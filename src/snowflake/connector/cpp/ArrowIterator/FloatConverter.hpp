@@ -6,7 +6,6 @@
 #define PC_FLOATCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
-#include "nanoarrow.h"
 #include <memory>
 
 namespace sf
@@ -15,23 +14,23 @@ namespace sf
 class FloatConverter : public IColumnConverter
 {
 public:
-  explicit FloatConverter(ArrowArrayView *array);
+  explicit FloatConverter(std::shared_ptr<arrow::Array> array);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  ArrowArrayView* m_array;
+  std::shared_ptr<arrow::DoubleArray> m_array;
 };
 
 class NumpyFloat64Converter : public IColumnConverter
 {
 public:
-  explicit NumpyFloat64Converter(ArrowArrayView* array, PyObject * context);
+  explicit NumpyFloat64Converter(std::shared_ptr<arrow::Array> array, PyObject * context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  ArrowArrayView* m_array;
+  std::shared_ptr<arrow::DoubleArray> m_array;
 
   PyObject * m_context;
 };

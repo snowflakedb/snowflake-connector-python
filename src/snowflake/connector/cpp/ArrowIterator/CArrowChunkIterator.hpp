@@ -8,8 +8,6 @@
 #include "CArrowIterator.hpp"
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
-#include "nanoarrow.h"
-#include "nanoarrow.hpp"
 #include <memory>
 #include <vector>
 
@@ -27,10 +25,10 @@ public:
   /**
    * Constructor
    */
-  CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy);
+  CArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> * batches, PyObject *use_numpy);
 
   /**
-   * Destructor
+   * Desctructor
    */
   virtual ~CArrowChunkIterator() = default;
 
@@ -50,8 +48,12 @@ protected:
 
   /** list of column converters*/
   std::vector<std::shared_ptr<sf::IColumnConverter>> m_currentBatchConverters;
+
   /** row index inside current record batch (start from 0) */
   int m_rowIndexInBatch;
+
+  /** schema of current record batch */
+  std::shared_ptr<arrow::Schema> m_currentSchema;
 
 private:
   /** number of columns */
@@ -66,6 +68,9 @@ private:
   /** total number of rows inside current record batch */
   int64_t m_rowCountInBatch;
 
+  /** pointer to the current python exception object */
+  py::UniqueRef m_currentPyException;
+
   /** arrow format convert context for the current session */
   PyObject* m_context;
 
@@ -78,7 +83,7 @@ private:
 class DictCArrowChunkIterator : public CArrowChunkIterator
 {
 public:
-  DictCArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy);
+  DictCArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> * batches, PyObject *use_numpy);
 
   ~DictCArrowChunkIterator() = default;
 

@@ -30,73 +30,33 @@ py::UniqueRef& DecimalBaseConverter::initPyDecimalConstructor()
   return pyDecimalConstructor;
 }
 
-DecimalFromIntConverter::DecimalFromIntConverter(ArrowArrayView* array,
-                                   int precision, int scale)
-  : m_array(array),
-    m_precision(precision),
-    m_scale(scale)
-  {
-  }
-
-PyObject* DecimalFromIntConverter::toPyObject(int64_t rowIndex) const
-{
-  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
-    Py_RETURN_NONE;
-  }
-  int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
-  py::UniqueRef decimal(
-        PyObject_CallFunction(m_pyDecimalConstructor.get(), "L", val));
-  return PyObject_CallMethod(decimal.get(), "scaleb", "i", -m_scale);
-}
-
-NumpyDecimalConverter::NumpyDecimalConverter(ArrowArrayView* array,
-                                 int precision, int scale, PyObject * context)
-  : m_array(array),
-    m_precision(precision),
-    m_scale(scale),
-    m_context(context)
-  {
-  }
-
-PyObject* NumpyDecimalConverter::toPyObject(int64_t rowIndex) const
-{
-    if(ArrowArrayViewIsNull(m_array, rowIndex)) {
-        Py_RETURN_NONE;
-    }
-    int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
-    return PyObject_CallMethod(m_context, "FIXED_to_numpy_float64", "Li", val, m_scale);
-}
-
 DecimalFromDecimalConverter::DecimalFromDecimalConverter(
-    PyObject* context,
-    ArrowArrayView* array, int scale)
-: m_array(array),
-  m_context(context),
+    std::shared_ptr<arrow::Array> array, int scale)
+: m_array(std::dynamic_pointer_cast<arrow::Decimal128Array>(array)),
   m_scale(scale)
 {
 }
 
 PyObject* DecimalFromDecimalConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
+  if (m_array->IsValid(rowIndex))
+  {
+    std::string formatDecimalString = m_array->FormatValue(rowIndex);
+    if (m_scale == 0)
+    {
+      return PyLong_FromString(formatDecimalString.c_str(), nullptr, 0);
+    }
+
+    /** the reason we use c_str() instead of std::string here is that we may
+     * meet some encoding problem with std::string */
+    return PyObject_CallFunction(m_pyDecimalConstructor.get(), "s#",
+                                 formatDecimalString.c_str(),
+                                 static_cast<Py_ssize_t>(formatDecimalString.size()));
+  }
+  else
+  {
     Py_RETURN_NONE;
   }
-  int64_t bytes_start = 16 * (m_array->array->offset + rowIndex);
-  const char* ptr_start = m_array->buffer_views[1].data.as_char;
-  PyObject* int128_bytes = PyBytes_FromStringAndSize(&(ptr_start[bytes_start]), 16);
-  /**
-  # Alternatively, the decimal conversion can be implemented using the ArrowDecimal related APIs in the following
-  # code snippets, however, it's less performant than the direct memory manipulation.
-  # The code snippets here is for context reference.
-
-  ArrowDecimal arrowDecimal;
-  ArrowDecimalInit(&arrowDecimal, 128, precision, scale);
-  ArrowArrayViewGetDecimalUnsafe(m_array, rowIndex, &arrowDecimal);
-  uint8_t outBytes[16];
-  ArrowDecimalGetBytes(&arrowDecimal, outBytes);
-  PyObject* int128_bytes = PyBytes_FromStringAndSize(&outBytes, 16);
-  */
-  return PyObject_CallMethod(m_context, "DECIMAL128_to_decimal", "Si", int128_bytes, m_scale);
 }
 
 }  // namespace sf

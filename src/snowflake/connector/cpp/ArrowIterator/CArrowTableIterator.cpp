@@ -8,9 +8,7 @@
 #include "Util/time.hpp"
 #include <memory>
 #include <string>
-#include <cstring>
 #include <vector>
-#include <iostream>
 
 namespace sf
 {
@@ -29,63 +27,54 @@ namespace sf
  *    timestamptz will be converted to Arrow timestamp with UTC
  *    Since Arrow timestamp use int64_t internally so it may be out of range for small and large timestamps
  */
-void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
+void CArrowTableIterator::reconstructRecordBatches()
 {
-  int returnCode = 0;
   // Type conversion, the code needs to be optimized
-  for (unsigned int batchIdx = 0; batchIdx <  m_ipcArrowArrayViewVec.size(); batchIdx++)
+  for (unsigned int batchIdx = 0; batchIdx <  m_cRecordBatches->size(); batchIdx++)
   {
-    // each record batch will have its own list of newly created array and schema
-    m_newArrays.push_back(std::vector<nanoarrow::UniqueArray>());
-    m_newSchemas.push_back(std::vector<nanoarrow::UniqueSchema>());
+    std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
+    std::shared_ptr<arrow::Schema> schema = currentBatch->schema();
+    // These copies will be used if rebuilding the RecordBatch if necessary
+    bool needsRebuild = false;
+    std::vector<std::shared_ptr<arrow::Field>> futureFields;
+    std::vector<std::shared_ptr<arrow::Array>> futureColumns;
 
-    nanoarrow::UniqueSchema copiedSchema;
-    returnCode = ArrowSchemaDeepCopy(m_ipcArrowSchema.get(), copiedSchema.get());
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error copying arrow schema, error code: %d", returnCode);
-    m_ipcSchemaArrayVec.push_back(std::move(copiedSchema));
-
-    ArrowError error;
-    int returnCode;
-    for (int colIdx = 0; colIdx < m_ipcSchemaArrayVec[batchIdx]->n_children; colIdx++)
+    for (int colIdx = 0; colIdx < currentBatch->num_columns(); colIdx++)
     {
-      ArrowArrayView* columnArray = m_ipcArrowArrayViewVec[batchIdx]->children[colIdx];
-      ArrowSchema* columnSchema = m_ipcSchemaArrayVec[batchIdx]->children[colIdx];
-      ArrowSchemaView columnSchemaView;
-
-      returnCode = ArrowSchemaViewInit(
-         &columnSchemaView, columnSchema, &error);
-      SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowSchemaView : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-
-      ArrowStringView snowflakeLogicalType;
-      const char* metadata = m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->metadata;
-      returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("logicalType"), &snowflakeLogicalType);
-      SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'logicalType' from Arrow metadata, error code: %d", returnCode);
+      std::shared_ptr<arrow::Array> columnArray = currentBatch->column(colIdx);
+      std::shared_ptr<arrow::Field> field = schema->field(colIdx);
+      std::shared_ptr<arrow::DataType> dt = field->type();
+      std::shared_ptr<const arrow::KeyValueMetadata> metaData = field->metadata();
       SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
-        std::string(snowflakeLogicalType.data, snowflakeLogicalType.size_bytes)
-      );
+          metaData->value(metaData->FindKey("logicalType")));
 
       // reconstruct columnArray in place
       switch (st)
       {
         case SnowflakeType::Type::FIXED:
         {
-          int scale = 0;
-          struct ArrowStringView scaleString = ArrowCharView(nullptr);
-          if(metadata != nullptr) {
-              returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-              SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-              scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-          }
-          if (scale > 0 && columnSchemaView.type != ArrowType::NANOARROW_TYPE_DECIMAL128)
+          int scale = metaData
+                          ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                          : 0;
+          if (scale > 0 && dt->id() != arrow::Type::type::DECIMAL)
           {
-            logger->debug(__FILE__, __func__, __LINE__, "Convert fixed number column to double column, column scale %d, column type id: %d",
-              scale, columnSchemaView.type);
-            convertScaledFixedNumberColumn_nanoarrow(
+            logger->debug(
+              __FILE__,
+              __func__,
+              __LINE__,
+              "Convert fixed number column to double column, column scale %d, column type id: %d",
+              scale,
+              dt->id()
+            );
+            convertScaledFixedNumberColumn(
                 batchIdx,
                 colIdx,
-                &columnSchemaView,
+                field,
                 columnArray,
-                scale
+                scale,
+                futureFields,
+                futureColumns,
+                needsRebuild
             );
           }
           break;
@@ -108,106 +97,116 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
 
         case SnowflakeType::Type::TIME:
         {
-            int scale = 9;
-            if(metadata != nullptr) {
-                struct ArrowStringView scaleString = ArrowCharView(nullptr);
-                returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-                SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-                scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-            }
+          int scale = metaData
+                          ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                          : 9;
 
-          convertTimeColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale);
+          convertTimeColumn(batchIdx, colIdx, field, columnArray, scale, futureFields, futureColumns, needsRebuild);
           break;
         }
 
         case SnowflakeType::Type::TIMESTAMP_NTZ:
         {
-          int scale = 9;
-          if(metadata != nullptr) {
-            struct ArrowStringView scaleString = ArrowCharView(nullptr);
-            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-            scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-          }
-          convertTimestampColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale);
+          int scale = metaData
+                          ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                          : 9;
+
+          convertTimestampColumn(batchIdx, colIdx, field, columnArray, scale, futureFields, futureColumns, needsRebuild);
           break;
         }
 
         case SnowflakeType::Type::TIMESTAMP_LTZ:
         {
-            int scale = 9;
-            if(metadata != nullptr) {
-                struct ArrowStringView scaleString = ArrowCharView(nullptr);
-                returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-                SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-                scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-            }
+          int scale = metaData
+                          ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                          : 9;
 
-          convertTimestampColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale,  m_timezone);
+          convertTimestampColumn(batchIdx, colIdx, field, columnArray, scale, futureFields, futureColumns, needsRebuild, m_timezone);
           break;
         }
 
         case SnowflakeType::Type::TIMESTAMP_TZ:
         {
-            struct ArrowStringView scaleString = ArrowCharView(nullptr);
-            struct ArrowStringView byteLengthString = ArrowCharView(nullptr);
-            int scale = 9;
-            int byteLength = 16;
-            if(metadata != nullptr) {
-                returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-                SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-                returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("byteLength"), &byteLengthString);
-                SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'byteLength' from Arrow metadata, error code: %d", returnCode);
-                scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-                byteLength = std::stoi(std::string(byteLengthString.data, byteLengthString.size_bytes));
-            }
+          int scale = metaData
+                          ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                          : 9;
+          int byteLength =
+            metaData
+                ? std::stoi(metaData->value(metaData->FindKey("byteLength")))
+                : 16;
 
-          convertTimestampTZColumn_nanoarrow(batchIdx, colIdx, &columnSchemaView, columnArray, scale, byteLength, m_timezone);
+          convertTimestampTZColumn(batchIdx, colIdx, field, columnArray, scale, byteLength, futureFields, futureColumns, needsRebuild, m_timezone);
           break;
         }
 
         default:
         {
-            std::string errorInfo = Logger::formatString(
-                "[Snowflake Exception] unknown snowflake data type : %s",
-                snowflakeLogicalType.data);
-            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-            PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-            return;
+          std::string errorInfo = Logger::formatString(
+              "[Snowflake Exception] unknown snowflake data type : %s",
+              metaData->value(metaData->FindKey("logicalType")).c_str());
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+          PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+          return;
         }
       }
     }
-    m_tableConverted = true;
+
+    if (needsRebuild)
+    {
+      std::shared_ptr<arrow::Schema> futureSchema = arrow::schema(futureFields, schema->metadata());
+      (*m_cRecordBatches)[batchIdx] = arrow::RecordBatch::Make(futureSchema, currentBatch->num_rows(), futureColumns);
+    }
   }
 }
 
 CArrowTableIterator::CArrowTableIterator(
 PyObject* context,
-char* arrow_bytes, int64_t arrow_bytes_size,
+std::vector<std::shared_ptr<arrow::RecordBatch>>* batches,
 const bool number_to_decimal
 )
-: CArrowIterator(arrow_bytes, arrow_bytes_size),
+: CArrowIterator(batches),
 m_context(context),
+m_pyTableObjRef(nullptr),
 m_convert_number_to_decimal(number_to_decimal)
 {
-  if (py::checkPyError()) {
-    return;
-  }
   py::UniqueRef tz(PyObject_GetAttrString(m_context, "_timezone"));
   PyArg_Parse(tz.get(), "s", &m_timezone);
 }
 
 std::shared_ptr<ReturnVal> CArrowTableIterator::next()
 {
-  bool firstDone = this->convertRecordBatchesToTable_nanoarrow();
-  if (firstDone && !m_ipcArrowArrayVec.empty())
+  bool firstDone = this->convertRecordBatchesToTable();
+  if (firstDone && m_cTable)
   {
-    return std::make_shared<ReturnVal>(Py_True, nullptr);
+    m_pyTableObjRef.reset(arrow::py::wrap_table(m_cTable));
+    return std::make_shared<ReturnVal>(m_pyTableObjRef.get(), nullptr);
   }
   else
   {
     return std::make_shared<ReturnVal>(Py_None, nullptr);
   }
+}
+
+void CArrowTableIterator::replaceColumn(
+    const unsigned int batchIdx,
+    const int colIdx,
+    const std::shared_ptr<arrow::Field>& newField,
+    const std::shared_ptr<arrow::Array>& newColumn,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild)
+{
+  // replace the targeted column
+  if (needsRebuild == false)
+  {
+    // First time of modifying batches, we have to make a deep copy of fields and columns
+    std::shared_ptr<arrow::RecordBatch> currentBatch = (*m_cRecordBatches)[batchIdx];
+    futureFields = currentBatch->schema()->fields();
+    futureColumns = currentBatch->columns();
+    needsRebuild = true;
+  }
+  futureFields[colIdx] = newField;
+  futureColumns[colIdx] = newColumn;
 }
 
 template <typename T>
@@ -239,559 +238,761 @@ double CArrowTableIterator::convertScaledFixedNumberToDouble(
   }
 }
 
-void CArrowTableIterator::convertScaledFixedNumberColumn_nanoarrow(
+void CArrowTableIterator::convertScaledFixedNumberColumn(
   const unsigned int batchIdx,
   const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const unsigned int scale
+  const std::shared_ptr<arrow::Field> field,
+  const std::shared_ptr<arrow::Array> columnArray,
+  const unsigned int scale,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild
 )
 {
 // Convert scaled fixed number to either Double, or Decimal based on setting
   if (m_convert_number_to_decimal){
-    convertScaledFixedNumberColumnToDecimalColumn_nanoarrow(
+    convertScaledFixedNumberColumnToDecimalColumn(
       batchIdx,
       colIdx,
       field,
       columnArray,
-      scale
+      scale,
+      futureFields,
+      futureColumns,
+      needsRebuild
       );
   } else {
-    convertScaledFixedNumberColumnToDoubleColumn_nanoarrow(
+    convertScaledFixedNumberColumnToDoubleColumn(
       batchIdx,
       colIdx,
       field,
       columnArray,
-      scale
+      scale,
+      futureFields,
+      futureColumns,
+      needsRebuild
       );
   }
 }
 
-void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarrow(
+void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn(
   const unsigned int batchIdx,
   const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const unsigned int scale
+  const std::shared_ptr<arrow::Field> field,
+  const std::shared_ptr<arrow::Array> columnArray,
+  const unsigned int scale,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild
 )
 {
-    int returnCode = 0;
-  // Convert to arrow double/float64 column
-  nanoarrow::UniqueSchema newUniqueField;
-  nanoarrow::UniqueArray newUniqueArray;
-  ArrowSchema* newSchema = newUniqueField.get();
-  ArrowArray* newArray = newUniqueArray.get();
-
-  // create new schema
-  ArrowSchemaInit(newSchema);
-  newSchema->flags &= (field->schema->flags & ARROW_FLAG_NULLABLE); // map to nullable()
-  returnCode = ArrowSchemaSetTypeDecimal(newSchema, NANOARROW_TYPE_DECIMAL128, 38, scale);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type decimal, error code: %d", returnCode);
-  returnCode = ArrowSchemaSetName(newSchema, field->schema->name);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting schema name, error code: %d", returnCode);
-
-  ArrowError error;
-  returnCode = ArrowArrayInitFromSchema(newArray, newSchema, &error);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowArrayView from schema : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-
-  returnCode = ArrowArrayStartAppending(newArray);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending arrow array, error code: %d", returnCode);
-
-  for(int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++)
+  // Convert to decimal columns
+  const std::shared_ptr<arrow::DataType> field_type = field->type();
+  const std::shared_ptr<arrow::DataType> destType = arrow::decimal128(38, scale);
+  std::shared_ptr<arrow::Field> doubleField = std::make_shared<arrow::Field>(
+      field->name(), destType, field->nullable());
+  arrow::Decimal128Builder builder(destType, m_pool);
+  arrow::Status ret;
+  for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
   {
-    if(ArrowArrayViewIsNull(columnArray, rowIdx)) {
-        returnCode = ArrowArrayAppendNull(newArray, 1);
-        SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending null to arrow array, error code: %d", returnCode);
-    } else {
-        auto originalVal = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
-        std::shared_ptr<ArrowDecimal> arrowDecimal = std::make_shared<ArrowDecimal>();
-        ArrowDecimalInit(arrowDecimal.get(), 128, 38, scale);
-        ArrowDecimalSetInt(arrowDecimal.get(), originalVal);
-        returnCode = ArrowArrayAppendDecimal(newArray, arrowDecimal.get());
-        SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending decimal to arrow array, error code: %d", returnCode);
-    }
-  }
-  returnCode = ArrowArrayFinishBuildingDefault(newArray, &error);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error finishing building arrow array: %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-  m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->release(m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
-  ArrowSchemaMove(newSchema, m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
-  m_ipcArrowArrayVec[batchIdx]->children[colIdx]->release(m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
-  ArrowArrayMove(newArray, m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
-  m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
-  m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
-}
-
-void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn_nanoarrow(
-    const unsigned int batchIdx,
-    const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const unsigned int scale
-)
-{
-  int returnCode = 0;
-  // Convert to arrow double/float64 column
-  nanoarrow::UniqueSchema newUniqueField;
-  nanoarrow::UniqueArray newUniqueArray;
-  ArrowSchema* newSchema = newUniqueField.get();
-  ArrowArray* newArray = newUniqueArray.get();
-
-  // create new schema
-  ArrowSchemaInit(newSchema);
-  newSchema->flags &= (field->schema->flags & ARROW_FLAG_NULLABLE); // map to nullable()
-  returnCode = ArrowSchemaSetType(newSchema, NANOARROW_TYPE_DOUBLE);  // map to arrow:float64()
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type double, error code: %d", returnCode);
-  returnCode = ArrowSchemaSetName(newSchema, field->schema->name);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting schema name, error code: %d", returnCode);
-
-  ArrowError error;
-  returnCode = ArrowArrayInitFromSchema(newArray, newSchema, &error);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowArrayView from schema : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-
-  for(int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++)
-  {
-    if(ArrowArrayViewIsNull(columnArray, rowIdx)) {
-        returnCode = ArrowArrayAppendNull(newArray, 1);
-        SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending null to arrow array, error code: %d", returnCode);
-    } else {
-        auto originalVal = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
-        double val = convertScaledFixedNumberToDouble(scale, originalVal);
-        returnCode = ArrowArrayAppendDouble(newArray, val);
-        SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending double to arrow array, error code: %d", returnCode);
-    }
-  }
-  returnCode = ArrowArrayFinishBuildingDefault(newArray, &error);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error finishing building arrow array: %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-  m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->release(m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
-  ArrowSchemaMove(newSchema, m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
-  m_ipcArrowArrayVec[batchIdx]->children[colIdx]->release(m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
-  ArrowArrayMove(newArray, m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
-  m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
-  m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
-}
-
-void CArrowTableIterator::convertTimeColumn_nanoarrow(
-  const unsigned int batchIdx,
-  const int colIdx,
-  ArrowSchemaView* field,
-  ArrowArrayView* columnArray,
-  const int scale
-)
-{
-  int returnCode = 0;
-  nanoarrow::UniqueSchema newUniqueField;
-  nanoarrow::UniqueArray newUniqueArray;
-  ArrowSchema* newSchema = newUniqueField.get();
-  ArrowArray* newArray = newUniqueArray.get();
-  ArrowError error;
-
-  // create new schema
-  ArrowSchemaInit(newSchema);
-  int64_t powTenSB4Val = 1;
-  newSchema->flags &= (field->schema->flags & ARROW_FLAG_NULLABLE); // map to nullable()
-  if (scale == 0)
-  {
-    returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIME32, NANOARROW_TIME_UNIT_SECOND,  NULL);
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
-  }
-  else if (scale <= 3)
-  {
-    returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIME32, NANOARROW_TIME_UNIT_MILLI,  NULL);
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
-    powTenSB4Val = sf::internal::powTenSB4[3 - scale];
-  }
-  else if (scale <= 6)
-  {
-    returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIME64, NANOARROW_TIME_UNIT_MICRO,  NULL);
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
-    powTenSB4Val = sf::internal::powTenSB4[6 - scale];
-  }
-  else
-  {
-    returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIME64, NANOARROW_TIME_UNIT_MICRO,  NULL);
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
-    powTenSB4Val = sf::internal::powTenSB4[scale - 6];
-  }
-  returnCode = ArrowSchemaSetName(newSchema, field->schema->name);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting schema name, error code: %d", returnCode);
-
-  returnCode = ArrowArrayInitFromSchema(newArray, newSchema, &error);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowArrayView from schema : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-
-  returnCode = ArrowArrayStartAppending(newArray);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending arrow array, error code: %d", returnCode);
-
-  for(int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++)
-  {
-    if(ArrowArrayViewIsNull(columnArray, rowIdx)) {
-      returnCode = ArrowArrayAppendNull(newArray, 1);
-      SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending null to arrow array, error code: %d", returnCode);
-    } else {
-      auto originalVal = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
-      if(scale <= 6)
-      {
-        originalVal *= powTenSB4Val;
-      }
-      else
-      {
-        originalVal /= powTenSB4Val;
-      }
-      returnCode = ArrowArrayAppendInt(newArray, originalVal);
-      SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
-    }
-  }
-
-  returnCode = ArrowArrayFinishBuildingDefault(newArray, &error);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error finishing building arrow array: %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-  m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->release(m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
-  ArrowSchemaMove(newSchema, m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
-  m_ipcArrowArrayVec[batchIdx]->children[colIdx]->release(m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
-  ArrowArrayMove(newArray, m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
-  m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
-  m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
-}
-
-void CArrowTableIterator::convertTimestampColumn_nanoarrow(
-  const unsigned int batchIdx,
-  const int colIdx,
-  ArrowSchemaView* field,
-  ArrowArrayView* columnArray,
-  const int scale,
-  const std::string timezone
-)
-{
-  int returnCode = 0;
-  nanoarrow::UniqueSchema newUniqueField;
-  nanoarrow::UniqueArray newUniqueArray;
-  ArrowSchema* newSchema = newUniqueField.get();
-  ArrowArray* newArray = newUniqueArray.get();
-  ArrowError error;
-
-  ArrowSchemaInit(newSchema);
-  newSchema->flags &= (field->schema->flags & ARROW_FLAG_NULLABLE); // map to nullable()
-
-  // calculate has_overflow_to_downscale
-  bool has_overflow_to_downscale = false;
-  if (scale > 6 && field->type == NANOARROW_TYPE_STRUCT)
-  {
-    ArrowArrayView* epochArray;
-    ArrowArrayView* fractionArray;
-    for(int64_t i = 0; i < field->schema->n_children; i++) {
-        ArrowSchema* c_schema = field->schema->children[i];
-        if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
-          epochArray = columnArray->children[i];
-        } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0) {
-          fractionArray = columnArray->children[i];
-        } else {
-          // do nothing
-        }
-    }
-
-    int powTenSB4 = sf::internal::powTenSB4[9];
-    for(int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++)
+    if (columnArray->IsValid(rowIdx))
     {
-      if(!ArrowArrayViewIsNull(columnArray, rowIdx))
+      arrow::Decimal128 val;
+      switch (field_type->id())
       {
-        int64_t epoch = ArrowArrayViewGetIntUnsafe(epochArray, rowIdx);
-        int64_t fraction = ArrowArrayViewGetIntUnsafe(fractionArray, rowIdx);
-        if (epoch > (INT64_MAX / powTenSB4) || epoch < (INT64_MIN / powTenSB4))
+        case arrow::Type::type::INT8:
         {
-          if (fraction % 1000 != 0) {
-            std::string errorInfo = Logger::formatString(
-              "The total number of nanoseconds %d%d overflows int64 range. If you use a timestamp with "
-              "the nanosecond part over 6-digits in the Snowflake database, the timestamp must be "
-              "between '1677-09-21 00:12:43.145224192' and '2262-04-11 23:47:16.854775807' to not overflow."
-              , epoch, fraction);
-            throw std::overflow_error(errorInfo.c_str());
-          } else {
-            has_overflow_to_downscale = true;
-          }
+          auto originalVal = std::static_pointer_cast<arrow::Int8Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(originalVal);
+          break;
         }
+        case arrow::Type::type::INT16:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int16Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(originalVal);
+          break;
+        }
+        case arrow::Type::type::INT32:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(originalVal);
+          break;
+        }
+        case arrow::Type::type::INT64:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+          val = arrow::Decimal128(originalVal);
+          break;
+        }
+        default:
+          std::string errorInfo = Logger::formatString(
+              "[Snowflake Exception] unknown arrow internal data type(%d) "
+              "for FIXED data",
+              field_type->id());
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+          return;
       }
-    }
-  }
-
-  if (scale <= 6)
-  {
-    int64_t powTenSB4Val = 1;
-    auto timeunit = NANOARROW_TIME_UNIT_SECOND;
-    if (scale == 0)
-    {
-      timeunit = NANOARROW_TIME_UNIT_SECOND;
-      powTenSB4Val = 1;
-    }
-    else if (scale <= 3)
-    {
-      timeunit = NANOARROW_TIME_UNIT_MILLI;
-      powTenSB4Val = sf::internal::powTenSB4[3 - scale];
-    }
-    else if(scale <= 6)
-    {
-      timeunit = NANOARROW_TIME_UNIT_MICRO;
-      powTenSB4Val = sf::internal::powTenSB4[6 - scale];
-    }
-    if(!timezone.empty())
-    {
-        returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIMESTAMP, timeunit, timezone.c_str());
-        SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
+      ret = builder.Append(val);
     }
     else
     {
-        returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIMESTAMP, timeunit, NULL);
-        SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
+      ret = builder.AppendNull();
     }
-    returnCode = ArrowSchemaSetName(newSchema, field->schema->name);
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting schema name, error code: %d", returnCode);
-    returnCode = ArrowArrayInitFromSchema(newArray, newSchema, &error);
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowArrayView from schema : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-
-    for(int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++)
-    {
-        if(ArrowArrayViewIsNull(columnArray, rowIdx))
-        {
-          returnCode = ArrowArrayAppendNull(newArray, 1);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending null to arrow array, error code: %d", returnCode);
-        }
-        else
-        {
-          int64_t val = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
-          val *= powTenSB4Val;
-          returnCode = ArrowArrayAppendInt(newArray, val);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
-        }
-    }
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to append Decimal value: internal data type(%d), errorInfo: %s",
+      field_type->id(),  ret.message().c_str());
   }
-  else
+
+  std::shared_ptr<arrow::Array> doubleArray;
+  ret = builder.Finish(&doubleArray);
+  SF_CHECK_ARROW_RC(ret,
+    "[Snowflake Exception] arrow failed to finish Decimal array, errorInfo: %s",
+    ret.message().c_str());
+
+  // replace the targeted column
+  replaceColumn(batchIdx, colIdx, doubleField, doubleArray, futureFields, futureColumns, needsRebuild);
+}
+
+void CArrowTableIterator::convertScaledFixedNumberColumnToDoubleColumn(
+  const unsigned int batchIdx,
+  const int colIdx,
+  const std::shared_ptr<arrow::Field> field,
+  const std::shared_ptr<arrow::Array> columnArray,
+  const unsigned int scale,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild
+)
+{
+  // Convert to arrow double/float64 column
+  std::shared_ptr<arrow::Field> doubleField = std::make_shared<arrow::Field>(
+      field->name(), arrow::float64(), field->nullable());
+  arrow::DoubleBuilder builder(m_pool);
+  arrow::Status ret;
+  auto dt = field->type();
+  for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
   {
-    int64_t val;
-    if (field->type == NANOARROW_TYPE_STRUCT)
-     {
-        ArrowArrayView* epochArray;
-        ArrowArrayView* fractionArray;
-        for(int64_t i = 0; i < field->schema->n_children; i++) {
-            ArrowSchema* c_schema = field->schema->children[i];
-            if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
-                epochArray = columnArray->children[i];
-            } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0) {
-                fractionArray = columnArray->children[i];
-            } else {
-              // do nothing
-            }
-        }
-
-        auto timeunit = has_overflow_to_downscale? NANOARROW_TIME_UNIT_MICRO: NANOARROW_TIME_UNIT_NANO;
-        if(!timezone.empty())
-        {
-          returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIMESTAMP, timeunit, timezone.c_str());
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
-        }
-        else
-        {
-          returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIMESTAMP, timeunit, NULL);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
-        }
-        returnCode = ArrowSchemaSetName(newSchema, field->schema->name);
-        SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting schema name, error code: %d", returnCode);
-
-        returnCode = ArrowArrayInitFromSchema(newArray, newSchema, &error);
-        SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowArrayView from schema : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-
-        for(int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++)
-        {
-          if(!ArrowArrayViewIsNull(columnArray, rowIdx))
-          {
-            int64_t epoch = ArrowArrayViewGetIntUnsafe(epochArray, rowIdx);
-            int64_t fraction = ArrowArrayViewGetIntUnsafe(fractionArray, rowIdx);
-            if (has_overflow_to_downscale)
-            {
-              val = epoch * sf::internal::powTenSB4[6] + fraction / 1000;
-            }
-            else
-            {
-              val = epoch * sf::internal::powTenSB4[9] + fraction;
-            }
-            returnCode = ArrowArrayAppendInt(newArray, val);
-            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
-          }
-          else
-          {
-            returnCode = ArrowArrayAppendNull(newArray, 1);
-            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending null to arrow array, error code: %d", returnCode);
-          }
-        }
-    }
-    else if (field->type == NANOARROW_TYPE_INT64)
+    if (columnArray->IsValid(rowIdx))
     {
-      auto timeunit = has_overflow_to_downscale? NANOARROW_TIME_UNIT_MICRO: NANOARROW_TIME_UNIT_NANO;
-      if(!timezone.empty())
+      double val;
+      switch (dt->id())
       {
-        returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIMESTAMP, timeunit, timezone.c_str());
-        SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
+        case arrow::Type::type::INT8:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int8Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
+          break;
+        }
+        case arrow::Type::type::INT16:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int16Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
+          break;
+        }
+        case arrow::Type::type::INT32:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
+          break;
+        }
+        case arrow::Type::type::INT64:
+        {
+          auto originalVal = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+          val = convertScaledFixedNumberToDouble(scale, originalVal);
+          break;
+        }
+        default:
+          std::string errorInfo = Logger::formatString(
+              "[Snowflake Exception] unknown arrow internal data type(%d) "
+              "for FIXED data",
+              dt->id());
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+          return;
+      }
+      ret = builder.Append(val);
+    }
+    else
+    {
+      ret = builder.AppendNull();
+    }
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to append Double value: internal data type(%d), errorInfo: %s",
+      dt->id(),  ret.message().c_str());
+  }
+
+  std::shared_ptr<arrow::Array> doubleArray;
+  ret = builder.Finish(&doubleArray);
+  SF_CHECK_ARROW_RC(ret,
+    "[Snowflake Exception] arrow failed to finish Double array, errorInfo: %s",
+    ret.message().c_str());
+
+  // replace the targeted column
+  replaceColumn(batchIdx, colIdx, doubleField, doubleArray, futureFields, futureColumns, needsRebuild);
+}
+
+void CArrowTableIterator::convertTimeColumn(
+  const unsigned int batchIdx,
+  const int colIdx,
+  const std::shared_ptr<arrow::Field> field,
+  const std::shared_ptr<arrow::Array> columnArray,
+  const int scale,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild
+)
+{
+  std::shared_ptr<arrow::Field> tsField;
+  std::shared_ptr<arrow::Array> tsArray;
+  arrow::Status ret;
+  auto dt = field->type();
+  // Convert to arrow time column
+  if (scale == 0)
+  {
+    auto timeType = arrow::time32(arrow::TimeUnit::SECOND);
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+    arrow::Time32Builder builder(timeType, m_pool);
+
+
+    for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+    {
+      if (columnArray->IsValid(rowIdx))
+      {
+        int32_t originalVal = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
+        // unit is second
+        ret = builder.Append(originalVal);
       }
       else
       {
-        returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIMESTAMP, timeunit, NULL);
-        SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
+        ret = builder.AppendNull();
       }
-      returnCode = ArrowSchemaSetName(newSchema, field->schema->name);
-      SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting schema name, error code: %d", returnCode);
-
-      returnCode = ArrowArrayInitFromSchema(newArray, newSchema, &error);
-      SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowArrayView from schema : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-
-      for(int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++)
-      {
-        if(!ArrowArrayViewIsNull(columnArray, rowIdx))
-        {
-          val = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
-          val *= sf::internal::powTenSB4[9 - scale];
-          returnCode = ArrowArrayAppendInt(newArray, val);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
-        }
-        else
-        {
-          returnCode = ArrowArrayAppendNull(newArray, 1);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending null to arrow array, error code: %d", returnCode);
-        }
-      }
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
+        ", errorInfo: %s",
+        dt->id(), ret.message().c_str());
     }
-  }
 
-  returnCode = ArrowArrayFinishBuildingDefault(newArray, &error);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error finishing building arrow array: %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-  m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->release(m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
-  ArrowSchemaMove(newSchema, m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
-  m_ipcArrowArrayVec[batchIdx]->children[colIdx]->release(m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
-  ArrowArrayMove(newArray, m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
-  m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
-  m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
-}
-
-void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
-  const unsigned int batchIdx,
-  const int colIdx,
-  ArrowSchemaView* field,
-  ArrowArrayView* columnArray,
-  const int scale,
-  const int byteLength,
-  const std::string timezone
-)
-{
-  int returnCode = 0;
-  nanoarrow::UniqueSchema newUniqueField;
-  nanoarrow::UniqueArray newUniqueArray;
-  ArrowSchema* newSchema = newUniqueField.get();
-  ArrowArray* newArray = newUniqueArray.get();
-  ArrowError error;
-  ArrowSchemaInit(newSchema);
-  newSchema->flags &= (field->schema->flags & ARROW_FLAG_NULLABLE); // map to nullable()
-  auto timeunit = NANOARROW_TIME_UNIT_SECOND;
-  if (scale == 0)
-  {
-    timeunit = NANOARROW_TIME_UNIT_SECOND;
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
   }
   else if (scale <= 3)
   {
-    timeunit = NANOARROW_TIME_UNIT_MILLI;
+    auto timeType = arrow::time32(arrow::TimeUnit::MILLI);
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+    arrow::Time32Builder builder(timeType, m_pool);
+
+    arrow::Status ret;
+    for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+    {
+      if (columnArray->IsValid(rowIdx))
+      {
+        int32_t val = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx)
+          * sf::internal::powTenSB4[3 - scale];
+        // unit is millisecond
+        ret = builder.Append(val);
+      }
+      else
+      {
+        ret = builder.AppendNull();
+      }
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d)"
+        ", errorInfo: %s",
+        dt->id(), ret.message().c_str());
+    }
+
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
   }
   else if (scale <= 6)
   {
-    timeunit = NANOARROW_TIME_UNIT_MICRO;
-  }
-  else
-  {
-    timeunit = NANOARROW_TIME_UNIT_NANO;
-  }
+    auto timeType = arrow::time64(arrow::TimeUnit::MICRO);
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+    arrow::Time64Builder builder(timeType, m_pool);
 
-  if(!timezone.empty())
-  {
-    returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIMESTAMP, timeunit, timezone.c_str());
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
-  }
-  else
-  {
-    returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_TIMESTAMP, timeunit, NULL);
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting arrow schema type DateTime, error code: %d", returnCode);
-  }
-  returnCode = ArrowSchemaSetName(newSchema, field->schema->name);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error setting schema name, error code: %d", returnCode);
-
-  returnCode = ArrowArrayInitFromSchema(newArray, newSchema, &error);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowArrayView from schema : %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-
-  ArrowArrayView* epochArray;
-  ArrowArrayView* fractionArray;
-  for(int64_t i = 0; i < field->schema->n_children; i++) {
-    ArrowSchema* c_schema = field->schema->children[i];
-    if(std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
-      epochArray = columnArray->children[i];
-    } else if(std::strcmp(c_schema->name, internal::FIELD_NAME_FRACTION.c_str()) == 0) {
-      fractionArray = columnArray->children[i];
-    } else {
-      // do nothing
+    arrow::Status ret;
+    for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+    {
+      if (columnArray->IsValid(rowIdx))
+      {
+        int64_t val;
+        switch (dt->id())
+        {
+          case arrow::Type::type::INT32:
+            val = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
+            break;
+          case arrow::Type::type::INT64:
+            val = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+            break;
+          default:
+            std::string errorInfo = Logger::formatString(
+                "[Snowflake Exception] unknown arrow internal data type(%d) "
+                "for FIXED data",
+                dt->id());
+            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+            return;
+        }
+        val *= sf::internal::powTenSB4[6 - scale];
+        // unit is microsecond
+        ret = builder.Append(val);
+      }
+      else
+      {
+        ret = builder.AppendNull();
+      }
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
+        dt->id(),  ret.message().c_str());
     }
+
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
+  }
+  else
+  {
+    // Note: Python/Pandas Time does not support nanoseconds,
+    // So truncate the time values to microseconds
+    auto timeType = arrow::time64(arrow::TimeUnit::MICRO);
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+    arrow::Time64Builder builder(timeType, m_pool);
+
+    arrow::Status ret;
+    for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+    {
+      if (columnArray->IsValid(rowIdx))
+      {
+        int64_t val;
+        switch (dt->id())
+        {
+          case arrow::Type::type::INT32:
+            val = std::static_pointer_cast<arrow::Int32Array>(columnArray)->Value(rowIdx);
+            break;
+          case arrow::Type::type::INT64:
+            val = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+            break;
+          default:
+            std::string errorInfo = Logger::formatString(
+                "[Snowflake Exception] unknown arrow internal data type(%d) "
+                "for FIXED data",
+                dt->id());
+            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+            return;
+        }
+        val /= sf::internal::powTenSB4[scale - 6];
+        // unit is microsecond
+        ret = builder.Append(val);
+      }
+      else
+      {
+        ret = builder.AppendNull();
+      }
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
+        dt->id(),  ret.message().c_str());
+    }
+
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
   }
 
-  for(int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++)
+  // replace the targeted column
+  replaceColumn(batchIdx, colIdx, tsField, tsArray, futureFields, futureColumns, needsRebuild);
+}
+
+void CArrowTableIterator::convertTimestampColumn(
+  const unsigned int batchIdx,
+  const int colIdx,
+  const std::shared_ptr<arrow::Field> field,
+  const std::shared_ptr<arrow::Array> columnArray,
+  const int scale,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild,
+  const std::string timezone
+)
+{
+  std::shared_ptr<arrow::Field> tsField;
+  std::shared_ptr<arrow::Array> tsArray;
+  arrow::Status ret;
+  std::shared_ptr<arrow::DataType> timeType;
+  auto dt = field->type();
+  // Convert to arrow time column
+  if (scale == 0)
   {
-    if(!ArrowArrayViewIsNull(columnArray, rowIdx))
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::SECOND, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::SECOND);
+    }
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+    arrow::TimestampBuilder builder(timeType, m_pool);
+
+
+    for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+    {
+      if (columnArray->IsValid(rowIdx))
+      {
+        int64_t originalVal = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+        // unit is second
+        ret = builder.Append(originalVal);
+      }
+      else
+      {
+        ret = builder.AppendNull();
+      }
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
+        dt->id(),  ret.message().c_str());
+    }
+
+    ret = builder.Finish(&tsArray); SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
+  }
+  else if (scale <= 3)
+  {
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MILLI, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MILLI);
+    }
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+    arrow::TimestampBuilder builder(timeType, m_pool);
+
+    arrow::Status ret;
+    for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+    {
+      if (columnArray->IsValid(rowIdx))
+      {
+        int64_t val = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx)
+          * sf::internal::powTenSB4[3 - scale];
+        // unit is millisecond
+        ret = builder.Append(val);
+      }
+      else
+      {
+        ret = builder.AppendNull();
+      }
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
+        dt->id(),  ret.message().c_str());
+    }
+
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
+  }
+  else if (scale <= 6)
+  {
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MICRO, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MICRO);
+    }
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+    arrow::TimestampBuilder builder(timeType, m_pool);
+
+    arrow::Status ret;
+    for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+    {
+      if (columnArray->IsValid(rowIdx))
+      {
+        int64_t val;
+        switch (dt->id())
+        {
+          case arrow::Type::type::INT64:
+            val = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+            break;
+          default:
+            std::string errorInfo = Logger::formatString(
+                "[Snowflake Exception] unknown arrow internal data type(%d) "
+                "for FIXED data",
+                dt->id());
+            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+            return;
+        }
+        val *= sf::internal::powTenSB4[6 - scale];
+        // unit is microsecond
+        ret = builder.Append(val);
+      }
+      else
+      {
+        ret = builder.AppendNull();
+      }
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
+        dt->id(),  ret.message().c_str());
+    }
+
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
+  }
+  else
+  {
+     bool has_overflow_to_downscale = false;
+     if (dt->id() == arrow::Type::type::STRUCT)
+     {
+         auto structArray = std::dynamic_pointer_cast<arrow::StructArray>(columnArray);
+         for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+           {
+              if (columnArray->IsValid(rowIdx))
+              {
+                  int64_t epoch = std::static_pointer_cast<arrow::Int64Array>(
+                    structArray->GetFieldByName(sf::internal::FIELD_NAME_EPOCH))->Value(rowIdx);
+                  int32_t fraction = std::static_pointer_cast<arrow::Int32Array>(
+                    structArray->GetFieldByName(sf::internal::FIELD_NAME_FRACTION))->Value(rowIdx);
+                  int powTenSB4 = sf::internal::powTenSB4[9];
+                  if (epoch > (INT64_MAX / powTenSB4) || epoch < (INT64_MIN / powTenSB4))
+                  {
+                    if (fraction % 1000 != 0) {
+                        std::string errorInfo = Logger::formatString(
+                          "The total number of nanoseconds %d%d overflows int64 range. If you use a timestamp with "
+                          "the nanosecond part over 6-digits in the Snowflake database, the timestamp must be "
+                          "between '1677-09-21 00:12:43.145224192' and '2262-04-11 23:47:16.854775807' to not overflow."
+                          , epoch, fraction);
+                        throw std::overflow_error(errorInfo.c_str());
+                    } else {
+                        has_overflow_to_downscale = true;
+                    }
+                  }
+                }
+           }
+     }
+    auto timeUnit = has_overflow_to_downscale? arrow::TimeUnit::MICRO: arrow::TimeUnit::NANO;
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(timeUnit, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(timeUnit);
+    }
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+    arrow::TimestampBuilder builder(timeType, m_pool);
+    std::shared_ptr<arrow::StructArray> structArray;
+    if (dt->id() == arrow::Type::type::STRUCT)
+    {
+      structArray = std::dynamic_pointer_cast<arrow::StructArray>(columnArray);
+    }
+    arrow::Status ret;
+    for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+    {
+      if (columnArray->IsValid(rowIdx))
+      {
+        int64_t val;
+        switch (dt->id())
+        {
+          case arrow::Type::type::INT64:
+            val = std::static_pointer_cast<arrow::Int64Array>(columnArray)->Value(rowIdx);
+            val *= sf::internal::powTenSB4[9 - scale];
+            break;
+          case arrow::Type::type::STRUCT:
+            {
+              int64_t epoch = std::static_pointer_cast<arrow::Int64Array>(
+                structArray->GetFieldByName(sf::internal::FIELD_NAME_EPOCH))->Value(rowIdx);
+              int32_t fraction = std::static_pointer_cast<arrow::Int32Array>(
+                structArray->GetFieldByName(sf::internal::FIELD_NAME_FRACTION))->Value(rowIdx);
+              if (has_overflow_to_downscale)
+              {
+                val = epoch * sf::internal::powTenSB4[6] + fraction / 1000;
+              } else
+              {
+                val = epoch * sf::internal::powTenSB4[9] + fraction;
+              }
+            }
+            break;
+          default:
+            std::string errorInfo = Logger::formatString(
+                "[Snowflake Exception] unknown arrow internal data type(%d) "
+                "for FIXED data",
+                dt->id());
+            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+            return;
+        }
+        // unit is nanosecond
+        ret = builder.Append(val);
+      }
+      else
+      {
+        ret = builder.AppendNull();
+      }
+      SF_CHECK_ARROW_RC(ret,
+        "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
+        dt->id(),  ret.message().c_str());
+    }
+
+    ret = builder.Finish(&tsArray);
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+      ret.message().c_str());
+  }
+
+  // replace the targeted column
+  replaceColumn(batchIdx, colIdx, tsField, tsArray, futureFields, futureColumns, needsRebuild);
+}
+
+void CArrowTableIterator::convertTimestampTZColumn(
+  const unsigned int batchIdx,
+  const int colIdx,
+  const std::shared_ptr<arrow::Field> field,
+  const std::shared_ptr<arrow::Array> columnArray,
+  const int scale,
+  const int byteLength,
+  std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+  std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+  bool& needsRebuild,
+  const std::string timezone
+)
+{
+  std::shared_ptr<arrow::Field> tsField;
+  std::shared_ptr<arrow::Array> tsArray;
+  std::shared_ptr<arrow::DataType> timeType;
+  auto dt = field->type();
+  // Convert to arrow time column
+  std::shared_ptr<arrow::StructArray> structArray;
+  structArray = std::dynamic_pointer_cast<arrow::StructArray>(columnArray);
+  auto epochArray = std::static_pointer_cast<arrow::Int64Array>(
+          structArray->GetFieldByName(sf::internal::FIELD_NAME_EPOCH));
+  auto fractionArray = std::static_pointer_cast<arrow::Int32Array>(
+          structArray->GetFieldByName(sf::internal::FIELD_NAME_FRACTION));
+
+  if (scale == 0)
+  {
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::SECOND, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::SECOND);
+    }
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+  }
+  else if (scale <= 3)
+  {
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MILLI, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MILLI);
+    }
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+  }
+  else if (scale <= 6)
+  {
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MICRO, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::MICRO);
+    }
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+  }
+  else
+  {
+    if (!timezone.empty())
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::NANO, timezone);
+    }
+    else
+    {
+      timeType = arrow::timestamp(arrow::TimeUnit::NANO);
+    }
+    tsField = std::make_shared<arrow::Field>(
+      field->name(), timeType, field->nullable());
+  }
+
+  arrow::TimestampBuilder builder(timeType, m_pool);
+  arrow::Status ret;
+  for(int64_t rowIdx = 0; rowIdx < columnArray->length(); rowIdx++)
+  {
+    if (columnArray->IsValid(rowIdx))
     {
       if (byteLength == 8)
       {
-        int64_t epoch = ArrowArrayViewGetIntUnsafe(epochArray, rowIdx);
+        // two fields
+        int64_t epoch = epochArray->Value(rowIdx);
+        // append value
         if (scale == 0)
         {
-          returnCode = ArrowArrayAppendInt(newArray, epoch);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
+          ret = builder.Append(epoch);
         }
         else if (scale <= 3)
         {
-          returnCode = ArrowArrayAppendInt(newArray, epoch * sf::internal::powTenSB4[3 - scale]);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
+          ret = builder.Append(epoch * sf::internal::powTenSB4[3-scale]);
         }
         else if (scale <= 6)
         {
-          returnCode = ArrowArrayAppendInt(newArray, epoch * sf::internal::powTenSB4[6 - scale]);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
+          ret = builder.Append(epoch * sf::internal::powTenSB4[6-scale]);
         }
         else
         {
-          returnCode = ArrowArrayAppendInt(newArray, epoch * sf::internal::powTenSB4[9 - scale]);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
+          ret = builder.Append(epoch * sf::internal::powTenSB4[9 - scale]);
         }
       }
       else if (byteLength == 16)
       {
-        int64_t epoch = ArrowArrayViewGetIntUnsafe(epochArray, rowIdx);
-        int64_t fraction = ArrowArrayViewGetIntUnsafe(fractionArray, rowIdx);
+        // three fields
+        int64_t epoch = epochArray->Value(rowIdx);
+        int32_t fraction = fractionArray->Value(rowIdx);
         if (scale == 0)
         {
-          returnCode = ArrowArrayAppendInt(newArray, epoch);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
+          ret = builder.Append(epoch);
         }
         else if (scale <= 3)
         {
-          returnCode = ArrowArrayAppendInt(newArray, epoch * sf::internal::powTenSB4[3-scale]
+          ret = builder.Append(epoch * sf::internal::powTenSB4[3-scale]
                   + fraction / sf::internal::powTenSB4[6]);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
         }
         else if (scale <= 6)
         {
-          returnCode = ArrowArrayAppendInt(newArray, epoch * sf::internal::powTenSB4[6] + fraction / sf::internal::powTenSB4[3]);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
+          ret = builder.Append(epoch * sf::internal::powTenSB4[6] + fraction / sf::internal::powTenSB4[3]);
         }
         else
         {
-          returnCode = ArrowArrayAppendInt(newArray, epoch * sf::internal::powTenSB4[9] + fraction);
-          SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending int to arrow array, error code: %d", returnCode);
+          ret = builder.Append(epoch * sf::internal::powTenSB4[9] + fraction);
         }
       }
       else
       {
         std::string errorInfo = Logger::formatString(
-            "[Snowflake Exception] unknown arrow internal data type(%d) "
-            "for TIMESTAMP_TZ data",
-            NANOARROW_TYPE_ENUM_STRING[field->type]);
+          "[Snowflake Exception] unknown arrow internal data type(%d) "
+          "for TIMESTAMP_TZ data",
+          dt->id());
         logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
@@ -799,46 +1000,37 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
     }
     else
     {
-      returnCode = ArrowArrayAppendNull(newArray, 1);
-      SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending null to arrow array, error code: %d", returnCode);
+      ret = builder.AppendNull();
     }
+    SF_CHECK_ARROW_RC(ret,
+      "[Snowflake Exception] arrow failed to append value: internal data type(%d), errorInfo: %s",
+      dt->id(),  ret.message().c_str());
   }
 
-  returnCode = ArrowArrayFinishBuildingDefault(newArray, &error);
-  SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error finishing building arrow array: %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-  m_ipcSchemaArrayVec[batchIdx]->children[colIdx]->release(m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
-  ArrowSchemaMove(newSchema, m_ipcSchemaArrayVec[batchIdx]->children[colIdx]);
-  m_ipcArrowArrayVec[batchIdx]->children[colIdx]->release(m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
-  ArrowArrayMove(newArray, m_ipcArrowArrayVec[batchIdx]->children[colIdx]);
-  m_newArrays[batchIdx].push_back(std::move(newUniqueArray));
-  m_newSchemas[batchIdx].push_back(std::move(newUniqueField));
+  ret = builder.Finish(&tsArray);
+  SF_CHECK_ARROW_RC(ret,
+    "[Snowflake Exception] arrow failed to finish array, errorInfo: %s",
+    ret.message().c_str());
+
+  // replace the targeted column
+  replaceColumn(batchIdx, colIdx, tsField, tsArray, futureFields, futureColumns, needsRebuild);
 }
 
-bool CArrowTableIterator::convertRecordBatchesToTable_nanoarrow()
+bool CArrowTableIterator::convertRecordBatchesToTable()
 {
   // only do conversion once and there exist some record batches
-  if (!m_tableConverted && m_ipcArrowArrayViewVec.size() > 0)
+  if (!m_cTable && !m_cRecordBatches->empty())
   {
-    reconstructRecordBatches_nanoarrow();
+    reconstructRecordBatches();
+    arrow::Result<std::shared_ptr<arrow::Table>> ret = arrow::Table::FromRecordBatches(*m_cRecordBatches);
+    SF_CHECK_ARROW_RC_AND_RETURN(ret, false,
+      "[Snowflake Exception] arrow failed to build table from batches, errorInfo: %s",
+      ret.status().message().c_str());
+    m_cTable = ret.ValueOrDie();
+
     return true;
   }
   return false;
-}
-
-std::vector<uintptr_t> CArrowTableIterator::getArrowArrayPtrs() {
-    std::vector<uintptr_t> ret;
-    for(size_t i = 0; i < m_ipcArrowArrayVec.size(); i++) {
-        ret.push_back((uintptr_t)(void*)(m_ipcArrowArrayVec[i].get()));
-    }
-    return ret;
-}
-
-std::vector<uintptr_t> CArrowTableIterator::getArrowSchemaPtrs() {
-    std::vector<uintptr_t> ret;
-    for(size_t i = 0; i < m_ipcSchemaArrayVec.size(); i++) {
-        ret.push_back((uintptr_t)(void*)(m_ipcSchemaArrayVec[i].get()));
-    }
-    return ret;
 }
 
 } // namespace sf

@@ -6,7 +6,6 @@
 #define PC_BOOLEANCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
-#include "nanoarrow.h"
 #include <memory>
 
 namespace sf
@@ -15,12 +14,12 @@ namespace sf
 class BooleanConverter : public IColumnConverter
 {
 public:
-  explicit BooleanConverter(ArrowArrayView* array);
+  explicit BooleanConverter(std::shared_ptr<arrow::Array> array);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  ArrowArrayView* m_array;
+  std::shared_ptr<arrow::BooleanArray> m_array;
 };
 
 }  // namespace sf

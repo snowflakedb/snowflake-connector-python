@@ -7,7 +7,6 @@
 
 #include "IColumnConverter.hpp"
 #include "logging.hpp"
-#include "nanoarrow.h"
 #include <memory>
 
 namespace sf
@@ -16,12 +15,12 @@ namespace sf
 class BinaryConverter : public IColumnConverter
 {
 public:
-  explicit BinaryConverter(ArrowArrayView* array);
+  explicit BinaryConverter(std::shared_ptr<arrow::Array> array);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  ArrowArrayView* m_array;
+  std::shared_ptr<arrow::BinaryArray> m_array;
 
   static Logger* logger;
 };

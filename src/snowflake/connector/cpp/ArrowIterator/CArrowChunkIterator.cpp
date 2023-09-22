@@ -17,23 +17,35 @@
 #include <string>
 #include <vector>
 
+#define SF_CHECK_PYTHON_ERR() \
+  if (py::checkPyError())\
+  {\
+    PyObject *type, * val, *traceback;\
+    PyErr_Fetch(&type, &val, &traceback);\
+    PyErr_Clear();\
+    m_currentPyException.reset(val);\
+\
+    Py_XDECREF(type);\
+    Py_XDECREF(traceback);\
+\
+    return std::make_shared<ReturnVal>(nullptr, m_currentPyException.get());\
+  }
+
+
 namespace sf
 {
 
-CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy)
-: CArrowIterator(arrow_bytes, arrow_bytes_size), m_latestReturnedRow(nullptr), m_context(context)
+CArrowChunkIterator::CArrowChunkIterator(PyObject* context, std::vector<std::shared_ptr<arrow::RecordBatch>> *batches,
+                                         PyObject* use_numpy)
+: CArrowIterator(batches), m_latestReturnedRow(nullptr), m_context(context)
 {
-  if (py::checkPyError()) {
-    return;
-  }
+  m_batchCount = m_cRecordBatches->size();
+  m_columnCount = m_batchCount > 0 ? (*m_cRecordBatches)[0]->num_columns() : 0;
   m_currentBatchIndex = -1;
   m_rowIndexInBatch = -1;
   m_rowCountInBatch = 0;
   m_latestReturnedRow.reset();
   m_useNumpy = PyObject_IsTrue(use_numpy);
-
-  m_batchCount = m_ipcArrowArrayVec.size();
-  m_columnCount = m_batchCount > 0 ? m_ipcArrowSchema->n_children : 0;
 
   logger->debug(__FILE__, __func__, __LINE__, "Arrow chunk info: batchCount %d, columnCount %d, use_numpy: %d", m_batchCount,
                m_columnCount, m_useNumpy);
@@ -51,12 +63,11 @@ std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
   }
   else
   {
-    SF_CHECK_PYTHON_ERR();
     m_currentBatchIndex++;
     if (m_currentBatchIndex < m_batchCount)
     {
       m_rowIndexInBatch = 0;
-      m_rowCountInBatch = m_ipcArrowArrayVec[m_currentBatchIndex]->length;
+      m_rowCountInBatch = (*m_cRecordBatches)[m_currentBatchIndex]->num_rows();
       this->initColumnConverters();
       SF_CHECK_PYTHON_ERR()
 
@@ -91,64 +102,48 @@ void CArrowChunkIterator::createRowPyObject()
 void CArrowChunkIterator::initColumnConverters()
 {
   m_currentBatchConverters.clear();
-  ArrowError error;
-  int returnCode = 0;
-  for (int i = 0; i < m_ipcArrowSchema->n_children; i++)
+  std::shared_ptr<arrow::RecordBatch> currentBatch =
+      (*m_cRecordBatches)[m_currentBatchIndex];
+  m_currentSchema = currentBatch->schema();
+  for (int i = 0; i < currentBatch->num_columns(); i++)
   {
-
-    ArrowSchema* columnSchema = m_ipcArrowSchema->children[i];
-    ArrowSchemaView columnSchemaView;
-
-    returnCode = ArrowSchemaViewInit(
-        &columnSchemaView, columnSchema, &error);
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error initializing ArrowSchemaView: %s, error code: %d", ArrowErrorMessage(&error), returnCode);
-
-    ArrowArrayView* array = m_ipcArrowArrayViewVec[m_currentBatchIndex]->children[i];
-
-    struct ArrowStringView snowflakeLogicalType = ArrowCharView(nullptr);
-    const char* metadata = m_ipcArrowSchema->children[i]->metadata;
-    returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("logicalType"), &snowflakeLogicalType);
-    SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'logicalType' from Arrow metadata, error code: %d", returnCode);
-
+    std::shared_ptr<arrow::Array> columnArray = currentBatch->column(i);
+    std::shared_ptr<arrow::DataType> dt = m_currentSchema->field(i)->type();
+    std::shared_ptr<const arrow::KeyValueMetadata> metaData =
+        m_currentSchema->field(i)->metadata();
     SnowflakeType::Type st = SnowflakeType::snowflakeTypeFromString(
-        std::string(snowflakeLogicalType.data, snowflakeLogicalType.size_bytes)
-    );
+        metaData->value(metaData->FindKey("logicalType")));
 
     switch (st)
     {
       case SnowflakeType::Type::FIXED:
       {
-        struct ArrowStringView scaleString = ArrowCharView(nullptr);
-        struct ArrowStringView precisionString = ArrowCharView(nullptr);
-        int scale = 0;
-        int precision = 38;
-        if(metadata != nullptr) {
-            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("precision"), &precisionString);
-            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'precision' from Arrow metadata, error code: %d", returnCode);
-            scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-            precision = std::stoi(std::string(precisionString.data, precisionString.size_bytes));
-        }
-
-        switch(columnSchemaView.type)
+        int scale = metaData
+                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                        : 0;
+        int precision =
+            metaData
+                ? std::stoi(metaData->value(metaData->FindKey("precision")))
+                : 38;
+        switch (dt->id())
         {
-#define _SF_INIT_FIXED_CONVERTER(ARROW_TYPE) \
-          case ArrowType::ARROW_TYPE: \
+
+#define _SF_INIT_FIXED_CONVERTER(ARROW_TYPE, ARROW_ARRAY_TYPE) \
+          case arrow::Type::type::ARROW_TYPE: \
           {\
             if (scale > 0)\
             {\
               if (m_useNumpy)\
               {\
                 m_currentBatchConverters.push_back(std::make_shared<\
-                    sf::NumpyDecimalConverter>(\
-                    array, precision, scale, m_context));\
+                    sf::NumpyDecimalConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
+                    columnArray, precision, scale, m_context));\
               }\
               else\
               {\
                 m_currentBatchConverters.push_back(std::make_shared<\
-                    sf::DecimalFromIntConverter>(\
-                    array, precision, scale));\
+                    sf::DecimalFromIntConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
+                    columnArray, precision, scale));\
               }\
             }\
             else\
@@ -156,30 +151,29 @@ void CArrowChunkIterator::initColumnConverters()
               if (m_useNumpy)\
               {\
                 m_currentBatchConverters.push_back(\
-                    std::make_shared<sf::NumpyIntConverter>(\
-                    array, m_context));\
+                    std::make_shared<sf::NumpyIntConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
+                    columnArray, m_context));\
               }\
               else\
               {\
                 m_currentBatchConverters.push_back(\
-                    std::make_shared<sf::IntConverter>(\
-                    array));\
+                    std::make_shared<sf::IntConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
+                    columnArray));\
               }\
             }\
             break;\
           }
 
-          _SF_INIT_FIXED_CONVERTER(NANOARROW_TYPE_INT8)
-          _SF_INIT_FIXED_CONVERTER(NANOARROW_TYPE_INT16)
-          _SF_INIT_FIXED_CONVERTER(NANOARROW_TYPE_INT32)
-          _SF_INIT_FIXED_CONVERTER(NANOARROW_TYPE_INT64)
+          _SF_INIT_FIXED_CONVERTER(INT8, Int8)
+          _SF_INIT_FIXED_CONVERTER(INT16, Int16)
+          _SF_INIT_FIXED_CONVERTER(INT32, Int32)
+          _SF_INIT_FIXED_CONVERTER(INT64, Int64)
 #undef _SF_INIT_FIXED_CONVERTER
 
-          case ArrowType::NANOARROW_TYPE_DECIMAL128:
+          case arrow::Type::type::DECIMAL:
           {
             m_currentBatchConverters.push_back(
-                std::make_shared<sf::DecimalFromDecimalConverter>(m_context,
-                                                                  array,
+                std::make_shared<sf::DecimalFromDecimalConverter>(columnArray,
                                                                   scale));
             break;
           }
@@ -189,7 +183,7 @@ void CArrowChunkIterator::initColumnConverters()
             std::string errorInfo = Logger::formatString(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for FIXED data",
-                NANOARROW_TYPE_ENUM_STRING[columnSchemaView.type]);
+                dt->id());
             logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             PyErr_SetString(PyExc_Exception, errorInfo.c_str());
             return;
@@ -206,14 +200,14 @@ void CArrowChunkIterator::initColumnConverters()
       case SnowflakeType::Type::ARRAY:
       {
         m_currentBatchConverters.push_back(
-            std::make_shared<sf::StringConverter>(array));
+            std::make_shared<sf::StringConverter>(columnArray));
         break;
       }
 
       case SnowflakeType::Type::BOOLEAN:
       {
         m_currentBatchConverters.push_back(
-            std::make_shared<sf::BooleanConverter>(array));
+            std::make_shared<sf::BooleanConverter>(columnArray));
         break;
       }
 
@@ -222,12 +216,12 @@ void CArrowChunkIterator::initColumnConverters()
         if (m_useNumpy)
         {
           m_currentBatchConverters.push_back(
-              std::make_shared<sf::NumpyFloat64Converter>(array, m_context));
+              std::make_shared<sf::NumpyFloat64Converter>(columnArray, m_context));
         }
         else
         {
           m_currentBatchConverters.push_back(
-              std::make_shared<sf::FloatConverter>(array));
+              std::make_shared<sf::FloatConverter>(columnArray));
         }
         break;
       }
@@ -237,12 +231,12 @@ void CArrowChunkIterator::initColumnConverters()
         if (m_useNumpy)
         {
           m_currentBatchConverters.push_back(
-              std::make_shared<sf::NumpyDateConverter>(array, m_context));
+              std::make_shared<sf::NumpyDateConverter>(columnArray, m_context));
         }
         else
         {
           m_currentBatchConverters.push_back(
-              std::make_shared<sf::DateConverter>(array));
+              std::make_shared<sf::DateConverter>(columnArray));
         }
         break;
       }
@@ -250,27 +244,30 @@ void CArrowChunkIterator::initColumnConverters()
       case SnowflakeType::Type::BINARY:
       {
         m_currentBatchConverters.push_back(
-            std::make_shared<sf::BinaryConverter>(array));
+            std::make_shared<sf::BinaryConverter>(columnArray));
         break;
       }
 
       case SnowflakeType::Type::TIME:
       {
-        int scale = 9;
-        if(metadata != nullptr) {
-            struct ArrowStringView scaleString = ArrowCharView(nullptr);
-            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-            scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-        }
-        switch (columnSchemaView.type)
+        int scale = metaData
+                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                        : 9;
+        switch (dt->id())
         {
-          case NANOARROW_TYPE_INT32:
-          case NANOARROW_TYPE_INT64:
+          case arrow::Type::type::INT32:
           {
             m_currentBatchConverters.push_back(
-                std::make_shared<sf::TimeConverter>(
-                    array, scale));
+                std::make_shared<sf::TimeConverter<arrow::Int32Array>>(
+                    columnArray, scale));
+            break;
+          }
+
+          case arrow::Type::type::INT64:
+          {
+            m_currentBatchConverters.push_back(
+                std::make_shared<sf::TimeConverter<arrow::Int64Array>>(
+                    columnArray, scale));
             break;
           }
 
@@ -279,7 +276,7 @@ void CArrowChunkIterator::initColumnConverters()
             std::string errorInfo = Logger::formatString(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for TIME data",
-                NANOARROW_TYPE_ENUM_STRING[columnSchemaView.type]);
+                dt->id());
             logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             PyErr_SetString(PyExc_Exception, errorInfo.c_str());
             return;
@@ -290,45 +287,41 @@ void CArrowChunkIterator::initColumnConverters()
 
       case SnowflakeType::Type::TIMESTAMP_NTZ:
       {
-        int scale = 9;
-        if(metadata != nullptr) {
-            struct ArrowStringView scaleString = ArrowCharView(nullptr);
-            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-            scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-        }
-        switch (columnSchemaView.type)
+        int scale = metaData
+                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                        : 9;
+        switch (dt->id())
         {
-          case NANOARROW_TYPE_INT64:
+          case arrow::Type::type::INT64:
           {
             if (m_useNumpy)
             {
               m_currentBatchConverters.push_back(
                   std::make_shared<sf::NumpyOneFieldTimeStampNTZConverter>(
-                      array, scale, m_context));
+                      columnArray, scale, m_context));
             }
             else
             {
               m_currentBatchConverters.push_back(
                   std::make_shared<sf::OneFieldTimeStampNTZConverter>(
-                      array, scale, m_context));
+                      columnArray, scale, m_context));
             }
             break;
           }
 
-          case NANOARROW_TYPE_STRUCT:
+          case arrow::Type::type::STRUCT:
           {
             if (m_useNumpy)
             {
               m_currentBatchConverters.push_back(
                   std::make_shared<sf::NumpyTwoFieldTimeStampNTZConverter>(
-                      array, &columnSchemaView, scale, m_context));
+                      columnArray, scale, m_context));
             }
             else
             {
               m_currentBatchConverters.push_back(
                   std::make_shared<sf::TwoFieldTimeStampNTZConverter>(
-                      array, &columnSchemaView, scale, m_context));
+                      columnArray, scale, m_context));
             }
             break;
           }
@@ -338,7 +331,7 @@ void CArrowChunkIterator::initColumnConverters()
             std::string errorInfo = Logger::formatString(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for TIMESTAMP_NTZ data",
-                NANOARROW_TYPE_ENUM_STRING[columnSchemaView.type]);
+                dt->id());
             logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             PyErr_SetString(PyExc_Exception, errorInfo.c_str());
             return;
@@ -349,28 +342,24 @@ void CArrowChunkIterator::initColumnConverters()
 
       case SnowflakeType::Type::TIMESTAMP_LTZ:
       {
-        int scale = 9;
-        if(metadata != nullptr) {
-            struct ArrowStringView scaleString = ArrowCharView(nullptr);
-            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-            scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-        }
-        switch (columnSchemaView.type)
+        int scale = metaData
+                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                        : 9;
+        switch (dt->id())
         {
-          case NANOARROW_TYPE_INT64:
+          case arrow::Type::type::INT64:
           {
             m_currentBatchConverters.push_back(
                 std::make_shared<sf::OneFieldTimeStampLTZConverter>(
-                    array, scale, m_context));
+                    columnArray, scale, m_context));
             break;
           }
 
-          case NANOARROW_TYPE_STRUCT:
+          case arrow::Type::type::STRUCT:
           {
             m_currentBatchConverters.push_back(
                 std::make_shared<sf::TwoFieldTimeStampLTZConverter>(
-                    array, &columnSchemaView, scale, m_context));
+                    columnArray, scale, m_context));
             break;
           }
 
@@ -379,7 +368,7 @@ void CArrowChunkIterator::initColumnConverters()
             std::string errorInfo = Logger::formatString(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for TIMESTAMP_LTZ data",
-                NANOARROW_TYPE_ENUM_STRING[columnSchemaView.type]);
+                dt->id());
             logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             PyErr_SetString(PyExc_Exception, errorInfo.c_str());
             return;
@@ -390,25 +379,20 @@ void CArrowChunkIterator::initColumnConverters()
 
       case SnowflakeType::Type::TIMESTAMP_TZ:
       {
-        struct ArrowStringView scaleString = ArrowCharView(nullptr);
-        struct ArrowStringView byteLengthString = ArrowCharView(nullptr);
-        int scale = 9;
-        int byteLength = 16;
-        if(metadata != nullptr) {
-            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"), &scaleString);
-            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'scale' from Arrow metadata, error code: %d", returnCode);
-            returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("byteLength"), &byteLengthString);
-            SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error getting 'byteLength' from Arrow metadata, error code: %d", returnCode);
-            scale = std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-            byteLength = std::stoi(std::string(byteLengthString.data, byteLengthString.size_bytes));
-        }
+        int scale = metaData
+                        ? std::stoi(metaData->value(metaData->FindKey("scale")))
+                        : 9;
+        int byteLength =
+            metaData
+                ? std::stoi(metaData->value(metaData->FindKey("byteLength")))
+                : 16;
         switch (byteLength)
         {
           case 8:
           {
             m_currentBatchConverters.push_back(
                 std::make_shared<sf::TwoFieldTimeStampTZConverter>(
-                    array, &columnSchemaView, scale, m_context));
+                    columnArray, scale, m_context));
             break;
           }
 
@@ -416,7 +400,7 @@ void CArrowChunkIterator::initColumnConverters()
           {
             m_currentBatchConverters.push_back(
                 std::make_shared<sf::ThreeFieldTimeStampTZConverter>(
-                    array, &columnSchemaView, scale, m_context));
+                    columnArray, scale, m_context));
             break;
           }
 
@@ -425,7 +409,7 @@ void CArrowChunkIterator::initColumnConverters()
             std::string errorInfo = Logger::formatString(
                 "[Snowflake Exception] unknown arrow internal data type(%d) "
                 "for TIMESTAMP_TZ data",
-                NANOARROW_TYPE_ENUM_STRING[columnSchemaView.type]);
+                dt->id());
             logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
             PyErr_SetString(PyExc_Exception, errorInfo.c_str());
             return;
@@ -439,7 +423,7 @@ void CArrowChunkIterator::initColumnConverters()
       {
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] unknown snowflake data type : %s",
-            snowflakeLogicalType.data);
+            metaData->value(metaData->FindKey("logicalType")).c_str());
         logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
         return;
@@ -449,16 +433,16 @@ void CArrowChunkIterator::initColumnConverters()
 }
 
 DictCArrowChunkIterator::DictCArrowChunkIterator(PyObject* context,
-                                                 char* arrow_bytes, int64_t arrow_bytes_size,
+                                                 std::vector<std::shared_ptr<arrow::RecordBatch>> * batches,
                                                  PyObject* use_numpy)
-: CArrowChunkIterator(context, arrow_bytes, arrow_bytes_size, use_numpy)
+: CArrowChunkIterator(context, batches, use_numpy)
 {
 }
 
 void DictCArrowChunkIterator::createRowPyObject()
 {
   m_latestReturnedRow.reset(PyDict_New());
-  for (int i = 0; i < m_ipcArrowSchema->n_children; i++)
+  for (int i = 0; i < m_currentSchema->num_fields(); i++)
   {
     py::UniqueRef value(m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
     if (!value.empty())
@@ -466,7 +450,7 @@ void DictCArrowChunkIterator::createRowPyObject()
       // PyDict_SetItemString doesn't steal a reference to value.get().
       PyDict_SetItemString(
           m_latestReturnedRow.get(),
-          m_ipcArrowSchema->children[i]->name,
+          m_currentSchema->field(i)->name().c_str(),
           value.get());
     }
   }
