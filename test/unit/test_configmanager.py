@@ -514,6 +514,8 @@ def test_error_missing_fp_retrieve():
         "user_music_dir",
         "user_pictures_dir",
         "user_videos_dir",
+        "user_desktop_dir",
+        "site_runtime_dir",
     ),
 )
 def test_sf_dirs(tmp_path, method, version):

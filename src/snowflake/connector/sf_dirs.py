@@ -139,3 +139,13 @@ class SFPlatformDirs(PlatformDirsABC):
     def user_downloads_dir(self) -> str:
         """downloads directory tied to the user"""
         return self.user_data_dir
+
+    @property
+    def site_runtime_dir(self) -> str:
+        """runtime directory shared by users, same as `user_runtime_dir`"""
+        return self.user_data_dir
+
+    @property
+    def user_desktop_dir(self) -> str:
+        """desktop directory tied to the user, e.g. ``~/Desktop``"""
+        return self.user_data_dir
