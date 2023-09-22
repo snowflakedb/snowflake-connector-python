@@ -12,6 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
   - Fixed a bug where url port and path were ignore in private link oscp retry.
   - Added thread safety in telemetry when instantiating multiple connections concurrently.
+  - Removed the deprecation warning from the vendored urllib3 about urllib3.contrib.pyopenssl deprecation.
 
 - v3.2.0(September 06,2023)
 
