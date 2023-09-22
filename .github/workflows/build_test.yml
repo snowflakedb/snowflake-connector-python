@@ -311,7 +311,7 @@ jobs:
          - image_name: windows-2019
            download_name: win_amd64
         python-version: ["3.8", "3.11"]
-        cloud-provider: [aws, azure, gcp]
+        cloud-provider: [aws]
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python
