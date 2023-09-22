@@ -23,37 +23,43 @@ py::UniqueRef& DateConverter::initPyDatetimeDate()
   return pyDatetimeDate;
 }
 
-DateConverter::DateConverter(ArrowArrayView* array)
-: m_array(array),
+DateConverter::DateConverter(std::shared_ptr<arrow::Array> array)
+: m_array(std::dynamic_pointer_cast<arrow::Date32Array>(array)),
   m_pyDatetimeDate(initPyDatetimeDate())
 {
 }
 
 PyObject* DateConverter::toPyObject(int64_t rowIndex) const
 {
-    if(ArrowArrayViewIsNull(m_array, rowIndex)) {
-    Py_RETURN_NONE;
-    }
-
-    int64_t deltaDays = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
+  if (m_array->IsValid(rowIndex))
+  {
+    int32_t deltaDays = m_array->Value(rowIndex);
     return PyObject_CallMethod(m_pyDatetimeDate.get(), "fromordinal", "i",
                                epochDay + deltaDays);
+  }
+  else
+  {
+    Py_RETURN_NONE;
+  }
 }
 
-NumpyDateConverter::NumpyDateConverter(ArrowArrayView* array, PyObject * context)
-: m_array(array),
+NumpyDateConverter::NumpyDateConverter(std::shared_ptr<arrow::Array> array, PyObject * context)
+: m_array(std::dynamic_pointer_cast<arrow::Date32Array>(array)),
   m_context(context)
 {
 }
 
 PyObject* NumpyDateConverter::toPyObject(int64_t rowIndex) const
 {
-    if(ArrowArrayViewIsNull(m_array, rowIndex)) {
-    Py_RETURN_NONE;
-    }
-
-    int64_t deltaDays = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
+  if (m_array->IsValid(rowIndex))
+  {
+    int32_t deltaDays = m_array->Value(rowIndex);
     return PyObject_CallMethod(m_context, "DATE_to_numpy_datetime64", "i", deltaDays);
+  }
+  else
+  {
+    Py_RETURN_NONE;
+  }
 }
 
 }  // namespace sf

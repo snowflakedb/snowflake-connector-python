@@ -9,18 +9,22 @@ namespace sf
 {
 Logger* BinaryConverter::logger = new Logger("snowflake.connector.BinaryConverter");
 
-BinaryConverter::BinaryConverter(ArrowArrayView* array)
-: m_array(array)
+BinaryConverter::BinaryConverter(std::shared_ptr<arrow::Array> array)
+: m_array(std::dynamic_pointer_cast<arrow::BinaryArray>(array))
 {
 }
 
 PyObject* BinaryConverter::toPyObject(int64_t rowIndex) const
 {
-  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
+  if (m_array->IsValid(rowIndex))
+  {
+    std::string_view sv = m_array->GetView(rowIndex);
+    return PyByteArray_FromStringAndSize(sv.data(), sv.size());
+  }
+  else
+  {
     Py_RETURN_NONE;
   }
-  ArrowStringView stringView = ArrowArrayViewGetStringUnsafe(m_array, rowIndex);
-  return PyByteArray_FromStringAndSize(stringView.data, stringView.size_bytes);
 }
 
 }  // namespace sf

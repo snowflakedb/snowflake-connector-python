@@ -27,6 +27,8 @@ from uuid import UUID
 
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
+import snowflake.connector.cursor
+
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
 from .auth import (
@@ -57,6 +59,7 @@ from .constants import (
     PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED,
     PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
     PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1,
+    PARAMETER_PYTHON_CONNECTOR_USE_NANOARROW,
     PARAMETER_QUERY_CONTEXT_CACHE_SIZE,
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
@@ -1559,6 +1562,10 @@ class SnowflakeConnection:
                 self.enable_stage_s3_privatelink_for_us_east_1 = value
             elif PARAMETER_QUERY_CONTEXT_CACHE_SIZE == name:
                 self.query_context_cache_size = value
+            elif PARAMETER_PYTHON_CONNECTOR_USE_NANOARROW == name:
+                snowflake.connector.cursor._SERVER_USE_NANOARROW_CONVERTER_PARAMETER = (
+                    value
+                )
 
     def _format_query_for_log(self, query: str) -> str:
         ret = " ".join(line.strip() for line in query.split("\n"))

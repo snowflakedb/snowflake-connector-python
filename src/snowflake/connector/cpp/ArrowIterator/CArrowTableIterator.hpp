@@ -6,8 +6,6 @@
 #define PC_ARROWTABLEITERATOR_HPP
 
 #include "CArrowIterator.hpp"
-#include "nanoarrow.h"
-#include "nanoarrow.hpp"
 #include <string>
 #include <memory>
 #include <vector>
@@ -27,10 +25,9 @@ public:
   /**
    * Constructor
    */
-
   CArrowTableIterator(
   PyObject* context,
-  char* arrow_bytes, int64_t arrow_bytes_size,
+  std::vector<std::shared_ptr<arrow::RecordBatch>>* batches,
   bool number_to_decimal
   );
 
@@ -43,19 +40,21 @@ public:
    * @return an arrow table containing all data in all record batches
    */
   std::shared_ptr<ReturnVal> next() override;
-  std::vector<uintptr_t> getArrowArrayPtrs() override;
-  std::vector<uintptr_t> getArrowSchemaPtrs() override;
 
 private:
-  // nanoarrow data
-  std::vector<std::vector<nanoarrow::UniqueArray>> m_newArrays;
-  std::vector<std::vector<nanoarrow::UniqueSchema>> m_newSchemas;
-  std::vector<nanoarrow::UniqueSchema> m_ipcSchemaArrayVec;
-
-  bool m_tableConverted = false;
+  /* arrow table of all record batches in current chunk */
+  std::shared_ptr<arrow::Table> m_cTable;
 
   /** arrow format convert context for the current session */
   PyObject* m_context;
+
+  /** reference to PyObject */
+  py::UniqueRef m_pyTableObjRef;
+
+  /**
+   * arrow memory buffer to allocate type converted arrays for fetching pandas from arrow
+   */
+  arrow::MemoryPool* m_pool = arrow::default_memory_pool();
 
   /** local time zone */
   char* m_timezone;
@@ -66,68 +65,94 @@ private:
    */
   void reconstructRecordBatches();
 
-  void reconstructRecordBatches_nanoarrow();
-
   /**
    * Convert all current RecordBatches to Arrow Table
    * @return if conversion is executed at first time and successfully
    */
-  bool convertRecordBatchesToTable_nanoarrow();
+  bool convertRecordBatchesToTable();
+
+  /**
+   * replace column with the new column in place
+   */
+  void replaceColumn(
+    const unsigned int batchIdx,
+    const int colIdx,
+    const std::shared_ptr<arrow::Field>& newField,
+    const std::shared_ptr<arrow::Array>& newColumn,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild
+    );
 
   /**
    * convert scaled fixed number column to Decimal, or Double column based on setting
    */
-  void convertScaledFixedNumberColumn_nanoarrow(
+  void convertScaledFixedNumberColumn(
     const unsigned int batchIdx,
     const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const unsigned int scale
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
+    const unsigned int scale,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild
   );
 
   /**
    * convert scaled fixed number column to Decimal column
    */
-  void convertScaledFixedNumberColumnToDecimalColumn_nanoarrow(
+  void convertScaledFixedNumberColumnToDecimalColumn(
     const unsigned int batchIdx,
     const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const unsigned int scale
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
+    const unsigned int scale,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild
     );
 
   /**
    * convert scaled fixed number column to Double column
    */
-  void convertScaledFixedNumberColumnToDoubleColumn_nanoarrow(
+  void convertScaledFixedNumberColumnToDoubleColumn(
     const unsigned int batchIdx,
     const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const unsigned int scale
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
+    const unsigned int scale,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild
     );
 
   /**
    * convert Snowflake Time column (Arrow int32/int64) to Arrow Time column
    * Since Python/Pandas Time does not support nanoseconds, this function truncates values to microseconds if necessary
    */
-  void convertTimeColumn_nanoarrow(
+  void convertTimeColumn(
     const unsigned int batchIdx,
     const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const int scale
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
+    const int scale,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild
     );
 
   /**
    * convert Snowflake TimestampNTZ/TimestampLTZ column to Arrow Timestamp column
    */
-  void convertTimestampColumn_nanoarrow(
+  void convertTimestampColumn(
     const unsigned int batchIdx,
     const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
     const int scale,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild,
     const std::string timezone=""
     );
 
@@ -136,13 +161,16 @@ private:
    * Arrow Timestamp does not support time zone info in each value, so this method convert TimestampTZ to Arrow
    * timestamp with UTC timezone
    */
-  void convertTimestampTZColumn_nanoarrow(
+  void convertTimestampTZColumn(
     const unsigned int batchIdx,
     const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
+    const std::shared_ptr<arrow::Field> field,
+    const std::shared_ptr<arrow::Array> columnArray,
     const int scale,
     const int byteLength,
+    std::vector<std::shared_ptr<arrow::Field>>& futureFields,
+    std::vector<std::shared_ptr<arrow::Array>>& futureColumns,
+    bool& needsRebuild,
     const std::string timezone
     );
 

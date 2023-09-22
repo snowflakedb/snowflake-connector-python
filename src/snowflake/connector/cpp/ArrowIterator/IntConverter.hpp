@@ -6,18 +6,17 @@
 #define PC_INTCONVERTER_HPP
 
 #include "IColumnConverter.hpp"
-#include "nanoarrow.h"
-#include "nanoarrow.hpp"
 #include <memory>
 
 namespace sf
 {
 
+template <typename T>
 class IntConverter : public IColumnConverter
 {
 public:
-  explicit IntConverter(ArrowArrayView* array)
-  : m_array(array)
+  explicit IntConverter(std::shared_ptr<arrow::Array> array)
+  : m_array(std::dynamic_pointer_cast<T>(array))
   {
   }
 
@@ -34,14 +33,29 @@ public:
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  ArrowArrayView* m_array;
+  std::shared_ptr<T> m_array;
 };
 
+template <typename T>
+PyObject* IntConverter<T>::toPyObject(int64_t rowIndex) const
+{
+  if (m_array->IsValid(rowIndex))
+  {
+    // TODO : this forward function need to be tested in Win64
+    return pyLongForward(m_array->Value(rowIndex));
+  }
+  else
+  {
+    Py_RETURN_NONE;
+  }
+}
+
+template <typename T>
 class NumpyIntConverter : public IColumnConverter
 {
 public:
-  explicit NumpyIntConverter(ArrowArrayView* array, PyObject * context)
-  : m_array(array),
+  explicit NumpyIntConverter(std::shared_ptr<arrow::Array> array, PyObject * context)
+  : m_array(std::dynamic_pointer_cast<T>(array)),
     m_context(context)
   {
   }
@@ -49,10 +63,24 @@ public:
   PyObject* toPyObject(int64_t rowIndex) const override;
 
 private:
-  ArrowArrayView* m_array;
+  std::shared_ptr<T> m_array;
 
   PyObject * m_context;
 };
+
+template <typename T>
+PyObject* NumpyIntConverter<T>::toPyObject(int64_t rowIndex) const
+{
+  if (m_array->IsValid(rowIndex))
+  {
+    int64_t val = m_array->Value(rowIndex);
+    return PyObject_CallMethod(m_context, "FIXED_to_numpy_int64", "L", val);
+  }
+  else
+  {
+    Py_RETURN_NONE;
+  }
+}
 
 }  // namespace sf
 
