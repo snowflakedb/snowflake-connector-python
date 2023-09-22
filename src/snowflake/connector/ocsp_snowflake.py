@@ -439,7 +439,15 @@ class OCSPServer:
         if self.OCSP_RETRY_URL is None:
             target_url = f"{ocsp_url}/{b64data}"
         else:
-            target_url = self.OCSP_RETRY_URL.format(parsed_url.hostname, b64data)
+            # values of parsed_url.netloc and parsed_url.path based on oscp_url are as follows:
+            # URL                                    NETLOC                         PATH
+            # "http://oneocsp.microsoft.com"         "oneocsp.microsoft.com"        ""
+            # "http://oneocsp.microsoft.com:8080"    "oneocsp.microsoft.com:8080"   ""
+            # "http://oneocsp.microsoft.com/"        "oneocsp.microsoft.com"        "/"
+            # "http://oneocsp.microsoft.com/ocsp"    "oneocsp.microsoft.com"        "/ocsp"
+            # The check below is to treat first two urls same
+            path = parsed_url.path if parsed_url.path != "/" else ""
+            target_url = self.OCSP_RETRY_URL.format(parsed_url.netloc + path, b64data)
 
         logger.debug("OCSP Retry URL is - %s", target_url)
         return target_url
