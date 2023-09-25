@@ -20,4 +20,4 @@ IMPLEMENTATION = platform.python_implementation()
 COMPILER = platform.python_compiler()
 
 CLIENT_NAME = "PythonConnector"  # don't change!
-LIENT_VERSION = ".".join([str(v) for v in VERSION[:3]])
+CLIENT_VERSION = ".".join([str(v) for v in VERSION[:3]])

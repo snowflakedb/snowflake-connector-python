@@ -271,6 +271,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
 
             original__compile = self.compiler._compile
 
+            # the following is required by nanoarrow to compile c files
             def new__compile(obj, src: str, ext, cc_args, extra_postargs, pp_opts):
                 if (
                     src.endswith("nanoarrow.c")
