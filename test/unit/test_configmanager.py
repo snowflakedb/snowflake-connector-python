@@ -499,35 +499,18 @@ def test_error_missing_fp_retrieve():
 
 
 @pytest.mark.parametrize("version", (None, "1"))
-@pytest.mark.parametrize(
-    "method",
-    (
-        "user_data_dir",
-        "site_data_dir",
-        "user_config_dir",
-        "site_config_dir",
-        "user_cache_dir",
-        "user_state_dir",
-        "user_log_dir",
-        "user_documents_dir",
-        "user_runtime_dir",
-        "user_music_dir",
-        "user_pictures_dir",
-        "user_videos_dir",
-    ),
-)
-def test_sf_dirs(tmp_path, method, version):
+def test_sf_dirs(tmp_path, version):
     appname = random_string(5)
-    assert getattr(
+    assert (
         SFPlatformDirs(
             str(tmp_path),
             appname=appname,
             appauthor=False,
             version=version,
             ensure_exists=True,
-        ),
-        method,
-    ) == str(tmp_path)
+        ).user_config_path
+        == tmp_path
+    )
 
 
 def test_config_file_resolution_sfdirs_default():
