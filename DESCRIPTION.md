@@ -8,8 +8,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.2.1(TBD)
-
 - v3.2.1(September 26,2023)
 
    - 91d31b8f SNOW-872568: Fix retry oscp URL for private link (#1733)
