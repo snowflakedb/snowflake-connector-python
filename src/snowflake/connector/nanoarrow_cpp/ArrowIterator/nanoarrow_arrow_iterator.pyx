@@ -104,8 +104,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef object use_numpy
     cdef object number_to_decimal
     cdef object pyarrow_table
-    # this is needed keep the original reference of the python bytes object
-    cdef object python_bytes
 
     def __cinit__(
             self,
@@ -128,7 +126,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.table_returned = False
         self.arrow_bytes = <char*>arrow_bytes
         self.arrow_bytes_size = len(arrow_bytes)
-        self.python_bytes = arrow_bytes
 
         if self.unit == IterUnit.TABLE_UNIT.value:
             self.init_table_unit()
