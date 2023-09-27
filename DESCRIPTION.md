@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.2.1(TBD)
+- v3.2.1(September 26,2023)
 
   - Fixed a bug where url port and path were ignore in private link oscp retry.
   - Added thread safety in telemetry when instantiating multiple connections concurrently.
