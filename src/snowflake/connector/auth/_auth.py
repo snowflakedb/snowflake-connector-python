@@ -282,7 +282,7 @@ class Auth:
             )
 
         # waiting for MFA authentication
-        if ret["data"].get("nextAction") in (
+        if ret["data"] and ret["data"].get("nextAction") in (
             "EXT_AUTHN_DUO_ALL",
             "EXT_AUTHN_DUO_PUSH_N_PASSCODE",
         ):
@@ -310,7 +310,11 @@ class Auth:
                 t.join(timeout=timeout)
 
             ret = self.ret
-            if ret and ret["data"].get("nextAction") == "EXT_AUTHN_SUCCESS":
+            if (
+                ret
+                and ret["data"]
+                and ret["data"].get("nextAction") == "EXT_AUTHN_SUCCESS"
+            ):
                 body = copy.deepcopy(body_template)
                 body["inFlightCtx"] = ret["data"]["inFlightCtx"]
                 # final request to get tokens
@@ -321,7 +325,7 @@ class Auth:
                     timeout=self._rest._connection.login_timeout,
                     socket_timeout=self._rest._connection.login_timeout,
                 )
-            elif not ret or not ret["data"].get("token"):
+            elif not ret or not ret["data"] or not ret["data"].get("token"):
                 # not token is returned.
                 Error.errorhandler_wrapper(
                     self._rest._connection,
@@ -343,7 +347,7 @@ class Auth:
                 )
                 return session_parameters  # required for unit test
 
-        elif ret["data"].get("nextAction") == "PWD_CHANGE":
+        elif ret["data"] and ret["data"].get("nextAction") == "PWD_CHANGE":
             if callable(password_callback):
                 body = copy.deepcopy(body_template)
                 body["inFlightCtx"] = ret["data"]["inFlightCtx"]
@@ -411,20 +415,38 @@ class Auth:
             )
         else:
             logger.debug(
-                "token = %s", "******" if ret["data"]["token"] is not None else "NULL"
+                "token = %s",
+                "******"
+                if ret["data"] and ret["data"]["token"] is not None
+                else "NULL",
             )
             logger.debug(
                 "master_token = %s",
-                "******" if ret["data"]["masterToken"] is not None else "NULL",
+                "******"
+                if ret["data"] and ret["data"]["masterToken"] is not None
+                else "NULL",
             )
             logger.debug(
                 "id_token = %s",
-                "******" if ret["data"].get("idToken") is not None else "NULL",
+                "******"
+                if ret["data"] and ret["data"].get("idToken") is not None
+                else "NULL",
             )
             logger.debug(
                 "mfa_token = %s",
-                "******" if ret["data"].get("mfaToken") is not None else "NULL",
+                "******"
+                if ret["data"] and ret["data"].get("mfaToken") is not None
+                else "NULL",
             )
+            if not ret["data"]:
+                Error.errorhandler_wrapper(
+                    None,
+                    None,
+                    Error,
+                    {
+                        "msg": "There is no data in the returning response, please retry the operation."
+                    },
+                )
             self._rest.update_tokens(
                 ret["data"]["token"],
                 ret["data"]["masterToken"],
@@ -435,15 +457,15 @@ class Auth:
             self.write_temporary_credentials(
                 self._rest._host, user, session_parameters, ret
             )
-            if "sessionId" in ret["data"]:
+            if ret["data"] and "sessionId" in ret["data"]:
                 self._rest._connection._session_id = ret["data"]["sessionId"]
-            if "sessionInfo" in ret["data"]:
+            if ret["data"] and "sessionInfo" in ret["data"]:
                 session_info = ret["data"]["sessionInfo"]
                 self._rest._connection._database = session_info.get("databaseName")
                 self._rest._connection._schema = session_info.get("schemaName")
                 self._rest._connection._warehouse = session_info.get("warehouseName")
                 self._rest._connection._role = session_info.get("roleName")
-            if "parameters" in ret["data"]:
+            if ret["data"] and "parameters" in ret["data"]:
                 session_parameters.update(
                     {p["name"]: p["value"] for p in ret["data"]["parameters"]}
                 )
