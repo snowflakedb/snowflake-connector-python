@@ -10,7 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.2.1(TBD)
   - Fixed issue with connection diagnostics failing to complete certificate checks.
 
-- v3.2.1(TBD)
+- v3.2.1(September 26,2023)
 
   - Fixed a bug where url port and path were ignore in private link oscp retry.
   - Added thread safety in telemetry when instantiating multiple connections concurrently.
