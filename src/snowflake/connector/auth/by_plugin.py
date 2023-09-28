@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 from ..errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from ..errors import DatabaseError, Error, OperationalError
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from ..time_util import DecorrelateJitterBackoff
+from ..time_util import BackoffCtx
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection
@@ -33,13 +33,13 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_CON_RETRY_ATTEMPTS = 1
 
 
-class AuthRetryCtx:
+class AuthRetryCtx(BackoffCtx):
     def __init__(self) -> None:
+        super().__init__()
         self._current_retry_count = 0
         self._max_retry_attempts = int(
             getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)
         )
-        self._backoff = DecorrelateJitterBackoff(1, 16)
         self._current_sleep_time = 1
 
     def get_current_retry_count(self) -> int:
@@ -91,6 +91,7 @@ class AuthByPlugin(ABC):
 
     def __init__(self) -> None:
         self._retry_ctx = AuthRetryCtx()
+
         self.consent_cache_id_token = False
         self._timeout: int = 120
 

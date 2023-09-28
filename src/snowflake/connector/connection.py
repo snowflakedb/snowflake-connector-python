@@ -65,6 +65,7 @@ from .constants import (
     PARAMETER_QUERY_CONTEXT_CACHE_SIZE,
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
+    BackoffMode,
     OCSPMode,
     QueryStatus,
 )
@@ -82,6 +83,7 @@ from .errorcode import (
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
     ER_FAILED_TO_CONNECT_TO_DB,
+    ER_INVALID_BACKOFF_MODE,
     ER_INVALID_VALUE,
     ER_NO_ACCOUNT_NAME,
     ER_NO_NUMPY,
@@ -151,6 +153,13 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # network timeout (infinite by default)
+    "request_timeout": (None, (type(None), int)),
+    "connect_timeout": (None, (type(None), int)),
+    "socket_timeout": (None, (type(None), str)),
+    "backoff_mode": (None, (type(None), str)),
+    "backoff_base": (None, (type(None), int)),
+    "backoff_factor": (None, (type(None), int)),
+    "backoff_cap": (None, (type(None), int)),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), str, RSAPrivateKey)),
@@ -477,6 +486,36 @@ class SnowflakeConnection:
     @property
     def network_timeout(self) -> int | None:
         return int(self._network_timeout) if self._network_timeout is not None else None
+
+    @property
+    def request_timeout(self) -> int | None:
+        return int(self._request_timeout) if self._request_timeout is not None else None
+
+    @property
+    def connect_timeout(self) -> int | None:
+        return int(self._connect_timeout) if self._connect_timeout is not None else None
+
+    @property
+    def socket_timeout(self) -> int | None:
+        return int(self._socket_timeout) if self._connect_timeout is not None else None
+
+    @property
+    def backoff_mode(self) -> BackoffMode | None:
+        return (
+            BackoffMode(self._backoff_mode) if self._backoff_mode is not None else None
+        )
+
+    @property
+    def backoff_base(self) -> int | None:
+        return int(self._backoff_base) if self._backoff_base is not None else None
+
+    @property
+    def backoff_factor(self) -> int | None:
+        return int(self._backoff_factor) if self._backoff_factor is not None else None
+
+    @property
+    def backoff_cap(self) -> int | None:
+        return int(self._backoff_cap) if self._backoff_cap is not None else None
 
     @property
     def client_session_keep_alive(self) -> bool | None:
@@ -932,6 +971,15 @@ class SnowflakeConnection:
             # okta URL, e.g., https://<account>.okta.com/
             self.auth_class = AuthByOkta(application=self.application)
 
+        # set auth_class backoff if user has specified it
+        if self.backoff_mode is not None:
+            self.auth_class._retry_ctx.set_backoff(
+                backoff_mode=self.backoff_mode,
+                base=self.backoff_base,
+                cap=self.backoff_cap,
+                factor=self.backoff_factor,
+            )
+
         self.authenticate_with_retry(self.auth_class)
 
         self._password = None  # ensure password won't persist
@@ -1098,6 +1146,17 @@ class SnowflakeConnection:
             )
         if "." in self._account:
             self._account = parse_account(self._account)
+
+        if self._backoff_mode:
+            try:
+                self._backoff_mode = BackoffMode[self._backoff_mode.upper()]
+            except KeyError:
+                Error.errorhandler_wrapper(
+                    self,
+                    None,
+                    ProgrammingError,
+                    {"msg": "Invalid backoff mode", "errno": ER_INVALID_BACKOFF_MODE},
+                )
 
         if self.ocsp_fail_open:
             logger.info(

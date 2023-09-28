@@ -11,6 +11,8 @@ from logging import getLogger
 from types import TracebackType
 from typing import Any, Callable
 
+from .constants import BackoffMode
+
 logger = getLogger(__name__)
 
 try:
@@ -47,15 +49,64 @@ def get_time_millis() -> int:
     return int(time.time() * 1000)
 
 
-class DecorrelateJitterBackoff:
-    # Decorrelate Jitter backoff
-    # https://www.awsarchitectureblog.com/2015/03/backoff.html
-    def __init__(self, base: int, cap: int) -> None:
+class BackoffCtx:
+    @staticmethod
+    def resolve_backoff(backoff_mode: BackoffMode) -> Backoff:
+        """Takes a BackoffMode enum and returns the corresponding Backoff class"""
+        return {
+            BackoffMode.DECORRELATED_JITTER: DecorrelateJitterBackoff,
+            BackoffMode.FULL_JITTER: FullJitterBackoff,
+            BackoffMode.LINEAR: LinearBackoff,
+            BackoffMode.EXPONENTIAL: ExponentialBackoff,
+        }[backoff_mode]
+
+    def __init__(self) -> None:
+        # default backoff
+        self.set_backoff(BackoffMode.DECORRELATED_JITTER)
+
+    def set_backoff(self, backoff_mode: BackoffMode, **kwargs) -> None:
+        clean_kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        backoff = self.resolve_backoff(backoff_mode)
+        self._backoff = backoff(**clean_kwargs)
+
+
+class Backoff:
+    def __init__(self, base: int = 1, cap: int = 16, factor: int = 2):
+        """default argument values were previously used everywhere else in code"""
         self._base = base
         self._cap = cap
+        self._factor = factor
+
+    def next_sleep(self, _: Any, sleep: int) -> int:
+        pass
+
+
+class DecorrelateJitterBackoff(Backoff):
+    """Decorrelate jitter backoff, see https://www.awsarchitectureblog.com/2015/03/backoff.html"""
 
     def next_sleep(self, _: Any, sleep: int) -> int:
         return min(self._cap, random.randint(self._base, sleep * 3))
+
+
+class FullJitterBackoff(Backoff):
+    """Full jitter backoff, see https://www.awsarchitectureblog.com/2015/03/backoff.html"""
+
+    def next_sleep(self, cnt: int, _: Any) -> int:
+        return random.randint(0, min(self._cap, self._base * (self._factor**cnt)))
+
+
+class LinearBackoff(Backoff):
+    """Standard linear backoff"""
+
+    def next_sleep(self, cnt: int, _: Any) -> int:
+        return min(self._cap, self._base + self._factor * cnt)
+
+
+class ExponentialBackoff(Backoff):
+    """Standard exponential backoff"""
+
+    def next_sleep(self, cnt: int, _: Any) -> int:
+        return min(self._cap, self._base * (self._factor**cnt))
 
 
 class TimerContextManager:

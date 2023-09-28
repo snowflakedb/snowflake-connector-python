@@ -92,11 +92,7 @@ from .sqlstate import (
     SQLSTATE_IO_ERROR,
 )
 from .telemetry_oob import TelemetryService
-from .time_util import (
-    DEFAULT_MASTER_VALIDITY_IN_SECONDS,
-    DecorrelateJitterBackoff,
-    get_time_millis,
-)
+from .time_util import DEFAULT_MASTER_VALIDITY_IN_SECONDS, BackoffCtx, get_time_millis
 from .tool.probe_connection import probe_connection
 from .vendored import requests
 from .vendored.requests import Response, Session
@@ -793,13 +789,14 @@ class SnowflakeRestful:
     ) -> dict[Any, Any]:
         """Carry out API request with session management."""
 
-        class RetryCtx:
+        class RetryCtx(BackoffCtx):
             def __init__(
                 self,
                 timeout,
                 _include_retry_params: bool = False,
                 _include_retry_reason: bool = False,
             ) -> None:
+                super().__init__()
                 self.total_timeout = timeout
                 self.timeout = timeout
                 self.cnt = 0
@@ -808,8 +805,6 @@ class SnowflakeRestful:
                 self.start_time = get_time_millis()
                 self._include_retry_params = _include_retry_params
                 self._include_retry_reason = _include_retry_reason
-                # backoff between 1 and 16 seconds
-                self._backoff = DecorrelateJitterBackoff(1, 16)
 
             def increment_retry(self, reason: int = 0) -> None:
                 """Increment retry count and update the reason for retry
@@ -845,6 +840,14 @@ class SnowflakeRestful:
 
         with self._use_requests_session(full_url) as session:
             retry_ctx = RetryCtx(timeout, include_retry_params, include_retry_reason)
+            if self._connection.backoff_mode is not None:
+                retry_ctx.set_backoff(
+                    backoff_mode=self._connection.backoff_mode,
+                    base=self._connection.backoff_base,
+                    cap=self._connection.backoff_cap,
+                    factor=self._connection.backoff_factor,
+                )
+
             while True:
                 ret = self._request_exec_wrapper(
                     session, method, full_url, headers, data, retry_ctx, **kwargs
