@@ -141,13 +141,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     def __next__(self):
         if self.cIterator is NULL:
             self.init_row_unit()
-
-        if self.unit == IterUnit.TABLE_UNIT.value:
-            if not self.table_returned:
-                self.table_returned = True
-                return self.pyarrow_table
-            raise StopIteration
-
         self.cret = self.cIterator.next()
 
         if not self.cret.get().successObj:
