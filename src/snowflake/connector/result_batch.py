@@ -13,11 +13,15 @@ from enum import Enum, unique
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
 
+import snowflake.connector.cursor
+
 from .arrow_context import ArrowConverterContext
+from .arrow_iterator import PyArrowIterator
 from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import FIELD_TYPES, IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
 from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError
+from .nanoarrow_arrow_iterator import PyArrowIterator as NanoarrowIterator
 from .network import (
     RetryRequest,
     get_http_retryable_error,
@@ -565,16 +569,12 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        import snowflake.connector.cursor
-
-        if snowflake.connector.cursor.USE_NANOARROW_CONVERTER or (
+        if (
             snowflake.connector.cursor.USE_NANOARROW_CONVERTER is None
             and snowflake.connector.cursor._SERVER_USE_NANOARROW_CONVERTER_PARAMETER
-        ):
-            from .nanoarrow_arrow_iterator import PyArrowIterator
-
+        ) or snowflake.connector.cursor.USE_NANOARROW_CONVERTER:
             logger.debug("Using nanoarrow as the arrow data converter")
-            iter = PyArrowIterator(
+            iter = NanoarrowIterator(
                 None,
                 response.content,
                 self._context,
@@ -584,8 +584,6 @@ class ArrowResultBatch(ResultBatch):
                 row_unit == IterUnit.TABLE_UNIT,
             )
         else:
-            from .arrow_iterator import PyArrowIterator
-
             logger.debug("Using vendored arrow as the arrow data converter")
             iter = PyArrowIterator(
                 None,
@@ -610,16 +608,12 @@ class ArrowResultBatch(ResultBatch):
         if len(data) == 0:
             return iter([])
 
-        import snowflake.connector.cursor
-
-        if snowflake.connector.cursor.USE_NANOARROW_CONVERTER or (
+        if (
             snowflake.connector.cursor.USE_NANOARROW_CONVERTER is None
             and snowflake.connector.cursor._SERVER_USE_NANOARROW_CONVERTER_PARAMETER
-        ):
-            from .nanoarrow_arrow_iterator import PyArrowIterator
-
+        ) or snowflake.connector.cursor.USE_NANOARROW_CONVERTER:
             logger.debug("Using nanoarrow as the arrow data converter")
-            _iter = PyArrowIterator(
+            _iter = NanoarrowIterator(
                 None,
                 b64decode(data),
                 self._context,
@@ -629,8 +623,6 @@ class ArrowResultBatch(ResultBatch):
                 iter_unit == IterUnit.TABLE_UNIT,
             )
         else:
-            from .arrow_iterator import PyArrowIterator
-
             logger.debug("Using vendored arrow as the arrow data converter")
             _iter = PyArrowIterator(
                 None,
