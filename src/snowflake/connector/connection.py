@@ -28,6 +28,7 @@ from uuid import UUID
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 import snowflake.connector.cursor
+import snowflake.connector.result_batch
 
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
@@ -929,6 +930,18 @@ class SnowflakeConnection:
             # By this point it should have been decided if the heartbeat has to be enabled
             # and what would the heartbeat frequency be
             self._add_heartbeat()
+
+        if (
+            snowflake.connector.cursor.USE_NANOARROW_CONVERTER is None
+            and snowflake.connector.cursor._SERVER_USE_NANOARROW_CONVERTER_PARAMETER
+        ) or snowflake.connector.cursor.USE_NANOARROW_CONVERTER:
+            snowflake.connector.result_batch._create_arrow_iterator_method = (
+                snowflake.connector.result_batch._create_nanoarrow_iterator
+            )
+        else:
+            snowflake.connector.result_batch._create_arrow_iterator_method = (
+                snowflake.connector.result_batch._create_vendored_arrow_iterator
+            )
 
     def __config(self, **kwargs):
         """Sets up parameters in the connection object."""

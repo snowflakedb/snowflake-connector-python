@@ -104,6 +104,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef object use_numpy
     cdef object number_to_decimal
     cdef object pyarrow_table
+    cdef object _next_impl
 
     def __cinit__(
             self,
@@ -126,6 +127,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.table_returned = False
         self.arrow_bytes = <char*>arrow_bytes
         self.arrow_bytes_size = len(arrow_bytes)
+        self._next_impl = None
 
         if self.unit == IterUnit.TABLE_UNIT.value:
             self.init_table_unit()
@@ -139,17 +141,10 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         return self
 
     def __next__(self):
-        if self.cIterator is NULL:
-            self.init_row_unit()
+        return self._next_impl()
 
-        if self.unit == IterUnit.TABLE_UNIT.value:
-            if not self.table_returned:
-                self.table_returned = True
-                return self.pyarrow_table
-            raise StopIteration
-
+    def _row_unit_next_impl(self):
         self.cret = self.cIterator.next()
-
         if not self.cret.get().successObj:
             Error.errorhandler_wrapper(
                 self.cursor.connection if self.cursor is not None else None,
@@ -168,6 +163,12 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             raise StopIteration
         else:
             return ret
+
+    def _table_unit_next_impl(self):
+        if not self.table_returned:
+            self.table_returned = True
+            return self.pyarrow_table
+        raise StopIteration
 
     def init(self, str iter_unit):
         if iter_unit == IterUnit.ROW_UNIT.value:
@@ -203,6 +204,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
                     'msg': f'Failed to open arrow stream: {str(<object>self.cret.get().exception)}',
                     'errno': ER_FAILED_TO_READ_ARROW_STREAM
                 })
+        self._next_impl = self._row_unit_next_impl
         snow_logger.debug(msg=f"Batches read: {self.cIterator.getArrowArrayPtrs().size()}", path_name=__file__, func_name="init_row_unit")
 
     def init_table_unit(self) -> None:
@@ -249,4 +251,5 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
                 ) for i in range(self.nanoarrow_Table.size())
             ]
         )
+        self._next_impl = self._table_unit_next_impl
         snow_logger.debug(msg=f"Batches read: {self.nanoarrow_Table.size()}", path_name=__file__, func_name="init_table_unit")

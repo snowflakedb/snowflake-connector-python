@@ -13,8 +13,6 @@ from enum import Enum, unique
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
 
-import snowflake.connector.cursor
-
 from .arrow_context import ArrowConverterContext
 from .arrow_iterator import PyArrowIterator
 from .compat import OK, UNAUTHORIZED, urlparse
@@ -57,6 +55,41 @@ FIELD_TYPE_TO_PA_TYPE: list[DataType] = []
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
 SSE_C_KEY = "x-amz-server-side-encryption-customer-key"
 SSE_C_AES = "AES256"
+
+
+def _create_vendored_arrow_iterator(
+    data, context, use_dict_result, numpy, number_to_decimal, row_unit
+):
+    logger.debug("Using vendored arrow as the arrow data converter")
+    iter = PyArrowIterator(
+        None,
+        io.BytesIO(data),
+        context,
+        use_dict_result,
+        numpy,
+        number_to_decimal,
+    )
+    if row_unit == IterUnit.TABLE_UNIT:
+        iter.init_table_unit()
+    return iter
+
+
+def _create_nanoarrow_iterator(
+    data, context, use_dict_result, numpy, number_to_decimal, row_unit
+):
+    logger.debug("Using nanoarrow as the arrow data converter")
+    return NanoarrowIterator(
+        None,
+        data,
+        context,
+        use_dict_result,
+        numpy,
+        number_to_decimal,
+        row_unit == IterUnit.TABLE_UNIT,
+    )
+
+
+_create_arrow_iterator_method = _create_nanoarrow_iterator
 
 
 @unique
@@ -569,33 +602,14 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        if (
-            snowflake.connector.cursor.USE_NANOARROW_CONVERTER is None
-            and snowflake.connector.cursor._SERVER_USE_NANOARROW_CONVERTER_PARAMETER
-        ) or snowflake.connector.cursor.USE_NANOARROW_CONVERTER:
-            logger.debug("Using nanoarrow as the arrow data converter")
-            iter = NanoarrowIterator(
-                None,
-                response.content,
-                self._context,
-                self._use_dict_result,
-                self._numpy,
-                self._number_to_decimal,
-                row_unit == IterUnit.TABLE_UNIT,
-            )
-        else:
-            logger.debug("Using vendored arrow as the arrow data converter")
-            iter = PyArrowIterator(
-                None,
-                io.BytesIO(response.content),
-                self._context,
-                self._use_dict_result,
-                self._numpy,
-                self._number_to_decimal,
-            )
-            if row_unit == IterUnit.TABLE_UNIT:
-                iter.init_table_unit()
-        return iter
+        return _create_arrow_iterator_method(
+            response.content,
+            self._context,
+            self._use_dict_result,
+            self._numpy,
+            self._number_to_decimal,
+            row_unit,
+        )
 
     def _from_data(
         self, data: str, iter_unit: IterUnit
@@ -608,35 +622,14 @@ class ArrowResultBatch(ResultBatch):
         if len(data) == 0:
             return iter([])
 
-        if (
-            snowflake.connector.cursor.USE_NANOARROW_CONVERTER is None
-            and snowflake.connector.cursor._SERVER_USE_NANOARROW_CONVERTER_PARAMETER
-        ) or snowflake.connector.cursor.USE_NANOARROW_CONVERTER:
-            logger.debug("Using nanoarrow as the arrow data converter")
-            _iter = NanoarrowIterator(
-                None,
-                b64decode(data),
-                self._context,
-                self._use_dict_result,
-                self._numpy,
-                self._number_to_decimal,
-                iter_unit == IterUnit.TABLE_UNIT,
-            )
-        else:
-            logger.debug("Using vendored arrow as the arrow data converter")
-            _iter = PyArrowIterator(
-                None,
-                io.BytesIO(b64decode(data)),
-                self._context,
-                self._use_dict_result,
-                self._numpy,
-                self._number_to_decimal,
-            )
-            if iter_unit == IterUnit.TABLE_UNIT:
-                _iter.init_table_unit()
-            else:
-                _iter.init_row_unit()
-        return _iter
+        return _create_arrow_iterator_method(
+            b64decode(data),
+            self._context,
+            self._use_dict_result,
+            self._numpy,
+            self._number_to_decimal,
+            iter_unit,
+        )
 
     @classmethod
     def from_data(
