@@ -8,6 +8,7 @@ import abc
 import io
 import json
 import time
+from base64 import b64decode
 from enum import Enum, unique
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
@@ -622,7 +623,7 @@ class ArrowResultBatch(ResultBatch):
             return iter([])
 
         return _create_arrow_iterator_method(
-            data,
+            b64decode(data),
             self._context,
             self._use_dict_result,
             self._numpy,
