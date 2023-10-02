@@ -1721,6 +1721,14 @@ def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog):
     importlib.reload(snowflake.connector.cursor)
     assert snowflake.connector.cursor.USE_NANOARROW_CONVERTER is True
 
+    os.environ["USE_NANOARROW_CONVERTER"] = "True"
+    importlib.reload(snowflake.connector.cursor)
+    assert snowflake.connector.cursor.USE_NANOARROW_CONVERTER is True
+
+    os.environ["USE_NANOARROW_CONVERTER"] = "true"
+    importlib.reload(snowflake.connector.cursor)
+    assert snowflake.connector.cursor.USE_NANOARROW_CONVERTER is True
+
     with conn_cnx() as con:
         with con.cursor() as cur, caplog.at_level(logging.DEBUG):
             cur.execute("select 1").fetchall()
