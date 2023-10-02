@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -26,6 +28,8 @@ DEV_CONFIG = {
     "password": "ShouldNotShowUp",
     "protocol": "http",
 }
+TEST_RACE_CONDITION_THREAD_COUNT = 2
+TEST_RACE_CONDITION_DELAY_SECONDS = 1
 telemetry_data = {}
 exception = RevocationCheckError("Test OCSP Revocation error")
 event_type = "Test OCSP Exception"
@@ -198,3 +202,25 @@ def test_generate_telemetry_with_driver_info():
         snowflake.connector.telemetry.TelemetryField.KEY_OOB_VERSION.value: "1.2.3",
         "key": "value",
     }
+
+
+class MockTelemetryService(TelemetryService):
+    """Mocks a delay in the __init__ of TelemetryService to simulate a race condition"""
+
+    def __init__(self, *args, **kwargs):
+        # this delay all but guarantees enough time to catch multiple threads entering __init__
+        time.sleep(TEST_RACE_CONDITION_DELAY_SECONDS)
+        super().__init__(*args, **kwargs)
+
+
+def test_get_instance_multithreaded():
+    """Tests thread safety of multithreaded calls to TelemetryService.get_instance()"""
+    TelemetryService._TelemetryService__instance = None
+    with ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(MockTelemetryService.get_instance)
+            for _ in range(TEST_RACE_CONDITION_THREAD_COUNT)
+        ]
+        for future in futures:
+            # will error if singleton constraint violated
+            future.result()

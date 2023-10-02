@@ -5,12 +5,20 @@
 from __future__ import annotations
 
 import os
-from typing import Literal
+import pathlib
+from functools import cached_property
+from typing import Protocol
 
-from platformdirs import PlatformDirs, PlatformDirsABC
+from platformdirs import PlatformDirs
 
 
-def _resolve_platform_dirs() -> PlatformDirsABC:
+class PlatformDirsProto(Protocol):
+    @property
+    def user_config_path(self) -> pathlib.Path:
+        ...
+
+
+def _resolve_platform_dirs() -> PlatformDirsProto:
     """Decide on what PlatformDirs class to use.
 
     In case a folder exists (which can be customized with the environmental
@@ -40,7 +48,7 @@ def _resolve_platform_dirs() -> PlatformDirsABC:
         return PlatformDirs(**platformdir_kwargs)
 
 
-class SFPlatformDirs(PlatformDirsABC):
+class SFPlatformDirs:
     """Single folder platformdirs.
 
     This class introduces a PlatformDir class where everything is placed into a
@@ -51,91 +59,11 @@ class SFPlatformDirs(PlatformDirsABC):
     def __init__(
         self,
         single_dir: str,
-        appname: str | None = None,
-        appauthor: str | None | Literal[False] = None,
-        version: str | None = None,
-        roaming: bool = False,
-        multipath: bool = False,
-        opinion: bool = True,
-        ensure_exists: bool = False,
+        **kwargs,
     ) -> None:
-        super().__init__(
-            appname=appname,
-            appauthor=appauthor,
-            version=version,
-            roaming=roaming,
-            multipath=multipath,
-            opinion=opinion,
-            ensure_exists=ensure_exists,
-        )
-        self.single_dir = single_dir
+        self.single_dir = pathlib.Path(single_dir)
 
-    @property
-    def user_data_dir(self) -> str:
+    @cached_property
+    def user_config_path(self) -> str:
         """data directory tied to to the user"""
         return self.single_dir
-
-    @property
-    def site_data_dir(self) -> str:
-        """data directory shared by users"""
-        return self.user_data_dir
-
-    @property
-    def user_config_dir(self) -> str:
-        """config directory tied to the user"""
-        return self.user_data_dir
-
-    @property
-    def site_config_dir(self) -> str:
-        """config directory shared by the users"""
-        return self.user_data_dir
-
-    @property
-    def user_cache_dir(self) -> str:
-        """cache directory tied to the user"""
-        return self.user_data_dir
-
-    @property
-    def site_cache_dir(self) -> str:
-        """cache directory shared by users"""
-        return self.user_data_dir
-
-    @property
-    def user_state_dir(self) -> str:
-        """state directory tied to the user"""
-        return self.user_data_dir
-
-    @property
-    def user_log_dir(self) -> str:
-        """log directory tied to the user"""
-        return self.user_data_dir
-
-    @property
-    def user_documents_dir(self) -> str:
-        """documents directory tied to the user"""
-        return self.user_data_dir
-
-    @property
-    def user_runtime_dir(self) -> str:
-        """runtime directory tied to the user"""
-        return self.user_data_dir
-
-    @property
-    def user_music_dir(self) -> str:
-        """music directory tied to the user"""
-        return self.user_data_dir
-
-    @property
-    def user_pictures_dir(self) -> str:
-        """pictures directory tied to the user"""
-        return self.user_data_dir
-
-    @property
-    def user_videos_dir(self) -> str:
-        """videos directory tied to the user"""
-        return self.user_data_dir
-
-    @property
-    def user_downloads_dir(self) -> str:
-        """downloads directory tied to the user"""
-        return self.user_data_dir

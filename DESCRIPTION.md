@@ -12,6 +12,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
   - Added support for `use_logical_type` in `write_pandas`.
 
+- v3.2.1(September 26,2023)
+
+  - Fixed a bug where url port and path were ignored in private link oscp retry.
+  - Added thread safety in telemetry when instantiating multiple connections concurrently.
+  - Bumped platformdirs dependency from >=2.6.0,<3.9.0 to >=2.6.0,<4.0.0.0 and made necessary changes to allow this.
+  - Removed the deprecation warning from the vendored urllib3 about urllib3.contrib.pyopenssl deprecation.
+  - Improved robustness in handling authentication response.
+
 - v3.2.0(September 06,2023)
 
   - Made the ``parser`` -> ``manager`` renaming more consistent in ``snowflake.connector.config_manager`` module.
