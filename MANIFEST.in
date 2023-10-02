@@ -16,6 +16,7 @@ recursive-include src/snowflake/connector/nanoarrow_cpp *.c *.h
 exclude src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow_arrow_iterator.cpp
 exclude src/snowflake/connector/nanoarrow_cpp/scripts/.clang-format
 exclude src/snowflake/connector/nanoarrow_cpp/scripts/format.sh
+exclude src/snowflake/connector/nanoarrow_cpp/ArrowIterator/LICENSE.txt
 
 exclude .git-blame-ignore-revs
 exclude .pre-commit-config.yaml
