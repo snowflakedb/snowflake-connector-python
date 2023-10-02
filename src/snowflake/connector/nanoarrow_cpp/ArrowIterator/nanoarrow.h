@@ -21,7 +21,7 @@
 #define NANOARROW_VERSION_MAJOR 0
 #define NANOARROW_VERSION_MINOR 3
 #define NANOARROW_VERSION_PATCH 0
-#define NANOARROW_VERSION "0.3.0-SNAPSHOT"
+#define NANOARROW_VERSION "0.3.0"
 
 #define NANOARROW_VERSION_INT                                        \
   (NANOARROW_VERSION_MAJOR * 10000 + NANOARROW_VERSION_MINOR * 100 + \
@@ -1665,18 +1665,21 @@ static inline ArrowErrorCode ArrowArrayAppendDouble(struct ArrowArray* array,
 /// \brief Append a string of bytes to an array
 ///
 /// Returns NANOARROW_OK if value can be exactly represented by
-/// the underlying storage type or EINVAL otherwise (e.g.,
-/// the underlying array is not a binary, string, large binary, large string,
-/// or fixed-size binary array, or value is the wrong size for a fixed-size
-/// binary array).
+/// the underlying storage type, EOVERFLOW if appending value would overflow
+/// the offset type (e.g., if the data buffer would be larger than 2 GB for a
+/// non-large string type), or EINVAL otherwise (e.g., the underlying array is not a
+/// binary, string, large binary, large string, or fixed-size binary array, or value is
+/// the wrong size for a fixed-size binary array).
 static inline ArrowErrorCode ArrowArrayAppendBytes(struct ArrowArray* array,
                                                    struct ArrowBufferView value);
 
 /// \brief Append a string value to an array
 ///
 /// Returns NANOARROW_OK if value can be exactly represented by
-/// the underlying storage type or EINVAL otherwise (e.g.,
-/// the underlying array is not a string or large string array).
+/// the underlying storage type, EOVERFLOW if appending value would overflow
+/// the offset type (e.g., if the data buffer would be larger than 2 GB for a
+/// non-large string type), or EINVAL otherwise (e.g., the underlying array is not a
+/// string or large string array).
 static inline ArrowErrorCode ArrowArrayAppendString(struct ArrowArray* array,
                                                     struct ArrowStringView value);
 
@@ -1697,7 +1700,8 @@ static inline ArrowErrorCode ArrowArrayAppendDecimal(struct ArrowArray* array,
 /// \brief Finish a nested array element
 ///
 /// Appends a non-null element to the array based on the first child's current
-/// length. Returns NANOARROW_OK if the item was successfully added or EINVAL
+/// length. Returns NANOARROW_OK if the item was successfully added, EOVERFLOW
+/// if the child of a list or map array would exceed INT_MAX elements, or EINVAL
 /// if the underlying storage type is not a struct, list, large list, or fixed-size
 /// list, or if there was an attempt to add a struct or fixed-size list element where the
 /// length of the child array(s) did not match the expected length.
@@ -2969,8 +2973,8 @@ static inline ArrowErrorCode ArrowArrayAppendBytes(struct ArrowArray* array,
     case NANOARROW_TYPE_STRING:
     case NANOARROW_TYPE_BINARY:
       offset = ((int32_t*)offset_buffer->data)[array->length];
-      if ((offset + value.size_bytes) > INT32_MAX) {
-        return EINVAL;
+      if ((((int64_t)offset) + value.size_bytes) > INT32_MAX) {
+        return EOVERFLOW;
       }
 
       offset += (int32_t)value.size_bytes;
@@ -3118,7 +3122,7 @@ static inline ArrowErrorCode ArrowArrayFinishElement(struct ArrowArray* array) {
     case NANOARROW_TYPE_MAP:
       child_length = array->children[0]->length;
       if (child_length > INT32_MAX) {
-        return EINVAL;
+        return EOVERFLOW;
       }
       NANOARROW_RETURN_NOT_OK(
           ArrowBufferAppendInt32(ArrowArrayBuffer(array, 1), (int32_t)child_length));
