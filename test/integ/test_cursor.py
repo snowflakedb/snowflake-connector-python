@@ -1753,3 +1753,65 @@ def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog):
             assert "Using nanoarrow as the arrow data converter" in caplog.text
 
     snowflake.connector.cursor.USE_NANOARROW_CONVERTER = origin_value
+
+    # test server side session parameter PYTHON_CONNECTOR_USE_NANOARROW, without any client setting
+    with conn_cnx() as con:
+        # by default the session parameter is True
+        assert con._session_parameters["PYTHON_CONNECTOR_USE_NANOARROW"] is True
+        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
+            cur.execute("select 1").fetchall()
+            assert "Using nanoarrow as the arrow data converter" in caplog.text
+
+    with conn_cnx(
+        session_parameters={
+            "PYTHON_CONNECTOR_USE_NANOARROW": True,
+        },
+    ) as con:
+        # set to true
+        assert con._session_parameters["PYTHON_CONNECTOR_USE_NANOARROW"] is True
+        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
+            cur.execute("select 1").fetchall()
+            assert "Using nanoarrow as the arrow data converter" in caplog.text
+
+    with conn_cnx(
+        session_parameters={
+            "PYTHON_CONNECTOR_USE_NANOARROW": False,
+        },
+    ) as con:
+        # set to false
+        assert con._session_parameters["PYTHON_CONNECTOR_USE_NANOARROW"] is False
+        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
+            cur.execute("select 1").fetchall()
+            assert "Using vendored arrow as the arrow data converter" in caplog.text
+
+    # test client side parameter has higher priority
+
+    # test client uses nanoarrow False, but server uses True
+    # client should not use nanoarrow
+    snowflake.connector.cursor.USE_NANOARROW_CONVERTER = False
+    with conn_cnx(
+        session_parameters={
+            "PYTHON_CONNECTOR_USE_NANOARROW": True,
+        },
+    ) as con:
+        # set to true
+        assert con._session_parameters["PYTHON_CONNECTOR_USE_NANOARROW"] is True
+        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
+            cur.execute("select 1").fetchall()
+            assert "Using vendored arrow as the arrow data converter" in caplog.text
+
+    # test client uses nanoarrow True, but server uses False
+    # client should use nanoarrow
+    snowflake.connector.cursor.USE_NANOARROW_CONVERTER = True
+    with conn_cnx(
+        session_parameters={
+            "PYTHON_CONNECTOR_USE_NANOARROW": False,
+        },
+    ) as con:
+        # set to false
+        assert con._session_parameters["PYTHON_CONNECTOR_USE_NANOARROW"] is False
+        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
+            cur.execute("select 1").fetchall()
+            assert "Using nanoarrow as the arrow data converter" in caplog.text
+
+    snowflake.connector.cursor.USE_NANOARROW_CONVERTER = origin_value
