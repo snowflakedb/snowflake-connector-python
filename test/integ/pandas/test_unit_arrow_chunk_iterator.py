@@ -36,7 +36,7 @@ except ImportError:
 try:
     from snowflake.connector.arrow_iterator import IterUnit, PyArrowIterator
     from snowflake.connector.nanoarrow_arrow_iterator import (
-        PyArrowIterator as NanoarrowIterator,
+        PyArrowRowIterator as NanoarrowPyArrowRowIterator,
     )
 
     no_arrow_iterator_ext = False
@@ -456,8 +456,8 @@ def iterate_over_test_chunk(
     context = ArrowConverterContext()
 
     if use_nanoarrow_iterator:
-        it = NanoarrowIterator(
-            None, stream.read(), context, False, False, False, is_table_unit=False
+        it = NanoarrowPyArrowRowIterator(
+            None, stream.read(), context, False, False, False
         )
     else:
         it = PyArrowIterator(None, stream, context, False, False, False)

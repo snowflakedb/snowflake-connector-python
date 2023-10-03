@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import decimal
-import importlib
 import json
 import logging
 import os
@@ -1695,7 +1694,11 @@ def test_decoding_utf8_for_json_result(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog):
+    from snowflake.connector.cursor import _get_client_nanoarrow_setting
+
     origin_value = snowflake.connector.cursor.USE_NANOARROW_CONVERTER
+
+    # test setting directly the parameter
 
     snowflake.connector.cursor.USE_NANOARROW_CONVERTER = None
     with conn_cnx() as con:
@@ -1717,26 +1720,34 @@ def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog):
 
     snowflake.connector.cursor.USE_NANOARROW_CONVERTER = origin_value
 
+    # test setting by env var
+
     os.environ["USE_NANOARROW_CONVERTER"] = "1"
-    importlib.reload(snowflake.connector.cursor)
-    assert snowflake.connector.cursor.USE_NANOARROW_CONVERTER is True
+    assert _get_client_nanoarrow_setting() is True
 
     os.environ["USE_NANOARROW_CONVERTER"] = "True"
-    importlib.reload(snowflake.connector.cursor)
-    assert snowflake.connector.cursor.USE_NANOARROW_CONVERTER is True
+    assert _get_client_nanoarrow_setting() is True
 
     os.environ["USE_NANOARROW_CONVERTER"] = "true"
-    importlib.reload(snowflake.connector.cursor)
-    assert snowflake.connector.cursor.USE_NANOARROW_CONVERTER is True
+    assert _get_client_nanoarrow_setting() is True
+
+    snowflake.connector.cursor.USE_NANOARROW_CONVERTER = _get_client_nanoarrow_setting()
 
     with conn_cnx() as con:
         with con.cursor() as cur, caplog.at_level(logging.DEBUG):
             cur.execute("select 1").fetchall()
             assert "Using nanoarrow as the arrow data converter" in caplog.text
 
+    os.environ["USE_NANOARROW_CONVERTER"] = "False"
+    assert _get_client_nanoarrow_setting() is False
+
+    os.environ["USE_NANOARROW_CONVERTER"] = "false"
+    assert _get_client_nanoarrow_setting() is False
+
     os.environ["USE_NANOARROW_CONVERTER"] = "0"
-    importlib.reload(snowflake.connector.cursor)
-    assert snowflake.connector.cursor.USE_NANOARROW_CONVERTER is False
+    assert _get_client_nanoarrow_setting() is False
+
+    snowflake.connector.cursor.USE_NANOARROW_CONVERTER = _get_client_nanoarrow_setting()
 
     with conn_cnx() as con:
         with con.cursor() as cur, caplog.at_level(logging.DEBUG):
@@ -1744,8 +1755,7 @@ def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog):
             assert "Using vendored arrow as the arrow data converter" in caplog.text
 
     del os.environ["USE_NANOARROW_CONVERTER"]
-    importlib.reload(snowflake.connector.cursor)
-    assert snowflake.connector.cursor.USE_NANOARROW_CONVERTER is None
+    assert _get_client_nanoarrow_setting() is None
 
     with conn_cnx() as con:
         with con.cursor() as cur, caplog.at_level(logging.DEBUG):

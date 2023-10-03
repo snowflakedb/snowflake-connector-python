@@ -30,7 +30,10 @@ except ImportError:
 try:
     from snowflake.connector.arrow_iterator import PyArrowIterator
     from snowflake.connector.nanoarrow_arrow_iterator import (
-        PyArrowIterator as NanoarrowPyArrowIterator,
+        PyArrowRowIterator as NanoarrowPyArrowRowIterator,
+    )
+    from snowflake.connector.nanoarrow_arrow_iterator import (
+        PyArrowTableIterator as NanoarrowPyArrowTableIterator,
     )
 except ImportError:
     pass
@@ -113,14 +116,28 @@ def _wait_until_query_success(
 
 def create_pyarrow_iterator(input_data, use_table_iterator):
     # create nanoarrow based iterator
-    return NanoarrowPyArrowIterator(
-        None,
-        input_data,
-        ArrowConverterContext(session_parameters={"TIMEZONE": "America/Los_Angeles"}),
-        False,
-        False,
-        False,
-        use_table_iterator,
+    return (
+        NanoarrowPyArrowRowIterator(
+            None,
+            input_data,
+            ArrowConverterContext(
+                session_parameters={"TIMEZONE": "America/Los_Angeles"}
+            ),
+            False,
+            False,
+            False,
+        )
+        if not use_table_iterator
+        else NanoarrowPyArrowTableIterator(
+            None,
+            input_data,
+            ArrowConverterContext(
+                session_parameters={"TIMEZONE": "America/Los_Angeles"}
+            ),
+            False,
+            False,
+            False,
+        )
     )
 
 

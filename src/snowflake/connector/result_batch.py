@@ -19,7 +19,8 @@ from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import FIELD_TYPES, IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
 from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError
-from .nanoarrow_arrow_iterator import PyArrowIterator as NanoarrowIterator
+from .nanoarrow_arrow_iterator import PyArrowRowIterator as NanoarrowRowIterator
+from .nanoarrow_arrow_iterator import PyArrowTableIterator as NanoarrowTableIterator
 from .network import (
     RetryRequest,
     get_http_retryable_error,
@@ -78,14 +79,24 @@ def _create_nanoarrow_iterator(
     data, context, use_dict_result, numpy, number_to_decimal, row_unit
 ):
     logger.debug("Using nanoarrow as the arrow data converter")
-    return NanoarrowIterator(
-        None,
-        data,
-        context,
-        use_dict_result,
-        numpy,
-        number_to_decimal,
-        row_unit == IterUnit.TABLE_UNIT,
+    return (
+        NanoarrowRowIterator(
+            None,
+            data,
+            context,
+            use_dict_result,
+            numpy,
+            number_to_decimal,
+        )
+        if row_unit == IterUnit.ROW_UNIT
+        else NanoarrowTableIterator(
+            None,
+            data,
+            context,
+            use_dict_result,
+            numpy,
+            number_to_decimal,
+        )
     )
 
 

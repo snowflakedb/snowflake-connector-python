@@ -104,7 +104,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef object use_numpy
     cdef object number_to_decimal
     cdef object pyarrow_table
-    cdef object _next_impl
 
     def __cinit__(
             self,
@@ -114,11 +113,9 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             object use_dict_result,
             object numpy,
             object number_to_decimal,
-            object is_table_unit = False,
     ):
         self.context = arrow_context
         self.cIterator = NULL
-        self.unit = IterUnit.TABLE_UNIT.value if is_table_unit else IterUnit.ROW_UNIT.value
         self.use_dict_result = use_dict_result
         self.cursor = cursor
         self.use_numpy = numpy
@@ -127,12 +124,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.table_returned = False
         self.arrow_bytes = <char*>arrow_bytes
         self.arrow_bytes_size = len(arrow_bytes)
-        self._next_impl = None
-
-        if self.unit == IterUnit.TABLE_UNIT.value:
-            self.init_table_unit()
-        else:
-            self.init_row_unit()
 
     def __dealloc__(self):
         del self.cIterator
@@ -140,44 +131,18 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     def __iter__(self):
         return self
 
-    def __next__(self):
-        return self._next_impl()
 
-    def _row_unit_next_impl(self):
-        self.cret = self.cIterator.next()
-        if not self.cret.get().successObj:
-            Error.errorhandler_wrapper(
-                self.cursor.connection if self.cursor is not None else None,
-                self.cursor,
-                InterfaceError,
-                {
-                    'msg': f'Failed to convert current row, cause: {<object>self.cret.get().exception}',
-                    'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
-                }
-            )
-            # it looks like this line can help us get into python and detect the global variable immediately
-            # however, this log will not show up for unclear reason
-        ret = <object>self.cret.get().successObj
-
-        if ret is None:
-            raise StopIteration
-        else:
-            return ret
-
-    def _table_unit_next_impl(self):
-        if not self.table_returned:
-            self.table_returned = True
-            return self.pyarrow_table
-        raise StopIteration
-
-    def init(self, str iter_unit):
-        if iter_unit == IterUnit.ROW_UNIT.value:
-            self.init_row_unit()
-        elif iter_unit == IterUnit.TABLE_UNIT.value:
-            self.init_table_unit()
-        self.unit = iter_unit
-
-    def init_row_unit(self) -> None:
+cdef class PyArrowRowIterator(PyArrowIterator):
+    def __cinit__(
+        self,
+        object cursor,
+        object py_inputstream,
+        object arrow_context,
+        object use_dict_result,
+        object numpy,
+        object number_to_decimal,
+    ):
+        super().__init__(cursor, py_inputstream, arrow_context, use_dict_result, numpy, number_to_decimal)
         if self.cIterator is not NULL:
             return
 
@@ -204,10 +169,41 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
                     'msg': f'Failed to open arrow stream: {str(<object>self.cret.get().exception)}',
                     'errno': ER_FAILED_TO_READ_ARROW_STREAM
                 })
-        self._next_impl = self._row_unit_next_impl
-        snow_logger.debug(msg=f"Batches read: {self.cIterator.getArrowArrayPtrs().size()}", path_name=__file__, func_name="init_row_unit")
+        snow_logger.debug(msg=f"Batches read: {self.cIterator.getArrowArrayPtrs().size()}", path_name=__file__, func_name="__cinit__")
 
-    def init_table_unit(self) -> None:
+    def __next__(self):
+        self.cret = self.cIterator.next()
+        if not self.cret.get().successObj:
+            Error.errorhandler_wrapper(
+                self.cursor.connection if self.cursor is not None else None,
+                self.cursor,
+                InterfaceError,
+                {
+                    'msg': f'Failed to convert current row, cause: {<object>self.cret.get().exception}',
+                    'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
+                }
+            )
+            # it looks like this line can help us get into python and detect the global variable immediately
+            # however, this log will not show up for unclear reason
+        ret = <object>self.cret.get().successObj
+
+        if ret is None:
+            raise StopIteration
+        else:
+            return ret
+
+
+cdef class PyArrowTableIterator(PyArrowIterator):
+    def __cinit__(
+        self,
+        object cursor,
+        object py_inputstream,
+        object arrow_context,
+        object use_dict_result,
+        object numpy,
+        object number_to_decimal,
+    ):
+        super().__init__(cursor, py_inputstream, arrow_context, use_dict_result, numpy, number_to_decimal)
         if not INSTALLED_PYARROW:
             raise Error.errorhandler_make_exception(
                 ProgrammingError,
@@ -240,7 +236,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
                     'errno': ER_FAILED_TO_READ_ARROW_STREAM
                 })
         self.cret = self.cIterator.next()
-        self.unit = 'table'
         self.nanoarrow_Table = self.cIterator.getArrowArrayPtrs()
         self.nanoarrow_Schema = self.cIterator.getArrowSchemaPtrs()
         self.pyarrow_table = pyarrow.Table.from_batches(
@@ -251,5 +246,10 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
                 ) for i in range(self.nanoarrow_Table.size())
             ]
         )
-        self._next_impl = self._table_unit_next_impl
-        snow_logger.debug(msg=f"Batches read: {self.nanoarrow_Table.size()}", path_name=__file__, func_name="init_table_unit")
+        snow_logger.debug(msg=f"Batches read: {self.nanoarrow_Table.size()}", path_name=__file__, func_name="__cinit__")
+
+    def __next__(self):
+        if not self.table_returned:
+            self.table_returned = True
+            return self.pyarrow_table
+        raise StopIteration

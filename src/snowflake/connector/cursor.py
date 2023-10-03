@@ -121,6 +121,7 @@ LOG_MAX_QUERY_LENGTH = 80
 ASYNC_NO_DATA_MAX_RETRY = 24
 ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
 
+
 # The USE_NANOARROW_CONVERTER is introduced to control which arrow converter to use.
 # default value is None means it will be decided by the session parameter PYTHON_CONNECTOR_USE_NANOARROW whether
 # to use nanoarrow converter or vendored arrow converter, in which case, PYTHON_CONNECTOR_USE_NANOARROW defaults to True
@@ -128,9 +129,13 @@ ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
 # then the local setting has higher priority than the session parameter.
 # or it can be set via the environment variable USE_NANOARROW_CONVERTER, Only string values `true`, `1` will
 # be taken as True, all other values will be taken as false
-USE_NANOARROW_CONVERTER = os.environ.get("USE_NANOARROW_CONVERTER", None)
-if USE_NANOARROW_CONVERTER is not None:
-    USE_NANOARROW_CONVERTER = bool(USE_NANOARROW_CONVERTER.lower() in ("true", "1"))
+def _get_client_nanoarrow_setting():
+    ret = os.environ.get("USE_NANOARROW_CONVERTER", None)
+    return bool(ret.lower() in ("true", "1")) if ret is not None else ret
+
+
+# client parameter
+USE_NANOARROW_CONVERTER = _get_client_nanoarrow_setting()
 # server parameter default to use nanoarrow iterator
 _SERVER_USE_NANOARROW_CONVERTER_PARAMETER = True
 
