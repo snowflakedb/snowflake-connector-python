@@ -1695,6 +1695,7 @@ def test_decoding_utf8_for_json_result(conn_cnx):
 @pytest.mark.skipolddriver
 def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog):
     from snowflake.connector.cursor import _get_client_nanoarrow_setting
+
     origin_value = snowflake.connector.cursor.USE_NANOARROW_CONVERTER
 
     # test setting directly the parameter
