@@ -23,56 +23,26 @@ from typing import TYPE_CHECKING, Any
 from ..errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from ..errors import DatabaseError, Error, OperationalError
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from ..time_util import BackoffCtx
+from ..time_util import TimeoutBackoffCtx
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection
 
 logger = logging.getLogger(__name__)
 
+"""
+Default value for max retry is 1 because
+Python requests module already tries twice
+by default. Unlike JWT where we need to refresh
+token every 10 seconds, general authenticators
+wait for 60 seconds before connection timeout
+per attempt totaling a 240 sec wait time for a non
+JWT based authenticator which is more than enough.
+This can be changed ofcourse using MAX_CNXN_RETRY_ATTEMPTS
+env variable.
+"""
 DEFAULT_MAX_CON_RETRY_ATTEMPTS = 1
-
-
-class AuthRetryCtx(BackoffCtx):
-    def __init__(self) -> None:
-        super().__init__()
-        self._current_retry_count = 0
-        self._max_retry_attempts = int(
-            getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)
-        )
-        self._current_sleep_time = 1
-
-    def get_current_retry_count(self) -> int:
-        return self._current_retry_count
-
-    def increment_retry(self) -> None:
-        self._current_retry_count += 1
-
-    def should_retry(self) -> bool:
-        """Decides whether to retry connection.
-
-        Default value for max retry is 1 because
-        Python requests module already tries twice
-        by default. Unlike JWT where we need to refresh
-        token every 10 seconds, general authenticators
-        wait for 60 seconds before connection timeout
-        per attempt totaling a 240 sec wait time for a non
-        JWT based authenticator which is more than enough.
-        This can be changed ofcourse using MAX_CNXN_RETRY_ATTEMPTS
-        env variable.
-        """
-        return self._current_retry_count < self._max_retry_attempts
-
-    def next_sleep_duration(self) -> int:
-        self._current_sleep_time = self._backoff.next_sleep(
-            self._current_retry_count, self._current_sleep_time
-        )
-        logger.debug(f"Sleeping for {self._current_sleep_time} seconds")
-        return self._current_sleep_time
-
-    def reset(self) -> None:
-        self._current_retry_count = 0
-        self._current_sleep_time = 1
+DEFAULT_AUTH_CLASS_TIMEOUT = 120
 
 
 @unique
@@ -89,19 +59,21 @@ class AuthType(Enum):
 class AuthByPlugin(ABC):
     """External Authenticator interface."""
 
-    def __init__(self) -> None:
-        self._retry_ctx = AuthRetryCtx()
-
+    def __init__(self, **kwargs) -> None:
         self.consent_cache_id_token = False
-        self._timeout: int = 120
+        self._timeout = kwargs.pop("timeout", None)
+
+        self._retry_ctx = TimeoutBackoffCtx(
+            max_retry_attempts=int(
+                getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)
+            ),
+            timeout=self._timeout,
+            **kwargs,
+        )
 
     @property
     def timeout(self) -> int:
         return self._timeout
-
-    @timeout.setter
-    def timeout(self, value: Any) -> None:
-        self._timeout = int(value)
 
     @property
     @abstractmethod
@@ -212,7 +184,7 @@ class AuthByPlugin(ABC):
         logger.debug("Default timeout handler invoked for authenticator")
         if not self._retry_ctx.should_retry():
             error = OperationalError(
-                msg=f"Could not connect to Snowflake backend after {self._retry_ctx.get_current_retry_count()} attempt(s)."
+                msg=f"Could not connect to Snowflake backend after {self._retry_ctx.current_retry_count} attempt(s)."
                 "Aborting",
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
             )
@@ -220,7 +192,7 @@ class AuthByPlugin(ABC):
             raise error
         else:
             logger.debug(
-                f"Hit connection timeout, attempt number {self._retry_ctx.get_current_retry_count()}."
+                f"Hit connection timeout, attempt number {self._retry_ctx.current_retry_count}."
                 " Will retry in a bit..."
             )
             self._retry_ctx.increment_retry()

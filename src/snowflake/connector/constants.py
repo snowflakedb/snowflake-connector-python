@@ -332,7 +332,8 @@ ENV_VAR_TEST_MODE = "SNOWFLAKE_TEST_MODE"
 class BackoffMode(Enum):
     """This enum specifies the type of backoff to use between retries"""
 
-    DECORRELATED_JITTER = 0
-    FULL_JITTER = 1
-    LINEAR = 2
-    EXPONENTIAL = 3
+    DEFAULT_JITTER = 0
+    DECORRELATED_JITTER = 1
+    FULL_JITTER = 2
+    LINEAR = 3
+    EXPONENTIAL = 4

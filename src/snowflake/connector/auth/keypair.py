@@ -49,6 +49,7 @@ class AuthByKeyPair(AuthByPlugin):
         self,
         private_key: bytes | RSAPrivateKey,
         lifetime_in_seconds: int = LIFETIME,
+        **kwargs,
     ) -> None:
         """Inits AuthByKeyPair class with private key.
 
@@ -57,7 +58,21 @@ class AuthByKeyPair(AuthByPlugin):
                 object that implements the `RSAPrivateKey` interface.
             lifetime_in_seconds: number of seconds the JWT token will be valid
         """
-        super().__init__()
+        jwt_timeout = int(
+            timedelta(
+                seconds=int(
+                    os.getenv(
+                        "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
+                    )
+                )
+            ).total_seconds()
+        )
+        if "timeout" in kwargs and kwargs["timeout"] is not None:
+            kwargs["timeout"] = min(jwt_timeout, kwargs["timeout"])
+        else:
+            kwargs["timeout"] = jwt_timeout
+        super().__init__(**kwargs)
+
         self._private_key: bytes | RSAPrivateKey | None = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
@@ -68,15 +83,6 @@ class AuthByKeyPair(AuthByPlugin):
             os.getenv(
                 "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
             )
-        )
-        self._timeout = int(
-            timedelta(
-                seconds=int(
-                    os.getenv(
-                        "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
-                    )
-                )
-            ).total_seconds()
         )
         self._current_retry_count = 0
 
@@ -193,17 +199,17 @@ class AuthByKeyPair(AuthByPlugin):
         password: str | None,
         **kwargs: Any,
     ) -> None:
-        if self._retry_ctx.get_current_retry_count() > self._jwt_retry_attempts:
+        if self._retry_ctx.current_retry_count > self._jwt_retry_attempts:
             logger.debug("Exhausted max login attempts. Aborting connection")
             self._retry_ctx.reset()
             raise OperationalError(
-                msg=f"Could not connect to Snowflake backend after {self._retry_ctx.get_current_retry_count()} attempt(s)."
+                msg=f"Could not connect to Snowflake backend after {self._retry_ctx.current_retry_count} attempt(s)."
                 "Aborting",
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
             )
         else:
             logger.debug(
-                f"Hit JWT timeout, attempt {self._retry_ctx.get_current_retry_count()}. Retrying..."
+                f"Hit JWT timeout, attempt {self._retry_ctx.current_retry_count}. Retrying..."
             )
             self._retry_ctx.increment_retry()
 

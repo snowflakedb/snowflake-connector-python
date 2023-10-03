@@ -92,7 +92,11 @@ from .sqlstate import (
     SQLSTATE_IO_ERROR,
 )
 from .telemetry_oob import TelemetryService
-from .time_util import DEFAULT_MASTER_VALIDITY_IN_SECONDS, BackoffCtx, get_time_millis
+from .time_util import (
+    DEFAULT_MASTER_VALIDITY_IN_SECONDS,
+    TimeoutBackoffCtx,
+    get_time_millis,
+)
 from .tool.probe_connection import probe_connection
 from .vendored import requests
 from .vendored.requests import Response, Session
@@ -789,7 +793,7 @@ class SnowflakeRestful:
     ) -> dict[Any, Any]:
         """Carry out API request with session management."""
 
-        class RetryCtx(BackoffCtx):
+        class RetryCtx(TimeoutBackoffCtx):
             def __init__(
                 self,
                 timeout,

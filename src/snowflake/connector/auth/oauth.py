@@ -26,9 +26,9 @@ class AuthByOAuth(AuthByPlugin):
         """Returns the token."""
         return self._oauth_token
 
-    def __init__(self, oauth_token: str) -> None:
+    def __init__(self, oauth_token: str, **kwargs) -> None:
         """Initializes an instance with an OAuth Token."""
-        super().__init__()
+        super().__init__(**kwargs)
         self._oauth_token: str | None = oauth_token
 
     def reset_secrets(self) -> None:

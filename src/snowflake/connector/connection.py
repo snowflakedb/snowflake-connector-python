@@ -148,13 +148,11 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "schema": (None, (type(None), str)),  # snowflake
     "role": (None, (type(None), str)),  # snowflake
     "session_id": (None, (type(None), str)),  # snowflake
-    "login_timeout": (120, int),  # login timeout
+    "login_timeout": (None, (type(None), int)),  # login timeout
     "network_timeout": (
         None,
         (type(None), int),
     ),  # network timeout (infinite by default)
-    "request_timeout": (None, (type(None), int)),
-    "connect_timeout": (None, (type(None), int)),
     "socket_timeout": (None, (type(None), str)),
     "backoff_mode": (None, (type(None), str)),
     "backoff_base": (None, (type(None), int)),
@@ -488,16 +486,8 @@ class SnowflakeConnection:
         return int(self._network_timeout) if self._network_timeout is not None else None
 
     @property
-    def request_timeout(self) -> int | None:
-        return int(self._request_timeout) if self._request_timeout is not None else None
-
-    @property
-    def connect_timeout(self) -> int | None:
-        return int(self._connect_timeout) if self._connect_timeout is not None else None
-
-    @property
     def socket_timeout(self) -> int | None:
-        return int(self._socket_timeout) if self._connect_timeout is not None else None
+        return int(self._socket_timeout) if self._socket_timeout is not None else None
 
     @property
     def backoff_mode(self) -> BackoffMode | None:
@@ -911,6 +901,13 @@ class SnowflakeConnection:
 
         # Setup authenticator
         auth = Auth(self.rest)
+        auth_class_kwargs = {
+            "timeout": self.login_timeout,
+            "backoff_mode": self.backoff_mode,
+            "backoff_base": self.backoff_base,
+            "backoff_factor": self.backoff_factor,
+        }
+
         if self.auth_class is not None:
             if type(
                 self.auth_class
@@ -921,7 +918,9 @@ class SnowflakeConnection:
                 # TODO: add telemetry for custom auth
             self.auth_class = self.auth_class
         elif self._authenticator == DEFAULT_AUTHENTICATOR:
-            self.auth_class = AuthByDefault(password=self._password)
+            self.auth_class = AuthByDefault(
+                password=self._password, **auth_class_kwargs
+            )
         elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             self._session_parameters[PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = (
                 self._client_store_temporary_credential if IS_LINUX else True
@@ -939,6 +938,7 @@ class SnowflakeConnection:
                     protocol=self._protocol,
                     host=self.host,
                     port=self.port,
+                    **auth_class_kwargs,
                 )
             else:
                 self.auth_class = AuthByIdToken(
@@ -947,12 +947,15 @@ class SnowflakeConnection:
                     protocol=self._protocol,
                     host=self.host,
                     port=self.port,
+                    **auth_class_kwargs,
                 )
 
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
-            self.auth_class = AuthByKeyPair(private_key=self._private_key)
+            self.auth_class = AuthByKeyPair(
+                private_key=self._private_key, **auth_class_kwargs
+            )
         elif self._authenticator == OAUTH_AUTHENTICATOR:
-            self.auth_class = AuthByOAuth(oauth_token=self._token)
+            self.auth_class = AuthByOAuth(oauth_token=self._token, **auth_class_kwargs)
         elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
             self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                 self._client_request_mfa_token if IS_LINUX else True
@@ -966,18 +969,12 @@ class SnowflakeConnection:
             self.auth_class = AuthByUsrPwdMfa(
                 password=self._password,
                 mfa_token=self.rest.mfa_token,
+                **auth_class_kwargs,
             )
         else:
             # okta URL, e.g., https://<account>.okta.com/
-            self.auth_class = AuthByOkta(application=self.application)
-
-        # set auth_class backoff if user has specified it
-        if self.backoff_mode is not None:
-            self.auth_class._retry_ctx.set_backoff(
-                backoff_mode=self.backoff_mode,
-                base=self.backoff_base,
-                cap=self.backoff_cap,
-                factor=self.backoff_factor,
+            self.auth_class = AuthByOkta(
+                application=self.application, **auth_class_kwargs
             )
 
         self.authenticate_with_retry(self.auth_class)
@@ -1288,6 +1285,9 @@ class SnowflakeConnection:
         )
 
         auth = Auth(self.rest)
+        # record start time for computing timeout
+
+        auth_instance._retry_ctx.set_start_time()
         try:
             auth.authenticate(
                 auth_instance=auth_instance,

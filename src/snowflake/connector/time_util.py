@@ -22,6 +22,10 @@ except ImportError:
 
 DEFAULT_MASTER_VALIDITY_IN_SECONDS = 4 * 60 * 60  # seconds
 
+DEFAULT_BACKOFF_MODE = BackoffMode.DEFAULT_JITTER
+
+INITIAL_TIMEOUT_SLEEP_TIME = 1
+
 
 class HeartBeatTimer(Timer):
     """A thread which executes a function every client_session_keep_alive_heartbeat_frequency seconds."""
@@ -49,36 +53,120 @@ def get_time_millis() -> int:
     return int(time.time() * 1000)
 
 
-class BackoffCtx:
-    @staticmethod
-    def resolve_backoff(backoff_mode: BackoffMode) -> Backoff:
-        """Takes a BackoffMode enum and returns the corresponding Backoff class"""
-        return {
-            BackoffMode.DECORRELATED_JITTER: DecorrelateJitterBackoff,
-            BackoffMode.FULL_JITTER: FullJitterBackoff,
-            BackoffMode.LINEAR: LinearBackoff,
-            BackoffMode.EXPONENTIAL: ExponentialBackoff,
-        }[backoff_mode]
+class TimeoutBackoffCtx:
+    """Base context for handling timeouts and backoffs on retries"""
 
-    def __init__(self) -> None:
-        # default backoff
-        self.set_backoff(BackoffMode.DECORRELATED_JITTER)
+    def __init__(
+        self,
+        max_retry_attempts: int | None = None,
+        timeout: int | None = None,
+        backoff_mode: BackoffMode = DEFAULT_BACKOFF_MODE,
+        **kwargs,
+    ) -> None:
+        backoff_class: Backoff = resolve_backoff(backoff_mode)
+        self._backoff = backoff_class(
+            base=kwargs.pop("backoff_base", None),
+            cap=kwargs.pop("backoff_cap", None),
+            factor=kwargs.pop("backoff_factor", None),
+        )
 
-    def set_backoff(self, backoff_mode: BackoffMode, **kwargs) -> None:
-        clean_kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        backoff = self.resolve_backoff(backoff_mode)
-        self._backoff = backoff(**clean_kwargs)
+        self._current_retry_count = 0
+        self._current_sleep_time = INITIAL_TIMEOUT_SLEEP_TIME
+
+        self._max_retry_attempts = max_retry_attempts
+        # in seconds
+        self._timeout = timeout
+
+        # in milliseconds
+        self._start_time_millis = None
+
+    @property
+    def current_retry_count(self) -> int:
+        return int(self._current_retry_count)
+
+    @property
+    def current_sleep_time(self) -> int:
+        return int(self._current_sleep_time)
+
+    def set_start_time(self) -> None:
+        self._start_time_millis = get_time_millis()
+
+    def increment_retry(self) -> None:
+        self._current_retry_count += 1
+
+    def should_retry(self) -> bool:
+        """Decides whether to retry connection."""
+        if self._timeout is not None and self._start_time_millis is None:
+            logger.warning(
+                "Timeout set in TimeoutBackoffCtx, but start time not recorded"
+            )
+
+        timed_out = False
+        if self._timeout is not None and self._start_time_millis is not None:
+            elapsed_time_millis = get_time_millis() - self._start_time_millis
+            timed_out = elapsed_time_millis > self._timeout * 1000
+
+        retry_attempts_exceeded = False
+        if self._max_retry_attempts is not None:
+            retry_attempts_exceeded = (
+                self._current_retry_count >= self._max_retry_attempts
+            )
+
+        return not timed_out and not retry_attempts_exceeded
+
+    def next_sleep_duration(self) -> int:
+        self._current_sleep_time = self._backoff.next_sleep(
+            self._current_retry_count, self._current_sleep_time
+        )
+        logger.debug(f"Sleeping for {self._current_sleep_time} seconds")
+        return self._current_sleep_time
+
+    def reset(self) -> None:
+        self._current_retry_count = 0
+        self._current_sleep_time = INITIAL_TIMEOUT_SLEEP_TIME
+
+
+def resolve_backoff(backoff_mode: BackoffMode) -> Backoff:
+    """Takes a BackoffMode enum and returns the corresponding Backoff class"""
+    return {
+        BackoffMode.DEFAULT_JITTER: DefaultJitterBackoff,
+        BackoffMode.DECORRELATED_JITTER: DecorrelateJitterBackoff,
+        BackoffMode.FULL_JITTER: FullJitterBackoff,
+        BackoffMode.LINEAR: LinearBackoff,
+        BackoffMode.EXPONENTIAL: ExponentialBackoff,
+    }[backoff_mode]
 
 
 class Backoff:
-    def __init__(self, base: int = 1, cap: int = 16, factor: int = 2):
-        """default argument values were previously used everywhere else in code"""
-        self._base = base
-        self._cap = cap
-        self._factor = factor
+    DEFAULT_BACKOFF_BASE = 1
+    DEFAULT_BACKOFF_CAP = 16
+    DEFAULT_BACKOFF_FACTOR = 2
 
-    def next_sleep(self, _: Any, sleep: int) -> int:
+    def __init__(
+        self,
+        base: int | None = None,
+        cap: int | None = None,
+        factor: int | None = None,
+    ):
+        self._base = base if base is not None else self.DEFAULT_BACKOFF_BASE
+        self._cap = cap if cap is not None else self.DEFAULT_BACKOFF_CAP
+        self._factor = factor if cap is not None else self.DEFAULT_BACKOFF_FACTOR
+
+    def next_sleep(self, cnt: Any, sleep: int) -> int:
         pass
+
+
+class DefaultJitterBackoff(Backoff):
+    """Default retry strategy as specified in Client Retry Strategy"""
+
+    def next_sleep(self, cnt: Any, sleep: int) -> int:
+        mult_factor = random.choice([-1, 1])
+        jitter_amount = 0.5 * sleep * mult_factor
+
+        linear_wait = sleep + jitter_amount
+        exp_wait = (self._factor**cnt) + jitter_amount
+
+        return int(random.choice([linear_wait, exp_wait]))
 
 
 class DecorrelateJitterBackoff(Backoff):
