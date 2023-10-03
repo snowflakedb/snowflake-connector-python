@@ -8,6 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.3.0(Unreleased)
+  - Updated to use apache arrow-nanoarrow project for result arrow data conversion.
+
 - v3.2.1(September 26,2023)
 
   - Fixed a bug where url port and path were ignored in private link oscp retry.
@@ -15,14 +18,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Bumped platformdirs dependency from >=2.6.0,<3.9.0 to >=2.6.0,<4.0.0.0 and made necessary changes to allow this.
   - Removed the deprecation warning from the vendored urllib3 about urllib3.contrib.pyopenssl deprecation.
   - Improved robustness in handling authentication response.
-
-- v3.3.0b1(September 13,2023)
-
-  - Version 3.3.0b1 is the snowflake-connector-python based on apache nanoarrow project, which
-reduces the package size as well as removes a hard dependency on a specific version of pyarrow.
-This version is built on top of v3.2.0, and it includes the following nanoarrow related improvements:
-    - Updated arrow-nanoarrow dependency which improved error handling.
-    - Aligned error experience of handling corrupted arrow data with the GA versions.
 
 - v3.2.0(September 06,2023)
 
