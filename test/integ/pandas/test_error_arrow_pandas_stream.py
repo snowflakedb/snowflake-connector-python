@@ -13,7 +13,7 @@ from ...helpers import (
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True])
 def test_connector_error_base64_stream_chunk_remove_single_byte(use_nanoarrow_iterator):
     _arrow_error_stream_chunk_remove_single_byte_test(
         use_table_iterator=True, use_nanoarrow_iterator=use_nanoarrow_iterator

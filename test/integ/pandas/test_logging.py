@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import logging
 
-import snowflake.connector.cursor
-
 
 def test_rand_table_log(caplog, conn_cnx, db_parameters):
     with conn_cnx() as conn:
@@ -28,13 +26,7 @@ def test_rand_table_log(caplog, conn_cnx, db_parameters):
             if "Batches read:" in record.msg:
                 has_batch_read = True
                 assert "arrow_iterator" in record.filename
-                if (
-                    snowflake.connector.cursor.USE_NANOARROW_CONVERTER is True
-                    or snowflake.connector.cursor.USE_NANOARROW_CONVERTER is None
-                ):
-                    assert "init_row_unit" in record.funcName
-                else:
-                    assert "__cinit__" in record.funcName
+                assert "__cinit__" in record.funcName
 
             if "Arrow BatchSize:" in record.msg:
                 has_batch_size = True

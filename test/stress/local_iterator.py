@@ -24,6 +24,12 @@ from util import task_memory_decorator, task_time_execution_decorator
 
 from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.arrow_iterator import PyArrowIterator
+from snowflake.connector.nanoarrow_arrow_iterator import (
+    PyArrowRowIterator as NanoarrowRowIterator,
+)
+from snowflake.connector.nanoarrow_arrow_iterator import (
+    PyArrowTableIterator as NanoarrowTableIterator,
+)
 from snowflake.connector.version import VERSION
 
 stress_util.print_to_console = False
@@ -52,14 +58,28 @@ def remove_bytes(byte_str, num_bytes):
 
 def create_pyarrow_iterator(input_data, use_table_unit):
     # create nanoarrow based iterator
-    return PyArrowIterator(
-        None,
-        input_data,
-        ArrowConverterContext(session_parameters={"TIMEZONE": "America/Los_Angeles"}),
-        False,
-        False,
-        False,
-        use_table_unit,
+    return (
+        NanoarrowRowIterator(
+            None,
+            input_data,
+            ArrowConverterContext(
+                session_parameters={"TIMEZONE": "America/Los_Angeles"}
+            ),
+            False,
+            False,
+            False,
+        )
+        if not use_table_unit
+        else NanoarrowTableIterator(
+            None,
+            input_data,
+            ArrowConverterContext(
+                session_parameters={"TIMEZONE": "America/Los_Angeles"}
+            ),
+            False,
+            False,
+            False,
+        )
     )
 
 
@@ -144,6 +164,19 @@ if __name__ == "__main__":
         action="store_true",
         default=False,
     )
+
+    parser.add_argument(
+        "--use_vendored_arrow",
+        action="store_true",
+        default=False,
+    )
+
+    parser.add_argument(
+        "--test_error_method",
+        action="store_true",
+        default=False,
+    )
+
     args = parser.parse_args()
 
     with open(args.data_file) as f:
@@ -158,14 +191,20 @@ if __name__ == "__main__":
     )
     create_arrow_iterator_method = (
         create_old_pyarrow_iterator
-        if str(VERSION[2]).isdigit()
+        if args.use_vendored_arrow
         else create_pyarrow_iterator
     )
 
     perf_check_task_for_loop_iterator = task_time_execution_decorator(
-        task_for_loop_iterator
+        task_for_loop_iterator_expected_error
+        if args.test_error_method
+        else task_for_loop_iterator
     )
-    memory_check_task_for_loop_iterator = task_memory_decorator(task_for_loop_iterator)
+    memory_check_task_for_loop_iterator = task_memory_decorator(
+        task_for_loop_iterator_expected_error
+        if args.test_error_method
+        else task_for_loop_iterator
+    )
 
     execute_task(
         memory_check_task_for_loop_iterator,
