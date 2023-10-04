@@ -5,13 +5,17 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, Mock, PropertyMock
+import logging
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
+
+import pytest
 
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
 
 try:  # pragma: no cover
+    import snowflake.connector.vendored.requests.sessions
     from snowflake.connector.auth import AuthByOkta
 except ImportError:
     from snowflake.connector.auth_okta import AuthByOkta
@@ -70,8 +74,11 @@ def test_auth_okta():
     def fake_fetch(method, full_url, headers, **kwargs):
         return ref_response_html
 
+    def get_one_time_token():
+        return one_time_token
+
     rest.fetch = fake_fetch
-    response_html = auth._step4(rest._connection, one_time_token, sso_url)
+    response_html = auth._step4(rest._connection, get_one_time_token, sso_url)
     assert response_html == response_html
 
     # step 5
@@ -171,6 +178,74 @@ def test_auth_okta_step3_negative():
     assert rest._connection.errorhandler.called  # auth failure error
 
 
+@pytest.mark.skipolddriver
+def test_auth_okta_step4_negative(caplog):
+    """Authentication by OKTA step4 negative test case."""
+    authenticator = "https://testsso.snowflake.net/"
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    service_name = ""
+
+    ref_sso_url = "https://testsso.snowflake.net/sso"
+    ref_token_url = "https://testsso.snowflake.net/token"
+    rest = _init_rest(ref_sso_url, ref_token_url)
+
+    auth = AuthByOkta(application)
+    # step 1
+    headers, sso_url, token_url = auth._step1(
+        rest._connection, authenticator, service_name, account, user
+    )
+    # step 2
+    auth._step2(rest._connection, authenticator, sso_url, token_url)
+    assert not rest._connection.errorhandler.called  # no error
+
+    # step 3: authentication by IdP failed due to throttling
+    raise_token_refresh_error = True
+    second_token_generated = False
+
+    def get_one_time_token():
+        nonlocal raise_token_refresh_error
+        nonlocal second_token_generated
+        if raise_token_refresh_error:
+            assert not second_token_generated
+            return "1token1"
+        else:
+            second_token_generated = True
+            return "2token2"
+
+    # the first time, when step4 gets executed, we return 429
+    # the second time when step4 gets retried, we return 200
+    def mock_session_request(*args, **kwargs):
+        nonlocal second_token_generated
+        url = kwargs.get("url")
+        assert url == (
+            "https://testsso.snowflake.net/sso?RelayState=%2Fsome%2Fdeep%2Flink&onetimetoken=1token1"
+            if not second_token_generated
+            else "https://testsso.snowflake.net/sso?RelayState=%2Fsome%2Fdeep%2Flink&onetimetoken=2token2"
+        )
+        nonlocal raise_token_refresh_error
+        if raise_token_refresh_error:
+            raise_token_refresh_error = False
+            return Mock(status_code=429)
+        else:
+            return Mock(status_code=200, text="success")
+
+    with patch.object(
+        snowflake.connector.vendored.requests.sessions.Session,
+        "request",
+        new=mock_session_request,
+    ):
+        caplog.set_level(logging.DEBUG, "snowflake.connector")
+        response_html = auth._step4(rest._connection, get_one_time_token, sso_url)
+        # make sure the RefreshToken error is caught and tried
+        assert "step4: refresh token for re-authentication" in caplog.text
+        # test that token generation method is called
+        assert second_token_generated
+        assert response_html == "success"
+        assert not rest._connection.errorhandler.called
+
+
 def test_auth_okta_step5_negative():
     """Authentication by OKTA step5 negative test case."""
     authenticator = "https://testsso.snowflake.net/"
@@ -217,8 +292,11 @@ def test_auth_okta_step5_negative():
     def fake_fetch(method, full_url, headers, **kwargs):
         return ref_response_html
 
+    def get_one_time_token():
+        return one_time_token
+
     rest.fetch = fake_fetch
-    response_html = auth._step4(rest._connection, one_time_token, sso_url)
+    response_html = auth._step4(rest._connection, get_one_time_token, sso_url)
     assert response_html == ref_response_html
 
     # step 5
@@ -245,6 +323,7 @@ def _init_rest(ref_sso_url, ref_token_url, success=True, message=None):
         }
 
     connection = MagicMock()
+    connection.login_timeout = 120
     connection._login_timeout = 120
     connection._network_timeout = None
     connection.errorhandler = Mock(return_value=None)

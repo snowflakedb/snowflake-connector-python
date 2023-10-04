@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import logging
-import sys
 from unittest import mock
 
 import pytest
@@ -19,10 +18,7 @@ except ImportError:
     MissingPandas = None
     _import_or_missing_pandas_option = None
 
-if sys.version_info >= (3, 8):
-    from importlib.metadata import distributions
-else:
-    from importlib_metadata import distributions
+from importlib.metadata import distributions
 
 
 @pytest.mark.skipif(

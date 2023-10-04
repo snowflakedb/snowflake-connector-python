@@ -51,6 +51,37 @@ class ExpectedQCCData:
         self.priorities = [BASE_PRIORITY + i for i in range(self.capacity)]
 
 
+def serialize_to_json(qcc: QueryContextCache) -> str:
+    """
+    This function is used for testing the deserialize_to_dict function is correct. Note that `QueryContextCache::serialize_to_dict` function is used in sending the query context back to GS.
+    It has slight difference with this function on `context` field.
+    """
+    with qcc._lock:
+        qcc.log_cache_entries()
+
+        if len(qcc._tree_set) == 0:
+            return ""
+
+        try:
+            data = {
+                "entries": [
+                    {
+                        "id": qce.id,
+                        "timestamp": qce.read_timestamp,
+                        "priority": qce.priority,
+                        "context": qce.context,
+                    }
+                    for qce in qcc._tree_set
+                ]
+            }
+            # Serialize the data to JSON
+            serialized_data = json.dumps(data)
+
+            return serialized_data
+        except Exception:
+            return ""
+
+
 @pytest.fixture()
 def expected_data() -> ExpectedQCCData:
     data = ExpectedQCCData(MAX_CAPACITY)
@@ -376,7 +407,8 @@ def test_serialization_deserialization_with_null_context(
 ):
     assert_cache_with_data(qcc_with_data_null_context, expected_data_with_null_context)
 
-    data = qcc_with_data_null_context.serialize_to_json()
+    data = serialize_to_json(qcc_with_data_null_context)
+
     qcc_with_data_null_context.clear_cache()
     assert len(qcc_with_data_null_context) == 0
 
@@ -390,7 +422,7 @@ def test_serialization_deserialization(
 ):
     assert_cache_with_data(qcc_with_data, expected_data)
 
-    data = qcc_with_data.serialize_to_json()
+    data = serialize_to_json(qcc_with_data)
     qcc_with_data.clear_cache()
     assert len(qcc_with_data) == 0
 

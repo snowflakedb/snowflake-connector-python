@@ -41,22 +41,22 @@ from snowflake.connector.errors import (
 )
 
 try:
+    from snowflake.connector.compat import TOO_MANY_REQUESTS
+    from snowflake.connector.errors import TooManyRequests
     from snowflake.connector.result_batch import MAX_DOWNLOAD_RETRY, JSONResultBatch
-except ImportError:
-    MAX_DOWNLOAD_RETRY = None
-    JSONResultBatch = None
-from snowflake.connector.sqlstate import (
-    SQLSTATE_CONNECTION_REJECTED,
-    SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-)
-
-try:
     from snowflake.connector.vendored import requests  # NOQA
 
     REQUEST_MODULE_PATH = "snowflake.connector.vendored.requests"
 except ImportError:
+    MAX_DOWNLOAD_RETRY = None
+    JSONResultBatch = None
     REQUEST_MODULE_PATH = "requests"
-
+    TooManyRequests = None
+    TOO_MANY_REQUESTS = None
+from snowflake.connector.sqlstate import (
+    SQLSTATE_CONNECTION_REJECTED,
+    SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+)
 
 MockRemoteChunkInfo = namedtuple("MockRemoteChunkInfo", "url")
 chunk_info = MockRemoteChunkInfo("http://www.chunk-url.com")
@@ -76,6 +76,7 @@ def test_ok_response_download(mock_get):
     assert response.status_code == 200
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "errcode,error_class",
     [
@@ -83,6 +84,7 @@ def test_ok_response_download(mock_get):
         (FORBIDDEN, ForbiddenError),  # 403
         (METHOD_NOT_ALLOWED, MethodNotAllowed),  # 405
         (REQUEST_TIMEOUT, OtherHTTPRetryableError),  # 408
+        (TOO_MANY_REQUESTS, TooManyRequests),  # 429
         (INTERNAL_SERVER_ERROR, InternalServerError),  # 500
         (BAD_GATEWAY, BadGatewayError),  # 502
         (SERVICE_UNAVAILABLE, ServiceUnavailableError),  # 503

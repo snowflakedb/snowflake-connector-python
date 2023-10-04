@@ -5,6 +5,10 @@
 
 from __future__ import annotations
 
+import logging
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 import snowflake.connector.errorcode
@@ -24,6 +28,8 @@ DEV_CONFIG = {
     "password": "ShouldNotShowUp",
     "protocol": "http",
 }
+TEST_RACE_CONDITION_THREAD_COUNT = 2
+TEST_RACE_CONDITION_DELAY_SECONDS = 1
 telemetry_data = {}
 exception = RevocationCheckError("Test OCSP Revocation error")
 event_type = "Test OCSP Exception"
@@ -49,15 +55,20 @@ def telemetry_setup(request):
     telemetry.flush()
 
 
-def test_telemetry_oob_simple_flush(telemetry_setup):
+def test_telemetry_oob_simple_flush(telemetry_setup, caplog):
     """Tests capturing and sending a simple OCSP Exception message."""
     telemetry = TelemetryService.get_instance()
-
+    telemetry.flush()  # clear the buffer first
     telemetry.log_ocsp_exception(
         event_type, telemetry_data, exception=exception, stack_trace=stack_trace
     )
     assert telemetry.size() == 1
+    caplog.set_level(logging.DEBUG, "snowflake.connector.telemetry_oob")
     telemetry.flush()
+    assert (
+        "Failed to generate a JSON dump from the passed in telemetry OOB events"
+        not in caplog.text
+    )
     assert telemetry.size() == 0
 
 
@@ -191,3 +202,25 @@ def test_generate_telemetry_with_driver_info():
         snowflake.connector.telemetry.TelemetryField.KEY_OOB_VERSION.value: "1.2.3",
         "key": "value",
     }
+
+
+class MockTelemetryService(TelemetryService):
+    """Mocks a delay in the __init__ of TelemetryService to simulate a race condition"""
+
+    def __init__(self, *args, **kwargs):
+        # this delay all but guarantees enough time to catch multiple threads entering __init__
+        time.sleep(TEST_RACE_CONDITION_DELAY_SECONDS)
+        super().__init__(*args, **kwargs)
+
+
+def test_get_instance_multithreaded():
+    """Tests thread safety of multithreaded calls to TelemetryService.get_instance()"""
+    TelemetryService._TelemetryService__instance = None
+    with ThreadPoolExecutor() as executor:
+        futures = [
+            executor.submit(MockTelemetryService.get_instance)
+            for _ in range(TEST_RACE_CONDITION_THREAD_COUNT)
+        ]
+        for future in futures:
+            # will error if singleton constraint violated
+            future.result()

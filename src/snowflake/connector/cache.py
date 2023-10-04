@@ -20,6 +20,7 @@ from filelock import FileLock, Timeout
 from typing_extensions import NamedTuple, Self
 
 from . import constants
+from .constants import ENV_VAR_TEST_MODE
 
 now = datetime.datetime.now
 getmtime = os.path.getmtime
@@ -27,6 +28,8 @@ getmtime = os.path.getmtime
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
+
+test_mode = os.getenv(ENV_VAR_TEST_MODE, "").lower() == "true"
 
 
 class CacheEntry(NamedTuple, Generic[T]):
@@ -75,8 +78,7 @@ class SFDictCache(Generic[K, V]):
         the dictionary provided.
         """
         cache = cls(**kw)
-        for k, v in _dict.items():
-            cache[k] = v
+        cache.update(_dict)
         return cache
 
     def _getitem(
@@ -90,6 +92,10 @@ class SFDictCache(Generic[K, V]):
         This should only be used by internal functions when already
         holding self._lock.
         """
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
         try:
             t, v = self._cache[k]
         except KeyError:
@@ -101,14 +107,8 @@ class SFDictCache(Generic[K, V]):
             self._hit(k)
         return v
 
-    def _getitem_non_locking(
-        self,
-        k: K,
-        *,
-        should_record_hits: bool = True,
-    ) -> V:
-        # aliasing _getitem to unify the api with SFDictFileCache
-        return self._getitem(k, should_record_hits=should_record_hits)
+    # aliasing _getitem to unify the api with SFDictFileCache
+    _getitem_non_locking = _getitem
 
     def _setitem(self, k: K, v: V) -> None:
         """Non-locking version of __setitem__.
@@ -116,6 +116,10 @@ class SFDictCache(Generic[K, V]):
         This should only be used by internal functions when already
         holding self._lock.
         """
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
         self._cache[k] = CacheEntry(
             expiry=now() + self._entry_lifetime,
             entry=v,
@@ -182,6 +186,10 @@ class SFDictCache(Generic[K, V]):
         This should only be used by internal functions when already
         holding self._lock.
         """
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
         del self._cache[key]
         self._add_or_remove()
 
@@ -209,6 +217,15 @@ class SFDictCache(Generic[K, V]):
         other: dict[K, V] | list[tuple[K, V]] | SFDictCache[K, V],
         update_newer_only: bool = False,
     ) -> bool:
+        """Non-locking version of update.
+
+        This should only be used by internal functions when already
+        holding self._lock and other._lock.
+        """
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
         to_insert: dict[K, CacheEntry[V]]
         self._clear_expired_entries()
         if isinstance(other, (list, dict)):
@@ -219,7 +236,7 @@ class SFDictCache(Generic[K, V]):
                 g = iter(other.items())
             to_insert = {k: CacheEntry(expiry=expiry, entry=v) for k, v in g}
         elif isinstance(other, SFDictCache):
-            other._clear_expired_entries()
+            other.clear_expired_entries()
             others_items = list(other._cache.items())
             # Only accept values from another cache if their key is not in self,
             #  or if expiry is later the self known one
@@ -238,12 +255,15 @@ class SFDictCache(Generic[K, V]):
         else:
             raise TypeError
         self._cache.update(to_insert)
-        self._add_or_remove()
+        if to_insert:
+            self._add_or_remove()
+        # TODO: this should really save_if_should
         return len(to_insert) > 0
 
     def update(
         self,
         other: dict[K, V] | list[tuple[K, V]] | SFDictCache[K, V],
+        update_newer_only: bool = False,
     ) -> bool:
         """Insert multiple values at the same time, if self could learn from the other.
 
@@ -261,7 +281,7 @@ class SFDictCache(Generic[K, V]):
         into the other caches.
         """
         with self._lock:
-            return self._update(other)
+            return self._update(other, update_newer_only)
 
     def update_newer(
         self,
@@ -275,12 +295,20 @@ class SFDictCache(Generic[K, V]):
             )
 
     def _clear_expired_entries(self) -> None:
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
+        cache_updated = False
         for k in list(self._cache.keys()):
             try:
                 self._getitem(k, should_record_hits=False)
             except KeyError:
-                continue
-        self._add_or_remove()
+                # the only case KeyError raised in this method
+                # is that k is expired
+                cache_updated = True
+        if cache_updated:
+            self._add_or_remove()
 
     def clear_expired_entries(self) -> None:
         """Remove expired entries from the cache."""
@@ -343,7 +371,6 @@ class SFDictCache(Generic[K, V]):
 
 
 class SFDictFileCache(SFDictCache):
-
     # This number decides the chance of saving after writing (probability: 1/n+1)
     MAX_RAND_INT = 9
     _ATTRIBUTES_TO_PICKLE = (
@@ -419,7 +446,11 @@ class SFDictFileCache(SFDictCache):
         self._file_lock = FileLock(self._file_lock_path, timeout=self.file_timeout)
         self.last_loaded: datetime.datetime | None = None
         if os.path.exists(self.file_path):
-            self._load()
+            with self._lock:
+                self._load()
+        # indicate whether the cache is modified or not, this variable is for
+        # SFDictFileCache to determine whether to dump cache to file when _save is called
+        self._cache_modified = False
 
     def _getitem_non_locking(
         self,
@@ -456,41 +487,8 @@ class SFDictFileCache(SFDictCache):
 
     def __getitem__(self, k: K) -> V:
         """Returns an element if it hasn't expired yet in a thread-safe way."""
-        self._lock.acquire()
-        # TODO: This variable could be replaced by a wrapper class that keeps track
-        #  of whether the lock is locked, but unless this function gets extended I
-        #  feel like it's an overkill. Make sure to change the bool right after
-        #  self._lock.acquire() and self._lock.release().
-        currently_holding = True
-        try:
-            if k not in self._cache:
-                self._lock.release()
-                currently_holding = False
-                loaded = self._load_if_should()
-                self._lock.acquire()
-                currently_holding = True
-                if (not loaded) or k not in self._cache:
-                    self._miss(k)
-                    raise KeyError
-            t, v = self._cache[k]
-            if is_expired(t):
-                self._lock.release()
-                currently_holding = False
-                loaded = self._load_if_should()
-                self._lock.acquire()
-                currently_holding = True
-                expire_item = True
-                if loaded:
-                    t, v = self._cache[k]
-                    expire_item = is_expired(t)
-                if expire_item:
-                    # Raises KeyError
-                    self._expire(k)
-            self._hit(k)
-            return v
-        finally:
-            if currently_holding:
-                self._lock.release()
+        with self._lock:
+            return self._getitem_non_locking(k)
 
     def _setitem(self, k: K, v: V) -> None:
         super()._setitem(k, v)
@@ -500,20 +498,50 @@ class SFDictFileCache(SFDictCache):
         """Load cache from disk if possible, returns whether it was able to load."""
         try:
             with open(self.file_path, "rb") as r_file:
-                other = pickle.load(r_file)
-            self._update(
-                other,
+                other: SFDictFileCache = pickle.load(r_file)
+            # Since we want to know whether we are dirty after loading
+            #  we have to know whether the file could learn anything from self
+            #  so instead of calling self.update we call other.update and swap
+            #  the 2 underlying caches after.
+            self._lock.release()
+            cache_file_learnt = other.update(
+                self,
                 update_newer_only=True,
             )
+            self._lock.acquire()
+            self._cache, other._cache = other._cache, self._cache
+            self.telemetry["size"] = other.telemetry["size"]
+            self._cache_modified = cache_file_learnt
             self.last_loaded = now()
             return True
+        except (AssertionError, RuntimeError):
+            raise
         except Exception as e:
             logger.debug("Fail to read cache from disk due to error: %s", e)
             return False
 
-    def _save(self, load_first: bool = True) -> bool:
-        """Save cache to disk if possible, returns whether it was able to save."""
+    def load(self) -> bool:
+        """Load cache from disk if possible, returns whether it was able to load.
+
+        This is the public version of _load, it makes sure that all the
+        necessary locks are acquired.
+        """
+        with self._lock:
+            return self._load()
+
+    def _save(self, load_first: bool = True, force_flush: bool = False) -> bool:
+        """Save cache to disk if possible, returns whether it was able to save.
+
+        This function is non-locking when it comes to self._lock.
+        """
+        if test_mode:
+            assert (
+                self._lock.locked()
+            ), "The mutex self._lock should be locked by this thread"
         self._clear_expired_entries()
+        if not self._cache_modified and not force_flush:
+            # cache is not updated, so there is no need to dump cache to file, we just return
+            return False
         try:
             with self._file_lock:
                 if load_first:
@@ -531,12 +559,14 @@ class SFDictFileCache(SFDictCache):
                     # python program.
                     # thus we fall back to the approach using the normal open() method to open a file and write.
                     with open(tmp_file, "wb") as w_file:
-                        pickle.dump(self, w_file)
+                        w_file.write(pickle.dumps(self))
                     # We write to a tmp file and then move it to have atomic write
                     os.replace(tmp_file_path, self.file_path)
                     self.last_loaded = datetime.datetime.fromtimestamp(
                         getmtime(self.file_path),
                     )
+                    # after update, reset self._cache_modified to indicate it's up-to-update to avoid unnecessary flush
+                    self._cache_modified = False
                     return True
                 except NameError:
                     # note: when exiting python program, garbage collection will kick in
@@ -559,9 +589,20 @@ class SFDictFileCache(SFDictCache):
             logger.debug(
                 f"acquiring {self._file_lock_path} timed out, skipping saving..."
             )
+        except (AssertionError, RuntimeError):
+            raise
         except Exception as e:
             logger.debug("Fail to write cache to disk due to error: %s", e)
         return False
+
+    def save(self, load_first: bool = True) -> bool:
+        """Save cache to disk if possible, returns whether it was able to save.
+
+        This is the public version of _save, it makes sure that all the
+        necessary locks are acquired.
+        """
+        with self._lock:
+            return self._save(load_first)
 
     def _save_if_should(self) -> bool:
         """Saves file to disk if necessary and returns whether it saved.
@@ -605,24 +646,15 @@ class SFDictFileCache(SFDictCache):
             )
         return False
 
-    def __del__(self) -> None:
-        try:
-            self._save()
-        except Exception:
-            # At tear-down time builtins module might be already gone, ignore every error
-            pass
-
-    def clear_expired_entries(self) -> None:
-        super().clear_expired_entries()
-        self._save_if_should()
-
     def clear(self) -> None:
         super().clear()
         # This unlink prevents us from loading just before saving
         with self._file_lock:
             if os.path.exists(self.file_path) and os.path.isfile(self.file_path):
                 os.unlink(self.file_path)
-        self._save(load_first=False)
+        # TODO: is this necessary?
+        with self._lock:
+            self._save(load_first=False, force_flush=True)
 
     # Custom pickling implementation
 
@@ -635,5 +667,15 @@ class SFDictFileCache(SFDictCache):
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)
+        self._cache_modified = False
         self._lock = Lock()
         self._file_lock = FileLock(self._file_lock_path, timeout=self.file_timeout)
+
+    def _add_or_remove(self) -> None:
+        """This function gets called when an element is added, or removed.
+
+        Note that while this function does not interact with lock, but it's only
+        called from contexts where the lock is already held.
+        """
+        super()._add_or_remove()
+        self._cache_modified = True

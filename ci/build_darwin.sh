@@ -2,12 +2,12 @@
 #
 # Build Snowflake Python Connector on Mac
 # NOTES:
-#   - To compile only a specific version(s) pass in versions like: `./build_darwin.sh "3.7 3.8"`
+#   - To compile only a specific version(s) pass in versions like: `./build_darwin.sh "3.8 3.9"`
 arch=$(uname -m)
 if [[ "$arch" == "arm64" ]]; then
   PYTHON_VERSIONS="${1:-3.8 3.9 3.10 3.11}"
 else
-  PYTHON_VERSIONS="${1:-3.7 3.8 3.9 3.10 3.11}"
+  PYTHON_VERSIONS="${1:-3.8 3.9 3.10 3.11}"
 fi
 
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

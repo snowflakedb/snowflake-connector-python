@@ -3,7 +3,6 @@
 #
 from __future__ import annotations
 
-import json
 from functools import total_ordering
 from hashlib import md5
 from logging import getLogger
@@ -151,13 +150,13 @@ class QueryContextCache:
     def _last(self) -> QueryContextElement:
         return self._tree_set[-1]
 
-    def serialize_to_json(self) -> str:
+    def serialize_to_dict(self) -> dict:
         with self._lock:
-            logger.debug("serialize_to_json() called")
+            logger.debug("serialize_to_dict() called")
             self.log_cache_entries()
 
             if len(self._tree_set) == 0:
-                return ""
+                return {}  # we should return an empty dict
 
             try:
                 data = {
@@ -166,22 +165,24 @@ class QueryContextCache:
                             "id": qce.id,
                             "timestamp": qce.read_timestamp,
                             "priority": qce.priority,
-                            "context": qce.context,
+                            "context": {"base64Data": qce.context}
+                            if qce.context is not None
+                            else {},
                         }
                         for qce in self._tree_set
                     ]
                 }
-                # Serialize the data to JSON
-                serialized_data = json.dumps(data)
+                # Because on GS side, `context` field is an object with `base64Data`  string member variable,
+                # we should serialize `context` field to an object instead of string directly to stay consistent with GS side.
 
-                logger.debug(
-                    f"serialize_to_json(): data to send to server {serialized_data}"
-                )
+                logger.debug(f"serialize_to_dict(): data to send to server {data}")
 
-                return serialized_data
+                # query context shoule be an object field of the HTTP request body JSON and on GS side. here we should only return a dict
+                # and let the outer HTTP request body to convert the entire big dict to a single JSON.
+                return data
             except Exception as e:
-                logger.debug(f"serialize_to_json(): Exception {e}")
-                return ""
+                logger.debug(f"serialize_to_dict(): Exception {e}")
+                return {}
 
     def deserialize_json_dict(self, data: dict) -> None:
         with self._lock:

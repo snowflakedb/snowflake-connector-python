@@ -536,6 +536,30 @@ class MethodNotAllowed(Error):
         )
 
 
+class TooManyRequests(Error):
+    """Exception for 429 HTTP error for retry."""
+
+    def __init__(self, **kwargs) -> None:
+        Error.__init__(
+            self,
+            msg=kwargs.get("msg") or "HTTP 429: Too Many Requests",
+            errno=kwargs.get("errno"),
+            sqlstate=kwargs.get("sqlstate"),
+            sfqid=kwargs.get("sfqid"),
+        )
+
+
+class RefreshTokenError(Error):
+    def __init__(self, **kwargs) -> None:
+        Error.__init__(
+            self,
+            msg=kwargs.get("msg") or "Token Refresh Required",
+            errno=kwargs.get("errno"),
+            sqlstate=kwargs.get("sqlstate"),
+            sfqid=kwargs.get("sfqid"),
+        )
+
+
 class OtherHTTPRetryableError(Error):
     """Exception for other HTTP error for retry."""
 
@@ -588,8 +612,15 @@ class ConfigSourceError(Error):
     """
 
 
-class ConfigManagerError(Error):
-    """Configuration parser related errors.
+class MissingConfigOptionError(ConfigSourceError):
+    """When a configuration option is missing from the final, resolved configurations.
 
-    These mean that ConfigManager is misused by a developer.
+    This is a special-case of ConfigSourceError.
+    """
+
+
+class ConfigManagerError(Error):
+    """Configuration manager related errors.
+
+    This means that ConfigManager is misused by a developer.
     """

@@ -49,7 +49,6 @@ class AuthByKeyPairFile(AuthByKeyPair):
 
 
 if __name__ == "__main__":
-
     # instantiate the authentication plugin
     auth_by_key_pair_file = AuthByKeyPairFile(PRIVATE_KEY_PATH)
 
