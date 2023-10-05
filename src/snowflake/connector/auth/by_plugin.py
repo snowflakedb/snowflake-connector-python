@@ -59,21 +59,27 @@ class AuthType(Enum):
 class AuthByPlugin(ABC):
     """External Authenticator interface."""
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(
+        self,
+        auth_socket_timeout: int | None = None,
+        **kwargs,
+    ) -> None:
         self.consent_cache_id_token = False
-        self._timeout = kwargs.pop("timeout", None)
+        self._auth_socket_timeout = auth_socket_timeout
+
+        if "timeout" not in kwargs or kwargs["timeout"] is None:
+            kwargs["timeout"] = DEFAULT_AUTH_CLASS_TIMEOUT
 
         self._retry_ctx = TimeoutBackoffCtx(
             max_retry_attempts=int(
                 getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)
             ),
-            timeout=self._timeout,
             **kwargs,
         )
 
     @property
-    def timeout(self) -> int:
-        return self._timeout
+    def auth_socket_timeout(self) -> int:
+        return self._auth_socket_timeout
 
     @property
     @abstractmethod
@@ -195,5 +201,5 @@ class AuthByPlugin(ABC):
                 f"Hit connection timeout, attempt number {self._retry_ctx.current_retry_count}."
                 " Will retry in a bit..."
             )
-            self._retry_ctx.increment_retry()
-            time.sleep(self._retry_ctx.next_sleep_duration())
+            time.sleep(self._retry_ctx.current_sleep_time)
+            self._retry_ctx.increment()

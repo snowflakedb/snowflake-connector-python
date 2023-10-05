@@ -166,7 +166,7 @@ class Auth:
         mfa_callback: Callable[[], None] | None = None,
         password_callback: Callable[[], str] | None = None,
         session_parameters: dict[Any, Any] | None = None,
-        timeout: int = 120,
+        timeout: int | None = None,  # might want to implement for timeout override
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
 
@@ -239,20 +239,24 @@ class Auth:
             {k: v for (k, v) in body["data"].items() if k != "PASSWORD"},
         )
 
-        # accommodate any authenticator specific timeout requirements here.
-        # login_timeout comes from user configuration.
-        # Between login timeout and auth specific
-        # timeout use whichever value is smaller
-        auth_timeout = min(self._rest._connection.login_timeout, auth_instance.timeout)
-        logger.debug(f"Timeout set to {auth_timeout}")
+        # socket timeout should be the min between user specified timeout and authenticator specific timeout
+        socket_timeout_opts = (
+            self._rest._connection.socket_timeout,
+            auth_instance.auth_socket_timeout,
+        )
+        socket_timeout = min(
+            (t for t in socket_timeout_opts if t is not None), default=None
+        )
+
+        if socket_timeout is not None:
+            logger.debug(f"Socket timeout for authentication set to {socket_timeout}")
 
         try:
             ret = self._rest._post_request(
                 url,
                 headers,
                 json.dumps(body),
-                timeout=auth_timeout,
-                socket_timeout=auth_timeout,
+                socket_timeout=socket_timeout,
             )
         except ForbiddenError as err:
             # HTTP 403
@@ -293,7 +297,7 @@ class Auth:
             def post_request_wrapper(self, url, headers, body) -> None:
                 # get the MFA response
                 self.ret = self._rest._post_request(
-                    url, headers, body, timeout=self._rest._connection.login_timeout
+                    url, headers, body, socket_timeout=socket_timeout
                 )
 
             # send new request to wait until MFA is approved
@@ -307,7 +311,8 @@ class Auth:
                 while not self.ret or self.ret.get("message") == "Timeout":
                     next(c)
             else:
-                t.join(timeout=timeout)
+                # no need to set a timeout on join as _post_request will terminate on timeout
+                t.join()
 
             ret = self.ret
             if (
@@ -322,8 +327,7 @@ class Auth:
                     url,
                     headers,
                     json.dumps(body),
-                    timeout=self._rest._connection.login_timeout,
-                    socket_timeout=self._rest._connection.login_timeout,
+                    socket_timeout=socket_timeout,
                 )
             elif not ret or not ret["data"] or not ret["data"].get("token"):
                 # not token is returned.
@@ -363,8 +367,7 @@ class Auth:
                     url,
                     headers,
                     json.dumps(body),
-                    timeout=self._rest._connection.login_timeout,
-                    socket_timeout=self._rest._connection.login_timeout,
+                    socket_timeout=socket_timeout,
                 )
 
         logger.debug("completed authentication")

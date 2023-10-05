@@ -1187,6 +1187,8 @@ class SnowflakeConnection:
         _no_results: bool = False,
         _update_current_object: bool = True,
         _no_retry: bool = False,
+        timeout: int | None = None,
+        socket_timeout: int | None = None,
     ) -> dict[str, Any]:
         """Executes a query with a sequence counter."""
         logger.debug("_cmd_query")
@@ -1232,6 +1234,8 @@ class SnowflakeConnection:
             _no_results=_no_results,
             _include_retry_params=True,
             _no_retry=_no_retry,
+            timeout=timeout,
+            socket_timeout=socket_timeout,
         )
 
         if ret is None:
@@ -1286,7 +1290,6 @@ class SnowflakeConnection:
 
         auth = Auth(self.rest)
         # record start time for computing timeout
-
         auth_instance._retry_ctx.set_start_time()
         try:
             auth.authenticate(
@@ -1308,7 +1311,6 @@ class SnowflakeConnection:
                 "Operational Error raised at authentication"
                 f"for authenticator: {type(auth_instance).__name__}"
             )
-
             while True:
                 try:
                     auth_instance.handle_timeout(

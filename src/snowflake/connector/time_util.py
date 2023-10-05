@@ -23,7 +23,6 @@ except ImportError:
 DEFAULT_MASTER_VALIDITY_IN_SECONDS = 4 * 60 * 60  # seconds
 
 DEFAULT_BACKOFF_MODE = BackoffMode.DEFAULT_JITTER
-
 INITIAL_TIMEOUT_SLEEP_TIME = 1
 
 
@@ -81,6 +80,19 @@ class TimeoutBackoffCtx:
         self._start_time_millis = None
 
     @property
+    def timeout(self) -> int | None:
+        return self._timeout
+
+    @property
+    def remaining_time_millis(self) -> float | None:
+        if self._timeout is None or self._start_time_millis is None:
+            return None
+
+        elapsed_time_millis = get_time_millis() - self._start_time_millis
+        timeout_millis = self._timeout * 1000
+        return timeout_millis - elapsed_time_millis
+
+    @property
     def current_retry_count(self) -> int:
         return int(self._current_retry_count)
 
@@ -91,9 +103,6 @@ class TimeoutBackoffCtx:
     def set_start_time(self) -> None:
         self._start_time_millis = get_time_millis()
 
-    def increment_retry(self) -> None:
-        self._current_retry_count += 1
-
     def should_retry(self) -> bool:
         """Decides whether to retry connection."""
         if self._timeout is not None and self._start_time_millis is None:
@@ -103,8 +112,7 @@ class TimeoutBackoffCtx:
 
         timed_out = False
         if self._timeout is not None and self._start_time_millis is not None:
-            elapsed_time_millis = get_time_millis() - self._start_time_millis
-            timed_out = elapsed_time_millis > self._timeout * 1000
+            timed_out = self.remaining_time_millis < 0
 
         retry_attempts_exceeded = False
         if self._max_retry_attempts is not None:
@@ -114,12 +122,14 @@ class TimeoutBackoffCtx:
 
         return not timed_out and not retry_attempts_exceeded
 
-    def next_sleep_duration(self) -> int:
+    def increment(self) -> None:
+        """Updates retry count and sleep time for another retry"""
+        self._current_retry_count += 1
         self._current_sleep_time = self._backoff.next_sleep(
             self._current_retry_count, self._current_sleep_time
         )
-        logger.debug(f"Sleeping for {self._current_sleep_time} seconds")
-        return self._current_sleep_time
+        logger.debug(f"Update retry count to {self._current_retry_count}")
+        logger.debug(f"Update sleep time to {self._current_sleep_time} seconds")
 
     def reset(self) -> None:
         self._current_retry_count = 0

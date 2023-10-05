@@ -67,11 +67,9 @@ class AuthByKeyPair(AuthByPlugin):
                 )
             ).total_seconds()
         )
-        if "timeout" in kwargs and kwargs["timeout"] is not None:
-            kwargs["timeout"] = min(jwt_timeout, kwargs["timeout"])
-        else:
-            kwargs["timeout"] = jwt_timeout
-        super().__init__(**kwargs)
+        super().__init__(
+            auth_socket_timeout=jwt_timeout**kwargs,
+        )
 
         self._private_key: bytes | RSAPrivateKey | None = private_key
         self._jwt_token = ""
@@ -84,7 +82,6 @@ class AuthByKeyPair(AuthByPlugin):
                 "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
             )
         )
-        self._current_retry_count = 0
 
     def reset_secrets(self) -> None:
         self._private_key = None
@@ -211,7 +208,7 @@ class AuthByKeyPair(AuthByPlugin):
             logger.debug(
                 f"Hit JWT timeout, attempt {self._retry_ctx.current_retry_count}. Retrying..."
             )
-            self._retry_ctx.increment_retry()
+            self._retry_ctx.increment()
 
         self.prepare(account=account, user=user)
 
