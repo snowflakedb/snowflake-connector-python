@@ -65,6 +65,8 @@ class AuthByPlugin(ABC):
         **kwargs,
     ) -> None:
         self.consent_cache_id_token = False
+
+        # authenticator specific connection (socket) timeout
         self._auth_socket_timeout = auth_socket_timeout
 
         if "timeout" not in kwargs or kwargs["timeout"] is None:

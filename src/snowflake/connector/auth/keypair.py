@@ -68,7 +68,8 @@ class AuthByKeyPair(AuthByPlugin):
             ).total_seconds()
         )
         super().__init__(
-            auth_socket_timeout=jwt_timeout**kwargs,
+            auth_socket_timeout=jwt_timeout,
+            **kwargs,
         )
 
         self._private_key: bytes | RSAPrivateKey | None = private_key

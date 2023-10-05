@@ -127,8 +127,9 @@ class Auth:
         internal_application_name,
         internal_application_version,
         ocsp_mode,
-        login_timeout,
+        login_timeout=None,
         network_timeout=None,
+        socket_timeout=None,
     ):
         return {
             "data": {
@@ -148,6 +149,7 @@ class Auth:
                     "TRACING": logger.getEffectiveLevel(),
                     "LOGIN_TIMEOUT": login_timeout,
                     "NETWORK_TIMEOUT": network_timeout,
+                    "SOCKET_TIMEOUT": socket_timeout,
                 },
             },
         }
@@ -194,6 +196,7 @@ class Auth:
             self._rest._connection._ocsp_mode(),
             self._rest._connection._login_timeout,
             self._rest._connection._network_timeout,
+            self._rest._connection._socket_timeout,
         )
 
         body = copy.deepcopy(body_template)
