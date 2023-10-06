@@ -22,7 +22,8 @@ except ImportError:
 
 DEFAULT_MASTER_VALIDITY_IN_SECONDS = 4 * 60 * 60  # seconds
 
-DEFAULT_BACKOFF_MODE = BackoffMode.DEFAULT_JITTER
+DEFAULT_BACKOFF_MODE = BackoffMode.RECURSIVE_MIXED
+DEFAULT_JITTER = True
 INITIAL_TIMEOUT_SLEEP_TIME = 1
 
 
@@ -67,6 +68,7 @@ class TimeoutBackoffCtx:
             base=kwargs.pop("backoff_base", None),
             cap=kwargs.pop("backoff_cap", None),
             factor=kwargs.pop("backoff_factor", None),
+            enable_jitter=kwargs.pop("backoff_enable_jitter", None),
         )
 
         self._current_retry_count = 0
@@ -139,9 +141,7 @@ class TimeoutBackoffCtx:
 def resolve_backoff(backoff_mode: BackoffMode) -> Backoff:
     """Takes a BackoffMode enum and returns the corresponding Backoff class"""
     return {
-        BackoffMode.DEFAULT_JITTER: DefaultJitterBackoff,
-        BackoffMode.DECORRELATED_JITTER: DecorrelateJitterBackoff,
-        BackoffMode.FULL_JITTER: FullJitterBackoff,
+        BackoffMode.RECURSIVE_MIXED: RecursiveMixedBackoff,
         BackoffMode.LINEAR: LinearBackoff,
         BackoffMode.EXPONENTIAL: ExponentialBackoff,
     }[backoff_mode]
@@ -151,60 +151,60 @@ class Backoff:
     DEFAULT_BACKOFF_BASE = 1
     DEFAULT_BACKOFF_CAP = 16
     DEFAULT_BACKOFF_FACTOR = 2
+    DEFAULT_ENABLE_JITTER = True
 
     def __init__(
         self,
         base: int | None = None,
         cap: int | None = None,
         factor: int | None = None,
+        enable_jitter: bool | None = None,
     ):
         self._base = base if base is not None else self.DEFAULT_BACKOFF_BASE
         self._cap = cap if cap is not None else self.DEFAULT_BACKOFF_CAP
         self._factor = factor if cap is not None else self.DEFAULT_BACKOFF_FACTOR
+        self._enable_jitter = (
+            enable_jitter if enable_jitter is not None else self.DEFAULT_ENABLE_JITTER
+        )
 
     def next_sleep(self, cnt: Any, sleep: int) -> int:
         pass
 
 
-class DefaultJitterBackoff(Backoff):
-    """Default retry strategy as specified in Client Retry Strategy"""
-
-    def next_sleep(self, cnt: Any, sleep: int) -> int:
-        mult_factor = random.choice([-1, 1])
-        jitter_amount = 0.5 * sleep * mult_factor
-
-        linear_wait = sleep + jitter_amount
-        exp_wait = (self._factor**cnt) + jitter_amount
-
-        return int(random.choice([linear_wait, exp_wait]))
-
-
 class DecorrelateJitterBackoff(Backoff):
-    """Decorrelate jitter backoff, see https://www.awsarchitectureblog.com/2015/03/backoff.html"""
+    """Decorrelate jitter backoff (retained for backwards compatibility), see https://www.awsarchitectureblog.com/2015/03/backoff.html"""
 
     def next_sleep(self, _: Any, sleep: int) -> int:
         return min(self._cap, random.randint(self._base, sleep * 3))
 
 
-class FullJitterBackoff(Backoff):
-    """Full jitter backoff, see https://www.awsarchitectureblog.com/2015/03/backoff.html"""
+class RecursiveMixedBackoff(Backoff):
+    """Default retry strategy as specified in Client Retry Strategy"""
 
-    def next_sleep(self, cnt: int, _: Any) -> int:
-        return random.randint(0, min(self._cap, self._base * (self._factor**cnt)))
+    def next_sleep(self, cnt: Any, sleep: int) -> int:
+        mult_factor = random.choice([-1, 1])
+        jitter_amount = 0.5 * sleep * mult_factor if self._enable_jitter else 0
+
+        linear_wait = sleep + jitter_amount
+        exp_wait = self._base * (self._factor**cnt) + jitter_amount
+
+        return int(random.choice([linear_wait, exp_wait]))
 
 
 class LinearBackoff(Backoff):
     """Standard linear backoff"""
 
     def next_sleep(self, cnt: int, _: Any) -> int:
-        return min(self._cap, self._base + self._factor * cnt)
+        t = min(self._cap, self._base + self._factor * cnt)
+        return t if self._enable_jitter else random.randint(0, t)
 
 
 class ExponentialBackoff(Backoff):
     """Standard exponential backoff"""
 
     def next_sleep(self, cnt: int, _: Any) -> int:
-        return min(self._cap, self._base * (self._factor**cnt))
+        t = min(self._cap, self._base * (self._factor**cnt))
+        return t if self._enable_jitter else random.randint(0, t)
 
 
 class TimerContextManager:

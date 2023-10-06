@@ -158,6 +158,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "backoff_base": (None, (type(None), int)),
     "backoff_factor": (None, (type(None), int)),
     "backoff_cap": (None, (type(None), int)),
+    "backoff_enable_jitter": (None, (type(None), bool)),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), str, RSAPrivateKey)),
@@ -506,6 +507,14 @@ class SnowflakeConnection:
     @property
     def backoff_cap(self) -> int | None:
         return int(self._backoff_cap) if self._backoff_cap is not None else None
+
+    @property
+    def backoff_enable_jitter(self) -> bool | None:
+        return (
+            bool(self._backoff_enable_jitter)
+            if self._backoff_enable_jitter is not None
+            else None
+        )
 
     @property
     def client_session_keep_alive(self) -> bool | None:
@@ -906,6 +915,7 @@ class SnowflakeConnection:
             "backoff_mode": self.backoff_mode,
             "backoff_base": self.backoff_base,
             "backoff_factor": self.backoff_factor,
+            "backoff_enable_jitter": self.backoff_enable_jitter,
         }
 
         if self.auth_class is not None:

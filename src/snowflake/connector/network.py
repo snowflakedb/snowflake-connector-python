@@ -841,6 +841,7 @@ class SnowflakeRestful:
                 "backoff_mode": self._connection.backoff_mode,
                 "backoff_base": self._connection.backoff_base,
                 "backoff_factor": self._connection.backoff_factor,
+                "backoff_enable_jitter": self._connection.backoff_enable_jitter,
             }
             retry_ctx = RetryCtx(
                 include_retry_params, include_retry_reason, **retry_ctx_kwargs
