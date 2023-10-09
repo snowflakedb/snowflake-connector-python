@@ -34,6 +34,7 @@ from snowflake.connector.errors import (
     Error,
     ForbiddenError,
     InterfaceError,
+    OperationalError,
     OtherHTTPRetryableError,
 )
 from snowflake.connector.network import (
@@ -41,6 +42,7 @@ from snowflake.connector.network import (
     RetryRequest,
     SnowflakeRestful,
 )
+from snowflake.connector.vendored.requests.exceptions import ConnectionError
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
@@ -419,3 +421,31 @@ def test_retry_connection_reset_error(caplog):
             not in caplog.text
         )
         assert caplog.text.count("Starting new HTTPS connection") > 1
+
+
+@pytest.mark.parametrize("next_action", ("RETRY", "ERROR"))
+@patch("snowflake.connector.vendored.requests.sessions.Session.request")
+def test_login_request_timeout(mockSessionRequest, next_action):
+    """For login requests, all errors should be bubbled up as OperationalError for authenticator to handle"""
+
+    def mock_request(**kwargs):
+        if next_action == "RETRY":
+            response = MagicMock()
+            response.status_code = 503
+            return response
+        elif next_action == "ERROR":
+            raise ConnectionError()
+
+    mockSessionRequest.side_effect = mock_request
+
+    connection = mock_connection()
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com", port=443, connection=connection
+    )
+
+    with pytest.raises(OperationalError):
+        rest.fetch(
+            method="post",
+            full_url="https://testaccount.snowflakecomputing.com/session/v1/login-request",
+            headers=dict(),
+        )

@@ -248,7 +248,7 @@ def raise_failed_request_error(
 
 
 def is_login_request(url: str) -> bool:
-    return "/session/v1/login-request" in url
+    return "login-request" in parse_url(url).path
 
 
 class ProxySupportAdapter(HTTPAdapter):
@@ -1056,9 +1056,6 @@ class SnowflakeRestful:
         socket_timeout: int | None = None,
         is_okta_authentication: bool = False,
     ):
-        def is_login_request(url):
-            return "login-request" in parse_url(full_url).path
-
         if socket_timeout is None:
             if self._connection.socket_timeout is not None:
                 logger.debug("socket_timeout specified in connection")

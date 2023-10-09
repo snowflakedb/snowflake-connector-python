@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import Mock, PropertyMock
+from unittest.mock import Mock, PropertyMock, patch
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -118,6 +118,27 @@ def test_auth_keypair_bad_type():
                 password=None,
             )
         assert str(type(bad_private_key)) in str(ex)
+
+
+@patch("snowflake.connector.auth.keypair.AuthByKeyPair.prepare")
+def test_renew_token(mockPrepare):
+    private_key_der, _ = generate_key_pair(2048)
+    auth_instance = AuthByKeyPair(private_key=private_key_der)
+
+    # force renew condition to be met
+    auth_instance._jwt_retry_attempts = 0
+    account = "testaccount"
+    user = "testuser"
+
+    auth_instance.handle_timeout(
+        authenticator="SNOWFLAKE_JWT",
+        service_name=None,
+        account=account,
+        user=user,
+        password=None,
+    )
+
+    assert mockPrepare.called
 
 
 def _init_rest(application, post_requset):

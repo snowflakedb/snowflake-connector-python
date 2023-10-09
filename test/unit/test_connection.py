@@ -8,13 +8,15 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from textwrap import dedent
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 import snowflake.connector
-from snowflake.connector.errors import Error
+from snowflake.connector.errors import Error, OperationalError
+from snowflake.connector.vendored.requests.exceptions import ConnectionError
 
 from ..randomize import random_string
 
@@ -26,8 +28,6 @@ try:
         AuthByWebBrowser,
     )
 except ImportError:
-    from unittest.mock import MagicMock
-
     AuthByDefault = AuthByOkta = AuthByOAuth = AuthByWebBrowser = MagicMock
 
 try:  # pragma: no cover
@@ -43,13 +43,14 @@ except ImportError:
             pass
 
 
-def fake_connector() -> snowflake.connector.SnowflakeConnection:
+def fake_connector(**kwargs) -> snowflake.connector.SnowflakeConnection:
     return snowflake.connector.connect(
         user="user",
         account="account",
         password="testpassword",
         database="TESTDB",
         warehouse="TESTWH",
+        **kwargs,
     )
 
 
@@ -316,3 +317,25 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             match=f"Default connection with name '{connection_name}' cannot be found, known ones are \\['con_a'\\]",
         ):
             snowflake.connector.connect(connections_file_path=connections_file)
+
+
+@pytest.mark.parametrize("next_action", ("RETRY", "ERROR"))
+@patch("snowflake.connector.vendored.requests.sessions.Session.request")
+def test_handle_timeout(mockSessionRequest, next_action):
+    def mock_request(**kwargs):
+        # force timeout
+        time.sleep(5)
+        if next_action == "RETRY":
+            response = MagicMock()
+            response.status_code = 503
+            return response
+        elif next_action == "ERROR":
+            raise ConnectionError()
+
+    mockSessionRequest.side_effect = mock_request
+
+    with pytest.raises(OperationalError):
+        _ = fake_connector(login_timeout=1)
+
+    # authenticator should be the only retry mechanism for login requests
+    assert mockSessionRequest.call_count == 1
