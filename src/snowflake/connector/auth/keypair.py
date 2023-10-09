@@ -202,12 +202,8 @@ class AuthByKeyPair(AuthByPlugin):
 
         logger.debug("Base timeout handler passed, checking for JWT expiry")
         jwt_timed_out = False
-        if self._retry_ctx.elapsed_time_millis is not None:
-            jwt_timeout_millis = self._jwt_timeout * 1000
-            jwt_remaining_time_millis = (
-                jwt_timeout_millis - self._retry_ctx.elapsed_time_millis
-            )
-            jwt_timed_out = jwt_remaining_time_millis < 0
+        if self._retry_ctx.remaining_time_millis(jwt_timed_out) is not None:
+            jwt_timed_out = self._retry_ctx.remaining_time_millis(jwt_timed_out) < 0
 
         jwt_retry_attempts_exceeded = (
             self._retry_ctx.current_retry_count >= self._jwt_retry_attempts

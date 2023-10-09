@@ -24,6 +24,8 @@ try:  # pragma: no cover
 except ImportError:
     from snowflake.connector.auth_webbrowser import AuthByWebBrowser
 
+from .mock_connection import mock_connection
+
 AUTHENTICATOR = "https://testsso.snowflake.net/"
 APPLICATION = "testapplication"
 ACCOUNT = "testaccount"
@@ -265,9 +267,7 @@ def _init_rest(ref_sso_url, ref_proof_key, success=True, message=None):
             },
         }
 
-    connection = MagicMock()
-    connection._login_timeout = 120
-    connection._network_timeout = None
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=CLIENT_NAME)

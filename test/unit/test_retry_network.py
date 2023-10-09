@@ -31,6 +31,7 @@ from snowflake.connector.compat import (
 )
 from snowflake.connector.errors import (
     DatabaseError,
+    Error,
     ForbiddenError,
     InterfaceError,
     OtherHTTPRetryableError,
@@ -48,6 +49,8 @@ try:
 except ImportError:  # pragma: no cover
     import requests
     import urllib3
+
+from .mock_connection import mock_connection
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -74,8 +77,7 @@ def fake_connector() -> snowflake.connector.SnowflakeConnection:
 
 
 @patch("snowflake.connector.network.SnowflakeRestful._request_exec")
-@patch("snowflake.connector.network.DecorrelateJitterBackoff.next_sleep")
-def test_retry_reason(mockNextSleep, mockRequestExec):
+def test_retry_reason(mockRequestExec):
     url = ""
     cnt = Cnt()
 
@@ -116,7 +118,6 @@ def test_retry_reason(mockNextSleep, mockRequestExec):
         return success_result
 
     conn = fake_connector()
-    mockNextSleep.side_effect = lambda cnt, sleep: 0
     mockRequestExec.side_effect = mock_exec
 
     # ensure query requests don't have the retryReason if retryCount == 0
@@ -163,7 +164,13 @@ def test_retry_reason(mockNextSleep, mockRequestExec):
 
 
 def test_request_exec():
-    rest = SnowflakeRestful(host="testaccount.snowflakecomputing.com", port=443)
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
 
     default_parameters = {
         "method": "POST",
@@ -271,7 +278,7 @@ def test_request_exec():
 
 
 def test_fetch():
-    connection = MagicMock()
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
 
     rest = SnowflakeRestful(
@@ -336,7 +343,7 @@ def test_fetch():
 
 
 def test_secret_masking(caplog):
-    connection = MagicMock()
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
 
     rest = SnowflakeRestful(
@@ -373,7 +380,7 @@ def test_secret_masking(caplog):
 
 
 def test_retry_connection_reset_error(caplog):
-    connection = MagicMock()
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
 
     rest = SnowflakeRestful(

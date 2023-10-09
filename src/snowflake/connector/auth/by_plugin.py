@@ -76,6 +76,10 @@ class AuthByPlugin(ABC):
         )
 
     @property
+    def timeout(self) -> int | None:
+        return self._retry_ctx.timeout
+
+    @property
     @abstractmethod
     def type_(self) -> AuthType:
         """Return the Snowflake friendly name of auth class."""

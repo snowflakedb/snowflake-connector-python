@@ -60,10 +60,12 @@ class TimeoutBackoffCtx:
         self,
         max_retry_attempts: int | None = None,
         timeout: int | None = None,
-        backoff_mode: BackoffMode = DEFAULT_BACKOFF_MODE,
+        backoff_mode: BackoffMode | None = None,
         **kwargs,
     ) -> None:
-        backoff_class: Backoff = resolve_backoff(backoff_mode)
+        backoff_class: Backoff = resolve_backoff(
+            backoff_mode if backoff_mode is not None else DEFAULT_BACKOFF_MODE
+        )
         self._backoff = backoff_class(
             base=kwargs.pop("backoff_base", None),
             cap=kwargs.pop("backoff_cap", None),
@@ -86,13 +88,6 @@ class TimeoutBackoffCtx:
         return self._timeout
 
     @property
-    def elapsed_time_millis(self) -> int | None:
-        if self._start_time_millis is None:
-            return None
-
-        return get_time_millis() - self._start_time_millis
-
-    @property
     def current_retry_count(self) -> int:
         return int(self._current_retry_count)
 
@@ -103,8 +98,15 @@ class TimeoutBackoffCtx:
     def set_start_time(self) -> None:
         self._start_time_millis = get_time_millis()
 
+    def remaining_time_millis(self, timeout: int | None) -> int | None:
+        if timeout is None or self._start_time_millis is None:
+            return None
+
+        timeout_millis = timeout * 1000
+        elapsed_time_millis = get_time_millis() - self._start_time_millis
+        return timeout_millis - elapsed_time_millis
+
     def should_retry(self) -> bool:
-        print("retrying", self._timeout)
         """Decides whether to retry connection."""
         if self._timeout is not None and self._start_time_millis is None:
             logger.warning(
@@ -112,10 +114,8 @@ class TimeoutBackoffCtx:
             )
 
         timed_out = False
-        if self._timeout is not None and self._start_time_millis is not None:
-            timeout_millis = self._timeout * 1000
-            remaining_time_millis = timeout_millis - self.elapsed_time_millis
-            timed_out = remaining_time_millis < 0
+        if self.remaining_time_millis(self._timeout) is not None:
+            timed_out = self.remaining_time_millis(self._timeout) < 0
 
         retry_attempts_exceeded = False
         if self._max_retry_attempts is not None:

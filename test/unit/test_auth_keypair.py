@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, Mock, PropertyMock
+from unittest.mock import Mock, PropertyMock
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -23,6 +23,8 @@ try:  # pragma: no cover
     from snowflake.connector.auth import AuthByKeyPair
 except ImportError:
     from snowflake.connector.auth_oauth import AuthByKeyPair
+
+from .mock_connection import mock_connection
 
 
 def _create_mock_auth_keypair_rest_response():
@@ -105,6 +107,8 @@ def test_auth_keypair_bad_type():
 
     for bad_private_key in ("abcd", 1234, Bad()):
         auth_instance = AuthByKeyPair(private_key=bad_private_key)
+        # force token refresh for type check
+        auth_instance._jwt_retry_attempts = 0
         with raises(TypeError) as ex:
             auth_instance.handle_timeout(
                 authenticator="SNOWFLAKE_JWT",
@@ -117,10 +121,7 @@ def test_auth_keypair_bad_type():
 
 
 def _init_rest(application, post_requset):
-    connection = MagicMock()
-    connection._login_timeout = 120
-    connection.login_timeout = 120
-    connection._network_timeout = None
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=application)

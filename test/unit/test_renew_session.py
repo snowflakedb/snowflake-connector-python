@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, Mock, PropertyMock
+from unittest.mock import Mock, PropertyMock
 
 from snowflake.connector.network import SnowflakeRestful
+
+from .mock_connection import mock_connection
 
 
 def test_renew_session():
@@ -15,7 +17,7 @@ def test_renew_session():
     OLD_MASTER_TOKEN = "old_master_token"
     NEW_SESSION_TOKEN = "new_session_token"
     NEW_MASTER_TOKEN = "new_master_token"
-    connection = MagicMock()
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     type(connection)._probe_connection = PropertyMock(return_value=False)
 

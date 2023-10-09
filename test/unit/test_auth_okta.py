@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
@@ -19,6 +19,8 @@ try:  # pragma: no cover
     from snowflake.connector.auth import AuthByOkta
 except ImportError:
     from snowflake.connector.auth_okta import AuthByOkta
+
+from .mock_connection import mock_connection
 
 
 def test_auth_okta():
@@ -322,10 +324,7 @@ def _init_rest(ref_sso_url, ref_token_url, success=True, message=None):
             },
         }
 
-    connection = MagicMock()
-    connection.login_timeout = 120
-    connection._login_timeout = 120
-    connection._network_timeout = None
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=CLIENT_NAME)

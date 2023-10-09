@@ -168,7 +168,7 @@ class Auth:
         mfa_callback: Callable[[], None] | None = None,
         password_callback: Callable[[], str] | None = None,
         session_parameters: dict[Any, Any] | None = None,
-        timeout: int | None = None,  # might want to implement for timeout override
+        mfa_timeout: int | None = None,  # max time waiting for MFA response
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
 
@@ -300,7 +300,7 @@ class Auth:
                     next(c)
             else:
                 # no need to set a timeout on join as _post_request will terminate on timeout
-                t.join()
+                t.join(timeout=mfa_timeout)
 
             ret = self.ret
             if (

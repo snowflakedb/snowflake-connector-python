@@ -874,7 +874,7 @@ class SnowflakeRestful:
         conn = self._connection
         logger.debug(
             "remaining request timeout: %s ms, retry cnt: %s",
-            retry_ctx.timeout * 1000 - retry_ctx.elapsed_time_millis,
+            retry_ctx.remaining_time_millis(retry_ctx.timeout),
             retry_ctx.current_retry_count + 1,
         )
 

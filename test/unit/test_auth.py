@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import inspect
 import time
-from unittest.mock import MagicMock, Mock, PropertyMock
+from unittest.mock import Mock, PropertyMock
 
 import pytest
 
@@ -23,12 +23,11 @@ except ImportError:
     from snowflake.connector.auth_by_plugin import AuthByPlugin
     from snowflake.connector.auth_default import AuthByDefault
 
+from .mock_connection import mock_connection
+
 
 def _init_rest(application, post_requset):
-    connection = MagicMock()
-    connection._login_timeout = 120
-    connection.login_timeout = 120
-    connection._network_timeout = None
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=application)
@@ -177,7 +176,7 @@ def test_auth_mfa(next_action: str):
     rest = _init_rest(application, _mock_auth_mfa_rest_response_timeout)
     auth = Auth(rest)
     auth_instance = AuthByDefault(password)
-    auth.authenticate(auth_instance, account, user, timeout=1)
+    auth.authenticate(auth_instance, account, user, mfa_timeout=1)
     assert rest._connection.errorhandler.called  # error
 
     # ret["data"] is none
@@ -290,5 +289,6 @@ def test_authbyplugin_abc_api():
         "('account', <Parameter \"account: 'str'\">), "
         "('user', <Parameter \"user: 'str'\">), "
         "('password', <Parameter \"password: 'str'\">), "
+        "('delete_params', <Parameter \"delete_params: 'bool' = True\">), "
         "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
     )
