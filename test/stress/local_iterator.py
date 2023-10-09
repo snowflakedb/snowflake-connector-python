@@ -56,7 +56,7 @@ def remove_bytes(byte_str, num_bytes):
     return new_byte_str
 
 
-def create_pyarrow_iterator(input_data, use_table_unit):
+def create_nanoarrow_pyarrow_iterator(input_data, use_table_unit):
     # create nanoarrow based iterator
     return (
         NanoarrowRowIterator(
@@ -83,7 +83,7 @@ def create_pyarrow_iterator(input_data, use_table_unit):
     )
 
 
-def create_old_pyarrow_iterator(input_data, use_table_unit=False):
+def create_vendored_pyarrow_iterator(input_data, use_table_unit=False):
     # created vendored arrow based iterator
     iterator = PyArrowIterator(
         None,
@@ -190,9 +190,9 @@ if __name__ == "__main__":
         ".".join([str(v) for v in VERSION if v is not None]),
     )
     create_arrow_iterator_method = (
-        create_old_pyarrow_iterator
+        create_vendored_pyarrow_iterator
         if args.use_vendored_arrow
-        else create_pyarrow_iterator
+        else create_nanoarrow_pyarrow_iterator
     )
 
     perf_check_task_for_loop_iterator = task_time_execution_decorator(

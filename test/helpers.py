@@ -114,7 +114,7 @@ def _wait_until_query_success(
         )
 
 
-def create_pyarrow_iterator(input_data, use_table_iterator):
+def create_nanoarrow_pyarrow_iterator(input_data, use_table_iterator):
     # create nanoarrow based iterator
     return (
         NanoarrowPyArrowRowIterator(
@@ -141,7 +141,7 @@ def create_pyarrow_iterator(input_data, use_table_iterator):
     )
 
 
-def create_old_pyarrow_iterator(input_data, use_table_iterator):
+def create_vendored_pyarrow_iterator(input_data, use_table_iterator):
     # created vendored arrow based iterator
     iterator = PyArrowIterator(
         None,
@@ -157,9 +157,9 @@ def create_old_pyarrow_iterator(input_data, use_table_iterator):
 
 def create_arrow_iterator_method(use_nanoarrow_iterator):
     if use_nanoarrow_iterator:
-        return create_pyarrow_iterator
+        return create_nanoarrow_pyarrow_iterator
     else:
-        return create_old_pyarrow_iterator
+        return create_vendored_pyarrow_iterator
 
 
 def _arrow_error_stream_chunk_remove_single_byte_test(
@@ -171,7 +171,6 @@ def _arrow_error_stream_chunk_remove_single_byte_test(
 
     decode_bytes = base64.b64decode(b64data)
     exception_result = []
-    succeeded_result = []
     result_array = []
     for i in range(len(decode_bytes)):
         try:
@@ -181,7 +180,6 @@ def _arrow_error_stream_chunk_remove_single_byte_test(
             )
             for k in iterator:
                 result_array.append(k)
-            succeeded_result.append(i)
         except Exception as e:
             with pytest.raises(UnboundLocalError):
                 for _ in iterator:
@@ -192,7 +190,7 @@ def _arrow_error_stream_chunk_remove_single_byte_test(
     # note: nanoarrow and pyarrow exception information doesn't match, but the python
     # error instance users get should be the same
     assert len(exception_result)
-    assert len(succeeded_result) == len(result_array) == 0
+    assert len(result_array) == len(result_array) == 0
 
 
 def _arrow_error_stream_chunk_remove_random_length_bytes_test(

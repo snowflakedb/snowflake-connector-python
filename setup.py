@@ -288,9 +288,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
             try:
                 build_ext.build_extension(self, ext)
             finally:
-                del self.compiler._compile
                 self.compiler._compile = original__compile
-            # build_ext.build_extension(self, ext)
 
         def _get_arrow_lib_dir(self):
             if "SF_ARROW_LIBDIR" in os.environ:

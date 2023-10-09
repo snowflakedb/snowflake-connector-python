@@ -146,14 +146,14 @@ cdef class PyArrowRowIterator(PyArrowIterator):
         if self.cIterator is not NULL:
             return
 
-        self.cIterator = new CArrowChunkIterator(
+        self.cIterator = new DictCArrowChunkIterator(
             <PyObject *> self.context,
             self.arrow_bytes,
             self.arrow_bytes_size,
             <PyObject *> self.use_numpy
         ) \
-            if not self.use_dict_result \
-            else new DictCArrowChunkIterator(
+            if self.use_dict_result \
+            else new CArrowChunkIterator(
             <PyObject *> self.context,
             self.arrow_bytes,
             self.arrow_bytes_size,

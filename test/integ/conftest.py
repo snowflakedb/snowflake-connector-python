@@ -51,7 +51,9 @@ else:
     TEST_SCHEMA = "python_connector_tests_" + str(uuid.uuid4()).replace("-", "_")
 
 if TEST_USING_VENDORED_ARROW:
-    snowflake.connector.cursor.USE_NANOARROW_CONVERTER = False
+    snowflake.connector.cursor.NANOARR_USAGE = (
+        snowflake.connector.cursor.NanoarrowUsage.DISABLE_NANOARROW
+    )
 
 
 DEFAULT_PARAMETERS: dict[str, Any] = {
