@@ -61,13 +61,9 @@ class AuthByPlugin(ABC):
 
     def __init__(
         self,
-        auth_socket_timeout: int | None = None,
         **kwargs,
     ) -> None:
         self.consent_cache_id_token = False
-
-        # authenticator specific connection (socket) timeout
-        self._auth_socket_timeout = auth_socket_timeout
 
         if "timeout" not in kwargs or kwargs["timeout"] is None:
             kwargs["timeout"] = DEFAULT_AUTH_CLASS_TIMEOUT
@@ -78,10 +74,6 @@ class AuthByPlugin(ABC):
             ),
             **kwargs,
         )
-
-    @property
-    def auth_socket_timeout(self) -> int:
-        return self._auth_socket_timeout
 
     @property
     @abstractmethod
@@ -178,6 +170,7 @@ class AuthByPlugin(ABC):
         account: str,
         user: str,
         password: str,
+        delete_params: bool = True,
         **kwargs: Any,
     ) -> None:
         """Default timeout handler.
@@ -188,7 +181,9 @@ class AuthByPlugin(ABC):
         time ranges between 1 and 16 seconds.
         """
 
-        del authenticator, service_name, account, user, password
+        if delete_params:
+            del authenticator, service_name, account, user, password
+
         logger.debug("Default timeout handler invoked for authenticator")
         if not self._retry_ctx.should_retry():
             error = OperationalError(

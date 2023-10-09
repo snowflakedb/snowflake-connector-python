@@ -21,11 +21,7 @@ from cryptography.hazmat.primitives.serialization import (
     load_der_private_key,
 )
 
-from ..errorcode import (
-    ER_CONNECTION_TIMEOUT,
-    ER_FAILED_TO_CONNECT_TO_DB,
-    ER_INVALID_PRIVATE_KEY,
-)
+from ..errorcode import ER_CONNECTION_TIMEOUT, ER_INVALID_PRIVATE_KEY
 from ..errors import OperationalError, ProgrammingError
 from ..network import KEY_PAIR_AUTHENTICATOR
 from .by_plugin import AuthByPlugin, AuthType
@@ -58,19 +54,7 @@ class AuthByKeyPair(AuthByPlugin):
                 object that implements the `RSAPrivateKey` interface.
             lifetime_in_seconds: number of seconds the JWT token will be valid
         """
-        jwt_timeout = int(
-            timedelta(
-                seconds=int(
-                    os.getenv(
-                        "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
-                    )
-                )
-            ).total_seconds()
-        )
-        super().__init__(
-            auth_socket_timeout=jwt_timeout,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
         self._private_key: bytes | RSAPrivateKey | None = private_key
         self._jwt_token = ""
@@ -82,6 +66,15 @@ class AuthByKeyPair(AuthByPlugin):
             os.getenv(
                 "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
             )
+        )
+        self._jwt_timeout = int(
+            timedelta(
+                seconds=int(
+                    os.getenv(
+                        "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
+                    )
+                )
+            ).total_seconds()
         )
 
     def reset_secrets(self) -> None:
@@ -197,21 +190,32 @@ class AuthByKeyPair(AuthByPlugin):
         password: str | None,
         **kwargs: Any,
     ) -> None:
-        if self._retry_ctx.current_retry_count > self._jwt_retry_attempts:
-            logger.debug("Exhausted max login attempts. Aborting connection")
-            self._retry_ctx.reset()
-            raise OperationalError(
-                msg=f"Could not connect to Snowflake backend after {self._retry_ctx.current_retry_count} attempt(s)."
-                "Aborting",
-                errno=ER_FAILED_TO_CONNECT_TO_DB,
-            )
-        else:
-            logger.debug(
-                f"Hit JWT timeout, attempt {self._retry_ctx.current_retry_count}. Retrying..."
-            )
-            self._retry_ctx.increment()
+        logger.debug("Invoking base timeout handler")
+        super().handle_timeout(
+            authenticator=authenticator,
+            service_name=service_name,
+            account=account,
+            user=user,
+            password=password,
+            delete_params=False,
+        )
 
-        self.prepare(account=account, user=user)
+        logger.debug("Base timeout handler passed, checking for JWT expiry")
+        jwt_timed_out = False
+        if self._retry_ctx.elapsed_time_millis is not None:
+            jwt_timeout_millis = self._jwt_timeout * 1000
+            jwt_remaining_time_millis = (
+                jwt_timeout_millis - self._retry_ctx.elapsed_time_millis
+            )
+            jwt_timed_out = jwt_remaining_time_millis < 0
+
+        jwt_retry_attempts_exceeded = (
+            self._retry_ctx.current_retry_count >= self._jwt_retry_attempts
+        )
+
+        if jwt_timed_out or jwt_retry_attempts_exceeded:
+            logger.debug("JWT expired, preparing new token before retrying")
+            self.prepare(account=account, user=user)
 
     @staticmethod
     def can_handle_exception(op: OperationalError) -> bool:

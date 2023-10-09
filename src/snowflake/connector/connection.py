@@ -1198,7 +1198,6 @@ class SnowflakeConnection:
         _update_current_object: bool = True,
         _no_retry: bool = False,
         timeout: int | None = None,
-        socket_timeout: int | None = None,
     ) -> dict[str, Any]:
         """Executes a query with a sequence counter."""
         logger.debug("_cmd_query")
@@ -1245,7 +1244,6 @@ class SnowflakeConnection:
             _include_retry_params=True,
             _no_retry=_no_retry,
             timeout=timeout,
-            socket_timeout=socket_timeout,
         )
 
         if ret is None:

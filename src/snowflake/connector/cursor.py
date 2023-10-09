@@ -560,7 +560,6 @@ class SnowflakeCursor:
                 _no_results=_no_results,
                 _no_retry=_no_retry,
                 timeout=real_timeout,
-                socket_timeout=self._connection.socket_timeout,
             )
         finally:
             try:

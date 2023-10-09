@@ -67,6 +67,7 @@ from .errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_FAILED_TO_RENEW_SESSION,
     ER_FAILED_TO_REQUEST,
+    ER_RETRYABLE_CODE,
 )
 from .errors import (
     BadGatewayError,
@@ -453,9 +454,8 @@ class SnowflakeRestful:
         body=None,
         method: str = "post",
         client: str = "sfsql",
+        timeout: int | None = None,
         _no_results: bool = False,
-        timeout=None,
-        socket_timeout=None,
         _include_retry_params: bool = False,
         _no_retry: bool = False,
     ):
@@ -478,9 +478,6 @@ class SnowflakeRestful:
         else:
             accept_type = CONTENT_TYPE_APPLICATION_JSON
 
-        if timeout is None:
-            timeout = self._connection.network_timeout
-
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: accept_type,
@@ -496,7 +493,6 @@ class SnowflakeRestful:
                 token=self.token,
                 _no_results=_no_results,
                 timeout=timeout,
-                socket_timeout=socket_timeout,
                 _include_retry_params=_include_retry_params,
                 no_retry=_no_retry,
             )
@@ -506,7 +502,6 @@ class SnowflakeRestful:
                 headers,
                 token=self.token,
                 timeout=timeout,
-                socket_timeout=socket_timeout,
             )
 
     def update_tokens(
@@ -683,7 +678,6 @@ class SnowflakeRestful:
         headers: dict[str, str],
         token: str = None,
         timeout: int | None = None,
-        socket_timeout: int = DEFAULT_SOCKET_CONNECT_TIMEOUT,
     ) -> dict[str, Any]:
         if "Content-Encoding" in headers:
             del headers["Content-Encoding"]
@@ -697,7 +691,6 @@ class SnowflakeRestful:
             headers,
             timeout=timeout,
             token=token,
-            socket_timeout=socket_timeout,
         )
         if ret.get("code") == SESSION_EXPIRED_GS_CODE:
             try:
@@ -725,7 +718,6 @@ class SnowflakeRestful:
         timeout=None,
         _no_results: bool = False,
         no_retry: bool = False,
-        socket_timeout=None,
         _include_retry_params: bool = False,
     ):
         full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
@@ -743,7 +735,6 @@ class SnowflakeRestful:
             timeout=timeout,
             token=token,
             no_retry=no_retry,
-            socket_timeout=socket_timeout,
             _include_retry_params=_include_retry_params,
         )
         logger.debug(
@@ -883,7 +874,7 @@ class SnowflakeRestful:
         conn = self._connection
         logger.debug(
             "remaining request timeout: %s ms, retry cnt: %s",
-            retry_ctx.remaining_time_millis,
+            retry_ctx.timeout * 1000 - retry_ctx.elapsed_time_millis,
             retry_ctx.current_retry_count + 1,
         )
 
@@ -1062,10 +1053,20 @@ class SnowflakeRestful:
         is_raw_text: bool = False,
         is_raw_binary: bool = False,
         binary_data_handler=None,
-        socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
+        socket_timeout: int | None = None,
         is_okta_authentication: bool = False,
     ):
+        def is_login_request(url):
+            return "login-request" in parse_url(full_url).path
+
+        if socket_timeout is None:
+            if self._connection.socket_timeout is not None:
+                logger.debug("socket_timeout specified in connection")
+                socket_timeout = self._connection.socket_timeout
+            else:
+                socket_timeout = DEFAULT_SOCKET_CONNECT_TIMEOUT
         logger.debug("socket timeout: %s", socket_timeout)
+
         try:
             if not catch_okta_unauthorized_error and data and len(data) > 0:
                 headers["Content-Encoding"] = "gzip"
@@ -1106,14 +1107,25 @@ class SnowflakeRestful:
                     raise ForbiddenError
 
                 elif is_retryable_http_code(raw_ret.status_code):
-                    error = get_http_retryable_error(raw_ret.status_code)
-                    logger.debug(f"{error}. Retrying...")
+                    err = get_http_retryable_error(raw_ret.status_code)
                     # retryable server exceptions
                     if is_okta_authentication:
                         raise RefreshTokenError(
                             msg="OKTA authentication requires token refresh."
                         )
-                    raise RetryRequest(error)
+                    if is_login_request(full_url):
+                        logger.debug(
+                            "Received retryable response code while logging in. Will be handled by "
+                            f"authenticator. Ignore the following. Error stack: {err}",
+                            exc_info=True,
+                        )
+                        raise OperationalError(
+                            msg="Login request is retryable. Will be handled by authenticator",
+                            errno=ER_RETRYABLE_CODE,
+                        )
+                    else:
+                        logger.debug(f"{err}. Retrying...")
+                        raise RetryRequest(err)
 
                 elif (
                     raw_ret.status_code == UNAUTHORIZED
@@ -1154,15 +1166,14 @@ class SnowflakeRestful:
             RuntimeError,
             AttributeError,  # json decoding error
         ) as err:
-            parsed_url = parse_url(full_url)
-            if "login-request" in parsed_url.path:
+            if is_login_request(full_url):
                 logger.debug(
                     "Hit a timeout error while logging in. Will be handled by "
                     f"authenticator. Ignore the following. Error stack: {err}",
                     exc_info=True,
                 )
                 raise OperationalError(
-                    msg="ConnectionTimeout occurred. Will be handled by authenticator",
+                    msg="ConnectionTimeout occurred during login. Will be handled by authenticator",
                     errno=ER_CONNECTION_TIMEOUT,
                 )
             else:

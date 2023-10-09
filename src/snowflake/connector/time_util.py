@@ -86,13 +86,11 @@ class TimeoutBackoffCtx:
         return self._timeout
 
     @property
-    def remaining_time_millis(self) -> float | None:
-        if self._timeout is None or self._start_time_millis is None:
+    def elapsed_time_millis(self) -> int | None:
+        if self._start_time_millis is None:
             return None
 
-        elapsed_time_millis = get_time_millis() - self._start_time_millis
-        timeout_millis = self._timeout * 1000
-        return timeout_millis - elapsed_time_millis
+        return get_time_millis() - self._start_time_millis
 
     @property
     def current_retry_count(self) -> int:
@@ -106,6 +104,7 @@ class TimeoutBackoffCtx:
         self._start_time_millis = get_time_millis()
 
     def should_retry(self) -> bool:
+        print("retrying", self._timeout)
         """Decides whether to retry connection."""
         if self._timeout is not None and self._start_time_millis is None:
             logger.warning(
@@ -114,7 +113,9 @@ class TimeoutBackoffCtx:
 
         timed_out = False
         if self._timeout is not None and self._start_time_millis is not None:
-            timed_out = self.remaining_time_millis < 0
+            timeout_millis = self._timeout * 1000
+            remaining_time_millis = timeout_millis - self.elapsed_time_millis
+            timed_out = remaining_time_millis < 0
 
         retry_attempts_exceeded = False
         if self._max_retry_attempts is not None:
@@ -160,11 +161,13 @@ class Backoff:
         factor: int | None = None,
         enable_jitter: bool | None = None,
     ):
-        self._base = base if base is not None else self.DEFAULT_BACKOFF_BASE
-        self._cap = cap if cap is not None else self.DEFAULT_BACKOFF_CAP
-        self._factor = factor if cap is not None else self.DEFAULT_BACKOFF_FACTOR
+        self._base = base if base is not None else Backoff.DEFAULT_BACKOFF_BASE
+        self._cap = cap if cap is not None else Backoff.DEFAULT_BACKOFF_CAP
+        self._factor = factor if cap is not None else Backoff.DEFAULT_BACKOFF_FACTOR
         self._enable_jitter = (
-            enable_jitter if enable_jitter is not None else self.DEFAULT_ENABLE_JITTER
+            enable_jitter
+            if enable_jitter is not None
+            else Backoff.DEFAULT_ENABLE_JITTER
         )
 
     def next_sleep(self, cnt: Any, sleep: int) -> int:

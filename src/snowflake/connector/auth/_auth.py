@@ -242,24 +242,11 @@ class Auth:
             {k: v for (k, v) in body["data"].items() if k != "PASSWORD"},
         )
 
-        # socket timeout should be the min between user specified timeout and authenticator specific timeout
-        socket_timeout_opts = (
-            self._rest._connection.socket_timeout,
-            auth_instance.auth_socket_timeout,
-        )
-        socket_timeout = min(
-            (t for t in socket_timeout_opts if t is not None), default=None
-        )
-
-        if socket_timeout is not None:
-            logger.debug(f"Socket timeout for authentication set to {socket_timeout}")
-
         try:
             ret = self._rest._post_request(
                 url,
                 headers,
                 json.dumps(body),
-                socket_timeout=socket_timeout,
             )
         except ForbiddenError as err:
             # HTTP 403
@@ -299,9 +286,7 @@ class Auth:
 
             def post_request_wrapper(self, url, headers, body) -> None:
                 # get the MFA response
-                self.ret = self._rest._post_request(
-                    url, headers, body, socket_timeout=socket_timeout
-                )
+                self.ret = self._rest._post_request(url, headers, body)
 
             # send new request to wait until MFA is approved
             t = Thread(
@@ -330,7 +315,6 @@ class Auth:
                     url,
                     headers,
                     json.dumps(body),
-                    socket_timeout=socket_timeout,
                 )
             elif not ret or not ret["data"] or not ret["data"].get("token"):
                 # not token is returned.
@@ -370,7 +354,6 @@ class Auth:
                     url,
                     headers,
                     json.dumps(body),
-                    socket_timeout=socket_timeout,
                 )
 
         logger.debug("completed authentication")
