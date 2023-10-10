@@ -25,13 +25,14 @@ can_draw = True
 try:
     import matplotlib.pyplot as plt
 except ImportError:
+    print("graphs can not be drawn as matplotlib is not installed.")
     can_draw = False
 
 
 def prepare_data(cursor, row_count=100, test_table_name="TEMP_ARROW_TEST_TABLE"):
     cursor.execute(
-        f"""
-CREATE TEMP TABLE {test_table_name} (
+        f"""\
+CREATE OR REPLACE TEMP TABLE {test_table_name} (
     C1 BIGINT, C2 BINARY, C3 BOOLEAN, C4 CHAR, C5 CHARACTER, C6 DATE, C7 DATETIME, C8 DEC(12,3),
     C9 DECIMAL(12,3), C10 DOUBLE, C11 FLOAT, C12 INT, C13 INTEGER, C14 NUMBER, C15 REAL, C16 BYTEINT,
     C17 SMALLINT, C18 STRING, C19 TEXT, C20 TIME, C21 TIMESTAMP, C22 TIMESTAMP_TZ, C23 TIMESTAMP_LTZ,
@@ -41,7 +42,7 @@ CREATE TEMP TABLE {test_table_name} (
 
     for _ in range(row_count):
         cursor.execute(
-            f"""
+            f"""\
 INSERT INTO {test_table_name} SELECT
     123456,
     TO_BINARY('HELP', 'UTF-8'),
@@ -118,18 +119,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    test_table_name = "TEMP_ARROW_TEST_TABLE"
-
     with snowflake.connector.connect(
         **CONNECTION_PARAMETERS
     ) as conn, conn.cursor() as cursor:
-        if not args.test_table_name:
-            print("preparing data started")
-            prepare_data(cursor, args.row_count)
-            print("preparing data is done")
-        else:
-            print("using data in existing table")
-            test_table_name = args.test_table_name
+        test_table_name = args.test_table_name
 
         memory_check_task = task_memory_decorator(task_fetch_arrow_batches)
         execute_task(memory_check_task, cursor, test_table_name, args.iteration_cnt)

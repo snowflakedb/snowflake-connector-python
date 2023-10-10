@@ -56,7 +56,7 @@ def remove_bytes(byte_str, num_bytes):
     return new_byte_str
 
 
-def create_pyarrow_iterator(input_data, use_table_unit):
+def create_nanoarrow_pyarrow_iterator(input_data, use_table_unit):
     # create nanoarrow based iterator
     return (
         NanoarrowRowIterator(
@@ -83,7 +83,7 @@ def create_pyarrow_iterator(input_data, use_table_unit):
     )
 
 
-def create_old_pyarrow_iterator(input_data, use_table_unit=False):
+def create_vendored_pyarrow_iterator(input_data, use_table_unit=False):
     # created vendored arrow based iterator
     iterator = PyArrowIterator(
         None,
@@ -101,8 +101,7 @@ def create_old_pyarrow_iterator(input_data, use_table_unit=False):
 def task_for_loop_iterator(
     input_data: bytes, create_iterator_method, use_table_unit=False
 ):
-    for _ in create_iterator_method(input_data, use_table_unit):
-        pass
+    list(create_iterator_method(input_data, use_table_unit))
 
 
 def task_for_loop_iterator_expected_error(
@@ -110,30 +109,28 @@ def task_for_loop_iterator_expected_error(
 ):
     # case 1: removing the i-th byte in the input_data
     try:
-        iterator = create_iterator_method(
-            input_data[:10] + input_data[10 + 1 :], use_table_unit
+        list(
+            create_iterator_method(
+                input_data[:10] + input_data[10 + 1 :], use_table_unit
+            )
         )
-        for _ in iterator:
-            pass
     except:  # noqa
         pass
 
     # case 2: removing the 2**math.log2(len(decode_bytes) bytes in input_data input
     try:
-        iterator = create_iterator_method(
-            bytes(remove_bytes(input_data, 2 ** int(math.log2(len(input_data))))),
-            use_table_unit,
+        list(
+            create_iterator_method(
+                bytes(remove_bytes(input_data, 2 ** int(math.log2(len(input_data))))),
+                use_table_unit,
+            )
         )
-        for _ in iterator:
-            pass
     except:  # noqa
         pass
 
     # case 3: randomly-generated 2*22 bytes
     try:
-        iterator = create_iterator_method(secrets.token_bytes(2**22), use_table_unit)
-        for _ in iterator:
-            pass
+        list(create_iterator_method(secrets.token_bytes(2**22), use_table_unit))
     except:  # noqa
         pass
 
@@ -190,9 +187,9 @@ if __name__ == "__main__":
         ".".join([str(v) for v in VERSION if v is not None]),
     )
     create_arrow_iterator_method = (
-        create_old_pyarrow_iterator
+        create_vendored_pyarrow_iterator
         if args.use_vendored_arrow
-        else create_pyarrow_iterator
+        else create_nanoarrow_pyarrow_iterator
     )
 
     perf_check_task_for_loop_iterator = task_time_execution_decorator(

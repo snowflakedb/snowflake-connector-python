@@ -353,7 +353,7 @@ jobs:
         shell: bash
       - uses: actions/upload-artifact@v3
         with:
-          name: coverage_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          name: coverage_vendored_arrow_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
             .tox/.coverage
             .tox/coverage.xml

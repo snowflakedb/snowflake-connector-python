@@ -150,7 +150,7 @@ class ArrowConverterContext:
         nanoseconds = int(decimal.Decimal(epoch).scaleb(9) + decimal.Decimal(fraction))
         return numpy.datetime64(nanoseconds, "ns")
 
-    def DECIMAL128_to_decimal(self, int128_bytes: bytes, scale: int):
+    def DECIMAL128_to_decimal(self, int128_bytes: bytes, scale: int) -> decimal.Decimal:
         int128 = int.from_bytes(int128_bytes, byteorder=byteorder, signed=True)
         if scale == 0:
             return int128

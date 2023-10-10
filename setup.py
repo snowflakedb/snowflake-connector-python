@@ -170,7 +170,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                     if "std=" not in os.environ.get("CXXFLAGS", ""):
                         ext.extra_compile_args.append("-std=c++17")
                         ext.extra_compile_args.append("-D_GLIBCXX_USE_CXX11_ABI=0")
-                    if sys.platform == "darwin":
+                    if (
+                        sys.platform == "darwin"
+                        and "macosx-version-min" not in os.environ.get("CXXFLAGS", "")
+                    ):
                         ext.extra_compile_args.append("-mmacosx-version-min=10.13")
 
                 ext.library_dirs.append(
@@ -252,7 +255,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                     if "std=" not in os.environ.get("CXXFLAGS", ""):
                         ext.extra_compile_args.append("-std=c++17")
                         ext.extra_compile_args.append("-D_GLIBCXX_USE_CXX11_ABI=0")
-                    if sys.platform == "darwin":
+                    if (
+                        sys.platform == "darwin"
+                        and "macosx-version-min" not in os.environ.get("CXXFLAGS", "")
+                    ):
                         ext.extra_compile_args.append("-mmacosx-version-min=10.13")
 
                 ext.library_dirs.append(
@@ -288,9 +294,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
             try:
                 build_ext.build_extension(self, ext)
             finally:
-                del self.compiler._compile
                 self.compiler._compile = original__compile
-            # build_ext.build_extension(self, ext)
 
         def _get_arrow_lib_dir(self):
             if "SF_ARROW_LIBDIR" in os.environ:

@@ -11,7 +11,7 @@ import time
 from base64 import b64decode
 from enum import Enum, unique
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
 
 from .arrow_context import ArrowConverterContext
 from .arrow_iterator import PyArrowIterator
@@ -59,8 +59,13 @@ SSE_C_AES = "AES256"
 
 
 def _create_vendored_arrow_iterator(
-    data, context, use_dict_result, numpy, number_to_decimal, row_unit
-):
+    data: bytes,
+    context: ArrowConverterContext,
+    use_dict_result: bool,
+    numpy: bool,
+    number_to_decimal: bool,
+    row_unit: IterUnit,
+) -> PyArrowIterator:
     logger.debug("Using vendored arrow as the arrow data converter")
     iter = PyArrowIterator(
         None,
@@ -76,8 +81,13 @@ def _create_vendored_arrow_iterator(
 
 
 def _create_nanoarrow_iterator(
-    data, context, use_dict_result, numpy, number_to_decimal, row_unit
-):
+    data: bytes,
+    context: ArrowConverterContext,
+    use_dict_result: bool,
+    numpy: bool,
+    number_to_decimal: bool,
+    row_unit: IterUnit,
+) -> NanoarrowRowIterator | NanoarrowTableIterator:
     logger.debug("Using nanoarrow as the arrow data converter")
     return (
         NanoarrowRowIterator(
@@ -98,9 +108,6 @@ def _create_nanoarrow_iterator(
             number_to_decimal,
         )
     )
-
-
-_create_arrow_iterator_method = _create_nanoarrow_iterator
 
 
 @unique
@@ -195,6 +202,7 @@ def create_batches_from_response(
                     cursor._connection._numpy,
                     schema,
                     cursor._connection._arrow_number_to_decimal,
+                    cursor._connection._create_pyarrow_iterator_method,
                 )
                 for c in chunks
             ]
@@ -217,6 +225,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
+            cursor._connection._create_pyarrow_iterator_method,
         )
     else:
         logger.error(f"Don't know how to construct ResultBatches from response: {data}")
@@ -228,6 +237,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
+            cursor._connection._create_pyarrow_iterator_method,
         )
 
     return [first_chunk] + rest_of_chunks
@@ -590,6 +600,7 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadata],
         number_to_decimal: bool,
+        create_pyarrow_iterator_method: Callable,
     ) -> None:
         super().__init__(
             rowcount,
@@ -601,6 +612,7 @@ class ArrowResultBatch(ResultBatch):
         self._context = context
         self._numpy = numpy
         self._number_to_decimal = number_to_decimal
+        self._create_pyarrow_iterator_method = create_pyarrow_iterator_method
 
     def __repr__(self) -> str:
         return f"ArrowResultChunk({self.id})"
@@ -613,7 +625,7 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        return _create_arrow_iterator_method(
+        return self._create_pyarrow_iterator_method(
             response.content,
             self._context,
             self._use_dict_result,
@@ -633,7 +645,7 @@ class ArrowResultBatch(ResultBatch):
         if len(data) == 0:
             return iter([])
 
-        return _create_arrow_iterator_method(
+        return self._create_pyarrow_iterator_method(
             b64decode(data),
             self._context,
             self._use_dict_result,
@@ -652,6 +664,7 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadata],
         number_to_decimal: bool,
+        create_pyarrow_iterator_method: Callable,
     ):
         """Initializes an ``ArrowResultBatch`` from static, local data."""
         new_chunk = cls(
@@ -663,6 +676,7 @@ class ArrowResultBatch(ResultBatch):
             numpy,
             schema,
             number_to_decimal,
+            create_pyarrow_iterator_method,
         )
         new_chunk._data = data
 

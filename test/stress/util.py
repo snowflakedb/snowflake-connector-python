@@ -2,13 +2,11 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-import os
 import time
 
 import psutil
 
-pid = os.getpid()
-process = psutil.Process(pid)
+process = psutil.Process()
 
 last_memory_record = None
 memory_records = []

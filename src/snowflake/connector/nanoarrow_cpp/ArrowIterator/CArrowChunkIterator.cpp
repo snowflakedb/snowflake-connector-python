@@ -51,6 +51,8 @@ std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
   }
   else
   {
+    // the initialization took place in CArrowIterator constructor in which function
+    // we can not raise error but we can set error , we check here to see if error occurred during initialization
     SF_CHECK_PYTHON_ERR();
     m_currentBatchIndex++;
     if (m_currentBatchIndex < m_batchCount)
@@ -82,7 +84,8 @@ void CArrowChunkIterator::createRowPyObject()
   {
     // PyTuple_SET_ITEM steals a reference to the PyObject returned by toPyObject below
     PyTuple_SET_ITEM(
-        m_latestReturnedRow.get(), i,
+        m_latestReturnedRow.get(),
+        i,
         m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
   }
   return;
