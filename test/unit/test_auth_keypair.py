@@ -19,12 +19,12 @@ from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
 
+from .mock_utils import mock_connection
+
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByKeyPair
 except ImportError:
     from snowflake.connector.auth_oauth import AuthByKeyPair
-
-from .mock_connection import mock_connection
 
 
 def _create_mock_auth_keypair_rest_response():

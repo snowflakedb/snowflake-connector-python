@@ -16,14 +16,14 @@ from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
 
+from .mock_utils import mock_connection
+
 try:  # pragma: no cover
     from snowflake.connector.auth import Auth, AuthByDefault, AuthByPlugin
 except ImportError:
     from snowflake.connector.auth import Auth
     from snowflake.connector.auth_by_plugin import AuthByPlugin
     from snowflake.connector.auth_default import AuthByDefault
-
-from .mock_connection import mock_connection
 
 
 def _init_rest(application, post_requset):

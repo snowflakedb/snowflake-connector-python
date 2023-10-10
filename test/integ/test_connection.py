@@ -944,6 +944,7 @@ def test_authenticate_error(conn_cnx, caplog):
     mock_auth = mock.Mock(spec=AuthByPlugin, unsafe=True)
     mock_auth.prepare.return_value = mock_auth
     mock_auth.update_body.side_effect = ReauthenticationRequest(None)
+    mock_auth._retry_ctx = mock.MagicMock()
     with conn_cnx() as conn:
         caplog.set_level(logging.DEBUG, "snowflake.connector")
         with pytest.raises(ReauthenticationRequest):

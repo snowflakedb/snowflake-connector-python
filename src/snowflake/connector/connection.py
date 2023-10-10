@@ -284,8 +284,20 @@ class SnowflakeConnection:
         schema: Schema in use on Snowflake.
         warehouse: Warehouse to be used on Snowflake.
         role: Role in use on Snowflake.
-        login_timeout: Login timeout in seconds. Used while authenticating.
-        network_timeout: Network timeout. Used for general purpose.
+        login_timeout: Login timeout in seconds. Login requests will not be retried after this timeout expires.
+            Note that the login attempt may still take more than login_timeout seconds as an ongoing login request
+            cannot be canceled even upon login timeout expiry. The login timeout only prevents further retries.
+        network_timeout: Network timeout in seconds. Network requests besides login requests will not be retried
+            after this timeout expires. Overriden in cursor query execution if timeout is passed to cursor.execute.
+            Note that an operation may still take more than network_timeout seconds for the same reason as above.
+        socket_timeout: Socket timeout in seconds. Sets both socket connect and read timeout.
+        backoff_mode: Backoff policy between login and network requests. Specified by case-insensitive string.
+            Valid options are: "recursive_mixed", "linear", and "exponential". Recursive mixed backoff randomly
+            chooses between incrementing backoff period linearly and exponentially each iteration.
+        backoff_base: Integer constant term used in backoff computations. See usage in time_utils.
+        backoff_factor: Integer constant term used in backoff computations. See usage in time_utils.
+        backoff_cap: Maximum backoff time in integer seconds.
+        backoff_enable_jitter: Boolean specifying whether to enable randomized jitter on computed backoff times.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.

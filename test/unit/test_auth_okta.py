@@ -14,13 +14,13 @@ from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
 
+from .mock_utils import mock_connection
+
 try:  # pragma: no cover
     import snowflake.connector.vendored.requests.sessions
     from snowflake.connector.auth import AuthByOkta
 except ImportError:
     from snowflake.connector.auth_okta import AuthByOkta
-
-from .mock_connection import mock_connection
 
 
 def test_auth_okta():

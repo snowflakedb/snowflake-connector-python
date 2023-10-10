@@ -9,7 +9,7 @@ from unittest.mock import Mock, PropertyMock
 
 from snowflake.connector.network import SnowflakeRestful
 
-from .mock_connection import mock_connection
+from .mock_utils import mock_connection
 
 
 def test_renew_session():

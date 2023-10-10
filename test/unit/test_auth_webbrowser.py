@@ -19,12 +19,12 @@ from snowflake.connector.network import (
     SnowflakeRestful,
 )
 
+from .mock_utils import mock_connection
+
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByWebBrowser
 except ImportError:
     from snowflake.connector.auth_webbrowser import AuthByWebBrowser
-
-from .mock_connection import mock_connection
 
 AUTHENTICATOR = "https://testsso.snowflake.net/"
 APPLICATION = "testapplication"

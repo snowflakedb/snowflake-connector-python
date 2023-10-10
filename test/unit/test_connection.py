@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import time
 from textwrap import dedent
 from unittest.mock import MagicMock, patch
 
@@ -16,9 +15,9 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector.errors import Error, OperationalError
-from snowflake.connector.vendored.requests.exceptions import ConnectionError
 
 from ..randomize import random_string
+from .mock_utils import mock_request_with_action
 
 try:
     from snowflake.connector.auth import (
@@ -322,20 +321,17 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
 @pytest.mark.parametrize("next_action", ("RETRY", "ERROR"))
 @patch("snowflake.connector.vendored.requests.sessions.Session.request")
 def test_handle_timeout(mockSessionRequest, next_action):
-    def mock_request(**kwargs):
-        # force timeout
-        time.sleep(5)
-        if next_action == "RETRY":
-            response = MagicMock()
-            response.status_code = 503
-            return response
-        elif next_action == "ERROR":
-            raise ConnectionError()
-
-    mockSessionRequest.side_effect = mock_request
+    mockSessionRequest.side_effect = mock_request_with_action(next_action, sleep=5)
 
     with pytest.raises(OperationalError):
-        _ = fake_connector(login_timeout=1)
+        # no backoff for testing
+        _ = fake_connector(
+            login_timeout=7,
+            backoff_mode="linear",
+            backoff_cap=0,
+            backoff_enable_jitter=False,
+        )
 
     # authenticator should be the only retry mechanism for login requests
-    assert mockSessionRequest.call_count == 1
+    # 7 seconds should be enough for authenticator to attempt twice
+    assert mockSessionRequest.call_count == 2
