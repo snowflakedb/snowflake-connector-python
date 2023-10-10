@@ -14,7 +14,7 @@ import webbrowser
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
-from ..compat import parse_qs, urlparse, urlsplit
+from ..compat import parse_qs, urlencode, urlparse, urlsplit
 from ..constants import (
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
@@ -134,10 +134,14 @@ class AuthByWebBrowser(AuthByPlugin):
             socket_connection.listen(0)  # no backlog
             callback_port = socket_connection.getsockname()[1]
 
-            logger.debug("step 1: query GS to obtain SSO url")
-            sso_url = self._get_sso_url(
-                conn, authenticator, service_name, account, callback_port, user
-            )
+            if conn.disable_console_login:
+                logger.debug("step 1: query GS to obtain SSO url")
+                sso_url = self._get_sso_url(
+                    conn, authenticator, service_name, account, callback_port, user
+                )
+            else:
+                logger.debug("step 1: constructing console login url")
+                sso_url = self._get_console_login_url(conn, callback_port, user)
 
             logger.debug("Validate SSO URL")
             if not is_valid_url(sso_url):
@@ -415,3 +419,13 @@ You can close this window now and go back where you started from.
         sso_url = data["ssoUrl"]
         self._proof_key = data["proofKey"]
         return sso_url
+
+    @staticmethod
+    def _get_console_login_url(conn: SnowflakeConnection, port: int, user: str) -> str:
+        url = (
+            conn._rest.server_url
+            + "/console/login/?"
+            + urlencode({"login_name": user, "client_port": port})
+        )
+        logger.debug(f"Console Log In URL: {url}")
+        return url

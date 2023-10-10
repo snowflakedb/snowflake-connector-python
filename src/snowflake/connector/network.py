@@ -435,6 +435,10 @@ class SnowflakeRestful:
     def mfa_token(self, value: str) -> None:
         self._mfa_token = value
 
+    @property
+    def server_url(self) -> str:
+        return f"{self._protocol}://{self._host}:{self._port}"
+
     def close(self) -> None:
         if hasattr(self, "_token"):
             del self._token
@@ -683,7 +687,7 @@ class SnowflakeRestful:
         if "Content-Length" in headers:
             del headers["Content-Length"]
 
-        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
+        full_url = f"{self.server_url}{url}"
         ret = self.fetch(
             "get",
             full_url,
@@ -720,7 +724,7 @@ class SnowflakeRestful:
         no_retry: bool = False,
         _include_retry_params: bool = False,
     ):
-        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
+        full_url = f"{self.server_url}{url}"
         if self._connection._probe_connection:
             from pprint import pprint
 
