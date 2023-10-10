@@ -170,7 +170,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                     if "std=" not in os.environ.get("CXXFLAGS", ""):
                         ext.extra_compile_args.append("-std=c++17")
                         ext.extra_compile_args.append("-D_GLIBCXX_USE_CXX11_ABI=0")
-                    if sys.platform == "darwin":
+                    if (
+                        sys.platform == "darwin"
+                        and "macosx-version-min" not in os.environ.get("CXXFLAGS", "")
+                    ):
                         ext.extra_compile_args.append("-mmacosx-version-min=10.13")
 
                 ext.library_dirs.append(
@@ -252,7 +255,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                     if "std=" not in os.environ.get("CXXFLAGS", ""):
                         ext.extra_compile_args.append("-std=c++17")
                         ext.extra_compile_args.append("-D_GLIBCXX_USE_CXX11_ABI=0")
-                    if sys.platform == "darwin":
+                    if (
+                        sys.platform == "darwin"
+                        and "macosx-version-min" not in os.environ.get("CXXFLAGS", "")
+                    ):
                         ext.extra_compile_args.append("-mmacosx-version-min=10.13")
 
                 ext.library_dirs.append(

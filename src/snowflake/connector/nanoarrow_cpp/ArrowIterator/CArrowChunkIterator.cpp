@@ -84,7 +84,8 @@ void CArrowChunkIterator::createRowPyObject()
   {
     // PyTuple_SET_ITEM steals a reference to the PyObject returned by toPyObject below
     PyTuple_SET_ITEM(
-        m_latestReturnedRow.get(), i,
+        m_latestReturnedRow.get(),
+        i,
         m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
   }
   return;

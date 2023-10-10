@@ -65,7 +65,7 @@ def _create_vendored_arrow_iterator(
     numpy: bool,
     number_to_decimal: bool,
     row_unit: IterUnit,
-):
+) -> PyArrowIterator:
     logger.debug("Using vendored arrow as the arrow data converter")
     iter = PyArrowIterator(
         None,
@@ -87,7 +87,7 @@ def _create_nanoarrow_iterator(
     numpy: bool,
     number_to_decimal: bool,
     row_unit: IterUnit,
-):
+) -> NanoarrowRowIterator | NanoarrowTableIterator:
     logger.debug("Using nanoarrow as the arrow data converter")
     return (
         NanoarrowRowIterator(

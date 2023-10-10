@@ -119,18 +119,10 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    test_table_name = "TEMP_ARROW_TEST_TABLE"
-
     with snowflake.connector.connect(
         **CONNECTION_PARAMETERS
     ) as conn, conn.cursor() as cursor:
-        if not args.test_table_name:
-            print("preparing data started")
-            prepare_data(cursor, args.row_count)
-            print("preparing data is done")
-        else:
-            print("using data in existing table")
-            test_table_name = args.test_table_name
+        test_table_name = args.test_table_name
 
         memory_check_task = task_memory_decorator(task_fetch_arrow_batches)
         execute_task(memory_check_task, cursor, test_table_name, args.iteration_cnt)
