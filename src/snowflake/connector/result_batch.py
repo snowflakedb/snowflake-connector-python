@@ -59,7 +59,12 @@ SSE_C_AES = "AES256"
 
 
 def _create_vendored_arrow_iterator(
-    data, context, use_dict_result, numpy, number_to_decimal, row_unit
+    data: bytes,
+    context: ArrowConverterContext,
+    use_dict_result: bool,
+    numpy: bool,
+    number_to_decimal: bool,
+    row_unit: IterUnit,
 ):
     logger.debug("Using vendored arrow as the arrow data converter")
     iter = PyArrowIterator(
@@ -76,7 +81,12 @@ def _create_vendored_arrow_iterator(
 
 
 def _create_nanoarrow_iterator(
-    data, context, use_dict_result, numpy, number_to_decimal, row_unit
+    data: bytes,
+    context: ArrowConverterContext,
+    use_dict_result: bool,
+    numpy: bool,
+    number_to_decimal: bool,
+    row_unit: IterUnit,
 ):
     logger.debug("Using nanoarrow as the arrow data converter")
     return (

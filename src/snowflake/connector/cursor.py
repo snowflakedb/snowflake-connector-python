@@ -131,7 +131,7 @@ class NanoarrowUsage(str, Enum):
     DISABLE_NANOARROW = "disable_nanoarrow"
 
 
-def _get_client_nanoarrow_setting():
+def _get_client_nanoarrow_setting() -> NanoarrowUsage:
     ret = os.environ.get("NANOARROW_USAGE", NanoarrowUsage.FOLLOW_SESSION_PARAMETER)
     if ret is not NanoarrowUsage.FOLLOW_SESSION_PARAMETER:
         try:

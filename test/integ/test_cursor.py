@@ -1693,7 +1693,7 @@ def test_decoding_utf8_for_json_result(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog):
+def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog, monkeypatch):
     from snowflake.connector.cursor import _get_client_nanoarrow_setting
 
     origin_value = snowflake.connector.cursor.NANOARROW_USAGE
@@ -1727,14 +1727,13 @@ def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog):
     snowflake.connector.cursor.NANOARROW_USAGE = origin_value
 
     # test setting by env var
-
-    os.environ["NANOARROW_USAGE"] = "enable_nanoarrow"
+    monkeypatch.setenv("NANOARROW_USAGE", "enable_nanoarrow")
     assert (
         _get_client_nanoarrow_setting()
         == snowflake.connector.cursor.NanoarrowUsage.ENABLE_NANOARROW
     )
 
-    os.environ["NANOARROW_USAGE"] = "ENABLE_NANOARROW"
+    monkeypatch.setenv("NANOARROW_USAGE", "ENABLE_NANOARROW")
     assert (
         _get_client_nanoarrow_setting()
         == snowflake.connector.cursor.NanoarrowUsage.ENABLE_NANOARROW
@@ -1747,13 +1746,13 @@ def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog):
             cur.execute("select 1").fetchall()
             assert "Using nanoarrow as the arrow data converter" in caplog.text
 
-    os.environ["NANOARROW_USAGE"] = "disable_nanoarrow"
+    monkeypatch.setenv("NANOARROW_USAGE", "disable_nanoarrow")
     assert (
         _get_client_nanoarrow_setting()
         == snowflake.connector.cursor.NanoarrowUsage.DISABLE_NANOARROW
     )
 
-    os.environ["NANOARROW_USAGE"] = "DISABLE_NANOARROW"
+    monkeypatch.setenv("NANOARROW_USAGE", "DISABLE_NANOARROW")
     assert (
         _get_client_nanoarrow_setting()
         == snowflake.connector.cursor.NanoarrowUsage.DISABLE_NANOARROW
@@ -1766,13 +1765,13 @@ def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog):
             cur.execute("select 1").fetchall()
             assert "Using vendored arrow as the arrow data converter" in caplog.text
 
-    os.environ["NANOARROW_USAGE"] = "random_value"
+    monkeypatch.setenv("NANOARROW_USAGE", "random_value")
     assert (
         _get_client_nanoarrow_setting()
         == snowflake.connector.cursor.NanoarrowUsage.FOLLOW_SESSION_PARAMETER
     )
 
-    del os.environ["NANOARROW_USAGE"]
+    monkeypatch.delenv("NANOARROW_USAGE")
     assert (
         _get_client_nanoarrow_setting()
         == snowflake.connector.cursor.NanoarrowUsage.FOLLOW_SESSION_PARAMETER

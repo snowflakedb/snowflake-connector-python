@@ -25,13 +25,14 @@ can_draw = True
 try:
     import matplotlib.pyplot as plt
 except ImportError:
+    print("graphs can not be drawn as matplotlib is not installed.")
     can_draw = False
 
 
 def prepare_data(cursor, row_count=100, test_table_name="TEMP_ARROW_TEST_TABLE"):
     cursor.execute(
-        f"""
-CREATE TEMP TABLE {test_table_name} (
+        f"""\
+CREATE OR REPLACE TEMP TABLE {test_table_name} (
     C1 BIGINT, C2 BINARY, C3 BOOLEAN, C4 CHAR, C5 CHARACTER, C6 DATE, C7 DATETIME, C8 DEC(12,3),
     C9 DECIMAL(12,3), C10 DOUBLE, C11 FLOAT, C12 INT, C13 INTEGER, C14 NUMBER, C15 REAL, C16 BYTEINT,
     C17 SMALLINT, C18 STRING, C19 TEXT, C20 TIME, C21 TIMESTAMP, C22 TIMESTAMP_TZ, C23 TIMESTAMP_LTZ,
@@ -41,7 +42,7 @@ CREATE TEMP TABLE {test_table_name} (
 
     for _ in range(row_count):
         cursor.execute(
-            f"""
+            f"""\
 INSERT INTO {test_table_name} SELECT
     123456,
     TO_BINARY('HELP', 'UTF-8'),

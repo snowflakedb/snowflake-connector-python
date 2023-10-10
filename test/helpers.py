@@ -182,8 +182,7 @@ def _arrow_error_stream_chunk_remove_single_byte_test(
                 result_array.append(k)
         except Exception as e:
             with pytest.raises(UnboundLocalError):
-                for _ in iterator:
-                    pass
+                next(iterator)
             assert isinstance(e, OperationalError)
             exception_result.append((i, str(e), e))
 
@@ -198,9 +197,7 @@ def _arrow_error_stream_chunk_remove_random_length_bytes_test(
 ):
     # this test removes random bytes from the input bytes
     def remove_bytes(byte_str, num_bytes):
-        """
-        Remove a specified number of random bytes from a byte string.
-        """
+        """Remove a specified number of random bytes from a byte string."""
         if num_bytes >= len(byte_str):
             return (
                 bytearray()
@@ -233,8 +230,7 @@ def _arrow_error_stream_chunk_remove_random_length_bytes_test(
             succeeded_result.append(i)
         except Exception as e:
             with pytest.raises(UnboundLocalError):
-                for _ in iterator:
-                    pass
+                next(iterator)
             exception_result.append((i, str(e), e))
             assert isinstance(e, OperationalError)
 
@@ -264,8 +260,7 @@ def _arrow_error_stream_random_input_test(
             with pytest.raises(UnboundLocalError):
                 # create_arrow_iterator_method will raise error so
                 # iterator is not instantiated at all
-                for _ in iterator:
-                    pass
+                next(iterator)
             assert isinstance(e, OperationalError)
             exception_result.append((i, str(e), e))
 
