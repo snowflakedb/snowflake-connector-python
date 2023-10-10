@@ -139,8 +139,10 @@ def _get_client_nanoarrow_setting():
         except ValueError:
             logger.warning(
                 "Invalid value for enum NanoarrowUsage, valid options are"
-                "FOLLOW_SESSION_PARAMETER, ENABLE_NANOARROW, DISABLE_NANOARROW."
+                "FOLLOW_SESSION_PARAMETER, ENABLE_NANOARROW, DISABLE_NANOARROW,"
+                "falling back to use NanoarrowUsage.FOLLOW_SESSION_PARAMETER"
             )
+            ret = NanoarrowUsage.FOLLOW_SESSION_PARAMETER
     return ret
 
 
