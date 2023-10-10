@@ -107,16 +107,8 @@ def test_auth_keypair_bad_type():
 
     for bad_private_key in ("abcd", 1234, Bad()):
         auth_instance = AuthByKeyPair(private_key=bad_private_key)
-        # force token refresh for type check
-        auth_instance._jwt_retry_attempts = 0
         with raises(TypeError) as ex:
-            auth_instance.handle_timeout(
-                authenticator="SNOWFLAKE_JWT",
-                service_name=None,
-                account=account,
-                user=user,
-                password=None,
-            )
+            auth_instance.prepare(account=account, user=user)
         assert str(type(bad_private_key)) in str(ex)
 
 
@@ -126,7 +118,8 @@ def test_renew_token(mockPrepare):
     auth_instance = AuthByKeyPair(private_key=private_key_der)
 
     # force renew condition to be met
-    auth_instance._jwt_retry_attempts = 0
+    auth_instance._retry_ctx.set_start_time()
+    auth_instance._jwt_timeout = 0
     account = "testaccount"
     user = "testuser"
 

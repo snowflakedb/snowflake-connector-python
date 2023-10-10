@@ -3,10 +3,15 @@
 #
 
 import time
+from collections import defaultdict
 from unittest.mock import MagicMock
 
-from snowflake.connector.constants import BackoffMode
-from snowflake.connector.vendored.requests.exceptions import ConnectionError
+try:
+    from snowflake.connector.constants import BackoffMode
+    from snowflake.connector.vendored.requests.exceptions import ConnectionError
+except ImportError:
+    BackoffMode = defaultdict(lambda: None)
+    from requests.exceptions import ConnectionError
 
 
 def mock_connection(

@@ -61,17 +61,23 @@ class AuthByPlugin(ABC):
 
     def __init__(
         self,
+        timeout: int | None = None,
+        max_retry_attempts: int | None = None,
         **kwargs,
     ) -> None:
         self.consent_cache_id_token = False
 
-        if "timeout" not in kwargs or kwargs["timeout"] is None:
-            kwargs["timeout"] = DEFAULT_AUTH_CLASS_TIMEOUT
+        if timeout is None:
+            timeout = DEFAULT_AUTH_CLASS_TIMEOUT
+
+        if max_retry_attempts is None:
+            max_retry_attempts = int(
+                getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)
+            )
 
         self._retry_ctx = TimeoutBackoffCtx(
-            max_retry_attempts=int(
-                getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)
-            ),
+            timeout=timeout,
+            max_retry_attempts=max_retry_attempts,
             **kwargs,
         )
 
@@ -199,7 +205,7 @@ class AuthByPlugin(ABC):
             raise error
         else:
             logger.debug(
-                f"Hit connection timeout, attempt number {self._retry_ctx.current_retry_count}."
+                f"Hit connection timeout, attempt number {self._retry_ctx.current_retry_count + 1}."
                 " Will retry in a bit..."
             )
             time.sleep(self._retry_ctx.current_sleep_time)

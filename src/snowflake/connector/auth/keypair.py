@@ -54,18 +54,18 @@ class AuthByKeyPair(AuthByPlugin):
                 object that implements the `RSAPrivateKey` interface.
             lifetime_in_seconds: number of seconds the JWT token will be valid
         """
-        super().__init__(**kwargs)
+        max_retry_attempts = int(
+            os.getenv(
+                "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
+            )
+        )
+        super().__init__(max_retry_attempts=max_retry_attempts, **kwargs)
 
         self._private_key: bytes | RSAPrivateKey | None = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
             seconds=int(os.getenv("JWT_LIFETIME_IN_SECONDS", lifetime_in_seconds))
-        )
-        self._jwt_retry_attempts = int(
-            os.getenv(
-                "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
-            )
         )
         self._jwt_timeout = int(
             timedelta(
@@ -205,11 +205,7 @@ class AuthByKeyPair(AuthByPlugin):
         if self._retry_ctx.remaining_time_millis(jwt_timed_out) is not None:
             jwt_timed_out = self._retry_ctx.remaining_time_millis(jwt_timed_out) < 0
 
-        jwt_retry_attempts_exceeded = (
-            self._retry_ctx.current_retry_count >= self._jwt_retry_attempts
-        )
-
-        if jwt_timed_out or jwt_retry_attempts_exceeded:
+        if jwt_timed_out:
             logger.debug("JWT expired, preparing new token before retrying")
             self.prepare(account=account, user=user)
 
