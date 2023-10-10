@@ -7,6 +7,7 @@ from __future__ import annotations
 import itertools
 import logging
 import os
+import platform
 import stat
 import warnings
 from collections.abc import Iterable
@@ -324,7 +325,7 @@ class ConfigManager:
             if (
                 sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
                 # Same check as openssh does for permissions
-                #  https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
+                # https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
                 and filep.stat().st_mode & READABLE_BY_OTHERS != 0
                 or (
                     # Windows doesn't have getuid, skip checking
@@ -333,7 +334,14 @@ class ConfigManager:
                     and filep.stat().st_uid != os.getuid()
                 )
             ):
-                warn(f"Bad owner or permissions on {str(filep)}")
+                # for non-Windows, suggest change to 0600 permissions.
+                chmod_message = (
+                    f". To change owner, run chown $USER {str(filep)}. To restrict permissions, run chmod 0600 {str(filep)}."
+                    if platform.system() != "Windows"
+                    else ""
+                )
+
+                warn(f"Bad owner or permissions on {str(filep)}{chmod_message}")
             LOGGER.debug(f"reading configuration file from {str(filep)}")
             try:
                 read_config_piece = tomlkit.parse(filep.read_text())

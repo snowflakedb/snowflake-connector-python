@@ -553,7 +553,11 @@ def test_warn_config_file_owner(tmp_path, monkeypatch):
         with warnings.catch_warnings(record=True) as c:
             assert c1["b"] is True
         assert len(c) == 1
-        assert str(c[0].message) == f"Bad owner or permissions on {str(c_file)}"
+        assert (
+            str(c[0].message)
+            == f"Bad owner or permissions on {str(c_file)}"
+            + f". To change owner, run chown $USER {str(c_file)}. To restrict permissions, run chmod 0600 {str(c_file)}."
+        )
 
 
 def test_warn_config_file_permissions(tmp_path):
@@ -571,7 +575,15 @@ def test_warn_config_file_permissions(tmp_path):
     with warnings.catch_warnings(record=True) as c:
         assert c1["b"] is True
     assert len(c) == 1
-    assert str(c[0].message) == f"Bad owner or permissions on {str(c_file)}"
+    chmod_message = (
+        f". To change owner, run chown $USER {str(c_file)}. To restrict permissions, run chmod 0600 {str(c_file)}."
+        if not IS_WINDOWS
+        else ""
+    )
+    assert (
+        str(c[0].message)
+        == f"Bad owner or permissions on {str(c_file)}" + chmod_message
+    )
 
 
 def test_configoption_missing_root_manager():
