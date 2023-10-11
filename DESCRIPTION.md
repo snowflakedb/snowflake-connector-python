@@ -8,6 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.2.2 (tbd)
+  - Added for non-Windows platforms command suggestions (chown/chmod) for insufficient file permissions of config files.
+
 - v3.2.1(September 26,2023)
 
   - Fixed a bug where url port and path were ignored in private link oscp retry.
