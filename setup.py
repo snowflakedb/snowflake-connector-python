@@ -11,6 +11,7 @@ from shutil import copy
 from setuptools import Extension, setup
 
 CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
+NANOARROW_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp", "ArrowIterator")
 
 VERSION = (1, 1, 1, None)  # Default
 try:
@@ -59,9 +60,18 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
     pyarrow_version = tuple(int(x) for x in pyarrow.__version__.split("."))
     extensions = cythonize(
         [
+            # vendored arrow iterator
             Extension(
                 name="snowflake.connector.arrow_iterator",
                 sources=[os.path.join(CONNECTOR_SRC_DIR, "arrow_iterator.pyx")],
+            ),
+            # nanoarrow iterator
+            Extension(
+                name="snowflake.connector.nanoarrow_arrow_iterator",
+                sources=[
+                    os.path.join(NANOARROW_SRC_DIR, "nanoarrow_arrow_iterator.pyx")
+                ],
+                language="c++",
             ),
         ],
         compile_time_env=dict(ARROW_LESS_THAN_8=pyarrow_version < (8,)),
@@ -119,6 +129,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                 ext.extra_link_args.append("-g")
             current_dir = os.getcwd()
 
+            # vendored arrow extension
             if ext.name == "snowflake.connector.arrow_iterator":
                 if not os.environ.get("SF_NO_COPY_ARROW_LIB", False):
                     self._copy_arrow_lib()
@@ -159,7 +170,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                     if "std=" not in os.environ.get("CXXFLAGS", ""):
                         ext.extra_compile_args.append("-std=c++17")
                         ext.extra_compile_args.append("-D_GLIBCXX_USE_CXX11_ABI=0")
-                    if sys.platform == "darwin":
+                    if (
+                        sys.platform == "darwin"
+                        and "macosx-version-min" not in os.environ.get("CXXFLAGS", "")
+                    ):
                         ext.extra_compile_args.append("-mmacosx-version-min=10.13")
 
                 ext.library_dirs.append(
@@ -177,7 +191,110 @@ if _ABLE_TO_COMPILE_EXTENSIONS:
                     # fyi, https://medium.com/@donblas/fun-with-rpath-otool-and-install-name-tool-e3e41ae86172
                     ext.extra_link_args += ["-rpath", "@loader_path"]
 
-            build_ext.build_extension(self, ext)
+            # nanoarrow extension
+            if ext.name == "snowflake.connector.nanoarrow_arrow_iterator":
+                NANOARROW_CPP_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp")
+                NANOARROW_ARROW_ITERATOR_SRC_DIR = os.path.join(
+                    NANOARROW_CPP_SRC_DIR, "ArrowIterator"
+                )
+                NANOARROW_LOGGING_SRC_DIR = os.path.join(
+                    NANOARROW_CPP_SRC_DIR, "Logging"
+                )
+
+                ext.sources += [
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowIterator.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowChunkIterator.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowTableIterator.cpp"
+                    ),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "SnowflakeType.cpp"),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "BinaryConverter.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "BooleanConverter.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "DecimalConverter.cpp"
+                    ),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "DateConverter.cpp"),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "FloatConverter.cpp"
+                    ),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "IntConverter.cpp"),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "StringConverter.cpp"
+                    ),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "TimeConverter.cpp"),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "TimeStampConverter.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "Python", "Common.cpp"
+                    ),
+                    os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "Python", "Helpers.cpp"
+                    ),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "Util", "time.cpp"),
+                    NANOARROW_LOGGING_SRC_DIR + "/logging.cpp",
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "nanoarrow.c"),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "nanoarrow_ipc.c"),
+                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "flatcc.c"),
+                ]
+                ext.include_dirs.append(NANOARROW_ARROW_ITERATOR_SRC_DIR)
+                ext.include_dirs.append(NANOARROW_LOGGING_SRC_DIR)
+
+                if sys.platform == "win32":
+                    if not any("/std" not in s for s in ext.extra_compile_args):
+                        ext.extra_compile_args.append("/std:c++17")
+                elif sys.platform == "linux" or sys.platform == "darwin":
+                    if "std=" not in os.environ.get("CXXFLAGS", ""):
+                        ext.extra_compile_args.append("-std=c++17")
+                        ext.extra_compile_args.append("-D_GLIBCXX_USE_CXX11_ABI=0")
+                    if (
+                        sys.platform == "darwin"
+                        and "macosx-version-min" not in os.environ.get("CXXFLAGS", "")
+                    ):
+                        ext.extra_compile_args.append("-mmacosx-version-min=10.13")
+
+                ext.library_dirs.append(
+                    os.path.join(current_dir, self.build_lib, "snowflake", "connector")
+                )
+
+                # sys.platform for linux used to return with version suffix, (i.e. linux2, linux3)
+                # After version 3.3, it will always be just 'linux'
+                # https://docs.python.org/3/library/sys.html#sys.platform
+                if sys.platform == "linux":
+                    ext.extra_link_args += ["-Wl,-rpath,$ORIGIN"]
+                elif sys.platform == "darwin":
+                    # rpath,$ORIGIN only work on linux, did not work on darwin. use @loader_path instead
+                    # fyi, https://medium.com/@donblas/fun-with-rpath-otool-and-install-name-tool-e3e41ae86172
+                    ext.extra_link_args += ["-rpath", "@loader_path"]
+
+            original__compile = self.compiler._compile
+
+            # the following is required by nanoarrow to compile c files
+            def new__compile(obj, src: str, ext, cc_args, extra_postargs, pp_opts):
+                if (
+                    src.endswith("nanoarrow.c")
+                    or src.endswith("nanoarrow_ipc.c")
+                    or src.endswith("flatcc.c")
+                ):
+                    extra_postargs = [s for s in extra_postargs if s != "-std=c++17"]
+                return original__compile(
+                    obj, src, ext, cc_args, extra_postargs, pp_opts
+                )
+
+            self.compiler._compile = new__compile
+
+            try:
+                build_ext.build_extension(self, ext)
+            finally:
+                self.compiler._compile = original__compile
 
         def _get_arrow_lib_dir(self):
             if "SF_ARROW_LIBDIR" in os.environ:
