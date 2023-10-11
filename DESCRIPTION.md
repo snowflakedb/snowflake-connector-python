@@ -9,6 +9,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 - v3.3.0(Unreleased)
+
+- v3.2.2(October 14,2023)
+
+   - de93ef47 SNOW-920892: v3.3.0 nanoarrow based connector (#1750)
+   -
+
   - Updated to use apache arrow-nanoarrow project for result arrow data conversion.
 
 - v3.2.1(September 26,2023)
