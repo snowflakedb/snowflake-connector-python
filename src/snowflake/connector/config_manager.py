@@ -7,7 +7,6 @@ from __future__ import annotations
 import itertools
 import logging
 import os
-import platform
 import stat
 import warnings
 from collections.abc import Iterable
@@ -19,6 +18,7 @@ from warnings import warn
 import tomlkit
 from tomlkit.items import Table
 
+from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.constants import CONFIG_FILE, CONNECTIONS_FILE
 from snowflake.connector.errors import (
     ConfigManagerError,
@@ -337,7 +337,7 @@ class ConfigManager:
                 # for non-Windows, suggest change to 0600 permissions.
                 chmod_message = (
                     f". To change owner, run chown $USER {str(filep)}. To restrict permissions, run chmod 0600 {str(filep)}."
-                    if platform.system() != "Windows"
+                    if not IS_WINDOWS
                     else ""
                 )
 
