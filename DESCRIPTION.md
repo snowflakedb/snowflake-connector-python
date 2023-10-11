@@ -7,6 +7,16 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.2.2(TBD)
+  - Fixed issue with connection diagnostics failing to complete certificate checks.
+
+- v3.2.1(September 26,2023)
+
+  - Fixed a bug where url port and path were ignored in private link oscp retry.
+  - Added thread safety in telemetry when instantiating multiple connections concurrently.
+  - Bumped platformdirs dependency from >=2.6.0,<3.9.0 to >=2.6.0,<4.0.0.0 and made necessary changes to allow this.
+  - Removed the deprecation warning from the vendored urllib3 about urllib3.contrib.pyopenssl deprecation.
+  - Improved robustness in handling authentication response.
 
 - v3.3.0(Unreleased)
   - Updated to use apache arrow-nanoarrow project for result arrow data conversion.
