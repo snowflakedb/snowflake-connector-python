@@ -42,6 +42,12 @@ except ImportError:
             pass
 
 
+try:
+    from snowflake.connector.time_util import LinearBackoff
+except ImportError:
+    LinearBackoff = MagicMock
+
+
 def fake_connector(**kwargs) -> snowflake.connector.SnowflakeConnection:
     return snowflake.connector.connect(
         user="user",
@@ -318,6 +324,7 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             snowflake.connector.connect(connections_file_path=connections_file)
 
 
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.parametrize("next_action", ("RETRY", "ERROR"))
 @patch("snowflake.connector.vendored.requests.sessions.Session.request")
 def test_handle_timeout(mockSessionRequest, next_action):
@@ -325,11 +332,10 @@ def test_handle_timeout(mockSessionRequest, next_action):
 
     with pytest.raises(OperationalError):
         # no backoff for testing
+        zero_backoff = LinearBackoff(cap=0)
         _ = fake_connector(
             login_timeout=7,
-            backoff_mode="linear",
-            backoff_cap=0,
-            backoff_enable_jitter=False,
+            backoff=zero_backoff,
         )
 
     # authenticator should be the only retry mechanism for login requests

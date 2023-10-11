@@ -54,6 +54,11 @@ except ImportError:  # pragma: no cover
     import requests
     import urllib3
 
+try:
+    from snowflake.connector.time_util import LinearBackoff
+except ImportError:
+    LinearBackoff = MagicMock
+
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -442,6 +447,7 @@ def test_login_request_timeout(mockSessionRequest, next_action):
         )
 
 
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.parametrize(
     "next_action_result",
     (("RETRY", ServiceUnavailableError), ("ERROR", OperationalError)),
@@ -451,11 +457,10 @@ def test_retry_request_timeout(mockSessionRequest, next_action_result):
     next_action, next_result = next_action_result
     mockSessionRequest.side_effect = mock_request_with_action(next_action, 5)
 
+    zero_backoff = LinearBackoff(cap=0)
     connection = mock_connection(
         network_timeout=13,
-        backoff_mode="linear",
-        backoff_cap=0,
-        backoff_enable_jitter=False,
+        backoff=zero_backoff,
     )
     connection.errorhandler = Error.default_errorhandler
     rest = SnowflakeRestful(

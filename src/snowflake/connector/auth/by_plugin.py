@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 from ..errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from ..errors import DatabaseError, Error, OperationalError
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from ..time_util import TimeoutBackoffCtx
+from ..time_util import Backoff, TimeoutBackoffCtx
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection
@@ -63,7 +63,7 @@ class AuthByPlugin(ABC):
         self,
         timeout: int | None = None,
         max_retry_attempts: int | None = None,
-        **kwargs,
+        backoff: Backoff | None = None,
     ) -> None:
         self.consent_cache_id_token = False
 
@@ -78,7 +78,7 @@ class AuthByPlugin(ABC):
         self._retry_ctx = TimeoutBackoffCtx(
             timeout=timeout,
             max_retry_attempts=max_retry_attempts,
-            **kwargs,
+            backoff=backoff,
         )
 
     @property

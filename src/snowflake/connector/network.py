@@ -825,17 +825,14 @@ class SnowflakeRestful:
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
         with self._use_requests_session(full_url) as session:
-            retry_ctx_kwargs = {
-                "timeout": timeout
-                if timeout is not None
-                else self._connection.network_timeout,
-                "backoff_mode": self._connection.backoff_mode,
-                "backoff_base": self._connection.backoff_base,
-                "backoff_factor": self._connection.backoff_factor,
-                "backoff_enable_jitter": self._connection.backoff_enable_jitter,
-            }
+            timeout = (
+                timeout if timeout is not None else self._connection.network_timeout
+            )
             retry_ctx = RetryCtx(
-                include_retry_params, include_retry_reason, **retry_ctx_kwargs
+                _include_retry_params=include_retry_params,
+                _include_retry_reason=include_retry_reason,
+                timeout=timeout,
+                backoff=self._connection.backoff,
             )
 
             retry_ctx.set_start_time()

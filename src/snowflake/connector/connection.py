@@ -65,7 +65,6 @@ from .constants import (
     PARAMETER_QUERY_CONTEXT_CACHE_SIZE,
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
-    BackoffMode,
     OCSPMode,
     QueryStatus,
 )
@@ -83,7 +82,7 @@ from .errorcode import (
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
     ER_FAILED_TO_CONNECT_TO_DB,
-    ER_INVALID_BACKOFF_MODE,
+    ER_INVALID_BACKOFF,
     ER_INVALID_VALUE,
     ER_NO_ACCOUNT_NAME,
     ER_NO_NUMPY,
@@ -105,7 +104,7 @@ from .network import (
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
-from .time_util import HeartBeatTimer, get_time_millis
+from .time_util import Backoff, HeartBeatTimer, get_time_millis
 from .util_text import construct_hostname, parse_account, split_statements
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
@@ -153,12 +152,8 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # network timeout (infinite by default)
-    "socket_timeout": (None, (type(None), str)),
-    "backoff_mode": (None, (type(None), str)),
-    "backoff_base": (None, (type(None), int)),
-    "backoff_factor": (None, (type(None), int)),
-    "backoff_cap": (None, (type(None), int)),
-    "backoff_enable_jitter": (None, (type(None), bool)),
+    "socket_timeout": (None, (type(None), int)),
+    "backoff": (None, (type(None), Backoff)),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), str, RSAPrivateKey)),
@@ -291,13 +286,10 @@ class SnowflakeConnection:
             after this timeout expires. Overriden in cursor query execution if timeout is passed to cursor.execute.
             Note that an operation may still take more than network_timeout seconds for the same reason as above.
         socket_timeout: Socket timeout in seconds. Sets both socket connect and read timeout.
-        backoff_mode: Backoff policy between login and network requests. Specified by case-insensitive string.
-            Valid options are: "recursive_mixed", "linear", and "exponential". Recursive mixed backoff randomly
-            chooses between incrementing backoff period linearly and exponentially each iteration.
-        backoff_base: Integer constant term used in backoff computations. See usage in time_utils.
-        backoff_factor: Integer constant term used in backoff computations. See usage in time_utils.
-        backoff_cap: Maximum backoff time in integer seconds.
-        backoff_enable_jitter: Boolean specifying whether to enable randomized jitter on computed backoff times.
+        backoff: Backoff policy to use between login and network requests. Must subclass the Backoff base class.
+            Standard implementations of linear and exponential backoff are included in the time_util module.
+            By default, a mixed backoff is used which randomly chooses between linear and exponential incrementing
+            of backoff time each iteration.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
@@ -503,30 +495,8 @@ class SnowflakeConnection:
         return int(self._socket_timeout) if self._socket_timeout is not None else None
 
     @property
-    def backoff_mode(self) -> BackoffMode | None:
-        return (
-            BackoffMode(self._backoff_mode) if self._backoff_mode is not None else None
-        )
-
-    @property
-    def backoff_base(self) -> int | None:
-        return int(self._backoff_base) if self._backoff_base is not None else None
-
-    @property
-    def backoff_factor(self) -> int | None:
-        return int(self._backoff_factor) if self._backoff_factor is not None else None
-
-    @property
-    def backoff_cap(self) -> int | None:
-        return int(self._backoff_cap) if self._backoff_cap is not None else None
-
-    @property
-    def backoff_enable_jitter(self) -> bool | None:
-        return (
-            bool(self._backoff_enable_jitter)
-            if self._backoff_enable_jitter is not None
-            else None
-        )
+    def backoff(self) -> Backoff | None:
+        return self._backoff if self._backoff is not None else None
 
     @property
     def client_session_keep_alive(self) -> bool | None:
@@ -922,14 +892,6 @@ class SnowflakeConnection:
 
         # Setup authenticator
         auth = Auth(self.rest)
-        auth_class_kwargs = {
-            "timeout": self.login_timeout,
-            "backoff_mode": self.backoff_mode,
-            "backoff_base": self.backoff_base,
-            "backoff_factor": self.backoff_factor,
-            "backoff_enable_jitter": self.backoff_enable_jitter,
-        }
-
         if self.auth_class is not None:
             if type(
                 self.auth_class
@@ -941,7 +903,9 @@ class SnowflakeConnection:
             self.auth_class = self.auth_class
         elif self._authenticator == DEFAULT_AUTHENTICATOR:
             self.auth_class = AuthByDefault(
-                password=self._password, **auth_class_kwargs
+                password=self._password,
+                timeout=self._login_timeout,
+                backoff=self._backoff,
             )
         elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             self._session_parameters[PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = (
@@ -960,7 +924,8 @@ class SnowflakeConnection:
                     protocol=self._protocol,
                     host=self.host,
                     port=self.port,
-                    **auth_class_kwargs,
+                    timeout=self._login_timeout,
+                    backoff=self._backoff,
                 )
             else:
                 self.auth_class = AuthByIdToken(
@@ -969,15 +934,22 @@ class SnowflakeConnection:
                     protocol=self._protocol,
                     host=self.host,
                     port=self.port,
-                    **auth_class_kwargs,
+                    timeout=self._login_timeout,
+                    backoff=self._backoff,
                 )
 
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
             self.auth_class = AuthByKeyPair(
-                private_key=self._private_key, **auth_class_kwargs
+                private_key=self._private_key,
+                timeout=self._login_timeout,
+                backoff=self._backoff,
             )
         elif self._authenticator == OAUTH_AUTHENTICATOR:
-            self.auth_class = AuthByOAuth(oauth_token=self._token, **auth_class_kwargs)
+            self.auth_class = AuthByOAuth(
+                oauth_token=self._token,
+                timeout=self._login_timeout,
+                backoff=self._backoff,
+            )
         elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
             self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                 self._client_request_mfa_token if IS_LINUX else True
@@ -991,12 +963,15 @@ class SnowflakeConnection:
             self.auth_class = AuthByUsrPwdMfa(
                 password=self._password,
                 mfa_token=self.rest.mfa_token,
-                **auth_class_kwargs,
+                timeout=self._login_timeout,
+                backoff=self._backoff,
             )
         else:
             # okta URL, e.g., https://<account>.okta.com/
             self.auth_class = AuthByOkta(
-                application=self.application, **auth_class_kwargs
+                application=self.application,
+                timeout=self._login_timeout,
+                backoff=self._backoff,
             )
 
         self.authenticate_with_retry(self.auth_class)
@@ -1166,16 +1141,13 @@ class SnowflakeConnection:
         if "." in self._account:
             self._account = parse_account(self._account)
 
-        if self._backoff_mode:
-            try:
-                self._backoff_mode = BackoffMode[self._backoff_mode.upper()]
-            except KeyError:
-                Error.errorhandler_wrapper(
-                    self,
-                    None,
-                    ProgrammingError,
-                    {"msg": "Invalid backoff mode", "errno": ER_INVALID_BACKOFF_MODE},
-                )
+        if self._backoff and not isinstance(self._backoff, Backoff):
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {"msg": "Invalid backoff type", "errno": ER_INVALID_BACKOFF},
+            )
 
         if self.ocsp_fail_open:
             logger.info(

@@ -326,12 +326,3 @@ DAY_IN_SECONDS = 60 * 60 * 24
 # TODO: all env variables definitions should be here
 ENV_VAR_PARTNER = "SF_PARTNER"
 ENV_VAR_TEST_MODE = "SNOWFLAKE_TEST_MODE"
-
-
-@unique
-class BackoffMode(Enum):
-    """This enum specifies the type of backoff to use between retries"""
-
-    RECURSIVE_MIXED = auto()
-    LINEAR = auto()
-    EXPONENTIAL = auto()

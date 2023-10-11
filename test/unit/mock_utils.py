@@ -3,14 +3,11 @@
 #
 
 import time
-from collections import defaultdict
 from unittest.mock import MagicMock
 
 try:
-    from snowflake.connector.constants import BackoffMode
     from snowflake.connector.vendored.requests.exceptions import ConnectionError
 except ImportError:
-    BackoffMode = defaultdict(lambda: None)
     from requests.exceptions import ConnectionError
 
 
@@ -18,11 +15,7 @@ def mock_connection(
     login_timeout=120,
     network_timeout=None,
     socket_timeout=None,
-    backoff_mode=None,
-    backoff_base=None,
-    backoff_cap=None,
-    backoff_factor=None,
-    backoff_enable_jitter=None,
+    backoff=None,
 ):
     connection = MagicMock()
 
@@ -35,13 +28,8 @@ def mock_connection(
     connection._socket_timeout = socket_timeout
     connection.socket_timeout = socket_timeout
 
-    connection.backoff_mode = (
-        BackoffMode[backoff_mode.upper()] if backoff_mode is not None else None
-    )
-    connection.backoff_base = backoff_base
-    connection.backoff_cap = backoff_cap
-    connection.backoff_factor = backoff_factor
-    connection.backoff_enable_jitter = backoff_enable_jitter
+    connection._backoff = backoff
+    connection.backoff = backoff
 
     return connection
 
