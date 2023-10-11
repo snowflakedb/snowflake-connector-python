@@ -8,6 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.3.0(Unreleased)
+  - Updated to use apache arrow-nanoarrow project for result arrow data conversion.
+
 - v3.2.1(September 26,2023)
 
   - Fixed a bug where url port and path were ignored in private link oscp retry.

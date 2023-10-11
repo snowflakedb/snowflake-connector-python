@@ -27,6 +27,9 @@ from uuid import UUID
 
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
+import snowflake.connector.cursor
+import snowflake.connector.result_batch
+
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
 from .auth import (
@@ -57,6 +60,7 @@ from .constants import (
     PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED,
     PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
     PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1,
+    PARAMETER_PYTHON_CONNECTOR_USE_NANOARROW,
     PARAMETER_QUERY_CONTEXT_CACHE_SIZE,
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
@@ -369,6 +373,11 @@ class SnowflakeConnection:
             # connection_name is None and kwargs was empty when called
             kwargs = _get_default_connection_params()
         self.__set_error_attributes()
+        # by default, nanoarrow converter is used, the following two will be reset in self.__open_connection
+        self._server_use_nanoarrow_converter_parameter = True
+        self._create_pyarrow_iterator_method = (
+            snowflake.connector.result_batch._create_nanoarrow_iterator
+        )
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
 
@@ -926,6 +935,22 @@ class SnowflakeConnection:
             # By this point it should have been decided if the heartbeat has to be enabled
             # and what would the heartbeat frequency be
             self._add_heartbeat()
+        if (
+            (
+                snowflake.connector.cursor.NANOARROW_USAGE
+                == snowflake.connector.cursor.NanoarrowUsage.FOLLOW_SESSION_PARAMETER
+                and self._server_use_nanoarrow_converter_parameter
+            )
+            or snowflake.connector.cursor.NANOARROW_USAGE
+            == snowflake.connector.cursor.NanoarrowUsage.ENABLE_NANOARROW
+        ):
+            self._create_pyarrow_iterator_method = (
+                snowflake.connector.result_batch._create_nanoarrow_iterator
+            )
+        else:
+            self._create_pyarrow_iterator_method = (
+                snowflake.connector.result_batch._create_vendored_arrow_iterator
+            )
 
     def __config(self, **kwargs):
         """Sets up parameters in the connection object."""
@@ -1548,6 +1573,8 @@ class SnowflakeConnection:
                 self.enable_stage_s3_privatelink_for_us_east_1 = value
             elif PARAMETER_QUERY_CONTEXT_CACHE_SIZE == name:
                 self.query_context_cache_size = value
+            elif PARAMETER_PYTHON_CONNECTOR_USE_NANOARROW == name:
+                self._server_use_nanoarrow_converter_parameter = value
 
     def _format_query_for_log(self, query: str) -> str:
         ret = " ".join(line.strip() for line in query.split("\n"))

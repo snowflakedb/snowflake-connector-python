@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import collections
 import logging
+import os
 import re
 import signal
 import sys
@@ -119,6 +120,34 @@ LOG_MAX_QUERY_LENGTH = 80
 
 ASYNC_NO_DATA_MAX_RETRY = 24
 ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
+
+
+class NanoarrowUsage(str, Enum):
+    # follow the session parameter to use nanoarrow converter or not
+    FOLLOW_SESSION_PARAMETER = "follow_session_parameter"
+    # ignore the session parameter, use nanoarrow converter
+    ENABLE_NANOARROW = "enable_nanoarrow"
+    # ignore the session parameter, do not use nanoarrow converter
+    DISABLE_NANOARROW = "disable_nanoarrow"
+
+
+def _get_client_nanoarrow_setting() -> NanoarrowUsage:
+    ret = os.environ.get("NANOARROW_USAGE", NanoarrowUsage.FOLLOW_SESSION_PARAMETER)
+    if ret is not NanoarrowUsage.FOLLOW_SESSION_PARAMETER:
+        try:
+            ret = NanoarrowUsage(ret.lower())
+        except ValueError:
+            logger.warning(
+                "Invalid value for enum NanoarrowUsage, valid options are"
+                "FOLLOW_SESSION_PARAMETER, ENABLE_NANOARROW, DISABLE_NANOARROW,"
+                "falling back to use NanoarrowUsage.FOLLOW_SESSION_PARAMETER"
+            )
+            ret = NanoarrowUsage.FOLLOW_SESSION_PARAMETER
+    return ret
+
+
+# client parameter
+NANOARROW_USAGE = _get_client_nanoarrow_setting()
 
 
 class ResultMetadata(NamedTuple):

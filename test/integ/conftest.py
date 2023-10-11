@@ -32,6 +32,7 @@ if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
     from snowflake.connector import SnowflakeConnection
 
 RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
+TEST_USING_VENDORED_ARROW = os.getenv("TEST_USING_VENDORED_ARROW") == "true"
 
 if not isinstance(CONNECTION_PARAMETERS["host"], str):
     raise Exception("default host is not a string in parameters.py")
@@ -48,6 +49,12 @@ if RUNNING_ON_GH:
     TEST_SCHEMA = "GH_JOB_{}".format(str(uuid.uuid4()).replace("-", "_"))
 else:
     TEST_SCHEMA = "python_connector_tests_" + str(uuid.uuid4()).replace("-", "_")
+
+if TEST_USING_VENDORED_ARROW:
+    snowflake.connector.cursor.NANOARR_USAGE = (
+        snowflake.connector.cursor.NanoarrowUsage.DISABLE_NANOARROW
+    )
+
 
 DEFAULT_PARAMETERS: dict[str, Any] = {
     "account": "<account_name>",
