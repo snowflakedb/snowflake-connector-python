@@ -30,6 +30,19 @@ if IS_WINDOWS:
     import winreg
 
 
+def _decode_dict(d):
+    result = {}
+    for key, value in d.items():
+        if isinstance(key, bytes):
+            key = key.decode()
+        if isinstance(value, bytes):
+            value = value.decode()
+        elif isinstance(value, dict):
+            value = _decode_dict(value)
+        result.update({key: value})
+    return result
+
+
 class ConnectionDiagnostic:
     """Implementation of a connection test utility for Snowflake connector
 
@@ -360,10 +373,12 @@ class ConnectionDiagnostic:
                             f"{host}:{port}: URL Check: Failed: Certificate mismatch: Host not in subject or alt names",
                         )
                 self.__append_message(host_type, f"{host}: Cert info:")
-                self.__append_message(
-                    host_type, f"{host}: subject: {result['subject']}"
-                )
-                self.__append_message(host_type, f"{host}: issuer: {result['issuer']}")
+
+                subject_str = _decode_dict(result["subject"])
+                self.__append_message(host_type, f"{host}: subject: {subject_str}")
+
+                issuer_str = _decode_dict(result["issuer"])
+                self.__append_message(host_type, f"{host}: issuer: {issuer_str}")
                 self.__append_message(
                     host_type, f"{host}: serialNumber: {result['serialNumber']}"
                 )
@@ -414,7 +429,9 @@ class ConnectionDiagnostic:
 
     def __get_issuer_string(self, issuer: dict[bytes, bytes]) -> str:
         issuer_str: str = (
-            re.sub('[{}"]', "", json.dumps(issuer)).replace(": ", "=").replace(",", ";")
+            re.sub('[{}"]', "", json.dumps(_decode_dict(issuer)))
+            .replace(": ", "=")
+            .replace(",", ";")
         )
         return issuer_str
 
