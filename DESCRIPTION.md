@@ -8,8 +8,19 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.3.0(Unreleased)
-  - Updated to use apache arrow-nanoarrow project for result arrow data conversion.
+- v3.3.0(October 10,2023)
+
+  - Updated to Apache arrow-nanoarrow project for result arrow data conversion.
+  - Introduced the `NANOARROW_USAGE` environment variable to allows switching between the nanoarrow converter and the arrow converter. Valid values include:
+    - `FOLLOW_SESSION_PARAMETER`, which uses the converter configured in the server.
+    - `DISABLE_NANOARROW`, which uses arrow converter, overriding the server setting.
+    - `ENABLE_NANOARROW`, which uses the nanoarrow converter, overriding the server setting.
+  - Introduced the `snowflake.connector.cursor.NanoarrowUsage` enum, whose members include:
+    - `NanoarrowUsage.FOLLOW_SESSION_PARAMETER`, which uses the converter configured in the server.
+    - `NanoarrowUsage.DISABLE_NANOARROW`, which uses arrow converter, overriding the server setting.
+    - `NanoarrowUsage.ENABLE_NANOARROW`, which uses the nanoarrow converter, overriding the server setting.
+  - Introduced the `snowflake.connector.cursor.NANOARROW_USAGE` module variable to allow switching between the nanoarrow converter and the arrow converter. It works in conjunction with the `snowflake.connector.cursor.NanoarrowUsage` enum.
+  - The newly-introduced environment variable, enum, and module variable are temporary. They will be removed in a future release when switch from arrow to nanoarrow for data conversion is complete.
 
 - v3.2.1(September 26,2023)
 
