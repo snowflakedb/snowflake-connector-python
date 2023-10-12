@@ -335,7 +335,7 @@ def test_handle_timeout(mockSessionRequest, next_action):
         zero_backoff = LinearBackoff(cap=0)
         _ = fake_connector(
             login_timeout=7,
-            backoff=zero_backoff,
+            backoff_policy=zero_backoff,
         )
 
     # authenticator should be the only retry mechanism for login requests

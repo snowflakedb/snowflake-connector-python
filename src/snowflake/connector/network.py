@@ -832,7 +832,7 @@ class SnowflakeRestful:
                 _include_retry_params=include_retry_params,
                 _include_retry_reason=include_retry_reason,
                 timeout=timeout,
-                backoff=self._connection.backoff,
+                backoff_policy=self._connection.backoff_policy,
             )
 
             retry_ctx.set_start_time()

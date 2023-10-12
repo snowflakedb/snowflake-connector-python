@@ -15,7 +15,7 @@ def mock_connection(
     login_timeout=120,
     network_timeout=None,
     socket_timeout=None,
-    backoff=None,
+    backoff_policy=None,
 ):
     connection = MagicMock()
 
@@ -28,8 +28,8 @@ def mock_connection(
     connection._socket_timeout = socket_timeout
     connection.socket_timeout = socket_timeout
 
-    connection._backoff = backoff
-    connection.backoff = backoff
+    connection._backoff_policy = backoff_policy
+    connection.backoff_policy = backoff_policy
 
     return connection
 

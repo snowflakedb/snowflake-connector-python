@@ -460,7 +460,7 @@ def test_retry_request_timeout(mockSessionRequest, next_action_result):
     zero_backoff = LinearBackoff(cap=0)
     connection = mock_connection(
         network_timeout=13,
-        backoff=zero_backoff,
+        backoff_policy=zero_backoff,
     )
     connection.errorhandler = Error.default_errorhandler
     rest = SnowflakeRestful(

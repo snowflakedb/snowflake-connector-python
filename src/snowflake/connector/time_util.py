@@ -50,7 +50,7 @@ def get_time_millis() -> int:
     return int(time.time() * 1000)
 
 
-class Backoff(ABC):
+class BackoffPolicy(ABC):
     DEFAULT_BACKOFF_BASE = 1
     DEFAULT_BACKOFF_CAP = 16
     DEFAULT_BACKOFF_FACTOR = 2
@@ -80,14 +80,14 @@ class Backoff(ABC):
         pass
 
 
-class DecorrelateJitterBackoff(Backoff):
+class DecorrelateJitterBackoff(BackoffPolicy):
     """Decorrelate jitter backoff (retained for backwards compatibility), see https://www.awsarchitectureblog.com/2015/03/backoff.html"""
 
     def next_sleep(self, _: Any, sleep: int) -> int:
         return min(self._cap, random.randint(self._base, sleep * 3))
 
 
-class RecursiveMixedBackoff(Backoff):
+class RecursiveMixedBackoff(BackoffPolicy):
     """Default retry strategy as specified in Client Retry Strategy"""
 
     def next_sleep(self, cnt: Any, sleep: int) -> int:
@@ -100,7 +100,7 @@ class RecursiveMixedBackoff(Backoff):
         return int(random.choice([linear_wait, exp_wait]))
 
 
-class LinearBackoff(Backoff):
+class LinearBackoff(BackoffPolicy):
     """Standard linear backoff"""
 
     def next_sleep(self, cnt: int, _: Any) -> int:
@@ -108,7 +108,7 @@ class LinearBackoff(Backoff):
         return t if self._enable_jitter else random.randint(0, t)
 
 
-class ExponentialBackoff(Backoff):
+class ExponentialBackoff(BackoffPolicy):
     """Standard exponential backoff"""
 
     def next_sleep(self, cnt: int, _: Any) -> int:
@@ -157,16 +157,18 @@ class TimerContextManager:
 class TimeoutBackoffCtx:
     """Base context for handling timeouts and backoffs on retries"""
 
-    DEFAULT_BACKOFF = RecursiveMixedBackoff
+    DEFAULT_BACKOFF_POLICY = RecursiveMixedBackoff
 
     def __init__(
         self,
         max_retry_attempts: int | None = None,
         timeout: int | None = None,
-        backoff: Backoff | None = None,
+        backoff_policy: BackoffPolicy | None = None,
     ) -> None:
-        self._backoff = (
-            backoff if backoff is not None else TimeoutBackoffCtx.DEFAULT_BACKOFF()
+        self._backoff_policy = (
+            backoff_policy
+            if backoff_policy is not None
+            else TimeoutBackoffCtx.DEFAULT_BACKOFF_POLICY()
         )
 
         self._current_retry_count = 0
@@ -224,7 +226,7 @@ class TimeoutBackoffCtx:
     def increment(self) -> None:
         """Updates retry count and sleep time for another retry"""
         self._current_retry_count += 1
-        self._current_sleep_time = self._backoff.next_sleep(
+        self._current_sleep_time = self._backoff_policy.next_sleep(
             self._current_retry_count, self._current_sleep_time
         )
         logger.debug(f"Update retry count to {self._current_retry_count}")
