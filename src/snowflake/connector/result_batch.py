@@ -87,12 +87,11 @@ def _create_nanoarrow_iterator(
     number_to_decimal: bool,
     row_unit: IterUnit,
 ):
-    from .nanoarrow_arrow_iterator import PyArrowRowIterator as NanoarrowRowIterator
-    from .nanoarrow_arrow_iterator import PyArrowTableIterator as NanoarrowTableIterator
+    from .nanoarrow_arrow_iterator import PyArrowRowIterator, PyArrowTableIterator
 
     logger.debug("Using nanoarrow as the arrow data converter")
     return (
-        NanoarrowRowIterator(
+        PyArrowRowIterator(
             None,
             data,
             context,
@@ -101,7 +100,7 @@ def _create_nanoarrow_iterator(
             number_to_decimal,
         )
         if row_unit == IterUnit.ROW_UNIT
-        else NanoarrowTableIterator(
+        else PyArrowTableIterator(
             None,
             data,
             context,
