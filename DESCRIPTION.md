@@ -9,6 +9,15 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v3.3.1(Unreleased)
 
+
+- v3.3.1(October 16,2023)
+
+   - 845481c2 SNOW-940615: fix pyarrow import if pyarrow iterator is not compiled (#1769)
+   - 5bdef59d Add Jira to one TODO in cursor.py (#1771)
+   - Add chmod and chown suggestion to config manager message (#1763)
+   - 4dca3505 Second attempt at fixing the diagnostics issues (#1755)
+   -
+
   - Added for non-Windows platforms command suggestions (chown/chmod) for insufficient file permissions of config files.
   - Fixed issue with connection diagnostics failing to complete certificate checks.
   - Fixed issue that arrow iterator causes `ImportError` when the c extensions are not compiled.
