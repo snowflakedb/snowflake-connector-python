@@ -7,8 +7,6 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.3.1(Unreleased)
-
 
 - v3.3.1(October 16,2023)
 
