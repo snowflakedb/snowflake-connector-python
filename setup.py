@@ -42,6 +42,10 @@ for flag in options_def:
 extensions = None
 cmd_class = {}
 
+DISABLE_ARROW_EXTENSION_BUILDING = os.environ.get(
+    "DISABLE_ARROW_EXTENSION_BUILDING", False
+)
+
 try:
     import numpy
     import pyarrow
@@ -56,7 +60,7 @@ except ImportError:
     )
     _ABLE_TO_COMPILE_EXTENSIONS = False
 
-if _ABLE_TO_COMPILE_EXTENSIONS:
+if _ABLE_TO_COMPILE_EXTENSIONS and not DISABLE_ARROW_EXTENSION_BUILDING:
     pyarrow_version = tuple(int(x) for x in pyarrow.__version__.split("."))
     extensions = cythonize(
         [
