@@ -5,10 +5,6 @@
 
 from __future__ import annotations
 
-import os
-import platform
-import sys
-import warnings
 from base64 import b64decode, b64encode
 from collections import OrderedDict
 from datetime import datetime, timezone
@@ -44,7 +40,6 @@ from snowflake.connector.errorcode import (
 )
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP, generate_cache_key
-
 
 logger = getLogger(__name__)
 
