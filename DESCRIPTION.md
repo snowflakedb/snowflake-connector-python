@@ -10,6 +10,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.2.2(TBD)
   - Fixed issue with connection diagnostics failing to complete certificate checks.
 
+- v3.3.1(Unreleased)
+
+  - Added for non-Windows platforms command suggestions (chown/chmod) for insufficient file permissions of config files.
+
 - v3.3.0(October 10,2023)
 
   - Updated to Apache arrow-nanoarrow project for result arrow data conversion.
