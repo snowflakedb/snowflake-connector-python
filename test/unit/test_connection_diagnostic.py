@@ -5,6 +5,11 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
+
+
 import snowflake.connector
 from snowflake.connector.connection_diagnostic import ConnectionDiagnostic, _decode_dict
 
