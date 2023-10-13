@@ -14,13 +14,10 @@ from logging import getLogger
 from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
 
 from .arrow_context import ArrowConverterContext
-from .arrow_iterator import PyArrowIterator
 from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import FIELD_TYPES, IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
 from .errors import Error, InterfaceError, NotSupportedError, ProgrammingError
-from .nanoarrow_arrow_iterator import PyArrowRowIterator as NanoarrowRowIterator
-from .nanoarrow_arrow_iterator import PyArrowTableIterator as NanoarrowTableIterator
 from .network import (
     RetryRequest,
     get_http_retryable_error,
@@ -65,7 +62,9 @@ def _create_vendored_arrow_iterator(
     numpy: bool,
     number_to_decimal: bool,
     row_unit: IterUnit,
-) -> PyArrowIterator:
+):
+    from .arrow_iterator import PyArrowIterator
+
     logger.debug("Using vendored arrow as the arrow data converter")
     iter = PyArrowIterator(
         None,
@@ -87,7 +86,10 @@ def _create_nanoarrow_iterator(
     numpy: bool,
     number_to_decimal: bool,
     row_unit: IterUnit,
-) -> NanoarrowRowIterator | NanoarrowTableIterator:
+):
+    from .nanoarrow_arrow_iterator import PyArrowRowIterator as NanoarrowRowIterator
+    from .nanoarrow_arrow_iterator import PyArrowTableIterator as NanoarrowTableIterator
+
     logger.debug("Using nanoarrow as the arrow data converter")
     return (
         NanoarrowRowIterator(
