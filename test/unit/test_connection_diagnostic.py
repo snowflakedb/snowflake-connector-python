@@ -5,8 +5,20 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
+
+
 import snowflake.connector
-from snowflake.connector.connection_diagnostic import ConnectionDiagnostic, _decode_dict
+
+try:
+    from snowflake.connector.connection_diagnostic import (
+        ConnectionDiagnostic,
+        _decode_dict,
+    )
+except ImportError:
+    pass
 
 
 def test_https_host_report(caplog):

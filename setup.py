@@ -42,6 +42,10 @@ for flag in options_def:
 extensions = None
 cmd_class = {}
 
+SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS = os.environ.get(
+    "SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS", "false"
+).lower() in ("y", "yes", "t", "true", "1", "on")
+
 try:
     import numpy
     import pyarrow
@@ -56,7 +60,7 @@ except ImportError:
     )
     _ABLE_TO_COMPILE_EXTENSIONS = False
 
-if _ABLE_TO_COMPILE_EXTENSIONS:
+if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS:
     pyarrow_version = tuple(int(x) for x in pyarrow.__version__.split("."))
     extensions = cythonize(
         [

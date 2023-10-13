@@ -210,6 +210,38 @@ jobs:
           PYTEST_ADDOPTS: --color=yes --tb=short
         shell: bash
 
+  test-noarrowextension:
+    name: No Arrow Extension Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    needs: lint
+    runs-on: ${{ matrix.os.image_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+         - image_name: ubuntu-latest
+           download_name: linux
+        python-version: [3.8]
+        cloud-provider: [aws]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Upgrade setuptools, pip and wheel
+        run: python -m pip install -U setuptools pip wheel
+      - name: Install tox
+        run: python -m pip install tox
+      - name: Run tests
+        run: python -m tox -e noarrowextension
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+        shell: bash
+
   test-fips:
     name: Test FIPS linux-3.8-${{ matrix.cloud-provider }}
     needs: build
