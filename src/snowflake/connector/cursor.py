@@ -1174,7 +1174,7 @@ class SnowflakeCursor:
             "num_statements" not in kwargs or kwargs.get("num_statements") == 1
         ):
             if self._connection.is_pyformat:
-                # TODO - utilize multi-statement instead of rewriting the query and
+                # TODO(SNOW-940692) - utilize multi-statement instead of rewriting the query and
                 #  accumulate results to mock the result from a single insert statement as formatted below
                 logger.debug("rewriting INSERT query")
                 command_wo_comments = re.sub(self.COMMENT_SQL_RE, "", command)
