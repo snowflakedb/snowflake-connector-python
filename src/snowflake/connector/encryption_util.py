@@ -91,7 +91,7 @@ class SnowflakeEncryptionUtil:
                 padded = True
             out.write(encryptor.update(chunk))
         if not padded:
-            out.write(data_cipher.encrypt(block_size * chr(block_size).encode(UTF8)))
+            out.write(encryptor.update(block_size * chr(block_size).encode(UTF8)))
         out.write(encryptor.finalize())
 
         # encrypt key with QRMK
