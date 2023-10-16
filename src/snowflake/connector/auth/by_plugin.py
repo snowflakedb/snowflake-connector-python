@@ -70,14 +70,11 @@ class AuthByPlugin(ABC):
         if timeout is None:
             timeout = DEFAULT_AUTH_CLASS_TIMEOUT
 
-        if max_retry_attempts is None:
-            max_retry_attempts = int(
-                getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)
-            )
-
         self._retry_ctx = TimeoutBackoffCtx(
             timeout=timeout,
-            max_retry_attempts=max_retry_attempts,
+            max_retry_attempts=max_retry_attempts
+            if max_retry_attempts is not None
+            else int(getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)),
             backoff_policy=backoff_policy,
         )
 

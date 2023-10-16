@@ -157,19 +157,13 @@ class TimerContextManager:
 class TimeoutBackoffCtx:
     """Base context for handling timeouts and backoffs on retries"""
 
-    DEFAULT_BACKOFF_POLICY = RecursiveMixedBackoff
-
     def __init__(
         self,
         max_retry_attempts: int | None = None,
         timeout: int | None = None,
         backoff_policy: BackoffPolicy | None = None,
     ) -> None:
-        self._backoff_policy = (
-            backoff_policy
-            if backoff_policy is not None
-            else TimeoutBackoffCtx.DEFAULT_BACKOFF_POLICY()
-        )
+        self._backoff_policy = backoff_policy
 
         self._current_retry_count = 0
         self._current_sleep_time = INITIAL_TIMEOUT_SLEEP_TIME
@@ -226,12 +220,14 @@ class TimeoutBackoffCtx:
     def increment(self) -> None:
         """Updates retry count and sleep time for another retry"""
         self._current_retry_count += 1
-        self._current_sleep_time = self._backoff_policy.next_sleep(
-            self._current_retry_count, self._current_sleep_time
-        )
+        if self._backoff_policy is not None:
+            self._current_sleep_time = self._backoff_policy.next_sleep(
+                self._current_retry_count, self._current_sleep_time
+            )
         logger.debug(f"Update retry count to {self._current_retry_count}")
         logger.debug(f"Update sleep time to {self._current_sleep_time} seconds")
 
     def reset(self) -> None:
         self._current_retry_count = 0
         self._current_sleep_time = INITIAL_TIMEOUT_SLEEP_TIME
+        self._start_time_millis = None

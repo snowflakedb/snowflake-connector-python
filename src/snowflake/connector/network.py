@@ -804,7 +804,12 @@ class SnowflakeRestful:
                 self._include_retry_params = _include_retry_params
                 self._include_retry_reason = _include_retry_reason
 
-            def set_retry_reason(self, reason: int = 0):
+            @property
+            def retry_reason(self) -> int:
+                return self._reason
+
+            @retry_reason.setter
+            def retry_reason(self, reason: int) -> None:
                 self._reason = reason
 
             def add_retry_params(self, full_url: str) -> str:
@@ -953,7 +958,7 @@ class SnowflakeRestful:
             retry_ctx.increment()
 
             reason = getattr(cause, "errno", 0)
-            retry_ctx.set_retry_reason(reason)
+            retry_ctx.retry_reason = reason
 
             if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
                 # connection is reset by the server, the underlying connection is broken and can not be reused

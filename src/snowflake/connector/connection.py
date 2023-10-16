@@ -104,11 +104,17 @@ from .network import (
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
-from .time_util import BackoffPolicy, HeartBeatTimer, get_time_millis
+from .time_util import (
+    BackoffPolicy,
+    HeartBeatTimer,
+    RecursiveMixedBackoff,
+    get_time_millis,
+)
 from .util_text import construct_hostname, parse_account, split_statements
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
+DEFAULT_BACKOFF_POLICY = RecursiveMixedBackoff()
 
 
 def DefaultConverterClass() -> type:
@@ -153,7 +159,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), int),
     ),  # network timeout (infinite by default)
     "socket_timeout": (None, (type(None), int)),
-    "backoff_policy": (None, (type(None), BackoffPolicy)),
+    "backoff_policy": (DEFAULT_BACKOFF_POLICY, BackoffPolicy),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), str, RSAPrivateKey)),
@@ -495,8 +501,8 @@ class SnowflakeConnection:
         return int(self._socket_timeout) if self._socket_timeout is not None else None
 
     @property
-    def backoff_policy(self) -> BackoffPolicy | None:
-        return self._backoff_policy if self._backoff_policy is not None else None
+    def backoff_policy(self) -> BackoffPolicy:
+        return self._backoff_policy
 
     @property
     def client_session_keep_alive(self) -> bool | None:
@@ -1141,7 +1147,7 @@ class SnowflakeConnection:
         if "." in self._account:
             self._account = parse_account(self._account)
 
-        if self._backoff_policy and not isinstance(self._backoff_policy, BackoffPolicy):
+        if not isinstance(self._backoff_policy, BackoffPolicy):
             Error.errorhandler_wrapper(
                 self,
                 None,
