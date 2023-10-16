@@ -17,6 +17,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added for non-Windows platforms command suggestions (chown/chmod) for insufficient file permissions of config files.
   - Fixed issue with connection diagnostics failing to complete certificate checks.
   - Fixed issue that arrow iterator causes `ImportError` when the c extensions are not compiled.
+  - Removed dependencies on Cryptodome and oscrypto and removed the `use_openssl_only` parameter. All connections now go through OpenSSL via the cryptography library, which was already a dependency.
 
 - v3.3.0(October 10,2023)
 
