@@ -5,10 +5,6 @@
 
 from __future__ import annotations
 
-import os
-import platform
-import sys
-import warnings
 from base64 import b64decode, b64encode
 from collections import OrderedDict
 from datetime import datetime, timezone
@@ -28,9 +24,6 @@ from asn1crypto.ocsp import (
     Version,
 )
 from asn1crypto.x509 import Certificate
-from Cryptodome.Hash import SHA1, SHA256, SHA384, SHA512
-from Cryptodome.PublicKey import RSA
-from Cryptodome.Signature import PKCS1_v1_5
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
@@ -48,20 +41,6 @@ from snowflake.connector.errorcode import (
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP, generate_cache_key
 
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    # force versioned dylibs onto oscrypto ssl on catalina
-    if sys.platform == "darwin" and platform.mac_ver()[0].startswith("10.15"):
-        from oscrypto import _module_values, use_openssl
-
-        if _module_values["backend"] is None:
-            use_openssl(
-                libcrypto_path="/usr/lib/libcrypto.35.dylib",
-                libssl_path="/usr/lib/libssl.35.dylib",
-            )
-    from oscrypto import asymmetric
-
-
 logger = getLogger(__name__)
 
 
@@ -70,12 +49,6 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
 
     # map signature algorithm name to digest class
     SIGNATURE_ALGORITHM_TO_DIGEST_CLASS = {
-        "sha256": SHA256,
-        "sha384": SHA384,
-        "sha512": SHA512,
-    }
-
-    SIGNATURE_ALGORITHM_TO_DIGEST_CLASS_OPENSSL = {
         "sha256": hashes.SHA256,
         "sha384": hashes.SHA3_384,
         "sha512": hashes.SHA3_512,
@@ -378,51 +351,29 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             raise RevocationCheckError(msg=debug_msg, errno=op_er.errno)
 
     def verify_signature(self, signature_algorithm, signature, cert, data):
-        use_openssl_only = os.getenv("SF_USE_OPENSSL_ONLY", "False") == "True"
-        if not use_openssl_only:
-            pubkey = asymmetric.load_public_key(cert.public_key).unwrap().dump()
-            rsakey = RSA.importKey(pubkey)
-            signer = PKCS1_v1_5.new(rsakey)
-            if (
+        backend = default_backend()
+        public_key = serialization.load_der_public_key(
+            cert.public_key.dump(), backend=default_backend()
+        )
+        if (
+            signature_algorithm
+            in SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS
+        ):
+            chosen_hash = SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS[
                 signature_algorithm
-                in SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS
-            ):
-                digest = SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS[
-                    signature_algorithm
-                ].new()
-            else:
-                # the last resort. should not happen.
-                digest = SHA1.new()
-            digest.update(data.dump())
-            if not signer.verify(digest, signature):
-                raise RevocationCheckError(msg="Failed to verify the signature")
-
+            ]()
         else:
-            backend = default_backend()
-            public_key = serialization.load_der_public_key(
-                cert.public_key.dump(), backend=default_backend()
+            # the last resort. should not happen.
+            chosen_hash = hashes.SHA1()
+        hasher = hashes.Hash(chosen_hash, backend)
+        hasher.update(data.dump())
+        digest = hasher.finalize()
+        try:
+            public_key.verify(
+                signature, digest, padding.PKCS1v15(), utils.Prehashed(chosen_hash)
             )
-            if (
-                signature_algorithm
-                in SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS
-            ):
-                chosen_hash = (
-                    SnowflakeOCSPAsn1Crypto.SIGNATURE_ALGORITHM_TO_DIGEST_CLASS_OPENSSL[
-                        signature_algorithm
-                    ]()
-                )
-            else:
-                # the last resort. should not happen.
-                chosen_hash = hashes.SHA1()
-            hasher = hashes.Hash(chosen_hash, backend)
-            hasher.update(data.dump())
-            digest = hasher.finalize()
-            try:
-                public_key.verify(
-                    signature, digest, padding.PKCS1v15(), utils.Prehashed(chosen_hash)
-                )
-            except InvalidSignature:
-                raise RevocationCheckError(msg="Failed to verify the signature")
+        except InvalidSignature:
+            raise RevocationCheckError(msg="Failed to verify the signature")
 
     def extract_certificate_chain(
         self, connection: Connection
