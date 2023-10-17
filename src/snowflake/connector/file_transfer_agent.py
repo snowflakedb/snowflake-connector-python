@@ -631,10 +631,10 @@ class SnowflakeFileTransferAgent:
         self, meta: SnowflakeFileMeta
     ) -> SnowflakeStorageClient:
         from .constants import AZURE_CHUNK_SIZE
-        from .compute_chunk_size import computeChunkSize
+        from .compute_chunk_size import ChunkSizeCalculator
 
-        compute_chunk_size = computeChunkSize()
-        S3_CHUNK_SIZE = compute_chunk_size.compute_chunk_size(meta.src_file_size)
+        chunk_size_calculator = ChunkSizeCalculator()
+        S3_CHUNK_SIZE = chunk_size_calculator.compute_chunk_size(meta.src_file_size)
 
         if self._stage_location_type == LOCAL_FS:
             return SnowflakeLocalStorageClient(
