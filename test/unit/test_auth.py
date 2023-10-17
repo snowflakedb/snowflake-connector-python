@@ -176,7 +176,7 @@ def test_auth_mfa(next_action: str):
     rest = _init_rest(application, _mock_auth_mfa_rest_response_timeout)
     auth = Auth(rest)
     auth_instance = AuthByDefault(password)
-    auth.authenticate(auth_instance, account, user, mfa_timeout=1)
+    auth.authenticate(auth_instance, account, user, timeout=1)
     assert rest._connection.errorhandler.called  # error
 
     # ret["data"] is none

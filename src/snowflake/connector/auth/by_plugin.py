@@ -63,6 +63,7 @@ class AuthByPlugin(ABC):
         self,
         timeout: int | None = None,
         max_retry_attempts: int | None = None,
+        socket_timeout_override: int | None = None,
         backoff_policy: BackoffPolicy | None = None,
     ) -> None:
         self.consent_cache_id_token = False
@@ -78,9 +79,17 @@ class AuthByPlugin(ABC):
             backoff_policy=backoff_policy,
         )
 
+        # some authenticators may want to override socket level timeout
+        # for example, AuthByKeyPair will do this to ensure JWT tokens are refreshed in time
+        self._socket_timeout_override = socket_timeout_override
+
     @property
     def timeout(self) -> int | None:
         return self._retry_ctx.timeout
+
+    @property
+    def socket_timeout_override(self) -> int | None:
+        return self._socket_timeout_override
 
     @property
     @abstractmethod
@@ -186,6 +195,11 @@ class AuthByPlugin(ABC):
         hasn't implemented one. By default we retry on timeouts and use
         jitter to deduce the time to sleep before retrying. The sleep
         time ranges between 1 and 16 seconds.
+
+        Note that the delete_params parameter is introduced because some
+        authenticators may not want to delete the parameters to this function.
+        Currently, the only authenticator where this is the case is
+        AuthByKeyPair.
         """
 
         if delete_params:

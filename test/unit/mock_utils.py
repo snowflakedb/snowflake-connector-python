@@ -13,7 +13,7 @@ except ImportError:
 
 def mock_connection(
     login_timeout=120,
-    network_timeout=None,
+    request_timeout=None,
     socket_timeout=None,
     backoff_policy=None,
 ):
@@ -22,8 +22,8 @@ def mock_connection(
     connection._login_timeout = login_timeout
     connection.login_timeout = login_timeout
 
-    connection._network_timeout = network_timeout
-    connection.network_timeout = network_timeout
+    connection._request_timeout = request_timeout
+    connection.request_timeout = request_timeout
 
     connection._socket_timeout = socket_timeout
     connection.socket_timeout = socket_timeout

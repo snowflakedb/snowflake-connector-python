@@ -60,6 +60,16 @@ class AuthByKeyPair(AuthByPlugin):
                     "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
                 )
             ),
+            socket_timeout_override=int(
+                timedelta(
+                    seconds=int(
+                        os.getenv(
+                            "JWT_CNXN_WAIT_TIME",
+                            AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME,
+                        )
+                    )
+                ).total_seconds()
+            ),
             **kwargs,
         )
 
@@ -68,15 +78,6 @@ class AuthByKeyPair(AuthByPlugin):
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
             seconds=int(os.getenv("JWT_LIFETIME_IN_SECONDS", lifetime_in_seconds))
-        )
-        self._jwt_timeout = int(
-            timedelta(
-                seconds=int(
-                    os.getenv(
-                        "JWT_CNXN_WAIT_TIME", AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME
-                    )
-                )
-            ).total_seconds()
         )
 
     def reset_secrets(self) -> None:
@@ -202,19 +203,8 @@ class AuthByKeyPair(AuthByPlugin):
             delete_params=False,
         )
 
-        logger.debug("Base timeout handler passed, checking for JWT expiry")
-        jwt_remaining_time_millis = self._retry_ctx.remaining_time_millis(
-            self._jwt_timeout
-        )
-        jwt_timed_out = (
-            jwt_remaining_time_millis < 0
-            if jwt_remaining_time_millis is not None
-            else False
-        )
-
-        if jwt_timed_out:
-            logger.debug("JWT expired, preparing new token before retrying")
-            self.prepare(account=account, user=user)
+        logger.debug("Base timeout handler passed, preparing new token before retrying")
+        self.prepare(account=account, user=user)
 
     @staticmethod
     def can_handle_exception(op: OperationalError) -> bool:

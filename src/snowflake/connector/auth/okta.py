@@ -171,7 +171,7 @@ class AuthByOkta(AuthByPlugin):
             conn._internal_application_version,
             conn._ocsp_mode(),
             conn._login_timeout,
-            conn._network_timeout,
+            conn._request_timeout,
         )
 
         body["data"]["AUTHENTICATOR"] = authenticator

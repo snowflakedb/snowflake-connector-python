@@ -553,7 +553,6 @@ class SnowflakeRestful:
             headers,
             json.dumps(body),
             token=header_token,
-            timeout=self._connection.network_timeout,
         )
         if ret.get("success") and ret.get("data", {}).get("sessionToken"):
             logger.debug("success: %s", ret)
@@ -612,7 +611,6 @@ class SnowflakeRestful:
             headers,
             None,
             token=self.token,
-            timeout=self._connection.network_timeout,
         )
         if not ret.get("success"):
             logger.error("Failed to heartbeat. code: %s, url: %s", ret.get("code"), url)
@@ -716,6 +714,7 @@ class SnowflakeRestful:
         body,
         token=None,
         timeout=None,
+        socket_timeout=None,
         _no_results: bool = False,
         no_retry: bool = False,
         _include_retry_params: bool = False,
@@ -736,6 +735,7 @@ class SnowflakeRestful:
             token=token,
             no_retry=no_retry,
             _include_retry_params=_include_retry_params,
+            socket_timeout=socket_timeout,
         )
         logger.debug(
             "ret[code] = {code}, after post request".format(
@@ -831,7 +831,7 @@ class SnowflakeRestful:
 
         with self._use_requests_session(full_url) as session:
             timeout = (
-                timeout if timeout is not None else self._connection.network_timeout
+                timeout if timeout is not None else self._connection.request_timeout
             )
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,

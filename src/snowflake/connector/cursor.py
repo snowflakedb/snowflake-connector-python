@@ -505,7 +505,7 @@ class SnowflakeCursor:
         logger.debug("is_file_transfer: %s", self._is_file_transfer is not None)
 
         real_timeout = (
-            timeout if timeout and timeout > 0 else self._connection.network_timeout
+            timeout if timeout and timeout > 0 else self._connection.request_timeout
         )
 
         if real_timeout is not None:

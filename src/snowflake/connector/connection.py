@@ -154,7 +154,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "role": (None, (type(None), str)),  # snowflake
     "session_id": (None, (type(None), str)),  # snowflake
     "login_timeout": (None, (type(None), int)),  # login timeout
-    "network_timeout": (
+    "request_timeout": (
         None,
         (type(None), int),
     ),  # network timeout (infinite by default)
@@ -288,9 +288,9 @@ class SnowflakeConnection:
         login_timeout: Login timeout in seconds. Login requests will not be retried after this timeout expires.
             Note that the login attempt may still take more than login_timeout seconds as an ongoing login request
             cannot be canceled even upon login timeout expiry. The login timeout only prevents further retries.
-        network_timeout: Network timeout in seconds. Network requests besides login requests will not be retried
+        request_timeout: Network timeout in seconds. Network requests besides login requests will not be retried
             after this timeout expires. Overriden in cursor query execution if timeout is passed to cursor.execute.
-            Note that an operation may still take more than network_timeout seconds for the same reason as above.
+            Note that an operation may still take more than request_timeout seconds for the same reason as above.
         socket_timeout: Socket timeout in seconds. Sets both socket connect and read timeout.
         backoff_policy: Backoff policy to use for login and network requests. Must subclass base class BackoffPolicy.
             Standard implementations of linear and exponential backoff are included in the time_util module.
@@ -493,8 +493,8 @@ class SnowflakeConnection:
         return int(self._login_timeout) if self._login_timeout is not None else None
 
     @property
-    def network_timeout(self) -> int | None:
-        return int(self._network_timeout) if self._network_timeout is not None else None
+    def request_timeout(self) -> int | None:
+        return int(self._request_timeout) if self._request_timeout is not None else None
 
     @property
     def socket_timeout(self) -> int | None:

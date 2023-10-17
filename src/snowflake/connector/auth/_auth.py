@@ -128,7 +128,7 @@ class Auth:
         internal_application_version,
         ocsp_mode,
         login_timeout=None,
-        network_timeout=None,
+        request_timeout=None,
         socket_timeout=None,
     ):
         return {
@@ -148,7 +148,7 @@ class Auth:
                     "OCSP_MODE": ocsp_mode.name,
                     "TRACING": logger.getEffectiveLevel(),
                     "LOGIN_TIMEOUT": login_timeout,
-                    "NETWORK_TIMEOUT": network_timeout,
+                    "REQUEST_TIMEOUT": request_timeout,
                     "SOCKET_TIMEOUT": socket_timeout,
                 },
             },
@@ -168,9 +168,13 @@ class Auth:
         mfa_callback: Callable[[], None] | None = None,
         password_callback: Callable[[], str] | None = None,
         session_parameters: dict[Any, Any] | None = None,
-        mfa_timeout: int | None = None,  # max time waiting for MFA response
+        timeout: int
+        | None = None,  # max time waiting for MFA response, currently unused
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
+
+        if timeout is None:
+            timeout = auth_instance.timeout
 
         if session_parameters is None:
             session_parameters = {}
@@ -195,7 +199,7 @@ class Auth:
             self._rest._connection._internal_application_version,
             self._rest._connection._ocsp_mode(),
             self._rest._connection._login_timeout,
-            self._rest._connection._network_timeout,
+            self._rest._connection._request_timeout,
             self._rest._connection._socket_timeout,
         )
 
@@ -247,6 +251,7 @@ class Auth:
                 url,
                 headers,
                 json.dumps(body),
+                socket_timeout=auth_instance.socket_timeout_override,
             )
         except ForbiddenError as err:
             # HTTP 403
@@ -286,7 +291,12 @@ class Auth:
 
             def post_request_wrapper(self, url, headers, body) -> None:
                 # get the MFA response
-                self.ret = self._rest._post_request(url, headers, body)
+                self.ret = self._rest._post_request(
+                    url,
+                    headers,
+                    body,
+                    socket_timeout=auth_instance.socket_timeout_override,
+                )
 
             # send new request to wait until MFA is approved
             t = Thread(
@@ -300,7 +310,7 @@ class Auth:
                     next(c)
             else:
                 # no need to set a timeout on join as _post_request will terminate on timeout
-                t.join(timeout=mfa_timeout)
+                t.join(timeout=timeout)
 
             ret = self.ret
             if (
@@ -315,6 +325,7 @@ class Auth:
                     url,
                     headers,
                     json.dumps(body),
+                    socket_timeout=auth_instance.socket_timeout_override,
                 )
             elif not ret or not ret["data"] or not ret["data"].get("token"):
                 # not token is returned.
@@ -354,6 +365,7 @@ class Auth:
                     url,
                     headers,
                     json.dumps(body),
+                    socket_timeout=auth_instance.socket_timeout_override,
                 )
 
         logger.debug("completed authentication")
