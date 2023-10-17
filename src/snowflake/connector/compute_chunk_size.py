@@ -11,6 +11,7 @@ constants = {
     "MAX_PARTS" : 10000
 }
 
+
 class ChunkSizeCalculator:
     def __init__(
         self,
@@ -19,13 +20,13 @@ class ChunkSizeCalculator:
         max_part_size: int = constants["MAX_PART_SIZE"],
         min_part_size: int = constants["MIN_PART_SIZE"],
         max_parts: int = constants["MAX_PARTS"]
-        ) -> None :
+    ) -> None :
 
         self.current_chunk_size = current_chunk_size
         self.max_object_size = max_object_size
         self.max_part_size = max_part_size
         self.min_part_size = min_part_size
-        self.max_parts= max_parts
+        self.max_parts = max_parts
 
     def compute_chunk_size(self, file_size: int = None) -> int:
         
@@ -36,7 +37,7 @@ class ChunkSizeCalculator:
             chunk_size = self._check_max_parts(chunk_size, file_size)
         
         else:
-            error_message = f"File size %s exceeds the maximum file size %s.".format(file_size, self.max_object_size)
+            error_message = "File size %s exceeds the maximum file size %s.".format(file_size, self.max_object_size)
             logger.error(error_message)
             raise Exception(error_message)
 
@@ -68,6 +69,6 @@ class ChunkSizeCalculator:
             logger.debug(
                 "Setting chunksize to %s instead of the default %s." 
                 % (chunk_size, current_chunk_size)
-                )
+            )
 
         return chunk_size
