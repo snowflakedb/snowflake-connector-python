@@ -630,8 +630,8 @@ class SnowflakeFileTransferAgent:
     def _create_file_transfer_client(
         self, meta: SnowflakeFileMeta
     ) -> SnowflakeStorageClient:
-        from .constants import AZURE_CHUNK_SIZE
         from .compute_chunk_size import ChunkSizeCalculator
+        from .constants import AZURE_CHUNK_SIZE
 
         chunk_size_calculator = ChunkSizeCalculator()
         S3_CHUNK_SIZE = chunk_size_calculator.compute_chunk_size(meta.src_file_size)

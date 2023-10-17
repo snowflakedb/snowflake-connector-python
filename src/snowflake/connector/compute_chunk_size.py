@@ -1,14 +1,20 @@
+#
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
+#
+
+from __future__ import annotations
+
 import logging
 import math
 
 logger = logging.getLogger(__name__)
 
 constants = {
-    "CURRENT_CHUNK_SIZE" : 8388608,
-    "MAX_OBJECT_SIZE" : 5497558138880,
-    "MAX_PART_SIZE" : 5368709120,
-    "MIN_PART_SIZE" : 5242880,
-    "MAX_PARTS" : 10000
+    "CURRENT_CHUNK_SIZE": 8388608,
+    "MAX_OBJECT_SIZE": 5497558138880,
+    "MAX_PART_SIZE": 5368709120,
+    "MIN_PART_SIZE": 5242880,
+    "MAX_PARTS": 10000,
 }
 
 
@@ -19,9 +25,8 @@ class ChunkSizeCalculator:
         max_object_size: int = constants["MAX_OBJECT_SIZE"],
         max_part_size: int = constants["MAX_PART_SIZE"],
         min_part_size: int = constants["MIN_PART_SIZE"],
-        max_parts: int = constants["MAX_PARTS"]
-    ) -> None :
-
+        max_parts: int = constants["MAX_PARTS"],
+    ) -> None:
         self.current_chunk_size = current_chunk_size
         self.max_object_size = max_object_size
         self.max_part_size = max_part_size
@@ -58,7 +63,6 @@ class ChunkSizeCalculator:
             chunk_size = int(math.ceil(file_size / float(self.max_parts)))
 
         if chunk_size != current_chunk_size:
-
             logger.debug(
                 f"Setting chunksize to {chunk_size} instead of the default {current_chunk_size}."
             )
