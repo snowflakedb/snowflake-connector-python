@@ -21,6 +21,7 @@ user_id=$(id -u $USER)
 docker run --network=host \
     -e LANG=en_US.UTF-8 \
     -e TERM=vt102 \
+    -e SF_USE_OPENSSL_ONLY=True \
     -e PIP_DISABLE_PIP_VERSION_CHECK=1 \
     -e LOCAL_USER_ID=$user_id \
     -e CRYPTOGRAPHY_ALLOW_OPENSSL_102=1 \
