@@ -36,7 +36,7 @@ class test_ChunkSizeCalculator(unittest.TestCase):
 
     def test_check_min_chunk_size(self):
         chunk_size_1 = self.chunk_size_calculator._check_min_chunk_size(self.sample_chunk_size_4mb)
-        self.assertEqual(chunk_size_1, self.min_part_size) 
+        self.assertEqual(chunk_size_1, self.min_part_size)
 
         chunk_size_2 = self.chunk_size_calculator._check_min_chunk_size(self.sample_chunk_size_10mb)
         self.assertEqual(chunk_size_2, self.sample_chunk_size_10mb)

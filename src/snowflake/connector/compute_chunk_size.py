@@ -29,24 +29,19 @@ class ChunkSizeCalculator:
         self.max_parts = max_parts
 
     def compute_chunk_size(self, file_size: int = None) -> int:
-        
         chunk_size = self.current_chunk_size
-
         # check if we don"t exceed the allowed max file size 5 TiB
         if file_size is not None and file_size < self.max_object_size:
             chunk_size = self._check_max_parts(chunk_size, file_size)
-        
         else:
             error_message = f"File size {file_size} exceeds the maximum file size {self.max_object_size}."
             logger.error(error_message)
             raise Exception(error_message)
-
         return self._check_min_chunk_size(chunk_size)
 
     # check lower chunk size limit 5 MiB
     def _check_min_chunk_size(self, current_chunk_size: int) -> int:
         chunk_size = current_chunk_size
-
         if chunk_size < self.min_part_size:
             logger.debug(
                 f"Setting chunksize to {self.current_chunk_size} instead of the default {current_chunk_size}."
@@ -55,11 +50,10 @@ class ChunkSizeCalculator:
         else:
             return current_chunk_size
 
-    # check max chunks number 10k  
+    # check max chunks number 10k
     def _check_max_parts(self, current_chunk_size: int, file_size: int) -> int:
         chunk_size = current_chunk_size
         num_parts = int(math.ceil(file_size / float(current_chunk_size)))
-
         if num_parts > self.max_parts:
             chunk_size = int(math.ceil(file_size / float(self.max_parts)))
 
@@ -68,5 +62,4 @@ class ChunkSizeCalculator:
             logger.debug(
                 f"Setting chunksize to {chunk_size} instead of the default {current_chunk_size}."
             )
-
         return chunk_size
