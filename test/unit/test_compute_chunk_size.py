@@ -28,7 +28,7 @@ class test_ChunkSizeCalculator(unittest.TestCase):
         chunk_size_2 = self.chunk_size_calculator.compute_chunk_size(self.sample_file_size_5tb)
         self.assertLessEqual(chunk_size_2, self.max_part_size)
         
-        error_message = "File size %s exceeds the maximum file size %s.".format(self.sample_file_size_6tb, self.max_object_size)
+        error_message = f"File size {self.sample_file_size_6tb} exceeds the maximum file size {self.max_object_size}."
 
         with self.assertRaises(Exception) as context:
             self.chunk_size_calculator(self.sample_file_size_6tb)

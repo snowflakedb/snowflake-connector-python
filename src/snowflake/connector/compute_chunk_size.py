@@ -37,7 +37,7 @@ class ChunkSizeCalculator:
             chunk_size = self._check_max_parts(chunk_size, file_size)
         
         else:
-            error_message = "File size %s exceeds the maximum file size %s.".format(file_size, self.max_object_size)
+            error_message = f"File size {file_size} exceeds the maximum file size {self.max_object_size}."
             logger.error(error_message)
             raise Exception(error_message)
 
@@ -49,8 +49,7 @@ class ChunkSizeCalculator:
 
         if chunk_size < self.min_part_size:
             logger.debug(
-                "Setting chunksize to %s instead of the default %s." 
-                % (self.current_chunk_size, current_chunk_size)
+                f"Setting chunksize to {self.current_chunk_size} instead of the default {current_chunk_size}."
             )
             return self.min_part_size
         else:
@@ -67,8 +66,7 @@ class ChunkSizeCalculator:
         if chunk_size != current_chunk_size:
 
             logger.debug(
-                "Setting chunksize to %s instead of the default %s." 
-                % (chunk_size, current_chunk_size)
+                f"Setting chunksize to {chunk_size} instead of the default {current_chunk_size}."
             )
 
         return chunk_size
