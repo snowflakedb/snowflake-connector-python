@@ -47,6 +47,7 @@ def test_auth_keypair():
     account = "testaccount"
     user = "testuser"
     auth_instance = AuthByKeyPair(private_key=private_key_der)
+    auth_instance._retry_ctx.set_start_time()
     auth_instance.handle_timeout(
         authenticator="SNOWFLAKE_JWT",
         service_name=None,
@@ -80,6 +81,7 @@ def test_auth_keypair_abc():
     assert isinstance(private_key, RSAPrivateKey)
 
     auth_instance = AuthByKeyPair(private_key=private_key)
+    auth_instance._retry_ctx.set_start_time()
     auth_instance.handle_timeout(
         authenticator="SNOWFLAKE_JWT",
         service_name=None,

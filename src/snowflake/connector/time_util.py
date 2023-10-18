@@ -62,12 +62,14 @@ class BackoffPolicy(ABC):
         cap: int = DEFAULT_BACKOFF_CAP,
         factor: int = DEFAULT_BACKOFF_FACTOR,
         enable_jitter: bool = DEFAULT_ENABLE_JITTER,
-    ):
+    ) -> None:
         """Initialize a Backoff
-        backoff_base: Integer constant term used in backoff computations. Usage depends on implementation.
-        backoff_factor: Integer constant term used in backoff computations. Usage depends on implementation.
-        backoff_cap: Maximum backoff time in integer seconds.
-        backoff_enable_jitter: Boolean specifying whether to enable randomized jitter on computed backoff times.
+
+        Args:
+            backoff_base: Integer constant term used in backoff computations. Usage depends on implementation.
+            backoff_factor: Integer constant term used in backoff computations. Usage depends on implementation.
+            backoff_cap: Maximum backoff time in integer seconds.
+            backoff_enable_jitter: Boolean specifying whether to enable randomized jitter on computed backoff times.
         """
         self._base = base
         self._cap = cap
@@ -165,15 +167,11 @@ class TimeoutBackoffCtx:
     ) -> None:
         self._backoff_policy = backoff_policy
 
-        self._current_retry_count = 0
-        self._current_sleep_time = INITIAL_TIMEOUT_SLEEP_TIME
-
         self._max_retry_attempts = max_retry_attempts
         # in seconds
         self._timeout = timeout
 
-        # in milliseconds
-        self._start_time_millis = None
+        self.reset()
 
     @property
     def timeout(self) -> int | None:
@@ -190,9 +188,11 @@ class TimeoutBackoffCtx:
     def set_start_time(self) -> None:
         self._start_time_millis = get_time_millis()
 
-    def remaining_time_millis(self, timeout: int | None) -> int | None:
-        if timeout is None or self._start_time_millis is None:
-            return None
+    def remaining_time_millis(self, timeout: int) -> int:
+        if self._start_time_millis is None:
+            raise TypeError(
+                "Start time not recorded in remaining_time_millis, call set_start_time first"
+            )
 
         timeout_millis = timeout * 1000
         elapsed_time_millis = get_time_millis() - self._start_time_millis
@@ -206,7 +206,7 @@ class TimeoutBackoffCtx:
             )
 
         timed_out = False
-        if self.remaining_time_millis(self._timeout) is not None:
+        if self._timeout is not None:
             timed_out = self.remaining_time_millis(self._timeout) < 0
 
         retry_attempts_exceeded = False

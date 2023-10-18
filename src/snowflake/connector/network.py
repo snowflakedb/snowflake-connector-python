@@ -713,8 +713,8 @@ class SnowflakeRestful:
         headers,
         body,
         token=None,
-        timeout=None,
-        socket_timeout=None,
+        timeout: int | None = None,
+        socket_timeout: int | None = None,
         _no_results: bool = False,
         no_retry: bool = False,
         _include_retry_params: bool = False,
@@ -800,17 +800,9 @@ class SnowflakeRestful:
                 **kwargs,
             ) -> None:
                 super().__init__(**kwargs)
-                self._reason = 0
+                self.retry_reason = 0
                 self._include_retry_params = _include_retry_params
                 self._include_retry_reason = _include_retry_reason
-
-            @property
-            def retry_reason(self) -> int:
-                return self._reason
-
-            @retry_reason.setter
-            def retry_reason(self, reason: int) -> None:
-                self._reason = reason
 
             def add_retry_params(self, full_url: str) -> str:
                 if self._include_retry_params and self.current_retry_count > 0:
@@ -819,7 +811,7 @@ class SnowflakeRestful:
                         "retryCount": self.current_retry_count,
                     }
                     if self._include_retry_reason:
-                        retry_params.update({"retryReason": self._reason})
+                        retry_params.update({"retryReason": self.retry_reason})
                     suffix = urlencode(retry_params)
                     sep = "&" if urlparse(full_url).query else "?"
                     return full_url + sep + suffix
@@ -876,7 +868,9 @@ class SnowflakeRestful:
         conn = self._connection
         logger.debug(
             "remaining request timeout: %s ms, retry cnt: %s",
-            retry_ctx.remaining_time_millis(retry_ctx.timeout),
+            retry_ctx.remaining_time_millis(retry_ctx.timeout)
+            if retry_ctx.timeout is not None
+            else "N/A",
             retry_ctx.current_retry_count + 1,
         )
 

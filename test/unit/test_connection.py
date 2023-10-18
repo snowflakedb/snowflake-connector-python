@@ -324,7 +324,6 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             snowflake.connector.connect(connections_file_path=connections_file)
 
 
-@pytest.mark.flaky(reruns=3)
 @pytest.mark.parametrize("next_action", ("RETRY", "ERROR"))
 @patch("snowflake.connector.vendored.requests.sessions.Session.request")
 def test_handle_timeout(mockSessionRequest, next_action):

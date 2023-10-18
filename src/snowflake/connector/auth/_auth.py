@@ -127,9 +127,9 @@ class Auth:
         internal_application_name,
         internal_application_version,
         ocsp_mode,
-        login_timeout=None,
-        request_timeout=None,
-        socket_timeout=None,
+        login_timeout: int | None = None,
+        request_timeout: int | None = None,
+        socket_timeout: int | None = None,
     ):
         return {
             "data": {
@@ -168,8 +168,8 @@ class Auth:
         mfa_callback: Callable[[], None] | None = None,
         password_callback: Callable[[], str] | None = None,
         session_parameters: dict[Any, Any] | None = None,
-        timeout: int
-        | None = None,  # max time waiting for MFA response, currently unused
+        # max time waiting for MFA response, currently unused
+        timeout: int | None = None,
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
 

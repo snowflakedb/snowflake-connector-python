@@ -447,7 +447,6 @@ def test_login_request_timeout(mockSessionRequest, next_action):
         )
 
 
-@pytest.mark.flaky(reruns=3)
 @pytest.mark.parametrize(
     "next_action_result",
     (("RETRY", ServiceUnavailableError), ("ERROR", OperationalError)),

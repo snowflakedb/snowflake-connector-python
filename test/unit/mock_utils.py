@@ -17,21 +17,16 @@ def mock_connection(
     socket_timeout=None,
     backoff_policy=None,
 ):
-    connection = MagicMock()
-
-    connection._login_timeout = login_timeout
-    connection.login_timeout = login_timeout
-
-    connection._request_timeout = request_timeout
-    connection.request_timeout = request_timeout
-
-    connection._socket_timeout = socket_timeout
-    connection.socket_timeout = socket_timeout
-
-    connection._backoff_policy = backoff_policy
-    connection.backoff_policy = backoff_policy
-
-    return connection
+    return MagicMock(
+        _login_timeout=login_timeout,
+        login_timeout=login_timeout,
+        _request_timeout=request_timeout,
+        request_timeout=request_timeout,
+        _socket_timeout=socket_timeout,
+        socket_timeout=socket_timeout,
+        _backoff_policy=backoff_policy,
+        backoff_policy=backoff_policy,
+    )
 
 
 def mock_request_with_action(next_action, sleep=None):
@@ -39,10 +34,10 @@ def mock_request_with_action(next_action, sleep=None):
         if sleep is not None:
             time.sleep(sleep)
         if next_action == "RETRY":
-            response = MagicMock()
-            response.status_code = 503
-            response.close = lambda: None
-            return response
+            return MagicMock(
+                status_code=503,
+                close=lambda: None,
+            )
         elif next_action == "ERROR":
             raise ConnectionError()
 
