@@ -11,7 +11,7 @@ import time
 from base64 import b64decode
 from enum import Enum, unique
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
 
 from .arrow_context import ArrowConverterContext
 from .compat import OK, UNAUTHORIZED, urlparse
@@ -53,6 +53,62 @@ FIELD_TYPE_TO_PA_TYPE: list[DataType] = []
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
 SSE_C_KEY = "x-amz-server-side-encryption-customer-key"
 SSE_C_AES = "AES256"
+
+
+def _create_vendored_arrow_iterator(
+    data: bytes,
+    context: ArrowConverterContext,
+    use_dict_result: bool,
+    numpy: bool,
+    number_to_decimal: bool,
+    row_unit: IterUnit,
+):
+    from .arrow_iterator import PyArrowIterator
+
+    logger.debug("Using vendored arrow as the arrow data converter")
+    iter = PyArrowIterator(
+        None,
+        io.BytesIO(data),
+        context,
+        use_dict_result,
+        numpy,
+        number_to_decimal,
+    )
+    if row_unit == IterUnit.TABLE_UNIT:
+        iter.init_table_unit()
+    return iter
+
+
+def _create_nanoarrow_iterator(
+    data: bytes,
+    context: ArrowConverterContext,
+    use_dict_result: bool,
+    numpy: bool,
+    number_to_decimal: bool,
+    row_unit: IterUnit,
+):
+    from .nanoarrow_arrow_iterator import PyArrowRowIterator, PyArrowTableIterator
+
+    logger.debug("Using nanoarrow as the arrow data converter")
+    return (
+        PyArrowRowIterator(
+            None,
+            data,
+            context,
+            use_dict_result,
+            numpy,
+            number_to_decimal,
+        )
+        if row_unit == IterUnit.ROW_UNIT
+        else PyArrowTableIterator(
+            None,
+            data,
+            context,
+            use_dict_result,
+            numpy,
+            number_to_decimal,
+        )
+    )
 
 
 @unique
@@ -147,6 +203,7 @@ def create_batches_from_response(
                     cursor._connection._numpy,
                     schema,
                     cursor._connection._arrow_number_to_decimal,
+                    cursor._connection._create_pyarrow_iterator_method,
                 )
                 for c in chunks
             ]
@@ -169,6 +226,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
+            cursor._connection._create_pyarrow_iterator_method,
         )
     else:
         logger.error(f"Don't know how to construct ResultBatches from response: {data}")
@@ -180,6 +238,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
+            cursor._connection._create_pyarrow_iterator_method,
         )
 
     return [first_chunk] + rest_of_chunks
@@ -542,6 +601,7 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadata],
         number_to_decimal: bool,
+        create_pyarrow_iterator_method: Callable,
     ) -> None:
         super().__init__(
             rowcount,
@@ -553,6 +613,7 @@ class ArrowResultBatch(ResultBatch):
         self._context = context
         self._numpy = numpy
         self._number_to_decimal = number_to_decimal
+        self._create_pyarrow_iterator_method = create_pyarrow_iterator_method
 
     def __repr__(self) -> str:
         return f"ArrowResultChunk({self.id})"
@@ -565,20 +626,14 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        from .arrow_iterator import PyArrowIterator
-
-        iter = PyArrowIterator(
-            None,
-            io.BytesIO(response.content),
+        return self._create_pyarrow_iterator_method(
+            response.content,
             self._context,
             self._use_dict_result,
             self._numpy,
             self._number_to_decimal,
+            row_unit,
         )
-        if row_unit == IterUnit.TABLE_UNIT:
-            iter.init_table_unit()
-
-        return iter
 
     def _from_data(
         self, data: str, iter_unit: IterUnit
@@ -588,24 +643,17 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        from .arrow_iterator import PyArrowIterator
-
         if len(data) == 0:
             return iter([])
 
-        _iter = PyArrowIterator(
-            None,
-            io.BytesIO(b64decode(data)),
+        return self._create_pyarrow_iterator_method(
+            b64decode(data),
             self._context,
             self._use_dict_result,
             self._numpy,
             self._number_to_decimal,
+            iter_unit,
         )
-        if iter_unit == IterUnit.TABLE_UNIT:
-            _iter.init_table_unit()
-        else:
-            _iter.init_row_unit()
-        return _iter
 
     @classmethod
     def from_data(
@@ -617,6 +665,7 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadata],
         number_to_decimal: bool,
+        create_pyarrow_iterator_method: Callable,
     ):
         """Initializes an ``ArrowResultBatch`` from static, local data."""
         new_chunk = cls(
@@ -628,6 +677,7 @@ class ArrowResultBatch(ResultBatch):
             numpy,
             schema,
             number_to_decimal,
+            create_pyarrow_iterator_method,
         )
         new_chunk._data = data
 
