@@ -9,23 +9,23 @@ import math
 
 logger = logging.getLogger(__name__)
 
-constants = {
-    "CURRENT_CHUNK_SIZE": 8388608,
-    "MAX_OBJECT_SIZE": 5497558138880,
-    "MAX_PART_SIZE": 5368709120,
-    "MIN_PART_SIZE": 5242880,
-    "MAX_PARTS": 10000,
-}
+# Amazon S3 multipart upload limits
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html
+CURRENT_CHUNK_SIZE = 8 * 1024 ** 2
+MAX_OBJECT_SIZE = 5 * 1024 ** 4
+MAX_PART_SIZE = 5 * 1024 ** 3
+MIN_PART_SIZE = 5 * 1024 ** 2
+MAX_PARTS = 10000
 
 
 class ChunkSizeCalculator:
     def __init__(
         self,
-        current_chunk_size: int = constants["CURRENT_CHUNK_SIZE"],
-        max_object_size: int = constants["MAX_OBJECT_SIZE"],
-        max_part_size: int = constants["MAX_PART_SIZE"],
-        min_part_size: int = constants["MIN_PART_SIZE"],
-        max_parts: int = constants["MAX_PARTS"],
+        current_chunk_size: int = CURRENT_CHUNK_SIZE,
+        max_object_size: int = MAX_OBJECT_SIZE,
+        max_part_size: int = MAX_PART_SIZE,
+        min_part_size: int = MIN_PART_SIZE,
+        max_parts: int = MAX_PARTS,
     ) -> None:
         self.current_chunk_size = current_chunk_size
         self.max_object_size = max_object_size
@@ -33,7 +33,7 @@ class ChunkSizeCalculator:
         self.min_part_size = min_part_size
         self.max_parts = max_parts
 
-    def compute_chunk_size(self, file_size: int = None) -> int:
+    def compute_chunk_size(self, file_size: int) -> int:
         chunk_size = self.current_chunk_size
         # check if we don"t exceed the allowed max file size 5 TiB
         if file_size is not None and file_size < self.max_object_size:

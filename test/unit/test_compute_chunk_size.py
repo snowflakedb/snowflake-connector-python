@@ -5,18 +5,19 @@
 import pytest
 
 try:
-    from snowflake.connector.compute_chunk_size import ChunkSizeCalculator, constants
+    from snowflake.connector.compute_chunk_size import ChunkSizeCalculator
 
-    expected_chunk_size = constants["CURRENT_CHUNK_SIZE"]
-    max_part_size = constants["MAX_PART_SIZE"]
-    min_part_size = constants["MIN_PART_SIZE"]
-    max_object_size = constants["MAX_OBJECT_SIZE"]
-    sample_file_size_2gb = 2 * 1024 * 1024 * 1024
-    sample_file_size_85gb = 85 * 1024 * 1024 * 1024
-    sample_file_size_5tb = 4.9 * 1024 * 1024 * 1024 * 1024
-    sample_file_size_6tb = 6 * 1024 * 1024 * 1024 * 1024
-    sample_chunk_size_4mb = 4 * 1024 * 1024
-    sample_chunk_size_10mb = 10 * 1024 * 1024
+    expected_chunk_size = 8 * 1024 ** 2
+    max_part_size = 5 * 1024 ** 3
+    min_part_size = 5 * 1024 ** 2
+    max_object_size = 5 * 1024 ** 4
+    sample_file_size_2gb = 2 * 1024 ** 3
+    sample_file_size_85gb = 85 * 1024 ** 3
+    sample_file_size_2gb = 2 * 1024 ** 3
+    sample_file_size_under_5tb = 4.9 * 1024 ** 4
+    sample_file_size_6tb = 6 * 1024 ** 4
+    sample_chunk_size_4mb = 4 * 1024 ** 2
+    sample_chunk_size_10mb = 10 * 1024 ** 2
 except ImportError:
     pass
 
@@ -28,7 +29,7 @@ def test_check_chunk_size():
     chunk_size_calculator = ChunkSizeCalculator()
     chunk_size_1 = chunk_size_calculator.compute_chunk_size(sample_file_size_2gb)
     assert chunk_size_1 == expected_chunk_size
-    chunk_size_2 = chunk_size_calculator.compute_chunk_size(sample_file_size_5tb)
+    chunk_size_2 = chunk_size_calculator.compute_chunk_size(int(sample_file_size_under_5tb))
     assert chunk_size_2 <= max_part_size
 
     error_message = f"File size {sample_file_size_6tb} exceeds the maximum file size {max_object_size}."
