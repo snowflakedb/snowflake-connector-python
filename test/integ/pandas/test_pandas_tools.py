@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Generator
 from unittest import mock
 
@@ -413,6 +413,54 @@ def test_write_pandas_create_temp_table_deprecation_warning(
                 .fetchall()
             )
             assert table_info[0]["kind"] == "TEMPORARY"
+        finally:
+            cnx.execute_string(drop_sql)
+
+
+@pytest.mark.parametrize("use_logical_type", [None, True, False])
+def test_write_pandas_use_logical_type(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    use_logical_type: bool | None,
+):
+    table_name = random_string(5, "USE_LOCAL_TYPE_").upper()
+    col_name = "DT"
+    create_sql = f"CREATE OR REPLACE TABLE {table_name} ({col_name} TIMESTAMP_TZ)"
+    select_sql = f"SELECT * FROM {table_name}"
+    drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+    timestamp = datetime(
+        year=2020,
+        month=1,
+        day=2,
+        hour=3,
+        minute=4,
+        second=5,
+        microsecond=6,
+        tzinfo=timezone(timedelta(hours=2)),
+    )
+    df_write = pandas.DataFrame({col_name: [timestamp]})
+
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        cnx.cursor().execute(create_sql).fetchall()
+
+        write_pandas_kwargs = dict(
+            conn=cnx,
+            df=df_write,
+            use_logical_type=use_logical_type,
+            auto_create_table=False,
+            table_name=table_name,
+        )
+
+        try:
+            # When use_logical_type = True, datetimes with timestamps should be
+            # correctly written to Snowflake.
+            if use_logical_type:
+                write_pandas(**write_pandas_kwargs)
+                df_read = cnx.cursor().execute(select_sql).fetch_pandas_all()
+                assert all(df_write == df_read)
+            # For other use_logical_type values, a UserWarning should be displayed.
+            else:
+                with pytest.warns(UserWarning, match="Dataframe contains a datetime.*"):
+                    write_pandas(**write_pandas_kwargs)
         finally:
             cnx.execute_string(drop_sql)
 

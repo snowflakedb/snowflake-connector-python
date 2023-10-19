@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.3.2(TBD)
+
+  - Added support for `use_logical_type` in `write_pandas`.
+
 - v3.3.1(October 16,2023)
 
   - Added for non-Windows platforms command suggestions (chown/chmod) for insufficient file permissions of config files.
