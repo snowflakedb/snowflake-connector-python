@@ -46,9 +46,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from .vendored.requests import Response
 
 
-# emtpy pyarrow type array corresponding to FIELD_TYPES
-FIELD_TYPE_TO_PA_TYPE: list[DataType] = []
-
 # qrmk related constants
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
 SSE_C_KEY = "x-amz-server-side-encryption-customer-key"
@@ -705,11 +702,12 @@ class ArrowResultBatch(ResultBatch):
 
     def _create_empty_table(self) -> Table:
         """Returns empty Arrow table based on schema"""
-        if installed_pandas:
-            # initialize pyarrow type array corresponding to FIELD_TYPES
-            FIELD_TYPE_TO_PA_TYPE = [e.pa_type() for e in FIELD_TYPES]
+        if not installed_pandas:
+            raise ModuleNotFoundError("need pandas to run this code")
+        # initialize pyarrow type array corresponding to FIELD_TYPES
+        field_type_to_pa_type = [e.pa_type() for e in FIELD_TYPES]
         fields = [
-            pa.field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code]) for s in self.schema
+            pa.field(s.name, field_type_to_pa_type[s.type_code]) for s in self.schema
         ]
         return pa.schema(fields).empty_table()
 
