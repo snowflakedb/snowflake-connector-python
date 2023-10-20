@@ -9,7 +9,6 @@ from textwrap import dedent
 
 
 def test_structured_array_types(conn_cnx):
-    """Gets results for the given qid."""
     with conn_cnx() as cnx:
         cur = cnx.cursor()
         sql = dedent(
@@ -26,7 +25,8 @@ def test_structured_array_types(conn_cnx):
             [True, False]::array(boolean),
             [1::variant, 'b'::variant]::array(variant not null),
             [{'a': 'b'}, {'c': 1}]::array(object)
-            """)
+            """
+        )
         # Geography and geometry are not supported in an array
         # [TO_GEOGRAPHY('POINT(-122.35 37.55)'), TO_GEOGRAPHY('POINT(-123.35 37.55)')]::array(GEOGRAPHY),
         # [TO_GEOMETRY('POINT(1820.12 890.56)'), TO_GEOMETRY('POINT(1820.12 890.56)')]::array(GEOMETRY),
@@ -38,7 +38,6 @@ def test_structured_array_types(conn_cnx):
 
 
 def test_structured_map_types(conn_cnx):
-    """Gets results for the given qid."""
     with conn_cnx() as cnx:
         cur = cnx.cursor()
         sql = dedent(
@@ -55,7 +54,8 @@ def test_structured_map_types(conn_cnx):
             {'a': False}::map(string, boolean),
             {'a': 'b'::variant}::map(string, variant not null),
             {'a': {'c': 1}}::map(string, object)
-            """)
+            """
+        )
         cur.execute(sql)
         cur.execute(sql)
         for metadata in cur.description:
