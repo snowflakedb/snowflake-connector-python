@@ -23,7 +23,7 @@ from logging import getLogger
 from threading import Lock
 from time import strptime
 from types import TracebackType
-from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
+from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
 from uuid import UUID
 
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -45,6 +45,7 @@ from .auth import (
     AuthByWebBrowser,
 )
 from .auth.idtoken import AuthByIdToken
+from .backoff_policies import exponential_backoff
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .config_manager import CONFIG_MANAGER, _get_default_connection_params
@@ -104,17 +105,12 @@ from .network import (
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
-from .time_util import (
-    BackoffPolicy,
-    HeartBeatTimer,
-    RecursiveMixedBackoff,
-    get_time_millis,
-)
+from .time_util import HeartBeatTimer, get_time_millis
 from .util_text import construct_hostname, parse_account, split_statements
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
-DEFAULT_BACKOFF_POLICY = RecursiveMixedBackoff()
+DEFAULT_BACKOFF_POLICY = exponential_backoff
 
 
 def DefaultConverterClass() -> type:
@@ -159,7 +155,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), int),
     ),  # network timeout (infinite by default)
     "socket_timeout": (None, (type(None), int)),
-    "backoff_policy": (DEFAULT_BACKOFF_POLICY, BackoffPolicy),
+    "backoff_policy": (DEFAULT_BACKOFF_POLICY, Callable),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), str, RSAPrivateKey)),
@@ -292,10 +288,9 @@ class SnowflakeConnection:
             after this timeout expires. Overriden in cursor query execution if timeout is passed to cursor.execute.
             Note that an operation may still take more than request_timeout seconds for the same reason as above.
         socket_timeout: Socket timeout in seconds. Sets both socket connect and read timeout.
-        backoff_policy: Backoff policy to use for login and network requests. Must subclass base class BackoffPolicy.
-            Standard implementations of linear and exponential backoff are included in the time_util module.
-            By default, a mixed backoff is used which randomly chooses between linear and exponential incrementing
-            of backoff time each iteration.
+        backoff_policy: Backoff policy to use for login and network requests. Must be a callable generator function.
+            Standard implementations of linear and exponential backoff are included in the backoff_policies module.
+            See the backoff_policies module for details and implementation examples.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
@@ -501,8 +496,8 @@ class SnowflakeConnection:
         return int(self._socket_timeout) if self._socket_timeout is not None else None
 
     @property
-    def backoff_policy(self) -> BackoffPolicy:
-        return self._backoff_policy
+    def backoff_generator(self) -> Iterator:
+        return self._backoff_policy()
 
     @property
     def client_session_keep_alive(self) -> bool | None:
@@ -911,7 +906,7 @@ class SnowflakeConnection:
             self.auth_class = AuthByDefault(
                 password=self._password,
                 timeout=self._login_timeout,
-                backoff_policy=self._backoff_policy,
+                backoff_generator=self.backoff_generator,
             )
         elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             self._session_parameters[PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = (
@@ -931,7 +926,7 @@ class SnowflakeConnection:
                     host=self.host,
                     port=self.port,
                     timeout=self._login_timeout,
-                    backoff_policy=self._backoff_policy,
+                    backoff_generator=self.backoff_generator,
                 )
             else:
                 self.auth_class = AuthByIdToken(
@@ -941,20 +936,20 @@ class SnowflakeConnection:
                     host=self.host,
                     port=self.port,
                     timeout=self._login_timeout,
-                    backoff_policy=self._backoff_policy,
+                    backoff_generator=self.backoff_generator,
                 )
 
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
             self.auth_class = AuthByKeyPair(
                 private_key=self._private_key,
                 timeout=self._login_timeout,
-                backoff_policy=self._backoff_policy,
+                backoff_generator=self.backoff_generator,
             )
         elif self._authenticator == OAUTH_AUTHENTICATOR:
             self.auth_class = AuthByOAuth(
                 oauth_token=self._token,
                 timeout=self._login_timeout,
-                backoff_policy=self._backoff_policy,
+                backoff_generator=self.backoff_generator,
             )
         elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
             self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
@@ -970,14 +965,14 @@ class SnowflakeConnection:
                 password=self._password,
                 mfa_token=self.rest.mfa_token,
                 timeout=self._login_timeout,
-                backoff_policy=self._backoff_policy,
+                backoff_generator=self.backoff_generator,
             )
         else:
             # okta URL, e.g., https://<account>.okta.com/
             self.auth_class = AuthByOkta(
                 application=self.application,
                 timeout=self._login_timeout,
-                backoff_policy=self._backoff_policy,
+                backoff_generator=self.backoff_generator,
             )
 
         self.authenticate_with_retry(self.auth_class)
@@ -1147,13 +1142,15 @@ class SnowflakeConnection:
         if "." in self._account:
             self._account = parse_account(self._account)
 
-        if not isinstance(self._backoff_policy, BackoffPolicy):
+        if not isinstance(self._backoff_policy, Callable) or not not isinstance(
+            self._backoff_policy, Iterator
+        ):
             Error.errorhandler_wrapper(
                 self,
                 None,
                 ProgrammingError,
                 {
-                    "msg": "Backoff policy is of invalid type",
+                    "msg": "Backoff policy must be a generator function",
                     "errno": ER_INVALID_BACKOFF_POLICY,
                 },
             )

@@ -5,12 +5,10 @@
 
 from __future__ import annotations
 
-import random
 import time
-from abc import ABC, abstractmethod
 from logging import getLogger
 from types import TracebackType
-from typing import Any, Callable
+from typing import Callable, Iterator
 
 logger = getLogger(__name__)
 
@@ -48,74 +46,6 @@ class HeartBeatTimer(Timer):
 def get_time_millis() -> int:
     """Returns the current time in milliseconds."""
     return int(time.time() * 1000)
-
-
-class BackoffPolicy(ABC):
-    DEFAULT_BACKOFF_BASE = 1
-    DEFAULT_BACKOFF_CAP = 16
-    DEFAULT_BACKOFF_FACTOR = 2
-    DEFAULT_ENABLE_JITTER = True
-
-    def __init__(
-        self,
-        base: int = DEFAULT_BACKOFF_BASE,
-        cap: int = DEFAULT_BACKOFF_CAP,
-        factor: int = DEFAULT_BACKOFF_FACTOR,
-        enable_jitter: bool = DEFAULT_ENABLE_JITTER,
-    ) -> None:
-        """Initialize a Backoff
-
-        Args:
-            backoff_base: Integer constant term used in backoff computations. Usage depends on implementation.
-            backoff_factor: Integer constant term used in backoff computations. Usage depends on implementation.
-            backoff_cap: Maximum backoff time in integer seconds.
-            backoff_enable_jitter: Boolean specifying whether to enable randomized jitter on computed backoff times.
-        """
-        self._base = base
-        self._cap = cap
-        self._factor = factor
-        self._enable_jitter = enable_jitter
-
-    @abstractmethod
-    def next_sleep(self, cnt: Any, sleep: int) -> int:
-        """Implement this method if using a custom Backoff"""
-        pass
-
-
-class DecorrelateJitterBackoff(BackoffPolicy):
-    """Decorrelate jitter backoff (retained for backwards compatibility), see https://www.awsarchitectureblog.com/2015/03/backoff.html"""
-
-    def next_sleep(self, _: Any, sleep: int) -> int:
-        return min(self._cap, random.randint(self._base, sleep * 3))
-
-
-class RecursiveMixedBackoff(BackoffPolicy):
-    """Default retry strategy as specified in Client Retry Strategy"""
-
-    def next_sleep(self, cnt: Any, sleep: int) -> int:
-        mult_factor = random.choice([-1, 1])
-        jitter_amount = 0.5 * sleep * mult_factor if self._enable_jitter else 0
-
-        linear_wait = sleep + jitter_amount
-        exp_wait = self._base * (self._factor**cnt) + jitter_amount
-
-        return int(random.choice([linear_wait, exp_wait]))
-
-
-class LinearBackoff(BackoffPolicy):
-    """Standard linear backoff"""
-
-    def next_sleep(self, cnt: int, _: Any) -> int:
-        t = min(self._cap, self._base + self._factor * cnt)
-        return t if self._enable_jitter else random.randint(0, t)
-
-
-class ExponentialBackoff(BackoffPolicy):
-    """Standard exponential backoff"""
-
-    def next_sleep(self, cnt: int, _: Any) -> int:
-        t = min(self._cap, self._base * (self._factor**cnt))
-        return t if self._enable_jitter else random.randint(0, t)
 
 
 class TimerContextManager:
@@ -163,15 +93,17 @@ class TimeoutBackoffCtx:
         self,
         max_retry_attempts: int | None = None,
         timeout: int | None = None,
-        backoff_policy: BackoffPolicy | None = None,
+        backoff_generator: Iterator | None = None,
     ) -> None:
-        self._backoff_policy = backoff_policy
+        self._backoff_generator = backoff_generator
 
         self._max_retry_attempts = max_retry_attempts
         # in seconds
         self._timeout = timeout
 
-        self.reset()
+        self._current_retry_count = 0
+        self._current_sleep_time = self._advance_backoff()
+        self._start_time_millis = None
 
     @property
     def timeout(self) -> int | None:
@@ -185,19 +117,21 @@ class TimeoutBackoffCtx:
     def current_sleep_time(self) -> int:
         return int(self._current_sleep_time)
 
-    def set_start_time(self) -> None:
-        self._start_time_millis = get_time_millis()
-
-    def remaining_time_millis(self, timeout: int) -> int:
+    @property
+    def remaining_time_millis(self) -> int:
         if self._start_time_millis is None:
             raise TypeError(
                 "Start time not recorded in remaining_time_millis, call set_start_time first"
             )
 
-        timeout_millis = timeout * 1000
+        if self._timeout is None:
+            raise TypeError("Timeout is None in remaining_time_millis")
+
+        timeout_millis = self._timeout * 1000
         elapsed_time_millis = get_time_millis() - self._start_time_millis
         return timeout_millis - elapsed_time_millis
 
+    @property
     def should_retry(self) -> bool:
         """Decides whether to retry connection."""
         if self._timeout is not None and self._start_time_millis is None:
@@ -205,29 +139,27 @@ class TimeoutBackoffCtx:
                 "Timeout set in TimeoutBackoffCtx, but start time not recorded"
             )
 
-        timed_out = False
-        if self._timeout is not None:
-            timed_out = self.remaining_time_millis(self._timeout) < 0
-
-        retry_attempts_exceeded = False
-        if self._max_retry_attempts is not None:
-            retry_attempts_exceeded = (
-                self._current_retry_count >= self._max_retry_attempts
-            )
-
+        timed_out = (
+            self.remaining_time_millis < 0 if self._timeout is not None else False
+        )
+        retry_attempts_exceeded = (
+            self._current_retry_count >= self._max_retry_attempts
+            if self._max_retry_attempts is not None
+            else False
+        )
         return not timed_out and not retry_attempts_exceeded
+
+    def _advance_backoff(self) -> int:
+        return (
+            next(self._backoff_generator) if self._backoff_generator is not None else 0
+        )
+
+    def set_start_time(self) -> None:
+        self._start_time_millis = get_time_millis()
 
     def increment(self) -> None:
         """Updates retry count and sleep time for another retry"""
         self._current_retry_count += 1
-        if self._backoff_policy is not None:
-            self._current_sleep_time = self._backoff_policy.next_sleep(
-                self._current_retry_count, self._current_sleep_time
-            )
+        self._current_sleep_time = self._advance_backoff()
         logger.debug(f"Update retry count to {self._current_retry_count}")
         logger.debug(f"Update sleep time to {self._current_sleep_time} seconds")
-
-    def reset(self) -> None:
-        self._current_retry_count = 0
-        self._current_sleep_time = INITIAL_TIMEOUT_SLEEP_TIME
-        self._start_time_millis = None

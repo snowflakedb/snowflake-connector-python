@@ -10,12 +10,28 @@ try:
 except ImportError:
     from requests.exceptions import ConnectionError
 
+try:
+    from snowflake.connector.auth.by_plugin import DEFAULT_AUTH_CLASS_TIMEOUT
+except ImportError:
+    DEFAULT_AUTH_CLASS_TIMEOUT = 120
+
+
+def zero_backoff():
+    while True:
+        yield 0
+
+
+try:
+    from snowflake.connector.connection import DEFAULT_BACKOFF_POLICY
+except ImportError:
+    DEFAULT_BACKOFF_POLICY = zero_backoff
+
 
 def mock_connection(
-    login_timeout=120,
+    login_timeout=DEFAULT_AUTH_CLASS_TIMEOUT,
     request_timeout=None,
     socket_timeout=None,
-    backoff_policy=None,
+    backoff_policy=DEFAULT_BACKOFF_POLICY,
 ):
     return MagicMock(
         _login_timeout=login_timeout,

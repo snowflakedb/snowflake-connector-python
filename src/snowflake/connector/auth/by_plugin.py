@@ -18,12 +18,12 @@ import time
 from abc import ABC, abstractmethod
 from enum import Enum, unique
 from os import getenv
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Iterator
 
 from ..errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from ..errors import DatabaseError, Error, OperationalError
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from ..time_util import BackoffPolicy, TimeoutBackoffCtx
+from ..time_util import TimeoutBackoffCtx
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection
@@ -64,7 +64,7 @@ class AuthByPlugin(ABC):
         timeout: int | None = None,
         max_retry_attempts: int | None = None,
         socket_timeout_override: int | None = None,
-        backoff_policy: BackoffPolicy | None = None,
+        backoff_generator: Iterator | None = None,
     ) -> None:
         self.consent_cache_id_token = False
 
@@ -76,7 +76,7 @@ class AuthByPlugin(ABC):
             max_retry_attempts=max_retry_attempts
             if max_retry_attempts is not None
             else int(getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)),
-            backoff_policy=backoff_policy,
+            backoff_generator=backoff_generator,
         )
 
         # some authenticators may want to override socket level timeout
@@ -206,13 +206,12 @@ class AuthByPlugin(ABC):
             del authenticator, service_name, account, user, password
 
         logger.debug("Default timeout handler invoked for authenticator")
-        if not self._retry_ctx.should_retry():
+        if not self._retry_ctx.should_retry:
             error = OperationalError(
                 msg=f"Could not connect to Snowflake backend after {self._retry_ctx.current_retry_count + 1} attempt(s)."
                 "Aborting",
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
             )
-            self._retry_ctx.reset()
             raise error
         else:
             logger.debug(

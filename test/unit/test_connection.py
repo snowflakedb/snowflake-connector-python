@@ -17,7 +17,7 @@ import snowflake.connector
 from snowflake.connector.errors import Error, OperationalError
 
 from ..randomize import random_string
-from .mock_utils import mock_request_with_action
+from .mock_utils import mock_request_with_action, zero_backoff
 
 try:
     from snowflake.connector.auth import (
@@ -40,12 +40,6 @@ except ImportError:
     class AuthByUsrPwdMfa(AuthByDefault):
         def __init__(self, password: str, mfa_token: str) -> None:
             pass
-
-
-try:
-    from snowflake.connector.time_util import LinearBackoff
-except ImportError:
-    LinearBackoff = MagicMock
 
 
 def fake_connector(**kwargs) -> snowflake.connector.SnowflakeConnection:
@@ -331,7 +325,6 @@ def test_handle_timeout(mockSessionRequest, next_action):
 
     with pytest.raises(OperationalError):
         # no backoff for testing
-        zero_backoff = LinearBackoff(cap=0)
         _ = fake_connector(
             login_timeout=7,
             backoff_policy=zero_backoff,

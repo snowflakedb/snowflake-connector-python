@@ -822,14 +822,13 @@ class SnowflakeRestful:
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
         with self._use_requests_session(full_url) as session:
-            timeout = (
-                timeout if timeout is not None else self._connection.request_timeout
-            )
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,
                 _include_retry_reason=include_retry_reason,
-                timeout=timeout,
-                backoff_policy=self._connection.backoff_policy,
+                timeout=timeout
+                if timeout is not None
+                else self._connection.request_timeout,
+                backoff_generator=self._connection.backoff_generator,
             )
 
             retry_ctx.set_start_time()
@@ -868,9 +867,7 @@ class SnowflakeRestful:
         conn = self._connection
         logger.debug(
             "remaining request timeout: %s ms, retry cnt: %s",
-            retry_ctx.remaining_time_millis(retry_ctx.timeout)
-            if retry_ctx.timeout is not None
-            else "N/A",
+            retry_ctx.remaining_time_millis if retry_ctx.timeout is not None else "N/A",
             retry_ctx.current_retry_count + 1,
         )
 
@@ -927,7 +924,7 @@ class SnowflakeRestful:
                     timed_out=False,
                 )
                 return {}  # required for tests
-            if not retry_ctx.should_retry():
+            if not retry_ctx.should_retry:
                 self.log_and_handle_http_error_with_cause(
                     e,
                     full_url,

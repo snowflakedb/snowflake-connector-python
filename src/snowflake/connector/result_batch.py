@@ -14,6 +14,7 @@ from logging import getLogger
 from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
 
 from .arrow_context import ArrowConverterContext
+from .backoff_policies import exponential_backoff
 from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import FIELD_TYPES, IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
@@ -28,7 +29,7 @@ from .network import (
 from .options import installed_pandas
 from .options import pyarrow as pa
 from .secret_detector import SecretDetector
-from .time_util import DecorrelateJitterBackoff, TimerContextManager
+from .time_util import TimerContextManager
 from .vendored import requests
 
 logger = getLogger(__name__)
@@ -332,7 +333,11 @@ class ResultBatch(abc.ABC):
     ) -> Response:
         """Downloads the data that the ``ResultBatch`` is pointing at."""
         sleep_timer = 1
-        backoff = DecorrelateJitterBackoff(1, 16)
+        backoff = (
+            connection.backoff_generator
+            if connection is not None
+            else exponential_backoff()
+        )
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:
                 with TimerContextManager() as download_metric:
@@ -378,7 +383,7 @@ class ResultBatch(abc.ABC):
                     # Re-throw if we failed on the last retry
                     e = e.args[0] if isinstance(e, RetryRequest) else e
                     raise e
-                sleep_timer = backoff.next_sleep(1, sleep_timer)
+                sleep_timer = next(backoff)
                 logger.exception(
                     f"Failed to fetch the large result set batch "
                     f"{self.id} for the {retry + 1} th time, "

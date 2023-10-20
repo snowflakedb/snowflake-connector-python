@@ -44,7 +44,7 @@ from snowflake.connector.network import (
     SnowflakeRestful,
 )
 
-from .mock_utils import mock_connection, mock_request_with_action
+from .mock_utils import mock_connection, mock_request_with_action, zero_backoff
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
@@ -53,11 +53,6 @@ try:
 except ImportError:  # pragma: no cover
     import requests
     import urllib3
-
-try:
-    from snowflake.connector.time_util import LinearBackoff
-except ImportError:
-    LinearBackoff = MagicMock
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -455,8 +450,7 @@ def test_login_request_timeout(mockSessionRequest, next_action):
 def test_retry_request_timeout(mockSessionRequest, next_action_result):
     next_action, next_result = next_action_result
     mockSessionRequest.side_effect = mock_request_with_action(next_action, 5)
-
-    zero_backoff = LinearBackoff(cap=0)
+    # no backoff for testing
     connection = mock_connection(
         request_timeout=13,
         backoff_policy=zero_backoff,

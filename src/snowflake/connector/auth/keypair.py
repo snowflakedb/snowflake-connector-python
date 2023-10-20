@@ -180,9 +180,6 @@ class AuthByKeyPair(AuthByPlugin):
     def assertion_content(self) -> str:
         return self._jwt_token
 
-    def should_retry(self, count: int) -> bool:
-        return count < self._jwt_retry_attempts
-
     def handle_timeout(
         self,
         *,
