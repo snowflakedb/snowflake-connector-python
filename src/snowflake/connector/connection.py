@@ -189,9 +189,9 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "client_store_temporary_credential": (False, bool),
     "client_request_mfa_token": (False, bool),
     "use_openssl_only": (
-        False,
+        True,
         bool,
-    ),  # only use openssl instead of python only crypto modules
+    ),  # ignored - python only crypto modules are no longer used
     # whether to convert Arrow number values to decimal instead of doubles
     "arrow_number_to_decimal": (False, bool),
     "enable_stage_s3_privatelink_for_us_east_1": (
@@ -287,7 +287,6 @@ class SnowflakeConnection:
         validate_default_parameters: Validate database, schema, role and warehouse used on Snowflake.
         is_pyformat: Whether the current argument binding is pyformat or format.
         consent_cache_id_token: Consented cache ID token.
-        use_openssl_only: Use OpenSSL instead of pure Python libraries for signature verification and encryption.
         enable_stage_s3_privatelink_for_us_east_1: when true, clients use regional s3 url to upload files.
         enable_connection_diag: when true, clients will generate a connectivity diagnostic report.
         connection_diag_log_path: path to location to create diag report with enable_connection_diag.
@@ -574,7 +573,8 @@ class SnowflakeConnection:
 
     @property
     def use_openssl_only(self) -> bool:
-        return self._use_openssl_only
+        # Deprecated, kept for backwards compatibility
+        return True
 
     @property
     def arrow_number_to_decimal(self):
@@ -1116,19 +1116,6 @@ class SnowflakeConnection:
                 "CERTIFICATE REVOCATION STATUS WILL NOT BE "
                 "CHECKED."
             )
-
-        if "SF_USE_OPENSSL_ONLY" not in os.environ:
-            logger.info("Setting use_openssl_only mode to %s", self.use_openssl_only)
-            os.environ["SF_USE_OPENSSL_ONLY"] = str(self.use_openssl_only)
-        elif (
-            os.environ.get("SF_USE_OPENSSL_ONLY", "False") == "True"
-        ) != self.use_openssl_only:
-            logger.warning(
-                "Mode use_openssl_only is already set to: %s, ignoring set request to: %s",
-                os.environ["SF_USE_OPENSSL_ONLY"],
-                self.use_openssl_only,
-            )
-            self._use_openssl_only = os.environ["SF_USE_OPENSSL_ONLY"] == "True"
 
     def cmd_query(
         self,

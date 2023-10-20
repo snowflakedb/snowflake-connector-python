@@ -8,9 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.3.2(TBD)
+- v3.4.0(TBD)
 
   - Added support for `use_logical_type` in `write_pandas`.
+  - Removed dependencies on pycryptodomex and oscrypto. All connections now go through OpenSSL via the cryptography library, which was already a dependency.
 
 - v3.3.1(October 16,2023)
 
