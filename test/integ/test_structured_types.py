@@ -2,10 +2,13 @@
 #
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
-
 from __future__ import annotations
 
 from textwrap import dedent
+
+import pytest
+
+pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 
 
 def test_structured_array_types(conn_cnx):
