@@ -12,7 +12,7 @@ def test_structured_array_types(conn_cnx):
     with conn_cnx() as cnx:
         cur = cnx.cursor()
         sql = dedent(
-            """select 
+            """select
             [1, 2]::array(int),
             [1.1::float, 1.2::float]::array(float),
             ['a', 'b']::array(string not null),
@@ -56,7 +56,6 @@ def test_structured_map_types(conn_cnx):
             {'a': {'c': 1}}::map(string, object)
             """
         )
-        cur.execute(sql)
         cur.execute(sql)
         for metadata in cur.description:
             assert metadata.type_code == 9  # same as a regular object
