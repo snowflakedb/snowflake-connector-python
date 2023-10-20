@@ -2,13 +2,13 @@
 // Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 //
 
+#include <memory>
+#include <string>
+#include <vector>
 #include "CArrowTableIterator.hpp"
 #include "SnowflakeType.hpp"
 #include "Python/Common.hpp"
 #include "Util/time.hpp"
-#include <memory>
-#include <string>
-#include <vector>
 
 namespace sf
 {
@@ -218,7 +218,7 @@ double CArrowTableIterator::convertScaledFixedNumberToDouble(
   if (scale < 9)
   {
     // simply use divide to convert decimal value in double
-    return (double) originalValue / sf::internal::powTenSB4[scale];
+    return static_cast<double>(originalValue / sf::internal::powTenSB4[scale]);
   }
   else
   {

@@ -18,6 +18,6 @@ public:
   // The caller is responsible for calling DECREF on the returned pointer
   virtual PyObject* toPyObject(int64_t rowIndex) const = 0;
 };
-}
+} // namespace sf
 
 #endif  // PC_ICOLUMNCONVERTER_HPP

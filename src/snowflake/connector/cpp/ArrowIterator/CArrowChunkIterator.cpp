@@ -2,6 +2,9 @@
 // Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 //
 
+#include <memory>
+#include <string>
+#include <vector>
 #include "CArrowChunkIterator.hpp"
 #include "SnowflakeType.hpp"
 #include "IntConverter.hpp"
@@ -13,13 +16,9 @@
 #include "DateConverter.hpp"
 #include "TimeStampConverter.hpp"
 #include "TimeConverter.hpp"
-#include <memory>
-#include <string>
-#include <vector>
 
 #define SF_CHECK_PYTHON_ERR() \
-  if (py::checkPyError())\
-  {\
+  if (py::checkPyError()) { \
     PyObject *type, * val, *traceback;\
     PyErr_Fetch(&type, &val, &traceback);\
     PyErr_Clear();\
@@ -131,31 +130,22 @@ void CArrowChunkIterator::initColumnConverters()
 #define _SF_INIT_FIXED_CONVERTER(ARROW_TYPE, ARROW_ARRAY_TYPE) \
           case arrow::Type::type::ARROW_TYPE: \
           {\
-            if (scale > 0)\
-            {\
-              if (m_useNumpy)\
-              {\
+            if (scale > 0) { 
+              if (m_useNumpy) { \
                 m_currentBatchConverters.push_back(std::make_shared<\
                     sf::NumpyDecimalConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
                     columnArray, precision, scale, m_context));\
-              }\
-              else\
-              {\
+              } else { \
                 m_currentBatchConverters.push_back(std::make_shared<\
                     sf::DecimalFromIntConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
                     columnArray, precision, scale));\
               }\
-            }\
-            else\
-            {\
-              if (m_useNumpy)\
-              {\
+            } else { \
+              if (m_useNumpy) { \
                 m_currentBatchConverters.push_back(\
                     std::make_shared<sf::NumpyIntConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
                     columnArray, m_context));\
-              }\
-              else\
-              {\
+              } else { \
                 m_currentBatchConverters.push_back(\
                     std::make_shared<sf::IntConverter<arrow::ARROW_ARRAY_TYPE##Array>>(\
                     columnArray));\

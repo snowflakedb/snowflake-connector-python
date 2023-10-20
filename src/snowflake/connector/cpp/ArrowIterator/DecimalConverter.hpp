@@ -5,9 +5,9 @@
 #ifndef PC_DECIMALCONVERTER_HPP
 #define PC_DECIMALCONVERTER_HPP
 
+#include <memory>
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
-#include <memory>
 
 namespace sf
 {

@@ -33,9 +33,9 @@ constexpr int powTenSB4[]{1,      10,      100,      1000,      10000,
 
 /** if we use c++17 some day in the future, we can use 'constexpr
  * std::string_view sv = "hello, world";' to replace this */
-const std::string FIELD_NAME_EPOCH = "epoch";
-const std::string FIELD_NAME_TIME_ZONE = "timezone";
-const std::string FIELD_NAME_FRACTION = "fraction";
+const char FIELD_NAME_EPOCH[] = "epoch";
+const char FIELD_NAME_TIME_ZONE[] = "timezone";
+const char FIELD_NAME_FRACTION[] = "fraction";
 
 /** pow10Int means the return value should be int type. So user needs to take
  * care not to cause int overflow by a huge parameter n.

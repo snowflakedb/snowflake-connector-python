@@ -2,9 +2,9 @@
 // Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 //
 
+#include <cstdio>
 #include "logging.hpp"
 #include "Python/Helpers.hpp"
-#include <cstdio>
 
 namespace sf
 {
@@ -108,4 +108,4 @@ void Logger::error(const char *path_name, const char *func_name, int line_num, c
   Logger::log(ERROR, path_name, func_name, line_num, msg);
 }
 
-}
+} // namespace sf

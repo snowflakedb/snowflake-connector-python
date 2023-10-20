@@ -5,8 +5,8 @@
 #ifndef PC_LOGGING_HPP
 #define PC_LOGGING_HPP
 
-#include "Python/Common.hpp"
 #include <string>
+#include "Python/Common.hpp"
 
 namespace sf
 {
