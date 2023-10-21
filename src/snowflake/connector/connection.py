@@ -110,7 +110,7 @@ from .util_text import construct_hostname, parse_account, split_statements
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
-DEFAULT_BACKOFF_POLICY = exponential_backoff
+DEFAULT_BACKOFF_POLICY = exponential_backoff()
 
 
 def DefaultConverterClass() -> type:

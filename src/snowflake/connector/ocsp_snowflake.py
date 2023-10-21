@@ -397,7 +397,7 @@ class OCSPServer:
             with generic_requests.Session() as session:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
-                backoff = exponential_backoff()
+                backoff = exponential_backoff()()
                 for _ in range(max_retry):
                     response = session.get(
                         url,
@@ -1466,7 +1466,7 @@ class SnowflakeOCSP:
         with generic_requests.Session() as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
-            backoff = exponential_backoff()
+            backoff = exponential_backoff()()
             for _ in range(max_retry):
                 try:
                     response = session.request(

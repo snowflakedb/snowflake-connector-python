@@ -336,7 +336,7 @@ class ResultBatch(abc.ABC):
         backoff = (
             connection.backoff_generator
             if connection is not None
-            else exponential_backoff()
+            else exponential_backoff()()
         )
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:
