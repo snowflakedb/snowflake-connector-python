@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '* */12 * * *'
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 concurrency: snyk-issue
 
 jobs:
