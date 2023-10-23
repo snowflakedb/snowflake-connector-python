@@ -20,7 +20,9 @@ from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import GET_CWD, IS_WINDOWS
+from .compute_chunk_size import chunk_size_calculator
 from .constants import (
+    AZURE_CHUNK_SIZE,
     AZURE_FS,
     CMD_TYPE_DOWNLOAD,
     CMD_TYPE_UPLOAD,
@@ -630,9 +632,6 @@ class SnowflakeFileTransferAgent:
     def _create_file_transfer_client(
         self, meta: SnowflakeFileMeta
     ) -> SnowflakeStorageClient:
-        from .compute_chunk_size import chunk_size_calculator
-        from .constants import AZURE_CHUNK_SIZE
-
         s3_chunk_size = chunk_size_calculator(meta.src_file_size)
 
         if self._stage_location_type == LOCAL_FS:
