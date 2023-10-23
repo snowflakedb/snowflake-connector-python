@@ -7,63 +7,46 @@ from __future__ import annotations
 import logging
 import math
 
+from .constants import (
+    S3_DEFAULT_CHUNK_SIZE,
+    S3_MAX_OBJECT_SIZE,
+    S3_MAX_PARTS,
+    S3_MIN_PART_SIZE,
+)
+from .errors import Error
+
 logger = logging.getLogger(__name__)
 
-# Amazon S3 multipart upload limits
-# https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html
-CURRENT_CHUNK_SIZE = 8 * 1024 ** 2
-MAX_OBJECT_SIZE = 5 * 1024 ** 4
-MAX_PART_SIZE = 5 * 1024 ** 3
-MIN_PART_SIZE = 5 * 1024 ** 2
-MAX_PARTS = 10000
 
+def chunk_size_calculator(file_size: int) -> int:
+    default_chunk_size = S3_DEFAULT_CHUNK_SIZE
+    max_object_size = S3_MAX_OBJECT_SIZE
+    min_part_size = S3_MIN_PART_SIZE
+    max_parts = S3_MAX_PARTS
+    calculated_chunk_size = 0
 
-class ChunkSizeCalculator:
-    def __init__(
-        self,
-        current_chunk_size: int = CURRENT_CHUNK_SIZE,
-        max_object_size: int = MAX_OBJECT_SIZE,
-        max_part_size: int = MAX_PART_SIZE,
-        min_part_size: int = MIN_PART_SIZE,
-        max_parts: int = MAX_PARTS,
-    ) -> None:
-        self.current_chunk_size = current_chunk_size
-        self.max_object_size = max_object_size
-        self.max_part_size = max_part_size
-        self.min_part_size = min_part_size
-        self.max_parts = max_parts
+    # check if we don't exceed the allowed S3 max file size 5 TiB
+    if file_size is not None and file_size > max_object_size:
+        num_parts = math.ceil(file_size / default_chunk_size)
 
-    def compute_chunk_size(self, file_size: int) -> int:
-        chunk_size = self.current_chunk_size
-        # check if we don"t exceed the allowed max file size 5 TiB
-        if file_size is not None and file_size < self.max_object_size:
-            chunk_size = self._check_max_parts(chunk_size, file_size)
-        else:
-            error_message = f"File size {file_size} exceeds the maximum file size {self.max_object_size}."
-            logger.error(error_message)
-            raise Exception(error_message)
-        return self._check_min_chunk_size(chunk_size)
+        if num_parts > max_parts:
+            calculated_chunk_size = math.ceil(file_size / max_parts)
 
-    # check lower chunk size limit 5 MiB
-    def _check_min_chunk_size(self, current_chunk_size: int) -> int:
-        chunk_size = current_chunk_size
-        if chunk_size < self.min_part_size:
+        if calculated_chunk_size < min_part_size:
             logger.debug(
-                f"Setting chunksize to {self.current_chunk_size} instead of the default {current_chunk_size}."
+                f"Setting chunksize to {min_part_size} instead of the default {default_chunk_size}."
             )
-            return self.min_part_size
-        else:
-            return current_chunk_size
+            calculated_chunk_size = min_part_size
 
-    # check max chunks number 10k
-    def _check_max_parts(self, current_chunk_size: int, file_size: int) -> int:
-        chunk_size = current_chunk_size
-        num_parts = int(math.ceil(file_size / float(current_chunk_size)))
-        if num_parts > self.max_parts:
-            chunk_size = int(math.ceil(file_size / float(self.max_parts)))
-
-        if chunk_size != current_chunk_size:
+        if calculated_chunk_size != default_chunk_size:
             logger.debug(
-                f"Setting chunksize to {chunk_size} instead of the default {current_chunk_size}."
+                f"Setting chunksize to {calculated_chunk_size} instead of the default {default_chunk_size}."
             )
-        return chunk_size
+    else:
+        error_message = (
+            f"File size {file_size} exceeds the maximum file size {max_object_size}."
+        )
+        logger.error(error_message)
+        raise Error(error_message)
+
+    return calculated_chunk_size
