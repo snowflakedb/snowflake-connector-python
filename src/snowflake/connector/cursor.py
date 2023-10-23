@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import collections
 import logging
+import os
 import re
 import signal
 import sys
@@ -1510,14 +1511,24 @@ class DictCursor(SnowflakeCursor):
 def __getattr__(name):
     if name == "NanoarrowUsage":
         warnings.warn(
-            "NanoarrowUsage has been deprecated and will be removed in the future, please stop using the class.",
+            "snowflake.connector.cursor.NanoarrowUsage has been deprecated and will be removed in the future, "
+            "please stop using the class.",
             DeprecationWarning,
             stacklevel=2,
         )
         return _NanoarrowUsage
     if name == "NANOARROW_USAGE":
+        if "NANOARROW_USAGE" in os.environ:
+            warnings.warn(
+                "Environment variable NANOARROW_USAGE has been deprecated and will be removed in the future, "
+                "please stop setting the variable.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         warnings.warn(
-            "NANOARROW_USAGE has been deprecated and will be removed in the future, please stop using the variable.",
+            "snowflake.connector.cursor.NANOARROW_USAGE has been deprecated and will be removed in the future, "
+            "please stop using the variable.",
             DeprecationWarning,
             stacklevel=2,
         )
