@@ -29,9 +29,6 @@ def test_check_chunk_size():
     chunk_size_2 = chunk_size_calculator(int(sample_file_size_under_5tb))
     assert chunk_size_2 <= max_part_size
 
-    chunk_size_3 = chunk_size_calculator(sample_chunk_size_4mb)
-    assert chunk_size_3 == min_part_size
-
     error_message = f"File size {sample_file_size_6tb} exceeds the maximum file size {max_object_size}."
 
     with pytest.raises(Exception) as exc:

@@ -26,7 +26,7 @@ def chunk_size_calculator(file_size: int) -> int:
     calculated_chunk_size = 0
 
     # check if we don't exceed the allowed S3 max file size 5 TiB
-    if file_size is not None and file_size > max_object_size:
+    if file_size is not None and file_size < max_object_size:
         num_parts = math.ceil(file_size / default_chunk_size)
 
         if num_parts > max_parts:
