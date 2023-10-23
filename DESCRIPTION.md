@@ -8,6 +8,17 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+
+- v3.5.0(TBD)
+
+  - Version 3.5.0 is the snowflake-connector-python purely built upon apache arrow-nanoarrow project.
+    - Reduced the wheel size to ~1MB and installation size to ~5MB.
+    - Removed a hard dependency on a specific version of pyarrow.
+  - Deprecated the usage of the following class/variable/environment variable for the sake of pure nanoarrow converter:
+    - Deprecated class `snowflake.connector.cursor.NanoarrowUsage`.
+    - Deprecated environment variable `NANOARROW_USAGE`.
+    - Deprecated module variable `snowflake.connector.cursor.NANOARROW_USAGE`.
+
 - v3.4.0(TBD)
 
   - Added support for `use_logical_type` in `write_pandas`.
