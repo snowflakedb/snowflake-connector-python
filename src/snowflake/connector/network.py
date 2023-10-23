@@ -945,7 +945,7 @@ class SnowflakeRestful:
                 retry_ctx.current_retry_count + 1,
                 retry_ctx.current_sleep_time,
             )
-            time.sleep(retry_ctx.current_sleep_time)
+            time.sleep(float(retry_ctx.current_sleep_time))
             retry_ctx.increment()
 
             reason = getattr(cause, "errno", 0)

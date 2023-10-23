@@ -218,5 +218,5 @@ class AuthByPlugin(ABC):
                 f"Hit connection timeout, attempt number {self._retry_ctx.current_retry_count + 1}."
                 " Will retry in a bit..."
             )
-            time.sleep(self._retry_ctx.current_sleep_time)
+            time.sleep(float(self._retry_ctx.current_sleep_time))
             self._retry_ctx.increment()
