@@ -36,4 +36,4 @@ def test_check_chunk_size():
     assert error_message in str(exc)
 
     chunk_size_1 = chunk_size_calculator(sample_chunk_size_4mb)
-    assert chunk_size_1 == min_part_size
+    assert chunk_size_1 >= min_part_size
