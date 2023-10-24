@@ -14,7 +14,12 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import snowflake.connector
-from snowflake.connector.errors import Error, OperationalError
+from snowflake.connector.errors import (
+    Error,
+    ForbiddenError,
+    OperationalError,
+    ProgrammingError,
+)
 
 from ..randomize import random_string
 from .mock_utils import mock_request_with_action, zero_backoff
@@ -316,6 +321,20 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             match=f"Default connection with name '{connection_name}' cannot be found, known ones are \\['con_a'\\]",
         ):
             snowflake.connector.connect(connections_file_path=connections_file)
+
+
+def test_invalid_backoff_policy():
+    with pytest.raises(ProgrammingError):
+        # zero_backoff() is a generator, not a generator function
+        _ = fake_connector(backoff_policy=zero_backoff())
+
+    with pytest.raises(ProgrammingError):
+        # passing a non-generator function should not work
+        _ = fake_connector(backoff_policy=lambda: None)
+
+    with pytest.raises(ForbiddenError):
+        # passing a generator function should make it pass config and error during connection
+        _ = fake_connector(backoff_policy=zero_backoff)
 
 
 @pytest.mark.parametrize("next_action", ("RETRY", "ERROR"))

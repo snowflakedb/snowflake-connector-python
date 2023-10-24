@@ -63,7 +63,8 @@ class AuthByPlugin(ABC):
         self,
         timeout: int | None = None,
         max_retry_attempts: int | None = None,
-        socket_timeout_override: int | None = None,
+        socket_timeout: int
+        | None = None,  # if specified, this will take precedence over all other socket timeouts
         backoff_generator: Iterator | None = None,
     ) -> None:
         self.consent_cache_id_token = False
@@ -81,15 +82,13 @@ class AuthByPlugin(ABC):
 
         # some authenticators may want to override socket level timeout
         # for example, AuthByKeyPair will do this to ensure JWT tokens are refreshed in time
-        self._socket_timeout_override = socket_timeout_override
+        # if not None, this will override socket_timeout specified in connection
+        self._socket_timeout = socket_timeout
 
     @property
-    def timeout(self) -> int | None:
+    def timeout(self) -> int:
+        """The timeout of _retry_ctx is guaranteed not to be None during AuthByPlugin initialization"""
         return self._retry_ctx.timeout
-
-    @property
-    def socket_timeout_override(self) -> int | None:
-        return self._socket_timeout_override
 
     @property
     @abstractmethod
@@ -186,7 +185,6 @@ class AuthByPlugin(ABC):
         account: str,
         user: str,
         password: str,
-        delete_params: bool = True,
         **kwargs: Any,
     ) -> None:
         """Default timeout handler.
@@ -195,14 +193,11 @@ class AuthByPlugin(ABC):
         hasn't implemented one. By default we retry on timeouts and use
         jitter to deduce the time to sleep before retrying. The sleep
         time ranges between 1 and 16 seconds.
-
-        Note that the delete_params parameter is introduced because some
-        authenticators may not want to delete the parameters to this function.
-        Currently, the only authenticator where this is the case is
-        AuthByKeyPair.
         """
 
-        if delete_params:
+        # Some authenticators may not want to delete the parameters to this function
+        # Currently, the only authenticator where this is the case is AuthByKeyPair
+        if kwargs.pop("delete_params", True):
             del authenticator, service_name, account, user, password
 
         logger.debug("Default timeout handler invoked for authenticator")

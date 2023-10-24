@@ -64,7 +64,7 @@ class AuthByIdToken(AuthByPlugin):
             host=self._host,
             port=self._port,
             timeout=conn.login_timeout,
-            backoff_generator=conn.backoff_generator,
+            backoff_generator=conn._backoff_generator,
         )
         conn._authenticate(conn.auth_class)
         conn._auth_class.reset_secrets()

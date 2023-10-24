@@ -827,8 +827,8 @@ class SnowflakeRestful:
                 _include_retry_reason=include_retry_reason,
                 timeout=timeout
                 if timeout is not None
-                else self._connection.request_timeout,
-                backoff_generator=self._connection.backoff_generator,
+                else self._connection.network_timeout,
+                backoff_generator=self._connection._backoff_generator,
             )
 
             retry_ctx.set_start_time()

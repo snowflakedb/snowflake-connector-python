@@ -29,15 +29,15 @@ except ImportError:
 
 def mock_connection(
     login_timeout=DEFAULT_AUTH_CLASS_TIMEOUT,
-    request_timeout=None,
+    network_timeout=None,
     socket_timeout=None,
     backoff_policy=DEFAULT_BACKOFF_POLICY,
 ):
     return MagicMock(
         _login_timeout=login_timeout,
         login_timeout=login_timeout,
-        _request_timeout=request_timeout,
-        request_timeout=request_timeout,
+        _network_timeout=network_timeout,
+        network_timeout=network_timeout,
         _socket_timeout=socket_timeout,
         socket_timeout=socket_timeout,
         _backoff_policy=backoff_policy,

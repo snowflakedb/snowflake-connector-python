@@ -394,7 +394,7 @@ You can close this window now and go back where you started from.
             conn._rest._connection._internal_application_version,
             conn._rest._connection._ocsp_mode(),
             conn._rest._connection._login_timeout,
-            conn._rest._connection._request_timeout,
+            conn._rest._connection._network_timeout,
         )
 
         body["data"]["AUTHENTICATOR"] = authenticator

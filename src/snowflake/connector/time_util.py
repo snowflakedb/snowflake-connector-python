@@ -19,8 +19,6 @@ except ImportError:
 
 DEFAULT_MASTER_VALIDITY_IN_SECONDS = 4 * 60 * 60  # seconds
 
-INITIAL_TIMEOUT_SLEEP_TIME = 1
-
 
 class HeartBeatTimer(Timer):
     """A thread which executes a function every client_session_keep_alive_heartbeat_frequency seconds."""

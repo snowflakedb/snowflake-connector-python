@@ -289,6 +289,5 @@ def test_authbyplugin_abc_api():
         "('account', <Parameter \"account: 'str'\">), "
         "('user', <Parameter \"user: 'str'\">), "
         "('password', <Parameter \"password: 'str'\">), "
-        "('delete_params', <Parameter \"delete_params: 'bool' = True\">), "
         "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
     )

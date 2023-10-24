@@ -128,7 +128,7 @@ class Auth:
         internal_application_version,
         ocsp_mode,
         login_timeout: int | None = None,
-        request_timeout: int | None = None,
+        network_timeout: int | None = None,
         socket_timeout: int | None = None,
     ):
         return {
@@ -148,7 +148,7 @@ class Auth:
                     "OCSP_MODE": ocsp_mode.name,
                     "TRACING": logger.getEffectiveLevel(),
                     "LOGIN_TIMEOUT": login_timeout,
-                    "REQUEST_TIMEOUT": request_timeout,
+                    "NETWORK_TIMEOUT": network_timeout,
                     "SOCKET_TIMEOUT": socket_timeout,
                 },
             },
@@ -199,7 +199,7 @@ class Auth:
             self._rest._connection._internal_application_version,
             self._rest._connection._ocsp_mode(),
             self._rest._connection._login_timeout,
-            self._rest._connection._request_timeout,
+            self._rest._connection._network_timeout,
             self._rest._connection._socket_timeout,
         )
 
@@ -251,7 +251,7 @@ class Auth:
                 url,
                 headers,
                 json.dumps(body),
-                socket_timeout=auth_instance.socket_timeout_override,
+                socket_timeout=auth_instance._socket_timeout,
             )
         except ForbiddenError as err:
             # HTTP 403
@@ -295,7 +295,7 @@ class Auth:
                     url,
                     headers,
                     body,
-                    socket_timeout=auth_instance.socket_timeout_override,
+                    socket_timeout=auth_instance._socket_timeout,
                 )
 
             # send new request to wait until MFA is approved
@@ -309,7 +309,7 @@ class Auth:
                 while not self.ret or self.ret.get("message") == "Timeout":
                     next(c)
             else:
-                # no need to set a timeout on join as _post_request will terminate on timeout
+                # _post_request should already terminate on timeout, so this is just a safeguard
                 t.join(timeout=timeout)
 
             ret = self.ret
@@ -325,7 +325,7 @@ class Auth:
                     url,
                     headers,
                     json.dumps(body),
-                    socket_timeout=auth_instance.socket_timeout_override,
+                    socket_timeout=auth_instance._socket_timeout,
                 )
             elif not ret or not ret["data"] or not ret["data"].get("token"):
                 # not token is returned.
@@ -365,7 +365,7 @@ class Auth:
                     url,
                     headers,
                     json.dumps(body),
-                    socket_timeout=auth_instance.socket_timeout_override,
+                    socket_timeout=auth_instance._socket_timeout,
                 )
 
         logger.debug("completed authentication")

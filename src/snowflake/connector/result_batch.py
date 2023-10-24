@@ -334,7 +334,7 @@ class ResultBatch(abc.ABC):
         """Downloads the data that the ``ResultBatch`` is pointing at."""
         sleep_timer = 1
         backoff = (
-            connection.backoff_generator
+            connection._backoff_generator
             if connection is not None
             else exponential_backoff()()
         )
