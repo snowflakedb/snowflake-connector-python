@@ -12,13 +12,13 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
   - Added support for `use_logical_type` in `write_pandas`.
   - Removed dependencies on pycryptodomex and oscrypto. All connections now go through OpenSSL via the cryptography library, which was already a dependency.
+  - Fixed issue with ingesting files over 80 GB to S3.
 
 - v3.3.1(October 16,2023)
 
   - Added for non-Windows platforms command suggestions (chown/chmod) for insufficient file permissions of config files.
   - Fixed issue with connection diagnostics failing to complete certificate checks.
   - Fixed issue that arrow iterator causes `ImportError` when the c extensions are not compiled.
-  - Fixed issue with ingesting files over 80 GB.
 
 - v3.3.0(October 10,2023)
 
