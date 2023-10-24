@@ -32,16 +32,20 @@ def chunk_size_calculator(file_size: int) -> int:
         if num_parts > max_parts:
             calculated_chunk_size = math.ceil(file_size / max_parts)
 
-        if calculated_chunk_size < min_part_size:
-            logger.debug(
-                f"Setting chunksize to {min_part_size} instead of the default {default_chunk_size}."
-            )
-            calculated_chunk_size = min_part_size
+            if calculated_chunk_size < min_part_size:
+                logger.debug(
+                    f"Setting chunksize to {min_part_size} instead of the default {default_chunk_size}."
+                )
+                calculated_chunk_size = min_part_size
 
-        if calculated_chunk_size != default_chunk_size:
-            logger.debug(
-                f"Setting chunksize to {calculated_chunk_size} instead of the default {default_chunk_size}."
-            )
+            if calculated_chunk_size != default_chunk_size:
+                logger.debug(
+                    f"Setting chunksize to {calculated_chunk_size} instead of the default {default_chunk_size}."
+                )
+
+        else:
+            calculated_chunk_size = default_chunk_size
+
     else:
         error_message = (
             f"File size {file_size} exceeds the maximum file size {max_object_size}."
