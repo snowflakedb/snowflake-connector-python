@@ -60,17 +60,19 @@ class AuthByKeyPair(AuthByPlugin):
                     "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
                 )
             ),
-            socket_timeout=int(
-                timedelta(
-                    seconds=int(
-                        os.getenv(
-                            "JWT_CNXN_WAIT_TIME",
-                            AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME,
-                        )
-                    )
-                ).total_seconds()
-            ),
             **kwargs,
+        )
+
+        # set internal socket timeout override
+        self._socket_timeout = int(
+            timedelta(
+                seconds=int(
+                    os.getenv(
+                        "JWT_CNXN_WAIT_TIME",
+                        AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME,
+                    )
+                )
+            ).total_seconds()
         )
 
         self._private_key: bytes | RSAPrivateKey | None = private_key

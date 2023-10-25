@@ -62,28 +62,25 @@ class AuthByPlugin(ABC):
     def __init__(
         self,
         timeout: int | None = None,
-        max_retry_attempts: int | None = None,
-        socket_timeout: int
-        | None = None,  # if specified, this will take precedence over all other socket timeouts
         backoff_generator: Iterator | None = None,
+        **kwargs,
     ) -> None:
         self.consent_cache_id_token = False
 
-        if timeout is None:
-            timeout = DEFAULT_AUTH_CLASS_TIMEOUT
-
+        max_retry_attempts = kwargs.get(
+            "max_retry_attempts",
+            int(getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)),
+        )
         self._retry_ctx = TimeoutBackoffCtx(
-            timeout=timeout,
-            max_retry_attempts=max_retry_attempts
-            if max_retry_attempts is not None
-            else int(getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)),
+            timeout=timeout if timeout is not None else DEFAULT_AUTH_CLASS_TIMEOUT,
+            max_retry_attempts=max_retry_attempts,
             backoff_generator=backoff_generator,
         )
 
         # some authenticators may want to override socket level timeout
-        # for example, AuthByKeyPair will do this to ensure JWT tokens are refreshed in time
+        # for example, AuthByKeyPair will set this to ensure JWT tokens are refreshed in time
         # if not None, this will override socket_timeout specified in connection
-        self._socket_timeout = socket_timeout
+        self._socket_timeout = None
 
     @property
     def timeout(self) -> int:
