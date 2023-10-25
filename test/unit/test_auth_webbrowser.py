@@ -19,6 +19,8 @@ from snowflake.connector.network import (
     SnowflakeRestful,
 )
 
+from .mock_utils import mock_connection
+
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByWebBrowser
 except ImportError:
@@ -265,9 +267,7 @@ def _init_rest(ref_sso_url, ref_proof_key, success=True, message=None):
             },
         }
 
-    connection = MagicMock()
-    connection._login_timeout = 120
-    connection._network_timeout = None
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=CLIENT_NAME)

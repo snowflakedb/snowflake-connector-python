@@ -127,8 +127,9 @@ class Auth:
         internal_application_name,
         internal_application_version,
         ocsp_mode,
-        login_timeout,
-        network_timeout=None,
+        login_timeout: int | None = None,
+        network_timeout: int | None = None,
+        socket_timeout: int | None = None,
     ):
         return {
             "data": {
@@ -148,6 +149,7 @@ class Auth:
                     "TRACING": logger.getEffectiveLevel(),
                     "LOGIN_TIMEOUT": login_timeout,
                     "NETWORK_TIMEOUT": network_timeout,
+                    "SOCKET_TIMEOUT": socket_timeout,
                 },
             },
         }
@@ -166,9 +168,13 @@ class Auth:
         mfa_callback: Callable[[], None] | None = None,
         password_callback: Callable[[], str] | None = None,
         session_parameters: dict[Any, Any] | None = None,
-        timeout: int = 120,
+        # max time waiting for MFA response, currently unused
+        timeout: int | None = None,
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
+
+        if timeout is None:
+            timeout = auth_instance.timeout
 
         if session_parameters is None:
             session_parameters = {}
@@ -194,6 +200,7 @@ class Auth:
             self._rest._connection._ocsp_mode(),
             self._rest._connection._login_timeout,
             self._rest._connection._network_timeout,
+            self._rest._connection._socket_timeout,
         )
 
         body = copy.deepcopy(body_template)
@@ -239,20 +246,12 @@ class Auth:
             {k: v for (k, v) in body["data"].items() if k != "PASSWORD"},
         )
 
-        # accommodate any authenticator specific timeout requirements here.
-        # login_timeout comes from user configuration.
-        # Between login timeout and auth specific
-        # timeout use whichever value is smaller
-        auth_timeout = min(self._rest._connection.login_timeout, auth_instance.timeout)
-        logger.debug(f"Timeout set to {auth_timeout}")
-
         try:
             ret = self._rest._post_request(
                 url,
                 headers,
                 json.dumps(body),
-                timeout=auth_timeout,
-                socket_timeout=auth_timeout,
+                socket_timeout=auth_instance._socket_timeout,
             )
         except ForbiddenError as err:
             # HTTP 403
@@ -293,7 +292,10 @@ class Auth:
             def post_request_wrapper(self, url, headers, body) -> None:
                 # get the MFA response
                 self.ret = self._rest._post_request(
-                    url, headers, body, timeout=self._rest._connection.login_timeout
+                    url,
+                    headers,
+                    body,
+                    socket_timeout=auth_instance._socket_timeout,
                 )
 
             # send new request to wait until MFA is approved
@@ -307,6 +309,7 @@ class Auth:
                 while not self.ret or self.ret.get("message") == "Timeout":
                     next(c)
             else:
+                # _post_request should already terminate on timeout, so this is just a safeguard
                 t.join(timeout=timeout)
 
             ret = self.ret
@@ -322,8 +325,7 @@ class Auth:
                     url,
                     headers,
                     json.dumps(body),
-                    timeout=self._rest._connection.login_timeout,
-                    socket_timeout=self._rest._connection.login_timeout,
+                    socket_timeout=auth_instance._socket_timeout,
                 )
             elif not ret or not ret["data"] or not ret["data"].get("token"):
                 # not token is returned.
@@ -363,8 +365,7 @@ class Auth:
                     url,
                     headers,
                     json.dumps(body),
-                    timeout=self._rest._connection.login_timeout,
-                    socket_timeout=self._rest._connection.login_timeout,
+                    socket_timeout=auth_instance._socket_timeout,
                 )
 
         logger.debug("completed authentication")

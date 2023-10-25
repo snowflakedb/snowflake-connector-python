@@ -31,15 +31,20 @@ from snowflake.connector.compat import (
 )
 from snowflake.connector.errors import (
     DatabaseError,
+    Error,
     ForbiddenError,
     InterfaceError,
+    OperationalError,
     OtherHTTPRetryableError,
+    ServiceUnavailableError,
 )
 from snowflake.connector.network import (
     STATUS_TO_EXCEPTION,
     RetryRequest,
     SnowflakeRestful,
 )
+
+from .mock_utils import mock_connection, mock_request_with_action, zero_backoff
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
@@ -74,8 +79,7 @@ def fake_connector() -> snowflake.connector.SnowflakeConnection:
 
 
 @patch("snowflake.connector.network.SnowflakeRestful._request_exec")
-@patch("snowflake.connector.network.DecorrelateJitterBackoff.next_sleep")
-def test_retry_reason(mockNextSleep, mockRequestExec):
+def test_retry_reason(mockRequestExec):
     url = ""
     cnt = Cnt()
 
@@ -116,7 +120,6 @@ def test_retry_reason(mockNextSleep, mockRequestExec):
         return success_result
 
     conn = fake_connector()
-    mockNextSleep.side_effect = lambda cnt, sleep: 0
     mockRequestExec.side_effect = mock_exec
 
     # ensure query requests don't have the retryReason if retryCount == 0
@@ -163,7 +166,13 @@ def test_retry_reason(mockNextSleep, mockRequestExec):
 
 
 def test_request_exec():
-    rest = SnowflakeRestful(host="testaccount.snowflakecomputing.com", port=443)
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
 
     default_parameters = {
         "method": "POST",
@@ -271,7 +280,7 @@ def test_request_exec():
 
 
 def test_fetch():
-    connection = MagicMock()
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
 
     rest = SnowflakeRestful(
@@ -336,7 +345,7 @@ def test_fetch():
 
 
 def test_secret_masking(caplog):
-    connection = MagicMock()
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
 
     rest = SnowflakeRestful(
@@ -373,7 +382,7 @@ def test_secret_masking(caplog):
 
 
 def test_retry_connection_reset_error(caplog):
-    connection = MagicMock()
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
 
     rest = SnowflakeRestful(
@@ -412,3 +421,52 @@ def test_retry_connection_reset_error(caplog):
             not in caplog.text
         )
         assert caplog.text.count("Starting new HTTPS connection") > 1
+
+
+@pytest.mark.parametrize("next_action", ("RETRY", "ERROR"))
+@patch("snowflake.connector.vendored.requests.sessions.Session.request")
+def test_login_request_timeout(mockSessionRequest, next_action):
+    """For login requests, all errors should be bubbled up as OperationalError for authenticator to handle"""
+    mockSessionRequest.side_effect = mock_request_with_action(next_action)
+
+    connection = mock_connection()
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com", port=443, connection=connection
+    )
+
+    with pytest.raises(OperationalError):
+        rest.fetch(
+            method="post",
+            full_url="https://testaccount.snowflakecomputing.com/session/v1/login-request",
+            headers=dict(),
+        )
+
+
+@pytest.mark.parametrize(
+    "next_action_result",
+    (("RETRY", ServiceUnavailableError), ("ERROR", OperationalError)),
+)
+@patch("snowflake.connector.vendored.requests.sessions.Session.request")
+def test_retry_request_timeout(mockSessionRequest, next_action_result):
+    next_action, next_result = next_action_result
+    mockSessionRequest.side_effect = mock_request_with_action(next_action, 5)
+    # no backoff for testing
+    connection = mock_connection(
+        network_timeout=13,
+        backoff_policy=zero_backoff,
+    )
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com", port=443, connection=connection
+    )
+
+    with pytest.raises(next_result):
+        rest.fetch(
+            method="post",
+            full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+            headers=dict(),
+        )
+
+    # 13 seconds should be enough for authenticator to attempt thrice
+    # however, loosen restrictions to avoid thread scheduling causing failure
+    assert 1 < mockSessionRequest.call_count < 5

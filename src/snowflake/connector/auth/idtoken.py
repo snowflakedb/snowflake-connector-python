@@ -36,9 +36,10 @@ class AuthByIdToken(AuthByPlugin):
         protocol: str | None,
         host: str | None,
         port: str | None,
+        **kwargs,
     ) -> None:
         """Initialized an instance with an IdToken."""
-        super().__init__()
+        super().__init__(**kwargs)
         self._id_token: str | None = id_token
         self._application = application
         self._protocol = protocol
@@ -62,6 +63,8 @@ class AuthByIdToken(AuthByPlugin):
             protocol=self._protocol,
             host=self._host,
             port=self._port,
+            timeout=conn.login_timeout,
+            backoff_generator=conn._backoff_generator,
         )
         conn._authenticate(conn.auth_class)
         conn._auth_class.reset_secrets()
