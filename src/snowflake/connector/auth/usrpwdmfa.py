@@ -31,9 +31,10 @@ class AuthByUsrPwdMfa(AuthByPlugin):
         self,
         password: str,
         mfa_token: str | None = None,
+        **kwargs,
     ) -> None:
         """Initializes and instance with a password and a mfa token."""
-        super().__init__()
+        super().__init__(**kwargs)
         self._password: str | None = password
         self._mfa_token: str | None = mfa_token
 

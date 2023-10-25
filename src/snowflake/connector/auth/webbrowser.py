@@ -60,8 +60,9 @@ class AuthByWebBrowser(AuthByPlugin):
         protocol: str | None = None,
         host: str | None = None,
         port: str | None = None,
+        **kwargs,
     ) -> None:
-        super().__init__()
+        super().__init__(**kwargs)
         self.consent_cache_id_token = True
         self._token: str | None = None
         self._application = application

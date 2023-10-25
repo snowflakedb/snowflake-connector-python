@@ -57,9 +57,9 @@ from snowflake.connector.errorcode import (
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
 from snowflake.connector.telemetry_oob import TelemetryService
-from snowflake.connector.time_util import DecorrelateJitterBackoff
 
 from . import constants
+from .backoff_policies import exponential_backoff
 from .cache import SFDictCache, SFDictFileCache
 from .telemetry import TelemetryField, generate_telemetry_data_dict
 
@@ -397,7 +397,7 @@ class OCSPServer:
             with generic_requests.Session() as session:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
-                backoff = DecorrelateJitterBackoff(sleep_time, 16)
+                backoff = exponential_backoff()()
                 for _ in range(max_retry):
                     response = session.get(
                         url,
@@ -414,7 +414,7 @@ class OCSPServer:
                         )
                         break
                     elif max_retry > 1:
-                        sleep_time = backoff.next_sleep(1, sleep_time)
+                        sleep_time = next(backoff)
                         logger.debug(
                             "OCSP server returned %s. Retrying in %s(s)",
                             response.status_code,
@@ -1466,7 +1466,7 @@ class SnowflakeOCSP:
         with generic_requests.Session() as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
-            backoff = DecorrelateJitterBackoff(sleep_time, 16)
+            backoff = exponential_backoff()()
             for _ in range(max_retry):
                 try:
                     response = session.request(
@@ -1484,7 +1484,7 @@ class SnowflakeOCSP:
                         ret = response.content
                         break
                     elif max_retry > 1:
-                        sleep_time = backoff.next_sleep(1, sleep_time)
+                        sleep_time = next(backoff)
                         logger.debug(
                             "OCSP server returned %s. Retrying in %s(s)",
                             response.status_code,
@@ -1493,7 +1493,7 @@ class SnowflakeOCSP:
                     time.sleep(sleep_time)
                 except Exception as ex:
                     if max_retry > 1:
-                        sleep_time = backoff.next_sleep(1, sleep_time)
+                        sleep_time = next(backoff)
                         logger.debug(
                             "Could not fetch OCSP Response from server"
                             "Retrying in %s(s)",
