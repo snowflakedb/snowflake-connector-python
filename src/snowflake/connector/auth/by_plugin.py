@@ -67,13 +67,12 @@ class AuthByPlugin(ABC):
     ) -> None:
         self.consent_cache_id_token = False
 
-        max_retry_attempts = kwargs.get(
-            "max_retry_attempts",
-            int(getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)),
-        )
         self._retry_ctx = TimeoutBackoffCtx(
             timeout=timeout if timeout is not None else DEFAULT_AUTH_CLASS_TIMEOUT,
-            max_retry_attempts=max_retry_attempts,
+            max_retry_attempts=kwargs.get(
+                "max_retry_attempts",
+                int(getenv("MAX_CON_RETRY_ATTEMPTS", DEFAULT_MAX_CON_RETRY_ATTEMPTS)),
+            ),
             backoff_generator=backoff_generator,
         )
 
