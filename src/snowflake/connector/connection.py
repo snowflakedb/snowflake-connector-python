@@ -284,11 +284,13 @@ class SnowflakeConnection:
         login_timeout: Login timeout in seconds. Login requests will not be retried after this timeout expires.
             Note that the login attempt may still take more than login_timeout seconds as an ongoing login request
             cannot be canceled even upon login timeout expiry. The login timeout only prevents further retries.
-            If not specified, login_timeout is set to `snowflake.connector.auth.by_plugin.DEFAULT_AUTH_CLASS_TIMEOUT`
+            If not specified, login_timeout is set to `snowflake.connector.auth.by_plugin.DEFAULT_AUTH_CLASS_TIMEOUT`.
+            Note that the number of retries on login requests is still limited by
+            `snowflake.connector.auth.by_plugin.DEFAULT_MAX_CON_RETRY_ATTEMPTS`.
         network_timeout: Network timeout in seconds. Network requests besides login requests will not be retried
             after this timeout expires. Overriden in cursor query execution if timeout is passed to cursor.execute.
             Note that an operation may still take more than network_timeout seconds for the same reason as above.
-            If not specified, network_timeout is infinite,
+            If not specified, network_timeout is infinite.
         socket_timeout: Socket timeout in seconds. Sets both socket connect and read timeout.
         backoff_policy: Backoff policy to use for login and network requests. Must be a callable generator function.
             Standard linear and exponential backoff implementations are included in `snowflake.connector.backoff_policies`
