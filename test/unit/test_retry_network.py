@@ -452,7 +452,7 @@ def test_retry_request_timeout(mockSessionRequest, next_action_result):
     mockSessionRequest.side_effect = mock_request_with_action(next_action, 5)
     # no backoff for testing
     connection = mock_connection(
-        network_timeout=13,
+        network_timeout=14,
         backoff_policy=zero_backoff,
     )
     connection.errorhandler = Error.default_errorhandler

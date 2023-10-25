@@ -345,10 +345,10 @@ def test_handle_timeout(mockSessionRequest, next_action):
     with pytest.raises(OperationalError):
         # no backoff for testing
         _ = fake_connector(
-            login_timeout=7,
+            login_timeout=9,
             backoff_policy=zero_backoff,
         )
 
     # authenticator should be the only retry mechanism for login requests
-    # 7 seconds should be enough for authenticator to attempt twice
+    # 9 seconds should be enough for authenticator to attempt twice
     assert mockSessionRequest.call_count == 2

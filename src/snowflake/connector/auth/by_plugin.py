@@ -90,6 +90,12 @@ class AuthByPlugin(ABC):
         """The timeout of _retry_ctx is guaranteed not to be None during AuthByPlugin initialization"""
         return self._retry_ctx.timeout
 
+    @timeout.setter
+    def timeout(self) -> None:
+        logger.warning(
+            "Attempting to mutate timeout of AuthByPlugin. Create a new instance with desired parameters instead."
+        )
+
     @property
     @abstractmethod
     def type_(self) -> AuthType:
