@@ -15,6 +15,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added the `backoff_policy` argument to `snowflake.connector.connect` allowing for configurable backoff policy between retries of failed requests. See available implementations in the `backoff_policies` module.
   - Added the `socket_timeout` argument to `snowflake.connector.connect` specifying socket read and connect timeout.
   - Fixed `login_timeout` and `network_timeout` behaviour. Retries of login and network requests are now properly halted after these timeouts expire.
+  - Fixed bug for issue https://github.com/urllib3/urllib3/issues/1878 in vendored `urllib`.
 
 - v3.3.1(October 16,2023)
 
