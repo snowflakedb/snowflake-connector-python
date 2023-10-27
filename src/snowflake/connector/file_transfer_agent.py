@@ -193,15 +193,8 @@ def _chunk_size_calculator(file_size: int) -> int:
     # S3 has limitation on the num of parts to be uploaded, this helper method recalculate the num of parts
     if file_size > S3_MAX_OBJECT_SIZE:
         # check if we don't exceed the allowed S3 max file size 5 TiB
-        error_message = f"File size {file_size} exceeds the maximum file size {S3_MAX_OBJECT_SIZE} allowed in S3."
-        logger.error(error_message)
-        Error.errorhandler_wrapper(
-            None,
-            None,
-            Error,
-            {
-                "msg": error_message,
-            },
+        raise ValueError(
+            f"File size {file_size} exceeds the maximum file size {S3_MAX_OBJECT_SIZE} allowed in S3."
         )
 
     # num_parts = math.ceil(file_size / default_chunk_size)

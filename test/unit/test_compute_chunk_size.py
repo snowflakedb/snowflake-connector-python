@@ -4,21 +4,17 @@
 
 import pytest
 
-try:
+pytestmark = pytest.mark.skipolddriver
+
+
+def test_check_chunk_size():
     from snowflake.connector.constants import (
         S3_MAX_OBJECT_SIZE,
         S3_MAX_PART_SIZE,
         S3_MIN_PART_SIZE,
     )
     from snowflake.connector.file_transfer_agent import _chunk_size_calculator
-except ImportError:
-    pass
 
-
-pytestmark = pytest.mark.skipolddriver
-
-
-def test_check_chunk_size():
     expected_chunk_size = 8 * 1024**2
     sample_file_size_2gb = 2 * 1024**3
     sample_file_size_under_5tb = 4.9 * 1024**4
@@ -31,7 +27,7 @@ def test_check_chunk_size():
     chunk_size_2 = _chunk_size_calculator(int(sample_file_size_under_5tb))
     assert chunk_size_2 <= S3_MAX_PART_SIZE
 
-    with pytest.raises(Exception) as exc:
+    with pytest.raises(ValueError) as exc:
         _chunk_size_calculator(sample_file_size_6tb)
     assert (
         f"File size {sample_file_size_6tb} exceeds the maximum file size {S3_MAX_OBJECT_SIZE} allowed in S3."
