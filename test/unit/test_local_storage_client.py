@@ -2,7 +2,6 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-import os
 import random
 import string
 import tempfile
@@ -27,13 +26,13 @@ def test_multi_chunk_upload(multipart_threshold):
     ).encode()
     file_name = "test_file"
     with tempfile.TemporaryDirectory() as stage_dir, tempfile.TemporaryDirectory() as local_dir:
-        stage_file = os.path.join(stage_dir, file_name)
-        local_file = os.path.join(local_dir, file_name)
+        stage_file = Path(stage_dir) / file_name
+        local_file = Path(local_dir) / file_name
         Path(local_file).write_bytes(file_content)
 
         meta = SnowflakeFileMeta(
             name=file_name,
-            src_file_name=local_file,
+            src_file_name=str(local_file),
             stage_location_type=LOCAL_FS,
             dst_file_name=file_name,
             multipart_threshold=multipart_threshold,
@@ -53,13 +52,13 @@ def test_multi_chunk_download(multipart_threshold):
     ).encode()
     file_name = "test_file"
     with tempfile.TemporaryDirectory() as stage_dir, tempfile.TemporaryDirectory() as local_dir:
-        stage_file = os.path.join(stage_dir, file_name)
-        local_file = os.path.join(local_dir, file_name)
+        stage_file = Path(stage_dir) / file_name
+        local_file = Path(local_dir) / file_name
         Path(stage_file).write_bytes(file_content)
 
         meta = SnowflakeFileMeta(
             name=file_name,
-            src_file_name=stage_file,
+            src_file_name=str(stage_file),
             stage_location_type=LOCAL_FS,
             dst_file_name=file_name,
             local_location=local_dir,
