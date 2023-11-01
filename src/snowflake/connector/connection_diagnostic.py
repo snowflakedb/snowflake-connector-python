@@ -214,6 +214,12 @@ class ConnectionDiagnostic:
                 context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
                 sock = context.wrap_socket(conn, server_hostname=host)
                 certificate = ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
+                http_request = f"""GET / {host}:{port} HTTP/1.1\r\n
+                                   Host: {host}\r\n
+                                   User-Agent: snowflake-connector-python-diagnostic
+                                   \r\n\r\n"""
+                sock.send(str.encode(http_request))
+                sock.recv(4096).decode("utf-8")
                 conn.close()
                 return certificate
             else:
