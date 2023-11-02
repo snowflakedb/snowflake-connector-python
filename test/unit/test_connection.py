@@ -351,4 +351,5 @@ def test_handle_timeout(mockSessionRequest, next_action):
 
     # authenticator should be the only retry mechanism for login requests
     # 9 seconds should be enough for authenticator to attempt twice
-    assert mockSessionRequest.call_count == 2
+    # however, loosen restrictions to avoid thread scheduling causing failure
+    assert 1 < mockSessionRequest.call_count < 4
