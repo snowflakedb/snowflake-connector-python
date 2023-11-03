@@ -362,6 +362,11 @@ def write_pandas(
         logger.debug(f"dropping {object_type} with '{drop_sql}'")
         cursor.execute(drop_sql, _is_internal=True)
 
+    def truncate_table(name: str) -> None:
+        truncate_sql = f"TRUNCATE TABLE IF EXISTS {name} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
+        logger.debug(f"truncating table with '{truncate_sql}'")
+        cursor.execute(truncate_sql, _is_internal=True)
+
     if auto_create_table or overwrite:
         file_format_location = _create_temp_file_format(
             cursor,
@@ -389,7 +394,7 @@ def write_pandas(
         target_table_location = build_location_helper(
             database,
             schema,
-            random_string() if overwrite else table_name,
+            random_string() if (overwrite and auto_create_table) else table_name,
             quote_identifiers,
         )
 
@@ -417,6 +422,9 @@ def write_pandas(
         )
 
     try:
+        if overwrite and (not auto_create_table):
+            truncate_table(target_table_location)
+
         copy_into_sql = (
             f"COPY INTO {target_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
             f"({columns}) "
@@ -432,7 +440,7 @@ def write_pandas(
         logger.debug(f"copying into with '{copy_into_sql}'")
         copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()
 
-        if overwrite:
+        if overwrite and auto_create_table:
             original_table_location = build_location_helper(
                 database=database,
                 schema=schema,
