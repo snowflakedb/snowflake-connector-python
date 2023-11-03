@@ -19,7 +19,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
     - Deprecated environment variable `NANOARROW_USAGE`.
     - Deprecated module variable `snowflake.connector.cursor.NANOARROW_USAGE`.
 
-- v3.4.0(TBD)
+- v3.4.0(November 03,2023)
 
   - Added support for `use_logical_type` in `write_pandas`.
   - Removed dependencies on pycryptodomex and oscrypto. All connections now go through OpenSSL via the cryptography library, which was already a dependency.
