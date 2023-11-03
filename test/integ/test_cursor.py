@@ -1613,6 +1613,7 @@ def test_fetch_batches_with_sessions(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_null_connection(conn_cnx):
+    retries = 15
     with conn_cnx() as con:
         with con.cursor() as cur:
             cur.execute_async(
@@ -1620,6 +1621,13 @@ def test_null_connection(conn_cnx):
             )
             con.rest.delete_session()
             status = con.get_query_status(cur.sfqid)
+            for _ in range(retries):
+                if status not in (QueryStatus.RUNNING,):
+                    break
+                time.sleep(1)
+                status = con.get_query_status(cur.sfqid)
+            else:
+                pytest.fail(f"query is still running after {retries} retries")
             assert status == QueryStatus.FAILED_WITH_ERROR
             assert con.is_an_error(status)
 
