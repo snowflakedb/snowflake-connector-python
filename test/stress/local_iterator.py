@@ -14,6 +14,7 @@ There are two scenarios:
 
 import argparse
 import base64
+import io
 import math
 import random
 import secrets
@@ -22,6 +23,7 @@ import util as stress_util
 from util import task_memory_decorator, task_time_execution_decorator
 
 from snowflake.connector.arrow_context import ArrowConverterContext
+from snowflake.connector.arrow_iterator import PyArrowIterator
 from snowflake.connector.nanoarrow_arrow_iterator import (
     PyArrowRowIterator as NanoarrowRowIterator,
 )
@@ -81,6 +83,21 @@ def create_nanoarrow_pyarrow_iterator(input_data, use_table_unit):
     )
 
 
+def create_vendored_pyarrow_iterator(input_data, use_table_unit=False):
+    # created vendored arrow based iterator
+    iterator = PyArrowIterator(
+        None,
+        io.BytesIO(input_data),
+        ArrowConverterContext(session_parameters={"TIMEZONE": "America/Los_Angeles"}),
+        False,
+        False,
+        False,
+    )
+    if use_table_unit:
+        iterator.init_table_unit()
+    return iterator
+
+
 def task_for_loop_iterator(
     input_data: bytes, create_iterator_method, use_table_unit=False
 ):
@@ -130,7 +147,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--iteration_cnt",
         type=int,
-        default=10,
+        default=100000,
         help="how many times to run the test function, default is 100000",
     )
     parser.add_argument(
@@ -141,6 +158,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--use_table_unit",
+        action="store_true",
+        default=False,
+    )
+
+    parser.add_argument(
+        "--use_vendored_arrow",
         action="store_true",
         default=False,
     )
@@ -163,6 +186,11 @@ if __name__ == "__main__":
         "Testing connector version: ",
         ".".join([str(v) for v in VERSION if v is not None]),
     )
+    create_arrow_iterator_method = (
+        create_vendored_pyarrow_iterator
+        if args.use_vendored_arrow
+        else create_nanoarrow_pyarrow_iterator
+    )
 
     perf_check_task_for_loop_iterator = task_time_execution_decorator(
         task_for_loop_iterator_expected_error
@@ -178,7 +206,7 @@ if __name__ == "__main__":
     execute_task(
         memory_check_task_for_loop_iterator,
         decode_bytes,
-        create_nanoarrow_pyarrow_iterator,
+        create_arrow_iterator_method,
         args.iteration_cnt,
         args.use_table_unit,
     )
@@ -186,7 +214,7 @@ if __name__ == "__main__":
     execute_task(
         perf_check_task_for_loop_iterator,
         decode_bytes,
-        create_nanoarrow_pyarrow_iterator,
+        create_arrow_iterator_method,
         args.iteration_cnt,
         args.use_table_unit,
     )
