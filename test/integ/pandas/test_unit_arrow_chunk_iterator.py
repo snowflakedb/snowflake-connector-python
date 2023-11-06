@@ -34,6 +34,7 @@ except ImportError:
     pass
 
 try:
+    from snowflake.connector.arrow_iterator import IterUnit, PyArrowIterator
     from snowflake.connector.nanoarrow_arrow_iterator import (
         PyArrowRowIterator as NanoarrowPyArrowRowIterator,
     )
@@ -47,7 +48,8 @@ except ImportError:
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
-def test_iterate_over_string_chunk():
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+def test_iterate_over_string_chunk(use_nanoarrow_iterator):
     random.seed(datetime.datetime.now().timestamp())
     column_meta = [{"logicalType": "TEXT"}, {"logicalType": "TEXT"}]
     field_foo = pyarrow.field("column_foo", pyarrow.string(), True, column_meta[0])
@@ -61,6 +63,7 @@ def test_iterate_over_string_chunk():
         [pyarrow.string(), pyarrow.string()],
         column_meta,
         str_generator,
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
 
@@ -68,7 +71,8 @@ def test_iterate_over_string_chunk():
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
-def test_iterate_over_int64_chunk():
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+def test_iterate_over_int64_chunk(use_nanoarrow_iterator):
     random.seed(datetime.datetime.now().timestamp())
     column_meta = [
         {"logicalType": "FIXED", "precision": "38", "scale": "0"},
@@ -82,6 +86,7 @@ def test_iterate_over_int64_chunk():
         [pyarrow.int64(), pyarrow.int64()],
         column_meta,
         int64_generator,
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
 
@@ -89,7 +94,8 @@ def test_iterate_over_int64_chunk():
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
-def test_iterate_over_int32_chunk():
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+def test_iterate_over_int32_chunk(use_nanoarrow_iterator):
     random.seed(datetime.datetime.now().timestamp())
     column_meta = [
         {"logicalType": "FIXED", "precision": "10", "scale": "0"},
@@ -103,6 +109,7 @@ def test_iterate_over_int32_chunk():
         [pyarrow.int32(), pyarrow.int32()],
         column_meta,
         int32_generator,
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
 
@@ -110,7 +117,8 @@ def test_iterate_over_int32_chunk():
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
-def test_iterate_over_int16_chunk():
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+def test_iterate_over_int16_chunk(use_nanoarrow_iterator):
     random.seed(datetime.datetime.now().timestamp())
     column_meta = [
         {"logicalType": "FIXED", "precision": "5", "scale": "0"},
@@ -124,6 +132,7 @@ def test_iterate_over_int16_chunk():
         [pyarrow.int16(), pyarrow.int16()],
         column_meta,
         int16_generator,
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
 
@@ -131,7 +140,8 @@ def test_iterate_over_int16_chunk():
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
-def test_iterate_over_int8_chunk():
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+def test_iterate_over_int8_chunk(use_nanoarrow_iterator):
     random.seed(datetime.datetime.now().timestamp())
     column_meta = [
         {"logicalType": "FIXED", "precision": "3", "scale": "0"},
@@ -145,6 +155,7 @@ def test_iterate_over_int8_chunk():
         [pyarrow.int8(), pyarrow.int8()],
         column_meta,
         int8_generator,
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
 
@@ -152,7 +163,8 @@ def test_iterate_over_int8_chunk():
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
-def test_iterate_over_bool_chunk():
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+def test_iterate_over_bool_chunk(use_nanoarrow_iterator):
     random.seed(datetime.datetime.now().timestamp())
     column_meta = {"logicalType": "BOOLEAN"}
 
@@ -163,6 +175,7 @@ def test_iterate_over_bool_chunk():
         [pyarrow.bool_(), pyarrow.bool_()],
         [column_meta, column_meta],
         bool_generator,
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
 
@@ -170,7 +183,8 @@ def test_iterate_over_bool_chunk():
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
-def test_iterate_over_float_chunk():
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+def test_iterate_over_float_chunk(use_nanoarrow_iterator):
     random.seed(datetime.datetime.now().timestamp())
     column_meta = [{"logicalType": "REAL"}, {"logicalType": "FLOAT"}]
 
@@ -181,6 +195,7 @@ def test_iterate_over_float_chunk():
         [pyarrow.float64(), pyarrow.float64()],
         column_meta,
         float_generator,
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
 
@@ -188,7 +203,8 @@ def test_iterate_over_float_chunk():
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
-def test_iterate_over_decimal_chunk():
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+def test_iterate_over_decimal_chunk(use_nanoarrow_iterator):
     random.seed(datetime.datetime.now().timestamp())
     precision = random.randint(1, 38)
     scale = random.randint(0, precision)
@@ -262,6 +278,7 @@ def test_iterate_over_decimal_chunk():
         [column_meta, column_meta],
         lambda: decimal_generator(precision, scale),
         expected_data_transform_decimal(precision, scale),
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
 
@@ -269,7 +286,8 @@ def test_iterate_over_decimal_chunk():
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
-def test_iterate_over_date_chunk():
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+def test_iterate_over_date_chunk(use_nanoarrow_iterator):
     random.seed(datetime.datetime.now().timestamp())
     column_meta = {
         "byteLength": "4",
@@ -286,6 +304,7 @@ def test_iterate_over_date_chunk():
         [pyarrow.date32(), pyarrow.date32()],
         [column_meta, column_meta],
         date_generator,
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
 
@@ -293,7 +312,8 @@ def test_iterate_over_date_chunk():
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
-def test_iterate_over_binary_chunk():
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+def test_iterate_over_binary_chunk(use_nanoarrow_iterator):
     random.seed(datetime.datetime.now().timestamp())
     column_meta = {
         "byteLength": "100",
@@ -310,6 +330,7 @@ def test_iterate_over_binary_chunk():
         [pyarrow.binary(), pyarrow.binary()],
         [column_meta, column_meta],
         byte_array_generator,
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
 
@@ -317,7 +338,8 @@ def test_iterate_over_binary_chunk():
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas option is not installed.",
 )
-def test_iterate_over_time_chunk():
+@pytest.mark.parametrize("use_nanoarrow_iterator", [True, False])
+def test_iterate_over_time_chunk(use_nanoarrow_iterator):
     random.seed(datetime.datetime.now().timestamp())
     column_meta_int64 = [
         {"logicalType": "TIME", "scale": "9"},
@@ -360,6 +382,7 @@ def test_iterate_over_time_chunk():
         column_meta_int64,
         time_generator_int64,
         expected_data_transform_int64,
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
     iterate_over_test_chunk(
@@ -367,6 +390,7 @@ def test_iterate_over_time_chunk():
         column_meta_int32,
         time_generator_int32,
         expected_data_transform_int32,
+        use_nanoarrow_iterator=use_nanoarrow_iterator,
     )
 
 
@@ -375,6 +399,7 @@ def iterate_over_test_chunk(
     column_meta,
     source_data_generator,
     expected_data_transformer=None,
+    use_nanoarrow_iterator=True,
 ):
     stream = BytesIO()
 
@@ -430,7 +455,13 @@ def iterate_over_test_chunk(
     stream.seek(0)
     context = ArrowConverterContext()
 
-    it = NanoarrowPyArrowRowIterator(None, stream.read(), context, False, False, False)
+    if use_nanoarrow_iterator:
+        it = NanoarrowPyArrowRowIterator(
+            None, stream.read(), context, False, False, False
+        )
+    else:
+        it = PyArrowIterator(None, stream, context, False, False, False)
+        it.init(IterUnit.ROW_UNIT.value)
 
     count = 0
     while True:

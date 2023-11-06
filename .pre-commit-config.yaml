@@ -36,6 +36,7 @@ repos:
         exclude: >
             (?x)^(
                 src/snowflake/connector/version.py|
+                src/snowflake/connector/cpp|
                 src/snowflake/connector/nanoarrow_cpp|
             )$
         args:
@@ -45,6 +46,7 @@ repos:
         name: insert-cpp-license
         files: >
             (?x)^(
+                src/snowflake/connector/cpp/.*\.(cpp|hpp)|
                 src/snowflake/connector/nanoarrow_cpp/.*\.(cpp|hpp)|
             )$
         args:
