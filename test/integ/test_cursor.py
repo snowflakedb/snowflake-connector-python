@@ -1690,3 +1690,23 @@ def test_decoding_utf8_for_json_result(conn_cnx):
     mock_resp.content = "À".encode("latin1")
     with pytest.raises(Error):
         result_batch._load(mock_resp)
+
+
+@pytest.mark.skipolddriver
+def test_nanoarrow_usage_deprecation(caplog):
+    with pytest.warns() as record:
+        import snowflake.connector.cursor
+
+        os.environ["NANOARROW_USAGE"] = "abc"
+        _ = snowflake.connector.cursor.NANOARROW_USAGE
+        _ = snowflake.connector.cursor.NanoarrowUsage
+        del os.environ["NANOARROW_USAGE"]
+        assert len(record) == 3
+        assert (
+            "Environment variable NANOARROW_USAGE has been deprecated"
+            in str(record[0].message)
+            and "snowflake.connector.cursor.NANOARROW_USAGE has been deprecated"
+            in str(record[1].message)
+            and "snowflake.connector.cursor.NanoarrowUsage has been deprecated"
+            in str(record[2].message)
+        )
