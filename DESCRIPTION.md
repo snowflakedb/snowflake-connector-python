@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
+- v3.4.1(TBD)
+
+  - Bumped vendored `urllib3` to 1.26.18
+  - Bumped vendored `requests` to 2.31.0
+
 - v3.4.0(November 03,2023)
 
   - Added support for `use_logical_type` in `write_pandas`.
