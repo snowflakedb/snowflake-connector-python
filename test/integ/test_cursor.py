@@ -1693,7 +1693,7 @@ def test_decoding_utf8_for_json_result(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_nanoarrow_usage_deprecation(caplog):
+def test_nanoarrow_usage_deprecation():
     with pytest.warns() as record:
         import snowflake.connector.cursor
 
