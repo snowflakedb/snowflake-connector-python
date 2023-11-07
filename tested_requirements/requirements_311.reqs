@@ -2,7 +2,7 @@
 asn1crypto==1.5.1
 certifi==2023.7.22
 cffi==1.16.0
-charset-normalizer==3.3.1
+charset-normalizer==3.3.2
 cryptography==41.0.5
 filelock==3.13.1
 idna==3.4
@@ -14,7 +14,7 @@ pyOpenSSL==23.3.0
 pytz==2023.3.post1
 requests==2.31.0
 sortedcontainers==2.4.0
-tomlkit==0.12.1
+tomlkit==0.12.2
 typing_extensions==4.8.0
 urllib3==1.26.18
 snowflake-connector-python==3.4.0
