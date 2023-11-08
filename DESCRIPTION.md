@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
+- v3.4.2(TBD)
+
+  - Changed urllib3 version pin to only affect Python versions < 3.10.
+
 - v3.4.1(November 08, 2023)
 
   - Bumped vendored `urllib3` to 1.26.18
