@@ -1117,7 +1117,7 @@ class SnowflakeCursor:
         )
         return self._result_set._fetch_arrow_batches()
 
-    def fetch_arrow_all(self) -> Table | None:
+    def fetch_arrow_all(self) -> Table:
         self.check_can_use_arrow_resultset()
         if self._prefetch_hook is not None:
             self._prefetch_hook()
