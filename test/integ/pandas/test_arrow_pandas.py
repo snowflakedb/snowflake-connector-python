@@ -1233,6 +1233,17 @@ def test_simple_arrow_fetch(conn_cnx):
             assert lo == rowcount
 
 
+def test_arrow_zero_rows(conn_cnx):
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(SQL_ENABLE_ARROW)
+            cur.execute("select 1::NUMBER(38,0) limit 0")
+            table = cur.fetch_arrow_all()
+            # Snowflake will return an integery dtype with maximum bit-depth if
+            # no rows are returned
+            assert table.schema[0].type == pyarrow.int64()
+
+
 @pytest.mark.parametrize("fetch_fn_name", ["to_arrow", "to_pandas", "create_iter"])
 @pytest.mark.parametrize("pass_connection", [True, False])
 def test_sessions_used(conn_cnx, fetch_fn_name, pass_connection):
