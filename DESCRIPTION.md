@@ -9,7 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
-- v3.5.0(TBD)
+- v3.5.0(November 13, 2023)
 
   - Version 3.5.0 is the snowflake-connector-python purely built upon apache arrow-nanoarrow project.
     - Reduced the wheel size to ~1MB and installation size to ~5MB.
@@ -18,6 +18,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
     - Deprecated class `snowflake.connector.cursor.NanoarrowUsage`.
     - Deprecated environment variable `NANOARROW_USAGE`.
     - Deprecated module variable `snowflake.connector.cursor.NANOARROW_USAGE`.
+
+- v3.4.1(November 08, 2023)
+
+  - Bumped vendored `urllib3` to 1.26.18
+  - Bumped vendored `requests` to 2.31.0
 
 - v3.4.0(November 03,2023)
 
