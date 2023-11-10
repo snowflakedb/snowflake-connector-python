@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
+
+- v3.5.0(November 13,2023)
+
+   -
+
 - v3.5.0(November 13, 2023)
 
   - Version 3.5.0 is the snowflake-connector-python purely built upon apache arrow-nanoarrow project.
