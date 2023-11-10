@@ -39,7 +39,7 @@ except ImportError:
     pyarrow = None
 
 try:
-    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+    from snowflake.connector.nanoarrow_arrow_iterator import PyArrowIterator  # NOQA
 
     no_arrow_iterator_ext = False
 except ImportError:
