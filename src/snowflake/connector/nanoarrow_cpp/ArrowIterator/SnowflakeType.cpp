@@ -29,6 +29,7 @@ std::unordered_map<std::string, SnowflakeType::Type>
         {"TIMESTAMP_LTZ", SnowflakeType::Type::TIMESTAMP_LTZ},
         {"TIMESTAMP_NTZ", SnowflakeType::Type::TIMESTAMP_NTZ},
         {"TIMESTAMP_TZ", SnowflakeType::Type::TIMESTAMP_TZ},
-        {"VARIANT", SnowflakeType::Type::VARIANT}};
+        {"VARIANT", SnowflakeType::Type::VARIANT},
+        {"VECTOR", SnowflakeType::Type::VECTOR}};
 
 }  // namespace sf

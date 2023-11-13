@@ -320,6 +320,9 @@ class SnowflakeConverter:
 
     _ARRAY_to_python = _VARIANT_to_python
 
+    def _VECTOR_to_python(self, _: dict[str, Any]) -> Any | None:
+        return None  # skip conv
+
     def _BOOLEAN_to_python(
         self, ctx: dict[str, str | None] | dict[str, str]
     ) -> Callable:
