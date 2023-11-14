@@ -10,7 +10,7 @@ import time
 from base64 import b64decode
 from enum import Enum, unique
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
 
 from .arrow_context import ArrowConverterContext
 from .backoff_policies import exponential_backoff
@@ -47,7 +47,7 @@ if TYPE_CHECKING:  # pragma: no cover
 
 
 # emtpy pyarrow type array corresponding to FIELD_TYPES
-FIELD_TYPE_TO_PA_TYPE: list[DataType] = []
+FIELD_TYPE_TO_PA_TYPE: list[Callable[[ResultMetadata], DataType]] = []
 
 # qrmk related constants
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
@@ -680,9 +680,9 @@ class ArrowResultBatch(ResultBatch):
         """Returns empty Arrow table based on schema"""
         if installed_pandas:
             # initialize pyarrow type array corresponding to FIELD_TYPES
-            FIELD_TYPE_TO_PA_TYPE = [e.pa_type() for e in FIELD_TYPES]
+            FIELD_TYPE_TO_PA_TYPE = [e.pa_type for e in FIELD_TYPES]
         fields = [
-            pa.field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code]) for s in self.schema
+            pa.field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code](s)) for s in self.schema
         ]
         return pa.schema(fields).empty_table()
 

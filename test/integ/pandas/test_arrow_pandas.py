@@ -627,6 +627,7 @@ def test_vector(conn_cnx, is_public_test):
             cur.execute(f"select a from {table} limit 0")
             df = cur.fetch_pandas_all()
             assert len(df) == 0
+            assert df.dtypes[0] == "object"
 
             finish(conn, table)
 

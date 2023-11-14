@@ -15,6 +15,8 @@ from .sf_dirs import _resolve_platform_dirs
 if TYPE_CHECKING:
     from pyarrow import DataType
 
+    from .cursor import ResultMetadata
+
 # Snowflake's central platform dependent directories, if the folder
 # ~/.snowflake/ (customizable by the environment variable SNOWFLAKE_HOME) exists
 # we use that folder for everything. Otherwise, we fall back to platformdirs
@@ -38,71 +40,96 @@ DBAPI_TYPE_TIMESTAMP = 3
 class FieldType(NamedTuple):
     name: str
     dbapi_type: list[int]
-    pa_type: Callable[[], DataType]
+    pa_type: Callable[[ResultMetadata], DataType]
+
+
+def vector_pa_type(metadata: ResultMetadata) -> DataType:
+    if metadata.fields is None:
+        raise ValueError(
+            "Invalid result metadata for vector type: expected sub-field metadata"
+        )
+    if len(metadata.fields) != 1:
+        raise ValueError(
+            "Invalid result metadata for vector type: expected a single sub-field metadata"
+        )
+    field_type = FIELD_ID_TO_NAME[metadata.fields[0].type_code]
+
+    if metadata.vector_dimension is None:
+        raise ValueError(
+            "Invalid result metadata for vector type: expected a dimension"
+        )
+
+    if field_type == "FIXED":
+        return pa.list_(pa.int32(), metadata.vector_dimension)
+    elif field_type == "REAL":
+        return pa.list_(pa.float32(), metadata.vector_dimension)
+    else:
+        raise ValueError(
+            f"Invalid result metadata for vector type: invalid element type: {field_type}"
+        )
 
 
 # This type mapping holds column type definitions.
 #  Be careful to not change the ordering as the index is what Snowflake
 #  gives to as schema
 FIELD_TYPES: tuple[FieldType, ...] = (
-    FieldType(name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda: pa.int64()),
     FieldType(
-        name="REAL", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda: pa.float64()
+        name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda _: pa.int64()
     ),
-    FieldType(name="TEXT", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda: pa.string()),
     FieldType(
-        name="DATE", dbapi_type=[DBAPI_TYPE_TIMESTAMP], pa_type=lambda: pa.date64()
+        name="REAL", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda _: pa.float64()
+    ),
+    FieldType(
+        name="TEXT", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()
+    ),
+    FieldType(
+        name="DATE", dbapi_type=[DBAPI_TYPE_TIMESTAMP], pa_type=lambda _: pa.date64()
     ),
     FieldType(
         name="TIMESTAMP",
         dbapi_type=[DBAPI_TYPE_TIMESTAMP],
-        pa_type=lambda: pa.time64("ns"),
+        pa_type=lambda _: pa.time64("ns"),
     ),
     FieldType(
-        name="VARIANT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.string()
+        name="VARIANT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda _: pa.string()
     ),
     FieldType(
         name="TIMESTAMP_LTZ",
         dbapi_type=[DBAPI_TYPE_TIMESTAMP],
-        pa_type=lambda: pa.timestamp("ns"),
+        pa_type=lambda _: pa.timestamp("ns"),
     ),
     FieldType(
         name="TIMESTAMP_TZ",
         dbapi_type=[DBAPI_TYPE_TIMESTAMP],
-        pa_type=lambda: pa.timestamp("ns"),
+        pa_type=lambda _: pa.timestamp("ns"),
     ),
     FieldType(
         name="TIMESTAMP_NTZ",
         dbapi_type=[DBAPI_TYPE_TIMESTAMP],
-        pa_type=lambda: pa.timestamp("ns"),
+        pa_type=lambda _: pa.timestamp("ns"),
     ),
     FieldType(
-        name="OBJECT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.string()
+        name="OBJECT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda _: pa.string()
     ),
     FieldType(
-        name="ARRAY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.string()
+        name="ARRAY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda _: pa.string()
     ),
     FieldType(
-        name="BINARY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda: pa.binary()
+        name="BINARY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda _: pa.binary()
     ),
     FieldType(
-        name="TIME", dbapi_type=[DBAPI_TYPE_TIMESTAMP], pa_type=lambda: pa.time64("ns")
+        name="TIME",
+        dbapi_type=[DBAPI_TYPE_TIMESTAMP],
+        pa_type=lambda _: pa.time64("ns"),
     ),
-    FieldType(name="BOOLEAN", dbapi_type=[], pa_type=lambda: pa.bool_()),
+    FieldType(name="BOOLEAN", dbapi_type=[], pa_type=lambda _: pa.bool_()),
     FieldType(
-        name="GEOGRAPHY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda: pa.string()
+        name="GEOGRAPHY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()
     ),
     FieldType(
-        name="GEOMETRY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda: pa.string()
+        name="GEOMETRY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()
     ),
-    FieldType(
-        # TODO(SNOW-969160): While pa.binary() results in the correct pandas column
-        # type being generated, it should be switched to pa.list_(...) once parsing
-        # for the new result metadata fields is added.
-        name="VECTOR",
-        dbapi_type=[DBAPI_TYPE_BINARY],
-        pa_type=lambda: pa.binary(),
-    ),
+    FieldType(name="VECTOR", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=vector_pa_type),
 )
 
 FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)

@@ -132,6 +132,34 @@ class _NanoarrowUsage(str, Enum):
     DISABLE_NANOARROW = "disable_nanoarrow"
 
 
+class ResultMetadataField(NamedTuple):
+    type_code: int
+    internal_size: int | None
+    precision: int | None
+    scale: int | None
+    is_nullable: bool
+    fields: list[ResultMetadataField] | None
+
+    @classmethod
+    def from_column(cls, col: dict[str, Any]):
+        """Initializes a ResultMetadataField object from a child of the column description in the query response."""
+        fields = None
+        if "fields" in col and col["fields"] is not None:
+            fields = [cls.from_column(f) for f in col["fields"]]
+        return cls(
+            FIELD_NAME_TO_ID[
+                col["extTypeName"].upper()
+                if col.get("extTypeName")
+                else col["type"].upper()
+            ],
+            col["length"],
+            col["precision"],
+            col["scale"],
+            col["nullable"],
+            fields,
+        )
+
+
 class ResultMetadata(NamedTuple):
     name: str
     type_code: int
@@ -140,22 +168,36 @@ class ResultMetadata(NamedTuple):
     precision: int | None
     scale: int | None
     is_nullable: bool
+    vector_dimension: int | None
+    fields: list[ResultMetadataField] | None
 
     @classmethod
     def from_column(cls, col: dict[str, Any]):
         """Initializes a ResultMetadata object from the column description in the query response."""
+        type_code = FIELD_NAME_TO_ID[
+            col["extTypeName"].upper()
+            if col.get("extTypeName")
+            else col["type"].upper()
+        ]
+
+        fields = None
+        if (
+            type_code == FIELD_NAME_TO_ID["VECTOR"]
+            and "fields" in col
+            and col["fields"] is not None
+        ):
+            fields = [ResultMetadataField.from_column(f) for f in col["fields"]]
+
         return cls(
             col["name"],
-            FIELD_NAME_TO_ID[
-                col["extTypeName"].upper()
-                if col.get("extTypeName")
-                else col["type"].upper()
-            ],
+            type_code,
             None,
             col["length"],
             col["precision"],
             col["scale"],
             col["nullable"],
+            col.get("vectorDimension", None),
+            fields,
         )
 
 
