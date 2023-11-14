@@ -44,11 +44,11 @@ PyObject* FixedSizeListConverter::toPyObject(int64_t rowIndex) const
   // the lengths of the fixed size lists in the array.
 
   ArrowArrayView* elements = m_array->children[0];
-  const auto length = elements->length / m_array->length;
-  PyObject* list = PyList_New(length);
+  const auto fixedSizeArrayLength = elements->length / m_array->length;
+  PyObject* list = PyList_New(fixedSizeArrayLength);
 
-  const int64_t startIndexWithoutOffset = rowIndex * length;
-  for (int64_t i = 0; i < length; ++i)
+  const int64_t startIndexWithoutOffset = rowIndex * fixedSizeArrayLength;
+  for (int64_t i = 0; i < fixedSizeArrayLength; ++i)
   {
     const auto bufferIndexWithoutOffset = startIndexWithoutOffset + i;
     // Currently, the backend only sends back INT32 and FLOAT32, but the
@@ -63,8 +63,7 @@ PyObject* FixedSizeListConverter::toPyObject(int64_t rowIndex) const
         const auto value =
             ArrowArrayViewGetIntUnsafe(elements, bufferIndexWithoutOffset);
         PyList_SetItem(list, i, PyLong_FromLongLong(value));
-      }
-      break;
+      } break;
       case NANOARROW_TYPE_HALF_FLOAT:
       case NANOARROW_TYPE_FLOAT:
       case NANOARROW_TYPE_DOUBLE:
@@ -72,8 +71,7 @@ PyObject* FixedSizeListConverter::toPyObject(int64_t rowIndex) const
         const auto value =
             ArrowArrayViewGetDoubleUnsafe(elements, bufferIndexWithoutOffset);
         PyList_SetItem(list, i, PyFloat_FromDouble(value));
-      }
-      break;
+      } break;
       default:
         std::string errorInfo = Logger::formatString(
             "[Snowflake Exception] invalid arrow element type for fixed size "
