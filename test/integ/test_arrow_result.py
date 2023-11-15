@@ -360,14 +360,7 @@ def test_select_double_precision(conn_cnx):
     finish(conn_cnx, table)
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext, reason="arrow_iterator extension is not built."
-)
-def test_select_semi_structure(conn_cnx, is_public_test):
-    if is_public_test:
-        pytest.xfail(
-            reason="This feature hasn't been rolled out for public Snowflake deployments yet."
-        )
+def test_select_semi_structure(conn_cnx):
     sql_text = """select array_construct(10, 20, 30),
         array_construct(null, 'hello', 3::double, 4, 5),
         array_construct(),
@@ -382,7 +375,12 @@ def test_select_semi_structure(conn_cnx, is_public_test):
     iterate_over_test_chunk("struct", conn_cnx, sql_text, row_count, col_count)
 
 
-def test_select_vector(conn_cnx):
+def test_select_vector(conn_cnx, is_public_test):
+    if is_public_test:
+        pytest.xfail(
+            reason="This feature hasn't been rolled out for public Snowflake deployments yet."
+        )
+
     sql_text = """select [1,2,3]::vector(int,3),
         [1.1,2.2]::vector(float,2),
         NULL::vector(int,2),
