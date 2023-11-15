@@ -95,6 +95,14 @@ FIELD_TYPES: tuple[FieldType, ...] = (
     FieldType(
         name="GEOMETRY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda: pa.string()
     ),
+    FieldType(
+        # TODO(SNOW-969160): While pa.binary() results in the correct pandas column
+        # type being generated, it should be switched to pa.list_(...) once parsing
+        # for the new result metadata fields is added.
+        name="VECTOR",
+        dbapi_type=[DBAPI_TYPE_BINARY],
+        pa_type=lambda: pa.binary(),
+    ),
 )
 
 FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
