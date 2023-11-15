@@ -144,7 +144,7 @@ class ResultMetadataField(NamedTuple):
     def from_column(cls, col: dict[str, Any]):
         """Initializes a ResultMetadataField object from a child of the column description in the query response."""
         fields = None
-        if "fields" in col and col["fields"] is not None:
+        if col.get("fields") is not None:
             fields = [cls.from_column(f) for f in col["fields"]]
         return cls(
             FIELD_NAME_TO_ID[
@@ -181,11 +181,7 @@ class ResultMetadata(NamedTuple):
         ]
 
         fields = None
-        if (
-            type_code == FIELD_NAME_TO_ID["VECTOR"]
-            and "fields" in col
-            and col["fields"] is not None
-        ):
+        if type_code == FIELD_NAME_TO_ID["VECTOR"] and col.get("fields") is not None:
             fields = [ResultMetadataField.from_column(f) for f in col["fields"]]
 
         return cls(
@@ -196,7 +192,7 @@ class ResultMetadata(NamedTuple):
             col["precision"],
             col["scale"],
             col["nullable"],
-            col.get("vectorDimension", None),
+            col.get("vectorDimension"),
             fields,
         )
 
