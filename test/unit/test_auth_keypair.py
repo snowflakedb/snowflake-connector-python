@@ -13,7 +13,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import load_der_private_key
 from pytest import raises
-from tempfile import NamedTemporaryFile
 
 from snowflake.connector.auth import Auth
 from snowflake.connector.constants import OCSPMode
@@ -115,32 +114,6 @@ def test_auth_keypair_bad_type():
         assert str(type(bad_private_key)) in str(ex)
 
 
-def test_auth_keypair_file():
-    """Simple Key Pair file test."""
-    private_key_file = NamedTemporaryFile()
-
-    private_key = rsa.generate_private_key(
-        backend=default_backend(), public_exponent=65537, key_size=2048,
-    )
-
-    private_key_pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-
-    with open(private_key_file.name, "w") as f:
-        f.write(private_key_pem.decode())
-
-    application = "testapplication"
-    account = "testaccount"
-    user = "testuser"
-    auth_instance = AuthByKeyPair(
-        private_key=None,
-        private_key_file=private_key_file.name,
-    )
-
-    
 @patch("snowflake.connector.auth.keypair.AuthByKeyPair.prepare")
 def test_renew_token(mockPrepare):
     private_key_der, _ = generate_key_pair(2048)

@@ -26,7 +26,9 @@ from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
 from uuid import UUID
 
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
@@ -937,10 +939,18 @@ class SnowflakeConnection:
                 )
 
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
+            private_key=self._private_key
+
+            if self._private_key_file:
+                with open(self._private_key_file, "rb") as key:
+                    private_key = load_pem_private_key(
+                        key.read(),
+                        password=self._private_key_file_pwd,
+                        backend=default_backend(),
+                    )
+
             self.auth_class = AuthByKeyPair(
-                private_key=self._private_key,
-                private_key_file=self._private_key_file,
-                private_key_file_pwd=self._private_key_file_pwd,
+                private_key=private_key,
                 timeout=self._login_timeout,
                 backoff_generator=self._backoff_generator,
             )
