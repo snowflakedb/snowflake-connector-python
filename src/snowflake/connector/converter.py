@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import binascii
 import decimal
+import json
 import time
 from datetime import date, datetime
 from datetime import time as dt_t
@@ -319,6 +320,9 @@ class SnowflakeConverter:
     _OBJECT_to_python = _VARIANT_to_python
 
     _ARRAY_to_python = _VARIANT_to_python
+
+    def _VECTOR_to_python(self, ctx: dict[str, Any]) -> Callable:
+        return lambda v: json.loads(v)
 
     def _BOOLEAN_to_python(
         self, ctx: dict[str, str | None] | dict[str, str]

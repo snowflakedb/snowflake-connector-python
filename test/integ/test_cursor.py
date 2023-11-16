@@ -645,6 +645,61 @@ def test_geometry(conn_cnx):
                 assert row in expected_data
 
 
+@pytest.mark.skipolddriver
+def test_vector(conn_cnx, is_public_test):
+    if is_public_test:
+        pytest.xfail(
+            reason="This feature hasn't been rolled out for public Snowflake deployments yet."
+        )
+    name_vectors = random_string(5, "test_vector_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            # Seed test data
+            expected_data_ints = [[1, 3, -5], [40, 1234567, 1], "NULL"]
+            expected_data_floats = [
+                [1.8, -3.4, 6.7, 0, 2.3],
+                [4.121212121, 31234567.4, 7, -2.123, 1],
+                "NULL",
+            ]
+            cur.execute(
+                f"create temporary table {name_vectors} (int_vec VECTOR(INT,3), float_vec VECTOR(FLOAT,5))"
+            )
+            for i in range(len(expected_data_ints)):
+                cur.execute(
+                    f"insert into {name_vectors} select {expected_data_ints[i]}::VECTOR(INT,3), {expected_data_floats[i]}::VECTOR(FLOAT,5)"
+                )
+
+        with cnx.cursor() as cur:
+            # Test a basic fetch
+            cur.execute(
+                f"select int_vec, float_vec from {name_vectors} order by float_vec"
+            )
+            metadata = cur.description
+            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
+            assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
+            data = cur.fetchall()
+            for i, row in enumerate(data):
+                if expected_data_floats[i] == "NULL":
+                    assert row[0] is None
+                else:
+                    assert row[0] == expected_data_ints[i]
+
+                if expected_data_ints[i] == "NULL":
+                    assert row[1] is None
+                else:
+                    assert row[1] == pytest.approx(expected_data_floats[i])
+
+            # Test an empty result set
+            cur.execute(
+                f"select int_vec, float_vec from {name_vectors} where int_vec = [1,2,3]::VECTOR(int,3)"
+            )
+            metadata = cur.description
+            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
+            assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
+            data = cur.fetchall()
+            assert len(data) == 0
+
+
 def test_invalid_bind_data_type(conn_cnx):
     """Invalid bind data type."""
     with conn_cnx() as cnx:

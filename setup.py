@@ -108,6 +108,9 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                     ),
                     os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "DateConverter.cpp"),
                     os.path.join(
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "FixedSizeListConverter.cpp"
+                    ),
+                    os.path.join(
                         NANOARROW_ARROW_ITERATOR_SRC_DIR, "FloatConverter.cpp"
                     ),
                     os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "IntConverter.cpp"),

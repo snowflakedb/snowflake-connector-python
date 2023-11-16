@@ -32,7 +32,8 @@ public:
     TIMESTAMP_LTZ = 12,
     TIMESTAMP_NTZ = 13,
     TIMESTAMP_TZ = 14,
-    VARIANT = 15
+    VARIANT = 15,
+    VECTOR = 16
   };
 
   static SnowflakeType::Type snowflakeTypeFromString(std::string str)
