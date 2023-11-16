@@ -12,6 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.6.0(TBD)
 
   - Added support for Vector types
+  - Changed urllib3 version pin to only affect Python versions < 3.10.
 
 - v3.5.0(November 13,2023)
 
@@ -23,7 +24,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
     - Deprecated environment variable `NANOARROW_USAGE`.
     - Deprecated module variable `snowflake.connector.cursor.NANOARROW_USAGE`.
 
-- v3.4.1(November 08, 2023)
+- v3.4.1(November 08,2023)
 
   - Bumped vendored `urllib3` to 1.26.18
   - Bumped vendored `requests` to 2.31.0
