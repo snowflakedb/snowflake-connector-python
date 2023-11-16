@@ -499,35 +499,18 @@ def test_error_missing_fp_retrieve():
 
 
 @pytest.mark.parametrize("version", (None, "1"))
-@pytest.mark.parametrize(
-    "method",
-    (
-        "user_data_dir",
-        "site_data_dir",
-        "user_config_dir",
-        "site_config_dir",
-        "user_cache_dir",
-        "user_state_dir",
-        "user_log_dir",
-        "user_documents_dir",
-        "user_runtime_dir",
-        "user_music_dir",
-        "user_pictures_dir",
-        "user_videos_dir",
-    ),
-)
-def test_sf_dirs(tmp_path, method, version):
+def test_sf_dirs(tmp_path, version):
     appname = random_string(5)
-    assert getattr(
+    assert (
         SFPlatformDirs(
             str(tmp_path),
             appname=appname,
             appauthor=False,
             version=version,
             ensure_exists=True,
-        ),
-        method,
-    ) == str(tmp_path)
+        ).user_config_path
+        == tmp_path
+    )
 
 
 def test_config_file_resolution_sfdirs_default():
@@ -570,7 +553,11 @@ def test_warn_config_file_owner(tmp_path, monkeypatch):
         with warnings.catch_warnings(record=True) as c:
             assert c1["b"] is True
         assert len(c) == 1
-        assert str(c[0].message) == f"Bad owner or permissions on {str(c_file)}"
+        assert (
+            str(c[0].message)
+            == f"Bad owner or permissions on {str(c_file)}"
+            + f". To change owner, run `chown $USER {str(c_file)}`. To restrict permissions, run `chmod 0600 {str(c_file)}`."
+        )
 
 
 def test_warn_config_file_permissions(tmp_path):
@@ -588,7 +575,15 @@ def test_warn_config_file_permissions(tmp_path):
     with warnings.catch_warnings(record=True) as c:
         assert c1["b"] is True
     assert len(c) == 1
-    assert str(c[0].message) == f"Bad owner or permissions on {str(c_file)}"
+    chmod_message = (
+        f". To change owner, run `chown $USER {str(c_file)}`. To restrict permissions, run `chmod 0600 {str(c_file)}`."
+        if not IS_WINDOWS
+        else ""
+    )
+    assert (
+        str(c[0].message)
+        == f"Bad owner or permissions on {str(c_file)}" + chmod_message
+    )
 
 
 def test_configoption_missing_root_manager():

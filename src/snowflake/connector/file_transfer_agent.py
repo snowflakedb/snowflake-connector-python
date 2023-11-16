@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import binascii
 import glob
+import math
 import mimetypes
 import os
 import sys
@@ -21,12 +22,17 @@ from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import GET_CWD, IS_WINDOWS
 from .constants import (
+    AZURE_CHUNK_SIZE,
     AZURE_FS,
     CMD_TYPE_DOWNLOAD,
     CMD_TYPE_UPLOAD,
     GCS_FS,
     LOCAL_FS,
+    S3_DEFAULT_CHUNK_SIZE,
     S3_FS,
+    S3_MAX_OBJECT_SIZE,
+    S3_MAX_PARTS,
+    S3_MIN_PART_SIZE,
     ResultStatus,
     megabyte,
 )
@@ -181,6 +187,28 @@ def _update_progress(
         f"progress: {progress}, show_progress_bar: {show_progress_bar}"
     )
     return progress == 1.0
+
+
+def _chunk_size_calculator(file_size: int) -> int:
+    # S3 has limitation on the num of parts to be uploaded, this helper method recalculate the num of parts
+    if file_size > S3_MAX_OBJECT_SIZE:
+        # check if we don't exceed the allowed S3 max file size 5 TiB
+        raise ValueError(
+            f"File size {file_size} exceeds the maximum file size {S3_MAX_OBJECT_SIZE} allowed in S3."
+        )
+
+    # num_parts = math.ceil(file_size / default_chunk_size)
+    # if num_parts is greater than the allowed S3_MAX_PARTS, we update our chunk_size, otherwise we use the default one
+    calculated_chunk_size = (
+        max(math.ceil(file_size / S3_MAX_PARTS), S3_MIN_PART_SIZE)
+        if math.ceil(file_size / S3_DEFAULT_CHUNK_SIZE) > S3_MAX_PARTS
+        else S3_DEFAULT_CHUNK_SIZE
+    )
+    if calculated_chunk_size != S3_DEFAULT_CHUNK_SIZE:
+        logger.debug(
+            f"Setting chunksize to {calculated_chunk_size} instead of the default {S3_DEFAULT_CHUNK_SIZE}."
+        )
+    return calculated_chunk_size
 
 
 def percent(seen_so_far: int, size: float) -> float:
@@ -630,8 +658,6 @@ class SnowflakeFileTransferAgent:
     def _create_file_transfer_client(
         self, meta: SnowflakeFileMeta
     ) -> SnowflakeStorageClient:
-        from .constants import AZURE_CHUNK_SIZE, S3_CHUNK_SIZE
-
         if self._stage_location_type == LOCAL_FS:
             return SnowflakeLocalStorageClient(
                 meta,
@@ -651,7 +677,7 @@ class SnowflakeFileTransferAgent:
                 meta,
                 self._credentials,
                 self._stage_info,
-                S3_CHUNK_SIZE,
+                _chunk_size_calculator(meta.src_file_size),
                 use_accelerate_endpoint=self._use_accelerate_endpoint,
                 use_s3_regional_url=self._use_s3_regional_url,
             )

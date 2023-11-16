@@ -7,13 +7,16 @@ from __future__ import annotations
 
 import inspect
 import time
-from unittest.mock import MagicMock, Mock, PropertyMock
+from unittest.mock import Mock, PropertyMock
 
 import pytest
 
+import snowflake.connector.errors
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
+
+from .mock_utils import mock_connection
 
 try:  # pragma: no cover
     from snowflake.connector.auth import Auth, AuthByDefault, AuthByPlugin
@@ -24,10 +27,7 @@ except ImportError:
 
 
 def _init_rest(application, post_requset):
-    connection = MagicMock()
-    connection._login_timeout = 120
-    connection.login_timeout = 120
-    connection._network_timeout = None
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=application)
@@ -102,7 +102,12 @@ def _mock_auth_mfa_rest_response_failure(url, headers, body, **kwargs):
                 "inFlightCtx": "inFlightCtx",
             },
         }
-
+    elif mock_cnt == 2:
+        ret = {
+            "success": True,
+            "message": None,
+            "data": None,
+        }
     mock_cnt += 1
     return ret
 
@@ -126,6 +131,12 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
     elif mock_cnt == 1:
         time.sleep(10)  # should timeout while here
         ret = {}
+    elif mock_cnt == 2:
+        ret = {
+            "success": True,
+            "message": None,
+            "data": None,
+        }
 
     mock_cnt += 1
     return ret
@@ -167,6 +178,14 @@ def test_auth_mfa(next_action: str):
     auth_instance = AuthByDefault(password)
     auth.authenticate(auth_instance, account, user, timeout=1)
     assert rest._connection.errorhandler.called  # error
+
+    # ret["data"] is none
+    with pytest.raises(snowflake.connector.errors.Error):
+        mock_cnt = 2
+        rest = _init_rest(application, _mock_auth_mfa_rest_response_timeout)
+        auth = Auth(rest)
+        auth_instance = AuthByDefault(password)
+        auth.authenticate(auth_instance, account, user)
 
 
 def _mock_auth_password_change_rest_response(url, headers, body, **kwargs):

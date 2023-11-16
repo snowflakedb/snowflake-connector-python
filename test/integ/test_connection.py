@@ -681,35 +681,6 @@ def test_okta_url(conn_cnx):
         assert cnx
 
 
-@pytest.mark.skipolddriver
-def test_use_openssl_only(db_parameters):
-    cnx = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        use_openssl_only=True,
-    )
-    assert cnx
-    assert "SF_USE_OPENSSL_ONLY" in os.environ
-    # Note during testing conftest will default this value to False, so if testing this we need to manually clear it
-    # Let's test it again, after clearing it
-    del os.environ["SF_USE_OPENSSL_ONLY"]
-    cnx = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        use_openssl_only=True,
-    )
-    assert cnx
-    assert os.environ["SF_USE_OPENSSL_ONLY"] == "True"
-
-
 def test_dashed_url(db_parameters):
     """Test whether dashed URLs get created correctly."""
     with mock.patch(
@@ -973,6 +944,7 @@ def test_authenticate_error(conn_cnx, caplog):
     mock_auth = mock.Mock(spec=AuthByPlugin, unsafe=True)
     mock_auth.prepare.return_value = mock_auth
     mock_auth.update_body.side_effect = ReauthenticationRequest(None)
+    mock_auth._retry_ctx = mock.MagicMock()
     with conn_cnx() as conn:
         caplog.set_level(logging.DEBUG, "snowflake.connector")
         with pytest.raises(ReauthenticationRequest):

@@ -645,6 +645,61 @@ def test_geometry(conn_cnx):
                 assert row in expected_data
 
 
+@pytest.mark.skipolddriver
+def test_vector(conn_cnx, is_public_test):
+    if is_public_test:
+        pytest.xfail(
+            reason="This feature hasn't been rolled out for public Snowflake deployments yet."
+        )
+    name_vectors = random_string(5, "test_vector_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            # Seed test data
+            expected_data_ints = [[1, 3, -5], [40, 1234567, 1], "NULL"]
+            expected_data_floats = [
+                [1.8, -3.4, 6.7, 0, 2.3],
+                [4.121212121, 31234567.4, 7, -2.123, 1],
+                "NULL",
+            ]
+            cur.execute(
+                f"create temporary table {name_vectors} (int_vec VECTOR(INT,3), float_vec VECTOR(FLOAT,5))"
+            )
+            for i in range(len(expected_data_ints)):
+                cur.execute(
+                    f"insert into {name_vectors} select {expected_data_ints[i]}::VECTOR(INT,3), {expected_data_floats[i]}::VECTOR(FLOAT,5)"
+                )
+
+        with cnx.cursor() as cur:
+            # Test a basic fetch
+            cur.execute(
+                f"select int_vec, float_vec from {name_vectors} order by float_vec"
+            )
+            metadata = cur.description
+            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
+            assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
+            data = cur.fetchall()
+            for i, row in enumerate(data):
+                if expected_data_floats[i] == "NULL":
+                    assert row[0] is None
+                else:
+                    assert row[0] == expected_data_ints[i]
+
+                if expected_data_ints[i] == "NULL":
+                    assert row[1] is None
+                else:
+                    assert row[1] == pytest.approx(expected_data_floats[i])
+
+            # Test an empty result set
+            cur.execute(
+                f"select int_vec, float_vec from {name_vectors} where int_vec = [1,2,3]::VECTOR(int,3)"
+            )
+            metadata = cur.description
+            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
+            assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
+            data = cur.fetchall()
+            assert len(data) == 0
+
+
 def test_invalid_bind_data_type(conn_cnx):
     """Invalid bind data type."""
     with conn_cnx() as cnx:
@@ -1613,6 +1668,7 @@ def test_fetch_batches_with_sessions(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_null_connection(conn_cnx):
+    retries = 15
     with conn_cnx() as con:
         with con.cursor() as cur:
             cur.execute_async(
@@ -1620,6 +1676,13 @@ def test_null_connection(conn_cnx):
             )
             con.rest.delete_session()
             status = con.get_query_status(cur.sfqid)
+            for _ in range(retries):
+                if status not in (QueryStatus.RUNNING,):
+                    break
+                time.sleep(1)
+                status = con.get_query_status(cur.sfqid)
+            else:
+                pytest.fail(f"query is still running after {retries} retries")
             assert status == QueryStatus.FAILED_WITH_ERROR
             assert con.is_an_error(status)
 
@@ -1690,3 +1753,23 @@ def test_decoding_utf8_for_json_result(conn_cnx):
     mock_resp.content = "À".encode("latin1")
     with pytest.raises(Error):
         result_batch._load(mock_resp)
+
+
+@pytest.mark.skipolddriver
+def test_nanoarrow_usage_deprecation():
+    with pytest.warns() as record:
+        import snowflake.connector.cursor
+
+        os.environ["NANOARROW_USAGE"] = "abc"
+        _ = snowflake.connector.cursor.NANOARROW_USAGE
+        _ = snowflake.connector.cursor.NanoarrowUsage
+        del os.environ["NANOARROW_USAGE"]
+        assert len(record) == 3
+        assert (
+            "Environment variable NANOARROW_USAGE has been deprecated"
+            in str(record[0].message)
+            and "snowflake.connector.cursor.NANOARROW_USAGE has been deprecated"
+            in str(record[1].message)
+            and "snowflake.connector.cursor.NanoarrowUsage has been deprecated"
+            in str(record[2].message)
+        )

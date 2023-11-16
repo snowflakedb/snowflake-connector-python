@@ -118,12 +118,15 @@ def _create_temp_stage(
 
 
 def _do_create_temp_file_format(
-    cursor: SnowflakeCursor, file_format_location: str, compression: str
+    cursor: SnowflakeCursor,
+    file_format_location: str,
+    compression: str,
+    sql_use_logical_type: str,
 ) -> None:
     file_format_sql = (
         f"CREATE TEMP FILE FORMAT {file_format_location} "
         f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-        f"TYPE=PARQUET COMPRESSION={compression}"
+        f"TYPE=PARQUET COMPRESSION={compression}{sql_use_logical_type}"
     )
     logger.debug(f"creating file format with '{file_format_sql}'")
     cursor.execute(file_format_sql, _is_internal=True)
@@ -135,6 +138,7 @@ def _create_temp_file_format(
     schema: str | None,
     quote_identifiers: bool,
     compression: str,
+    sql_use_logical_type: str,
 ) -> str:
     file_format_name = random_string()
     file_format_location = build_location_helper(
@@ -144,7 +148,9 @@ def _create_temp_file_format(
         quote_identifiers=quote_identifiers,
     )
     try:
-        _do_create_temp_file_format(cursor, file_format_location, compression)
+        _do_create_temp_file_format(
+            cursor, file_format_location, compression, sql_use_logical_type
+        )
     except ProgrammingError as e:
         # User may not have the privilege to create file format on the target schema, so fall back to use current schema
         # as the old behavior.
@@ -152,7 +158,9 @@ def _create_temp_file_format(
             f"creating stage {file_format_location} failed. Exception {str(e)}. Fall back to use current schema"
         )
         file_format_location = file_format_name
-        _do_create_temp_file_format(cursor, file_format_location, compression)
+        _do_create_temp_file_format(
+            cursor, file_format_location, compression, sql_use_logical_type
+        )
 
     return file_format_location
 
@@ -172,6 +180,7 @@ def write_pandas(
     create_temp_table: bool = False,
     overwrite: bool = False,
     table_type: Literal["", "temp", "temporary", "transient"] = "",
+    use_logical_type: bool | None = None,
     **kwargs: Any,
 ) -> tuple[
     bool,
@@ -232,6 +241,11 @@ def write_pandas(
             Pandas DataFrame.
         table_type: The table type of to-be-created table. The supported table types include ``temp``/``temporary``
             and ``transient``. Empty means permanent table as per SQL convention.
+        use_logical_type: Boolean that specifies whether to use Parquet logical types. With this file format option,
+            Snowflake can interpret Parquet logical types during data loading. To enable Parquet logical types,
+            set use_logical_type as True. Set to None to use Snowflakes default. For more information, see:
+            https://docs.snowflake.com/en/sql-reference/sql/create-file-format
+
 
     Returns:
         Returns the COPY INTO command's results to verify ingestion in the form of a tuple of whether all chunks were
@@ -279,6 +293,27 @@ def write_pandas(
             UserWarning,
             stacklevel=2,
         )
+
+    # use_logical_type should be True when dataframe contains datetimes with timezone.
+    # https://github.com/snowflakedb/snowflake-connector-python/issues/1687
+    if not use_logical_type and any(
+        [pandas.api.types.is_datetime64tz_dtype(df[c]) for c in df.columns]
+    ):
+        warnings.warn(
+            "Dataframe contains a datetime with timezone column, but "
+            f"'{use_logical_type=}'. This can result in dateimes "
+            "being incorrectly written to Snowflake. Consider setting "
+            "'use_logical_type = True'",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    if use_logical_type is None:
+        sql_use_logical_type = ""
+    elif use_logical_type:
+        sql_use_logical_type = " USE_LOGICAL_TYPE = TRUE"
+    else:
+        sql_use_logical_type = " USE_LOGICAL_TYPE = FALSE"
 
     cursor = conn.cursor()
     stage_location = _create_temp_stage(
@@ -329,7 +364,12 @@ def write_pandas(
 
     if auto_create_table or overwrite:
         file_format_location = _create_temp_file_format(
-            cursor, database, schema, quote_identifiers, compression_map[compression]
+            cursor,
+            database,
+            schema,
+            quote_identifiers,
+            compression_map[compression],
+            sql_use_logical_type,
         )
         infer_schema_sql = f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>'@{stage_location}', file_format=>'{file_format_location}'))"
         logger.debug(f"inferring schema with '{infer_schema_sql}'")
@@ -381,7 +421,12 @@ def write_pandas(
             f"COPY INTO {target_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
             f"({columns}) "
             f"FROM (SELECT {parquet_columns} FROM @{stage_location}) "
-            f"FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression_map[compression]}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''}) "
+            f"FILE_FORMAT=("
+            f"TYPE=PARQUET "
+            f"COMPRESSION={compression_map[compression]}"
+            f"{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''}"
+            f"{sql_use_logical_type}"
+            f") "
             f"PURGE=TRUE ON_ERROR={on_error}"
         )
         logger.debug(f"copying into with '{copy_into_sql}'")

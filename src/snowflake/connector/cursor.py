@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import collections
 import logging
+import os
 import re
 import signal
 import sys
 import time
 import uuid
+import warnings
 from enum import Enum
 from logging import getLogger
 from threading import Lock, Timer
@@ -86,7 +88,7 @@ else:
     Table = None
 
 try:
-    from .arrow_iterator import PyArrowIterator  # NOQA
+    from .nanoarrow_arrow_iterator import PyArrowIterator  # NOQA
 
     CAN_USE_ARROW_RESULT_FORMAT = True
 except ImportError as e:  # pragma: no cover
@@ -119,6 +121,15 @@ LOG_MAX_QUERY_LENGTH = 80
 
 ASYNC_NO_DATA_MAX_RETRY = 24
 ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
+
+
+class _NanoarrowUsage(str, Enum):
+    # follow the session parameter to use nanoarrow converter or not
+    FOLLOW_SESSION_PARAMETER = "follow_session_parameter"
+    # ignore the session parameter, use nanoarrow converter
+    ENABLE_NANOARROW = "enable_nanoarrow"
+    # ignore the session parameter, do not use nanoarrow converter
+    DISABLE_NANOARROW = "disable_nanoarrow"
 
 
 class ResultMetadata(NamedTuple):
@@ -530,6 +541,7 @@ class SnowflakeCursor:
                 describe_only=describe_only,
                 _no_results=_no_results,
                 _no_retry=_no_retry,
+                timeout=real_timeout,
             )
         finally:
             try:
@@ -1145,7 +1157,7 @@ class SnowflakeCursor:
             "num_statements" not in kwargs or kwargs.get("num_statements") == 1
         ):
             if self._connection.is_pyformat:
-                # TODO - utilize multi-statement instead of rewriting the query and
+                # TODO(SNOW-940692) - utilize multi-statement instead of rewriting the query and
                 #  accumulate results to mock the result from a single insert statement as formatted below
                 logger.debug("rewriting INSERT query")
                 command_wo_comments = re.sub(self.COMMENT_SQL_RE, "", command)
@@ -1494,3 +1506,31 @@ class DictCursor(SnowflakeCursor):
             connection,
             use_dict_result=True,
         )
+
+
+def __getattr__(name):
+    if name == "NanoarrowUsage":
+        warnings.warn(
+            "snowflake.connector.cursor.NanoarrowUsage has been deprecated and will be removed in the future, "
+            "please stop using the class.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _NanoarrowUsage
+    if name == "NANOARROW_USAGE":
+        if "NANOARROW_USAGE" in os.environ:
+            warnings.warn(
+                "Environment variable NANOARROW_USAGE has been deprecated and will be removed in the future, "
+                "please stop setting the variable.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        warnings.warn(
+            "snowflake.connector.cursor.NANOARROW_USAGE has been deprecated and will be removed in the future, "
+            "please stop using the variable.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

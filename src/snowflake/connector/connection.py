@@ -10,6 +10,7 @@ import os
 import pathlib
 import re
 import sys
+import traceback
 import uuid
 import warnings
 import weakref
@@ -22,7 +23,7 @@ from logging import getLogger
 from threading import Lock
 from time import strptime
 from types import TracebackType
-from typing import Any, Callable, Generator, Iterable, NamedTuple, Sequence
+from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
 from uuid import UUID
 
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -41,6 +42,7 @@ from .auth import (
     AuthByWebBrowser,
 )
 from .auth.idtoken import AuthByIdToken
+from .backoff_policies import exponential_backoff
 from .bind_upload_agent import BindUploadError
 from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .config_manager import CONFIG_MANAGER, _get_default_connection_params
@@ -77,6 +79,7 @@ from .errorcode import (
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
     ER_FAILED_TO_CONNECT_TO_DB,
+    ER_INVALID_BACKOFF_POLICY,
     ER_INVALID_VALUE,
     ER_NO_ACCOUNT_NAME,
     ER_NO_NUMPY,
@@ -103,6 +106,7 @@ from .util_text import construct_hostname, parse_account, split_statements
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
+DEFAULT_BACKOFF_POLICY = exponential_backoff()
 
 
 def DefaultConverterClass() -> type:
@@ -141,11 +145,13 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "schema": (None, (type(None), str)),  # snowflake
     "role": (None, (type(None), str)),  # snowflake
     "session_id": (None, (type(None), str)),  # snowflake
-    "login_timeout": (120, int),  # login timeout
+    "login_timeout": (None, (type(None), int)),  # login timeout
     "network_timeout": (
         None,
         (type(None), int),
     ),  # network timeout (infinite by default)
+    "socket_timeout": (None, (type(None), int)),
+    "backoff_policy": (DEFAULT_BACKOFF_POLICY, Callable),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), str, RSAPrivateKey)),
@@ -186,9 +192,9 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "client_store_temporary_credential": (False, bool),
     "client_request_mfa_token": (False, bool),
     "use_openssl_only": (
-        False,
+        True,
         bool,
-    ),  # only use openssl instead of python only crypto modules
+    ),  # ignored - python only crypto modules are no longer used
     # whether to convert Arrow number values to decimal instead of doubles
     "arrow_number_to_decimal": (False, bool),
     "enable_stage_s3_privatelink_for_us_east_1": (
@@ -273,8 +279,20 @@ class SnowflakeConnection:
         schema: Schema in use on Snowflake.
         warehouse: Warehouse to be used on Snowflake.
         role: Role in use on Snowflake.
-        login_timeout: Login timeout in seconds. Used while authenticating.
-        network_timeout: Network timeout. Used for general purpose.
+        login_timeout: Login timeout in seconds. Login requests will not be retried after this timeout expires.
+            Note that the login attempt may still take more than login_timeout seconds as an ongoing login request
+            cannot be canceled even upon login timeout expiry. The login timeout only prevents further retries.
+            If not specified, login_timeout is set to `snowflake.connector.auth.by_plugin.DEFAULT_AUTH_CLASS_TIMEOUT`.
+            Note that the number of retries on login requests is still limited by
+            `snowflake.connector.auth.by_plugin.DEFAULT_MAX_CON_RETRY_ATTEMPTS`.
+        network_timeout: Network timeout in seconds. Network requests besides login requests will not be retried
+            after this timeout expires. Overriden in cursor query execution if timeout is passed to cursor.execute.
+            Note that an operation may still take more than network_timeout seconds for the same reason as above.
+            If not specified, network_timeout is infinite.
+        socket_timeout: Socket timeout in seconds. Sets both socket connect and read timeout.
+        backoff_policy: Backoff policy to use for login and network requests. Must be a callable generator function.
+            Standard linear and exponential backoff implementations are included in `snowflake.connector.backoff_policies`
+            See the backoff_policies module for details and implementation examples.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
@@ -284,7 +302,6 @@ class SnowflakeConnection:
         validate_default_parameters: Validate database, schema, role and warehouse used on Snowflake.
         is_pyformat: Whether the current argument binding is pyformat or format.
         consent_cache_id_token: Consented cache ID token.
-        use_openssl_only: Use OpenSSL instead of pure Python libraries for signature verification and encryption.
         enable_stage_s3_privatelink_for_us_east_1: when true, clients use regional s3 url to upload files.
         enable_connection_diag: when true, clients will generate a connectivity diagnostic report.
         connection_diag_log_path: path to location to create diag report with enable_connection_diag.
@@ -472,6 +489,14 @@ class SnowflakeConnection:
         return int(self._network_timeout) if self._network_timeout is not None else None
 
     @property
+    def socket_timeout(self) -> int | None:
+        return int(self._socket_timeout) if self._socket_timeout is not None else None
+
+    @property
+    def _backoff_generator(self) -> Iterator:
+        return self._backoff_policy()
+
+    @property
     def client_session_keep_alive(self) -> bool | None:
         return self._client_session_keep_alive
 
@@ -566,7 +591,8 @@ class SnowflakeConnection:
 
     @property
     def use_openssl_only(self) -> bool:
-        return self._use_openssl_only
+        # Deprecated, kept for backwards compatibility
+        return True
 
     @property
     def arrow_number_to_decimal(self):
@@ -619,6 +645,7 @@ class SnowflakeConnection:
             TelemetryService.get_instance().update_context(kwargs)
 
         if self.enable_connection_diag:
+            exceptions_dict = {}
             connection_diag = ConnectionDiagnostic(
                 account=self.account,
                 host=self.host,
@@ -633,15 +660,22 @@ class SnowflakeConnection:
                 connection_diag.run_test()
                 self.__open_connection()
                 connection_diag.cursor = self.cursor()
-            except Exception as e:
-                logger.warning(f"Exception during connection test: {e}")
-
+            except Exception:
+                exceptions_dict["connection_test"] = traceback.format_exc()
+                logger.warning(
+                    f"""Exception during connection test:\n{exceptions_dict["connection_test"]} """
+                )
             try:
                 connection_diag.run_post_test()
-            except Exception as e:
-                logger.warning(f"Exception during post connection test: {e}")
+            except Exception:
+                exceptions_dict["post_test"] = traceback.format_exc()
+                logger.warning(
+                    f"""Exception during post connection test:\n{exceptions_dict["post_test"]} """
+                )
             finally:
                 connection_diag.generate_report()
+                if exceptions_dict:
+                    raise Exception(str(exceptions_dict))
         else:
             self.__open_connection()
 
@@ -866,7 +900,11 @@ class SnowflakeConnection:
                 # TODO: add telemetry for custom auth
             self.auth_class = self.auth_class
         elif self._authenticator == DEFAULT_AUTHENTICATOR:
-            self.auth_class = AuthByDefault(password=self._password)
+            self.auth_class = AuthByDefault(
+                password=self._password,
+                timeout=self._login_timeout,
+                backoff_generator=self._backoff_generator,
+            )
         elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
             self._session_parameters[PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = (
                 self._client_store_temporary_credential if IS_LINUX else True
@@ -884,6 +922,8 @@ class SnowflakeConnection:
                     protocol=self._protocol,
                     host=self.host,
                     port=self.port,
+                    timeout=self._login_timeout,
+                    backoff_generator=self._backoff_generator,
                 )
             else:
                 self.auth_class = AuthByIdToken(
@@ -892,6 +932,8 @@ class SnowflakeConnection:
                     protocol=self._protocol,
                     host=self.host,
                     port=self.port,
+                    timeout=self._login_timeout,
+                    backoff_generator=self._backoff_generator,
                 )
 
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
@@ -899,9 +941,15 @@ class SnowflakeConnection:
                 private_key=self._private_key,
                 private_key_file=self._private_key_file,
                 private_key_file_pwd=self._private_key_file_pwd,
+                timeout=self._login_timeout,
+                backoff_generator=self._backoff_generator,
             )
         elif self._authenticator == OAUTH_AUTHENTICATOR:
-            self.auth_class = AuthByOAuth(oauth_token=self._token)
+            self.auth_class = AuthByOAuth(
+                oauth_token=self._token,
+                timeout=self._login_timeout,
+                backoff_generator=self._backoff_generator,
+            )
         elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
             self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                 self._client_request_mfa_token if IS_LINUX else True
@@ -915,10 +963,16 @@ class SnowflakeConnection:
             self.auth_class = AuthByUsrPwdMfa(
                 password=self._password,
                 mfa_token=self.rest.mfa_token,
+                timeout=self._login_timeout,
+                backoff_generator=self._backoff_generator,
             )
         else:
             # okta URL, e.g., https://<account>.okta.com/
-            self.auth_class = AuthByOkta(application=self.application)
+            self.auth_class = AuthByOkta(
+                application=self.application,
+                timeout=self._login_timeout,
+                backoff_generator=self._backoff_generator,
+            )
 
         self.authenticate_with_retry(self.auth_class)
 
@@ -1071,6 +1125,19 @@ class SnowflakeConnection:
         if "." in self._account:
             self._account = parse_account(self._account)
 
+        if not isinstance(self._backoff_policy, Callable) or not isinstance(
+            self._backoff_policy(), Iterator
+        ):
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Backoff policy must be a generator function",
+                    "errno": ER_INVALID_BACKOFF_POLICY,
+                },
+            )
+
         if self.ocsp_fail_open:
             logger.info(
                 "This connection is in OCSP Fail Open Mode. "
@@ -1089,19 +1156,6 @@ class SnowflakeConnection:
                 "CHECKED."
             )
 
-        if "SF_USE_OPENSSL_ONLY" not in os.environ:
-            logger.info("Setting use_openssl_only mode to %s", self.use_openssl_only)
-            os.environ["SF_USE_OPENSSL_ONLY"] = str(self.use_openssl_only)
-        elif (
-            os.environ.get("SF_USE_OPENSSL_ONLY", "False") == "True"
-        ) != self.use_openssl_only:
-            logger.warning(
-                "Mode use_openssl_only is already set to: %s, ignoring set request to: %s",
-                os.environ["SF_USE_OPENSSL_ONLY"],
-                self.use_openssl_only,
-            )
-            self._use_openssl_only = os.environ["SF_USE_OPENSSL_ONLY"] == "True"
-
     def cmd_query(
         self,
         sql: str,
@@ -1116,6 +1170,7 @@ class SnowflakeConnection:
         _no_results: bool = False,
         _update_current_object: bool = True,
         _no_retry: bool = False,
+        timeout: int | None = None,
     ) -> dict[str, Any]:
         """Executes a query with a sequence counter."""
         logger.debug("_cmd_query")
@@ -1161,6 +1216,7 @@ class SnowflakeConnection:
             _no_results=_no_results,
             _include_retry_params=True,
             _no_retry=_no_retry,
+            timeout=timeout,
         )
 
         if ret is None:
@@ -1214,6 +1270,8 @@ class SnowflakeConnection:
         )
 
         auth = Auth(self.rest)
+        # record start time for computing timeout
+        auth_instance._retry_ctx.set_start_time()
         try:
             auth.authenticate(
                 auth_instance=auth_instance,
@@ -1234,7 +1292,6 @@ class SnowflakeConnection:
                 "Operational Error raised at authentication"
                 f"for authenticator: {type(auth_instance).__name__}"
             )
-
             while True:
                 try:
                     auth_instance.handle_timeout(

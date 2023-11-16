@@ -349,13 +349,11 @@ class TestSFDictFileCache:
                 # changes, we set force_flush to True
                 with c._lock:
                     assert not c._save(force_flush=True)
-            assert caplog.record_tuples == [
-                (
-                    "snowflake.connector.cache",
-                    logging.DEBUG,
-                    f"acquiring {c._file_lock_path} timed out, skipping saving...",
-                ),
-            ]
+            assert (
+                "snowflake.connector.cache",
+                logging.DEBUG,
+                f"acquiring {c._file_lock_path} timed out, skipping saving...",
+            ) in caplog.record_tuples
 
     def test_pickle(self, tmpdir):
         c = AlwaysSaveSFDictFileCache(file_path=os.path.join(tmpdir, "cache.txt"))

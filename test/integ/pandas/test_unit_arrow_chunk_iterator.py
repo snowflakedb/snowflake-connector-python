@@ -34,7 +34,9 @@ except ImportError:
     pass
 
 try:
-    from snowflake.connector.arrow_iterator import IterUnit, PyArrowIterator
+    from snowflake.connector.nanoarrow_arrow_iterator import (
+        PyArrowRowIterator as NanoarrowPyArrowRowIterator,
+    )
 
     no_arrow_iterator_ext = False
 except ImportError:
@@ -56,7 +58,9 @@ def test_iterate_over_string_chunk():
         return str(random.randint(-100, 100))
 
     iterate_over_test_chunk(
-        [pyarrow.string(), pyarrow.string()], column_meta, str_generator
+        [pyarrow.string(), pyarrow.string()],
+        column_meta,
+        str_generator,
     )
 
 
@@ -75,7 +79,9 @@ def test_iterate_over_int64_chunk():
         return random.randint(-9223372036854775808, 9223372036854775807)
 
     iterate_over_test_chunk(
-        [pyarrow.int64(), pyarrow.int64()], column_meta, int64_generator
+        [pyarrow.int64(), pyarrow.int64()],
+        column_meta,
+        int64_generator,
     )
 
 
@@ -94,7 +100,9 @@ def test_iterate_over_int32_chunk():
         return random.randint(-2147483648, 2147483637)
 
     iterate_over_test_chunk(
-        [pyarrow.int32(), pyarrow.int32()], column_meta, int32_generator
+        [pyarrow.int32(), pyarrow.int32()],
+        column_meta,
+        int32_generator,
     )
 
 
@@ -113,7 +121,9 @@ def test_iterate_over_int16_chunk():
         return random.randint(-32768, 32767)
 
     iterate_over_test_chunk(
-        [pyarrow.int16(), pyarrow.int16()], column_meta, int16_generator
+        [pyarrow.int16(), pyarrow.int16()],
+        column_meta,
+        int16_generator,
     )
 
 
@@ -132,7 +142,9 @@ def test_iterate_over_int8_chunk():
         return random.randint(-128, 127)
 
     iterate_over_test_chunk(
-        [pyarrow.int8(), pyarrow.int8()], column_meta, int8_generator
+        [pyarrow.int8(), pyarrow.int8()],
+        column_meta,
+        int8_generator,
     )
 
 
@@ -148,7 +160,9 @@ def test_iterate_over_bool_chunk():
         return bool(random.getrandbits(1))
 
     iterate_over_test_chunk(
-        [pyarrow.bool_(), pyarrow.bool_()], [column_meta, column_meta], bool_generator
+        [pyarrow.bool_(), pyarrow.bool_()],
+        [column_meta, column_meta],
+        bool_generator,
     )
 
 
@@ -164,7 +178,9 @@ def test_iterate_over_float_chunk():
         return random.uniform(-100.0, 100.0)
 
     iterate_over_test_chunk(
-        [pyarrow.float64(), pyarrow.float64()], column_meta, float_generator
+        [pyarrow.float64(), pyarrow.float64()],
+        column_meta,
+        float_generator,
     )
 
 
@@ -267,7 +283,9 @@ def test_iterate_over_date_chunk():
         return datetime.date.fromordinal(random.randint(1, 1000000))
 
     iterate_over_test_chunk(
-        [pyarrow.date32(), pyarrow.date32()], [column_meta, column_meta], date_generator
+        [pyarrow.date32(), pyarrow.date32()],
+        [column_meta, column_meta],
+        date_generator,
     )
 
 
@@ -353,7 +371,10 @@ def test_iterate_over_time_chunk():
 
 
 def iterate_over_test_chunk(
-    pyarrow_type, column_meta, source_data_generator, expected_data_transformer=None
+    pyarrow_type,
+    column_meta,
+    source_data_generator,
+    expected_data_transformer=None,
 ):
     stream = BytesIO()
 
@@ -408,8 +429,8 @@ def iterate_over_test_chunk(
     # seek stream to begnning so that we can read from stream
     stream.seek(0)
     context = ArrowConverterContext()
-    it = PyArrowIterator(None, stream, context, False, False, False)
-    it.init(IterUnit.ROW_UNIT.value)
+
+    it = NanoarrowPyArrowRowIterator(None, stream.read(), context, False, False, False)
 
     count = 0
     while True:

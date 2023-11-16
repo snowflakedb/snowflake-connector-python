@@ -9,14 +9,20 @@ import json
 import os
 import sys
 from textwrap import dedent
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 import snowflake.connector
-from snowflake.connector.errors import Error
+from snowflake.connector.errors import (
+    Error,
+    ForbiddenError,
+    OperationalError,
+    ProgrammingError,
+)
 
 from ..randomize import random_string
+from .mock_utils import mock_request_with_action, zero_backoff
 
 try:
     from snowflake.connector.auth import (
@@ -26,8 +32,6 @@ try:
         AuthByWebBrowser,
     )
 except ImportError:
-    from unittest.mock import MagicMock
-
     AuthByDefault = AuthByOkta = AuthByOAuth = AuthByWebBrowser = MagicMock
 
 try:  # pragma: no cover
@@ -43,13 +47,14 @@ except ImportError:
             pass
 
 
-def fake_connector() -> snowflake.connector.SnowflakeConnection:
+def fake_connector(**kwargs) -> snowflake.connector.SnowflakeConnection:
     return snowflake.connector.connect(
         user="user",
         account="account",
         password="testpassword",
         database="TESTDB",
         warehouse="TESTWH",
+        **kwargs,
     )
 
 
@@ -316,3 +321,35 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             match=f"Default connection with name '{connection_name}' cannot be found, known ones are \\['con_a'\\]",
         ):
             snowflake.connector.connect(connections_file_path=connections_file)
+
+
+def test_invalid_backoff_policy():
+    with pytest.raises(ProgrammingError):
+        # zero_backoff() is a generator, not a generator function
+        _ = fake_connector(backoff_policy=zero_backoff())
+
+    with pytest.raises(ProgrammingError):
+        # passing a non-generator function should not work
+        _ = fake_connector(backoff_policy=lambda: None)
+
+    with pytest.raises(ForbiddenError):
+        # passing a generator function should make it pass config and error during connection
+        _ = fake_connector(backoff_policy=zero_backoff)
+
+
+@pytest.mark.parametrize("next_action", ("RETRY", "ERROR"))
+@patch("snowflake.connector.vendored.requests.sessions.Session.request")
+def test_handle_timeout(mockSessionRequest, next_action):
+    mockSessionRequest.side_effect = mock_request_with_action(next_action, sleep=5)
+
+    with pytest.raises(OperationalError):
+        # no backoff for testing
+        _ = fake_connector(
+            login_timeout=9,
+            backoff_policy=zero_backoff,
+        )
+
+    # authenticator should be the only retry mechanism for login requests
+    # 9 seconds should be enough for authenticator to attempt twice
+    # however, loosen restrictions to avoid thread scheduling causing failure
+    assert 1 < mockSessionRequest.call_count < 4

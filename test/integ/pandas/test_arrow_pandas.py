@@ -39,7 +39,7 @@ except ImportError:
     pyarrow = None
 
 try:
-    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+    from snowflake.connector.nanoarrow_arrow_iterator import PyArrowIterator  # NOQA
 
     no_arrow_iterator_ext = False
 except ImportError:
@@ -583,6 +583,54 @@ def test_timestampltz(conn_cnx, scale, timezone):
         finish(conn, table)
 
 
+@pytest.mark.skipif(
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.",
+)
+def test_vector(conn_cnx, is_public_test):
+    if is_public_test:
+        pytest.xfail(
+            reason="This feature hasn't been rolled out for public Snowflake deployments yet."
+        )
+    tests = [
+        (
+            "vector(int,3)",
+            [
+                "NULL",
+                "[1,2,3]::vector(int,3)",
+            ],
+            ["NULL", numpy.array([1, 2, 3])],
+        ),
+        (
+            "vector(float,3)",
+            [
+                "NULL",
+                "[1.3,2.4,3.5]::vector(float,3)",
+            ],
+            ["NULL", numpy.array([1.3, 2.4, 3.5], dtype=numpy.float32)],
+        ),
+    ]
+    for vector_type, cases, typed_cases in tests:
+        table = "test_arrow_vector"
+        column = f"(a {vector_type})"
+        values = [f"{i}, {c}" for i, c in enumerate(cases)]
+        with conn_cnx() as conn:
+            init_with_insert_select(conn, table, column, values)
+            # Test general fetches
+            sql_text = f"select a from {table} order by s"
+            validate_pandas(
+                conn, sql_text, typed_cases, 1, method="one", data_type=vector_type
+            )
+
+            # Test empty result sets
+            cur = conn.cursor()
+            cur.execute(f"select a from {table} limit 0")
+            df = cur.fetch_pandas_all()
+            assert len(df) == 0
+
+            finish(conn, table)
+
+
 def validate_pandas(
     cnx_table,
     sql,
@@ -649,7 +697,7 @@ def validate_pandas(
         for i in range(row_count):
             for j in range(col_count):
                 c_new = df_new.iat[i, j]
-                if cases[i] == "NULL":
+                if type(cases[i]) == str and cases[i] == "NULL":
                     assert c_new is None or pandas.isnull(c_new), (
                         "{} row, {} column: original value is NULL, "
                         "new value is {}, values are not equal".format(i, j, c_new)
@@ -686,6 +734,12 @@ def validate_pandas(
                             "values are not equal".format(i, j, cases[i], c_new)
                         )
                         break
+                    elif data_type.startswith("vector"):
+                        assert numpy.array_equal(cases[i], c_new), (
+                            "{} row, {} column: original value is {}, new value is {}, "
+                            "values are not equal".format(i, j, cases[i], c_new)
+                        )
+                        continue
                     else:
                         c_case = cases[i]
                     if epsilon is None:
@@ -859,6 +913,16 @@ def init(json_cnx, table, column, values, timezone=None):
     column_with_seq = column[0] + "s number, " + column[1:]
     cursor_json.execute(f"create or replace table {table} {column_with_seq}")
     cursor_json.execute(f"insert into {table} values {values}")
+
+
+def init_with_insert_select(json_cnx, table, column, rows, timezone=None):
+    cursor_json = json_cnx.cursor()
+    if timezone is not None:
+        cursor_json.execute(f"ALTER SESSION SET TIMEZONE = '{timezone}'")
+    column_with_seq = column[0] + "s number, " + column[1:]
+    cursor_json.execute(f"create or replace table {table} {column_with_seq}")
+    for row in rows:
+        cursor_json.execute(f"insert into {table} select {row}")
 
 
 def finish(json_cnx, table):

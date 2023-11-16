@@ -8,6 +8,65 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+
+- v3.6.0(TBD)
+
+  - Added support for Vector types
+  - Changed urllib3 version pin to only affect Python versions < 3.10.
+
+- v3.5.0(November 13,2023)
+
+  - Version 3.5.0 is the snowflake-connector-python purely built upon apache arrow-nanoarrow project.
+    - Reduced the wheel size to ~1MB and installation size to ~5MB.
+    - Removed a hard dependency on a specific version of pyarrow.
+  - Deprecated the usage of the following class/variable/environment variable for the sake of pure nanoarrow converter:
+    - Deprecated class `snowflake.connector.cursor.NanoarrowUsage`.
+    - Deprecated environment variable `NANOARROW_USAGE`.
+    - Deprecated module variable `snowflake.connector.cursor.NANOARROW_USAGE`.
+
+- v3.4.1(November 08,2023)
+
+  - Bumped vendored `urllib3` to 1.26.18
+  - Bumped vendored `requests` to 2.31.0
+
+- v3.4.0(November 03,2023)
+
+  - Added support for `use_logical_type` in `write_pandas`.
+  - Removed dependencies on pycryptodomex and oscrypto. All connections now go through OpenSSL via the cryptography library, which was already a dependency.
+  - Fixed issue with ingesting files over 80 GB to S3.
+  - Added the `backoff_policy` argument to `snowflake.connector.connect` allowing for configurable backoff policy between retries of failed requests. See available implementations in the `backoff_policies` module.
+  - Added the `socket_timeout` argument to `snowflake.connector.connect` specifying socket read and connect timeout.
+  - Fixed `login_timeout` and `network_timeout` behaviour. Retries of login and network requests are now properly halted after these timeouts expire.
+  - Fixed bug for issue https://github.com/urllib3/urllib3/issues/1878 in vendored `urllib`.
+
+- v3.3.1(October 16,2023)
+
+  - Added for non-Windows platforms command suggestions (chown/chmod) for insufficient file permissions of config files.
+  - Fixed issue with connection diagnostics failing to complete certificate checks.
+  - Fixed issue that arrow iterator causes `ImportError` when the c extensions are not compiled.
+
+- v3.3.0(October 10,2023)
+
+  - Updated to Apache arrow-nanoarrow project for result arrow data conversion.
+  - Introduced the `NANOARROW_USAGE` environment variable to allows switching between the nanoarrow converter and the arrow converter. Valid values include:
+    - `FOLLOW_SESSION_PARAMETER`, which uses the converter configured in the server.
+    - `DISABLE_NANOARROW`, which uses arrow converter, overriding the server setting.
+    - `ENABLE_NANOARROW`, which uses the nanoarrow converter, overriding the server setting.
+  - Introduced the `snowflake.connector.cursor.NanoarrowUsage` enum, whose members include:
+    - `NanoarrowUsage.FOLLOW_SESSION_PARAMETER`, which uses the converter configured in the server.
+    - `NanoarrowUsage.DISABLE_NANOARROW`, which uses arrow converter, overriding the server setting.
+    - `NanoarrowUsage.ENABLE_NANOARROW`, which uses the nanoarrow converter, overriding the server setting.
+  - Introduced the `snowflake.connector.cursor.NANOARROW_USAGE` module variable to allow switching between the nanoarrow converter and the arrow converter. It works in conjunction with the `snowflake.connector.cursor.NanoarrowUsage` enum.
+  - The newly-introduced environment variable, enum, and module variable are temporary. They will be removed in a future release when switch from arrow to nanoarrow for data conversion is complete.
+
+- v3.2.1(September 26,2023)
+
+  - Fixed a bug where url port and path were ignored in private link oscp retry.
+  - Added thread safety in telemetry when instantiating multiple connections concurrently.
+  - Bumped platformdirs dependency from >=2.6.0,<3.9.0 to >=2.6.0,<4.0.0.0 and made necessary changes to allow this.
+  - Removed the deprecation warning from the vendored urllib3 about urllib3.contrib.pyopenssl deprecation.
+  - Improved robustness in handling authentication response.
+
 - v3.2.0(September 06,2023)
 
   - Made the ``parser`` -> ``manager`` renaming more consistent in ``snowflake.connector.config_manager`` module.

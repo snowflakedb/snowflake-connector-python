@@ -21,9 +21,9 @@ class AuthByDefault(AuthByPlugin):
     def assertion_content(self) -> str:
         return "*********"
 
-    def __init__(self, password: str) -> None:
+    def __init__(self, password: str, **kwargs) -> None:
         """Initializes an instance with a password."""
-        super().__init__()
+        super().__init__(**kwargs)
         self._password: str | None = password
 
     def reset_secrets(self) -> None:
