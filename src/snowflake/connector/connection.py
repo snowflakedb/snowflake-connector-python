@@ -120,9 +120,12 @@ def DefaultConverterClass() -> type:
         from .converter import SnowflakeConverter
 
         return SnowflakeConverter
-    
 
-def _get_private_bytes_from_file(private_key_file, private_key_file_pwd=None):
+
+def _get_private_bytes_from_file(
+    private_key_file: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+    private_key_file_pwd: bytes | None = None,
+) -> bytes:
     with open(private_key_file, "rb") as key:
         private_key = serialization.load_pem_private_key(
             key.read(),
@@ -133,9 +136,9 @@ def _get_private_bytes_from_file(private_key_file, private_key_file_pwd=None):
     pkb = private_key.private_bytes(
         encoding=serialization.Encoding.DER,
         format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption()
+        encryption_algorithm=serialization.NoEncryption(),
     )
-    
+
     return pkb
 
 
@@ -956,7 +959,7 @@ class SnowflakeConnection:
                 )
 
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
-            private_key=self._private_key
+            private_key = self._private_key
 
             if self._private_key_file:
                 private_key = _get_private_bytes_from_file(
