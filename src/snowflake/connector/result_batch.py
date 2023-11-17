@@ -42,12 +42,12 @@ if TYPE_CHECKING:  # pragma: no cover
 
     from .connection import SnowflakeConnection
     from .converter import SnowflakeConverterType
-    from .cursor import ResultMetadata, SnowflakeCursor
+    from .cursor import ResultMetadataV2, SnowflakeCursor
     from .vendored.requests import Response
 
 
 # emtpy pyarrow type array corresponding to FIELD_TYPES
-FIELD_TYPE_TO_PA_TYPE: list[Callable[[ResultMetadata], DataType]] = []
+FIELD_TYPE_TO_PA_TYPE: list[Callable[[ResultMetadataV2], DataType]] = []
 
 # qrmk related constants
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
@@ -108,7 +108,7 @@ def create_batches_from_response(
     cursor: SnowflakeCursor,
     _format: str,
     data: dict[str, Any],
-    schema: Sequence[ResultMetadata],
+    schema: Sequence[ResultMetadataV2],
 ) -> list[ResultBatch]:
     column_converters: list[tuple[str, SnowflakeConverterType]] = []
     arrow_context: ArrowConverterContext | None = None
@@ -243,7 +243,7 @@ class ResultBatch(abc.ABC):
         rowcount: int,
         chunk_headers: dict[str, str] | None,
         remote_chunk_info: RemoteChunkInfo | None,
-        schema: Sequence[ResultMetadata],
+        schema: Sequence[ResultMetadataV2],
         use_dict_result: bool,
     ) -> None:
         self.rowcount = rowcount
@@ -418,7 +418,7 @@ class JSONResultBatch(ResultBatch):
         rowcount: int,
         chunk_headers: dict[str, str] | None,
         remote_chunk_info: RemoteChunkInfo | None,
-        schema: Sequence[ResultMetadata],
+        schema: Sequence[ResultMetadataV2],
         column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
         *,
@@ -439,7 +439,7 @@ class JSONResultBatch(ResultBatch):
         cls,
         data: Sequence[Sequence[Any]],
         data_len: int,
-        schema: Sequence[ResultMetadata],
+        schema: Sequence[ResultMetadataV2],
         column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
     ):
@@ -576,7 +576,7 @@ class ArrowResultBatch(ResultBatch):
         context: ArrowConverterContext,
         use_dict_result: bool,
         numpy: bool,
-        schema: Sequence[ResultMetadata],
+        schema: Sequence[ResultMetadataV2],
         number_to_decimal: bool,
     ) -> None:
         super().__init__(
@@ -638,7 +638,7 @@ class ArrowResultBatch(ResultBatch):
         context: ArrowConverterContext,
         use_dict_result: bool,
         numpy: bool,
-        schema: Sequence[ResultMetadata],
+        schema: Sequence[ResultMetadataV2],
         number_to_decimal: bool,
     ):
         """Initializes an ``ArrowResultBatch`` from static, local data."""

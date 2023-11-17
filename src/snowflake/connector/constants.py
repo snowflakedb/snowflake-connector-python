@@ -15,7 +15,7 @@ from .sf_dirs import _resolve_platform_dirs
 if TYPE_CHECKING:
     from pyarrow import DataType
 
-    from .cursor import ResultMetadata
+    from .cursor import ResultMetadataV2
 
 # Snowflake's central platform dependent directories, if the folder
 # ~/.snowflake/ (customizable by the environment variable SNOWFLAKE_HOME) exists
@@ -40,10 +40,10 @@ DBAPI_TYPE_TIMESTAMP = 3
 class FieldType(NamedTuple):
     name: str
     dbapi_type: list[int]
-    pa_type: Callable[[ResultMetadata], DataType]
+    pa_type: Callable[[ResultMetadataV2], DataType]
 
 
-def vector_pa_type(metadata: ResultMetadata) -> DataType:
+def vector_pa_type(metadata: ResultMetadataV2) -> DataType:
     if metadata.fields is None:
         raise ValueError(
             "Invalid result metadata for vector type: expected sub-field metadata"

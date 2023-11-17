@@ -132,34 +132,6 @@ class _NanoarrowUsage(str, Enum):
     DISABLE_NANOARROW = "disable_nanoarrow"
 
 
-class ResultMetadataField(NamedTuple):
-    type_code: int
-    internal_size: int | None
-    precision: int | None
-    scale: int | None
-    is_nullable: bool
-    fields: list[ResultMetadataField] | None
-
-    @classmethod
-    def from_column(cls, col: dict[str, Any]):
-        """Initializes a ResultMetadataField object from a child of the column description in the query response."""
-        fields = None
-        if col.get("fields") is not None:
-            fields = [cls.from_column(f) for f in col["fields"]]
-        return cls(
-            FIELD_NAME_TO_ID[
-                col["extTypeName"].upper()
-                if col.get("extTypeName")
-                else col["type"].upper()
-            ],
-            col["length"],
-            col["precision"],
-            col["scale"],
-            col["nullable"],
-            fields,
-        )
-
-
 class ResultMetadata(NamedTuple):
     name: str
     type_code: int
@@ -168,8 +140,6 @@ class ResultMetadata(NamedTuple):
     precision: int | None
     scale: int | None
     is_nullable: bool
-    vector_dimension: int | None
-    fields: list[ResultMetadataField] | None
 
     @classmethod
     def from_column(cls, col: dict[str, Any]):
@@ -180,10 +150,6 @@ class ResultMetadata(NamedTuple):
             else col["type"].upper()
         ]
 
-        fields = None
-        if type_code == FIELD_NAME_TO_ID["VECTOR"] and col.get("fields") is not None:
-            fields = [ResultMetadataField.from_column(f) for f in col["fields"]]
-
         return cls(
             col["name"],
             type_code,
@@ -192,9 +158,156 @@ class ResultMetadata(NamedTuple):
             col["precision"],
             col["scale"],
             col["nullable"],
+        )
+
+
+class ResultMetadataV2Field:
+    def __init__(
+        self,
+        type_code: int,
+        is_nullable: bool,
+        internal_size: int | None = None,
+        precision: int | None = None,
+        scale: int | None = None,
+        fields: list[ResultMetadataV2] | None = None,
+    ):
+        self._type_code = type_code
+        self._is_nullable = is_nullable
+        self._internal_size = internal_size
+        self._precision = precision
+        self._scale = scale
+        self._fields = fields
+
+    @classmethod
+    def from_column(cls, col: dict[str, Any]) -> ResultMetadataV2Field:
+        """Initializes a ResultMetadataV2Field object from a child of the column description in the query response."""
+        fields = None
+        if col.get("fields") is not None:
+            fields = [cls.from_column(f) for f in col["fields"]]
+        return ResultMetadataV2Field(
+            FIELD_NAME_TO_ID[
+                col["extTypeName"].upper()
+                if col.get("extTypeName")
+                else col["type"].upper()
+            ],
+            col["nullable"],
+            col["length"],
+            col["precision"],
+            col["scale"],
+            fields,
+        )
+
+    @property
+    def type_code(self) -> int:
+        return self._type_code
+
+    @property
+    def is_nullable(self) -> bool:
+        return self._is_nullable
+
+    @property
+    def internal_size(self) -> int | None:
+        return self._internal_size
+
+    @property
+    def precision(self) -> int | None:
+        return self._precision
+
+    @property
+    def scale(self) -> int | None:
+        return self._scale
+
+    @property
+    def fields(self) -> list[ResultMetadataV2Field] | None:
+        return self._fields
+
+
+class ResultMetadataV2:
+    def __init__(
+        self,
+        name: str,
+        type_code: int,
+        is_nullable: bool,
+        display_size: int | None = None,
+        internal_size: int | None = None,
+        precision: int | None = None,
+        scale: int | None = None,
+        vector_dimension: int | None = None,
+        fields: list[ResultMetadataV2] | None = None,
+    ):
+        self._name = name
+        self._type_code = type_code
+        self._is_nullable = is_nullable
+        self._display_size = display_size
+        self._internal_size = internal_size
+        self._precision = precision
+        self._scale = scale
+        self._vector_dimension = vector_dimension
+        self._fields = fields
+
+    @classmethod
+    def from_column(cls, col: dict[str, Any]) -> ResultMetadataV2:
+        """Initializes a ResultMetadataV2 object from the column description in the query response.
+        This differs from ResultMetadata in that it has newly-added fields which cannot be added to
+        ResultMetadata since it is a named tuple.
+        """
+        type_code = FIELD_NAME_TO_ID[
+            col["extTypeName"].upper()
+            if col.get("extTypeName")
+            else col["type"].upper()
+        ]
+
+        fields = None
+        if type_code == FIELD_NAME_TO_ID["VECTOR"] and col.get("fields") is not None:
+            fields = [ResultMetadataV2Field.from_column(f) for f in col["fields"]]
+
+        return ResultMetadataV2(
+            col["name"],
+            type_code,
+            col["nullable"],
+            None,
+            col["length"],
+            col["precision"],
+            col["scale"],
             col.get("vectorDimension"),
             fields,
         )
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def type_code(self) -> int:
+        return self._type_code
+
+    @property
+    def is_nullable(self) -> bool:
+        return self._is_nullable
+
+    @property
+    def internal_size(self) -> int | None:
+        return self._internal_size
+
+    @property
+    def display_size(self) -> int | None:
+        return self._displayl_size
+
+    @property
+    def precision(self) -> int | None:
+        return self._precision
+
+    @property
+    def scale(self) -> int | None:
+        return self._scale
+
+    @property
+    def vector_dimension(self) -> int | None:
+        return self._vector_dimension
+
+    @property
+    def fields(self) -> list[ResultMetadataV2Field] | None:
+        return self._fields
 
 
 def exit_handler(*_) -> NoReturn:
@@ -279,6 +392,7 @@ class SnowflakeCursor:
         ] = []
         self._timebomb: Timer | None = None  # must be here for abort_exit method
         self._description: list[ResultMetadata] | None = None
+        self._description_v2: list[ResultMetadataV2] | None = None
         self._sfqid: str | None = None
         self._sqlstate = None
         self._total_rowcount = -1
@@ -327,6 +441,10 @@ class SnowflakeCursor:
     @property
     def description(self) -> list[ResultMetadata]:
         return self._description
+
+    @property
+    def _description_internal(self) -> list[ResultMetadataV2]:
+        return self._description_v2
 
     @property
     def rowcount(self) -> int | None:
@@ -1000,9 +1118,12 @@ class SnowflakeCursor:
         self._description: list[ResultMetadata] = [
             ResultMetadata.from_column(col) for col in data["rowtype"]
         ]
+        self._description_v2: list[ResultMetadataV2] = [
+            ResultMetadataV2.from_column(col) for col in data["rowtype"]
+        ]
 
         result_chunks = create_batches_from_response(
-            self, self._query_result_format, data, self._description
+            self, self._query_result_format, data, self._description_v2
         )
 
         if not (is_dml or self.is_file_transfer):
@@ -1021,12 +1142,12 @@ class SnowflakeCursor:
         # don't update the row count when the result is returned from `describe` method
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
             updated_rows = 0
-            for idx, desc in enumerate(self._description):
-                if desc[0] in (
+            for idx, desc in enumerate(self._description_v2):
+                if desc.name in (
                     "number of rows updated",
                     "number of multi-joined rows updated",
                     "number of rows deleted",
-                ) or desc[0].startswith("number of rows inserted"):
+                ) or desc.name.startswith("number of rows inserted"):
                     updated_rows += int(data["rowset"][0][idx])
             if self._total_rowcount == -1:
                 self._total_rowcount = updated_rows
@@ -1495,6 +1616,7 @@ class SnowflakeCursor:
             self._query_result_format = self._inner_cursor._query_result_format
             self._total_rowcount = self._inner_cursor._total_rowcount
             self._description = self._inner_cursor._description
+            self._description_v2 = self._inner_cursor._description_v2
             self._result_set = self._inner_cursor._result_set
             self._result_state = ResultState.VALID
             self._rownumber = 0
