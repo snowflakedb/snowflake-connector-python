@@ -388,6 +388,7 @@ class SnowflakeConnection:
         self.__set_error_attributes()
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
+        self.expired = False
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
