@@ -13,7 +13,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
   - Added support for Vector types
   - Changed urllib3 version pin to only affect Python versions < 3.10.
-  - Support for `private_key_file` and `private_key_file_pwd`` connection parameters
+  - Support for `private_key_file` and `private_key_file_pwd` connection parameters
 
 - v3.5.0(November 13,2023)
 
