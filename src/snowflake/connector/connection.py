@@ -27,8 +27,8 @@ from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Seq
 from uuid import UUID
 
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
@@ -120,6 +120,23 @@ def DefaultConverterClass() -> type:
         from .converter import SnowflakeConverter
 
         return SnowflakeConverter
+    
+
+def _get_private_bytes_from_file(private_key_file, private_key_file_pwd=None):
+    with open(private_key_file, "rb") as key:
+        private_key = serialization.load_pem_private_key(
+            key.read(),
+            password=private_key_file_pwd,
+            backend=default_backend(),
+        )
+
+    pkb = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    
+    return pkb
 
 
 SUPPORTED_PARAMSTYLES = {
@@ -942,12 +959,10 @@ class SnowflakeConnection:
             private_key=self._private_key
 
             if self._private_key_file:
-                with open(self._private_key_file, "rb") as key:
-                    private_key = load_pem_private_key(
-                        key.read(),
-                        password=self._private_key_file_pwd,
-                        backend=default_backend(),
-                    )
+                private_key = _get_private_bytes_from_file(
+                    self._private_key_file,
+                    self._private_key_file_pwd,
+                )
 
             self.auth_class = AuthByKeyPair(
                 private_key=private_key,

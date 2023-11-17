@@ -8,9 +8,13 @@ from __future__ import annotations
 import json
 import os
 import sys
+from tempfile import NamedTemporaryFile
 from textwrap import dedent
 from unittest.mock import MagicMock, patch
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 import pytest
 
 import snowflake.connector
@@ -353,3 +357,32 @@ def test_handle_timeout(mockSessionRequest, next_action):
     # 9 seconds should be enough for authenticator to attempt twice
     # however, loosen restrictions to avoid thread scheduling causing failure
     assert 1 < mockSessionRequest.call_count < 4
+
+
+def test__get_private_bytes_from_file():
+    private_key_file = NamedTemporaryFile()
+
+    private_key = rsa.generate_private_key(
+        backend=default_backend(), public_exponent=65537, key_size=2048
+    )
+
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    pkb = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    with open(private_key_file.name, "w") as f:
+        f.write(private_key_pem.decode())
+
+    private_key = snowflake.connector.connection._get_private_bytes_from_file(
+        private_key_file=private_key_file.name,
+    )
+    
+    assert pkb == private_key
