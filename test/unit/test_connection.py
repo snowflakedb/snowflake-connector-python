@@ -9,7 +9,6 @@ import json
 import os
 import sys
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from textwrap import dedent
 from unittest import mock
 from unittest.mock import MagicMock, patch
@@ -361,8 +360,8 @@ def test_handle_timeout(mockSessionRequest, next_action):
     assert 1 < mockSessionRequest.call_count < 4
 
 
-def test__get_private_bytes_from_file():
-    private_key_file = NamedTemporaryFile()
+def test__get_private_bytes_from_file(tmp_path: Path):
+    private_key_file = tmp_path / "key.pem"
 
     private_key = rsa.generate_private_key(
         backend=default_backend(), public_exponent=65537, key_size=2048
@@ -380,11 +379,10 @@ def test__get_private_bytes_from_file():
         encryption_algorithm=serialization.NoEncryption(),
     )
 
-    with open(private_key_file.name, "w") as f:
-        f.write(private_key_pem.decode())
+    private_key_file.write_bytes(private_key_pem)
 
     private_key = snowflake.connector.connection._get_private_bytes_from_file(
-        private_key_file=private_key_file.name,
+        private_key_file=str(private_key_file)
     )
 
     assert pkb == private_key
