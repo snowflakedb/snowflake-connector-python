@@ -9,6 +9,7 @@ import json
 import os
 import sys
 from textwrap import dedent
+from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -353,3 +354,41 @@ def test_handle_timeout(mockSessionRequest, next_action):
     # 9 seconds should be enough for authenticator to attempt twice
     # however, loosen restrictions to avoid thread scheduling causing failure
     assert 1 < mockSessionRequest.call_count < 4
+
+
+def test_expired_detection():
+    with mock.patch(
+        "snowflake.connector.network.SnowflakeRestful._post_request",
+        return_value={
+            "data": {
+                "masterToken": "some master token",
+                "token": "some token",
+                "validityInSeconds": 3600,
+                "masterValidityInSeconds": 14400,
+                "displayUserName": "TEST_USER",
+                "serverVersion": "7.42.0",
+            },
+            "code": None,
+            "message": None,
+            "success": True,
+        },
+    ):
+        conn = fake_connector()
+    assert not conn.expired
+    with conn.cursor() as cur:
+        with mock.patch(
+            "snowflake.connector.network.SnowflakeRestful.fetch",
+            return_value={
+                "data": {
+                    "errorCode": "390114",
+                    "reAuthnMethods": ["USERNAME_PASSWORD"],
+                },
+                "code": "390114",
+                "message": "Authentication token has expired.  The user must authenticate again.",
+                "success": False,
+                "headers": None,
+            },
+        ):
+            with pytest.raises(ProgrammingError):
+                cur.execute("select 1;")
+    assert conn.expired
