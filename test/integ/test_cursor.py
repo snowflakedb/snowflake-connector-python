@@ -11,8 +11,9 @@ import logging
 import os
 import pickle
 import time
+from dataclasses import dataclass
 from datetime import date, datetime
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 from unittest import mock
 
 import pytest
@@ -30,20 +31,23 @@ from snowflake.connector import (
     errors,
 )
 from snowflake.connector.compat import IS_WINDOWS
-from snowflake.connector.cursor import ResultMetadataV2, SnowflakeCursor
+from snowflake.connector.cursor import SnowflakeCursor
 
 try:
-    from snowflake.connector.cursor import ResultMetadata
+    from snowflake.connector.cursor import ResultMetadataV2
 except ImportError:
 
-    class ResultMetadata(NamedTuple):
+    @dataclass
+    class ResultMetadataV2:
         name: str
         type_code: int
-        display_size: int
-        internal_size: int
-        precision: int
-        scale: int
         is_nullable: bool
+        display_size: int | None = None
+        internal_size: int | None = None
+        precision: int | None = None
+        scale: int | None = None
+        vector_dimension: int | None = None
+        fields: list[ResultMetadataV2] | None = None
 
 
 from snowflake.connector.description import CLIENT_VERSION
