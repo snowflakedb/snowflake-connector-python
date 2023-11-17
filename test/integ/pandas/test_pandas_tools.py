@@ -170,6 +170,27 @@ def test_write_pandas_with_overwrite(
                     if quote_identifiers
                     else "YEAR" in [col.name for col in result[0].description]
                 )
+            else:
+                # Should fail because the table will be truncated and df3 schema doesnt match
+                # (since df3 should at least have a subset of the columns of the target table)
+                with pytest.raises(ProgrammingError, match="invalid identifier"):
+                    write_pandas(
+                        cnx,
+                        df3,
+                        random_table_name,
+                        quote_identifiers=quote_identifiers,
+                        auto_create_table=auto_create_table,
+                        overwrite=True,
+                        index=index,
+                    )
+                # the original table shouldn't have any change
+                assert (
+                    result
+                    == cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
+                )
+                # Check number of rows
+                assert result["COUNT(*)"] == 1
+
 
             if not quote_identifiers:
                 original_result = (
