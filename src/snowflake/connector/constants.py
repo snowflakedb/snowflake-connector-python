@@ -44,6 +44,8 @@ class FieldType(NamedTuple):
 
 
 def vector_pa_type(metadata: ResultMetadataV2) -> DataType:
+    """Generate the arrow type represented by the given vector column metadata"""
+
     if metadata.fields is None:
         raise ValueError(
             "Invalid result metadata for vector type: expected sub-field metadata"
@@ -72,6 +74,10 @@ def vector_pa_type(metadata: ResultMetadataV2) -> DataType:
 # This type mapping holds column type definitions.
 #  Be careful to not change the ordering as the index is what Snowflake
 #  gives to as schema
+#
+# `name` is the SQL name of the type, `dbapi_type` is the set of corresponding
+# PEP 249 type objects, and `pa_type` is a lambda that takes in a column's
+# result metadata and returns the corresponding Arrow type.
 FIELD_TYPES: tuple[FieldType, ...] = (
     FieldType(
         name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda _: pa.int64()

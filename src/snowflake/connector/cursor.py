@@ -160,8 +160,27 @@ class ResultMetadata(NamedTuple):
             col["nullable"],
         )
 
+    @classmethod
+    def _from_result_metadata_v2(cls, meta: ResultMetadataV2):
+        """Initializes a ResultMetadata object from a ResultMetadataV2 object.
+
+        This method is for internal use only.
+        """
+
+        return cls(
+            meta.name,
+            meta.type_code,
+            meta.display_size,
+            meta.internal_size,
+            meta.precision,
+            meta.scale,
+            meta.is_nullable,
+        )
+
 
 class ResultMetadataV2Field:
+    """ResultMetadataV2Field represents the type information of one sub-type in a nested type."""
+
     def __init__(
         self,
         type_code: int,
@@ -184,7 +203,7 @@ class ResultMetadataV2Field:
         fields = None
         if col.get("fields") is not None:
             fields = [cls.from_column(f) for f in col["fields"]]
-        return ResultMetadataV2Field(
+        return cls(
             FIELD_NAME_TO_ID[
                 col["extTypeName"].upper()
                 if col.get("extTypeName")
@@ -223,6 +242,12 @@ class ResultMetadataV2Field:
 
 
 class ResultMetadataV2:
+    """ResultMetadataV2Field represents the type information of a single column.
+
+    It is a replacement for ResultMetadata that contains additional attributes, namely
+    `vector_dimension` and `fields`.
+    """
+
     def __init__(
         self,
         name: str,
@@ -261,7 +286,7 @@ class ResultMetadataV2:
         if type_code == FIELD_NAME_TO_ID["VECTOR"] and col.get("fields") is not None:
             fields = [ResultMetadataV2Field.from_column(f) for f in col["fields"]]
 
-        return ResultMetadataV2(
+        return cls(
             col["name"],
             type_code,
             col["nullable"],
@@ -291,7 +316,7 @@ class ResultMetadataV2:
 
     @property
     def display_size(self) -> int | None:
-        return self._displayl_size
+        return self._display_size
 
     @property
     def precision(self) -> int | None:
@@ -391,8 +416,7 @@ class SnowflakeCursor:
             tuple[type[Error] | type[Exception], dict[str, str | bool]]
         ] = []
         self._timebomb: Timer | None = None  # must be here for abort_exit method
-        self._description: list[ResultMetadata] | None = None
-        self._description_v2: list[ResultMetadataV2] | None = None
+        self._description: list[ResultMetadataV2] | None = None
         self._sfqid: str | None = None
         self._sqlstate = None
         self._total_rowcount = -1
@@ -440,11 +464,13 @@ class SnowflakeCursor:
 
     @property
     def description(self) -> list[ResultMetadata]:
-        return self._description
+        return [
+            ResultMetadata._from_result_metadata_v2(meta) for meta in self._description
+        ]
 
     @property
     def _description_internal(self) -> list[ResultMetadataV2]:
-        return self._description_v2
+        return self._description
 
     @property
     def rowcount(self) -> int | None:
@@ -1096,7 +1122,9 @@ class SnowflakeCursor:
         """
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
         self.execute(*args, **kwargs)
-        return self._description
+        return [
+            ResultMetadata._from_result_metadata_v2(meta) for meta in self._description
+        ]
 
     def _format_query_for_log(self, query: str) -> str:
         return self._connection._format_query_for_log(query)
@@ -1115,15 +1143,12 @@ class SnowflakeCursor:
         if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
             self._total_rowcount = data["total"]
 
-        self._description: list[ResultMetadata] = [
-            ResultMetadata.from_column(col) for col in data["rowtype"]
-        ]
-        self._description_v2: list[ResultMetadataV2] = [
+        self._description: list[ResultMetadataV2] = [
             ResultMetadataV2.from_column(col) for col in data["rowtype"]
         ]
 
         result_chunks = create_batches_from_response(
-            self, self._query_result_format, data, self._description_v2
+            self, self._query_result_format, data, self._description
         )
 
         if not (is_dml or self.is_file_transfer):
@@ -1142,7 +1167,7 @@ class SnowflakeCursor:
         # don't update the row count when the result is returned from `describe` method
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
             updated_rows = 0
-            for idx, desc in enumerate(self._description_v2):
+            for idx, desc in enumerate(self._description):
                 if desc.name in (
                     "number of rows updated",
                     "number of multi-joined rows updated",
@@ -1616,7 +1641,6 @@ class SnowflakeCursor:
             self._query_result_format = self._inner_cursor._query_result_format
             self._total_rowcount = self._inner_cursor._total_rowcount
             self._description = self._inner_cursor._description
-            self._description_v2 = self._inner_cursor._description_v2
             self._result_set = self._inner_cursor._result_set
             self._result_state = ResultState.VALID
             self._rownumber = 0
