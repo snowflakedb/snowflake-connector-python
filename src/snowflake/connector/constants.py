@@ -44,7 +44,7 @@ class FieldType(NamedTuple):
 
 
 def vector_pa_type(metadata: ResultMetadataV2) -> DataType:
-    """Generate the arrow type represented by the given vector column metadata"""
+    """Generate the arrow type represented by the given vector column metadata."""
 
     if metadata.fields is None:
         raise ValueError(

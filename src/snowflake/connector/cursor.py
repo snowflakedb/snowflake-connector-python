@@ -298,6 +298,22 @@ class ResultMetadataV2:
             fields,
         )
 
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return False
+
+        return (
+            self._name == other._name
+            and self._type_code == other._type_code
+            and self._is_nullable == other._is_nullable
+            and self._display_size == other._display_size
+            and self._internal_size == other._internal_size
+            and self._precision == other._precision
+            and self._scale == other._scale
+            and self._vector_dimension == other._vector_dimension
+            and self._fields == other._fields
+        )
+
     @property
     def name(self) -> str:
         return self._name
@@ -453,6 +469,9 @@ class SnowflakeCursor:
         self._prefetch_hook = None
         self._rownumber: int | None = None
 
+        # If true, return the new result metadata. This is an internal flag for use only by Snowpark
+        self._use_new_result_metadata = False
+
         self.reset()
 
     def __del__(self) -> None:  # pragma: no cover
@@ -463,14 +482,14 @@ class SnowflakeCursor:
                 logger.info(e)
 
     @property
-    def description(self) -> list[ResultMetadata]:
-        return [
-            ResultMetadata._from_result_metadata_v2(meta) for meta in self._description
-        ]
-
-    @property
-    def _description_internal(self) -> list[ResultMetadataV2]:
-        return self._description
+    def description(self) -> list[ResultMetadata | ResultMetadataV2]:
+        if self._use_new_result_metadata:
+            return self._description
+        else:
+            return [
+                ResultMetadata._from_result_metadata_v2(meta)
+                for meta in self._description
+            ]
 
     @property
     def rowcount(self) -> int | None:
@@ -1122,9 +1141,14 @@ class SnowflakeCursor:
         """
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
         self.execute(*args, **kwargs)
-        return [
-            ResultMetadata._from_result_metadata_v2(meta) for meta in self._description
-        ]
+
+        if self._use_new_result_metadata:
+            return self._description
+        else:
+            return [
+                ResultMetadata._from_result_metadata_v2(meta)
+                for meta in self._description
+            ]
 
     def _format_query_for_log(self, query: str) -> str:
         return self._connection._format_query_for_log(query)
