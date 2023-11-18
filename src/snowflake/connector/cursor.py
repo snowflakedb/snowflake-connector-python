@@ -42,7 +42,6 @@ from ._sql_util import get_file_transfer_type
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .constants import (
     FIELD_NAME_TO_ID,
-    PARAMETER_PYTHON_CONNECTOR_ENABLE_NEW_RESULT_METADATA,
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     FileTransferType,
     QueryStatus,
@@ -480,13 +479,16 @@ class SnowflakeCursor:
                 logger.info(e)
 
     @property
-    def description(self) -> list[ResultMetadata | ResultMetadataV2]:
-        if self.connection._session_parameters.get(
-            PARAMETER_PYTHON_CONNECTOR_ENABLE_NEW_RESULT_METADATA
-        ):
-            return self._description
-        else:
-            return [meta._to_result_metadata_v1() for meta in self._description]
+    def description(self) -> list[ResultMetadata]:
+        return [meta._to_result_metadata_v1() for meta in self._description]
+
+    @property
+    def _description_internal(self) -> list[ResultMetadataV2]:
+        """Return the new format of result metadata for a query.
+
+        This method is for internal use only.
+        """
+        return self._description
 
     @property
     def rowcount(self) -> int | None:
@@ -1141,12 +1143,24 @@ class SnowflakeCursor:
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
         self.execute(*args, **kwargs)
 
-        if self.connection._session_parameters.get(
-            PARAMETER_PYTHON_CONNECTOR_ENABLE_NEW_RESULT_METADATA
-        ):
-            return self._description
-        else:
-            return [meta._to_result_metadata_v1() for meta in self._description]
+        return [meta._to_result_metadata_v1() for meta in self._description]
+
+    def _describe_internal(
+        self, *args: Any, **kwargs: Any
+    ) -> list[ResultMetadata | ResultMetadataV2]:
+        """Obtain the schema of the result without executing the query.
+
+        This function takes the same arguments as execute, please refer to that function
+        for documentation.
+
+        This function is for internal use only
+
+        Returns:
+            The schema of the result, in the new result metadata format.
+        """
+        kwargs["_describe_only"] = kwargs["_is_internal"] = True
+        self.execute(*args, **kwargs)
+        return self._description
 
     def _format_query_for_log(self, query: str) -> str:
         return self._connection._format_query_for_log(query)
