@@ -13,6 +13,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
   - Added support for Vector types
   - Changed urllib3 version pin to only affect Python versions < 3.10.
+  - Added a new flag `expired` to `SnowflakeConnection` class, that keeps track of whether the connection's master token has expired.
 
 - v3.5.0(November 13,2023)
 
