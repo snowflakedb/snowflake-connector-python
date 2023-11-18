@@ -249,7 +249,8 @@ class ResultBatch(abc.ABC):
         self.rowcount = rowcount
         self._chunk_headers = chunk_headers
         self._remote_chunk_info = remote_chunk_info
-        self.schema = schema
+        self._schema = schema
+        self.schema = [s._to_result_metadata_v1() for s in schema]
         self._use_dict_result = use_dict_result
         self._metrics: dict[str, int] = {}
         self._data: str | list[tuple[Any, ...]] | None = None
@@ -287,7 +288,7 @@ class ResultBatch(abc.ABC):
 
     @property
     def column_names(self) -> list[str]:
-        return [col.name for col in self.schema]
+        return [col.name for col in self._schema]
 
     def __iter__(
         self,
@@ -490,7 +491,7 @@ class JSONResultBatch(ResultBatch):
                     for (_t, c), v, col in zip(
                         self.column_converters,
                         row,
-                        self.schema,
+                        self._schema,
                     ):
                         row_result[col.name] = v if c is None or v is None else c(v)
                     result_list.append(row_result)
@@ -508,13 +509,13 @@ class JSONResultBatch(ResultBatch):
                     )
         else:
             for row in downloaded_data:
-                row_result = [None] * len(self.schema)
+                row_result = [None] * len(self._schema)
                 try:
                     idx = 0
                     for (_t, c), v, _col in zip(
                         self.column_converters,
                         row,
-                        self.schema,
+                        self._schema,
                     ):
                         row_result[idx] = v if c is None or v is None else c(v)
                         idx += 1
@@ -682,7 +683,8 @@ class ArrowResultBatch(ResultBatch):
             # initialize pyarrow type array corresponding to FIELD_TYPES
             FIELD_TYPE_TO_PA_TYPE = [e.pa_type for e in FIELD_TYPES]
         fields = [
-            pa.field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code](s)) for s in self.schema
+            pa.field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code](s))
+            for s in self._schema
         ]
         return pa.schema(fields).empty_table()
 

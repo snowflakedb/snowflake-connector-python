@@ -161,23 +161,6 @@ class ResultMetadata(NamedTuple):
             col["nullable"],
         )
 
-    @classmethod
-    def _from_result_metadata_v2(cls, meta: ResultMetadataV2):
-        """Initializes a ResultMetadata object from a ResultMetadataV2 object.
-
-        This method is for internal use only.
-        """
-
-        return cls(
-            meta.name,
-            meta.type_code,
-            meta.display_size,
-            meta.internal_size,
-            meta.precision,
-            meta.scale,
-            meta.is_nullable,
-        )
-
 
 class ResultMetadataV2Field:
     """ResultMetadataV2Field represents the type information of one sub-type in a nested type."""
@@ -245,8 +228,9 @@ class ResultMetadataV2Field:
 class ResultMetadataV2:
     """ResultMetadataV2Field represents the type information of a single column.
 
-    It is a replacement for ResultMetadata that contains additional attributes, namely
-    `vector_dimension` and `fields`.
+    It is a replacement for ResultMetadata that contains additional attributes, currently
+    `vector_dimension` and `fields`. This class will be unified with ResultMetadata in the
+    near future.
     """
 
     def __init__(
@@ -297,6 +281,22 @@ class ResultMetadataV2:
             col["scale"],
             col.get("vectorDimension"),
             fields,
+        )
+
+    def _to_result_metadata_v1(self):
+        """Initializes a ResultMetadata object from a ResultMetadataV2 object.
+
+        This method is for internal use only.
+        """
+
+        return ResultMetadata(
+            self._name,
+            self._type_code,
+            self._display_size,
+            self._internal_size,
+            self._precision,
+            self._scale,
+            self._is_nullable,
         )
 
     def __eq__(self, other):
@@ -486,10 +486,7 @@ class SnowflakeCursor:
         ):
             return self._description
         else:
-            return [
-                ResultMetadata._from_result_metadata_v2(meta)
-                for meta in self._description
-            ]
+            return [meta._to_result_metadata_v1() for meta in self._description]
 
     @property
     def rowcount(self) -> int | None:
@@ -1147,10 +1144,7 @@ class SnowflakeCursor:
         ):
             return self._description
         else:
-            return [
-                ResultMetadata._from_result_metadata_v2(meta)
-                for meta in self._description
-            ]
+            return [meta._to_result_metadata_v1() for meta in self._description]
 
     def _format_query_for_log(self, query: str) -> str:
         return self._connection._format_query_for_log(query)
