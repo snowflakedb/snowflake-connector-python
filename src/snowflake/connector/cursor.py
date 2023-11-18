@@ -42,6 +42,7 @@ from ._sql_util import get_file_transfer_type
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .constants import (
     FIELD_NAME_TO_ID,
+    PARAMETER_PYTHON_CONNECTOR_ENABLE_NEW_RESULT_METADATA,
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     FileTransferType,
     QueryStatus,
@@ -469,9 +470,6 @@ class SnowflakeCursor:
         self._prefetch_hook = None
         self._rownumber: int | None = None
 
-        # If true, return the new result metadata. This is an internal flag for use only by Snowpark
-        self._use_new_result_metadata = False
-
         self.reset()
 
     def __del__(self) -> None:  # pragma: no cover
@@ -483,7 +481,9 @@ class SnowflakeCursor:
 
     @property
     def description(self) -> list[ResultMetadata | ResultMetadataV2]:
-        if self._use_new_result_metadata:
+        if self.connection._session_parameters.get(
+            PARAMETER_PYTHON_CONNECTOR_ENABLE_NEW_RESULT_METADATA
+        ):
             return self._description
         else:
             return [
@@ -1142,7 +1142,9 @@ class SnowflakeCursor:
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
         self.execute(*args, **kwargs)
 
-        if self._use_new_result_metadata:
+        if self.connection._session_parameters.get(
+            PARAMETER_PYTHON_CONNECTOR_ENABLE_NEW_RESULT_METADATA
+        ):
             return self._description
         else:
             return [
