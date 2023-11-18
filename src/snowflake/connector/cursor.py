@@ -1127,7 +1127,9 @@ class SnowflakeCursor:
         kwargs["_exec_async"] = True
         return self.execute(*args, **kwargs)
 
-    def describe(self, *args: Any, **kwargs: Any) -> list[ResultMetadata]:
+    def describe(
+        self, *args: Any, **kwargs: Any
+    ) -> list[ResultMetadata | ResultMetadataV2]:
         """Obtain the schema of the result without executing the query.
 
         This function takes the same arguments as execute, please refer to that function
