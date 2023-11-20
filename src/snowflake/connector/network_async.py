@@ -319,8 +319,11 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
                 url=full_url,
                 headers=headers,
                 data=input_data,
+                proxy=None,
+                # Yichuan: Should be fine specifying this unconditionally as proxy_headers will be ignored if no proxy
+                # is specified in env variables (REQUIRES TESTING)
+                proxy_headers={"Host": parse_url(full_url).hostname},
                 ssl=None,  # Yichuan: Default SSL check, replace later
-                auth=None,  # Yichuan: auth=None so auth headers aren't overriden
             )
 
             # download_end_time = get_time_millis()
@@ -428,8 +431,11 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
 
     # Yichuan: Override method, not _async because it's not an async method
     def make_requests_session(self) -> aiohttp.ClientSession:
-        # Yichuan: auth=None so auth headers aren't overriden inside ClientSession requests
-        return aiohttp.ClientSession(auth=None, loop=self._loop)
+        return aiohttp.ClientSession(
+            auth=None,  # Yichuan: auth=None so auth headers aren't overriden inside ClientSession requests
+            trust_env=True,  # Yichuan: So aiohttp will read the proxy variables set in proxy.set_proxies
+            loop=self._loop,
+        )
 
     # Yichuan: Literally copy & pasted but unfortunately needed because this method needs to be async
 
