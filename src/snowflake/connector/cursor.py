@@ -298,7 +298,16 @@ class ResultMetadataV2:
             self._is_nullable,
         )
 
-    def __eq__(self, other):
+    def __str__(self) -> str:
+        return (
+            f"ResultMetadataV2(name={self._name},type_code={self._type_code},"
+            + f"is_nullable={self._is_nullable},display_size={self._display_size},"
+            + "internal_size={self._internal_size},precision={self._precision},"
+            + "scale={self._scale},vector_dimension={self._vector_dimension},"
+            + "fields={self.fields})"
+        )
+
+    def __eq__(self, other) -> bool:
         if not isinstance(other, self.__class__):
             return False
 
