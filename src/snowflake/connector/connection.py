@@ -860,7 +860,9 @@ class SnowflakeConnection:
             self.proxy_host, self.proxy_port, self.proxy_user, self.proxy_password
         )
 
-        self._rest = SnowflakeRestful(
+        # Yichuan: TEMPORARY
+        from .network_async import SnowflakeRestfulAsync
+        self._rest = SnowflakeRestfulAsync(
             host=self.host,
             port=self.port,
             protocol=self._protocol,
