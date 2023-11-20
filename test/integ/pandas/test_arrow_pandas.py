@@ -583,6 +583,7 @@ def test_timestampltz(conn_cnx, scale, timezone):
         finish(conn, table)
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas is missing.",

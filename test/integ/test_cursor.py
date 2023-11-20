@@ -138,6 +138,20 @@ def _check_results(cursor, results):
     assert results[2] == 123456, "the third result was wrong"
 
 
+def _name_from_description(named_access: bool):
+    if named_access:
+        return lambda meta: meta.name
+    else:
+        return lambda meta: meta[0]
+
+
+def _type_from_description(named_access: bool):
+    if named_access:
+        return lambda meta: meta.type_code
+    else:
+        return lambda meta: meta[1]
+
+
 @pytest.mark.skipolddriver
 def test_insert_select(conn, db_parameters, caplog):
     """Inserts and selects integer data."""
@@ -330,31 +344,41 @@ def test_insert_timestamp_select(conn, db_parameters):
 
         assert current_time == result_time_value[0], "the time result was wrong"
 
-        for desc in [c.description, c._description_internal]:
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
             assert len(desc) == 6, "invalid number of column meta data"
-            assert desc[0].name.upper() == "AA", "invalid column name"
-            assert desc[1].name.upper() == "TSLTZ", "invalid column name"
-            assert desc[2].name.upper() == "TSTZ", "invalid column name"
-            assert desc[3].name.upper() == "TSNTZ", "invalid column name"
-            assert desc[4].name.upper() == "DT", "invalid column name"
-            assert desc[5].name.upper() == "TM", "invalid column name"
+            assert name(desc[0]).upper() == "AA", "invalid column name"
+            assert name(desc[1]).upper() == "TSLTZ", "invalid column name"
+            assert name(desc[2]).upper() == "TSTZ", "invalid column name"
+            assert name(desc[3]).upper() == "TSNTZ", "invalid column name"
+            assert name(desc[4]).upper() == "DT", "invalid column name"
+            assert name(desc[5]).upper() == "TM", "invalid column name"
             assert (
-                constants.FIELD_ID_TO_NAME[desc[0].type_code] == "FIXED"
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "FIXED"
             ), f"invalid column name: {constants.FIELD_ID_TO_NAME[desc[0][1]]}"
             assert (
-                constants.FIELD_ID_TO_NAME[desc[1].type_code] == "TIMESTAMP_LTZ"
+                constants.FIELD_ID_TO_NAME[type_code(desc[1])] == "TIMESTAMP_LTZ"
             ), "invalid column name"
             assert (
-                constants.FIELD_ID_TO_NAME[desc[2].type_code] == "TIMESTAMP_TZ"
+                constants.FIELD_ID_TO_NAME[type_code(desc[2])] == "TIMESTAMP_TZ"
             ), "invalid column name"
             assert (
-                constants.FIELD_ID_TO_NAME[desc[3].type_code] == "TIMESTAMP_NTZ"
+                constants.FIELD_ID_TO_NAME[type_code(desc[3])] == "TIMESTAMP_NTZ"
             ), "invalid column name"
             assert (
-                constants.FIELD_ID_TO_NAME[desc[4].type_code] == "DATE"
+                constants.FIELD_ID_TO_NAME[type_code(desc[4])] == "DATE"
             ), "invalid column name"
             assert (
-                constants.FIELD_ID_TO_NAME[desc[5].type_code] == "TIME"
+                constants.FIELD_ID_TO_NAME[type_code(desc[5])] == "TIME"
             ), "invalid column name"
     finally:
         cnx2.close()
@@ -487,11 +511,21 @@ def test_insert_binary_select(conn, db_parameters):
         results = [b for (b,) in c]
         assert value == results[0], "the binary result was wrong"
 
-        for desc in [c.description, c._description_internal]:
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
             assert len(desc) == 1, "invalid number of column meta data"
-            assert desc[0].name.upper() == "B", "invalid column name"
+            assert name(desc[0]).upper() == "B", "invalid column name"
             assert (
-                constants.FIELD_ID_TO_NAME[desc[0].type_code] == "BINARY"
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
             ), "invalid column name"
     finally:
         cnx2.close()
@@ -529,11 +563,21 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
         results = [b for (b,) in c]
         assert bytes(value) == results[0], "the binary result was wrong"
 
-        for desc in [c.description, c._description_internal]:
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
             assert len(desc) == 1, "invalid number of column meta data"
-            assert desc[0].name.upper() == "B", "invalid column name"
+            assert name(desc[0]).upper() == "B", "invalid column name"
             assert (
-                constants.FIELD_ID_TO_NAME[desc[0].type_code] == "BINARY"
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
             ), "invalid column name"
     finally:
         cnx2.close()

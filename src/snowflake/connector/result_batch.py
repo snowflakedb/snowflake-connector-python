@@ -250,7 +250,9 @@ class ResultBatch(abc.ABC):
         self._chunk_headers = chunk_headers
         self._remote_chunk_info = remote_chunk_info
         self._schema = schema
-        self.schema = [s._to_result_metadata_v1() for s in schema]
+        self.schema = (
+            [s._to_result_metadata_v1() for s in schema] if schema is not None else None
+        )
         self._use_dict_result = use_dict_result
         self._metrics: dict[str, int] = {}
         self._data: str | list[tuple[Any, ...]] | None = None

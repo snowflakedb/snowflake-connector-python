@@ -489,6 +489,9 @@ class SnowflakeCursor:
 
     @property
     def description(self) -> list[ResultMetadata]:
+        if self._description is None:
+            return None
+
         return [meta._to_result_metadata_v1() for meta in self._description]
 
     @property
@@ -1152,6 +1155,8 @@ class SnowflakeCursor:
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
         self.execute(*args, **kwargs)
 
+        if self._description is None:
+            return None
         return [meta._to_result_metadata_v1() for meta in self._description]
 
     def _describe_internal(
