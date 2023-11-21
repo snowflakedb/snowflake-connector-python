@@ -681,35 +681,6 @@ def test_okta_url(conn_cnx):
         assert cnx
 
 
-@pytest.mark.skipolddriver
-def test_use_openssl_only(db_parameters):
-    cnx = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        use_openssl_only=True,
-    )
-    assert cnx
-    assert "SF_USE_OPENSSL_ONLY" in os.environ
-    # Note during testing conftest will default this value to False, so if testing this we need to manually clear it
-    # Let's test it again, after clearing it
-    del os.environ["SF_USE_OPENSSL_ONLY"]
-    cnx = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        use_openssl_only=True,
-    )
-    assert cnx
-    assert os.environ["SF_USE_OPENSSL_ONLY"] == "True"
-
-
 def test_dashed_url(db_parameters):
     """Test whether dashed URLs get created correctly."""
     with mock.patch(
@@ -973,6 +944,7 @@ def test_authenticate_error(conn_cnx, caplog):
     mock_auth = mock.Mock(spec=AuthByPlugin, unsafe=True)
     mock_auth.prepare.return_value = mock_auth
     mock_auth.update_body.side_effect = ReauthenticationRequest(None)
+    mock_auth._retry_ctx = mock.MagicMock()
     with conn_cnx() as conn:
         caplog.set_level(logging.DEBUG, "snowflake.connector")
         with pytest.raises(ReauthenticationRequest):
@@ -1226,7 +1198,7 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
 
     doc = tomlkit.document()
     default_con = tomlkit.table()
-    tmp_config_file: None | pathlib.Path = None
+    tmp_connections_file: None | pathlib.Path = None
     try:
         # If anything unexpected fails here, don't want to expose password
         for k, v in db_parameters.items():
@@ -1236,12 +1208,38 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
             if mode == "env":
                 m.setenv("SF_CONNECTIONS", tomlkit.dumps(doc))
             else:
-                tmp_config_file = tmp_path / "connections.toml"
-                tmp_config_file.write_text(tomlkit.dumps(doc))
+                tmp_connections_file = tmp_path / "connections.toml"
+                tmp_connections_file.write_text(tomlkit.dumps(doc))
             with snowflake.connector.connect(
                 connection_name="default",
-                connections_file_path=tmp_config_file,
+                connections_file_path=tmp_connections_file,
             ) as conn:
+                with conn.cursor() as cur:
+                    assert cur.execute("select 1;").fetchall() == [
+                        (1,),
+                    ]
+    except Exception:
+        # This is my way of guaranteeing that we'll not expose the
+        # sensitive information that this test needs to handle.
+        # db_parameter contains passwords.
+        pytest.fail("something failed", pytrace=False)
+
+
+@pytest.mark.skipolddriver
+def test_default_connection_name_loading(monkeypatch, db_parameters):
+    import tomlkit
+
+    doc = tomlkit.document()
+    default_con = tomlkit.table()
+    try:
+        # If anything unexpected fails here, don't want to expose password
+        for k, v in db_parameters.items():
+            default_con[k] = v
+        doc["default"] = default_con
+        with monkeypatch.context() as m:
+            m.setenv("SNOWFLAKE_CONNECTIONS", tomlkit.dumps(doc))
+            m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", "default")
+            with snowflake.connector.connect() as conn:
                 with conn.cursor() as cur:
                     assert cur.execute("select 1;").fetchall() == [
                         (1,),

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import abc
-import io
 import json
 import time
 from base64 import b64decode
@@ -14,6 +13,7 @@ from logging import getLogger
 from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
 
 from .arrow_context import ArrowConverterContext
+from .backoff_policies import exponential_backoff
 from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import FIELD_TYPES, IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
@@ -28,7 +28,7 @@ from .network import (
 from .options import installed_pandas
 from .options import pyarrow as pa
 from .secret_detector import SecretDetector
-from .time_util import DecorrelateJitterBackoff, TimerContextManager
+from .time_util import TimerContextManager
 from .vendored import requests
 
 logger = getLogger(__name__)
@@ -53,6 +53,38 @@ FIELD_TYPE_TO_PA_TYPE: list[DataType] = []
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
 SSE_C_KEY = "x-amz-server-side-encryption-customer-key"
 SSE_C_AES = "AES256"
+
+
+def _create_nanoarrow_iterator(
+    data: bytes,
+    context: ArrowConverterContext,
+    use_dict_result: bool,
+    numpy: bool,
+    number_to_decimal: bool,
+    row_unit: IterUnit,
+):
+    from .nanoarrow_arrow_iterator import PyArrowRowIterator, PyArrowTableIterator
+
+    logger.debug("Using nanoarrow as the arrow data converter")
+    return (
+        PyArrowRowIterator(
+            None,
+            data,
+            context,
+            use_dict_result,
+            numpy,
+            number_to_decimal,
+        )
+        if row_unit == IterUnit.ROW_UNIT
+        else PyArrowTableIterator(
+            None,
+            data,
+            context,
+            use_dict_result,
+            numpy,
+            number_to_decimal,
+        )
+    )
 
 
 @unique
@@ -273,7 +305,11 @@ class ResultBatch(abc.ABC):
     ) -> Response:
         """Downloads the data that the ``ResultBatch`` is pointing at."""
         sleep_timer = 1
-        backoff = DecorrelateJitterBackoff(1, 16)
+        backoff = (
+            connection._backoff_generator
+            if connection is not None
+            else exponential_backoff()()
+        )
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:
                 with TimerContextManager() as download_metric:
@@ -319,7 +355,7 @@ class ResultBatch(abc.ABC):
                     # Re-throw if we failed on the last retry
                     e = e.args[0] if isinstance(e, RetryRequest) else e
                     raise e
-                sleep_timer = backoff.next_sleep(1, sleep_timer)
+                sleep_timer = next(backoff)
                 logger.exception(
                     f"Failed to fetch the large result set batch "
                     f"{self.id} for the {retry + 1} th time, "
@@ -565,20 +601,14 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        from .arrow_iterator import PyArrowIterator
-
-        iter = PyArrowIterator(
-            None,
-            io.BytesIO(response.content),
+        return _create_nanoarrow_iterator(
+            response.content,
             self._context,
             self._use_dict_result,
             self._numpy,
             self._number_to_decimal,
+            row_unit,
         )
-        if row_unit == IterUnit.TABLE_UNIT:
-            iter.init_table_unit()
-
-        return iter
 
     def _from_data(
         self, data: str, iter_unit: IterUnit
@@ -588,24 +618,17 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        from .arrow_iterator import PyArrowIterator
-
         if len(data) == 0:
             return iter([])
 
-        _iter = PyArrowIterator(
-            None,
-            io.BytesIO(b64decode(data)),
+        return _create_nanoarrow_iterator(
+            b64decode(data),
             self._context,
             self._use_dict_result,
             self._numpy,
             self._number_to_decimal,
+            iter_unit,
         )
-        if iter_unit == IterUnit.TABLE_UNIT:
-            _iter.init_table_unit()
-        else:
-            _iter.init_row_unit()
-        return _iter
 
     @classmethod
     def from_data(

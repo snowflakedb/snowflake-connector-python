@@ -8,6 +8,7 @@ import os.path
 import re
 import shutil
 import stat
+import string
 import warnings
 from pathlib import Path
 from test.randomize import random_string
@@ -22,6 +23,7 @@ from snowflake.connector.compat import IS_WINDOWS
 
 try:
     from snowflake.connector.config_manager import (
+        CONFIG_MANAGER,
         ConfigManager,
         ConfigOption,
         ConfigSlice,
@@ -394,7 +396,7 @@ def test_error_child_conflict():
     cp.add_subparser(ConfigManager(name="b"))
     with pytest.raises(
         ConfigManagerError,
-        match="'b' subparser, or option conflicts with a child element of 'test_parser'",
+        match="'b' sub-manager, or option conflicts with a child element of 'test_parser'",
     ):
         cp.add_option(name="b")
 
@@ -491,41 +493,24 @@ def test_error_missing_fp_retrieve():
     tp.add_option(name="option")
     with pytest.raises(
         ConfigManagerError,
-        match="Root parser 'test_parser' is missing file_path",
+        match="Root manager 'test_parser' is missing file_path",
     ):
         tp["option"]
 
 
 @pytest.mark.parametrize("version", (None, "1"))
-@pytest.mark.parametrize(
-    "method",
-    (
-        "user_data_dir",
-        "site_data_dir",
-        "user_config_dir",
-        "site_config_dir",
-        "user_cache_dir",
-        "user_state_dir",
-        "user_log_dir",
-        "user_documents_dir",
-        "user_runtime_dir",
-        "user_music_dir",
-        "user_pictures_dir",
-        "user_videos_dir",
-    ),
-)
-def test_sf_dirs(tmp_path, method, version):
+def test_sf_dirs(tmp_path, version):
     appname = random_string(5)
-    assert getattr(
+    assert (
         SFPlatformDirs(
             str(tmp_path),
             appname=appname,
             appauthor=False,
             version=version,
             ensure_exists=True,
-        ),
-        method,
-    ) == str(tmp_path)
+        ).user_config_path
+        == tmp_path
+    )
 
 
 def test_config_file_resolution_sfdirs_default():
@@ -568,7 +553,11 @@ def test_warn_config_file_owner(tmp_path, monkeypatch):
         with warnings.catch_warnings(record=True) as c:
             assert c1["b"] is True
         assert len(c) == 1
-        assert str(c[0].message) == f"Bad owner or permissions on {str(c_file)}"
+        assert (
+            str(c[0].message)
+            == f"Bad owner or permissions on {str(c_file)}"
+            + f". To change owner, run `chown $USER {str(c_file)}`. To restrict permissions, run `chmod 0600 {str(c_file)}`."
+        )
 
 
 def test_warn_config_file_permissions(tmp_path):
@@ -586,7 +575,15 @@ def test_warn_config_file_permissions(tmp_path):
     with warnings.catch_warnings(record=True) as c:
         assert c1["b"] is True
     assert len(c) == 1
-    assert str(c[0].message) == f"Bad owner or permissions on {str(c_file)}"
+    chmod_message = (
+        f". To change owner, run `chown $USER {str(c_file)}`. To restrict permissions, run `chmod 0600 {str(c_file)}`."
+        if not IS_WINDOWS
+        else ""
+    )
+    assert (
+        str(c[0].message)
+        == f"Bad owner or permissions on {str(c_file)}" + chmod_message
+    )
 
 
 def test_configoption_missing_root_manager():
@@ -611,3 +608,99 @@ def test_configoption_missing_nest_path():
             _nest_path=None,
             _root_manager=ConfigManager(name="test_manager"),
         )
+
+
+def test_deprecationwarning_sub_parsers():
+    with warnings.catch_warnings(record=True) as w:
+        assert ConfigManager(name="test_cm")._sub_managers == {}
+        assert len(w) == 0
+        assert ConfigManager(name="test_cm")._sub_parsers == {}
+    assert len(w) == 1
+    assert issubclass(w[-1].category, DeprecationWarning)
+    assert (
+        str(w[-1].message)
+        == "_sub_parsers has been deprecated, use _sub_managers instead"
+    )
+
+
+def test_deprecationwarning_add_subparser():
+    with warnings.catch_warnings(record=True) as w:
+        ConfigManager(name="test_cm").add_submanager(ConfigManager(name="test_cm2"))
+        assert len(w) == 0
+        ConfigManager(name="test_cm").add_subparser(ConfigManager(name="test_cm3"))
+    assert len(w) == 1
+    assert issubclass(w[-1].category, DeprecationWarning)
+    assert (
+        str(w[-1].message)
+        == "add_subparser has been deprecated, use add_submanager instead"
+    )
+
+
+def test_deprecationwarning_config_parser():
+    from snowflake.connector import config_manager
+
+    with warnings.catch_warnings(record=True) as w:
+        config_manager.CONFIG_MANAGER
+        assert len(w) == 0
+        config_manager.CONFIG_PARSER
+    assert len(w) == 1
+    assert issubclass(w[-1].category, DeprecationWarning)
+    assert (
+        str(w[-1].message)
+        == "CONFIG_PARSER has been deprecated, use CONFIG_MANAGER instead"
+    )
+    assert config_manager.CONFIG_MANAGER is config_manager.CONFIG_PARSER
+
+
+def test_configoption_default_value(tmp_path, monkeypatch):
+    env_name = random_string(
+        5,
+        "SF_TEST_OPTION_",
+        choices=string.ascii_uppercase,
+    )
+    conf_val = random_string(5)
+    cm = ConfigManager(
+        name="test_manager",
+        file_path=tmp_path / "config.toml",
+    )
+    cm.add_option(
+        name="test_option",
+        env_name=env_name,
+        default=conf_val,
+    )
+    assert cm["test_option"] == conf_val
+    env_value = random_string(5)
+    with monkeypatch.context() as c:
+        c.setenv(env_name, env_value)
+        assert cm["test_option"] == env_value
+
+
+def test_defaultconnectionname(tmp_path, monkeypatch):
+    c_file = tmp_path / "config.toml"
+    old_path = CONFIG_MANAGER.file_path
+    CONFIG_MANAGER.file_path = c_file
+    CONFIG_MANAGER.conf_file_cache = None
+    try:
+        with monkeypatch.context() as m:
+            m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
+            assert CONFIG_MANAGER["default_connection_name"] == "default"
+        env_val = random_string(5, "DEF_CONN_")
+        with monkeypatch.context() as m:
+            m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", env_val)
+            assert CONFIG_MANAGER["default_connection_name"] == env_val
+        assert CONFIG_MANAGER.file_path is not None
+        con_name = random_string(5, "conn_")
+        c_file.write_text(
+            dedent(
+                f"""\
+                default_connection_name = "{con_name}"
+                """
+            )
+        )
+        # re-cache config file from disk
+        CONFIG_MANAGER.file_path = c_file
+        CONFIG_MANAGER.conf_file_cache = None
+        assert CONFIG_MANAGER["default_connection_name"] == con_name
+    finally:
+        CONFIG_MANAGER.file_path = old_path
+        CONFIG_MANAGER.conf_file_cache = None

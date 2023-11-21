@@ -72,8 +72,8 @@ def _get_post_back_url_from_html(html):
 class AuthByOkta(AuthByPlugin):
     """Authenticate user by OKTA."""
 
-    def __init__(self, application: str) -> None:
-        super().__init__()
+    def __init__(self, application: str, **kwargs) -> None:
+        super().__init__(**kwargs)
         self._saml_response = None
         self._application = application
 

@@ -8,11 +8,26 @@ from __future__ import annotations
 import json
 import os
 import sys
-from unittest.mock import patch
+from pathlib import Path
+from textwrap import dedent
+from unittest import mock
+from unittest.mock import MagicMock, patch
 
 import pytest
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
+from snowflake.connector.errors import (
+    Error,
+    ForbiddenError,
+    OperationalError,
+    ProgrammingError,
+)
+
+from ..randomize import random_string
+from .mock_utils import mock_request_with_action, zero_backoff
 
 try:
     from snowflake.connector.auth import (
@@ -22,29 +37,29 @@ try:
         AuthByWebBrowser,
     )
 except ImportError:
-    from unittest.mock import MagicMock
-
     AuthByDefault = AuthByOkta = AuthByOAuth = AuthByWebBrowser = MagicMock
 
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByUsrPwdMfa
+    from snowflake.connector.config_manager import CONFIG_MANAGER
     from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
 except ImportError:
     ENV_VAR_PARTNER = "SF_PARTNER"
-    QueryStatus = None
+    QueryStatus = CONFIG_MANAGER = None
 
     class AuthByUsrPwdMfa(AuthByDefault):
         def __init__(self, password: str, mfa_token: str) -> None:
             pass
 
 
-def fake_connector() -> snowflake.connector.SnowflakeConnection:
+def fake_connector(**kwargs) -> snowflake.connector.SnowflakeConnection:
     return snowflake.connector.connect(
         user="user",
         account="account",
         password="testpassword",
         database="TESTDB",
         warehouse="TESTWH",
+        **kwargs,
     )
 
 
@@ -211,3 +226,203 @@ def test_negative_custom_auth(auth_class):
             user="user",
             auth_class=auth_class,
         )
+
+
+def test_missing_default_connection(monkeypatch, tmp_path):
+    connections_file = tmp_path / "connections.toml"
+    config_file = tmp_path / "config.toml"
+    with monkeypatch.context() as m:
+        m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
+        m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
+        m.setattr(CONFIG_MANAGER, "conf_file_cache", None)
+        m.setattr(CONFIG_MANAGER, "file_path", config_file)
+
+        with pytest.raises(
+            Error,
+            match="Default connection with name 'default' cannot be found, known ones are \\[\\]",
+        ):
+            snowflake.connector.connect(connections_file_path=connections_file)
+
+
+def test_missing_default_connection_conf_file(monkeypatch, tmp_path):
+    connection_name = random_string(5)
+    connections_file = tmp_path / "connections.toml"
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        dedent(
+            f"""\
+            default_connection_name = "{connection_name}"
+            """
+        )
+    )
+    with monkeypatch.context() as m:
+        m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
+        m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
+        m.setattr(CONFIG_MANAGER, "conf_file_cache", None)
+        m.setattr(CONFIG_MANAGER, "file_path", config_file)
+
+        with pytest.raises(
+            Error,
+            match=f"Default connection with name '{connection_name}' cannot be found, known ones are \\[\\]",
+        ):
+            snowflake.connector.connect(connections_file_path=connections_file)
+
+
+def test_missing_default_connection_conn_file(monkeypatch, tmp_path):
+    connections_file = tmp_path / "connections.toml"
+    config_file = tmp_path / "config.toml"
+    connections_file.write_text(
+        dedent(
+            """\
+            [con_a]
+            user = "test user"
+            account = "test account"
+            password = "test password"
+            """
+        )
+    )
+    with monkeypatch.context() as m:
+        m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
+        m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
+        m.setattr(CONFIG_MANAGER, "conf_file_cache", None)
+        m.setattr(CONFIG_MANAGER, "file_path", config_file)
+
+        with pytest.raises(
+            Error,
+            match="Default connection with name 'default' cannot be found, known ones are \\['con_a'\\]",
+        ):
+            snowflake.connector.connect(connections_file_path=connections_file)
+
+
+def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
+    connection_name = random_string(5)
+    connections_file = tmp_path / "connections.toml"
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        dedent(
+            f"""\
+            default_connection_name = "{connection_name}"
+            """
+        )
+    )
+    connections_file.write_text(
+        dedent(
+            """\
+            [con_a]
+            user = "test user"
+            account = "test account"
+            password = "test password"
+            """
+        )
+    )
+    with monkeypatch.context() as m:
+        m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
+        m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
+        m.setattr(CONFIG_MANAGER, "conf_file_cache", None)
+        m.setattr(CONFIG_MANAGER, "file_path", config_file)
+
+        with pytest.raises(
+            Error,
+            match=f"Default connection with name '{connection_name}' cannot be found, known ones are \\['con_a'\\]",
+        ):
+            snowflake.connector.connect(connections_file_path=connections_file)
+
+
+def test_invalid_backoff_policy():
+    with pytest.raises(ProgrammingError):
+        # zero_backoff() is a generator, not a generator function
+        _ = fake_connector(backoff_policy=zero_backoff())
+
+    with pytest.raises(ProgrammingError):
+        # passing a non-generator function should not work
+        _ = fake_connector(backoff_policy=lambda: None)
+
+    with pytest.raises(ForbiddenError):
+        # passing a generator function should make it pass config and error during connection
+        _ = fake_connector(backoff_policy=zero_backoff)
+
+
+@pytest.mark.parametrize("next_action", ("RETRY", "ERROR"))
+@patch("snowflake.connector.vendored.requests.sessions.Session.request")
+def test_handle_timeout(mockSessionRequest, next_action):
+    mockSessionRequest.side_effect = mock_request_with_action(next_action, sleep=5)
+
+    with pytest.raises(OperationalError):
+        # no backoff for testing
+        _ = fake_connector(
+            login_timeout=9,
+            backoff_policy=zero_backoff,
+        )
+
+    # authenticator should be the only retry mechanism for login requests
+    # 9 seconds should be enough for authenticator to attempt twice
+    # however, loosen restrictions to avoid thread scheduling causing failure
+    assert 1 < mockSessionRequest.call_count < 4
+
+
+def test__get_private_bytes_from_file(tmp_path: Path):
+    private_key_file = tmp_path / "key.pem"
+
+    private_key = rsa.generate_private_key(
+        backend=default_backend(), public_exponent=65537, key_size=2048
+    )
+
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    pkb = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    private_key_file.write_bytes(private_key_pem)
+
+    private_key = snowflake.connector.connection._get_private_bytes_from_file(
+        private_key_file=str(private_key_file)
+    )
+
+    assert pkb == private_key
+
+
+def test_private_key_file_reading(tmp_path: Path):
+    key_file = tmp_path / "key.pem"
+
+    private_key = rsa.generate_private_key(
+        backend=default_backend(), public_exponent=65537, key_size=2048
+    )
+
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    key_file.write_bytes(private_key_pem)
+
+    pkb = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    exc_msg = "stop execution"
+
+    with mock.patch(
+        "snowflake.connector.auth.keypair.AuthByKeyPair.__init__",
+        side_effect=Exception(exc_msg),
+    ) as m:
+        with pytest.raises(
+            Exception,
+            match=exc_msg,
+        ):
+            snowflake.connector.connect(
+                account="test_account",
+                user="test_user",
+                private_key_file=str(key_file),
+            )
+    assert m.call_count == 1
+    assert m.call_args_list[0].kwargs["private_key"] == pkb

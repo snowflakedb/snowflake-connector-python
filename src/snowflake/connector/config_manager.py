@@ -8,6 +8,7 @@ import itertools
 import logging
 import os
 import stat
+import warnings
 from collections.abc import Iterable
 from operator import methodcaller
 from pathlib import Path
@@ -17,10 +18,12 @@ from warnings import warn
 import tomlkit
 from tomlkit.items import Table
 
+from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.constants import CONFIG_FILE, CONNECTIONS_FILE
 from snowflake.connector.errors import (
     ConfigManagerError,
     ConfigSourceError,
+    Error,
     MissingConfigOptionError,
 )
 
@@ -46,8 +49,10 @@ class ConfigSlice(NamedTuple):
 class ConfigOption:
     """ConfigOption represents a flag/setting.
 
-    The class knows how to read the value out of all sources and implements
+    This class knows how to read the value out of all different sources and implements
     order of precedence between them.
+
+    It also provides value parsing and verification.
 
     Attributes:
         name: Name of this ConfigOption.
@@ -57,14 +62,17 @@ class ConfigOption:
           this option.
         env_name: Environmental variable value should be read from, if not
           supplied, we'll construct this. False disables reading from
-          environmental variable, None uses the auto generated variable name
+          environmental variables, None uses the auto generated variable name
           and explicitly provided string overwrites the default one.
-        _root_manager: Reference to the root parser. Used to efficiently
+        default: The value we should resolve to when the option is not defined
+          in any of the sources. When it's None we treat that as there's no
+          default value.
+        _root_manager: Reference to the root manager. Used to efficiently
           refer to cached config file. Is supplied by the parent
           ConfigManager.
         _nest_path: The names of the ConfigManagers that this option is
-          nested in. Used be able to efficiently resolve where to grab
-          value out of configuration file and construct environment
+          nested in. Used to be able to efficiently resolve where to retrieve
+          value out of the configuration file and construct environment
           variable name. This is supplied by the parent ConfigManager.
     """
 
@@ -75,17 +83,23 @@ class ConfigOption:
         parse_str: Callable[[str], _T] | None = None,
         choices: Iterable[Any] | None = None,
         env_name: str | None | Literal[False] = None,
+        default: Any | None = None,
         _root_manager: ConfigManager | None = None,
         _nest_path: list[str] | None,
     ) -> None:
-        """Create a config option that can read values from different locations.
+        """Create a config option that can read values from different sources.
 
         Args:
             name: Name to assign to this ConfigOption.
-            parse_str: String parser function for this ConfigOption.
-            choices: List of possible values for this ConfigOption.
+            parse_str: String parser function for this instance.
+            choices: List of possible values for this instance.
             env_name: Environmental variable name value should be read from.
-            _root_manager: Reference to the root parser. Should be supplied by
+              Providing a string will use that environment variable, False disables
+              reading value from environmental variables and the default None generates
+              an environmental variable name for it using the _nest_path and name.
+            default: Default value for the option. Used in case the value is
+              is not defined in any of the sources.
+            _root_manager: Reference to the root manager. Should be supplied by
               the parent ConfigManager.
             _nest_path: The names of the ConfigManagers that this option is
               nested in. This is supplied by the parent ConfigManager.
@@ -100,6 +114,7 @@ class ConfigOption:
         self._nest_path = _nest_path + [name]
         self._root_manager: ConfigManager = _root_manager
         self.env_name = env_name
+        self.default = default
 
     def value(self) -> Any:
         """Retrieve a value of option.
@@ -109,8 +124,15 @@ class ConfigOption:
         source = "environment variable"
         loaded_env, value = self._get_env()
         if not loaded_env:
-            source = "configuration file"
-            value = self._get_config()
+            try:
+                value = self._get_config()
+                source = "configuration file"
+            except MissingConfigOptionError:
+                if self.default is not None:
+                    source = "default_value"
+                    value = self.default
+                else:
+                    raise
         if self.choices and value not in self.choices:
             raise ConfigSourceError(
                 f"The value of {self.option_name} read from "
@@ -146,8 +168,8 @@ class ConfigOption:
         env_var = os.environ.get(env_name)
         if env_var is None:
             return False, None
-        loaded_var: str | _T | None = env_var
-        if env_var and self.parse_str is not None:
+        loaded_var: str | _T = env_var
+        if self.parse_str is not None:
             loaded_var = self.parse_str(env_var)
         if isinstance(loaded_var, (Table, tomlkit.TOMLDocument)):
             # If we got a TOML table we probably want it in dictionary form
@@ -155,7 +177,11 @@ class ConfigOption:
         return True, loaded_var
 
     def _get_config(self) -> Any:
-        """Get value from the cached config file."""
+        """Get value from the cached config file if possible.
+
+        Since this is the last resource for retrieving the value it raises
+        a MissingConfigOptionError if it's unable to find this option.
+        """
         if (
             self._root_manager.conf_file_cache is None
             and self._root_manager.file_path is not None
@@ -164,7 +190,7 @@ class ConfigOption:
         e = self._root_manager.conf_file_cache
         if e is None:
             raise ConfigManagerError(
-                f"Root parser '{self._root_manager.name}' is missing file_path",
+                f"Root manager '{self._root_manager.name}' is missing file_path",
             )
         for k in self._nest_path[1:]:
             try:
@@ -183,13 +209,21 @@ class ConfigOption:
 
 
 class ConfigManager:
-    """Read TOML configuration file with managed multi-source precedence.
+    """Read a TOML configuration file with managed multi-source precedence.
 
-     This class is updatable at run-time, allowing other libraries to add their
-    own configuration options and sub-parsers. Sub-parsers allow
-     options groups to exist, e.g. the group "snowflake.cli.output" could have
-     2 options in it: debug (boolean flag) and format (a string like "json", or
-     "csv").
+    Note that multi-source precedence is actually implemented by ConfigOption.
+    This is done to make sure that special handling can be done for special options.
+    As an example, think of not allowing to provide passwords by command line arguments.
+
+    This class is updatable at run-time, allowing other libraries to add their
+    own configuration options and sub-managers before resolution.
+
+    This class can simply be thought of as nestable containers for ConfigOptions.
+    It holds extra information necessary for efficient nesting purposes.
+
+    Sub-managers allow option groups to exist, e.g. the group "snowflake.cli.output"
+    could have 2 options in it: debug (boolean flag) and format (a string like "json",
+    or "csv").
 
     When a ConfigManager tries to retrieve ConfigOptions' value the _root_manager
     will read and cache the TOML file from the file it's pointing at, afterwards
@@ -200,14 +234,20 @@ class ConfigManager:
           useful error messages.
         file_path: Path to the file where this and all child ConfigManagers
           should read their values out of. Can be omitted for all child
-          parsers.
+          managers. Root manager could also miss this value, but this will
+          result in an exception when a value is read that isn't available from
+          a preceding config source.
         conf_file_cache: Cache to store what we read from the TOML file.
-        _sub_parsers: List of ConfigManagers that are nested under us.
-        _options: List of ConfigOptions that are our children.
-        _root_manager: Reference to root parser. Used to efficiently propagate to
+        _sub_managers: List of ConfigManagers that are nested under the current manager.
+        _sub_parsers: Alias for the old name of _sub_managers in the first release, please use
+          the new name now, as this might get deprecated in the future.
+        _options: List of ConfigOptions that are under the current manager.
+        _root_manager: Reference to the root manager. Used to efficiently propagate to
           child options.
-        _nest_path: The names of the ConfigManagers that this parser is nested
+        _nest_path: The names of the ConfigManagers that this manager is nested
           under. Used to efficiently propagate to child options.
+        _slices: List of config slices, where optional sections could be read from.
+          Note that this feature might become deprecated soon.
     """
 
     def __init__(
@@ -217,21 +257,24 @@ class ConfigManager:
         file_path: Path | None = None,
         _slices: list[ConfigSlice] | None = None,
     ):
-        """Create a new ConfigManager.
+        """Creates a new ConfigManager.
 
         Args:
             name: Name of this ConfigManager.
-            file_path: File this parser should read values from. Can be omitted
-              for all child parsers.
+            file_path: File this manager should read values from. Can be omitted
+              for all child managers.
+            _slices: List of ConfigSlices to consider. A configuration file's slice is a
+              section that can optionally reside in a different file. Note that this
+              feature might get deprecated soon.
         """
         if _slices is None:
             _slices = list()
         self.name = name
         self.file_path = file_path
         self._slices = _slices
-        # Objects holding subparsers and options
+        # Objects holding sub-managers and options
         self._options: dict[str, ConfigOption] = dict()
-        self._sub_parsers: dict[str, ConfigManager] = dict()
+        self._sub_managers: dict[str, ConfigManager] = dict()
         # Dictionary to cache read in config file
         self.conf_file_cache: tomlkit.TOMLDocument | None = None
         # Information necessary to be able to nest elements
@@ -239,15 +282,29 @@ class ConfigManager:
         self._root_manager: ConfigManager = self
         self._nest_path = [name]
 
+    @property
+    def _sub_parsers(self) -> dict[str, ConfigManager]:
+        """
+        Alias for the old name of ``_sub_managers``.
+
+        This used to be the original name  in the first release, please use the
+        new name, as this might get deprecated in the future.
+        """
+        warnings.warn(
+            "_sub_parsers has been deprecated, use _sub_managers instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._sub_managers
+
     def read_config(
         self,
     ) -> None:
-        """Read and cache config file.
+        """Read and cache config file contents.
 
-        This function should be called if the ConfigManager's cache is outdated.
-        Maybe in the case when we want to replace the file_path assigned to a
-        ConfigManager, or if one's doing development and are interactively
-        adding new options to their configuration files.
+        This function should be explicitly called if the ConfigManager's cache is
+        outdated. Most likely when someone's doing development and are interactively
+        adding new options to their configuration file.
         """
         if self.file_path is None:
             raise ConfigManagerError(
@@ -268,7 +325,7 @@ class ConfigManager:
             if (
                 sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
                 # Same check as openssh does for permissions
-                #  https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
+                # https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
                 and filep.stat().st_mode & READABLE_BY_OTHERS != 0
                 or (
                     # Windows doesn't have getuid, skip checking
@@ -277,7 +334,14 @@ class ConfigManager:
                     and filep.stat().st_uid != os.getuid()
                 )
             ):
-                warn(f"Bad owner or permissions on {str(filep)}")
+                # for non-Windows, suggest change to 0600 permissions.
+                chmod_message = (
+                    f". To change owner, run `chown $USER {str(filep)}`. To restrict permissions, run `chmod 0600 {str(filep)}`."
+                    if not IS_WINDOWS
+                    else ""
+                )
+
+                warn(f"Bad owner or permissions on {str(filep)}{chmod_message}")
             LOGGER.debug(f"reading configuration file from {str(filep)}")
             try:
                 read_config_piece = tomlkit.parse(filep.read_text())
@@ -297,10 +361,10 @@ class ConfigManager:
         option_cls: type[ConfigOption] = ConfigOption,
         **kwargs,
     ) -> None:
-        """Add an ConfigOption to this ConfigManager.
+        """Add a ConfigOption to this ConfigManager.
 
         Args:
-            option_cls: The class that should be instantiated. This is class
+            option_cls: The class that should be instantiated. This class
               should be a child class of ConfigOption. Mainly useful for cases
               where the default ConfigOption needs to be extended, for example
               if a new configuration option source needs to be supported.
@@ -314,17 +378,17 @@ class ConfigManager:
         self._options[new_option.name] = new_option
 
     def _check_child_conflict(self, name: str) -> None:
-        """Check if a sub-parser, or ConfigOption conflicts with given name.
+        """Check if a sub-manager, or ConfigOption conflicts with given name.
 
         Args:
             name: Name to check against children.
         """
-        if name in (self._options.keys() | self._sub_parsers.keys()):
+        if name in (self._options.keys() | self._sub_managers.keys()):
             raise ConfigManagerError(
-                f"'{name}' subparser, or option conflicts with a child element of '{self.name}'"
+                f"'{name}' sub-manager, or option conflicts with a child element of '{self.name}'"
             )
 
-    def add_subparser(self, new_child: ConfigManager) -> None:
+    def add_submanager(self, new_child: ConfigManager) -> None:
         """Nest another ConfigManager under this one.
 
         This function recursively updates _nest_path and _root_manager of all
@@ -334,17 +398,17 @@ class ConfigManager:
             new_child: The ConfigManager to be nested under the current one.
         Notes:
             We currently don't support re-nesting a ConfigManager. Only nest a
-            parser under another one once.
+            manager under another one once.
         """
         self._check_child_conflict(new_child.name)
-        self._sub_parsers[new_child.name] = new_child
+        self._sub_managers[new_child.name] = new_child
 
         def _root_setter_helper(node: ConfigManager):
             # Deal with ConfigManagers
             node._root_manager = self._root_manager
             node._nest_path = self._nest_path + node._nest_path
-            for sub_parser in node._sub_parsers.values():
-                _root_setter_helper(sub_parser)
+            for sub_manager in node._sub_managers.values():
+                _root_setter_helper(sub_manager)
             # Deal with ConfigOptions
             for option in node._options.values():
                 option._root_manager = self._root_manager
@@ -352,26 +416,34 @@ class ConfigManager:
 
         _root_setter_helper(new_child)
 
-    def __getitem__(self, name: str) -> ConfigOption | ConfigManager:
-        """Get either sub-parser, or option in this parser with name.
+    def add_subparser(self, *args, **kwargs) -> None:
+        warnings.warn(
+            "add_subparser has been deprecated, use add_submanager instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.add_submanager(*args, **kwargs)
 
-        If option is retrieved, we call get() on it to return its value instead.
+    def __getitem__(self, name: str) -> ConfigOption | ConfigManager:
+        """Get either sub-manager, or option in this manager with name.
+
+        If an option is retrieved, we call get() on it to return its value instead.
 
         Args:
             name: Name to retrieve.
         """
         if name in self._options:
             return self._options[name].value()
-        if name not in self._sub_parsers:
+        if name not in self._sub_managers:
             raise ConfigSourceError(
                 "No ConfigManager, or ConfigOption can be found"
                 f" with the name '{name}'"
             )
-        return self._sub_parsers[name]
+        return self._sub_managers[name]
 
 
-CONFIG_PARSER = ConfigManager(
-    name="CONFIG_PARSER",
+CONFIG_MANAGER = ConfigManager(
+    name="CONFIG_MANAGER",
     file_path=CONFIG_FILE,
     _slices=[
         ConfigSlice(  # Optional connections file to read in connections from
@@ -383,13 +455,43 @@ CONFIG_PARSER = ConfigManager(
         ),
     ],
 )
-CONFIG_PARSER.add_option(
+CONFIG_MANAGER.add_option(
     name="connections",
     parse_str=tomlkit.parse,
+    default=dict(),
+)
+CONFIG_MANAGER.add_option(
+    name="default_connection_name",
+    default="default",
 )
 
-__all__ = [
+
+def _get_default_connection_params() -> dict[str, Any]:
+    def_connection_name = CONFIG_MANAGER["default_connection_name"]
+    connections = CONFIG_MANAGER["connections"]
+    if def_connection_name not in connections:
+        raise Error(
+            f"Default connection with name '{def_connection_name}' "
+            "cannot be found, known ones are "
+            f"{list(connections.keys())}"
+        )
+    return {**connections[def_connection_name]}
+
+
+def __getattr__(name):
+    if name == "CONFIG_PARSER":
+        warnings.warn(
+            "CONFIG_PARSER has been deprecated, use CONFIG_MANAGER instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return CONFIG_MANAGER
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = [  # noqa: F822
     "ConfigOption",
     "ConfigManager",
+    "CONFIG_MANAGER",
     "CONFIG_PARSER",
 ]

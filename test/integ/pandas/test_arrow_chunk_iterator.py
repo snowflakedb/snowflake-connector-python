@@ -14,7 +14,7 @@ except ImportError:
     installed_pandas = False
 
 try:
-    import snowflake.connector.arrow_iterator  # NOQA
+    import snowflake.connector.nanoarrow_arrow_iterator  # NOQA
 
     no_arrow_iterator_ext = False
 except ImportError:

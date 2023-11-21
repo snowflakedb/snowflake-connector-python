@@ -6,13 +6,15 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
+
+from .mock_utils import mock_connection
 
 try:  # pragma: no cover
     import snowflake.connector.vendored.requests.sessions
@@ -322,10 +324,7 @@ def _init_rest(ref_sso_url, ref_token_url, success=True, message=None):
             },
         }
 
-    connection = MagicMock()
-    connection.login_timeout = 120
-    connection._login_timeout = 120
-    connection._network_timeout = None
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=CLIENT_NAME)

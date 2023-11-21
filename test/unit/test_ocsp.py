@@ -395,6 +395,33 @@ def test_building_retry_url():
         == "http://ocsp.us-east-1.snowflakecomputing.com/retry/{0}/{1}"
     )
 
+    assert (
+        OCSP_SERVER.generate_get_url("http://oneocsp.microsoft.com", "1234")
+        == "http://ocsp.us-east-1.snowflakecomputing.com/retry/oneocsp.microsoft.com/1234"
+    )
+    assert (
+        OCSP_SERVER.generate_get_url("http://oneocsp.microsoft.com/", "1234")
+        == "http://ocsp.us-east-1.snowflakecomputing.com/retry/oneocsp.microsoft.com/1234"
+    )
+    assert (
+        OCSP_SERVER.generate_get_url("http://oneocsp.microsoft.com/ocsp", "1234")
+        == "http://ocsp.us-east-1.snowflakecomputing.com/retry/oneocsp.microsoft.com/ocsp/1234"
+    )
+
+    # ensure we also handle port
+    assert (
+        OCSP_SERVER.generate_get_url("http://oneocsp.microsoft.com:8080", "1234")
+        == "http://ocsp.us-east-1.snowflakecomputing.com/retry/oneocsp.microsoft.com:8080/1234"
+    )
+    assert (
+        OCSP_SERVER.generate_get_url("http://oneocsp.microsoft.com:8080/", "1234")
+        == "http://ocsp.us-east-1.snowflakecomputing.com/retry/oneocsp.microsoft.com:8080/1234"
+    )
+    assert (
+        OCSP_SERVER.generate_get_url("http://oneocsp.microsoft.com:8080/ocsp", "1234")
+        == "http://ocsp.us-east-1.snowflakecomputing.com/retry/oneocsp.microsoft.com:8080/ocsp/1234"
+    )
+
     # privatelink retry url with port
     OCSP_SERVER.OCSP_RETRY_URL = None
     OCSP_SERVER.CACHE_SERVER_URL = (

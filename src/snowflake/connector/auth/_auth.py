@@ -127,8 +127,9 @@ class Auth:
         internal_application_name,
         internal_application_version,
         ocsp_mode,
-        login_timeout,
-        network_timeout=None,
+        login_timeout: int | None = None,
+        network_timeout: int | None = None,
+        socket_timeout: int | None = None,
     ):
         return {
             "data": {
@@ -148,6 +149,7 @@ class Auth:
                     "TRACING": logger.getEffectiveLevel(),
                     "LOGIN_TIMEOUT": login_timeout,
                     "NETWORK_TIMEOUT": network_timeout,
+                    "SOCKET_TIMEOUT": socket_timeout,
                 },
             },
         }
@@ -166,9 +168,13 @@ class Auth:
         mfa_callback: Callable[[], None] | None = None,
         password_callback: Callable[[], str] | None = None,
         session_parameters: dict[Any, Any] | None = None,
-        timeout: int = 120,
+        # max time waiting for MFA response, currently unused
+        timeout: int | None = None,
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
+
+        if timeout is None:
+            timeout = auth_instance.timeout
 
         if session_parameters is None:
             session_parameters = {}
@@ -194,6 +200,7 @@ class Auth:
             self._rest._connection._ocsp_mode(),
             self._rest._connection._login_timeout,
             self._rest._connection._network_timeout,
+            self._rest._connection._socket_timeout,
         )
 
         body = copy.deepcopy(body_template)
@@ -239,20 +246,12 @@ class Auth:
             {k: v for (k, v) in body["data"].items() if k != "PASSWORD"},
         )
 
-        # accommodate any authenticator specific timeout requirements here.
-        # login_timeout comes from user configuration.
-        # Between login timeout and auth specific
-        # timeout use whichever value is smaller
-        auth_timeout = min(self._rest._connection.login_timeout, auth_instance.timeout)
-        logger.debug(f"Timeout set to {auth_timeout}")
-
         try:
             ret = self._rest._post_request(
                 url,
                 headers,
                 json.dumps(body),
-                timeout=auth_timeout,
-                socket_timeout=auth_timeout,
+                socket_timeout=auth_instance._socket_timeout,
             )
         except ForbiddenError as err:
             # HTTP 403
@@ -282,18 +281,21 @@ class Auth:
             )
 
         # waiting for MFA authentication
-        if ret["data"].get("nextAction") in (
+        if ret["data"] and ret["data"].get("nextAction") in (
             "EXT_AUTHN_DUO_ALL",
             "EXT_AUTHN_DUO_PUSH_N_PASSCODE",
         ):
-            body["inFlightCtx"] = ret["data"]["inFlightCtx"]
+            body["inFlightCtx"] = ret["data"].get("inFlightCtx")
             body["data"]["EXT_AUTHN_DUO_METHOD"] = "push"
             self.ret = {"message": "Timeout", "data": {}}
 
             def post_request_wrapper(self, url, headers, body) -> None:
                 # get the MFA response
                 self.ret = self._rest._post_request(
-                    url, headers, body, timeout=self._rest._connection.login_timeout
+                    url,
+                    headers,
+                    body,
+                    socket_timeout=auth_instance._socket_timeout,
                 )
 
             # send new request to wait until MFA is approved
@@ -307,21 +309,25 @@ class Auth:
                 while not self.ret or self.ret.get("message") == "Timeout":
                     next(c)
             else:
+                # _post_request should already terminate on timeout, so this is just a safeguard
                 t.join(timeout=timeout)
 
             ret = self.ret
-            if ret and ret["data"].get("nextAction") == "EXT_AUTHN_SUCCESS":
+            if (
+                ret
+                and ret["data"]
+                and ret["data"].get("nextAction") == "EXT_AUTHN_SUCCESS"
+            ):
                 body = copy.deepcopy(body_template)
-                body["inFlightCtx"] = ret["data"]["inFlightCtx"]
+                body["inFlightCtx"] = ret["data"].get("inFlightCtx")
                 # final request to get tokens
                 ret = self._rest._post_request(
                     url,
                     headers,
                     json.dumps(body),
-                    timeout=self._rest._connection.login_timeout,
-                    socket_timeout=self._rest._connection.login_timeout,
+                    socket_timeout=auth_instance._socket_timeout,
                 )
-            elif not ret or not ret["data"].get("token"):
+            elif not ret or not ret["data"] or not ret["data"].get("token"):
                 # not token is returned.
                 Error.errorhandler_wrapper(
                     self._rest._connection,
@@ -343,10 +349,10 @@ class Auth:
                 )
                 return session_parameters  # required for unit test
 
-        elif ret["data"].get("nextAction") == "PWD_CHANGE":
+        elif ret["data"] and ret["data"].get("nextAction") == "PWD_CHANGE":
             if callable(password_callback):
                 body = copy.deepcopy(body_template)
-                body["inFlightCtx"] = ret["data"]["inFlightCtx"]
+                body["inFlightCtx"] = ret["data"].get("inFlightCtx")
                 body["data"]["LOGIN_NAME"] = user
                 body["data"]["PASSWORD"] = (
                     auth_instance.password
@@ -359,8 +365,7 @@ class Auth:
                     url,
                     headers,
                     json.dumps(body),
-                    timeout=self._rest._connection.login_timeout,
-                    socket_timeout=self._rest._connection.login_timeout,
+                    socket_timeout=auth_instance._socket_timeout,
                 )
 
         logger.debug("completed authentication")
@@ -411,23 +416,41 @@ class Auth:
             )
         else:
             logger.debug(
-                "token = %s", "******" if ret["data"]["token"] is not None else "NULL"
+                "token = %s",
+                "******"
+                if ret["data"] and ret["data"].get("token") is not None
+                else "NULL",
             )
             logger.debug(
                 "master_token = %s",
-                "******" if ret["data"]["masterToken"] is not None else "NULL",
+                "******"
+                if ret["data"] and ret["data"].get("masterToken") is not None
+                else "NULL",
             )
             logger.debug(
                 "id_token = %s",
-                "******" if ret["data"].get("idToken") is not None else "NULL",
+                "******"
+                if ret["data"] and ret["data"].get("idToken") is not None
+                else "NULL",
             )
             logger.debug(
                 "mfa_token = %s",
-                "******" if ret["data"].get("mfaToken") is not None else "NULL",
+                "******"
+                if ret["data"] and ret["data"].get("mfaToken") is not None
+                else "NULL",
             )
+            if not ret["data"]:
+                Error.errorhandler_wrapper(
+                    None,
+                    None,
+                    Error,
+                    {
+                        "msg": "There is no data in the returning response, please retry the operation."
+                    },
+                )
             self._rest.update_tokens(
-                ret["data"]["token"],
-                ret["data"]["masterToken"],
+                ret["data"].get("token"),
+                ret["data"].get("masterToken"),
                 master_validity_in_seconds=ret["data"].get("masterValidityInSeconds"),
                 id_token=ret["data"].get("idToken"),
                 mfa_token=ret["data"].get("mfaToken"),
@@ -435,17 +458,17 @@ class Auth:
             self.write_temporary_credentials(
                 self._rest._host, user, session_parameters, ret
             )
-            if "sessionId" in ret["data"]:
-                self._rest._connection._session_id = ret["data"]["sessionId"]
-            if "sessionInfo" in ret["data"]:
-                session_info = ret["data"]["sessionInfo"]
+            if ret["data"] and "sessionId" in ret["data"]:
+                self._rest._connection._session_id = ret["data"].get("sessionId")
+            if ret["data"] and "sessionInfo" in ret["data"]:
+                session_info = ret["data"].get("sessionInfo")
                 self._rest._connection._database = session_info.get("databaseName")
                 self._rest._connection._schema = session_info.get("schemaName")
                 self._rest._connection._warehouse = session_info.get("warehouseName")
                 self._rest._connection._role = session_info.get("roleName")
-            if "parameters" in ret["data"]:
+            if ret["data"] and "parameters" in ret["data"]:
                 session_parameters.update(
-                    {p["name"]: p["value"] for p in ret["data"]["parameters"]}
+                    {p["name"]: p["value"] for p in ret["data"].get("parameters")}
                 )
             self._rest._connection._update_parameters(session_parameters)
             return session_parameters

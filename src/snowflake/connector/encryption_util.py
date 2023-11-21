@@ -12,7 +12,6 @@ import tempfile
 from logging import getLogger
 from typing import IO, TYPE_CHECKING
 
-from Cryptodome.Cipher import AES
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -69,7 +68,6 @@ class SnowflakeEncryptionUtil:
             The encryption metadata.
         """
         logger = getLogger(__name__)
-        use_openssl_only = os.getenv("SF_USE_OPENSSL_ONLY", "False") == "True"
         decoded_key = base64.standard_b64decode(
             encryption_material.query_stage_master_key
         )
@@ -79,14 +77,9 @@ class SnowflakeEncryptionUtil:
         # Generate key for data encryption
         iv_data = SnowflakeEncryptionUtil.get_secure_random(block_size)
         file_key = SnowflakeEncryptionUtil.get_secure_random(key_size)
-        if not use_openssl_only:
-            data_cipher = AES.new(key=file_key, mode=AES.MODE_CBC, IV=iv_data)
-        else:
-            backend = default_backend()
-            cipher = Cipher(
-                algorithms.AES(file_key), modes.CBC(iv_data), backend=backend
-            )
-            encryptor = cipher.encryptor()
+        backend = default_backend()
+        cipher = Cipher(algorithms.AES(file_key), modes.CBC(iv_data), backend=backend)
+        encryptor = cipher.encryptor()
 
         padded = False
         while True:
@@ -96,30 +89,17 @@ class SnowflakeEncryptionUtil:
             elif len(chunk) % block_size != 0:
                 chunk = PKCS5_PAD(chunk, block_size)
                 padded = True
-            if not use_openssl_only:
-                out.write(data_cipher.encrypt(chunk))
-            else:
-                out.write(encryptor.update(chunk))
+            out.write(encryptor.update(chunk))
         if not padded:
-            if not use_openssl_only:
-                out.write(
-                    data_cipher.encrypt(block_size * chr(block_size).encode(UTF8))
-                )
-            else:
-                out.write(encryptor.update(block_size * chr(block_size).encode(UTF8)))
-        if use_openssl_only:
-            out.write(encryptor.finalize())
+            out.write(encryptor.update(block_size * chr(block_size).encode(UTF8)))
+        out.write(encryptor.finalize())
 
         # encrypt key with QRMK
-        if not use_openssl_only:
-            key_cipher = AES.new(key=decoded_key, mode=AES.MODE_ECB)
-            enc_kek = key_cipher.encrypt(PKCS5_PAD(file_key, block_size))
-        else:
-            cipher = Cipher(algorithms.AES(decoded_key), modes.ECB(), backend=backend)
-            encryptor = cipher.encryptor()
-            enc_kek = (
-                encryptor.update(PKCS5_PAD(file_key, block_size)) + encryptor.finalize()
-            )
+        cipher = Cipher(algorithms.AES(decoded_key), modes.ECB(), backend=backend)
+        encryptor = cipher.encryptor()
+        enc_kek = (
+            encryptor.update(PKCS5_PAD(file_key, block_size)) + encryptor.finalize()
+        )
 
         mat_desc = MaterialDescriptor(
             smk_id=encryption_material.smk_id,
@@ -178,7 +158,6 @@ class SnowflakeEncryptionUtil:
     ) -> None:
         """To read from `src` stream then decrypt to `out` stream."""
 
-        use_openssl_only = os.getenv("SF_USE_OPENSSL_ONLY", "False") == "True"
         key_base64 = metadata.key
         iv_base64 = metadata.iv
         decoded_key = base64.standard_b64decode(
@@ -187,37 +166,26 @@ class SnowflakeEncryptionUtil:
         key_bytes = base64.standard_b64decode(key_base64)
         iv_bytes = base64.standard_b64decode(iv_base64)
 
-        if not use_openssl_only:
-            key_cipher = AES.new(key=decoded_key, mode=AES.MODE_ECB)
-            file_key = PKCS5_UNPAD(key_cipher.decrypt(key_bytes))
-            data_cipher = AES.new(key=file_key, mode=AES.MODE_CBC, IV=iv_bytes)
-        else:
-            backend = default_backend()
-            cipher = Cipher(algorithms.AES(decoded_key), modes.ECB(), backend=backend)
-            decryptor = cipher.decryptor()
-            file_key = PKCS5_UNPAD(decryptor.update(key_bytes) + decryptor.finalize())
-            cipher = Cipher(
-                algorithms.AES(file_key), modes.CBC(iv_bytes), backend=backend
-            )
-            decryptor = cipher.decryptor()
+        backend = default_backend()
+        cipher = Cipher(algorithms.AES(decoded_key), modes.ECB(), backend=backend)
+        decryptor = cipher.decryptor()
+        file_key = PKCS5_UNPAD(decryptor.update(key_bytes) + decryptor.finalize())
+        cipher = Cipher(algorithms.AES(file_key), modes.CBC(iv_bytes), backend=backend)
+        decryptor = cipher.decryptor()
 
         last_decrypted_chunk = None
         chunk = src.read(chunk_size)
         while len(chunk) != 0:
             if last_decrypted_chunk is not None:
                 out.write(last_decrypted_chunk)
-            if not use_openssl_only:
-                d = data_cipher.decrypt(chunk)
-            else:
-                d = decryptor.update(chunk)
+            d = decryptor.update(chunk)
             last_decrypted_chunk = d
             chunk = src.read(chunk_size)
 
         if last_decrypted_chunk is not None:
             offset = PKCS5_OFFSET(last_decrypted_chunk)
             out.write(last_decrypted_chunk[:-offset])
-        if use_openssl_only:
-            out.write(decryptor.finalize())
+        out.write(decryptor.finalize())
 
     @staticmethod
     def decrypt_file(

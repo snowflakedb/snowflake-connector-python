@@ -16,7 +16,7 @@ import snowflake.connector
 pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 
 try:
-    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+    from snowflake.connector.nanoarrow_arrow_iterator import PyArrowIterator  # NOQA
 
     no_arrow_iterator_ext = False
 except ImportError:
@@ -375,6 +375,22 @@ def test_select_semi_structure(conn_cnx):
     iterate_over_test_chunk("struct", conn_cnx, sql_text, row_count, col_count)
 
 
+def test_select_vector(conn_cnx, is_public_test):
+    if is_public_test:
+        pytest.xfail(
+            reason="This feature hasn't been rolled out for public Snowflake deployments yet."
+        )
+
+    sql_text = """select [1,2,3]::vector(int,3),
+        [1.1,2.2]::vector(float,2),
+        NULL::vector(int,2),
+        NULL::vector(float,3);
+    """
+    row_count = 1
+    col_count = 4
+    iterate_over_test_chunk("vector", conn_cnx, sql_text, row_count, col_count)
+
+
 def test_select_time(conn_cnx):
     for scale in range(10):
         select_time_with_scale(conn_cnx, scale)
@@ -641,6 +657,8 @@ def iterate_over_test_chunk(
                             and eps is not None
                         ):
                             assert abs(json_res[j] - arrow_res[j]) <= eps
+                        elif test_name == "vector":
+                            assert json_res[j] == pytest.approx(arrow_res[j])
                         else:
                             assert json_res[j] == arrow_res[j]
             else:

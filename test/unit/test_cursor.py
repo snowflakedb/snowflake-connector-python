@@ -4,10 +4,14 @@
 
 from __future__ import annotations
 
+import time
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from snowflake.connector.connection import SnowflakeConnection
 from snowflake.connector.cursor import SnowflakeCursor
+from snowflake.connector.errors import ServiceUnavailableError
 
 try:
     from snowflake.connector.constants import FileTransferType
@@ -56,3 +60,27 @@ def test_cursor_attribute():
     fake_conn = FakeConnection()
     cursor = SnowflakeCursor(fake_conn)
     assert cursor.lastrowid is None
+
+
+@patch("snowflake.connector.cursor.SnowflakeCursor._SnowflakeCursor__cancel_query")
+def test_cursor_execute_timeout(mockCancelQuery):
+    def mock_cmd_query(*args, **kwargs):
+        time.sleep(10)
+        raise ServiceUnavailableError()
+
+    fake_conn = FakeConnection()
+    fake_conn.cmd_query = mock_cmd_query
+    fake_conn._rest = MagicMock()
+    fake_conn._paramstyle = MagicMock()
+    fake_conn._next_sequence_counter = MagicMock()
+
+    cursor = SnowflakeCursor(fake_conn)
+
+    with pytest.raises(ServiceUnavailableError):
+        cursor.execute(
+            command="SELECT * FROM nonexistent",
+            timeout=1,
+        )
+
+    # query cancel request should be sent upon timeout
+    assert mockCancelQuery.called
