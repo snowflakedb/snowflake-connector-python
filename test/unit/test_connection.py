@@ -464,4 +464,3 @@ def test_expired_detection():
             with pytest.raises(ProgrammingError):
                 cur.execute("select 1;")
     assert conn.expired
-
