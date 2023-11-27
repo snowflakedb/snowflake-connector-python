@@ -26,6 +26,8 @@ from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
 from uuid import UUID
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from . import errors, proxy
@@ -120,6 +122,26 @@ def DefaultConverterClass() -> type:
         return SnowflakeConverter
 
 
+def _get_private_bytes_from_file(
+    private_key_file: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+    private_key_file_pwd: bytes | None = None,
+) -> bytes:
+    with open(private_key_file, "rb") as key:
+        private_key = serialization.load_pem_private_key(
+            key.read(),
+            password=private_key_file_pwd,
+            backend=default_backend(),
+        )
+
+    pkb = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    return pkb
+
+
 SUPPORTED_PARAMSTYLES = {
     "qmark",
     "numeric",
@@ -155,6 +177,8 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), str, RSAPrivateKey)),
+    "private_key_file": (None, (type(None), str)),
+    "private_key_file_pwd": (None, (type(None), str)),
     "token": (None, (type(None), str)),  # OAuth or JWT Token
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
@@ -936,8 +960,16 @@ class SnowflakeConnection:
                 )
 
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
+            private_key = self._private_key
+
+            if self._private_key_file:
+                private_key = _get_private_bytes_from_file(
+                    self._private_key_file,
+                    self._private_key_file_pwd,
+                )
+
             self.auth_class = AuthByKeyPair(
-                private_key=self._private_key,
+                private_key=private_key,
                 timeout=self._login_timeout,
                 backoff_generator=self._backoff_generator,
             )
@@ -1092,7 +1124,7 @@ class SnowflakeConnection:
                 {"msg": "User is empty", "errno": ER_NO_USER},
             )
 
-        if self._private_key:
+        if self._private_key or self._private_key_file:
             self._authenticator = KEY_PAIR_AUTHENTICATOR
 
         if (
