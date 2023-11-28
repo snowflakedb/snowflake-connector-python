@@ -101,6 +101,7 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow()
         case SnowflakeType::Type::TEXT:
         case SnowflakeType::Type::REAL:
         case SnowflakeType::Type::DATE:
+        case SnowflakeType::Type::VECTOR:
         {
           // Do not need to convert
           break;
