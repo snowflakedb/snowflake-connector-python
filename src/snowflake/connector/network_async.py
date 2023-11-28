@@ -5,15 +5,21 @@
 from __future__ import annotations
 
 import asyncio
-
+import nest_asyncio
 import aiohttp
 
 from .network import *
 
+# YICHUAN: If a user calls any of our  methods from their async code, when we try to call loop.run_until_complete
+# it will raise "RuntimeError: This event loop is already running"
+def run_until_complete_safe(loop, coro) -> Any:
+    if loop.is_running():
+        # YICHUAN: Patching a loop multiple times is safe
+        nest_asyncio.apply(loop)
+    return loop.run_until_complete(coro)
+
 # YICHUAN: If we don't want to duplicate these raise  functions we can also modify them to directly take the error
 # status and reason instead of a response object (that way we can use the same for both sync and async)
-
-
 # For this commit I'm just adding separate functions for async so that I don't need to change too much code
 def raise_okta_unauthorized_error_async(
     connection: SnowflakeConnection | None, response: aiohttp.ClientResponse
@@ -131,15 +137,18 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
 
-        self._loop.run_until_complete(self.close_async())
-        self._loop.close()
+        # self._loop.run_until_complete(self.close_async())
+        run_until_complete_safe(self._loop, self.close_async())
+        # YICHUAN: We do not need to close the loop ourselves (in fact we should not because the client might own it)
+        # self._loop.close()
 
-    async def close_async(self):
+    async def close_async(self) -> None:
         for session_pool in self._sessions_map.values():
             await session_pool.close_async()
 
     def fetch(self, *args, **kwargs) -> dict[Any, Any]:
-        return self._loop.run_until_complete(self.fetch_async(*args, **kwargs))
+        # return self._loop.run_until_complete(self.fetch_async(*args, **kwargs))
+        return run_until_complete_safe(self._loop, self.fetch_async(*args, **kwargs))
 
     async def fetch_async(
         self,
@@ -304,12 +313,9 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
             # YICHUAN: aiohttp doesn't provide a convenient method like session.get_adapter to close an adapter if we
             # receive "Connection aborted" or "ECONNRESET"; aiohttp tends to release the connection itself on success
             # receiving EOF, or close the connection itself if something went wrong
-
             # (If you want to see for yourself, look at aiohttp.ClientResponse._response_eof)
-
             # This means that we can't access the connection used to close it without calling internal methods, which
             # is dangerous if it was acquired concurrently before the control flow reaches here
-
             # Not checking for "Connection aborted" or "ECONNRESET" shouldn't cause any problems as aiohttp rebuilds
             # broken connections the next time it's used anyway, but we can subclass ClientSession to override _request
             # if we really want to add the check, at the cost of a lot more code
@@ -357,7 +363,6 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
                 input_data = data
 
             # YICHUAN: Adding auth headers here isn't ideal (though I've checked that they won't be overriden)
-
             # If we want to pass an auth mechanism to request instead we can pass in auth=SnowflakeAuthAsync, but we
             # have to do some hacky stuff with the class to make it play nice with aiohttp.BasicAuth
             if HEADER_AUTHORIZATION_KEY in headers:
