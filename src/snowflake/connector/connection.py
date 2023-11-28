@@ -683,6 +683,8 @@ class SnowflakeConnection:
                 self.__open_connection()
                 connection_diag.cursor = self.cursor()
             except Exception:
+                if self.rest:
+                    self.rest.close()
                 exceptions_dict["connection_test"] = traceback.format_exc()
                 logger.warning(
                     f"""Exception during connection test:\n{exceptions_dict["connection_test"]} """
@@ -699,7 +701,12 @@ class SnowflakeConnection:
                 if exceptions_dict:
                     raise Exception(str(exceptions_dict))
         else:
-            self.__open_connection()
+            try:
+                self.__open_connection()
+            except Exception:
+                if self.rest:
+                    self.rest.close()
+                raise
 
     def close(self, retry: bool = True) -> None:
         """Closes the connection."""
@@ -862,6 +869,7 @@ class SnowflakeConnection:
 
         # Yichuan: TEMPORARY
         from .network_async import SnowflakeRestfulAsync
+
         self._rest = SnowflakeRestfulAsync(
             host=self.host,
             port=self.port,
@@ -869,6 +877,13 @@ class SnowflakeConnection:
             inject_client_pause=self._inject_client_pause,
             connection=self,
         )
+        # self._rest = SnowflakeRestful(
+        #     host=self.host,
+        #     port=self.port,
+        #     protocol=self._protocol,
+        #     inject_client_pause=self._inject_client_pause,
+        #     connection=self,
+        # )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 
         if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:

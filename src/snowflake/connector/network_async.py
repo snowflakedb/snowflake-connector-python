@@ -72,14 +72,71 @@ class SnowflakeAuthAsync(aiohttp.BasicAuth):
         return HEADER_SNOWFLAKE_TOKEN.format(token=self.token)
 
 
+class SessionPoolAsync(SessionPool):
+    async def close_async(self) -> None:
+        """Closes all active and idle sessions in this session pool."""
+        if self._active_sessions:
+            logger.debug(f"Closing {len(self._active_sessions)} active sessions")
+        for s in itertools.chain(self._active_sessions, self._idle_sessions):
+            try:
+                await s.close()
+            except Exception as e:
+                logger.info(f"Session cleanup failed: {e}")
+        self._active_sessions.clear()
+        self._idle_sessions.clear()
+
+
 class SnowflakeRestfulAsync(SnowflakeRestful):
-    def __init__(self, **kwargs) -> None:
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8080,
+        protocol: str = "http",
+        inject_client_pause: int = 0,
+        connection: SnowflakeConnection | None = None,
+    ) -> None:
         self._loop = asyncio.get_event_loop()
 
-        super().__init__(**kwargs)
+        self._host = host
+        self._port = port
+        self._protocol = protocol
+        self._inject_client_pause = inject_client_pause
+        self._connection = connection
+        self._lock_token = Lock()
+        self._sessions_map: dict[
+            str | None, SessionPoolAsync
+        ] = collections.defaultdict(lambda: SessionPoolAsync(self))
 
-    def __del__(self) -> None:
+        # OCSP mode (OCSPMode.FAIL_OPEN by default)
+        ssl_wrap_socket.FEATURE_OCSP_MODE = (
+            self._connection._ocsp_mode()
+            if self._connection
+            else ssl_wrap_socket.DEFAULT_OCSP_MODE
+        )
+        # cache file name (enabled by default)
+        ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
+            self._connection._ocsp_response_cache_filename if self._connection else None
+        )
+
+        # This is to address the issue where requests hangs
+        _ = "dummy".encode("idna").decode("utf-8")
+
+    def close(self) -> None:
+        if hasattr(self, "_token"):
+            del self._token
+        if hasattr(self, "_master_token"):
+            del self._master_token
+        if hasattr(self, "_id_token"):
+            del self._id_token
+        if hasattr(self, "_mfa_token"):
+            del self._mfa_token
+
+        self._loop.run_until_complete(self.close_async())
         self._loop.close()
+
+    async def close_async(self):
+        for session_pool in self._sessions_map.values():
+            await session_pool.close_async()
 
     def fetch(self, *args, **kwargs) -> dict[Any, Any]:
         return self._loop.run_until_complete(self.fetch_async(*args, **kwargs))
@@ -321,7 +378,9 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
                 data=input_data,
                 proxy=None,
                 # Yichuan: Should be fine specifying this unconditionally as proxy_headers will be ignored if no proxy
-                # is specified in env variables (REQUIRES TESTING)
+                # is specified in env variables
+                # (If you want to see for yourself, check that proxy_headers are only used to set the attribute
+                # ClientRequest.proxy_headers, which are in turn only used in TCPConnector._create_proxy_connection)
                 proxy_headers={"Host": parse_url(full_url).hostname},
                 ssl=None,  # Yichuan: Default SSL check, replace later
             )
@@ -341,7 +400,7 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
                     raise ForbiddenError
 
                 elif is_retryable_http_code(resp.status):
-                    err = get_http_retryable_error(resp.status_code)
+                    err = get_http_retryable_error(resp.status)
                     # retryable server exceptions
                     if is_okta_authentication:
                         raise RefreshTokenError(
@@ -457,15 +516,15 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
             except Exception:
                 hostname = None
 
-            # Yichuan: SessionPool works as-is for aiohttp ClientSession, but type hinting in it is not entirely clear,
-            # so I will find a way to clean up the code later
-            session_pool: SessionPool = self._sessions_map[hostname]
+            session_pool: SessionPoolAsync = self._sessions_map[hostname]
             session = session_pool.get_session()
-            logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
+            logger.debug(
+                f"Session status for SessionPoolAsync '{hostname}', {session_pool}"
+            )
             try:
                 yield session
             finally:
                 session_pool.return_session(session)
                 logger.debug(
-                    f"Session status for SessionPool '{hostname}', {session_pool}"
+                    f"Session status for SessionPoolAsync '{hostname}', {session_pool}"
                 )
