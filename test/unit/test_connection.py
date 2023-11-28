@@ -426,3 +426,41 @@ def test_private_key_file_reading(tmp_path: Path):
             )
     assert m.call_count == 1
     assert m.call_args_list[0].kwargs["private_key"] == pkb
+
+
+def test_expired_detection():
+    with mock.patch(
+        "snowflake.connector.network.SnowflakeRestful._post_request",
+        return_value={
+            "data": {
+                "masterToken": "some master token",
+                "token": "some token",
+                "validityInSeconds": 3600,
+                "masterValidityInSeconds": 14400,
+                "displayUserName": "TEST_USER",
+                "serverVersion": "7.42.0",
+            },
+            "code": None,
+            "message": None,
+            "success": True,
+        },
+    ):
+        conn = fake_connector()
+    assert not conn.expired
+    with conn.cursor() as cur:
+        with mock.patch(
+            "snowflake.connector.network.SnowflakeRestful.fetch",
+            return_value={
+                "data": {
+                    "errorCode": "390114",
+                    "reAuthnMethods": ["USERNAME_PASSWORD"],
+                },
+                "code": "390114",
+                "message": "Authentication token has expired.  The user must authenticate again.",
+                "success": False,
+                "headers": None,
+            },
+        ):
+            with pytest.raises(ProgrammingError):
+                cur.execute("select 1;")
+    assert conn.expired

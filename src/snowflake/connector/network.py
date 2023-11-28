@@ -743,7 +743,9 @@ class SnowflakeRestful:
             )
         )
 
-        if ret.get("code") == SESSION_EXPIRED_GS_CODE:
+        if ret.get("code") == MASTER_TOKEN_EXPIRED_GS_CODE:
+            self._connection.expired = True
+        elif ret.get("code") == SESSION_EXPIRED_GS_CODE:
             try:
                 ret = self._renew_session()
             except ReauthenticationRequest as ex:
