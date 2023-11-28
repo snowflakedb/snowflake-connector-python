@@ -583,6 +583,7 @@ def test_timestampltz(conn_cnx, scale, timezone):
         finish(conn, table)
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas is missing.",
@@ -627,6 +628,7 @@ def test_vector(conn_cnx, is_public_test):
             cur.execute(f"select a from {table} limit 0")
             df = cur.fetch_pandas_all()
             assert len(df) == 0
+            assert df.dtypes[0] == "object"
 
             finish(conn, table)
 

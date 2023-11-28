@@ -138,6 +138,20 @@ def _check_results(cursor, results):
     assert results[2] == 123456, "the third result was wrong"
 
 
+def _name_from_description(named_access: bool):
+    if named_access:
+        return lambda meta: meta.name
+    else:
+        return lambda meta: meta[0]
+
+
+def _type_from_description(named_access: bool):
+    if named_access:
+        return lambda meta: meta.type_code
+    else:
+        return lambda meta: meta[1]
+
+
 @pytest.mark.skipolddriver
 def test_insert_select(conn, db_parameters, caplog):
     """Inserts and selects integer data."""
@@ -330,28 +344,42 @@ def test_insert_timestamp_select(conn, db_parameters):
 
         assert current_time == result_time_value[0], "the time result was wrong"
 
-        desc = c.description
-        assert len(desc) == 6, "invalid number of column meta data"
-        assert desc[0][0].upper() == "AA", "invalid column name"
-        assert desc[1][0].upper() == "TSLTZ", "invalid column name"
-        assert desc[2][0].upper() == "TSTZ", "invalid column name"
-        assert desc[3][0].upper() == "TSNTZ", "invalid column name"
-        assert desc[4][0].upper() == "DT", "invalid column name"
-        assert desc[5][0].upper() == "TM", "invalid column name"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[0][1]] == "FIXED"
-        ), f"invalid column name: {constants.FIELD_ID_TO_NAME[desc[0][1]]}"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[1][1]] == "TIMESTAMP_LTZ"
-        ), "invalid column name"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[2][1]] == "TIMESTAMP_TZ"
-        ), "invalid column name"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[3][1]] == "TIMESTAMP_NTZ"
-        ), "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[4][1]] == "DATE", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[5][1]] == "TIME", "invalid column name"
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
+            assert len(desc) == 6, "invalid number of column meta data"
+            assert name(desc[0]).upper() == "AA", "invalid column name"
+            assert name(desc[1]).upper() == "TSLTZ", "invalid column name"
+            assert name(desc[2]).upper() == "TSTZ", "invalid column name"
+            assert name(desc[3]).upper() == "TSNTZ", "invalid column name"
+            assert name(desc[4]).upper() == "DT", "invalid column name"
+            assert name(desc[5]).upper() == "TM", "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "FIXED"
+            ), f"invalid column name: {constants.FIELD_ID_TO_NAME[desc[0][1]]}"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[1])] == "TIMESTAMP_LTZ"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[2])] == "TIMESTAMP_TZ"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[3])] == "TIMESTAMP_NTZ"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[4])] == "DATE"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[5])] == "TIME"
+            ), "invalid column name"
     finally:
         cnx2.close()
 
@@ -483,10 +511,22 @@ def test_insert_binary_select(conn, db_parameters):
         results = [b for (b,) in c]
         assert value == results[0], "the binary result was wrong"
 
-        desc = c.description
-        assert len(desc) == 1, "invalid number of column meta data"
-        assert desc[0][0].upper() == "B", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[0][1]] == "BINARY", "invalid column name"
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
+            assert len(desc) == 1, "invalid number of column meta data"
+            assert name(desc[0]).upper() == "B", "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
+            ), "invalid column name"
     finally:
         cnx2.close()
 
@@ -523,10 +563,22 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
         results = [b for (b,) in c]
         assert bytes(value) == results[0], "the binary result was wrong"
 
-        desc = c.description
-        assert len(desc) == 1, "invalid number of column meta data"
-        assert desc[0][0].upper() == "B", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[0][1]] == "BINARY", "invalid column name"
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
+            assert len(desc) == 1, "invalid number of column meta data"
+            assert name(desc[0]).upper() == "B", "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
+            ), "invalid column name"
     finally:
         cnx2.close()
 
@@ -607,8 +659,8 @@ def test_geography(conn_cnx):
         with cnx.cursor() as cur:
             # Test with GEOGRAPHY return type
             result = cur.execute(f"select * from {name_geo}")
-            metadata = result.description
-            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
             data = result.fetchall()
             for raw_data in data:
                 row = json.loads(raw_data[0])
@@ -637,8 +689,8 @@ def test_geometry(conn_cnx):
         with cnx.cursor() as cur:
             # Test with GEOMETRY return type
             result = cur.execute(f"select * from {name_geo}")
-            metadata = result.description
-            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOMETRY"
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOMETRY"
             data = result.fetchall()
             for raw_data in data:
                 row = json.loads(raw_data[0])
@@ -674,9 +726,9 @@ def test_vector(conn_cnx, is_public_test):
             cur.execute(
                 f"select int_vec, float_vec from {name_vectors} order by float_vec"
             )
-            metadata = cur.description
-            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
-            assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
+                assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
             data = cur.fetchall()
             for i, row in enumerate(data):
                 if expected_data_floats[i] == "NULL":
@@ -693,9 +745,9 @@ def test_vector(conn_cnx, is_public_test):
             cur.execute(
                 f"select int_vec, float_vec from {name_vectors} where int_vec = [1,2,3]::VECTOR(int,3)"
             )
-            metadata = cur.description
-            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
-            assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
+                assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
             data = cur.fetchall()
             assert len(data) == 0
 
@@ -1618,31 +1670,32 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
 def test_describe(conn_cnx):
     with conn_cnx() as con:
         with con.cursor() as cur:
-            table_name = random_string(5, "test_describe_")
-            # test select
-            description = cur.describe(
-                "select * from VALUES(1, 3.1415926, 'snow', TO_TIMESTAMP('2021-01-01 00:00:00'))"
-            )
-            assert description is not None
-            column_types = [column[1] for column in description]
-            assert constants.FIELD_ID_TO_NAME[column_types[0]] == "FIXED"
-            assert constants.FIELD_ID_TO_NAME[column_types[1]] == "FIXED"
-            assert constants.FIELD_ID_TO_NAME[column_types[2]] == "TEXT"
-            assert "TIMESTAMP" in constants.FIELD_ID_TO_NAME[column_types[3]]
-            assert len(cur.fetchall()) == 0
-
-            # test insert
-            cur.execute(f"create table {table_name} (aa int)")
-            try:
-                description = cur.describe(
-                    "insert into {name}(aa) values({value})".format(
-                        name=table_name, value="1234"
-                    )
+            for describe in [cur.describe, cur._describe_internal]:
+                table_name = random_string(5, "test_describe_")
+                # test select
+                description = describe(
+                    "select * from VALUES(1, 3.1415926, 'snow', TO_TIMESTAMP('2021-01-01 00:00:00'))"
                 )
-                assert description[0][0] == "number of rows inserted"
-                assert cur.rowcount is None
-            finally:
-                cur.execute(f"drop table if exists {table_name}")
+                assert description is not None
+                column_types = [column.type_code for column in description]
+                assert constants.FIELD_ID_TO_NAME[column_types[0]] == "FIXED"
+                assert constants.FIELD_ID_TO_NAME[column_types[1]] == "FIXED"
+                assert constants.FIELD_ID_TO_NAME[column_types[2]] == "TEXT"
+                assert "TIMESTAMP" in constants.FIELD_ID_TO_NAME[column_types[3]]
+                assert len(cur.fetchall()) == 0
+
+                # test insert
+                cur.execute(f"create table {table_name} (aa int)")
+                try:
+                    description = describe(
+                        "insert into {name}(aa) values({value})".format(
+                            name=table_name, value="1234"
+                        )
+                    )
+                    assert description[0].name == "number of rows inserted"
+                    assert cur.rowcount is None
+                finally:
+                    cur.execute(f"drop table if exists {table_name}")
 
 
 @pytest.mark.skipolddriver

@@ -144,19 +144,220 @@ class ResultMetadata(NamedTuple):
     @classmethod
     def from_column(cls, col: dict[str, Any]):
         """Initializes a ResultMetadata object from the column description in the query response."""
+        type_code = FIELD_NAME_TO_ID[
+            col["extTypeName"].upper()
+            if col.get("extTypeName")
+            else col["type"].upper()
+        ]
+
         return cls(
             col["name"],
-            FIELD_NAME_TO_ID[
-                col["extTypeName"].upper()
-                if col.get("extTypeName")
-                else col["type"].upper()
-            ],
+            type_code,
             None,
             col["length"],
             col["precision"],
             col["scale"],
             col["nullable"],
         )
+
+
+class ResultMetadataV2Field:
+    """ResultMetadataV2Field represents the type information of one sub-type in a nested type."""
+
+    def __init__(
+        self,
+        type_code: int,
+        is_nullable: bool,
+        internal_size: int | None = None,
+        precision: int | None = None,
+        scale: int | None = None,
+        fields: list[ResultMetadataV2] | None = None,
+    ):
+        self._type_code = type_code
+        self._is_nullable = is_nullable
+        self._internal_size = internal_size
+        self._precision = precision
+        self._scale = scale
+        self._fields = fields
+
+    @classmethod
+    def from_column(cls, col: dict[str, Any]) -> ResultMetadataV2Field:
+        """Initializes a ResultMetadataV2Field object from a child of the column description in the query response."""
+        fields = None
+        if col.get("fields") is not None:
+            fields = [cls.from_column(f) for f in col["fields"]]
+        return cls(
+            FIELD_NAME_TO_ID[
+                col["extTypeName"].upper()
+                if col.get("extTypeName")
+                else col["type"].upper()
+            ],
+            col["nullable"],
+            col["length"],
+            col["precision"],
+            col["scale"],
+            fields,
+        )
+
+    @property
+    def type_code(self) -> int:
+        return self._type_code
+
+    @property
+    def is_nullable(self) -> bool:
+        return self._is_nullable
+
+    @property
+    def internal_size(self) -> int | None:
+        return self._internal_size
+
+    @property
+    def precision(self) -> int | None:
+        return self._precision
+
+    @property
+    def scale(self) -> int | None:
+        return self._scale
+
+    @property
+    def fields(self) -> list[ResultMetadataV2Field] | None:
+        return self._fields
+
+
+class ResultMetadataV2:
+    """ResultMetadataV2Field represents the type information of a single column.
+
+    It is a replacement for ResultMetadata that contains additional attributes, currently
+    `vector_dimension` and `fields`. This class will be unified with ResultMetadata in the
+    near future.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        type_code: int,
+        is_nullable: bool,
+        display_size: int | None = None,
+        internal_size: int | None = None,
+        precision: int | None = None,
+        scale: int | None = None,
+        vector_dimension: int | None = None,
+        fields: list[ResultMetadataV2] | None = None,
+    ):
+        self._name = name
+        self._type_code = type_code
+        self._is_nullable = is_nullable
+        self._display_size = display_size
+        self._internal_size = internal_size
+        self._precision = precision
+        self._scale = scale
+        self._vector_dimension = vector_dimension
+        self._fields = fields
+
+    @classmethod
+    def from_column(cls, col: dict[str, Any]) -> ResultMetadataV2:
+        """Initializes a ResultMetadataV2 object from the column description in the query response.
+        This differs from ResultMetadata in that it has newly-added fields which cannot be added to
+        ResultMetadata since it is a named tuple.
+        """
+        type_code = FIELD_NAME_TO_ID[
+            col["extTypeName"].upper()
+            if col.get("extTypeName")
+            else col["type"].upper()
+        ]
+
+        fields = None
+        if type_code == FIELD_NAME_TO_ID["VECTOR"] and col.get("fields") is not None:
+            fields = [ResultMetadataV2Field.from_column(f) for f in col["fields"]]
+
+        return cls(
+            col["name"],
+            type_code,
+            col["nullable"],
+            None,
+            col["length"],
+            col["precision"],
+            col["scale"],
+            col.get("vectorDimension"),
+            fields,
+        )
+
+    def _to_result_metadata_v1(self):
+        """Initializes a ResultMetadata object from a ResultMetadataV2 object.
+
+        This method is for internal use only.
+        """
+
+        return ResultMetadata(
+            self._name,
+            self._type_code,
+            self._display_size,
+            self._internal_size,
+            self._precision,
+            self._scale,
+            self._is_nullable,
+        )
+
+    def __str__(self) -> str:
+        return (
+            f"ResultMetadataV2(name={self._name},type_code={self._type_code},"
+            + f"is_nullable={self._is_nullable},display_size={self._display_size},"
+            + "internal_size={self._internal_size},precision={self._precision},"
+            + "scale={self._scale},vector_dimension={self._vector_dimension},"
+            + "fields={self.fields})"
+        )
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, self.__class__):
+            return False
+
+        return (
+            self._name == other._name
+            and self._type_code == other._type_code
+            and self._is_nullable == other._is_nullable
+            and self._display_size == other._display_size
+            and self._internal_size == other._internal_size
+            and self._precision == other._precision
+            and self._scale == other._scale
+            and self._vector_dimension == other._vector_dimension
+            and self._fields == other._fields
+        )
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def type_code(self) -> int:
+        return self._type_code
+
+    @property
+    def is_nullable(self) -> bool:
+        return self._is_nullable
+
+    @property
+    def internal_size(self) -> int | None:
+        return self._internal_size
+
+    @property
+    def display_size(self) -> int | None:
+        return self._display_size
+
+    @property
+    def precision(self) -> int | None:
+        return self._precision
+
+    @property
+    def scale(self) -> int | None:
+        return self._scale
+
+    @property
+    def vector_dimension(self) -> int | None:
+        return self._vector_dimension
+
+    @property
+    def fields(self) -> list[ResultMetadataV2Field] | None:
+        return self._fields
 
 
 def exit_handler(*_) -> NoReturn:
@@ -240,7 +441,7 @@ class SnowflakeCursor:
             tuple[type[Error] | type[Exception], dict[str, str | bool]]
         ] = []
         self._timebomb: Timer | None = None  # must be here for abort_exit method
-        self._description: list[ResultMetadata] | None = None
+        self._description: list[ResultMetadataV2] | None = None
         self._sfqid: str | None = None
         self._sqlstate = None
         self._total_rowcount = -1
@@ -288,6 +489,17 @@ class SnowflakeCursor:
 
     @property
     def description(self) -> list[ResultMetadata]:
+        if self._description is None:
+            return None
+
+        return [meta._to_result_metadata_v1() for meta in self._description]
+
+    @property
+    def _description_internal(self) -> list[ResultMetadataV2]:
+        """Return the new format of result metadata for a query.
+
+        This method is for internal use only.
+        """
         return self._description
 
     @property
@@ -929,7 +1141,9 @@ class SnowflakeCursor:
         kwargs["_exec_async"] = True
         return self.execute(*args, **kwargs)
 
-    def describe(self, *args: Any, **kwargs: Any) -> list[ResultMetadata]:
+    def describe(
+        self, *args: Any, **kwargs: Any
+    ) -> list[ResultMetadata | ResultMetadataV2]:
         """Obtain the schema of the result without executing the query.
 
         This function takes the same arguments as execute, please refer to that function
@@ -937,6 +1151,26 @@ class SnowflakeCursor:
 
         Returns:
             The schema of the result.
+        """
+        kwargs["_describe_only"] = kwargs["_is_internal"] = True
+        self.execute(*args, **kwargs)
+
+        if self._description is None:
+            return None
+        return [meta._to_result_metadata_v1() for meta in self._description]
+
+    def _describe_internal(
+        self, *args: Any, **kwargs: Any
+    ) -> list[ResultMetadata | ResultMetadataV2]:
+        """Obtain the schema of the result without executing the query.
+
+        This function takes the same arguments as execute, please refer to that function
+        for documentation.
+
+        This function is for internal use only
+
+        Returns:
+            The schema of the result, in the new result metadata format.
         """
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
         self.execute(*args, **kwargs)
@@ -959,8 +1193,8 @@ class SnowflakeCursor:
         if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
             self._total_rowcount = data["total"]
 
-        self._description: list[ResultMetadata] = [
-            ResultMetadata.from_column(col) for col in data["rowtype"]
+        self._description: list[ResultMetadataV2] = [
+            ResultMetadataV2.from_column(col) for col in data["rowtype"]
         ]
 
         result_chunks = create_batches_from_response(
@@ -984,11 +1218,11 @@ class SnowflakeCursor:
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
             updated_rows = 0
             for idx, desc in enumerate(self._description):
-                if desc[0] in (
+                if desc.name in (
                     "number of rows updated",
                     "number of multi-joined rows updated",
                     "number of rows deleted",
-                ) or desc[0].startswith("number of rows inserted"):
+                ) or desc.name.startswith("number of rows inserted"):
                     updated_rows += int(data["rowset"][0][idx])
             if self._total_rowcount == -1:
                 self._total_rowcount = updated_rows
