@@ -260,6 +260,7 @@ class ResultMetadataV2:
         This differs from ResultMetadata in that it has newly-added fields which cannot be added to
         ResultMetadata since it is a named tuple.
         """
+        print(col)
         type_code = FIELD_NAME_TO_ID[
             col["extTypeName"].upper()
             if col.get("extTypeName")
