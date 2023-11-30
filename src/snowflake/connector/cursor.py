@@ -1159,6 +1159,7 @@ class SnowflakeCursor:
 
         if self._description is None:
             return None
+        raise ValueError("describe was run")
         return [meta._to_result_metadata_v1() for meta in self._description]
 
     def _describe_internal(
@@ -1176,6 +1177,7 @@ class SnowflakeCursor:
         """
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
         self.execute(*args, **kwargs)
+        raise ValueError("describe_internal was run")
         return self._description
 
     def _format_query_for_log(self, query: str) -> str:
