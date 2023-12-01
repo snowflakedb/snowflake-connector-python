@@ -44,7 +44,10 @@ class FieldType(NamedTuple):
 
 
 def vector_pa_type(metadata: ResultMetadataV2) -> DataType:
-    """Generate the arrow type represented by the given vector column metadata."""
+    """Generate the Arrow type represented by the given vector column metadata.
+
+    Vectors are represented as Arrow fixed-size lists.
+    """
 
     if metadata.fields is None:
         raise ValueError(
@@ -59,6 +62,10 @@ def vector_pa_type(metadata: ResultMetadataV2) -> DataType:
     if metadata.vector_dimension is None:
         raise ValueError(
             "Invalid result metadata for vector type: expected a dimension"
+        )
+    elif metadata.vector_dimension <= 0:
+        raise ValueError(
+            "Invalid result metadata for vector type: expected a positive dimension"
         )
 
     if field_type == "FIXED":
