@@ -699,7 +699,9 @@ class ArrowResultBatch(ResultBatch):
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
         table = self.to_arrow(connection=connection)
-        return table.to_pandas(**kwargs)
+        df = table.to_pandas(**kwargs)
+        del table
+        return df
 
     def _get_pandas_iter(
         self, connection: SnowflakeConnection | None = None, **kwargs
