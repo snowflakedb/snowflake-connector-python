@@ -15,6 +15,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Changed urllib3 version pin to only affect Python versions < 3.10.
   - Support for `private_key_file` and `private_key_file_pwd` connection parameters
   - Added a new flag `expired` to `SnowflakeConnection` class, that keeps track of whether the connection's master token has expired.
+  - Fixed a bug where date insertion failed when date format is set and qmark style binding is used.
 
 - v3.5.0(November 13,2023)
 

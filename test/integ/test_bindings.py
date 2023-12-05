@@ -481,6 +481,22 @@ drop table if exists {name}
 
 
 @pytest.mark.skipolddriver
+def test_binding_insert_date(conn_cnx, db_parameters):
+    import logging
+
+    logging.basicConfig(level=logging.DEBUG)
+    bind_query = """SELECT TRY_TO_DATE(TO_CHAR(?,?),?)"""
+    bind_variables = (date(2016, 4, 10), "YYYY-MM-DD", "YYYY-MM-DD")
+    bind_variables_2 = (date(2016, 4, 10), "YYYY-MM-DD", "DD-MON-YYYY")
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        assert cursor.execute(bind_query, bind_variables).fetchall() == [
+            (date(2016, 4, 10),)
+        ]
+        # the second sql returns None because 2016-04-10 doesn't comply with the format DD-MON-YYYY
+        assert cursor.execute(bind_query, bind_variables_2).fetchall() == [(None,)]
+
+
+@pytest.mark.skipolddriver
 def test_bulk_insert_binding_fallback(conn_cnx):
     """When stage creation fails, bulk inserts falls back to server side binding and disables stage optimization."""
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as csr:
