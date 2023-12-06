@@ -110,6 +110,18 @@ def _convert_time_to_epoch_nanoseconds(tm: dt_t) -> str:
     )
 
 
+def _convert_date_to_epoch_seconds(dt: date) -> str:
+    return f"{int((dt - ZERO_EPOCH_DATE).total_seconds())}"
+
+
+def _convert_date_to_epoch_milliseconds(dt: date) -> str:
+    return f"{(dt - ZERO_EPOCH_DATE).total_seconds():.3f}".replace(".", "")
+
+
+def _convert_date_to_epoch_nanoseconds(dt: date) -> str:
+    return f"{(dt - ZERO_EPOCH_DATE).total_seconds():.9f}".replace(".", "")
+
+
 def _extract_timestamp(value: str, ctx: dict) -> tuple[float, int]:
     """Extracts timestamp from a raw data."""
     scale = ctx["scale"]
@@ -366,8 +378,15 @@ class SnowflakeConverter:
         return None
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
-        # we are binding "TEXT" value for DATE, check function _adjust_bind_type
-        return value.isoformat()
+        milliseconds = _convert_date_to_epoch_milliseconds(value)
+        # according to https://docs.snowflake.com/en/sql-reference/functions/to_date
+        # through test, value in seconds will lead to wrong date
+        # millisecond and nanoarrow second are good
+        # if the milliseconds is beyond the range of 31536000000000, we switch to use nanoseconds
+        # otherwise we will hit overflow error in snowflake
+        if int(milliseconds) < 31536000000000:
+            return milliseconds
+        return _convert_date_to_epoch_nanoseconds(value)
 
     def _time_to_snowflake_bindings(self, _, value: dt_t) -> str:
         # nanoseconds
@@ -735,11 +754,3 @@ class SnowflakeConverter:
         if not tz:
             return datetime.utcfromtimestamp(seconds) + timedelta(microseconds=fraction)
         return datetime.fromtimestamp(seconds, tz=tz) + timedelta(microseconds=fraction)
-
-
-def _adjust_bind_type(input_type: str | None) -> str | None:
-    # This is to address SNOW-7706788, binding "DATE" value can not go beyond date 2969-05-03 (31536000000)
-    # https://docs.snowflake.com/en/sql-reference/functions/to_date#usage-notes
-    # https://docs.snowflake.com/en/developer-guide/sql-api/submitting-requests
-    # to correctly bind DATE value, we adjust to use "TEXT" type to bind value
-    return input_type if input_type != "DATE" else "TEXT"
