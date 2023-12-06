@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
+
+- v3.6.0(December 09,2023)
+
+   -N/A
+
 - v3.6.0(TBD)
 
   - Added support for Vector types
