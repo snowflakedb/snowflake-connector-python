@@ -493,10 +493,7 @@ drop table if exists {name}
 
 @pytest.mark.skipolddriver
 def test_binding_insert_date(conn_cnx, db_parameters):
-    import logging
-
-    logging.basicConfig(level=logging.DEBUG)
-    bind_query = """SELECT TRY_TO_DATE(TO_CHAR(?,?),?)"""
+    bind_query = "SELECT TRY_TO_DATE(TO_CHAR(?,?),?)"
     bind_variables = (date(2016, 4, 10), "YYYY-MM-DD", "YYYY-MM-DD")
     bind_variables_2 = (date(2016, 4, 10), "YYYY-MM-DD", "DD-MON-YYYY")
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:

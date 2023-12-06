@@ -378,22 +378,20 @@ class SnowflakeConverter:
         return None
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
+        milliseconds = _convert_date_to_epoch_milliseconds(value)
         if value >= date(1970, 1, 1):
             # according to https://docs.snowflake.com/en/sql-reference/functions/to_date
             # through test, value in seconds will lead to wrong date
             # millisecond and nanoarrow second are goods
-            milliseconds = _convert_date_to_epoch_milliseconds(value)
             # if the milliseconds is beyond the range of 31536000000000, we swtich to use nanoseconds
             # otherwise we will hit overflow error in snowflake
-            return (
-                milliseconds
-                if int(milliseconds) < 31536000000000
-                else _convert_date_to_epoch_nanoseconds(value)
-            )
+            if int(milliseconds) < 31536000000000:
+                return milliseconds
+            else:
+                return _convert_date_to_epoch_nanoseconds(value)
         else:
             # according to https://docs.snowflake.com/en/sql-reference/functions/to_date
-            # "Currently, negative values are always treated as seconds."
-            return _convert_date_to_epoch_seconds(value)
+            return milliseconds
 
     def _time_to_snowflake_bindings(self, _, value: dt_t) -> str:
         # nanoseconds
