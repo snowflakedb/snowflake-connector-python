@@ -189,14 +189,11 @@ class ResultSet(Iterable[list]):
         concat_kwargs = {k: kwargs.pop(k) for k in dict(kwargs) if k in concat_args}
         dataframes = list(self._fetch_pandas_batches(**kwargs))
         if dataframes:
-            final_dataframe = pandas.concat(
+            return pandas.concat(
                 dataframes,
                 ignore_index=True,  # Don't keep in result batch indexes
                 **concat_kwargs,
             )
-            for dataframe in dataframes:
-                del dataframe
-            return final_dataframe
         # Empty dataframe
         return self.batches[0].to_pandas(**kwargs)
 
