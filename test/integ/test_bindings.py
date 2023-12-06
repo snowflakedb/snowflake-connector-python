@@ -466,7 +466,7 @@ create or replace table {name} (
                 (date(9999, 12, 31),),
             ]
             cnx.cursor().execute(f"TRUNCATE TABLE {db_parameters['name']}")
-            # TODO: bulk insert mixing date < 1970-01-01 returns wrong result
+            # TODO: bulk insert mixing date < 1970-01-01 and >= 1970-01-01 can return wrong result
             #  here we split the insertion to make sure the client logic is correct
             #  this could be a bug in snowflake
             dates = [
