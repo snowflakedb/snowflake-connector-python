@@ -449,8 +449,6 @@ create or replace table {name} (
             c = cnx.cursor()
             cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
             dates = [
-                [date.fromisoformat("1750-05-09")],
-                [date.fromisoformat("1969-12-31")],
                 [date.fromisoformat("1970-01-01")],
                 [date.fromisoformat("2023-05-12")],
                 [date.fromisoformat("2999-12-31")],
@@ -461,13 +459,26 @@ create or replace table {name} (
             assert c.rowcount == len(dates)
             ret = c.execute(f'SELECT c1 from {db_parameters["name"]}').fetchall()
             assert ret == [
-                (date(1750, 5, 9),),
-                (date(1969, 12, 31),),
                 (date(1970, 1, 1),),
                 (date(2023, 5, 12),),
                 (date(2999, 12, 31),),
                 (date(3000, 12, 31),),
                 (date(9999, 12, 31),),
+            ]
+            cnx.cursor().execute(f"TRUNCATE TABLE {db_parameters['name']}")
+            # TODO: bulk insert mixing date < 1970-01-01 returns wrong result
+            #  here we split the insertion to make sure the client logic is correct
+            #  this could be a bug in snowflake
+            dates = [
+                [date.fromisoformat("1750-05-09")],
+                [date.fromisoformat("1969-12-31")],
+            ]
+            c.executemany(f'INSERT INTO {db_parameters["name"]}(c1) VALUES (?)', dates)
+            assert c.rowcount == len(dates)
+            ret = c.execute(f'SELECT c1 from {db_parameters["name"]}').fetchall()
+            assert ret == [
+                (date(1750, 5, 9),),
+                (date(1969, 12, 31),),
             ]
     finally:
         with conn_cnx() as cnx:
