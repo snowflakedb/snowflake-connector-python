@@ -5,18 +5,117 @@
 from __future__ import annotations
 
 import asyncio
-import nest_asyncio
+import ssl
+from threading import Thread
+from typing import Coroutine
+
 import aiohttp
+import nest_asyncio
 
 from .network import *
 
-# YICHUAN: If a user calls any of our  methods from their async code, when we try to call loop.run_until_complete
-# it will raise "RuntimeError: This event loop is already running"
+# !!!READ ME!!!
+
+# WHAT IS THIS FILE AND WHAT IS IT FOR?
+
+# network_async primarily contains the implementation of SnowflakeRestfulAsync, an implementation of SnowflakeRestful
+# that uses aiohttp instead of urllib3 (besides being async, aiohttp also allows us to stop vendoring urllib3)
+
+# This project's scope does not include adding an async API to the Python Connector API itself, and the API presented
+# by SnowflakeRestfulAsync will still be sync (e.g. SnowflakeRestfulAsync.fetch will behave (almost) exactly the same
+# as SnowflakeRestul.fetch)
+
+# SnowflakeRestfulAsync will wrap async methods with a sync wrapper using EventLoopThreadRunner to present a sync API
+
+# The goal of SnowflakeRestfulAsync is to lay a foundation so that an async API can be easily introduced to the Python
+# Connector in the future; as async functions using aiohttp are already implemented, we need only remove the wrapper
+
+# !!!READ ME!!!
+
+
+# YICHUAN: Consider the situation where a client  uses the Python Connector and thus SnowflakeRestfulAsync from async
+# code where an event loop is already running
+# In this situation, we cannot use asyncio.run for sync wrappers as asyncio event loops are not meant to be nested
+# (formally, they are not reentrant)
+
+# Furthermore, because we cache asyncio.ClientSessions using sessions_map, asyncio.run may inadvertently close the
+# event loop that sessions need after completing a request, preventing its reuse
+# Thus, we need a way to manage an event loop ourselves, and use it to run async methods instead of relying on asyncio
+# to do it ourselves
+
+# A simple solution is to get a loop via asyncio.get_event_loop, then run async methods using run_until_complete_safe,
+# which uses nest_asyncio to make the loop reentrant even if it is already running due to client async code
+# The problem with this solution is that it breaks SnowflakeStorageClientAsync, which uses SnowflakeRestfulAsync and
+# its event loop from multiple threads
+
+
+# A more robust solution is to have a separate thread host the event loop, running indefinitely, and any async work can
+# be shipped off to that thread
+# This way, we have a reliable, isolated event loop for our sync wrappers that won't interact badly with anything, and
+# still gives us the advantage of async concurrency when multiple threads are performing I/O bound async operations
+class EventLoopThreadRunner:
+    def __init__(self) -> None:
+        self._loop: asyncio.BaseEventLoop | None = None
+        self._thread: Thread | None = None
+
+    def _is_active(self) -> bool:
+        # YICHUAN: If for some reason the loop is running but not from self._thread then something has gone very wrong
+        # We're going to assume that's not possible
+        return self._loop is not None and self._loop.is_running()
+
+    @property
+    def loop(self) -> asyncio.BaseEventLoop | None:
+        if not self._is_active():
+            raise Exception(
+                "Runner should be active before getting loop, call start method first"
+            )
+
+        return self._loop
+
+    def start(self) -> None:
+        if self._is_active():
+            raise Exception("Runner is already active")
+
+        self._loop = asyncio.new_event_loop()
+        self._thread = Thread(
+            target=lambda loop: loop.run_forever(), args=(self._loop,)
+        )
+        self._thread.start()
+
+        # YICHUAN: Wait for event loop to actually start so no coroutines are run while thread is still working, this
+        # is a bit hacky but there's not much else we can do about it
+        while not self._is_active():
+            time.sleep(0.1)
+
+    def stop(self) -> None:
+        if not self._is_active():
+            raise Exception("Runner should be active before closing")
+
+        # YICHUAN: IT IS NOT SAFE TO ATTEMPT TO CLOSE A LOOP FROM ANOTHER (main) THREAD
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._thread.join(timeout=5)
+        # YICHUAN: Close loop AFTER the join to ensure that the thread has already stopped the loop
+        self._loop.close()
+
+        if self._thread.is_alive():
+            raise Exception("Failed to stop runner thread")
+
+    def run_coro(self, coro: Coroutine) -> Any:
+        if not self._is_active():
+            raise Exception(f"Runner should be active before running coroutine: {coro}")
+
+        res = asyncio.run_coroutine_threadsafe(coro, loop=self._loop)
+        # YICHUAN: Waiting for the result will block, which is what we want for a sync wrapper
+        return res.result()
+
+
+# YICHUAN: CURRENTLY UNUSED, see EventLoopThreadRunner and explanation above
 def run_until_complete_safe(loop, coro) -> Any:
     if loop.is_running():
         # YICHUAN: Patching a loop multiple times is safe
         nest_asyncio.apply(loop)
     return loop.run_until_complete(coro)
+
 
 # YICHUAN: If we don't want to duplicate these raise  functions we can also modify them to directly take the error
 # status and reason instead of a response object (that way we can use the same for both sync and async)
@@ -101,7 +200,11 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
         inject_client_pause: int = 0,
         connection: SnowflakeConnection | None = None,
     ) -> None:
-        self._loop = asyncio.get_event_loop()
+        # YICHUAN: We need to do this instead of using asyncio.run() because of session pooling; if we simply use
+        # asyncio.run(), the loops held by aiohttp.ClientSession will be closed, so the next time the cached session
+        # is used it will raise "RuntimeError: Event loop is closed"
+        self._loop_runner = EventLoopThreadRunner()
+        self._loop_runner.start()
 
         self._host = host
         self._port = port
@@ -137,18 +240,17 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
 
-        # self._loop.run_until_complete(self.close_async())
-        run_until_complete_safe(self._loop, self.close_async())
-        # YICHUAN: We do not need to close the loop ourselves (in fact we should not because the client might own it)
-        # self._loop.close()
+        # run_until_complete_safe(self._loop, self.close_async())
+        self._loop_runner.run_coro(self.close_async())
+        self._loop_runner.stop()
 
     async def close_async(self) -> None:
         for session_pool in self._sessions_map.values():
             await session_pool.close_async()
 
     def fetch(self, *args, **kwargs) -> dict[Any, Any]:
-        # return self._loop.run_until_complete(self.fetch_async(*args, **kwargs))
-        return run_until_complete_safe(self._loop, self.fetch_async(*args, **kwargs))
+        # return run_until_complete_safe(self._loop, self.fetch_async(*args, **kwargs))
+        return self._loop_runner.run_coro(self.fetch_async(*args, **kwargs))
 
     async def fetch_async(
         self,
@@ -456,9 +558,9 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
             aiohttp.ClientConnectionError,
             aiohttp.ClientPayloadError,
             aiohttp.ClientResponseError,
-            aiohttp.ServerTimeoutError,
+            asyncio.TimeoutError,
             IncompleteRead,
-            OpenSSL.SSL.SysCallError,
+            ssl.SSLSyscallError,
             KeyError,  # SNOW-39175: asn1crypto.keys.PublicKeyInfo
             ValueError,
             RuntimeError,
@@ -498,7 +600,7 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
         return aiohttp.ClientSession(
             auth=None,  # Yichuan: auth=None so auth headers aren't overriden inside ClientSession requests
             trust_env=True,  # Yichuan: So aiohttp will read the proxy variables set in proxy.set_proxies
-            loop=self._loop,
+            loop=self._loop_runner.loop,
         )
 
     # Yichuan: Literally copy & pasted but unfortunately needed because this method needs to be async

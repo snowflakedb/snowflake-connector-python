@@ -886,6 +886,7 @@ class SnowflakeCursor:
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
                 self._total_rowcount = len(data["rowset"]) if "rowset" in data else -1
+                sf_file_transfer_agent.close()
 
             if _exec_async:
                 self.connection._async_sfqids[self._sfqid] = None
