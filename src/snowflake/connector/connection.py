@@ -256,6 +256,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # Enable sending retryReason in response header for query-requests
+    "use_async": (
+        False,
+        bool,
+    ), # Experimental, internal use only, use aiohttp for requests instead of urllib3
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -683,6 +687,8 @@ class SnowflakeConnection:
                 self.__open_connection()
                 connection_diag.cursor = self.cursor()
             except Exception:
+                if self.rest:
+                    self.rest.close()
                 exceptions_dict["connection_test"] = traceback.format_exc()
                 logger.warning(
                     f"""Exception during connection test:\n{exceptions_dict["connection_test"]} """
@@ -699,7 +705,12 @@ class SnowflakeConnection:
                 if exceptions_dict:
                     raise Exception(str(exceptions_dict))
         else:
-            self.__open_connection()
+            try:
+                self.__open_connection()
+            except Exception:
+                if self.rest:
+                    self.rest.close()
+                raise
 
     def close(self, retry: bool = True) -> None:
         """Closes the connection."""
@@ -860,7 +871,13 @@ class SnowflakeConnection:
             self.proxy_host, self.proxy_port, self.proxy_user, self.proxy_password
         )
 
-        self._rest = SnowflakeRestful(
+        if self._use_async:
+            from .network_async import SnowflakeRestfulAsync
+            rest_class = SnowflakeRestfulAsync
+        else:
+            rest_class = SnowflakeRestful
+
+        self._rest = rest_class(
             host=self.host,
             port=self.port,
             protocol=self._protocol,

@@ -1184,3 +1184,6 @@ class SnowflakeFileTransferAgent:
                 else:
                     m.dst_file_name = m.name
                     m.dst_compression_type = None
+
+    def close(self) -> None:
+        pass
