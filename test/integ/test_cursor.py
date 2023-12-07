@@ -816,7 +816,12 @@ def test_executemany_qmark_types(conn, db_parameters):
             cur.execute(f"create temp table {table_name} (birth_date date)")
 
             insert_qy = f"INSERT INTO {table_name} (birth_date) values (?)"
-            date_1, date_2 = date(1969, 2, 7), date(1969, 1, 1)
+            date_1, date_2, date_3, date_4 = (
+                date(1969, 2, 7),
+                date(1969, 1, 1),
+                date(2999, 12, 31),
+                date(9999, 1, 1),
+            )
 
             # insert two dates, one in tuple format which specifies
             # the snowflake type similar to how we support it in this
@@ -824,7 +829,7 @@ def test_executemany_qmark_types(conn, db_parameters):
             # https://docs.snowflake.com/en/user-guide/python-connector-example.html#using-qmark-or-numeric-binding-with-datetime-objects
             cur.executemany(
                 insert_qy,
-                [[date_1], [("DATE", date_2)]],
+                [[date_1], [("DATE", date_2)], [date_3], [date_4]],
                 # test that kwargs get passed through executemany properly
                 _statement_params={
                     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "json"
@@ -835,7 +840,7 @@ def test_executemany_qmark_types(conn, db_parameters):
             )
 
             cur.execute(f"select * from {table_name}")
-            assert {row[0] for row in cur} == {date_1, date_2}
+            assert {row[0] for row in cur} == {date_1, date_2, date_3, date_4}
 
 
 @pytest.mark.skipolddriver

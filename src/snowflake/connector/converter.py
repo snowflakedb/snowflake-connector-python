@@ -360,6 +360,18 @@ class SnowflakeConverter:
         # NOTE: str type is always taken as a text data and never binary
         return str(value)
 
+    def _date_to_snowflake_bindings_in_bulk_insertion(self, value: date) -> str:
+        # notes: this is for date type bulk insertion, it's different from non-bulk date type insertion flow
+        milliseconds = _convert_date_to_epoch_milliseconds(value)
+        # according to https://docs.snowflake.com/en/sql-reference/functions/to_date
+        # through test, value in seconds will lead to wrong date
+        # millisecond and nanoarrow second are good
+        # if the milliseconds is beyond the range of 31536000000000, we switch to use nanoseconds
+        # otherwise we will hit overflow error in snowflake
+        if int(milliseconds) < 31536000000000:
+            return milliseconds
+        return _convert_date_to_epoch_nanoseconds(value)
+
     _int_to_snowflake_bindings = _str_to_snowflake_bindings
     _long_to_snowflake_bindings = _str_to_snowflake_bindings
     _float_to_snowflake_bindings = _str_to_snowflake_bindings
@@ -378,15 +390,7 @@ class SnowflakeConverter:
         return None
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
-        milliseconds = _convert_date_to_epoch_milliseconds(value)
-        # according to https://docs.snowflake.com/en/sql-reference/functions/to_date
-        # through test, value in seconds will lead to wrong date
-        # millisecond and nanoarrow second are good
-        # if the milliseconds is beyond the range of 31536000000000, we switch to use nanoseconds
-        # otherwise we will hit overflow error in snowflake
-        if int(milliseconds) < 31536000000000:
-            return milliseconds
-        return _convert_date_to_epoch_nanoseconds(value)
+        return _convert_date_to_epoch_milliseconds(value)
 
     def _time_to_snowflake_bindings(self, _, value: dt_t) -> str:
         # nanoseconds
@@ -662,6 +666,11 @@ class SnowflakeConverter:
         else:
             if isinstance(value, (dt_t, timedelta)):
                 val = self.to_snowflake(value)
+            elif isinstance(value, date) and not isinstance(value, datetime):
+                # FIX SNOW-770678 and SNOW-966444
+                # bulk insertion congestion is different from non-bulk insertion
+                # to_csv_bindings is only used in bulk insertion logic
+                val = self._date_to_snowflake_bindings_in_bulk_insertion(value)
             else:
                 _type = self.snowflake_type(value)
                 val = self.to_snowflake_bindings(_type, value)
