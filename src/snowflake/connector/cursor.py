@@ -861,10 +861,15 @@ class SnowflakeCursor:
             )
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
-                from .file_transfer_agent import SnowflakeFileTransferAgent
+                if self._connection._use_async:
+                    from .file_transfer_agent_async import SnowflakeFileTransferAgentAsync
+                    agent_class = SnowflakeFileTransferAgentAsync
+                else:
+                    from .file_transfer_agent import SnowflakeFileTransferAgent
+                    agent_class = SnowflakeFileTransferAgent
 
                 # Decide whether to use the old, or new code path
-                sf_file_transfer_agent = SnowflakeFileTransferAgent(
+                sf_file_transfer_agent = agent_class(
                     self,
                     query,
                     ret,

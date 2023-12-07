@@ -256,6 +256,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # Enable sending retryReason in response header for query-requests
+    "use_async": (
+        False,
+        bool,
+    ), # Experimental, internal use only, use aiohttp for requests instead of urllib3
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -867,23 +871,19 @@ class SnowflakeConnection:
             self.proxy_host, self.proxy_port, self.proxy_user, self.proxy_password
         )
 
-        # Yichuan: TEMPORARY
-        from .network_async import SnowflakeRestfulAsync
+        if self._use_async:
+            from .network_async import SnowflakeRestfulAsync
+            rest_class = SnowflakeRestfulAsync
+        else:
+            rest_class = SnowflakeRestful
 
-        self._rest = SnowflakeRestfulAsync(
+        self._rest = rest_class(
             host=self.host,
             port=self.port,
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
             connection=self,
         )
-        # self._rest = SnowflakeRestful(
-        #     host=self.host,
-        #     port=self.port,
-        #     protocol=self._protocol,
-        #     inject_client_pause=self._inject_client_pause,
-        #     connection=self,
-        # )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 
         if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:

@@ -673,10 +673,7 @@ class SnowflakeFileTransferAgent:
                 use_s3_regional_url=self._use_s3_regional_url,
             )
         elif self._stage_location_type == S3_FS:
-            # Yichuan: TEMPORARY
-            from .s3_storage_client_async import SnowflakeS3RestClientAsync
-
-            return SnowflakeS3RestClientAsync(
+            return SnowflakeS3RestClient(
                 meta,
                 self._credentials,
                 self._stage_info,
@@ -684,14 +681,6 @@ class SnowflakeFileTransferAgent:
                 use_accelerate_endpoint=self._use_accelerate_endpoint,
                 use_s3_regional_url=self._use_s3_regional_url,
             )
-            # return SnowflakeS3RestClient(
-            #     meta,
-            #     self._credentials,
-            #     self._stage_info,
-            #     _chunk_size_calculator(meta.src_file_size),
-            #     use_accelerate_endpoint=self._use_accelerate_endpoint,
-            #     use_s3_regional_url=self._use_s3_regional_url,
-            # )
         elif self._stage_location_type == GCS_FS:
             return SnowflakeGCSRestClient(
                 meta,
