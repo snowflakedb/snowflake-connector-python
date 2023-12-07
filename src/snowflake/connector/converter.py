@@ -390,6 +390,8 @@ class SnowflakeConverter:
         return None
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
+        # this is for date type non-bulk insertion, it's different from bulk date type insertion flow
+        # milliseconds
         return _convert_date_to_epoch_milliseconds(value)
 
     def _time_to_snowflake_bindings(self, _, value: dt_t) -> str:
