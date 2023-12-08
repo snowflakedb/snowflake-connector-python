@@ -131,6 +131,17 @@ def test_with_config(db_parameters):
         cnx.close()
 
 
+def test_with_tokens(db_parameters):
+    """Creates a connection using session and master token."""
+    cnx = snowflake.connector.connect(
+        account=db_parameters["account"],
+        session_token=db_parameters["session_token"],
+        master_token=db_parameters["master_token"],
+    )
+    assert cnx, "invalid cnx"
+    cnx.close()
+
+
 def test_keep_alive_true(db_parameters):
     """Creates a connection with client_session_keep_alive parameter."""
     config = {
