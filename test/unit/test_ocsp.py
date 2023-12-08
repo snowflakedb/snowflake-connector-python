@@ -7,10 +7,16 @@ from __future__ import annotations
 
 import logging
 import os
+import platform
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
 from os import environ, path
 from unittest import mock
+
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 import pytest
 
@@ -60,6 +66,41 @@ TARGET_HOSTS = [
 ]
 
 THIS_DIR = path.dirname(path.realpath(__file__))
+
+
+@pytest.fixture(autouse=True)
+def random_ocsp_response_validation_cache():
+    file_path = {
+        "linux": os.path.join(
+            "~",
+            ".cache",
+            "snowflake",
+            f"ocsp_response_validation_cache{random_string()}",
+        ),
+        "darwin": os.path.join(
+            "~",
+            "Library",
+            "Caches",
+            "Snowflake",
+            f"ocsp_response_validation_cache{random_string()}",
+        ),
+        "windows": os.path.join(
+            "~",
+            "AppData",
+            "Local",
+            "Snowflake",
+            "Caches",
+            f"ocsp_response_validation_cache{random_string()}",
+        ),
+    }
+    yield SFDictFileCache(
+        entry_lifetime=3600,
+        file_path=file_path,
+    )
+    try:
+        os.unlink(file_path[platform.system().lower()])
+    except BaseException:
+        pass
 
 
 def test_ocsp():
@@ -209,73 +250,81 @@ def test_ocsp_with_file_cache(tmpdir):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_with_bogus_cache_files(tmpdir):
-    from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
+def test_ocsp_with_bogus_cache_files(tmpdir, random_ocsp_response_validation_cache):
+    with mock.patch(
+        "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
+        random_ocsp_response_validation_cache,
+    ):
+        from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
 
-    """Attempts to use bogus OCSP response data."""
-    cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
+        """Attempts to use bogus OCSP response data."""
+        cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
-    ocsp = SFOCSP()
-    OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
-    cache_data = snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
-    assert cache_data, "more than one cache entries should be stored."
+        ocsp = SFOCSP()
+        OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
+        cache_data = snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
+        assert cache_data, "more than one cache entries should be stored."
 
-    # setting bogus data
-    current_time = int(time.time())
-    for k, _ in cache_data.items():
-        cache_data[k] = OCSPResponseValidationResult(
-            ocsp_response=b"bogus",
-            ts=current_time,
-            validated=True,
-        )
+        # setting bogus data
+        current_time = int(time.time())
+        for k, _ in cache_data.items():
+            cache_data[k] = OCSPResponseValidationResult(
+                ocsp_response=b"bogus",
+                ts=current_time,
+                validated=True,
+            )
 
-    # write back the cache file
-    OCSPCache.CACHE = cache_data
-    OCSPCache.write_ocsp_response_cache_file(ocsp, cache_file_name)
+        # write back the cache file
+        OCSPCache.CACHE = cache_data
+        OCSPCache.write_ocsp_response_cache_file(ocsp, cache_file_name)
 
-    # forces to use the bogus cache file but it should raise errors
-    SnowflakeOCSP.clear_cache()
-    ocsp = SFOCSP()
-    for hostname in target_hosts:
-        connection = _openssl_connect(hostname)
-        assert ocsp.validate(hostname, connection), "Failed to validate: {}".format(
-            hostname
-        )
+        # forces to use the bogus cache file but it should raise errors
+        SnowflakeOCSP.clear_cache()
+        ocsp = SFOCSP()
+        for hostname in target_hosts:
+            connection = _openssl_connect(hostname)
+            assert ocsp.validate(hostname, connection), "Failed to validate: {}".format(
+                hostname
+            )
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_with_outdated_cache(tmpdir):
-    from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
+def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_cache):
+    with mock.patch(
+        "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
+        random_ocsp_response_validation_cache,
+    ):
+        from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
 
-    """Attempts to use outdated OCSP response cache file."""
-    cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
+        """Attempts to use outdated OCSP response cache file."""
+        cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
-    ocsp = SFOCSP()
+        ocsp = SFOCSP()
 
-    # reading cache file
-    OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
-    cache_data = snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
-    assert cache_data, "more than one cache entries should be stored."
+        # reading cache file
+        OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
+        cache_data = snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
+        assert cache_data, "more than one cache entries should be stored."
 
-    # setting outdated data
-    current_time = int(time.time())
-    for k, v in cache_data.items():
-        cache_data[k] = OCSPResponseValidationResult(
-            ocsp_response=v.ocsp_response,
-            ts=current_time - 144 * 60 * 60,
-            validated=True,
-        )
+        # setting outdated data
+        current_time = int(time.time())
+        for k, v in cache_data.items():
+            cache_data[k] = OCSPResponseValidationResult(
+                ocsp_response=v.ocsp_response,
+                ts=current_time - 144 * 60 * 60,
+                validated=True,
+            )
 
-    # write back the cache file
-    OCSPCache.CACHE = cache_data
-    OCSPCache.write_ocsp_response_cache_file(ocsp, cache_file_name)
+        # write back the cache file
+        OCSPCache.CACHE = cache_data
+        OCSPCache.write_ocsp_response_cache_file(ocsp, cache_file_name)
 
-    # forces to use the bogus cache file but it should raise errors
-    SnowflakeOCSP.clear_cache()  # reset the memory cache
-    SFOCSP()
-    assert (
-        SnowflakeOCSP.cache_size() == 0
-    ), "must be empty. outdated cache should not be loaded"
+        # forces to use the bogus cache file but it should raise errors
+        SnowflakeOCSP.clear_cache()  # reset the memory cache
+        SFOCSP()
+        assert (
+            SnowflakeOCSP.cache_size() == 0
+        ), "must be empty. outdated cache should not be loaded"
 
 
 def _store_cache_in_file(tmpdir, target_hosts=None):
@@ -312,16 +361,22 @@ def test_ocsp_with_invalid_cache_file():
     "snowflake.connector.ocsp_snowflake.SnowflakeOCSP._fetch_ocsp_response",
     side_effect=BrokenPipeError("fake error"),
 )
-def test_ocsp_cache_when_server_is_down(mock_fetch_ocsp_response, tmpdir):
-    ocsp = SFOCSP()
+def test_ocsp_cache_when_server_is_down(
+    mock_fetch_ocsp_response, tmpdir, random_ocsp_response_validation_cache
+):
+    with mock.patch(
+        "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
+        random_ocsp_response_validation_cache,
+    ):
+        ocsp = SFOCSP()
 
-    """Attempts to use outdated OCSP response cache file."""
-    cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
+        """Attempts to use outdated OCSP response cache file."""
+        cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
 
-    # reading cache file
-    OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
-    cache_data = snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
-    assert not cache_data, "no cache should present because of broken pipe"
+        # reading cache file
+        OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
+        cache_data = snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE
+        assert not cache_data, "no cache should present because of broken pipe"
 
 
 def test_concurrent_ocsp_requests(tmpdir):
