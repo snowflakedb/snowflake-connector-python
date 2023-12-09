@@ -9,7 +9,8 @@ import ssl
 
 import aiohttp
 
-from .network_async import EventLoopThreadRunner
+from . import ssl_connector
+from .network_async import EventLoopThreadRunner, make_client_session, parse_url
 from .storage_client import *
 
 # YICHUAN: Not much to explain in this file, we add async versions of existing private methods and override public
@@ -124,15 +125,22 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
                     session_manager = conn._rest._use_requests_session_async(url)
                 else:
                     logger.debug("storage client request with new created session")
-                    session_manager = aiohttp.ClientSession(
-                        auth=None,  # Yichuan: auth=None so auth headers aren't overriden inside ClientSession requests
-                        trust_env=True,  # Yichuan: So aiohttp will read the proxy variables set in proxy.set_proxies
-                        loop=self._loop,
-                    )
+                    session_manager = make_client_session(self._loop)
 
                 # YICHUAN: Self explanatory, of course get_request_args needs to be modified for aiohttp as well
                 async with session_manager as session:
-                    response = await session.request(verb, url, **rest_kwargs)
+                    response = await session.request(
+                        method=verb,
+                        url=url,
+                        proxy=None,  # to make sure env variables for proxy aren't overriden
+                        # Yichuan: Should be fine specifying this unconditionally as proxy_headers will be ignored if no proxy
+                        # is specified in env variables
+                        # (If you want to see for yourself, check that proxy_headers are only used to set the attribute
+                        # ClientRequest.proxy_headers, which are in turn only used in TCPConnector._create_proxy_connection)
+                        proxy_headers={"Host": parse_url(url).hostname},
+                        ssl=ssl_connector.create_context(),
+                        **rest_kwargs,
+                    )
 
                 if await self._has_expired_presigned_url_async(response):
                     self._update_presigned_url()

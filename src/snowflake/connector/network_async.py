@@ -12,6 +12,7 @@ from typing import Coroutine
 import aiohttp
 import nest_asyncio
 
+from . import ssl_connector
 from .network import *
 
 # !!!READ ME!!!
@@ -163,7 +164,7 @@ def raise_failed_request_error_async(
     )
 
 
-# Yichuan: CURRENTLY UNUSED, see SnowflakeRestfulAsync._request_exec_async
+# YICHUAN: CURRENTLY UNUSED, see SnowflakeRestfulAsync._request_exec_async
 class SnowflakeAuthAsync(aiohttp.BasicAuth):
     def __new__(cls, token: str) -> aiohttp.BasicAuth:
         # for class compatibility with BasicAuth, these parameters are never used
@@ -189,6 +190,15 @@ class SessionPoolAsync(SessionPool):
                 logger.info(f"Session cleanup failed: {e}")
         self._active_sessions.clear()
         self._idle_sessions.clear()
+
+
+def make_client_session(loop: asyncio.BaseEventLoop) -> aiohttp.ClientSession:
+    return aiohttp.ClientSession(
+        auth=None,  # YICHUAN: auth=None so auth headers aren't overriden inside ClientSession requests
+        trust_env=True,  # YICHUAN: So aiohttp will read the proxy variables set in proxy.set_proxies
+        connector=ssl_connector.SnowflakeSSLConnector(loop=loop),
+        # loop=loop, # YICHUAN: If we specify loop for connector, the session will borrow it
+    )
 
 
 class SnowflakeRestfulAsync(SnowflakeRestful):
@@ -217,13 +227,13 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
         ] = collections.defaultdict(lambda: SessionPoolAsync(self))
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
-        ssl_wrap_socket.FEATURE_OCSP_MODE = (
+        ssl_connector.FEATURE_OCSP_MODE = (
             self._connection._ocsp_mode()
             if self._connection
-            else ssl_wrap_socket.DEFAULT_OCSP_MODE
+            else ssl_connector.DEFAULT_OCSP_MODE
         )
         # cache file name (enabled by default)
-        ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
+        ssl_connector.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
             self._connection._ocsp_response_cache_filename if self._connection else None
         )
 
@@ -474,7 +484,7 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
                     token=token
                 )
 
-            # Yichuan: No need to track these as aiohttp doesn't have is_raw_binary
+            # YICHUAN: No need to track these as aiohttp doesn't have is_raw_binary
 
             # download_start_time = get_time_millis()
 
@@ -483,13 +493,13 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
                 url=full_url,
                 headers=headers,
                 data=input_data,
-                proxy=None,
-                # Yichuan: Should be fine specifying this unconditionally as proxy_headers will be ignored if no proxy
+                proxy=None,  # to make sure env variables for proxy aren't overriden
+                # YICHUAN: Should be fine specifying this unconditionally as proxy_headers will be ignored if no proxy
                 # is specified in env variables
                 # (If you want to see for yourself, check that proxy_headers are only used to set the attribute
                 # ClientRequest.proxy_headers, which are in turn only used in TCPConnector._create_proxy_connection)
                 proxy_headers={"Host": parse_url(full_url).hostname},
-                ssl=None,  # Yichuan: Default SSL check, replace later
+                ssl=ssl_connector.create_context(),
             )
 
             # download_end_time = get_time_millis()
@@ -595,15 +605,11 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
             )
             raise err
 
-    # Yichuan: Override method, not _async because it's not an async method
+    # YICHUAN: Override method, not _async because it's not an async method
     def make_requests_session(self) -> aiohttp.ClientSession:
-        return aiohttp.ClientSession(
-            auth=None,  # Yichuan: auth=None so auth headers aren't overriden inside ClientSession requests
-            trust_env=True,  # Yichuan: So aiohttp will read the proxy variables set in proxy.set_proxies
-            loop=self._loop_runner.loop,
-        )
+        return make_client_session(self._loop_runner.loop)
 
-    # Yichuan: Literally copy & pasted but unfortunately needed because this method needs to be async
+    # YICHUAN: Literally copy & pasted but unfortunately needed because this method needs to be async
 
     # Q for later: Why do we need to pool sessions when sessions already pool connections for different hosts?
     @contextlib.asynccontextmanager

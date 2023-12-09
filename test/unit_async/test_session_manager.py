@@ -11,7 +11,7 @@ from unittest import mock
 from snowflake.connector.network import SnowflakeRestful
 
 try:
-    from snowflake.connector.ssl_wrap_socket import DEFAULT_OCSP_MODE
+    from snowflake.connector.ssl_connector import DEFAULT_OCSP_MODE
 except ImportError:
 
     class OCSPMode(Enum):

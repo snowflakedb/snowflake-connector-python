@@ -10,6 +10,7 @@ from collections import OrderedDict
 from datetime import datetime, timezone
 from logging import getLogger
 from os import getenv
+from typing import List
 
 from asn1crypto.algos import DigestAlgorithm
 from asn1crypto.core import Integer, OctetString
@@ -28,7 +29,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, utils
-from OpenSSL.SSL import Connection
+from OpenSSL.SSL import X509, Connection
 
 from snowflake.connector.errorcode import (
     ER_OCSP_RESPONSE_ATTACHED_CERT_EXPIRED,
@@ -376,15 +377,16 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
             raise RevocationCheckError(msg="Failed to verify the signature")
 
     def extract_certificate_chain(
-        self, connection: Connection
+        self,
+        peer_cert_chain: list[X509],
     ) -> list[tuple[Certificate, Certificate]]:
         """Gets certificate chain and extract the key info from OpenSSL connection."""
         from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
 
         cert_map = OrderedDict()
-        logger.debug("# of certificates: %s", len(connection.get_peer_cert_chain()))
+        logger.debug("# of certificates: %s", len(peer_cert_chain))
 
-        for cert_openssl in connection.get_peer_cert_chain():
+        for cert_openssl in peer_cert_chain:
             cert_der = dump_certificate(FILETYPE_ASN1, cert_openssl)
             cert = Certificate.load(cert_der)
             logger.debug(
