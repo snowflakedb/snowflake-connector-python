@@ -386,7 +386,7 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
 static PyObject *PyArrowTableIterator_next(PyArrowIteratorObject *self) {
     if (self->fields.tableReturned == false) {
         self->fields.tableReturned = true;
-        return self->fields.pyarrowTable.get();
+        return newRef(self->fields.pyarrowTable.get());
     }
     PyErr_SetNone(PyExc_StopIteration);
     return nullptr;
