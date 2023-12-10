@@ -28,9 +28,59 @@ static PyObject *getPyarrow() {
     return pyarrowModule.get();
 }
 
-static bool isPyarrowInstalled() {
-  py::UniqueRef pyarrowModule(getPyarrow());
-  return pyarrowModule.get() != nullptr;
+static int errorHandlerWrapper(PyObject *cursor, const char *errorClassName, const char *errorNumberName, PyObject *msg) {
+    // TODO: Relative import.
+    py::UniqueRef errorCodeModule(PyImport_ImportModule("snowflake.connector.errorcode"));
+    if (errorCodeModule.get() == nullptr) {
+        return -1;
+    }
+    py::UniqueRef errorNumber(PyObject_GetAttrString(errorCodeModule.get(), errorNumberName));
+    if (errorNumber.get() == nullptr) {
+        return -1;
+    }
+
+    // TODO: Relative import.
+    py::UniqueRef errorModule(PyImport_ImportModule("snowflake.connector.errors"));
+    if (errorModule.get() == nullptr) {
+        return -1;
+    }
+
+    py::UniqueRef errorClass(PyObject_GetAttrString(errorModule.get(), "Error"));
+    if (errorClass.get() == nullptr) {
+        return -1;
+    }
+
+    py::UniqueRef errorType(PyObject_GetAttrString(errorModule.get(), errorClassName));
+    if (errorType.get() == nullptr) {
+        return -1;
+    }
+
+    py::UniqueRef connection;
+    if (cursor != Py_None) {
+        connection.reset(PyObject_GetAttrString(cursor, "connection"));
+        if (connection.get() == nullptr) {
+            return -1;
+        }
+    } else {
+        connection.reset(newRef(Py_None));
+    }
+
+    py::UniqueRef errorValue(PyDict_New());
+    if (errorValue.get() == nullptr) {
+        return -1;
+    }
+    if (PyDict_SetItemString(errorValue.get(), "msg", msg) < 0) {
+        return -1;
+    }
+    if (PyDict_SetItemString(errorValue.get(), "errno", errorNumber.get()) < 0) {
+        return -1;
+    }
+
+    py::UniqueRef ret(PyObject_CallMethod(errorClass.get(), "errorhandler_wrapper", "OOOO", connection.get(), cursor, errorType.get(), errorValue.get()));
+    if (ret.get() == nullptr) {
+        return -1;
+    }
+    return 0;
 }
 
 // Python class structures.
@@ -249,16 +299,13 @@ static int PyArrowRowIterator_init(PyObject *selfObj, PyObject *args, PyObject *
     // TODO: Ownership of things that `cret` points at is unclear.
     ReturnVal cret = self->fields.cIterator->checkInitializationStatus();
     if (cret.exception != nullptr) {
-        // TODO: Throw error.
-        PyErr_SetNone(PyExc_StopIteration);
-        //Error.errorhandler_wrapper(
-        //    self.cursor.connection if self.cursor is not None else None,
-        //    self.cursor,
-        //    OperationalError,
-        //    {
-        //        'msg': f'Failed to open arrow stream: {str(<object>cret.exception)}',
-        //        'errno': ER_FAILED_TO_READ_ARROW_STREAM
-        //    })
+        py::UniqueRef msg(PyUnicode_FromFormat("Failed to open arrow stream: %S", cret.exception));
+        if (msg.get() == nullptr) {
+            return -1;
+        }
+        if (errorHandlerWrapper(self->fields.cursor.get(), "OperationalError", "ER_FAILED_TO_READ_ARROW_STREAM", msg.get()) < 0) {
+            return -1;
+        }
         return -1;
     }
     // TODO: snow_logger.debug(msg=f"Batches read: {self.cIterator->getArrowArrayPtrs().size()}", path_name=__file__, func_name="__cinit__")
@@ -268,17 +315,13 @@ static PyObject *PyArrowRowIterator_next(PyObject *selfObj) {
     PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
     ReturnVal cret = self->fields.cIterator->next();
     if (cret.successObj == nullptr) {
-        // TODO: Throw error.
-        PyErr_SetNone(PyExc_StopIteration);
-        //Error.errorhandler_wrapper(
-        //    self.cursor.connection if self.cursor is not None else None,
-        //    self.cursor,
-        //    InterfaceError,
-        //    {
-        //        'msg': f'Failed to convert current row, cause: {<object>cret.exception}',
-        //        'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
-        //    }
-        //)
+        py::UniqueRef msg(PyUnicode_FromFormat("Failed to convert current row, cause: %S", cret.exception));
+        if (msg.get() == nullptr) {
+            return nullptr;
+        }
+        if (errorHandlerWrapper(self->fields.cursor.get(), "InterfaceError", "ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE", msg.get()) < 0) {
+            return nullptr;
+        }
         return nullptr;
     }
 
@@ -309,22 +352,22 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
     // TODO: Should we remove the module-level check?
     py::UniqueRef pyarrowModule(getPyarrow());
 
+    PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
     if (pyarrowModule.get() == nullptr) {
-        // TODO: Throw exception.
-        //raise Error.errorhandler_make_exception(
-        //    ProgrammingError,
-        //    {
-        //        "msg": (
-        //            "Optional dependency: 'pyarrow' is not installed, please see the following link for install "
-        //            "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
-        //        ),
-        //        "errno": ER_NO_PYARROW,
-        //    },
-        //)
+        py::UniqueRef msg(PyUnicode_FromString(
+            "Optional dependency: 'pyarrow' is not installed, please see the following link for install "
+            "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
+        ));
+        if (msg.get() == nullptr) {
+            return -1;
+        }
+        // TODO: This previously used `raise Error.errorhandler_make_exception(...)`. Is it OK to use `errorhandler_wrapper` instead?
+        if (errorHandlerWrapper(self->fields.cursor.get(), "ProgrammingError", "ER_NO_PYARROW", msg.get()) < 0) {
+            return -1;
+        }
         return -1;
     }
 
-    PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
     if (self->fields.cIterator.get() != nullptr) {
         return 0;
     }
@@ -337,21 +380,19 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
     );
     ReturnVal cret = self->fields.cIterator->checkInitializationStatus();
     if (cret.exception) {
-        // TODO: Throw exception.
-        PyErr_SetNone(PyExc_StopIteration);
-        //Error.errorhandler_wrapper(
-        //    self.cursor.connection if self.cursor is not None else None,
-        //    self.cursor,
-        //    OperationalError,
-        //    {
-        //        'msg': f'Failed to open arrow stream: {str(<object>cret.exception)}',
-        //        'errno': ER_FAILED_TO_READ_ARROW_STREAM
-        //    })
+        py::UniqueRef msg(PyUnicode_FromFormat("Failed to open arrow stream: %S", cret.exception));
+        if (msg.get() == nullptr) {
+            return -1;
+        }
+        if (errorHandlerWrapper(self->fields.cursor.get(), "OperationalError", "ER_FAILED_TO_READ_ARROW_STREAM", msg.get()) < 0) {
+            return -1;
+        }
         return -1;
     }
 
+    ReturnVal cret2 = self->fields.cIterator->next();
     // TODO: Should we care about this result?
-    self->fields.cIterator->next();
+    (void)cret2;
     self->fields.nanoarrowTable = self->fields.cIterator->getArrowArrayPtrs();
     self->fields.nanoarrowSchema = self->fields.cIterator->getArrowSchemaPtrs();
 
@@ -364,21 +405,32 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
     }
 
     py::UniqueRef recordBatchClass(PyObject_GetAttrString(pyarrowModule.get(), "RecordBatch"));
+    if (recordBatchClass.get() == nullptr) {
+        return -1;
+    }
     for (size_t i = 0; i < batchesLen; ++i) {
         // Get pyarrow.
         const uintptr_t table = self->fields.nanoarrowTable[i];
         const uintptr_t schema = self->fields.nanoarrowSchema[i];
 
-        // TODO: Set list item.
         py::UniqueRef batch(PyObject_CallMethod(recordBatchClass.get(), "_import_from_c", "nn", table, schema));
+        if (batch.get() == nullptr) {
+            return -1;
+        }
         const int ret = PyList_SetItem(batches, i, batch.release());
         (void)ret;
         assert(ret == 0);
     }
 
     py::UniqueRef tableClass(PyObject_GetAttrString(pyarrowModule.get(), "Table"));
+    if (tableClass.get() == nullptr) {
+        return -1;
+    }
 
     self->fields.pyarrowTable.reset(PyObject_CallMethod(tableClass.get(), "from_batches", "O", batches));
+    if (self->fields.pyarrowTable.get() == nullptr) {
+        return -1;
+    }
     // TODO: snow_logger.debug(msg=f"Batches read: {self.nanoarrow_Table.size()}", path_name=__file__, func_name="__cinit__")
     return 0;
 }
@@ -442,9 +494,6 @@ static ArrowIteratorModuleState *getArrowIteratorModuleState(PyObject *module) {
 }
 
 static PyMethodDef arrowIteratorModuleMethods[] = {
-    // TODO: Do we need this?
-    //{"isPyarrowInstalled", isPyarrowInstalled, METH_VARARGS,
-    // "Check if pyarrow is installed."},
     {nullptr, nullptr, 0, nullptr},
 };
 
@@ -515,8 +564,6 @@ static int arrow_iterator_module_exec(PyObject *m) {
     state->typePyArrowTableIterator = (PyTypeObject *)typePyArrowTableIterator.release();
 
     // Initialize module-level variables.
-    state->isPyarrowInstalled = isPyarrowInstalled();
-
     return 0;
 }
 
