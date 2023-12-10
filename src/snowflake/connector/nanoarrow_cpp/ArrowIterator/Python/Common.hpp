@@ -60,6 +60,8 @@ public:
 
   void reset(PyObject* pyObj = nullptr)
   {
+    // TODO: There is a small window when we both point at `m_pyObj`,
+    // and it potentially has a refcount of 0.
     Py_XDECREF(m_pyObj);
     m_pyObj = pyObj;
   }

@@ -28,6 +28,7 @@ version = ".".join([str(v) for v in VERSION if v is not None])
 # This list defines the options definitions in a set
 options_def = {
     "--debug",
+    "--noopt",
 }
 
 # Options is the final parsed command line options
@@ -77,6 +78,9 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
             if options["debug"]:
                 ext.extra_compile_args.append("-g")
                 ext.extra_link_args.append("-g")
+            if options["noopt"]:
+                ext.extra_compile_args.append("-O0")
+                ext.extra_link_args.append("-O0")
             current_dir = os.getcwd()
 
             if ext.name == "snowflake.connector.nanoarrow_arrow_iterator":

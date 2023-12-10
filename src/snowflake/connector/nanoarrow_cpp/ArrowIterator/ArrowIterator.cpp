@@ -19,13 +19,6 @@ static PyObject *newRef(PyObject *o) {
   return o;
 }
 
-// A shim for `Py_SetRef`.
-static void setRef(PyObject *&to, PyObject *o) {
-  PyObject *oldTo = to;
-  to = o;
-  Py_XDECREF(oldTo);
-}
-
 static PyObject *getPyarrow() {
     py::UniqueRef pyarrowModule(PyImport_ImportModule("pyarrow"));
     if (pyarrowModule.get() == nullptr) {
@@ -60,9 +53,9 @@ struct PyArrowIteratorFields {
 
     std::shared_ptr<ReturnVal> cret;
 
-    // An reference to the object that arrowBytes points at.
+    // A reference to the object that arrowBytes points at.
     py::UniqueRef arrowBytesObject;
-    const char* arrowBytes = nullptr;
+    char* arrowBytes = nullptr;
     int64_t arrowBytesSize = 0;
 
     std::unique_ptr<CArrowIterator> cIterator;
@@ -126,8 +119,6 @@ static PyType_Slot EmptyPyArrowIterator_slots[] = {
     {0, nullptr},
 };
 
-// TODO: PyArrowIterator::init
-// TODO: PyArrowIterator::__dealloc__
 
 static PyObject *PyArrowIterator_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
     allocfunc alloc = (allocfunc)PyType_GetSlot(type, Py_tp_alloc);
@@ -157,8 +148,8 @@ static int PyArrowIterator_init(PyObject *selfObj, PyObject *args, PyObject *kwa
         nullptr,
     };
     PyObject *cursor = nullptr;
-    //PyObject *arrowBytesObject = nullptr;
-    const char *arrowBytes = nullptr;
+    PyObject *arrowBytesObject = nullptr;
+    char *arrowBytes = nullptr;
     Py_ssize_t arrowBytesSize = 0;
     PyObject *arrowContext = nullptr;
     int useDictResult = 0;
@@ -169,19 +160,28 @@ static int PyArrowIterator_init(PyObject *selfObj, PyObject *args, PyObject *kwa
     // `p` is a boolean, 1==true, 0==false.
     // `s#` is a string (start, length) pair.
     const int ret = PyArg_ParseTupleAndKeywords(
-        args, kwargs, "Os#Oppp", const_cast<char **>(keywordList),
-        &cursor, &arrowBytes, &arrowBytesSize, &arrowContext,
+        args, kwargs, "OOOppp", const_cast<char **>(keywordList),
+        &cursor, &arrowBytesObject, &arrowContext,
         &useDictResult, &numpy, &numberToDecimal);
     if (!ret) {
         return -1;
     }
 
+    py::UniqueRef arrowBytesRef(PyBytes_FromObject(arrowBytesObject));
+
+    if (arrowBytesRef.get() == nullptr) {
+        return -1;
+    }
+    if (PyBytes_AsStringAndSize(arrowBytesRef.get(), &arrowBytes, &arrowBytesSize) < 0) {
+        return -1;
+    }
+
     PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
+
     self->fields.cursor.reset(newRef(cursor));
     self->fields.context.reset(newRef(arrowContext));
+    self->fields.arrowBytesObject = std::move(arrowBytesRef);
 
-    // TODO: We should do this.
-    //self->fields.arrowBytesObject.reset(newRef(arrowBytesObject));
     self->fields.arrowBytes = arrowBytes;
     self->fields.arrowBytesSize = arrowBytesSize;
 
@@ -236,28 +236,29 @@ static int PyArrowRowIterator_init(PyObject *selfObj, PyObject *args, PyObject *
     if (self->fields.useDictResult) {
         self->fields.cIterator = std::make_unique<DictCArrowChunkIterator>(
             self->fields.context.get(),
-            const_cast<char *>(self->fields.arrowBytes),
+            self->fields.arrowBytes,
             self->fields.arrowBytesSize,
             self->fields.useNumpy
         );
     } else {
         self->fields.cIterator = std::make_unique<CArrowChunkIterator>(
             self->fields.context.get(),
-            const_cast<char *>(self->fields.arrowBytes),
+            self->fields.arrowBytes,
             self->fields.arrowBytesSize,
             self->fields.useNumpy
         );
     }
     // TODO: `cret` doesn't give up ownership.
-    std::shared_ptr<ReturnVal> cret = self->fields.cIterator->checkInitializationStatus();
-    if (cret->exception != nullptr) {
+    self->fields.cret = self->fields.cIterator->checkInitializationStatus();
+    if (self->fields.cret->exception != nullptr) {
         // TODO: Throw error.
+        PyErr_SetNone(PyExc_StopIteration);
         //Error.errorhandler_wrapper(
         //    self.cursor.connection if self.cursor is not None else None,
         //    self.cursor,
         //    OperationalError,
         //    {
-        //        'msg': f'Failed to open arrow stream: {str(<object>cret->exception)}',
+        //        'msg': f'Failed to open arrow stream: {str(<object>self->fields.cret->exception)}',
         //        'errno': ER_FAILED_TO_READ_ARROW_STREAM
         //    })
         return -1;
@@ -265,30 +266,34 @@ static int PyArrowRowIterator_init(PyObject *selfObj, PyObject *args, PyObject *
     // TODO: snow_logger.debug(msg=f"Batches read: {self.cIterator->getArrowArrayPtrs().size()}", path_name=__file__, func_name="__cinit__")
     return 0;
 }
-
 static PyObject *PyArrowRowIterator_next(PyObject *selfObj) {
     PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
     self->fields.cret = self->fields.cIterator->next();
     if (self->fields.cret->successObj == nullptr) {
         // TODO: Throw error.
+        PyErr_SetNone(PyExc_StopIteration);
         //Error.errorhandler_wrapper(
         //    self.cursor.connection if self.cursor is not None else None,
         //    self.cursor,
         //    InterfaceError,
         //    {
-        //        'msg': f'Failed to convert current row, cause: {<object>cret->exception}',
+        //        'msg': f'Failed to convert current row, cause: {<object>self->fields.cret->exception}',
         //        'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
         //    }
         //)
         return nullptr;
     }
-    PyObject *ret = self->fields.cret->successObj;
 
-    if (ret == Py_None) {
+    // The child class holds onto a reference to the row,
+    // but we should use a different reference, in case anything
+    // happens to the child.
+    py::UniqueRef ret(newRef(self->fields.cret->successObj));
+
+    if (ret.get() == Py_None) {
         PyErr_SetNone(PyExc_StopIteration);
         return nullptr;
     }
-    return ret;
+    return ret.release();
 }
 
 static PyType_Slot PyArrowRowIterator_slots[] = {
@@ -328,13 +333,14 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
 
     self->fields.cIterator = std::make_unique<CArrowTableIterator>(
         self->fields.context.get(),
-        const_cast<char *>(self->fields.arrowBytes),
+        self->fields.arrowBytes,
         self->fields.arrowBytesSize,
         self->fields.numberToDecimal
     );
-    std::shared_ptr<ReturnVal> cret = self->fields.cIterator->checkInitializationStatus();
-    if (cret->exception) {
+    self->fields.cret = self->fields.cIterator->checkInitializationStatus();
+    if (self->fields.cret->exception) {
         // TODO: Throw exception.
+        PyErr_SetNone(PyExc_StopIteration);
         //Error.errorhandler_wrapper(
         //    self.cursor.connection if self.cursor is not None else None,
         //    self.cursor,
