@@ -60,10 +60,12 @@ public:
 
   void reset(PyObject* pyObj = nullptr)
   {
-    // TODO: There is a small window when we both point at `m_pyObj`,
-    // and it potentially has a refcount of 0.
-    Py_XDECREF(m_pyObj);
+    // We could use `Py_XDECREF(m_pyObj); m_pyObj = pyObj;`, but 
+    // if the `Py_XDECREF` calls a destructor that uses this object,
+    // then the object is in a bad state.
+    PyObject *toDelete = m_pyObj;
     m_pyObj = pyObj;
+    Py_XDECREF(toDelete);
   }
 
   PyObject* release() noexcept

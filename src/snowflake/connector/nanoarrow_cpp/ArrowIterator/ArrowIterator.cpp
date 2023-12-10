@@ -51,8 +51,6 @@ struct PyArrowIteratorFields {
     py::UniqueRef context;
     py::UniqueRef cursor;
 
-    std::shared_ptr<ReturnVal> cret;
-
     // A reference to the object that arrowBytes points at.
     py::UniqueRef arrowBytesObject;
     char* arrowBytes = nullptr;
@@ -248,9 +246,9 @@ static int PyArrowRowIterator_init(PyObject *selfObj, PyObject *args, PyObject *
             self->fields.useNumpy
         );
     }
-    // TODO: `cret` doesn't give up ownership.
-    self->fields.cret = self->fields.cIterator->checkInitializationStatus();
-    if (self->fields.cret->exception != nullptr) {
+    // TODO: Ownership of things that `cret` points at is unclear.
+    ReturnVal cret = self->fields.cIterator->checkInitializationStatus();
+    if (cret.exception != nullptr) {
         // TODO: Throw error.
         PyErr_SetNone(PyExc_StopIteration);
         //Error.errorhandler_wrapper(
@@ -258,7 +256,7 @@ static int PyArrowRowIterator_init(PyObject *selfObj, PyObject *args, PyObject *
         //    self.cursor,
         //    OperationalError,
         //    {
-        //        'msg': f'Failed to open arrow stream: {str(<object>self->fields.cret->exception)}',
+        //        'msg': f'Failed to open arrow stream: {str(<object>cret.exception)}',
         //        'errno': ER_FAILED_TO_READ_ARROW_STREAM
         //    })
         return -1;
@@ -268,8 +266,8 @@ static int PyArrowRowIterator_init(PyObject *selfObj, PyObject *args, PyObject *
 }
 static PyObject *PyArrowRowIterator_next(PyObject *selfObj) {
     PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
-    self->fields.cret = self->fields.cIterator->next();
-    if (self->fields.cret->successObj == nullptr) {
+    ReturnVal cret = self->fields.cIterator->next();
+    if (cret.successObj == nullptr) {
         // TODO: Throw error.
         PyErr_SetNone(PyExc_StopIteration);
         //Error.errorhandler_wrapper(
@@ -277,7 +275,7 @@ static PyObject *PyArrowRowIterator_next(PyObject *selfObj) {
         //    self.cursor,
         //    InterfaceError,
         //    {
-        //        'msg': f'Failed to convert current row, cause: {<object>self->fields.cret->exception}',
+        //        'msg': f'Failed to convert current row, cause: {<object>cret.exception}',
         //        'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
         //    }
         //)
@@ -287,7 +285,7 @@ static PyObject *PyArrowRowIterator_next(PyObject *selfObj) {
     // The child class holds onto a reference to the row,
     // but we should use a different reference, in case anything
     // happens to the child.
-    py::UniqueRef ret(newRef(self->fields.cret->successObj));
+    py::UniqueRef ret(newRef(cret.successObj));
 
     if (ret.get() == Py_None) {
         PyErr_SetNone(PyExc_StopIteration);
@@ -337,8 +335,8 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
         self->fields.arrowBytesSize,
         self->fields.numberToDecimal
     );
-    self->fields.cret = self->fields.cIterator->checkInitializationStatus();
-    if (self->fields.cret->exception) {
+    ReturnVal cret = self->fields.cIterator->checkInitializationStatus();
+    if (cret.exception) {
         // TODO: Throw exception.
         PyErr_SetNone(PyExc_StopIteration);
         //Error.errorhandler_wrapper(
@@ -346,13 +344,14 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
         //    self.cursor,
         //    OperationalError,
         //    {
-        //        'msg': f'Failed to open arrow stream: {str(<object>self.cret.get().exception)}',
+        //        'msg': f'Failed to open arrow stream: {str(<object>cret.exception)}',
         //        'errno': ER_FAILED_TO_READ_ARROW_STREAM
         //    })
         return -1;
     }
 
-    self->fields.cret = self->fields.cIterator->next();
+    // TODO: Should we care about this result?
+    self->fields.cIterator->next();
     self->fields.nanoarrowTable = self->fields.cIterator->getArrowArrayPtrs();
     self->fields.nanoarrowSchema = self->fields.cIterator->getArrowSchemaPtrs();
 

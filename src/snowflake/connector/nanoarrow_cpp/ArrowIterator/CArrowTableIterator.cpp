@@ -198,16 +198,16 @@ m_convert_number_to_decimal(number_to_decimal)
   PyArg_Parse(tz.get(), "s", &m_timezone);
 }
 
-std::shared_ptr<ReturnVal> CArrowTableIterator::next()
+ReturnVal CArrowTableIterator::next()
 {
   bool firstDone = this->convertRecordBatchesToTable_nanoarrow();
   if (firstDone && !m_ipcArrowArrayVec.empty())
   {
-    return std::make_shared<ReturnVal>(Py_True, nullptr);
+    return ReturnVal(Py_True, nullptr);
   }
   else
   {
-    return std::make_shared<ReturnVal>(Py_None, nullptr);
+    return ReturnVal(Py_None, nullptr);
   }
 }
 

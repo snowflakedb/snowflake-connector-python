@@ -53,10 +53,10 @@ CArrowIterator::CArrowIterator(char* arrow_bytes, int64_t arrow_bytes_size)
   logger->debug(__FILE__, __func__, __LINE__, "Arrow BatchSize: %d", m_ipcArrowArrayVec.size());
 }
 
-std::shared_ptr<ReturnVal> CArrowIterator::checkInitializationStatus()
+ReturnVal CArrowIterator::checkInitializationStatus()
 {
     SF_CHECK_PYTHON_ERR()
-    return std::make_shared<ReturnVal>(nullptr, nullptr);
+    return ReturnVal(nullptr, nullptr);
 }
 
 }
