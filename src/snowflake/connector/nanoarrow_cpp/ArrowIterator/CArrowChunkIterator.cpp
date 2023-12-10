@@ -83,11 +83,12 @@ void CArrowChunkIterator::createRowPyObject()
   m_latestReturnedRow.reset(PyTuple_New(m_columnCount));
   for (int i = 0; i < m_columnCount; i++)
   {
-    // PyTuple_SET_ITEM steals a reference to the PyObject returned by toPyObject below
-    PyTuple_SET_ITEM(
+    // PyTuple_SetItem steals a reference to the PyObject returned by toPyObject below
+    const int ret = PyTuple_SetItem(
         m_latestReturnedRow.get(),
         i,
         m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
+    assert(ret == 0);
   }
   return;
 }

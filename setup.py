@@ -58,20 +58,21 @@ except ImportError:
     _ABLE_TO_COMPILE_EXTENSIONS = False
 
 if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS:
-    extensions = cythonize(
-        [
-            Extension(
-                name="snowflake.connector.nanoarrow_arrow_iterator",
-                sources=[
-                    os.path.join(NANOARROW_SRC_DIR, "nanoarrow_arrow_iterator.pyx")
-                ],
-                language="c++",
-            ),
-        ],
-    )
+    extensions = [
+        Extension(
+            name="snowflake.connector.nanoarrow_arrow_iterator",
+            sources=[
+                #os.path.join(NANOARROW_SRC_DIR, "nanoarrow_arrow_iterator.pyx")
+                os.path.join(NANOARROW_SRC_DIR, "ArrowIterator.cpp"),
+            ],
+            language="c++",
+            py_limited_api=True,
+        ),
+    ]
 
     class MyBuildExt(build_ext):
         def build_extension(self, ext):
+            ext.py_limited_api=True
             if options["debug"]:
                 ext.extra_compile_args.append("-g")
                 ext.extra_link_args.append("-g")

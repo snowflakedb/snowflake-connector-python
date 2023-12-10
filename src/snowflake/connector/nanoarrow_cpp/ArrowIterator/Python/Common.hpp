@@ -9,6 +9,8 @@
 //  argument parsing to not accept integers, leaving only Py_ssize_t as an option
 #define PY_SSIZE_T_CLEAN
 
+#define Py_LIMITED_API 0x03080000
+
 // We have to make sure that we import Python.h once for special flags that need to be
 //  set before importing it
 #include <Python.h>
