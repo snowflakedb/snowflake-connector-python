@@ -21,7 +21,7 @@
 namespace sf
 {
 
-CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy)
+CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, bool use_numpy)
 : CArrowIterator(arrow_bytes, arrow_bytes_size), m_latestReturnedRow(nullptr), m_context(context)
 {
   if (py::checkPyError()) {
@@ -31,7 +31,7 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, i
   m_rowIndexInBatch = -1;
   m_rowCountInBatch = 0;
   m_latestReturnedRow.reset();
-  m_useNumpy = PyObject_IsTrue(use_numpy);
+  m_useNumpy = use_numpy;
 
   m_batchCount = m_ipcArrowArrayVec.size();
   m_columnCount = m_batchCount > 0 ? m_ipcArrowSchema->n_children : 0;
@@ -461,7 +461,7 @@ void CArrowChunkIterator::initColumnConverters()
 
 DictCArrowChunkIterator::DictCArrowChunkIterator(PyObject* context,
                                                  char* arrow_bytes, int64_t arrow_bytes_size,
-                                                 PyObject* use_numpy)
+                                                 bool use_numpy)
 : CArrowChunkIterator(context, arrow_bytes, arrow_bytes_size, use_numpy)
 {
 }

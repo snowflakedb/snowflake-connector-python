@@ -5,29 +5,39 @@
 #include <memory>
 #include <vector>
 
+#include "CArrowChunkIterator.hpp"
 #include "CArrowIterator.hpp"
-
-#ifndef Py_PYTHON_H
-    #error Python headers needed to compile C extensions, please install development version of Python.
-#elif PY_VERSION_HEX < 0x03080000
-    #error This requires Python 3.8+.
-#endif
-
-// Helper functions.
+#include "CArrowTableIterator.hpp"
 
 namespace sf {
 
+// Helper functions.
+
+// A shim for `Py_NewRef`, until Python 3.9 support is removed.
+static PyObject *newRef(PyObject *o) {
+  Py_IncRef(o);
+  return o;
+}
+
+// A shim for `Py_SetRef`.
+static void setRef(PyObject *&to, PyObject *o) {
+  PyObject *oldTo = to;
+  to = o;
+  Py_XDECREF(oldTo);
+}
+
+static PyObject *getPyarrow() {
+    py::UniqueRef pyarrowModule(PyImport_ImportModule("pyarrow"));
+    if (pyarrowModule.get() == nullptr) {
+        // No pyarrow. Clear the exception.
+        PyErr_Clear();
+    }
+    return pyarrowModule.get();
+}
+
 static bool isPyarrowInstalled() {
-  PyObject *pyarrowModule = PyImport_ImportModule("pyarrow");
-  if (pyarrowModule) {
-    // We have pyarrow.
-    Py_XDECREF(pyarrowModule);
-    return true;
-  } else {
-    // No pyarrow. Clear the exception.
-    PyErr_Clear();
-    return false;
-  }
+  py::UniqueRef pyarrowModule(getPyarrow());
+  return pyarrowModule.get() != nullptr;
 }
 
 // Python class structures.
@@ -36,30 +46,46 @@ struct EmptyPyArrowIteratorObject {
     PyObject_HEAD
 };
 
-struct PyArrowIteratorObject {
-    EmptyPyArrowIteratorObject base;
-    // TODO: Fields.
+// A regular C++ structure, which holds the fields.
+struct PyArrowIteratorFields {
+    PyArrowIteratorFields() {
+        context.reset(newRef(Py_None));
+        cursor.reset(newRef(Py_None));
+        arrowBytesObject.reset(newRef(Py_None));
+        pyarrowTable.reset(newRef(Py_None));
+    }
 
-    PyObject *context;
-    CArrowIterator* cIterator;
-    PyObject *unit;
+    py::UniqueRef context;
+    py::UniqueRef cursor;
+
     std::shared_ptr<ReturnVal> cret;
-    PyObject *use_dict_result;
-    PyObject *cursor;
-    std::vector<uintptr_t> nanoarrow_Table;
-    std::vector<uintptr_t> nanoarrow_Schema;
-    PyObject *table_returned;
-    char* arrow_bytes;
-    int64_t arrow_bytes_size;
+
+    // An reference to the object that arrowBytes points at.
+    py::UniqueRef arrowBytesObject;
+    const char* arrowBytes = nullptr;
+    int64_t arrowBytesSize = 0;
+
+    std::unique_ptr<CArrowIterator> cIterator;
+
+    std::vector<uintptr_t> nanoarrowTable;
+    std::vector<uintptr_t> nanoarrowSchema;
+
+    bool useDictResult = false;
+    bool tableReturned = false;
 
     // This is the flag indicating whether fetch data as numpy datatypes or not. The flag
     // is passed from the constructor of SnowflakeConnection class. Note, only FIXED, REAL
     // and TIMESTAMP_NTZ will be converted into numpy data types, all other sql types will
     // still be converted into native python types.
     // https://docs.snowflake.com/en/user-guide/sqlalchemy.html#numpy-data-type-support
-    PyObject *use_numpy;
-    PyObject *number_to_decimal;
-    PyObject *pyarrow_table;
+    bool useNumpy = false;
+    bool numberToDecimal = false;
+    py::UniqueRef pyarrowTable;
+};
+
+struct PyArrowIteratorObject {
+    EmptyPyArrowIteratorObject base;
+    PyArrowIteratorFields fields;
 };
 
 struct PyArrowRowIteratorObject {
@@ -83,11 +109,6 @@ struct ArrowIteratorModuleState {
 
 // Member functions of classes.
 
-//static PyObject *EmptyPyArrowIterator_init(PyObject *self) {
-//  // TODO
-//  return nullptr;
-//}
-
 static PyObject *EmptyPyArrowIterator_iter(PyObject *self) {
     Py_INCREF(self);
     return self;
@@ -99,7 +120,7 @@ static PyObject *EmptyPyArrowIterator_next(PyObject *self) {
 }
 
 static PyType_Slot EmptyPyArrowIterator_slots[] = {
-    // TODO: {Py_tp_init, (void *)EmptyPyArrowIterator_init},
+    // TODO: Do we need this `init()`? The pyx one does nothing.
     {Py_tp_iter, (void *)EmptyPyArrowIterator_iter},
     {Py_tp_iternext, (void *)EmptyPyArrowIterator_next},
     {0, nullptr},
@@ -108,6 +129,84 @@ static PyType_Slot EmptyPyArrowIterator_slots[] = {
 // TODO: PyArrowIterator::init
 // TODO: PyArrowIterator::__dealloc__
 
+static PyObject *PyArrowIterator_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    allocfunc alloc = (allocfunc)PyType_GetSlot(type, Py_tp_alloc);
+    if (alloc == nullptr) {
+        return nullptr;
+    }
+    py::UniqueRef ret(alloc(type, 0));
+    if (ret.get() == nullptr) {
+        return nullptr;
+    }
+
+    PyArrowIteratorObject *self = (PyArrowIteratorObject *)ret.get();
+    // Placement `new` to initialize the structure.
+    new(&self->fields) PyArrowIteratorFields();
+
+    return ret.release();
+}
+
+static int PyArrowIterator_init(PyObject *selfObj, PyObject *args, PyObject *kwargs) {
+    static const char *keywordList[] = {
+        "cursor",
+        "arrow_bytes",
+        "arrow_context",
+        "use_dict_result",
+        "numpy",
+        "number_to_decimal",
+        nullptr,
+    };
+    PyObject *cursor = nullptr;
+    //PyObject *arrowBytesObject = nullptr;
+    const char *arrowBytes = nullptr;
+    Py_ssize_t arrowBytesSize = 0;
+    PyObject *arrowContext = nullptr;
+    int useDictResult = 0;
+    int numpy = 0;
+    int numberToDecimal = 0;
+
+    // `O` is a PyObject.
+    // `p` is a boolean, 1==true, 0==false.
+    // `s#` is a string (start, length) pair.
+    const int ret = PyArg_ParseTupleAndKeywords(
+        args, kwargs, "Os#Oppp", const_cast<char **>(keywordList),
+        &cursor, &arrowBytes, &arrowBytesSize, &arrowContext,
+        &useDictResult, &numpy, &numberToDecimal);
+    if (!ret) {
+        return -1;
+    }
+
+    PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
+    self->fields.cursor.reset(newRef(cursor));
+    self->fields.context.reset(newRef(arrowContext));
+
+    // TODO: We should do this.
+    //self->fields.arrowBytesObject.reset(newRef(arrowBytesObject));
+    self->fields.arrowBytes = arrowBytes;
+    self->fields.arrowBytesSize = arrowBytesSize;
+
+    self->fields.useDictResult = useDictResult;
+    self->fields.useNumpy = numpy;
+    self->fields.numberToDecimal = numberToDecimal;
+    return 0;
+}
+
+static void PyArrowIterator_dealloc(PyObject *selfObj) {
+    freefunc freefn = (freefunc)PyType_GetSlot(Py_TYPE(selfObj), Py_tp_free);
+    // Release all the fields by calling the destructor.
+    PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
+    self->fields.~PyArrowIteratorFields();
+    freefn(self);
+}
+
+//static int PyArrowIterator_traverse(CustomObject *self, visitproc visit, void *arg) {
+//    // TODO: List all members that are PyObjects.
+//    //Py_VISIT(self->field);
+//    return 0;
+//}
+
+// TODO: Clear.
+
 // TODO: Can't we inherit our parent's?
 static PyObject *PyArrowIterator_iter(PyObject *self) {
     Py_INCREF(self);
@@ -115,36 +214,181 @@ static PyObject *PyArrowIterator_iter(PyObject *self) {
 }
 
 static PyType_Slot PyArrowIterator_slots[] = {
-    // TODO: {Py_tp_init, (void *)PyArrowIterator_init},
-    // TODO: dealloc {Py_tp_init, (void *)PyArrowIterator_dealloc},
+    {Py_tp_new, (void *)PyArrowIterator_new},
+    {Py_tp_init, (void *)PyArrowIterator_init},
+    {Py_tp_dealloc, (void *)PyArrowIterator_dealloc},
+    // TODO: traverse.
     {Py_tp_iter, (void *)PyArrowIterator_iter},
     {0, nullptr},
 };
 
-// TODO: PyArrowRowIterator::init
+static int PyArrowRowIterator_init(PyObject *selfObj, PyObject *args, PyObject *kwargs) {
+    const int ret = PyArrowIterator_init(selfObj, args, kwargs);
+    if (ret < 0) {
+        return ret;
+    }
 
-static PyObject *PyArrowRowIterator_next(PyObject *self) {
-    // TODO
-    PyErr_SetNone(PyExc_StopIteration);
-    return nullptr;
+    PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
+    if (self->fields.cIterator.get() != nullptr) {
+        return 0;
+    }
+
+    if (self->fields.useDictResult) {
+        self->fields.cIterator = std::make_unique<DictCArrowChunkIterator>(
+            self->fields.context.get(),
+            const_cast<char *>(self->fields.arrowBytes),
+            self->fields.arrowBytesSize,
+            self->fields.useNumpy
+        );
+    } else {
+        self->fields.cIterator = std::make_unique<CArrowChunkIterator>(
+            self->fields.context.get(),
+            const_cast<char *>(self->fields.arrowBytes),
+            self->fields.arrowBytesSize,
+            self->fields.useNumpy
+        );
+    }
+    // TODO: `cret` doesn't give up ownership.
+    std::shared_ptr<ReturnVal> cret = self->fields.cIterator->checkInitializationStatus();
+    if (cret->exception != nullptr) {
+        // TODO: Throw error.
+        //Error.errorhandler_wrapper(
+        //    self.cursor.connection if self.cursor is not None else None,
+        //    self.cursor,
+        //    OperationalError,
+        //    {
+        //        'msg': f'Failed to open arrow stream: {str(<object>cret->exception)}',
+        //        'errno': ER_FAILED_TO_READ_ARROW_STREAM
+        //    })
+        return -1;
+    }
+    // TODO: snow_logger.debug(msg=f"Batches read: {self.cIterator->getArrowArrayPtrs().size()}", path_name=__file__, func_name="__cinit__")
+    return 0;
+}
+
+static PyObject *PyArrowRowIterator_next(PyObject *selfObj) {
+    PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
+    self->fields.cret = self->fields.cIterator->next();
+    if (self->fields.cret->successObj == nullptr) {
+        // TODO: Throw error.
+        //Error.errorhandler_wrapper(
+        //    self.cursor.connection if self.cursor is not None else None,
+        //    self.cursor,
+        //    InterfaceError,
+        //    {
+        //        'msg': f'Failed to convert current row, cause: {<object>cret->exception}',
+        //        'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
+        //    }
+        //)
+        return nullptr;
+    }
+    PyObject *ret = self->fields.cret->successObj;
+
+    if (ret == Py_None) {
+        PyErr_SetNone(PyExc_StopIteration);
+        return nullptr;
+    }
+    return ret;
 }
 
 static PyType_Slot PyArrowRowIterator_slots[] = {
-    // TODO: {Py_tp_init, (void *)PyArrowRowIterator_init},
+    {Py_tp_init, (void *)PyArrowRowIterator_init},
     {Py_tp_iternext, (void *)PyArrowRowIterator_next},
     {0, nullptr},
 };
 
-// TODO: PyArrowTableIterator::init
+static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject *kwargs) {
+    const int ret = PyArrowIterator_init(selfObj, args, kwargs);
+    if (ret < 0) {
+        return ret;
+    }
 
-static PyObject *PyArrowTableIterator_next(PyObject *self) {
-    // TODO
+    // TODO: Should we remove the module-level check?
+    py::UniqueRef pyarrowModule(getPyarrow());
+
+    if (pyarrowModule.get() == nullptr) {
+        // TODO: Throw exception.
+        //raise Error.errorhandler_make_exception(
+        //    ProgrammingError,
+        //    {
+        //        "msg": (
+        //            "Optional dependency: 'pyarrow' is not installed, please see the following link for install "
+        //            "instructions: https://docs.snowflake.com/en/user-guide/python-connector-pandas.html#installation"
+        //        ),
+        //        "errno": ER_NO_PYARROW,
+        //    },
+        //)
+        return -1;
+    }
+
+    PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
+    if (self->fields.cIterator.get() != nullptr) {
+        return 0;
+    }
+
+    self->fields.cIterator = std::make_unique<CArrowTableIterator>(
+        self->fields.context.get(),
+        const_cast<char *>(self->fields.arrowBytes),
+        self->fields.arrowBytesSize,
+        self->fields.numberToDecimal
+    );
+    std::shared_ptr<ReturnVal> cret = self->fields.cIterator->checkInitializationStatus();
+    if (cret->exception) {
+        // TODO: Throw exception.
+        //Error.errorhandler_wrapper(
+        //    self.cursor.connection if self.cursor is not None else None,
+        //    self.cursor,
+        //    OperationalError,
+        //    {
+        //        'msg': f'Failed to open arrow stream: {str(<object>self.cret.get().exception)}',
+        //        'errno': ER_FAILED_TO_READ_ARROW_STREAM
+        //    })
+        return -1;
+    }
+
+    self->fields.cret = self->fields.cIterator->next();
+    self->fields.nanoarrowTable = self->fields.cIterator->getArrowArrayPtrs();
+    self->fields.nanoarrowSchema = self->fields.cIterator->getArrowSchemaPtrs();
+
+    // Create the pyarrow table.
+    const size_t batchesLen = self->fields.nanoarrowTable.size();
+    self->fields.pyarrowTable.reset(PyList_New(batchesLen));
+    PyObject *batches = self->fields.pyarrowTable.get();
+    if (batches == nullptr) {
+        return -1;
+    }
+
+    py::UniqueRef recordBatchClass(PyObject_GetAttrString(pyarrowModule.get(), "RecordBatch"));
+    for (size_t i = 0; i < batchesLen; ++i) {
+        // Get pyarrow.
+        const uintptr_t table = self->fields.nanoarrowTable[i];
+        const uintptr_t schema = self->fields.nanoarrowSchema[i];
+
+        // TODO: Set list item.
+        py::UniqueRef batch(PyObject_CallMethod(recordBatchClass.get(), "_import_from_c", "nn", table, schema));
+        const int ret = PyList_SetItem(batches, i, batch.release());
+        (void)ret;
+        assert(ret == 0);
+    }
+
+    py::UniqueRef tableClass(PyObject_GetAttrString(pyarrowModule.get(), "Table"));
+
+    self->fields.pyarrowTable.reset(PyObject_CallMethod(tableClass.get(), "from_batches", "O", batches));
+    // TODO: snow_logger.debug(msg=f"Batches read: {self.nanoarrow_Table.size()}", path_name=__file__, func_name="__cinit__")
+    return 0;
+}
+
+static PyObject *PyArrowTableIterator_next(PyArrowIteratorObject *self) {
+    if (self->fields.tableReturned == false) {
+        self->fields.tableReturned = true;
+        return self->fields.pyarrowTable.get();
+    }
     PyErr_SetNone(PyExc_StopIteration);
     return nullptr;
 }
 
 static PyType_Slot PyArrowTableIterator_slots[] = {
-    // TODO: {Py_tp_init, (void *)PyArrowTableIterator_init},
+    {Py_tp_init, (void *)PyArrowTableIterator_init},
     {Py_tp_iternext, (void *)PyArrowTableIterator_next},
     {0, nullptr},
 };
@@ -156,6 +400,7 @@ static PyType_Spec EmptyPyArrowIterator_spec {
     /*name=*/"snowflake.connector.nanoarrow_arrow_iterator.EmptyPyArrowIterator",
     /*basicsize=*/sizeof(EmptyPyArrowIteratorObject),
     /*itemsize=*/0,
+    // TODO: Py_TPFLAGS_HAVE_GC here and elsewhere.
     /*flags=*/Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
     /*slots=*/EmptyPyArrowIterator_slots,
 };
@@ -185,8 +430,6 @@ static PyType_Spec PyArrowTableIterator_spec {
     /*slots=*/PyArrowTableIterator_slots,
 };
 
-// TODO
-
 static ArrowIteratorModuleState *getArrowIteratorModuleState(PyObject *module) {
     void *state = PyModule_GetState(module);
     assert(state != NULL);
@@ -214,6 +457,7 @@ static int arrow_iterator_module_exec(PyObject *m) {
             // Note that `PyTuple_SetItem` steals a reference to `base`.
             Py_INCREF(base);
             const int ret = PyTuple_SetItem(basesTuple.get(), 0, base);
+            (void)ret;
             assert(ret == 0);
         }
 
@@ -276,6 +520,7 @@ static PyModuleDef_Slot arrowIteratorModule_slots[] = {
     {0, nullptr},
 };
 
+// TODO: Module traverse.
 static PyModuleDef arrowIteratorModule_def = {
     /*m_base=*/PyModuleDef_HEAD_INIT,
     /*m_name=*/"nanoarrow_arrow_iterator",

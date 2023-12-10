@@ -45,6 +45,7 @@ SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS = os.environ.get(
     "SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS", "false"
 ).lower() in ("y", "yes", "t", "true", "1", "on")
 
+# TODO: Remove this.
 try:
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext

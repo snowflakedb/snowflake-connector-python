@@ -27,7 +27,7 @@ public:
   /**
    * Constructor
    */
-  CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy);
+  CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, bool use_numpy);
 
   /**
    * Destructor
@@ -78,7 +78,7 @@ private:
 class DictCArrowChunkIterator : public CArrowChunkIterator
 {
 public:
-  DictCArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy);
+  DictCArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, bool use_numpy);
 
   ~DictCArrowChunkIterator() = default;
 
