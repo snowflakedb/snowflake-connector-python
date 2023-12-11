@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-
+// TODO: Warning about not used.
 static const char* NANOARROW_TYPE_ENUM_STRING[] = {
     "NANOARROW_TYPE_UNINITIALIZED",
     "NANOARROW_TYPE_NA",

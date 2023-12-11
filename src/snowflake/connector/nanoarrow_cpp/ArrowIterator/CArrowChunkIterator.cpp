@@ -88,6 +88,7 @@ void CArrowChunkIterator::createRowPyObject()
         m_latestReturnedRow.get(),
         i,
         m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
+    (void)ret;
     assert(ret == 0);
   }
   return;

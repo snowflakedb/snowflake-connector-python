@@ -28,7 +28,6 @@ version = ".".join([str(v) for v in VERSION if v is not None])
 # This list defines the options definitions in a set
 options_def = {
     "--debug",
-    "--noopt",
 }
 
 # Options is the final parsed command line options
@@ -50,6 +49,9 @@ SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS = os.environ.get(
 try:
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext
+    from wheel.bdist_wheel import bdist_wheel
+    #from Cython.Distutils import build_ext as cython_build_ext
+    #from setuptools.command import build_ext
 
     _ABLE_TO_COMPILE_EXTENSIONS = True
 except ImportError:
@@ -69,17 +71,27 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
             ],
             language="c++",
             py_limited_api=True,
+            # Limited API, for Python 3.8+ . Note that Python 3.10 is `0x030A...`.
+            define_macros=[('Py_LIMITED_API', '0x03080000')],
         ),
     ]
 
+    class MyBuildWheel(bdist_wheel):
+        def get_tag(self):
+            python, abi, plat = super().get_tag()
+    
+            if python.startswith("cp"):
+                # on CPython, our wheels are abi3 and compatible back to 3.8
+                return "cp38", "abi3", plat
+    
+            return python, abi, plat
+
     class MyBuildExt(build_ext):
         def build_extension(self, ext):
-            ext.py_limited_api=True
             if options["debug"]:
                 ext.extra_compile_args.append("-g")
-                ext.extra_link_args.append("-g")
-            if options["noopt"]:
                 ext.extra_compile_args.append("-O0")
+                ext.extra_link_args.append("-g")
                 ext.extra_link_args.append("-O0")
             current_dir = os.getcwd()
 
@@ -190,7 +202,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
             finally:
                 self.compiler._compile = original__compile
 
-    cmd_class = {"build_ext": MyBuildExt}
+    cmd_class = {"build_ext": MyBuildExt, "bdist_wheel": MyBuildWheel}
 
 setup(
     version=version,

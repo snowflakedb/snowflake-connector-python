@@ -43,7 +43,7 @@ public:
   {
   }
 
-  explicit UniqueRef(UniqueRef&& other) : UniqueRef(other.release())
+  UniqueRef(UniqueRef&& other) : UniqueRef(other.release())
   {
   }
 
@@ -83,6 +83,11 @@ public:
   bool empty() const noexcept
   {
     return m_pyObj == nullptr;
+  }
+
+  explicit operator bool() const noexcept
+  {
+    return !empty();
   }
 
 private:
