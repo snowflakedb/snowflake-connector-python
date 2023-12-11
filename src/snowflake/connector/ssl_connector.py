@@ -51,7 +51,10 @@ def create_context() -> ssl.SSLContext:
 
 class SnowflakeSSLConnector(aiohttp.TCPConnector):
     async def _create_connection(
-        self, req: aiohttp.ClientResponse, traces: list[Trace], timeout: ClientTimeout
+        self,
+        req: aiohttp.ClientResponse,
+        traces: list[aiohttp.Trace],
+        timeout: aiohttp.ClientTimeout,
     ) -> ResponseHandler:
         """Create connection.
 
@@ -77,12 +80,14 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
         )
         if FEATURE_OCSP_MODE != OCSPMode.INSECURE:
-            from .ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
+            from .ocsp_asn1crypto_async import (
+                SnowflakeOCSPAsn1CryptoAsync as SFOCSPAsync,
+            )
 
-            v = SFOCSP(
+            v = await SFOCSPAsync(
                 ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
                 use_fail_open=FEATURE_OCSP_MODE == OCSPMode.FAIL_OPEN,
-            ).validate(req.host, peer_cert_chain_pyopenssl)
+            ).validate_async(req.host, peer_cert_chain_pyopenssl)
             if not v:
                 raise OperationalError(
                     msg=(

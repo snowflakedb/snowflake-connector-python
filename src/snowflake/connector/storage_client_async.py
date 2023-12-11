@@ -9,8 +9,11 @@ import ssl
 
 import aiohttp
 
-from . import ssl_connector
-from .network_async import EventLoopThreadRunner, make_client_session, parse_url
+from .network_async import (
+    EventLoopThreadRunner,
+    get_default_aiohttp_session_request_kwargs,
+    make_client_session,
+)
 from .storage_client import *
 
 # YICHUAN: Not much to explain in this file, we add async versions of existing private methods and override public
@@ -132,14 +135,10 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
                     response = await session.request(
                         method=verb,
                         url=url,
-                        proxy=None,  # to make sure env variables for proxy aren't overriden
-                        # Yichuan: Should be fine specifying this unconditionally as proxy_headers will be ignored if no proxy
-                        # is specified in env variables
-                        # (If you want to see for yourself, check that proxy_headers are only used to set the attribute
-                        # ClientRequest.proxy_headers, which are in turn only used in TCPConnector._create_proxy_connection)
-                        proxy_headers={"Host": parse_url(url).hostname},
-                        ssl=ssl_connector.create_context(),
-                        **rest_kwargs,
+                        **(
+                            rest_kwargs
+                            | get_default_aiohttp_session_request_kwargs(url=url)
+                        ),
                     )
 
                 if await self._has_expired_presigned_url_async(response):
@@ -147,7 +146,7 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
                 else:
                     self.last_err_is_presigned_url = False
                     if response.status in self.TRANSIENT_HTTP_ERR:
-                        time.sleep(
+                        await asyncio.sleep(
                             min(
                                 # TODO should SLEEP_UNIT come from the parent
                                 #  SnowflakeConnection and be customizable by users?
@@ -162,7 +161,7 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
                         return response
             except self.TRANSIENT_ERRORS_ASYNC as e:
                 self.last_err_is_presigned_url = False
-                time.sleep(
+                await asyncio.sleep(
                     min(
                         (2 ** self.retry_count[retry_id]) * self.SLEEP_UNIT,
                         self.SLEEP_MAX,

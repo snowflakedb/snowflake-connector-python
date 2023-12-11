@@ -9,7 +9,7 @@ import asyncio
 import aiohttp
 
 from .s3_storage_client import *
-from .storage_client_async import *
+from .storage_client_async import SnowflakeStorageClientAsync
 
 
 # YICHUAN: Prioritize methods inherited SnowflakeStorageClientAsync because it will only override what it needs to

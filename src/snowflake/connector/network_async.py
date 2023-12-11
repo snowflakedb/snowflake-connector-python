@@ -201,6 +201,18 @@ def make_client_session(loop: asyncio.BaseEventLoop) -> aiohttp.ClientSession:
     )
 
 
+def get_default_aiohttp_session_request_kwargs(url: str):
+    return {
+        "proxy": None,  # to make sure env variables for proxy aren't overriden
+        # Yichuan: Should be fine specifying this unconditionally as proxy_headers will be ignored if no proxy
+        # is specified in env variables
+        # (If you want to see for yourself, check that proxy_headers are only used to set the attribute
+        # ClientRequest.proxy_headers, which are in turn only used in TCPConnector._create_proxy_connection)
+        "proxy_headers": {"Host": parse_url(url).hostname},
+        "ssl": ssl_connector.create_context(),
+    }
+
+
 class SnowflakeRestfulAsync(SnowflakeRestful):
     def __init__(
         self,
@@ -485,24 +497,19 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
                 )
 
             # YICHUAN: No need to track these as aiohttp doesn't have is_raw_binary
-
             # download_start_time = get_time_millis()
+            # download_end_time = get_time_millis()
 
+            # YICHUAN: It is not required to call release on the response object. When the client fully receives the
+            # payload, the underlying connection automatically returns back to pool. If the payload is not fully read,
+            # the connection is closed
             resp = await session.request(
                 method=method,
                 url=full_url,
                 headers=headers,
                 data=input_data,
-                proxy=None,  # to make sure env variables for proxy aren't overriden
-                # YICHUAN: Should be fine specifying this unconditionally as proxy_headers will be ignored if no proxy
-                # is specified in env variables
-                # (If you want to see for yourself, check that proxy_headers are only used to set the attribute
-                # ClientRequest.proxy_headers, which are in turn only used in TCPConnector._create_proxy_connection)
-                proxy_headers={"Host": parse_url(full_url).hostname},
-                ssl=ssl_connector.create_context(),
+                **get_default_aiohttp_session_request_kwargs(url=full_url),
             )
-
-            # download_end_time = get_time_millis()
 
             try:
                 if resp.status == OK:
