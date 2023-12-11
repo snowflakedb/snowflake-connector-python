@@ -85,62 +85,10 @@ static int errorHandlerWrapper(PyObject *cursor, const char *errorClassName, con
     return 0;
 }
 
-static py::UniqueRef getSnowLogger() {
-    py::UniqueRef snowLoggingModule(PyImport_ImportModule("snowflake.connector.snow_logging"));
-    if (snowLoggingModule.get() == nullptr) {
-        return py::UniqueRef();
-    }
-
-    // TODO: __name__ (PyModule_GetNameObject)
-    py::UniqueRef moduleName(PyUnicode_FromString("snowflake.connector.arrow_iterator"));
-    if (moduleName.get() == nullptr) {
-        return py::UniqueRef();
-    }
-    py::UniqueRef snowLogger(PyObject_CallMethod(snowLoggingModule.get(), "getSnowLogger", "O", moduleName.get()));
-    if (moduleName.get() == nullptr) {
-        return py::UniqueRef();
-    }
-    return snowLogger;
-}
-
 static ArrowIteratorModuleState *getArrowIteratorModuleState(PyObject *module) {
     void *state = PyModule_GetState(module);
     assert(state != NULL);
     return (ArrowIteratorModuleState *)(state);
-}
-
-
-static int debugLog(PyObject *snowLogger, PyObject *msg, const char* funcName) {
-    py::UniqueRef args(PyTuple_New(0));
-    if (args.get() == nullptr) {
-        return -1;
-    }
-
-    // TODO: Actual filename.
-    const char *fileName = "<unknown>";
-    
-    py::UniqueRef kwargs(
-        Py_BuildValue(
-            "{s:O,s:s,s:s}",
-            "msg", msg,
-            "path_name", fileName,
-            "func_name", funcName
-        )
-    );
-    if (!kwargs) {
-        return -1;
-    }
-
-    py::UniqueRef debugMethod(PyObject_GetAttrString(snowLogger, "debug"));
-    if (!debugMethod) {
-        return -1;
-    }
-
-    py::UniqueRef result(PyObject_Call(debugMethod.get(), args.get(), kwargs.get()));
-    if (result.get() == nullptr) {
-        return -1;
-    }
-    return 0;
 }
 
 // Python class structures.
@@ -203,9 +151,6 @@ struct ArrowIteratorModuleState {
     PyTypeObject* typePyArrowIterator;
     PyTypeObject* typePyArrowRowIterator;
     PyTypeObject* typePyArrowTableIterator;
-
-    // Module-level variables.
-    PyObject* snowLogger;
 };
 
 // Member functions of classes.
@@ -369,23 +314,7 @@ static int PyArrowRowIterator_init(PyObject *selfObj, PyObject *args, PyObject *
         return -1;
     }
 
-    {
-        const size_t numBatches = self->fields.cIterator->getArrowArrayPtrs().size();
-        py::UniqueRef msg(PyUnicode_FromFormat("Batches read: %zu", numBatches)); // TODO: This is 0.
-        if (!msg) {
-            return -1;
-        }
-
-        // Get a reference to the module. Note that this is a borrowed reference.
-        PyObject *moduleRef = PyState_FindModule(&arrowIteratorModule_def);
-        if (moduleRef == nullptr) {
-            return -1;
-        }
-        ArrowIteratorModuleState *state = getArrowIteratorModuleState(moduleRef);
-        if (debugLog(state->snowLogger, msg.get(), "PyArrowRowIterator_init") < 0) {
-            return -1;
-        }
-    }
+    // TODO: Should we log the number of batches here?
 
     return 0;
 }
@@ -509,22 +438,7 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
     if (self->fields.pyarrowTable.get() == nullptr) {
         return -1;
     }
-    {
-        const size_t numBatches = self->fields.nanoarrowTable.size();
-        py::UniqueRef msg(PyUnicode_FromFormat("Batches read: %zu", numBatches));
-        if (!msg) {
-            return -1;
-        }
-
-        PyObject *moduleRef = PyState_FindModule(&arrowIteratorModule_def);
-        if (moduleRef == nullptr) {
-            return -1;
-        }
-        ArrowIteratorModuleState *state = getArrowIteratorModuleState(moduleRef);
-        if (debugLog(state->snowLogger, msg.get(), "PyArrowTableIterator_init") < 0) {
-            return -1;
-        }
-    }
+    // TODO: Should we log the number of batches here?
     return 0;
 }
 
@@ -585,10 +499,6 @@ static PyMethodDef arrowIteratorModuleMethods[] = {
 };
 
 static int arrow_iterator_module_exec(PyObject *m) {
-    if (PyState_AddModule(m, &arrowIteratorModule_def) < 0) {
-        return -1;
-    }
-
     const auto createType = [m](const char *name, PyType_Spec &spec, PyObject *base) -> py::UniqueRef {
         // After removing support for Python 3.9, we should be
         // able to pass `&base` directly. Until then, we need
@@ -643,11 +553,6 @@ static int arrow_iterator_module_exec(PyObject *m) {
       return -1;
     }
 
-    py::UniqueRef snowLogger = getSnowLogger();
-    if (snowLogger.get() == nullptr) {
-      return -1;
-    }
-
     // NOTE: After this point, we can no longer return an error,
     // since things might not be cleaned up.
 
@@ -659,9 +564,6 @@ static int arrow_iterator_module_exec(PyObject *m) {
     state->typePyArrowIterator = (PyTypeObject *)typePyArrowIterator.release();
     state->typePyArrowRowIterator = (PyTypeObject *)typePyArrowRowIterator.release();
     state->typePyArrowTableIterator = (PyTypeObject *)typePyArrowTableIterator.release();
-
-    // Initialize module-level variables.
-    state->snowLogger = snowLogger.release();
 
     return 0;
 }
