@@ -60,7 +60,7 @@ public:
 
   void reset(PyObject* pyObj = nullptr)
   {
-    // We could use `Py_XDECREF(m_pyObj); m_pyObj = pyObj;`, but 
+    // We could use `Py_XDECREF(m_pyObj); m_pyObj = pyObj;`, but
     // if the `Py_XDECREF` calls a destructor that uses this object,
     // then the object is in a bad state.
     PyObject *toDelete = m_pyObj;
