@@ -173,7 +173,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
     
             return python, abi, plat
 
-    class MyBuildExt2(build_ext):
+    class MyBuildExt(build_ext):
         def build_extension(self, ext):
             original__compile = self.compiler._compile
 
@@ -197,7 +197,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                 self.compiler._compile = original__compile
 
     cmd_class = {
-        "build_ext": MyBuildExt2,
+        "build_ext": MyBuildExt,
         "bdist_wheel": MyBuildWheel,
     }
 
