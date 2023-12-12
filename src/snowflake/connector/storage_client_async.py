@@ -33,7 +33,10 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
         if self.meta.sfagent and self.meta.sfagent._cursor.connection:
             return self.meta.sfagent._cursor.connection._rest._loop_runner
         else:
-            return self._loop_runner
+            # YICHUAN: This will not be an issue in the future as we progressively make higher-level functions async
+            # because at that point, the loop runner will have a wider scope; currently, SnowflakeRestfulAsync owns the
+            # loop runner, so we're locked to it
+            raise Exception("PUT/GET with use_async unsupported without active SnowflakeConnection")
 
     @abstractmethod
     async def get_file_header_async(self, filename: str) -> FileHeader | None:
@@ -115,23 +118,18 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
         retry_id: int,
     ) -> aiohttp.ClientResponse:
         url = ""  # YICHUAN: Not sure why this is a bytes string in original version, but aiohttp doesn't like bytes
-        conn = None
-        if self.meta.sfagent and self.meta.sfagent._cursor.connection:
-            conn = self.meta.sfagent._cursor.connection
+        if not self.meta.sfagent and self.meta.sfagent._cursor.connection:
+            raise Exception("PUT/GET with use_async unsupported without active SnowflakeConnection")
+        conn = self.meta.sfagent._cursor.connection
 
         while self.retry_count[retry_id] < self.max_retry:
             cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
             try:
-                if conn:
-                    logger.debug("storage client request with session from connection")
-                    session_manager = conn._rest._use_requests_session_async(url)
-                else:
-                    logger.debug("storage client request with new created session")
-                    session_manager = make_client_session(self._loop)
+                logger.debug("storage client request with session from connection")
 
                 # YICHUAN: Self explanatory, of course get_request_args needs to be modified for aiohttp as well
-                async with session_manager as session:
+                async with conn._rest._use_requests_session_async(url) as session:
                     response = await session.request(
                         method=verb,
                         url=url,
