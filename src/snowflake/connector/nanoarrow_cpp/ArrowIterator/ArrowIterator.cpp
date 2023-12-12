@@ -5,6 +5,7 @@
 #include "Python/Common.hpp"
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "CArrowChunkIterator.hpp"
@@ -12,6 +13,8 @@
 #include "CArrowTableIterator.hpp"
 
 namespace sf {
+
+namespace {
 
 // Forward declares.
 extern PyModuleDef arrowIteratorModule_def;
@@ -89,6 +92,10 @@ static int errorHandlerWrapper(PyObject *cursor, const char *errorClassName, con
     return 0;
 }
 
+static py::UniqueRef getThisModule() {
+    return py::UniqueRef(PyImport_ImportModule("snowflake.connector.nanoarrow_arrow_iterator"));
+}
+
 static ArrowIteratorModuleState *getArrowIteratorModuleState(PyObject *module) {
     void *state = PyModule_GetState(module);
     assert(state != NULL);
@@ -155,6 +162,9 @@ struct ArrowIteratorModuleState {
     PyTypeObject* typePyArrowIterator;
     PyTypeObject* typePyArrowRowIterator;
     PyTypeObject* typePyArrowTableIterator;
+
+    // Members.
+    std::optional<Logger> logger;
 };
 
 // Member functions of classes.
@@ -318,7 +328,19 @@ static int PyArrowRowIterator_init(PyObject *selfObj, PyObject *args, PyObject *
         return -1;
     }
 
-    // TODO: Should we log the number of batches here?
+    {
+        py::UniqueRef thisModule = getThisModule();
+        if (thisModule.get() == nullptr) {
+            return -1;
+        }
+        ArrowIteratorModuleState *state = getArrowIteratorModuleState(thisModule.get());
+        Logger &logger = *state->logger;
+
+        // TODO: Don't copy this vector.
+        const size_t numBatchesRead = self->fields.cIterator->getArrowArrayPtrs().size();
+        std::string log = Logger::formatString("Batches read: %zu", numBatchesRead);
+        logger.debug(__FILE__, __func__, __LINE__, log.c_str());
+    }
 
     return 0;
 }
@@ -449,7 +471,20 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
     if (self->fields.pyarrowTable.get() == nullptr) {
         return -1;
     }
-    // TODO: Should we log the number of batches here?
+
+    {
+        py::UniqueRef thisModule = getThisModule();
+        if (thisModule.get() == nullptr) {
+            return -1;
+        }
+        ArrowIteratorModuleState *state = getArrowIteratorModuleState(thisModule.get());
+        Logger &logger = *state->logger;
+
+        const size_t numBatchesRead = self->fields.nanoarrowTable.size();
+        std::string log = Logger::formatString("Batches read: %zu", numBatchesRead);
+        logger.debug(__FILE__, __func__, __LINE__, log.c_str());
+    }
+
     return 0;
 }
 
@@ -549,25 +584,30 @@ static int arrow_iterator_module_exec(PyObject *m) {
 
     py::UniqueRef typeEmptyPyArrowIterator = createType("EmptyPyArrowIterator", EmptyPyArrowIterator_spec, nullptr);
     if (typeEmptyPyArrowIterator.get() == nullptr) {
-      return -1;
+        return -1;
     }
     py::UniqueRef typePyArrowIterator = createType("PyArrowIterator", PyArrowIterator_spec, typeEmptyPyArrowIterator.get());
     if (typePyArrowIterator.get() == nullptr) {
-      return -1;
+        return -1;
     }
     py::UniqueRef typePyArrowRowIterator = createType("PyArrowRowIterator", PyArrowRowIterator_spec, typePyArrowIterator.get());
     if (typePyArrowRowIterator.get() == nullptr) {
-      return -1;
+        return -1;
     }
     py::UniqueRef typePyArrowTableIterator = createType("PyArrowTableIterator", PyArrowTableIterator_spec, typePyArrowIterator.get());
     if (typePyArrowTableIterator.get() == nullptr) {
-      return -1;
+        return -1;
+    }
+
+    // Get the module's name for the logger.
+    const char *const name = PyModule_GetName(m);
+    if (name == nullptr) {
+        return -1;
     }
 
     // NOTE: After this point, we can no longer return an error,
     // since things might not be cleaned up.
 
-    // TODO: Hook up.
     ArrowIteratorModuleState *state = getArrowIteratorModuleState(m);
 
     // Initialize types.
@@ -575,6 +615,9 @@ static int arrow_iterator_module_exec(PyObject *m) {
     state->typePyArrowIterator = (PyTypeObject *)typePyArrowIterator.release();
     state->typePyArrowRowIterator = (PyTypeObject *)typePyArrowRowIterator.release();
     state->typePyArrowTableIterator = (PyTypeObject *)typePyArrowTableIterator.release();
+
+    // Initialize fields.
+    state->logger.emplace(name);
 
     return 0;
 }
@@ -593,6 +636,8 @@ PyModuleDef arrowIteratorModule_def = {
     /*m_methods=*/arrowIteratorModuleMethods,
     /*m_slots=*/arrowIteratorModule_slots,
 };
+
+}
 
 }
 
