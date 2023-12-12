@@ -52,7 +52,7 @@ def create_context() -> ssl.SSLContext:
 class SnowflakeSSLConnector(aiohttp.TCPConnector):
     async def _create_connection(
         self,
-        req: aiohttp.ClientResponse,
+        req: aiohttp.ClientRequest,
         traces: list[aiohttp.Trace],
         timeout: aiohttp.ClientTimeout,
     ) -> ResponseHandler:
@@ -62,46 +62,49 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
         """
         proto = await super()._create_connection(req, traces, timeout)
 
-        # YICHUAN: Same as get_peer_cert_chain in PyOpenSSL, but we should consider using get_verified_chain instead
-        # https://github.com/python/cpython/issues/62433#issuecomment-1093619239
-        unverified_chain = (
-            proto.transport._ssl_protocol._sslobj._sslobj.get_unverified_chain()
-        )
-        peer_cert_chain_pyopenssl = [
-            X509.from_cryptography(
-                x509.load_der_x509_certificate(cert.public_bytes(ssl._ssl.ENCODING_DER))
+        # YICHUAN: If we don't have this check we're going to be doing OCSP checks for http connections, which is funny
+        # if the request happens to be to an OCSP responder
+        if req.is_ssl():
+            # YICHUAN: Same as get_peer_cert_chain in PyOpenSSL, but we should consider get_verified_chain instead
+            # https://github.com/python/cpython/issues/62433#issuecomment-1093619239
+            unverified_chain = (
+                proto.transport._ssl_protocol._sslobj._sslobj.get_unverified_chain()
             )
-            for cert in unverified_chain
-        ]
-
-        log.debug(
-            "OCSP Mode: %s, " "OCSP response cache file name: %s",
-            FEATURE_OCSP_MODE.name,
-            FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
-        )
-        if FEATURE_OCSP_MODE != OCSPMode.INSECURE:
-            from .ocsp_asn1crypto_async import (
-                SnowflakeOCSPAsn1CryptoAsync as SFOCSPAsync,
-            )
-
-            v = await SFOCSPAsync(
-                ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
-                use_fail_open=FEATURE_OCSP_MODE == OCSPMode.FAIL_OPEN,
-            ).validate_async(req.host, peer_cert_chain_pyopenssl)
-            if not v:
-                raise OperationalError(
-                    msg=(
-                        "The certificate is revoked or "
-                        "could not be validated: hostname={}".format(req.host)
-                    ),
-                    errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+            peer_cert_chain_pyopenssl = [
+                X509.from_cryptography(
+                    x509.load_der_x509_certificate(cert.public_bytes(ssl._ssl.ENCODING_DER))
                 )
-        else:
-            log.info(
-                "THIS CONNECTION IS IN INSECURE "
-                "MODE. IT MEANS THE CERTIFICATE WILL BE "
-                "VALIDATED BUT THE CERTIFICATE REVOCATION "
-                "STATUS WILL NOT BE CHECKED."
+                for cert in unverified_chain
+            ]
+
+            log.debug(
+                "OCSP Mode: %s, " "OCSP response cache file name: %s",
+                FEATURE_OCSP_MODE.name,
+                FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
             )
+            if FEATURE_OCSP_MODE != OCSPMode.INSECURE:
+                from .ocsp_asn1crypto_async import (
+                    SnowflakeOCSPAsn1CryptoAsync as SFOCSPAsync,
+                )
+
+                v = await SFOCSPAsync(
+                    ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+                    use_fail_open=FEATURE_OCSP_MODE == OCSPMode.FAIL_OPEN,
+                ).validate_async(req.host, peer_cert_chain_pyopenssl)
+                if not v:
+                    raise OperationalError(
+                        msg=(
+                            "The certificate is revoked or "
+                            "could not be validated: hostname={}".format(req.host)
+                        ),
+                        errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+                    )
+            else:
+                log.info(
+                    "THIS CONNECTION IS IN INSECURE "
+                    "MODE. IT MEANS THE CERTIFICATE WILL BE "
+                    "VALIDATED BUT THE CERTIFICATE REVOCATION "
+                    "STATUS WILL NOT BE CHECKED."
+                )
 
         return proto

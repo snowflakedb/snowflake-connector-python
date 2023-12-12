@@ -230,7 +230,7 @@ class SnowflakeOCSPAsync(SnowflakeOCSP):
             if not cache_status:
                 telemetry_data.set_cache_hit(False)
                 logger.debug("getting OCSP response from CA's OCSP server")
-                ocsp_response = self._fetch_ocsp_response_async(
+                ocsp_response = await self._fetch_ocsp_response_async(
                     req, subject, cert_id, telemetry_data, hostname, do_retry
                 )
             else:
