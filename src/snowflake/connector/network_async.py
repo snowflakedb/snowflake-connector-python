@@ -179,6 +179,15 @@ class SnowflakeAuthAsync(aiohttp.BasicAuth):
 
 
 class SessionPoolAsync(SessionPool):
+    def get_session_async(self) -> Session:
+        """Returns a session from the session pool or creates a new one."""
+        try:
+            session = self._idle_sessions.pop()
+        except IndexError:
+            session = self._rest.make_requests_session_async()
+        self._active_sessions.add(session)
+        return session
+
     async def close_async(self) -> None:
         """Closes all active and idle sessions in this session pool."""
         if self._active_sessions:
@@ -612,8 +621,10 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
             )
             raise err
 
-    # YICHUAN: Override method, not _async because it's not an async method
-    def make_requests_session(self) -> aiohttp.ClientSession:
+    # YICHUAN: Override method, !!!not _async because it's not an async method!!!
+    # UPDATE, add _async suffix so SnowflakeRestfulAsync.make_requests_session still functions normally for any usages
+    # not yet updated to async
+    def make_requests_session_async(self) -> aiohttp.ClientSession:
         return make_client_session(self._loop_runner.loop)
 
     # YICHUAN: Literally copy & pasted but unfortunately needed because this method needs to be async
@@ -625,7 +636,7 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
 
         # short-lived session, not added to the _sessions_map
         if self._connection.disable_request_pooling:
-            session = self.make_requests_session()
+            session = self.make_requests_session_async()
             try:
                 yield session
             finally:
@@ -637,7 +648,7 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
                 hostname = None
 
             session_pool: SessionPoolAsync = self._sessions_map[hostname]
-            session = session_pool.get_session()
+            session = session_pool.get_session_async()
             logger.debug(
                 f"Session status for SessionPoolAsync '{hostname}', {session_pool}"
             )
