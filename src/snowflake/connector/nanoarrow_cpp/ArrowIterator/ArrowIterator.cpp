@@ -156,12 +156,19 @@ struct PyArrowTableIteratorObject {
     PyArrowIteratorObject base;
 };
 
-struct ArrowIteratorModuleState {
+struct ArrowIteratorModuleState final {
+    // A marker to indicate if this structure has gone through C++
+    // initialization. This is to protect against `m_free` being
+    // called after the state has been initialized, but before
+    // `arrow_iterator_module_exec` has been called.
+    // TODO: Is this needed?
+    volatile bool isInitialized = true;
+
     // Types.
-    PyTypeObject* typeEmptyPyArrowIterator;
-    PyTypeObject* typePyArrowIterator;
-    PyTypeObject* typePyArrowRowIterator;
-    PyTypeObject* typePyArrowTableIterator;
+    py::UniqueRef typeEmptyPyArrowIterator;
+    py::UniqueRef typePyArrowIterator;
+    py::UniqueRef typePyArrowRowIterator;
+    py::UniqueRef typePyArrowTableIterator;
 
     // Members.
     std::optional<Logger> logger;
@@ -545,6 +552,10 @@ static PyMethodDef arrowIteratorModuleMethods[] = {
 };
 
 static int arrow_iterator_module_exec(PyObject *m) {
+    ArrowIteratorModuleState *state = getArrowIteratorModuleState(m);
+    // Placement `new` to initialize the structure.
+    new(state) ArrowIteratorModuleState();
+
     const auto createType = [m](const char *name, PyType_Spec &spec, PyObject *base) -> py::UniqueRef {
         // After removing support for Python 3.9, we should be
         // able to pass `&base` directly. Until then, we need
@@ -582,20 +593,20 @@ static int arrow_iterator_module_exec(PyObject *m) {
         return newType;
     };
 
-    py::UniqueRef typeEmptyPyArrowIterator = createType("EmptyPyArrowIterator", EmptyPyArrowIterator_spec, nullptr);
-    if (typeEmptyPyArrowIterator.get() == nullptr) {
+    state->typeEmptyPyArrowIterator = createType("EmptyPyArrowIterator", EmptyPyArrowIterator_spec, nullptr);
+    if (state->typeEmptyPyArrowIterator.get() == nullptr) {
         return -1;
     }
-    py::UniqueRef typePyArrowIterator = createType("PyArrowIterator", PyArrowIterator_spec, typeEmptyPyArrowIterator.get());
-    if (typePyArrowIterator.get() == nullptr) {
+    state->typePyArrowIterator = createType("PyArrowIterator", PyArrowIterator_spec, state->typeEmptyPyArrowIterator.get());
+    if (state->typePyArrowIterator.get() == nullptr) {
         return -1;
     }
-    py::UniqueRef typePyArrowRowIterator = createType("PyArrowRowIterator", PyArrowRowIterator_spec, typePyArrowIterator.get());
-    if (typePyArrowRowIterator.get() == nullptr) {
+    state->typePyArrowRowIterator = createType("PyArrowRowIterator", PyArrowRowIterator_spec, state->typePyArrowIterator.get());
+    if (state->typePyArrowRowIterator.get() == nullptr) {
         return -1;
     }
-    py::UniqueRef typePyArrowTableIterator = createType("PyArrowTableIterator", PyArrowTableIterator_spec, typePyArrowIterator.get());
-    if (typePyArrowTableIterator.get() == nullptr) {
+    state->typePyArrowTableIterator = createType("PyArrowTableIterator", PyArrowTableIterator_spec, state->typePyArrowIterator.get());
+    if (state->typePyArrowTableIterator.get() == nullptr) {
         return -1;
     }
 
@@ -605,21 +616,18 @@ static int arrow_iterator_module_exec(PyObject *m) {
         return -1;
     }
 
-    // NOTE: After this point, we can no longer return an error,
-    // since things might not be cleaned up.
-
-    ArrowIteratorModuleState *state = getArrowIteratorModuleState(m);
-
-    // Initialize types.
-    state->typeEmptyPyArrowIterator = (PyTypeObject *)typeEmptyPyArrowIterator.release();
-    state->typePyArrowIterator = (PyTypeObject *)typePyArrowIterator.release();
-    state->typePyArrowRowIterator = (PyTypeObject *)typePyArrowRowIterator.release();
-    state->typePyArrowTableIterator = (PyTypeObject *)typePyArrowTableIterator.release();
-
     // Initialize fields.
     state->logger.emplace(name);
 
     return 0;
+}
+
+static void arrow_iterator_module_free(void *selfObj) {
+    ArrowIteratorModuleState *state = getArrowIteratorModuleState((PyObject *)selfObj);
+    // If we called the C++ constructor, then call the C++ destructor.
+    if (state->isInitialized) {
+        state->~ArrowIteratorModuleState();
+    }
 }
 
 static PyModuleDef_Slot arrowIteratorModule_slots[] = {
@@ -635,6 +643,9 @@ PyModuleDef arrowIteratorModule_def = {
     /*m_size=*/sizeof(ArrowIteratorModuleState),
     /*m_methods=*/arrowIteratorModuleMethods,
     /*m_slots=*/arrowIteratorModule_slots,
+    /*m_traverse=*/nullptr, // TODO
+    /*m_clear=*/nullptr, // TODO
+    /*m_free=*/arrow_iterator_module_free,
 };
 
 }
