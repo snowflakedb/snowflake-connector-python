@@ -25,13 +25,13 @@ static PyObject *newRef(PyObject *o) {
   return o;
 }
 
-static PyObject *getPyarrow() {
+static py::UniqueRef getPyarrow() {
     py::UniqueRef pyarrowModule(PyImport_ImportModule("pyarrow"));
     if (pyarrowModule.get() == nullptr) {
         // No pyarrow. Clear the exception.
         PyErr_Clear();
     }
-    return pyarrowModule.get();
+    return pyarrowModule;
 }
 
 static int errorHandlerWrapper(PyObject *cursor, const char *errorClassName, const char *errorNumberName, PyObject *msg) {
@@ -361,7 +361,7 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
         return ret;
     }
 
-    py::UniqueRef pyarrowModule(getPyarrow());
+    py::UniqueRef pyarrowModule = getPyarrow();
 
     PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
     if (pyarrowModule.get() == nullptr) {
@@ -401,17 +401,24 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
         return -1;
     }
 
-    ReturnVal cret2 = self->fields.cIterator->next();
-    // TODO: Should we care about this result?
-    (void)cret2;
+    try {
+      ReturnVal cret2 = self->fields.cIterator->next();
+      // TODO: Should we care about this result?
+      (void)cret2;
+    } catch (const std::overflow_error& exn) {
+      // Only override the current exception if one is not already set.
+      if (PyErr_Occurred() == nullptr) {
+        PyErr_SetString(PyExc_OverflowError, exn.what());
+      }
+      return -1;
+    }
     self->fields.nanoarrowTable = self->fields.cIterator->getArrowArrayPtrs();
     self->fields.nanoarrowSchema = self->fields.cIterator->getArrowSchemaPtrs();
 
     // Create the pyarrow table.
     const size_t batchesLen = self->fields.nanoarrowTable.size();
-    self->fields.pyarrowTable.reset(PyList_New(batchesLen));
-    PyObject *batches = self->fields.pyarrowTable.get();
-    if (batches == nullptr) {
+    py::UniqueRef batches(PyList_New(batchesLen));
+    if (batches.get() == nullptr) {
         return -1;
     }
 
@@ -428,7 +435,7 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
         if (batch.get() == nullptr) {
             return -1;
         }
-        const int ret = PyList_SetItem(batches, i, batch.release());
+        const int ret = PyList_SetItem(batches.get(), i, batch.release());
         (void)ret;
         assert(ret == 0);
     }
@@ -438,7 +445,7 @@ static int PyArrowTableIterator_init(PyObject *selfObj, PyObject *args, PyObject
         return -1;
     }
 
-    self->fields.pyarrowTable.reset(PyObject_CallMethod(tableClass.get(), "from_batches", "O", batches));
+    self->fields.pyarrowTable.reset(PyObject_CallMethod(tableClass.get(), "from_batches", "O", batches.get()));
     if (self->fields.pyarrowTable.get() == nullptr) {
         return -1;
     }

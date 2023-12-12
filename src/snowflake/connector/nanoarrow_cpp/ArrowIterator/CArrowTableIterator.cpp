@@ -503,6 +503,7 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
               "the nanosecond part over 6-digits in the Snowflake database, the timestamp must be "
               "between '1677-09-21 00:12:43.145224192' and '2262-04-11 23:47:16.854775807' to not overflow."
               , epoch, fraction);
+            // Note that this has special handling in `ArrowIterator.cpp`.
             throw std::overflow_error(errorInfo.c_str());
           } else {
             has_overflow_to_downscale = true;
