@@ -125,8 +125,6 @@ struct PyArrowIteratorFields {
     char* arrowBytes = nullptr;
     int64_t arrowBytesSize = 0;
 
-    std::unique_ptr<CArrowIterator> cIterator;
-
     std::vector<uintptr_t> nanoarrowTable;
     std::vector<uintptr_t> nanoarrowSchema;
 
@@ -141,6 +139,9 @@ struct PyArrowIteratorFields {
     bool useNumpy = false;
     bool numberToDecimal = false;
     py::UniqueRef pyarrowTable;
+
+    // This is last, since it references some of the above.
+    std::unique_ptr<CArrowIterator> cIterator;
 };
 
 struct PyArrowIteratorObject {
@@ -266,6 +267,9 @@ static int PyArrowIterator_init(PyObject *selfObj, PyObject *args, PyObject *kwa
 }
 
 static void PyArrowIterator_dealloc(PyObject *selfObj) {
+    // Ask the GC to not do circular GC on this object.
+    PyObject_GC_UnTrack(selfObj);
+
     freefunc freefn = (freefunc)PyType_GetSlot(Py_TYPE(selfObj), Py_tp_free);
     // Release all the fields by calling the destructor.
     PyArrowIteratorObject *self = (PyArrowIteratorObject *)selfObj;
@@ -273,13 +277,32 @@ static void PyArrowIterator_dealloc(PyObject *selfObj) {
     freefn(self);
 }
 
-//static int PyArrowIterator_traverse(CustomObject *self, visitproc visit, void *arg) {
-//    // TODO: List all members that are PyObjects.
-//    //Py_VISIT(self->field);
-//    return 0;
-//}
+static int PyArrowIterator_traverse(PyArrowIteratorObject *self, visitproc visit, void *arg) {
+    // For each subobject that can participate in cycles, we list them here.
+    // This must be kept in sync with `PyArrowIterator_clear`.
+    PyArrowIteratorFields &fields = self->fields;
+    Py_VISIT(fields.context.get());
+    Py_VISIT(fields.cursor.get());
+    Py_VISIT(fields.pyarrowTable.get());
+    Py_VISIT(fields.arrowBytesObject.get());
+    // `cIterator` doesn't own any objects, so we can skip it.
+    return 0;
+}
 
-// TODO: Clear.
+static int PyArrowIterator_clear(PyArrowIteratorObject *self) {
+    PyArrowIteratorFields &fields = self->fields;
+    // Clear `cIterator` first, since it references these other
+    // objects.
+    fields.cIterator.reset();
+
+    // Release the Python objects. This must be kept in sync
+    // with `PyArrowIterator_clear`.
+    fields.context.reset();
+    fields.cursor.reset();
+    fields.pyarrowTable.reset();
+    fields.arrowBytesObject.reset();
+    return 0;
+}
 
 // TODO: Can't we inherit our parent's?
 static PyObject *PyArrowIterator_iter(PyObject *self) {
@@ -291,7 +314,9 @@ static PyType_Slot PyArrowIterator_slots[] = {
     {Py_tp_new, (void *)PyArrowIterator_new},
     {Py_tp_init, (void *)PyArrowIterator_init},
     {Py_tp_dealloc, (void *)PyArrowIterator_dealloc},
-    // TODO: traverse.
+    {Py_tp_traverse, (void *)PyArrowIterator_traverse},
+    {Py_tp_clear, (void *)PyArrowIterator_clear},
+
     {Py_tp_iter, (void *)PyArrowIterator_iter},
     {0, nullptr},
 };
@@ -517,7 +542,6 @@ static PyType_Spec EmptyPyArrowIterator_spec {
     /*name=*/"snowflake.connector.nanoarrow_arrow_iterator.EmptyPyArrowIterator",
     /*basicsize=*/sizeof(EmptyPyArrowIteratorObject),
     /*itemsize=*/0,
-    // TODO: Py_TPFLAGS_HAVE_GC here and elsewhere.
     /*flags=*/Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
     /*slots=*/EmptyPyArrowIterator_slots,
 };
@@ -526,7 +550,7 @@ static PyType_Spec PyArrowIterator_spec {
     /*name=*/"snowflake.connector.nanoarrow_arrow_iterator.PyArrowIterator",
     /*basicsize=*/sizeof(PyArrowIteratorObject),
     /*itemsize=*/0,
-    /*flags=*/Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    /*flags=*/Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC,
     /*slots=*/PyArrowIterator_slots,
 };
 
@@ -622,12 +646,35 @@ static int arrow_iterator_module_exec(PyObject *m) {
     return 0;
 }
 
-static void arrow_iterator_module_free(void *selfObj) {
-    ArrowIteratorModuleState *state = getArrowIteratorModuleState((PyObject *)selfObj);
+static void arrow_iterator_module_free(void *self) {
+    ArrowIteratorModuleState *state = getArrowIteratorModuleState((PyObject *)self);
     // If we called the C++ constructor, then call the C++ destructor.
     if (state->isInitialized) {
         state->~ArrowIteratorModuleState();
     }
+}
+
+static int arrow_iterator_module_traverse(PyObject *self, visitproc visit, void *arg) {
+    // Visit everything that might participate in a cycle.
+    ArrowIteratorModuleState &state = *getArrowIteratorModuleState(self);
+
+    // This must be kept in sync with `arrow_iterator_module_clear`.
+    Py_VISIT(state.typeEmptyPyArrowIterator.get());
+    Py_VISIT(state.typePyArrowIterator.get());
+    Py_VISIT(state.typePyArrowRowIterator.get());
+    Py_VISIT(state.typePyArrowTableIterator.get());
+    return 0;
+}
+
+static int arrow_iterator_module_clear(PyObject *self) {
+    ArrowIteratorModuleState &state = *getArrowIteratorModuleState(self);
+
+    // This must be kept in sync with `arrow_iterator_module_traverse`.
+    state.typeEmptyPyArrowIterator.reset();
+    state.typePyArrowIterator.reset();
+    state.typePyArrowRowIterator.reset();
+    state.typePyArrowTableIterator.reset();
+    return 0;
 }
 
 static PyModuleDef_Slot arrowIteratorModule_slots[] = {
@@ -635,7 +682,6 @@ static PyModuleDef_Slot arrowIteratorModule_slots[] = {
     {0, nullptr},
 };
 
-// TODO: Module traverse.
 PyModuleDef arrowIteratorModule_def = {
     /*m_base=*/PyModuleDef_HEAD_INIT,
     /*m_name=*/"nanoarrow_arrow_iterator",
@@ -643,8 +689,8 @@ PyModuleDef arrowIteratorModule_def = {
     /*m_size=*/sizeof(ArrowIteratorModuleState),
     /*m_methods=*/arrowIteratorModuleMethods,
     /*m_slots=*/arrowIteratorModule_slots,
-    /*m_traverse=*/nullptr, // TODO
-    /*m_clear=*/nullptr, // TODO
+    /*m_traverse=*/arrow_iterator_module_traverse,
+    /*m_clear=*/arrow_iterator_module_clear,
     /*m_free=*/arrow_iterator_module_free,
 };
 

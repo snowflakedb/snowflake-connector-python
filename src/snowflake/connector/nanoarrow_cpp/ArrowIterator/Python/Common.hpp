@@ -56,6 +56,8 @@ public:
     reset();
   }
 
+  // Decrement the refcount of the object we're point at. This is
+  // compatible with `Py_CLEAR()`.
   void reset(PyObject* pyObj = nullptr)
   {
     // We could use `Py_XDECREF(m_pyObj); m_pyObj = pyObj;`, but
