@@ -321,6 +321,9 @@ jobs:
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
+      - name: Debug - find files
+        run: find .
+        shell: bash
       - uses: actions/upload-artifact@v3
         with:
           name: coverage_linux-lambda-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
