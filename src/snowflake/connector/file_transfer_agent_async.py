@@ -4,24 +4,19 @@
 
 from __future__ import annotations
 
-from .file_transfer_agent import *
-from .file_transfer_agent import _chunk_size_calculator
-from .network_async import EventLoopThreadRunner
+from .constants import AZURE_FS, GCS_FS, LOCAL_FS, S3_FS
+from .file_transfer_agent import (
+    SnowflakeFileMeta,
+    SnowflakeFileTransferAgent,
+    _chunk_size_calculator,
+)
+from .storage_client import SnowflakeStorageClient
 
-# YICHUAN: SnowflakeFileTransferAgentAsync is identical to SnowflakeFileTransferAgent, except for two differences; it
-# owns an EventLoopThreadRunner and uses instances of SnowflakeStorageClientAsync
+# YICHUAN: SnowflakeFileTransferAgentAsync is identical to SnowflakeFileTransferAgent, except it uses instances of
+# SnowflakeStorageClientAsync instead of SnowflakeStorageClient
 
 
 class SnowflakeFileTransferAgentAsync(SnowflakeFileTransferAgent):
-    def __init__(self, *args, **kwargs) -> None:
-        # YICHUAN: This EventLoopThreadRunner may never be used if there is one available in the SnowflakeRestfulAsync
-        # instance owned by SnowflakeConnector, but a thread running an event loop that does nothing is lightweight
-        # and saves us headaches if no SnowflakeConnector instance is associated to a transfer
-        self._loop_runner = EventLoopThreadRunner()
-        self._loop_runner.start()
-
-        super().__init__(*args, **kwargs)
-
     def _create_file_transfer_client(
         self, meta: SnowflakeFileMeta
     ) -> SnowflakeStorageClient:

@@ -13,7 +13,7 @@ from logging import getLogger
 from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
 
 from .arrow_context import ArrowConverterContext
-from .backoff_policies import exponential_backoff
+from .backoff_policies import DEFAULT_TIMEOUT_GENERATOR_FUNCTION
 from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import FIELD_TYPES, IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
@@ -308,7 +308,7 @@ class ResultBatch(abc.ABC):
         backoff = (
             connection._backoff_generator
             if connection is not None
-            else exponential_backoff()()
+            else DEFAULT_TIMEOUT_GENERATOR_FUNCTION()
         )
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:

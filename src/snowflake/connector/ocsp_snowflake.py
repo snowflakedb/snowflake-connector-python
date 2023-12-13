@@ -21,7 +21,7 @@ from os import environ, path
 from os.path import expanduser
 from threading import Lock, RLock
 from time import gmtime, strftime
-from typing import Any, NamedTuple
+from typing import Any, List, NamedTuple
 
 # We use regular requests and urlib3 when we reach out to do OCSP checks, basically in this very narrow
 # part of the code where we want to call out to check for revoked certificates,
@@ -29,7 +29,7 @@ from typing import Any, NamedTuple
 import requests as generic_requests
 from asn1crypto.ocsp import CertId, OCSPRequest, SingleResponse
 from asn1crypto.x509 import Certificate
-from OpenSSL.SSL import Connection
+from OpenSSL.SSL import X509, Connection
 
 from snowflake.connector.compat import OK, urlsplit, urlunparse
 from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
@@ -59,7 +59,7 @@ from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
 from snowflake.connector.telemetry_oob import TelemetryService
 
 from . import constants
-from .backoff_policies import exponential_backoff
+from .backoff_policies import DEFAULT_TIMEOUT_GENERATOR_FUNCTION
 from .cache import SFDictCache, SFDictFileCache
 from .telemetry import TelemetryField, generate_telemetry_data_dict
 
@@ -397,7 +397,7 @@ class OCSPServer:
             with generic_requests.Session() as session:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
-                backoff = exponential_backoff()()
+                backoff = DEFAULT_TIMEOUT_GENERATOR_FUNCTION()
                 for _ in range(max_retry):
                     response = session.get(
                         url,
@@ -948,7 +948,7 @@ class SnowflakeOCSP:
     def validate(
         self,
         hostname: str | None,
-        connection: Connection,
+        peer_cert_chain: list[X509],
         no_exception: bool = False,
     ) -> (
         list[
@@ -982,7 +982,7 @@ class SnowflakeOCSP:
         telemetry_data.set_fail_open(self.is_enabled_fail_open())
 
         try:
-            cert_data = self.extract_certificate_chain(connection)
+            cert_data = self.extract_certificate_chain(peer_cert_chain)
         except RevocationCheckError:
             telemetry_data.set_event_sub_type(
                 OCSPTelemetryData.CERTIFICATE_EXTRACTION_FAILED
@@ -1466,7 +1466,7 @@ class SnowflakeOCSP:
         with generic_requests.Session() as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
-            backoff = exponential_backoff()()
+            backoff = DEFAULT_TIMEOUT_GENERATOR_FUNCTION()
             for _ in range(max_retry):
                 try:
                     response = session.request(

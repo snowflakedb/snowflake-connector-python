@@ -5,14 +5,60 @@
 from __future__ import annotations
 
 import asyncio
+import collections
+import contextlib
+import gzip
+import itertools
+import logging
 import ssl
-from threading import Thread
-from typing import Coroutine
+import time
+import traceback
+from threading import Lock, Thread
+from typing import TYPE_CHECKING, Any, Coroutine
 
 import aiohttp
 import nest_asyncio
 
-from .network import *
+from . import ssl_connector
+from .compat import FORBIDDEN, OK, UNAUTHORIZED, IncompleteRead, urlencode, urlparse
+from .errorcode import (
+    ER_CONNECTION_TIMEOUT,
+    ER_FAILED_TO_CONNECT_TO_DB,
+    ER_FAILED_TO_REQUEST,
+    ER_RETRYABLE_CODE,
+)
+from .errors import (
+    DatabaseError,
+    Error,
+    ForbiddenError,
+    InterfaceError,
+    OperationalError,
+    RefreshTokenError,
+)
+from .network import (
+    DEFAULT_SOCKET_CONNECT_TIMEOUT,
+    HEADER_AUTHORIZATION_KEY,
+    HEADER_SNOWFLAKE_TOKEN,
+    NO_TOKEN,
+    RetryRequest,
+    SessionPool,
+    SnowflakeRestful,
+    get_http_retryable_error,
+    is_login_request,
+    is_retryable_http_code,
+)
+from .sqlstate import (
+    SQLSTATE_CONNECTION_REJECTED,
+    SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+    SQLSTATE_IO_ERROR,
+)
+from .telemetry_oob import TelemetryService
+from .time_util import TimeoutBackoffCtx
+from .vendored.urllib3.util.url import parse_url
+
+if TYPE_CHECKING:
+    from .connection import SnowflakeConnection
+logger = logging.getLogger(__name__)
 
 # !!!READ ME!!!
 
@@ -163,7 +209,7 @@ def raise_failed_request_error_async(
     )
 
 
-# Yichuan: CURRENTLY UNUSED, see SnowflakeRestfulAsync._request_exec_async
+# YICHUAN: CURRENTLY UNUSED, see SnowflakeRestfulAsync._request_exec_async
 class SnowflakeAuthAsync(aiohttp.BasicAuth):
     def __new__(cls, token: str) -> aiohttp.BasicAuth:
         # for class compatibility with BasicAuth, these parameters are never used
@@ -178,6 +224,15 @@ class SnowflakeAuthAsync(aiohttp.BasicAuth):
 
 
 class SessionPoolAsync(SessionPool):
+    def get_session_async(self) -> aiohttp.ClientSession:
+        """Returns a session from the session pool or creates a new one."""
+        try:
+            session = self._idle_sessions.pop()
+        except IndexError:
+            session = self._rest.make_requests_session_async()
+        self._active_sessions.add(session)
+        return session
+
     async def close_async(self) -> None:
         """Closes all active and idle sessions in this session pool."""
         if self._active_sessions:
@@ -189,6 +244,27 @@ class SessionPoolAsync(SessionPool):
                 logger.info(f"Session cleanup failed: {e}")
         self._active_sessions.clear()
         self._idle_sessions.clear()
+
+
+def make_client_session(loop: asyncio.BaseEventLoop) -> aiohttp.ClientSession:
+    return aiohttp.ClientSession(
+        auth=None,  # YICHUAN: auth=None so auth headers aren't overriden inside ClientSession requests
+        trust_env=True,  # YICHUAN: So aiohttp will read the proxy variables set in proxy.set_proxies
+        connector=ssl_connector.SnowflakeSSLConnector(loop=loop),
+        # loop=loop, # YICHUAN: If we specify loop for connector, the session will borrow it
+    )
+
+
+def get_default_aiohttp_session_request_kwargs(url: str):
+    return {
+        "proxy": None,  # to make sure env variables for proxy aren't overriden
+        # Yichuan: Should be fine specifying this unconditionally as proxy_headers will be ignored if no proxy
+        # is specified in env variables
+        # (If you want to see for yourself, check that proxy_headers are only used to set the attribute
+        # ClientRequest.proxy_headers, which are in turn only used in TCPConnector._create_proxy_connection)
+        "proxy_headers": {"Host": parse_url(url).hostname},
+        "ssl": ssl_connector.create_context(),
+    }
 
 
 class SnowflakeRestfulAsync(SnowflakeRestful):
@@ -217,13 +293,13 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
         ] = collections.defaultdict(lambda: SessionPoolAsync(self))
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
-        ssl_wrap_socket.FEATURE_OCSP_MODE = (
+        ssl_connector.FEATURE_OCSP_MODE = (
             self._connection._ocsp_mode()
             if self._connection
-            else ssl_wrap_socket.DEFAULT_OCSP_MODE
+            else ssl_connector.DEFAULT_OCSP_MODE
         )
         # cache file name (enabled by default)
-        ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
+        ssl_connector.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
             self._connection._ocsp_response_cache_filename if self._connection else None
         )
 
@@ -474,25 +550,21 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
                     token=token
                 )
 
-            # Yichuan: No need to track these as aiohttp doesn't have is_raw_binary
-
+            # YICHUAN: No need to track these as aiohttp doesn't have is_raw_binary
             # download_start_time = get_time_millis()
+            # download_end_time = get_time_millis()
 
+            # YICHUAN: It is not required to call release on the response object. When the client fully receives the
+            # payload, the underlying connection automatically returns back to pool. If the payload is not fully read,
+            # the connection is closed
             resp = await session.request(
                 method=method,
                 url=full_url,
                 headers=headers,
                 data=input_data,
-                proxy=None,
-                # Yichuan: Should be fine specifying this unconditionally as proxy_headers will be ignored if no proxy
-                # is specified in env variables
-                # (If you want to see for yourself, check that proxy_headers are only used to set the attribute
-                # ClientRequest.proxy_headers, which are in turn only used in TCPConnector._create_proxy_connection)
-                proxy_headers={"Host": parse_url(full_url).hostname},
-                ssl=None,  # Yichuan: Default SSL check, replace later
+                timeout=aiohttp.ClientTimeout(socket_timeout),
+                **get_default_aiohttp_session_request_kwargs(url=full_url),
             )
-
-            # download_end_time = get_time_millis()
 
             try:
                 if resp.status == OK:
@@ -595,15 +667,13 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
             )
             raise err
 
-    # Yichuan: Override method, not _async because it's not an async method
-    def make_requests_session(self) -> aiohttp.ClientSession:
-        return aiohttp.ClientSession(
-            auth=None,  # Yichuan: auth=None so auth headers aren't overriden inside ClientSession requests
-            trust_env=True,  # Yichuan: So aiohttp will read the proxy variables set in proxy.set_proxies
-            loop=self._loop_runner.loop,
-        )
+    # YICHUAN: Override method, !!!not _async because it's not an async method!!!
+    # UPDATE, add _async suffix so SnowflakeRestfulAsync.make_requests_session still functions normally for any usages
+    # not yet updated to async
+    def make_requests_session_async(self) -> aiohttp.ClientSession:
+        return make_client_session(self._loop_runner.loop)
 
-    # Yichuan: Literally copy & pasted but unfortunately needed because this method needs to be async
+    # YICHUAN: Literally copy & pasted but unfortunately needed because this method needs to be async
 
     # Q for later: Why do we need to pool sessions when sessions already pool connections for different hosts?
     @contextlib.asynccontextmanager
@@ -612,7 +682,7 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
 
         # short-lived session, not added to the _sessions_map
         if self._connection.disable_request_pooling:
-            session = self.make_requests_session()
+            session = self.make_requests_session_async()
             try:
                 yield session
             finally:
@@ -624,7 +694,7 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
                 hostname = None
 
             session_pool: SessionPoolAsync = self._sessions_map[hostname]
-            session = session_pool.get_session()
+            session = session_pool.get_session_async()
             logger.debug(
                 f"Session status for SessionPoolAsync '{hostname}', {session_pool}"
             )

@@ -143,3 +143,7 @@ def exponential_backoff(
             yield random.randint(0, sleep) if enable_jitter else sleep
 
     return generator
+
+
+# Exponential is standard for anything outside SnowflakeConnection that wants to use this module
+DEFAULT_TIMEOUT_GENERATOR_FUNCTION = exponential_backoff()

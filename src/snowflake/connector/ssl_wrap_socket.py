@@ -87,7 +87,7 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
         v = SFOCSP(
             ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
             use_fail_open=FEATURE_OCSP_MODE == OCSPMode.FAIL_OPEN,
-        ).validate(server_hostname, ret.connection)
+        ).validate(server_hostname, ret.connection.get_peer_cert_chain())
         if not v:
             raise OperationalError(
                 msg=(
