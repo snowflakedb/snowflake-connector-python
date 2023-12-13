@@ -304,7 +304,7 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
         SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending null to arrow array, error code: %d", returnCode);
     } else {
         auto originalVal = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
-        ArrowDecimal arrowDecimal();
+        ArrowDecimal arrowDecimal;
         ArrowDecimalInit(&arrowDecimal, 128, 38, scale);
         ArrowDecimalSetInt(&arrowDecimal, originalVal);
         returnCode = ArrowArrayAppendDecimal(newArray, &arrowDecimal);

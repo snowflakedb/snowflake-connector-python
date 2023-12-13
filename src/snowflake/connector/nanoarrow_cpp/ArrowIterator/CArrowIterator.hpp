@@ -59,7 +59,7 @@
 namespace sf
 {
 
-static const char* const NANOARROW_TYPE_ENUM_STRING[];
+extern const char* const NANOARROW_TYPE_ENUM_STRING[];
 
 /**
  * A simple struct to contain return data back cython.
@@ -71,6 +71,11 @@ static const char* const NANOARROW_TYPE_ENUM_STRING[];
 class ReturnVal
 {
 public:
+  ReturnVal() :
+    successObj(nullptr), exception(nullptr)
+  {
+  }
+
   ReturnVal(PyObject * obj, PyObject *except) :
     successObj(obj), exception(except)
   {
@@ -95,7 +100,7 @@ public:
   /**
    * @return a python object which might be current row or an Arrow Table
    */
-  virtual std::ReturnVal next() = 0;
+  virtual ReturnVal next() = 0;
   virtual std::vector<uintptr_t> getArrowArrayPtrs() { return {}; };
   virtual std::vector<uintptr_t> getArrowSchemaPtrs() { return {}; };
 
