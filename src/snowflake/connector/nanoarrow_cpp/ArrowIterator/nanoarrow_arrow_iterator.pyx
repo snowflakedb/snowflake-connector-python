@@ -224,7 +224,7 @@ cdef class PyArrowTableIterator(PyArrowIterator):
             self.number_to_decimal,
         )
         cdef ReturnVal cret = self.cIterator.checkInitializationStatus()
-        if self.cret.exception:
+        if cret.exception:
             Error.errorhandler_wrapper(
                 self.cursor.connection if self.cursor is not None else None,
                 self.cursor,
