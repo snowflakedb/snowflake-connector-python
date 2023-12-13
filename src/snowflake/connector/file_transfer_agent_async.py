@@ -4,9 +4,13 @@
 
 from __future__ import annotations
 
-from .file_transfer_agent import *
-from .file_transfer_agent import _chunk_size_calculator
-from .network_async import EventLoopThreadRunner
+from .constants import AZURE_FS, GCS_FS, LOCAL_FS, S3_FS
+from .file_transfer_agent import (
+    SnowflakeFileMeta,
+    SnowflakeFileTransferAgent,
+    _chunk_size_calculator,
+)
+from .storage_client import SnowflakeStorageClient
 
 # YICHUAN: SnowflakeFileTransferAgentAsync is identical to SnowflakeFileTransferAgent, except it uses instances of
 # SnowflakeStorageClientAsync instead of SnowflakeStorageClient

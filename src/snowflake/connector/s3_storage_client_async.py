@@ -4,12 +4,34 @@
 
 from __future__ import annotations
 
-import asyncio
+import xml.etree.ElementTree as ET
+from datetime import datetime
+from io import IOBase
+from logging import getLogger
 
 import aiohttp
 
-from .s3_storage_client import *
+from .compat import quote, urlparse
+from .constants import (
+    HTTP_HEADER_CONTENT_TYPE,
+    HTTP_HEADER_VALUE_OCTET_STREAM,
+    EncryptionMetadata,
+    FileHeader,
+    ResultStatus,
+)
+from .s3_storage_client import (
+    AMZ_IV,
+    AMZ_KEY,
+    AMZ_MATDESC,
+    EXPIRED_TOKEN,
+    META_PREFIX,
+    SFC_DIGEST,
+    UNSIGNED_PAYLOAD,
+    SnowflakeS3RestClient,
+)
 from .storage_client_async import SnowflakeStorageClientAsync
+
+logger = getLogger(__name__)
 
 
 # YICHUAN: Prioritize methods inherited SnowflakeStorageClientAsync because it will only override what it needs to

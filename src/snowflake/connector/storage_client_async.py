@@ -5,16 +5,26 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import shutil
 import ssl
+from abc import abstractmethod
+from logging import getLogger
+from math import ceil
+from typing import Any, Callable
 
 import aiohttp
 
+from .constants import FileHeader, ResultStatus
+from .encryption_util import SnowflakeEncryptionUtil
+from .errors import RequestExceedMaxRetryError
 from .network_async import (
     EventLoopThreadRunner,
     get_default_aiohttp_session_request_kwargs,
-    make_client_session,
 )
-from .storage_client import *
+from .storage_client import SnowflakeStorageClient
+
+logger = getLogger(__name__)
 
 # YICHUAN: Not much to explain in this file, we add async versions of existing private methods and override public
 # methods to call async private methods instead
@@ -36,7 +46,9 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
             # YICHUAN: This will not be an issue in the future as we progressively make higher-level functions async
             # because at that point, the loop runner will have a wider scope; currently, SnowflakeRestfulAsync owns the
             # loop runner, so we're locked to it
-            raise Exception("PUT/GET with use_async unsupported without active SnowflakeConnection")
+            raise Exception(
+                "PUT/GET with use_async unsupported without active SnowflakeConnection"
+            )
 
     @abstractmethod
     async def get_file_header_async(self, filename: str) -> FileHeader | None:
@@ -119,7 +131,9 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
     ) -> aiohttp.ClientResponse:
         url = ""  # YICHUAN: Not sure why this is a bytes string in original version, but aiohttp doesn't like bytes
         if not self.meta.sfagent and self.meta.sfagent._cursor.connection:
-            raise Exception("PUT/GET with use_async unsupported without active SnowflakeConnection")
+            raise Exception(
+                "PUT/GET with use_async unsupported without active SnowflakeConnection"
+            )
         conn = self.meta.sfagent._cursor.connection
 
         while self.retry_count[retry_id] < self.max_retry:
@@ -290,7 +304,7 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
 
     # Override in GCS
     async def _has_expired_presigned_url_async(
-        self, response: requests.Response
+        self, response: aiohttp.ClientResponse
     ) -> bool:
         return False
 

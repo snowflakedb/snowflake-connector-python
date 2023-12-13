@@ -257,9 +257,9 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         bool,
     ),  # Enable sending retryReason in response header for query-requests
     "use_async": (
-        False,
+        True,
         bool,
-    ), # Experimental, internal use only, use aiohttp for requests instead of urllib3
+    ),  # Experimental, internal use only, use aiohttp for requests instead of urllib3
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -873,6 +873,7 @@ class SnowflakeConnection:
 
         if self._use_async:
             from .network_async import SnowflakeRestfulAsync
+
             rest_class = SnowflakeRestfulAsync
         else:
             rest_class = SnowflakeRestful

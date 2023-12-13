@@ -5,15 +5,60 @@
 from __future__ import annotations
 
 import asyncio
+import collections
+import contextlib
+import gzip
+import itertools
+import logging
 import ssl
-from threading import Thread
-from typing import Coroutine
+import time
+import traceback
+from threading import Lock, Thread
+from typing import TYPE_CHECKING, Any, Coroutine
 
 import aiohttp
 import nest_asyncio
 
 from . import ssl_connector
-from .network import *
+from .compat import FORBIDDEN, OK, UNAUTHORIZED, IncompleteRead, urlencode, urlparse
+from .errorcode import (
+    ER_CONNECTION_TIMEOUT,
+    ER_FAILED_TO_CONNECT_TO_DB,
+    ER_FAILED_TO_REQUEST,
+    ER_RETRYABLE_CODE,
+)
+from .errors import (
+    DatabaseError,
+    Error,
+    ForbiddenError,
+    InterfaceError,
+    OperationalError,
+    RefreshTokenError,
+)
+from .network import (
+    DEFAULT_SOCKET_CONNECT_TIMEOUT,
+    HEADER_AUTHORIZATION_KEY,
+    HEADER_SNOWFLAKE_TOKEN,
+    NO_TOKEN,
+    RetryRequest,
+    SessionPool,
+    SnowflakeRestful,
+    get_http_retryable_error,
+    is_login_request,
+    is_retryable_http_code,
+)
+from .sqlstate import (
+    SQLSTATE_CONNECTION_REJECTED,
+    SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+    SQLSTATE_IO_ERROR,
+)
+from .telemetry_oob import TelemetryService
+from .time_util import TimeoutBackoffCtx
+from .vendored.urllib3.util.url import parse_url
+
+if TYPE_CHECKING:
+    from .connection import SnowflakeConnection
+logger = logging.getLogger(__name__)
 
 # !!!READ ME!!!
 
@@ -179,7 +224,7 @@ class SnowflakeAuthAsync(aiohttp.BasicAuth):
 
 
 class SessionPoolAsync(SessionPool):
-    def get_session_async(self) -> Session:
+    def get_session_async(self) -> aiohttp.ClientSession:
         """Returns a session from the session pool or creates a new one."""
         try:
             session = self._idle_sessions.pop()
@@ -517,6 +562,7 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
                 url=full_url,
                 headers=headers,
                 data=input_data,
+                timeout=aiohttp.ClientTimeout(socket_timeout),
                 **get_default_aiohttp_session_request_kwargs(url=full_url),
             )
 
