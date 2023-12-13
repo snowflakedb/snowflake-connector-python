@@ -41,7 +41,7 @@ public:
   {
   }
 
-  explicit UniqueRef(UniqueRef&& other) : UniqueRef(other.release())
+  UniqueRef(UniqueRef&& other) : UniqueRef(other.release())
   {
   }
 
@@ -56,10 +56,19 @@ public:
     reset();
   }
 
+  // Make this `UniqueRef` take ownership of the reference
+  // `pyObj`, if it is not null. If this `UniqueRef` previously
+  // owned a reference, it is released (via decrementing the
+  // refcount).
+  //
+  // This provides a similar guarantee as `Py_SETREF()` or
+  // `Py_CLEAR()`, by setting the new reference before
+  // decrementing the old reference.
   void reset(PyObject* pyObj = nullptr)
   {
-    Py_XDECREF(m_pyObj);
+    PyObject *toDelete = m_pyObj;
     m_pyObj = pyObj;
+    Py_XDECREF(toDelete);
   }
 
   PyObject* release() noexcept

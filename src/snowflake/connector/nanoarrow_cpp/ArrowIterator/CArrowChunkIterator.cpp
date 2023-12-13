@@ -40,7 +40,7 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, i
                m_columnCount, m_useNumpy);
 }
 
-std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
+ReturnVal CArrowChunkIterator::next()
 {
   m_rowIndexInBatch++;
 
@@ -48,7 +48,7 @@ std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
   {
     this->createRowPyObject();
     SF_CHECK_PYTHON_ERR()
-    return std::make_shared<ReturnVal>(m_latestReturnedRow.get(), nullptr);
+    return ReturnVal(m_latestReturnedRow.get(), nullptr);
   }
   else
   {
@@ -69,13 +69,13 @@ std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
       this->createRowPyObject();
       SF_CHECK_PYTHON_ERR()
 
-      return std::make_shared<ReturnVal>(m_latestReturnedRow.get(), nullptr);
+      return ReturnVal(m_latestReturnedRow.get(), nullptr);
     }
   }
 
   /** It looks like no one will decrease the ref of this Py_None, so we don't
    * increment the ref count here */
-  return std::make_shared<ReturnVal>(Py_None, nullptr);
+  return ReturnVal(Py_None, nullptr);
 }
 
 void CArrowChunkIterator::createRowPyObject()

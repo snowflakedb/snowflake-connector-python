@@ -42,7 +42,7 @@ public:
   /**
    * @return an arrow table containing all data in all record batches
    */
-  std::shared_ptr<ReturnVal> next() override;
+  ReturnVal next() override;
   std::vector<uintptr_t> getArrowArrayPtrs() override;
   std::vector<uintptr_t> getArrowSchemaPtrs() override;
 
