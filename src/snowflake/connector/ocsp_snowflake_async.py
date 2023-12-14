@@ -8,7 +8,7 @@ import asyncio
 import json
 import os
 import time
-from typing import Any, Dict
+from typing import Any
 
 import aiohttp
 from asn1crypto.ocsp import CertId
@@ -25,6 +25,7 @@ from .errorcode import (
     ER_OCSP_URL_INFO_MISSING,
 )
 from .errors import RevocationCheckError
+from .event_loop_runner import LOOP_RUNNER
 from .network import PYTHON_CONNECTOR_USER_AGENT
 from .network_async import (
     get_default_aiohttp_session_request_kwargs,
@@ -351,7 +352,7 @@ class SnowflakeOCSPAsync(SnowflakeOCSP):
         if not self.is_enabled_fail_open():
             sf_max_retry = SnowflakeOCSP.CA_OCSP_RESPONDER_MAX_RETRY_FC
 
-        async with make_client_session(asyncio.get_running_loop()) as session:
+        async with make_client_session(loop=LOOP_RUNNER.loop) as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = DEFAULT_TIMEOUT_GENERATOR_FUNCTION()

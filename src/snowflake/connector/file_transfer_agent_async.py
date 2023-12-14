@@ -38,6 +38,3 @@ class SnowflakeFileTransferAgentAsync(SnowflakeFileTransferAgent):
         elif self._stage_location_type == GCS_FS:
             raise Exception("GCS not supported for SnowflakeFileTransferAgentAsync")
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
-
-    def close(self) -> None:
-        self._loop_runner.stop()

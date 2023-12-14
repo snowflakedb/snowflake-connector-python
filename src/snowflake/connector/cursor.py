@@ -862,10 +862,14 @@ class SnowflakeCursor:
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
                 if self._connection._use_async:
-                    from .file_transfer_agent_async import SnowflakeFileTransferAgentAsync
+                    from .file_transfer_agent_async import (
+                        SnowflakeFileTransferAgentAsync,
+                    )
+
                     agent_class = SnowflakeFileTransferAgentAsync
                 else:
                     from .file_transfer_agent import SnowflakeFileTransferAgent
+
                     agent_class = SnowflakeFileTransferAgent
 
                 # Decide whether to use the old, or new code path
@@ -888,12 +892,9 @@ class SnowflakeCursor:
                     multipart_threshold=data.get("threshold"),
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
                 )
-                try:
-                    sf_file_transfer_agent.execute()
-                    data = sf_file_transfer_agent.result()
-                    self._total_rowcount = len(data["rowset"]) if "rowset" in data else -1
-                finally:
-                    sf_file_transfer_agent.close()
+                sf_file_transfer_agent.execute()
+                data = sf_file_transfer_agent.result()
+                self._total_rowcount = len(data["rowset"]) if "rowset" in data else -1
 
             if _exec_async:
                 self.connection._async_sfqids[self._sfqid] = None
