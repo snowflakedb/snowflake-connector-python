@@ -19,7 +19,7 @@ from .constants import FileHeader, ResultStatus
 from .encryption_util import SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
 from .event_loop_runner import LOOP_RUNNER
-from .network_async import get_default_aiohttp_session_request_kwargs
+from .network_async import get_default_aiohttp_session_request_kwargs, make_client_session
 from .storage_client import SnowflakeStorageClient
 
 logger = getLogger(__name__)
@@ -116,20 +116,21 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
         retry_id: int,
     ) -> aiohttp.ClientResponse:
         url = ""  # YICHUAN: Not sure why this is a bytes string in original version, but aiohttp doesn't like bytes
-        if not self.meta.sfagent and self.meta.sfagent._cursor.connection:
-            raise Exception(
-                "PUT/GET with use_async unsupported without active SnowflakeConnection"
-            )
-        conn = self.meta.sfagent._cursor.connection
+        if self.meta.sfagent and self.meta.sfagent._cursor.connection:
+            conn = self.meta.sfagent._cursor.connection
 
         while self.retry_count[retry_id] < self.max_retry:
             cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
             try:
                 logger.debug("storage client request with session from connection")
+                if conn:
+                    session_manager = conn._rest._use_requests_session_async(url)
+                else:
+                    session_manager = make_client_session(LOOP_RUNNER.loop)
 
                 # YICHUAN: Self explanatory, of course get_request_args needs to be modified for aiohttp as well
-                async with conn._rest._use_requests_session_async(url) as session:
+                async with session_manager as session:
                     response = await session.request(
                         method=verb,
                         url=url,
