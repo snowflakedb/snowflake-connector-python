@@ -33,6 +33,7 @@ from typing import (
 )
 
 from typing_extensions import Self
+from warnings import warn
 
 from snowflake.connector.result_batch import create_batches_from_response
 from snowflake.connector.result_set import ResultSet
@@ -1333,8 +1334,25 @@ class SnowflakeCursor:
         )
         return self._result_set._fetch_arrow_batches()
 
-    def fetch_arrow_all(self) -> Table:
+    @overload
+    def fetch_arrow_all(self, force_return_table: Literal[False] = False) -> None:
+        ...
+
+    @overload
+    def fetch_arrow_all(self, force_return_table: Literal[True] = True) -> Table:
+        ...
+
+    def fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
+        if not force_return_table:
+            warn(
+                "The behaviour of fetch_arrow_all when the query returns zero rows "
+                "will change from returning None to returning an empty pyarrow table with "
+                "schema using the highest bit length for each column.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.check_can_use_arrow_resultset()
+
         if self._prefetch_hook is not None:
             self._prefetch_hook()
         if self._query_result_format != "arrow":
