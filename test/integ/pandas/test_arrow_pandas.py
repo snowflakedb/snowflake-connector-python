@@ -753,9 +753,7 @@ def validate_pandas(
                         assert abs(c_case - c_new) < epsilon, (
                             "{} row, {} column: original value is {}, "
                             "new value is {}, epsilon is {} \
-                        values are not equal".format(
-                                i, j, cases[i], c_new, epsilon
-                            )
+                        values are not equal".format(i, j, cases[i], c_new, epsilon)
                         )
 
 
@@ -887,9 +885,7 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method="one"):
         # verify the correctness
         # only do it when fetch one dataframe
         if method == "one":
-            assert (
-                df_old.shape == df_new.shape
-            ), "the shape of old dataframe is {}, the shape of new dataframe is {}, \
+            assert df_old.shape == df_new.shape, "the shape of old dataframe is {}, the shape of new dataframe is {}, \
                                      shapes are not equal".format(
                 df_old.shape, df_new.shape
             )
@@ -1238,10 +1234,13 @@ def test_arrow_zero_rows(conn_cnx):
         with cnx.cursor() as cur:
             cur.execute(SQL_ENABLE_ARROW)
             cur.execute("select 1::NUMBER(38,0) limit 0")
-            table = cur.fetch_arrow_all()
-            # Snowflake will return an integery dtype with maximum bit-depth if
+            table = cur.fetch_arrow_all(force_return_table=True)
+            # Snowflake will return an integer dtype with maximum bit-length if
             # no rows are returned
             assert table.schema[0].type == pyarrow.int64()
+            cur.execute("select 1::NUMBER(38,0) limit 0")
+            # test default behavior
+            assert cur.fetch_arrow_all(force_return_table=False) is None
 
 
 @pytest.mark.parametrize("fetch_fn_name", ["to_arrow", "to_pandas", "create_iter"])

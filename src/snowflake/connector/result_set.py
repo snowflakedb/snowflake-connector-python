@@ -9,7 +9,16 @@ from collections import deque
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Callable, Deque, Iterable, Iterator
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Deque,
+    Iterable,
+    Iterator,
+    Literal,
+    overload,
+)
 
 from .constants import IterUnit
 from .errors import NotSupportedError
@@ -164,13 +173,21 @@ class ResultSet(Iterable[list]):
         self._can_create_arrow_iter()
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow")
 
-    def _fetch_arrow_all(self) -> Table:
+    @overload
+    def _fetch_arrow_all(self, force_return_table: Literal[False] = False) -> None:
+        ...
+
+    @overload
+    def _fetch_arrow_all(self, force_return_table: Literal[True] = True) -> Table:
+        ...
+
+    def _fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
         """Fetches a single Arrow Table from all of the ``ResultBatch``."""
         tables = list(self._fetch_arrow_batches())
         if tables:
             return pa.concat_tables(tables)
         else:
-            return self.batches[0].to_arrow()
+            return self.batches[0].to_arrow() if force_return_table else None
 
     def _fetch_pandas_batches(self, **kwargs) -> Iterator[DataFrame]:
         """Fetches Pandas dataframes in batches, where batch refers to Snowflake Chunk.
