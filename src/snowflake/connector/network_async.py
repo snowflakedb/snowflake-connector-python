@@ -160,8 +160,10 @@ class SessionPoolAsync(SessionPool):
         self._active_sessions.clear()
         self._idle_sessions.clear()
 
-
-def make_client_session(loop: asyncio.BaseEventLoop) -> aiohttp.ClientSession:
+# YICHUAN: In theory we should never need to pass in loop because it is only called from inside async functions, and
+# the loop running when the ClientSession was created should be the loop it will always run on, even when it is cached
+# for later reuse
+def make_client_session(loop: asyncio.BaseEventLoop | None = None) -> aiohttp.ClientSession:
     return aiohttp.ClientSession(
         auth=None,  # YICHUAN: auth=None so auth headers aren't overriden inside ClientSession requests
         trust_env=True,  # YICHUAN: So aiohttp will read the proxy variables set in proxy.set_proxies
@@ -583,7 +585,9 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
     # UPDATE, add _async suffix so SnowflakeRestfulAsync.make_requests_session still functions normally for any usages
     # not yet updated to async
     def make_requests_session_async(self) -> aiohttp.ClientSession:
-        return make_client_session(LOOP_RUNNER.loop)
+        # YICHUAN: In the future we may not be able to  unconditionally pass in LOOP_RUNNER.loop; we may need to check
+        # which event loop the client session is actually going to be running on
+        return make_client_session()
 
     # YICHUAN: Literally copy & pasted but unfortunately needed because this method needs to be async
 

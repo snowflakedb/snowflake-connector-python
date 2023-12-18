@@ -52,6 +52,19 @@ class EventLoopThreadRunner:
         self._thread: Thread = Thread(
             target=lambda loop: loop.run_forever(), args=(self._loop,)
         )
+        self._running = False
+
+    @property
+    def loop(self) -> asyncio.BaseEventLoop:
+        if not self._running:
+            raise Exception("Runner is not running and has no running loop")
+
+        return self._loop
+
+    def _start(self) -> None:
+        if self._running:
+            raise Exception("Running is already running")
+
         self._thread.start()
 
         # YICHUAN: Wait for event loop to actually start so no coroutines are run while thread is still working, this
@@ -59,18 +72,11 @@ class EventLoopThreadRunner:
         while not self._loop.is_running():
             time.sleep(0.1)
 
-        self._stopped = False
-
-    @property
-    def loop(self) -> asyncio.BaseEventLoop:
-        if self._stopped:
-            raise Exception("Runner is closed and has no running loop")
-
-        return self._loop
+        self._running = True
 
     def _stop(self) -> None:
-        if self._stopped:
-            raise Exception("Runner is already closed")
+        if not self._running:
+            raise Exception("Runner is already stopped")
 
         # YICHUAN: IT IS NOT SAFE TO ATTEMPT TO CLOSE A LOOP FROM ANOTHER (main) THREAD
         self._loop.call_soon_threadsafe(self._loop.stop)
@@ -81,11 +87,11 @@ class EventLoopThreadRunner:
         if self._thread.is_alive():
             raise Exception("Failed to stop runner thread")
 
-        self._stopped = True
+        self._running = False
 
     def run_coro(self, coro: Coroutine) -> Any:
-        if self._stopped:
-            raise Exception(f"Runner is closed and cannot run coroutine: {coro}")
+        if not self._running:
+            raise Exception(f"Runner not running and cannot run coroutine: {coro}")
 
         res = asyncio.run_coroutine_threadsafe(coro, loop=self._loop)
         # YICHUAN: Waiting for the result will block, which is what we want for a sync wrapper
@@ -101,19 +107,16 @@ def run_until_complete_safe(loop, coro) -> Any:
 
 
 STATE_LOCK: Lock = Lock()
-LOOP_RUNNER: EventLoopThreadRunner | None = None
+LOOP_RUNNER: EventLoopThreadRunner = EventLoopThreadRunner()
 
 
 def start() -> None:
     global STATE_LOCK, LOOP_RUNNER
     with STATE_LOCK:
-        if LOOP_RUNNER is None:
-            LOOP_RUNNER = EventLoopThreadRunner()
+        LOOP_RUNNER._start()
 
 
 def stop() -> None:
     global STATE_LOCK, LOOP_RUNNER
     with STATE_LOCK:
-        if LOOP_RUNNER is not None:
-            LOOP_RUNNER._stop()
-            LOOP_RUNNER = None
+        LOOP_RUNNER._stop()

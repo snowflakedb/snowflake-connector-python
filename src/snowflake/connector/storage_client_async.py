@@ -123,11 +123,12 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
             cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
             try:
-                logger.debug("storage client request with session from connection")
                 if conn:
+                    logger.debug("storage client request with session from connection")
                     session_manager = conn._rest._use_requests_session_async(url)
                 else:
-                    session_manager = make_client_session(LOOP_RUNNER.loop)
+                    logger.debug("storage client request with new session")
+                    session_manager = make_client_session()
 
                 # YICHUAN: Self explanatory, of course get_request_args needs to be modified for aiohttp as well
                 async with session_manager as session:

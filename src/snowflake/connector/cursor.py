@@ -972,9 +972,16 @@ class SnowflakeCursor:
             ResultMetadata.from_column(col) for col in data["rowtype"]
         ]
 
-        result_chunks = create_batches_from_response(
-            self, self._query_result_format, data, self._description
-        )
+        if self._connection._use_async:
+            from snowflake.connector.result_batch_async import create_batches_from_response_async
+
+            result_chunks = create_batches_from_response_async(
+                self, self._query_result_format, data, self._description
+            )
+        else:
+            result_chunks = create_batches_from_response(
+                self, self._query_result_format, data, self._description
+            )
 
         if not (is_dml or self.is_file_transfer):
             logger.info(

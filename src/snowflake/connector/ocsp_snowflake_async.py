@@ -352,7 +352,7 @@ class SnowflakeOCSPAsync(SnowflakeOCSP):
         if not self.is_enabled_fail_open():
             sf_max_retry = SnowflakeOCSP.CA_OCSP_RESPONDER_MAX_RETRY_FC
 
-        async with make_client_session(loop=LOOP_RUNNER.loop) as session:
+        async with make_client_session() as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = DEFAULT_TIMEOUT_GENERATOR_FUNCTION()
