@@ -753,7 +753,9 @@ def validate_pandas(
                         assert abs(c_case - c_new) < epsilon, (
                             "{} row, {} column: original value is {}, "
                             "new value is {}, epsilon is {} \
-                        values are not equal".format(i, j, cases[i], c_new, epsilon)
+                        values are not equal".format(
+                                i, j, cases[i], c_new, epsilon
+                            )
                         )
 
 
@@ -885,7 +887,9 @@ def fetch_pandas(conn_cnx, sql, row_count, col_count, method="one"):
         # verify the correctness
         # only do it when fetch one dataframe
         if method == "one":
-            assert df_old.shape == df_new.shape, "the shape of old dataframe is {}, the shape of new dataframe is {}, \
+            assert (
+                df_old.shape == df_new.shape
+            ), "the shape of old dataframe is {}, the shape of new dataframe is {}, \
                                      shapes are not equal".format(
                 df_old.shape, df_new.shape
             )
