@@ -191,7 +191,6 @@ def test_write_pandas_with_overwrite(
                 # Check number of rows
                 assert result["COUNT(*)"] == 1
 
-
             if not quote_identifiers:
                 original_result = (
                     cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
