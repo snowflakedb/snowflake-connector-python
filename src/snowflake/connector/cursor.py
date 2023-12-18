@@ -33,7 +33,6 @@ from typing import (
 )
 
 from typing_extensions import Self
-from warnings import warn
 
 from snowflake.connector.result_batch import create_batches_from_response
 from snowflake.connector.result_set import ResultSet
@@ -1345,11 +1344,9 @@ class SnowflakeCursor:
     def fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
         """
         Args:
-            force_return_table: Set to True so that when the query returns zero rows.
-
-            Behavior will change from returning None to returning an empty pyarrow table
-            with schema using the highest bit length for each column. Future behaviour will
-            be as if force_return_table = True, similar to the fetch_pandas_all method.
+            force_return_table: Set to True so that when the query returns zero rows,
+                an empty pyarrow table will be returned with schema using the highest bit length for each column.
+                Default value is False in which case None is returned in case of zero rows.
         """
         self.check_can_use_arrow_resultset()
 
