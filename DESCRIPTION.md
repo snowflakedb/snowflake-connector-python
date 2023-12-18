@@ -9,6 +9,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 
+- v3.4.1(TBD)
+
+  - Fixed a bug where `write_pandas` wasn't truncating the target table.
+
 - v3.4.0(November 03,2023)
 
   - Added support for `use_logical_type` in `write_pandas`.
