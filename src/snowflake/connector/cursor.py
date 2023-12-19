@@ -1333,14 +1333,29 @@ class SnowflakeCursor:
         )
         return self._result_set._fetch_arrow_batches()
 
-    def fetch_arrow_all(self) -> Table | None:
+    @overload
+    def fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None:
+        ...
+
+    @overload
+    def fetch_arrow_all(self, force_return_table: Literal[True]) -> Table:
+        ...
+
+    def fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
+        """
+        Args:
+            force_return_table: Set to True so that when the query returns zero rows,
+                an empty pyarrow table will be returned with schema using the highest bit length for each column.
+                Default value is False in which case None is returned in case of zero rows.
+        """
         self.check_can_use_arrow_resultset()
+
         if self._prefetch_hook is not None:
             self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
-        return self._result_set._fetch_arrow_all()
+        return self._result_set._fetch_arrow_all(force_return_table=force_return_table)
 
     def fetch_pandas_batches(self, **kwargs: Any) -> Iterator[DataFrame]:
         """Fetches a single Arrow Table."""
