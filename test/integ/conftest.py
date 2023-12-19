@@ -177,6 +177,8 @@ def init_test_schema(db_parameters) -> Generator[None, None, None]:
         database=ret["database"],
         account=ret["account"],
         protocol=ret["protocol"],
+        session_token=ret["session_token"],
+        master_token=ret["master_token"],
     ) as con:
         con.cursor().execute(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}")
         yield

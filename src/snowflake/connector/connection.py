@@ -932,6 +932,9 @@ class SnowflakeConnection:
                 self._master_token,
                 self._master_validity_in_seconds,
             )
+            auth._rest._heartbeat()
+            logger.debug("Session and master token validation successful.")
+
         else:
             if self.auth_class is not None:
                 if type(
@@ -1135,41 +1138,35 @@ class SnowflakeConnection:
             ]:
                 self._authenticator = auth_tmp
 
-        if (
-            not self._master_token
-            and not self._session_token
-            and not self.user
-            and self._authenticator != OAUTH_AUTHENTICATOR
-        ):
-            # OAuth Authentication does not require a username
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {"msg": "User is empty", "errno": ER_NO_USER},
-            )
+        if not self._master_token and not self._session_token:
+            if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
+                # OAuth Authentication does not require a username
+                Error.errorhandler_wrapper(
+                    self,
+                    None,
+                    ProgrammingError,
+                    {"msg": "User is empty", "errno": ER_NO_USER},
+                )
 
-        if self._private_key or self._private_key_file:
-            self._authenticator = KEY_PAIR_AUTHENTICATOR
+            if self._private_key or self._private_key_file:
+                self._authenticator = KEY_PAIR_AUTHENTICATOR
 
-        if (
-            self.auth_class is None
-            and self._authenticator
-            not in [
-                EXTERNAL_BROWSER_AUTHENTICATOR,
-                OAUTH_AUTHENTICATOR,
-                KEY_PAIR_AUTHENTICATOR,
-            ]
-            and not self._password
-            and not self._master_token
-            and not self._session_token
-        ):
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
-            )
+            if (
+                self.auth_class is None
+                and self._authenticator
+                not in [
+                    EXTERNAL_BROWSER_AUTHENTICATOR,
+                    OAUTH_AUTHENTICATOR,
+                    KEY_PAIR_AUTHENTICATOR,
+                ]
+                and not self._password
+            ):
+                Error.errorhandler_wrapper(
+                    self,
+                    None,
+                    ProgrammingError,
+                    {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
+                )
 
         if not self._account:
             Error.errorhandler_wrapper(
