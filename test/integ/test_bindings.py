@@ -450,7 +450,7 @@ create or replace table {name} (
             cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
             dates = [
                 [date.fromisoformat("1750-05-09")],
-                [date.fromisoformat("1969-12-31")],
+                [date.fromisoformat("1969-01-01")],
                 [date.fromisoformat("1970-01-01")],
                 [date.fromisoformat("2023-05-12")],
                 [date.fromisoformat("2999-12-31")],
@@ -462,7 +462,7 @@ create or replace table {name} (
             ret = c.execute(f'SELECT c1 from {db_parameters["name"]}').fetchall()
             assert ret == [
                 (date(1750, 5, 9),),
-                (date(1969, 12, 31),),
+                (date(1969, 1, 1),),
                 (date(1970, 1, 1),),
                 (date(2023, 5, 12),),
                 (date(2999, 12, 31),),
@@ -478,6 +478,19 @@ drop table if exists {name}
                     name=db_parameters["name"]
                 )
             )
+
+
+@pytest.mark.skipolddriver
+def test_binding_insert_date(conn_cnx, db_parameters):
+    bind_query = "SELECT TRY_TO_DATE(TO_CHAR(?,?),?)"
+    bind_variables = (date(2016, 4, 10), "YYYY-MM-DD", "YYYY-MM-DD")
+    bind_variables_2 = (date(2016, 4, 10), "YYYY-MM-DD", "DD-MON-YYYY")
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        assert cursor.execute(bind_query, bind_variables).fetchall() == [
+            (date(2016, 4, 10),)
+        ]
+        # the second sql returns None because 2016-04-10 doesn't comply with the format DD-MON-YYYY
+        assert cursor.execute(bind_query, bind_variables_2).fetchall() == [(None,)]
 
 
 @pytest.mark.skipolddriver

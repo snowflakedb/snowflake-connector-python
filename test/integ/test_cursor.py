@@ -138,6 +138,20 @@ def _check_results(cursor, results):
     assert results[2] == 123456, "the third result was wrong"
 
 
+def _name_from_description(named_access: bool):
+    if named_access:
+        return lambda meta: meta.name
+    else:
+        return lambda meta: meta[0]
+
+
+def _type_from_description(named_access: bool):
+    if named_access:
+        return lambda meta: meta.type_code
+    else:
+        return lambda meta: meta[1]
+
+
 @pytest.mark.skipolddriver
 def test_insert_select(conn, db_parameters, caplog):
     """Inserts and selects integer data."""
@@ -330,28 +344,42 @@ def test_insert_timestamp_select(conn, db_parameters):
 
         assert current_time == result_time_value[0], "the time result was wrong"
 
-        desc = c.description
-        assert len(desc) == 6, "invalid number of column meta data"
-        assert desc[0][0].upper() == "AA", "invalid column name"
-        assert desc[1][0].upper() == "TSLTZ", "invalid column name"
-        assert desc[2][0].upper() == "TSTZ", "invalid column name"
-        assert desc[3][0].upper() == "TSNTZ", "invalid column name"
-        assert desc[4][0].upper() == "DT", "invalid column name"
-        assert desc[5][0].upper() == "TM", "invalid column name"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[0][1]] == "FIXED"
-        ), f"invalid column name: {constants.FIELD_ID_TO_NAME[desc[0][1]]}"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[1][1]] == "TIMESTAMP_LTZ"
-        ), "invalid column name"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[2][1]] == "TIMESTAMP_TZ"
-        ), "invalid column name"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[3][1]] == "TIMESTAMP_NTZ"
-        ), "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[4][1]] == "DATE", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[5][1]] == "TIME", "invalid column name"
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
+            assert len(desc) == 6, "invalid number of column meta data"
+            assert name(desc[0]).upper() == "AA", "invalid column name"
+            assert name(desc[1]).upper() == "TSLTZ", "invalid column name"
+            assert name(desc[2]).upper() == "TSTZ", "invalid column name"
+            assert name(desc[3]).upper() == "TSNTZ", "invalid column name"
+            assert name(desc[4]).upper() == "DT", "invalid column name"
+            assert name(desc[5]).upper() == "TM", "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "FIXED"
+            ), f"invalid column name: {constants.FIELD_ID_TO_NAME[desc[0][1]]}"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[1])] == "TIMESTAMP_LTZ"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[2])] == "TIMESTAMP_TZ"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[3])] == "TIMESTAMP_NTZ"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[4])] == "DATE"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[5])] == "TIME"
+            ), "invalid column name"
     finally:
         cnx2.close()
 
@@ -483,10 +511,22 @@ def test_insert_binary_select(conn, db_parameters):
         results = [b for (b,) in c]
         assert value == results[0], "the binary result was wrong"
 
-        desc = c.description
-        assert len(desc) == 1, "invalid number of column meta data"
-        assert desc[0][0].upper() == "B", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[0][1]] == "BINARY", "invalid column name"
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
+            assert len(desc) == 1, "invalid number of column meta data"
+            assert name(desc[0]).upper() == "B", "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
+            ), "invalid column name"
     finally:
         cnx2.close()
 
@@ -523,10 +563,22 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
         results = [b for (b,) in c]
         assert bytes(value) == results[0], "the binary result was wrong"
 
-        desc = c.description
-        assert len(desc) == 1, "invalid number of column meta data"
-        assert desc[0][0].upper() == "B", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[0][1]] == "BINARY", "invalid column name"
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
+            assert len(desc) == 1, "invalid number of column meta data"
+            assert name(desc[0]).upper() == "B", "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
+            ), "invalid column name"
     finally:
         cnx2.close()
 
@@ -607,8 +659,8 @@ def test_geography(conn_cnx):
         with cnx.cursor() as cur:
             # Test with GEOGRAPHY return type
             result = cur.execute(f"select * from {name_geo}")
-            metadata = result.description
-            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
             data = result.fetchall()
             for raw_data in data:
                 row = json.loads(raw_data[0])
@@ -637,12 +689,67 @@ def test_geometry(conn_cnx):
         with cnx.cursor() as cur:
             # Test with GEOMETRY return type
             result = cur.execute(f"select * from {name_geo}")
-            metadata = result.description
-            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOMETRY"
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOMETRY"
             data = result.fetchall()
             for raw_data in data:
                 row = json.loads(raw_data[0])
                 assert row in expected_data
+
+
+@pytest.mark.skipolddriver
+def test_vector(conn_cnx, is_public_test):
+    if is_public_test:
+        pytest.xfail(
+            reason="This feature hasn't been rolled out for public Snowflake deployments yet."
+        )
+    name_vectors = random_string(5, "test_vector_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            # Seed test data
+            expected_data_ints = [[1, 3, -5], [40, 1234567, 1], "NULL"]
+            expected_data_floats = [
+                [1.8, -3.4, 6.7, 0, 2.3],
+                [4.121212121, 31234567.4, 7, -2.123, 1],
+                "NULL",
+            ]
+            cur.execute(
+                f"create temporary table {name_vectors} (int_vec VECTOR(INT,3), float_vec VECTOR(FLOAT,5))"
+            )
+            for i in range(len(expected_data_ints)):
+                cur.execute(
+                    f"insert into {name_vectors} select {expected_data_ints[i]}::VECTOR(INT,3), {expected_data_floats[i]}::VECTOR(FLOAT,5)"
+                )
+
+        with cnx.cursor() as cur:
+            # Test a basic fetch
+            cur.execute(
+                f"select int_vec, float_vec from {name_vectors} order by float_vec"
+            )
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
+                assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
+            data = cur.fetchall()
+            for i, row in enumerate(data):
+                if expected_data_floats[i] == "NULL":
+                    assert row[0] is None
+                else:
+                    assert row[0] == expected_data_ints[i]
+
+                if expected_data_ints[i] == "NULL":
+                    assert row[1] is None
+                else:
+                    assert row[1] == pytest.approx(expected_data_floats[i])
+
+            # Test an empty result set
+            cur.execute(
+                f"select int_vec, float_vec from {name_vectors} where int_vec = [1,2,3]::VECTOR(int,3)"
+            )
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
+                assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
+            data = cur.fetchall()
+            assert len(data) == 0
 
 
 def test_invalid_bind_data_type(conn_cnx):
@@ -709,7 +816,12 @@ def test_executemany_qmark_types(conn, db_parameters):
             cur.execute(f"create temp table {table_name} (birth_date date)")
 
             insert_qy = f"INSERT INTO {table_name} (birth_date) values (?)"
-            date_1, date_2 = date(1969, 2, 7), date(1969, 1, 1)
+            date_1, date_2, date_3, date_4 = (
+                date(1969, 2, 7),
+                date(1969, 1, 1),
+                date(2999, 12, 31),
+                date(9999, 1, 1),
+            )
 
             # insert two dates, one in tuple format which specifies
             # the snowflake type similar to how we support it in this
@@ -717,7 +829,7 @@ def test_executemany_qmark_types(conn, db_parameters):
             # https://docs.snowflake.com/en/user-guide/python-connector-example.html#using-qmark-or-numeric-binding-with-datetime-objects
             cur.executemany(
                 insert_qy,
-                [[date_1], [("DATE", date_2)]],
+                [[date_1], [("DATE", date_2)], [date_3], [date_4]],
                 # test that kwargs get passed through executemany properly
                 _statement_params={
                     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "json"
@@ -728,7 +840,7 @@ def test_executemany_qmark_types(conn, db_parameters):
             )
 
             cur.execute(f"select * from {table_name}")
-            assert {row[0] for row in cur} == {date_1, date_2}
+            assert {row[0] for row in cur} == {date_1, date_2, date_3, date_4}
 
 
 @pytest.mark.skipolddriver
@@ -1563,31 +1675,32 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
 def test_describe(conn_cnx):
     with conn_cnx() as con:
         with con.cursor() as cur:
-            table_name = random_string(5, "test_describe_")
-            # test select
-            description = cur.describe(
-                "select * from VALUES(1, 3.1415926, 'snow', TO_TIMESTAMP('2021-01-01 00:00:00'))"
-            )
-            assert description is not None
-            column_types = [column[1] for column in description]
-            assert constants.FIELD_ID_TO_NAME[column_types[0]] == "FIXED"
-            assert constants.FIELD_ID_TO_NAME[column_types[1]] == "FIXED"
-            assert constants.FIELD_ID_TO_NAME[column_types[2]] == "TEXT"
-            assert "TIMESTAMP" in constants.FIELD_ID_TO_NAME[column_types[3]]
-            assert len(cur.fetchall()) == 0
-
-            # test insert
-            cur.execute(f"create table {table_name} (aa int)")
-            try:
-                description = cur.describe(
-                    "insert into {name}(aa) values({value})".format(
-                        name=table_name, value="1234"
-                    )
+            for describe in [cur.describe, cur._describe_internal]:
+                table_name = random_string(5, "test_describe_")
+                # test select
+                description = describe(
+                    "select * from VALUES(1, 3.1415926, 'snow', TO_TIMESTAMP('2021-01-01 00:00:00'))"
                 )
-                assert description[0][0] == "number of rows inserted"
-                assert cur.rowcount is None
-            finally:
-                cur.execute(f"drop table if exists {table_name}")
+                assert description is not None
+                column_types = [column.type_code for column in description]
+                assert constants.FIELD_ID_TO_NAME[column_types[0]] == "FIXED"
+                assert constants.FIELD_ID_TO_NAME[column_types[1]] == "FIXED"
+                assert constants.FIELD_ID_TO_NAME[column_types[2]] == "TEXT"
+                assert "TIMESTAMP" in constants.FIELD_ID_TO_NAME[column_types[3]]
+                assert len(cur.fetchall()) == 0
+
+                # test insert
+                cur.execute(f"create table {table_name} (aa int)")
+                try:
+                    description = describe(
+                        "insert into {name}(aa) values({value})".format(
+                            name=table_name, value="1234"
+                        )
+                    )
+                    assert description[0].name == "number of rows inserted"
+                    assert cur.rowcount is None
+                finally:
+                    cur.execute(f"drop table if exists {table_name}")
 
 
 @pytest.mark.skipolddriver
@@ -1613,6 +1726,7 @@ def test_fetch_batches_with_sessions(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_null_connection(conn_cnx):
+    retries = 15
     with conn_cnx() as con:
         with con.cursor() as cur:
             cur.execute_async(
@@ -1620,6 +1734,13 @@ def test_null_connection(conn_cnx):
             )
             con.rest.delete_session()
             status = con.get_query_status(cur.sfqid)
+            for _ in range(retries):
+                if status not in (QueryStatus.RUNNING,):
+                    break
+                time.sleep(1)
+                status = con.get_query_status(cur.sfqid)
+            else:
+                pytest.fail(f"query is still running after {retries} retries")
             assert status == QueryStatus.FAILED_WITH_ERROR
             assert con.is_an_error(status)
 
@@ -1693,159 +1814,20 @@ def test_decoding_utf8_for_json_result(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_switch_nanoarrow_and_vendored_arrow(conn_cnx, caplog, monkeypatch):
-    from snowflake.connector.cursor import _get_client_nanoarrow_setting
+def test_nanoarrow_usage_deprecation():
+    with pytest.warns() as record:
+        import snowflake.connector.cursor
 
-    origin_value = snowflake.connector.cursor.NANOARROW_USAGE
-
-    # test setting directly the parameter
-
-    snowflake.connector.cursor.NANOARROW_USAGE = (
-        snowflake.connector.cursor.NanoarrowUsage.FOLLOW_SESSION_PARAMETER
-    )
-    with conn_cnx() as con:
-        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
-            cur.execute("select 1").fetchall()
-            assert "Using nanoarrow as the arrow data converter" in caplog.text
-
-    snowflake.connector.cursor.USE_NANOARROW_CONVERTER = (
-        snowflake.connector.cursor.NanoarrowUsage.ENABLE_NANOARROW
-    )
-    with conn_cnx() as con:
-        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
-            cur.execute("select 1").fetchall()
-            assert "Using nanoarrow as the arrow data converter" in caplog.text
-
-    snowflake.connector.cursor.NANOARROW_USAGE = (
-        snowflake.connector.cursor.NanoarrowUsage.DISABLE_NANOARROW
-    )
-    with conn_cnx() as con:
-        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
-            cur.execute("select 1").fetchall()
-            assert "Using vendored arrow as the arrow data converter" in caplog.text
-
-    snowflake.connector.cursor.NANOARROW_USAGE = origin_value
-
-    # test setting by env var
-    monkeypatch.setenv("NANOARROW_USAGE", "enable_nanoarrow")
-    assert (
-        _get_client_nanoarrow_setting()
-        == snowflake.connector.cursor.NanoarrowUsage.ENABLE_NANOARROW
-    )
-
-    monkeypatch.setenv("NANOARROW_USAGE", "ENABLE_NANOARROW")
-    assert (
-        _get_client_nanoarrow_setting()
-        == snowflake.connector.cursor.NanoarrowUsage.ENABLE_NANOARROW
-    )
-
-    snowflake.connector.cursor.NANOARROW_USAGE = _get_client_nanoarrow_setting()
-
-    with conn_cnx() as con:
-        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
-            cur.execute("select 1").fetchall()
-            assert "Using nanoarrow as the arrow data converter" in caplog.text
-
-    monkeypatch.setenv("NANOARROW_USAGE", "disable_nanoarrow")
-    assert (
-        _get_client_nanoarrow_setting()
-        == snowflake.connector.cursor.NanoarrowUsage.DISABLE_NANOARROW
-    )
-
-    monkeypatch.setenv("NANOARROW_USAGE", "DISABLE_NANOARROW")
-    assert (
-        _get_client_nanoarrow_setting()
-        == snowflake.connector.cursor.NanoarrowUsage.DISABLE_NANOARROW
-    )
-
-    snowflake.connector.cursor.NANOARROW_USAGE = _get_client_nanoarrow_setting()
-
-    with conn_cnx() as con:
-        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
-            cur.execute("select 1").fetchall()
-            assert "Using vendored arrow as the arrow data converter" in caplog.text
-
-    monkeypatch.setenv("NANOARROW_USAGE", "random_value")
-    assert (
-        _get_client_nanoarrow_setting()
-        == snowflake.connector.cursor.NanoarrowUsage.FOLLOW_SESSION_PARAMETER
-    )
-
-    monkeypatch.delenv("NANOARROW_USAGE")
-    assert (
-        _get_client_nanoarrow_setting()
-        == snowflake.connector.cursor.NanoarrowUsage.FOLLOW_SESSION_PARAMETER
-    )
-
-    with conn_cnx() as con:
-        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
-            cur.execute("select 1").fetchall()
-            assert "Using nanoarrow as the arrow data converter" in caplog.text
-
-    snowflake.connector.cursor.NANOARROW_USAGE = origin_value
-
-    # test server side session parameter PYTHON_CONNECTOR_USE_NANOARROW, without any client setting
-    with conn_cnx() as con:
-        # by default the session parameter is True
-        assert con._session_parameters["PYTHON_CONNECTOR_USE_NANOARROW"] is True
-        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
-            cur.execute("select 1").fetchall()
-            assert "Using nanoarrow as the arrow data converter" in caplog.text
-
-    with conn_cnx(
-        session_parameters={
-            "PYTHON_CONNECTOR_USE_NANOARROW": True,
-        },
-    ) as con:
-        # set to true
-        assert con._session_parameters["PYTHON_CONNECTOR_USE_NANOARROW"] is True
-        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
-            cur.execute("select 1").fetchall()
-            assert "Using nanoarrow as the arrow data converter" in caplog.text
-
-    with conn_cnx(
-        session_parameters={
-            "PYTHON_CONNECTOR_USE_NANOARROW": False,
-        },
-    ) as con:
-        # set to false
-        assert con._session_parameters["PYTHON_CONNECTOR_USE_NANOARROW"] is False
-        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
-            cur.execute("select 1").fetchall()
-            assert "Using vendored arrow as the arrow data converter" in caplog.text
-
-    # test client side parameter has higher priority
-
-    # test client uses nanoarrow False, but server uses True
-    # client should not use nanoarrow
-    snowflake.connector.cursor.NANOARROW_USAGE = (
-        snowflake.connector.cursor.NanoarrowUsage.DISABLE_NANOARROW
-    )
-    with conn_cnx(
-        session_parameters={
-            "PYTHON_CONNECTOR_USE_NANOARROW": True,
-        },
-    ) as con:
-        # set to true
-        assert con._session_parameters["PYTHON_CONNECTOR_USE_NANOARROW"] is True
-        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
-            cur.execute("select 1").fetchall()
-            assert "Using vendored arrow as the arrow data converter" in caplog.text
-
-    # test client uses nanoarrow True, but server uses False
-    # client should use nanoarrow
-    snowflake.connector.cursor.NANOARROW_USAGE = (
-        snowflake.connector.cursor.NanoarrowUsage.ENABLE_NANOARROW
-    )
-    with conn_cnx(
-        session_parameters={
-            "PYTHON_CONNECTOR_USE_NANOARROW": False,
-        },
-    ) as con:
-        # set to false
-        assert con._session_parameters["PYTHON_CONNECTOR_USE_NANOARROW"] is False
-        with con.cursor() as cur, caplog.at_level(logging.DEBUG):
-            cur.execute("select 1").fetchall()
-            assert "Using nanoarrow as the arrow data converter" in caplog.text
-
-    snowflake.connector.cursor.NANOARROW_USAGE = origin_value
+        os.environ["NANOARROW_USAGE"] = "abc"
+        _ = snowflake.connector.cursor.NANOARROW_USAGE
+        _ = snowflake.connector.cursor.NanoarrowUsage
+        del os.environ["NANOARROW_USAGE"]
+        assert len(record) == 3
+        assert (
+            "Environment variable NANOARROW_USAGE has been deprecated"
+            in str(record[0].message)
+            and "snowflake.connector.cursor.NANOARROW_USAGE has been deprecated"
+            in str(record[1].message)
+            and "snowflake.connector.cursor.NanoarrowUsage has been deprecated"
+            in str(record[2].message)
+        )

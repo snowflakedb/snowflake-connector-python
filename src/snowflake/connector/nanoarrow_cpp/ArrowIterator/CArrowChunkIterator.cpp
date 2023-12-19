@@ -11,6 +11,7 @@
 #include "BinaryConverter.hpp"
 #include "BooleanConverter.hpp"
 #include "DateConverter.hpp"
+#include "FixedSizeListConverter.hpp"
 #include "TimeStampConverter.hpp"
 #include "TimeConverter.hpp"
 #include <memory>
@@ -435,6 +436,12 @@ void CArrowChunkIterator::initColumnConverters()
           }
         }
 
+        break;
+      }
+
+      case SnowflakeType::Type::VECTOR:
+      {
+        m_currentBatchConverters.push_back(std::make_shared<sf::FixedSizeListConverter>(array));
         break;
       }
 

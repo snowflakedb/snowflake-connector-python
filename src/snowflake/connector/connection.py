@@ -26,10 +26,9 @@ from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
 from uuid import UUID
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-
-import snowflake.connector.cursor
-import snowflake.connector.result_batch
 
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
@@ -62,14 +61,13 @@ from .constants import (
     PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED,
     PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
     PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1,
-    PARAMETER_PYTHON_CONNECTOR_USE_NANOARROW,
     PARAMETER_QUERY_CONTEXT_CACHE_SIZE,
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
     OCSPMode,
     QueryStatus,
 )
-from .converter import SnowflakeConverter, _adjust_bind_type
+from .converter import SnowflakeConverter
 from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor
 from .description import (
     CLIENT_NAME,
@@ -124,6 +122,26 @@ def DefaultConverterClass() -> type:
         return SnowflakeConverter
 
 
+def _get_private_bytes_from_file(
+    private_key_file: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+    private_key_file_pwd: bytes | None = None,
+) -> bytes:
+    with open(private_key_file, "rb") as key:
+        private_key = serialization.load_pem_private_key(
+            key.read(),
+            password=private_key_file_pwd,
+            backend=default_backend(),
+        )
+
+    pkb = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    return pkb
+
+
 SUPPORTED_PARAMSTYLES = {
     "qmark",
     "numeric",
@@ -159,6 +177,8 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), str, RSAPrivateKey)),
+    "private_key_file": (None, (type(None), str)),
+    "private_key_file_pwd": (None, (type(None), str)),
     "token": (None, (type(None), str)),  # OAuth or JWT Token
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
@@ -390,13 +410,9 @@ class SnowflakeConnection:
             # connection_name is None and kwargs was empty when called
             kwargs = _get_default_connection_params()
         self.__set_error_attributes()
-        # by default, nanoarrow converter is used, the following two will be reset in self.__open_connection
-        self._server_use_nanoarrow_converter_parameter = True
-        self._create_pyarrow_iterator_method = (
-            snowflake.connector.result_batch._create_nanoarrow_iterator
-        )
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
+        self.expired = False
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
@@ -944,8 +960,16 @@ class SnowflakeConnection:
                 )
 
         elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
+            private_key = self._private_key
+
+            if self._private_key_file:
+                private_key = _get_private_bytes_from_file(
+                    self._private_key_file,
+                    self._private_key_file_pwd,
+                )
+
             self.auth_class = AuthByKeyPair(
-                private_key=self._private_key,
+                private_key=private_key,
                 timeout=self._login_timeout,
                 backoff_generator=self._backoff_generator,
             )
@@ -991,22 +1015,6 @@ class SnowflakeConnection:
             # By this point it should have been decided if the heartbeat has to be enabled
             # and what would the heartbeat frequency be
             self._add_heartbeat()
-        if (
-            (
-                snowflake.connector.cursor.NANOARROW_USAGE
-                == snowflake.connector.cursor.NanoarrowUsage.FOLLOW_SESSION_PARAMETER
-                and self._server_use_nanoarrow_converter_parameter
-            )
-            or snowflake.connector.cursor.NANOARROW_USAGE
-            == snowflake.connector.cursor.NanoarrowUsage.ENABLE_NANOARROW
-        ):
-            self._create_pyarrow_iterator_method = (
-                snowflake.connector.result_batch._create_nanoarrow_iterator
-            )
-        else:
-            self._create_pyarrow_iterator_method = (
-                snowflake.connector.result_batch._create_vendored_arrow_iterator
-            )
 
     def __config(self, **kwargs):
         """Sets up parameters in the connection object."""
@@ -1116,7 +1124,7 @@ class SnowflakeConnection:
                 {"msg": "User is empty", "errno": ER_NO_USER},
             )
 
-        if self._private_key:
+        if self._private_key or self._private_key_file:
             self._authenticator = KEY_PAIR_AUTHENTICATOR
 
         if (
@@ -1425,13 +1433,13 @@ class SnowflakeConnection:
                 if all(param_data.type == first_type for param_data in all_param_data):
                     snowflake_type = first_type
                 processed_params[str(idx + 1)] = {
-                    "type": _adjust_bind_type(snowflake_type),
+                    "type": snowflake_type,
                     "value": [param_data.binding for param_data in all_param_data],
                 }
             else:
                 snowflake_type, snowflake_binding = get_type_and_binding(v)
                 processed_params[str(idx + 1)] = {
-                    "type": _adjust_bind_type(snowflake_type),
+                    "type": snowflake_type,
                     "value": snowflake_binding,
                 }
         if logger.getEffectiveLevel() <= logging.DEBUG:
@@ -1632,8 +1640,6 @@ class SnowflakeConnection:
                 self.enable_stage_s3_privatelink_for_us_east_1 = value
             elif PARAMETER_QUERY_CONTEXT_CACHE_SIZE == name:
                 self.query_context_cache_size = value
-            elif PARAMETER_PYTHON_CONNECTOR_USE_NANOARROW == name:
-                self._server_use_nanoarrow_converter_parameter = value
 
     def _format_query_for_log(self, query: str) -> str:
         ret = " ".join(line.strip() for line in query.split("\n"))

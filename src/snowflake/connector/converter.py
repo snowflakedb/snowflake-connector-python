@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import binascii
 import decimal
+import json
 import time
 from datetime import date, datetime
 from datetime import time as dt_t
@@ -107,6 +108,18 @@ def _convert_time_to_epoch_nanoseconds(tm: dt_t) -> str:
         + f"{tm.microsecond:06d}"
         + "000"
     )
+
+
+def _convert_date_to_epoch_seconds(dt: date) -> str:
+    return f"{int((dt - ZERO_EPOCH_DATE).total_seconds())}"
+
+
+def _convert_date_to_epoch_milliseconds(dt: date) -> str:
+    return f"{(dt - ZERO_EPOCH_DATE).total_seconds():.3f}".replace(".", "")
+
+
+def _convert_date_to_epoch_nanoseconds(dt: date) -> str:
+    return f"{(dt - ZERO_EPOCH_DATE).total_seconds():.9f}".replace(".", "")
 
 
 def _extract_timestamp(value: str, ctx: dict) -> tuple[float, int]:
@@ -320,6 +333,9 @@ class SnowflakeConverter:
 
     _ARRAY_to_python = _VARIANT_to_python
 
+    def _VECTOR_to_python(self, ctx: dict[str, Any]) -> Callable:
+        return lambda v: json.loads(v)
+
     def _BOOLEAN_to_python(
         self, ctx: dict[str, str | None] | dict[str, str]
     ) -> Callable:
@@ -344,6 +360,18 @@ class SnowflakeConverter:
         # NOTE: str type is always taken as a text data and never binary
         return str(value)
 
+    def _date_to_snowflake_bindings_in_bulk_insertion(self, value: date) -> str:
+        # notes: this is for date type bulk insertion, it's different from non-bulk date type insertion flow
+        milliseconds = _convert_date_to_epoch_milliseconds(value)
+        # according to https://docs.snowflake.com/en/sql-reference/functions/to_date
+        # through test, value in seconds will lead to wrong date
+        # millisecond and nanoarrow second are good
+        # if the milliseconds is beyond the range of 31536000000000, we switch to use nanoseconds
+        # otherwise we will hit overflow error in snowflake
+        if int(milliseconds) < 31536000000000:
+            return milliseconds
+        return _convert_date_to_epoch_nanoseconds(value)
+
     _int_to_snowflake_bindings = _str_to_snowflake_bindings
     _long_to_snowflake_bindings = _str_to_snowflake_bindings
     _float_to_snowflake_bindings = _str_to_snowflake_bindings
@@ -362,8 +390,9 @@ class SnowflakeConverter:
         return None
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
-        # we are binding "TEXT" value for DATE, check function _adjust_bind_type
-        return value.isoformat()
+        # this is for date type non-bulk insertion, it's different from bulk date type insertion flow
+        # milliseconds
+        return _convert_date_to_epoch_milliseconds(value)
 
     def _time_to_snowflake_bindings(self, _, value: dt_t) -> str:
         # nanoseconds
@@ -639,6 +668,11 @@ class SnowflakeConverter:
         else:
             if isinstance(value, (dt_t, timedelta)):
                 val = self.to_snowflake(value)
+            elif isinstance(value, date) and not isinstance(value, datetime):
+                # FIX SNOW-770678 and SNOW-966444
+                # bulk insertion congestion is different from non-bulk insertion
+                # to_csv_bindings is only used in bulk insertion logic
+                val = self._date_to_snowflake_bindings_in_bulk_insertion(value)
             else:
                 _type = self.snowflake_type(value)
                 val = self.to_snowflake_bindings(_type, value)
@@ -731,11 +765,3 @@ class SnowflakeConverter:
         if not tz:
             return datetime.utcfromtimestamp(seconds) + timedelta(microseconds=fraction)
         return datetime.fromtimestamp(seconds, tz=tz) + timedelta(microseconds=fraction)
-
-
-def _adjust_bind_type(input_type: str | None) -> str | None:
-    # This is to address SNOW-7706788, binding "DATE" value can not go beyond date 2969-05-03 (31536000000)
-    # https://docs.snowflake.com/en/sql-reference/functions/to_date#usage-notes
-    # https://docs.snowflake.com/en/developer-guide/sql-api/submitting-requests
-    # to correctly bind DATE value, we adjust to use "TEXT" type to bind value
-    return input_type if input_type != "DATE" else "TEXT"
