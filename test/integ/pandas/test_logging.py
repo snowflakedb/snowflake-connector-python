@@ -25,8 +25,8 @@ def test_rand_table_log(caplog, conn_cnx, db_parameters):
         for record in caplog.records:
             if "Batches read:" in record.msg:
                 has_batch_read = True
-                assert "arrow_iterator" in record.filename
-                assert "__cinit__" in record.funcName
+                assert "ArrowIterator" in record.filename
+                assert "PyArrowRowIterator_init" in record.funcName
 
             if "Arrow BatchSize:" in record.msg:
                 has_batch_size = True

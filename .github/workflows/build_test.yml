@@ -80,8 +80,8 @@ jobs:
             id: macosx_x86_64
           - image: macos-latest
             id: macosx_arm64
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
-    name: Build ${{ matrix.os.id }}-py${{ matrix.python-version }}
+        python-version: ["3.8"]
+    name: Build ${{ matrix.os.id }}-abi3
     runs-on: ${{ matrix.os.image }}
     steps:
       - name: Set shortver
@@ -107,7 +107,7 @@ jobs:
         shell: bash
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{ matrix.os.id }}_py${{ matrix.python-version }}
+          name: ${{ matrix.os.id }}_abi3
           path: dist/
 
   test:
@@ -144,7 +144,7 @@ jobs:
       - name: Download wheel(s)
         uses: actions/download-artifact@v3
         with:
-          name: ${{ matrix.os.download_name }}_py${{ matrix.python-version }}
+          name: ${{ matrix.os.download_name }}_abi3
           path: dist
       - name: Show wheels downloaded
         run: ls -lh dist
@@ -262,7 +262,7 @@ jobs:
       - name: Download wheel(s)
         uses: actions/download-artifact@v3
         with:
-          name: manylinux_x86_64_py3.8
+          name: manylinux_x86_64_abi3
           path: dist
       - name: Show wheels downloaded
         run: ls -lh dist
@@ -308,7 +308,7 @@ jobs:
       - name: Download wheel(s)
         uses: actions/download-artifact@v3
         with:
-          name: manylinux_x86_64_py${{ matrix.python-version }}
+          name: manylinux_x86_64_abi3
           path: dist
       - name: Show wheels downloaded
         run: ls -lh dist
@@ -320,6 +320,9 @@ jobs:
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
+        shell: bash
+      - name: Debug - find files
+        run: find .
         shell: bash
       - uses: actions/upload-artifact@v3
         with:

@@ -46,8 +46,8 @@ SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS = os.environ.get(
 ).lower() in ("y", "yes", "t", "true", "1", "on")
 
 try:
-    from Cython.Build import cythonize
-    from Cython.Distutils import build_ext
+    from setuptools.command.build_ext import build_ext
+    from wheel.bdist_wheel import bdist_wheel
 
     _ABLE_TO_COMPILE_EXTENSIONS = True
 except ImportError:
@@ -57,112 +57,96 @@ except ImportError:
     )
     _ABLE_TO_COMPILE_EXTENSIONS = False
 
-if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS:
-    extensions = cythonize(
-        [
-            Extension(
-                name="snowflake.connector.nanoarrow_arrow_iterator",
-                sources=[
-                    os.path.join(NANOARROW_SRC_DIR, "nanoarrow_arrow_iterator.pyx")
-                ],
-                language="c++",
-            ),
+
+def get_extensions():
+    ext = Extension(
+        name="snowflake.connector.nanoarrow_arrow_iterator",
+        sources=[
+            os.path.join(NANOARROW_SRC_DIR, "ArrowIterator.cpp"),
         ],
+        language="c++",
+        py_limited_api=True,
+        # Limited API, for Python 3.8+ . Note that Python 3.10 is `0x030A...`.
+        define_macros=[("Py_LIMITED_API", "0x03080000")],
     )
+
+    if options["debug"]:
+        ext.extra_compile_args.append("-g")
+        ext.extra_compile_args.append("-O0")
+        ext.extra_link_args.append("-g")
+        ext.extra_link_args.append("-O0")
+
+    NANOARROW_CPP_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp")
+    NANOARROW_ARROW_ITERATOR_SRC_DIR = os.path.join(
+        NANOARROW_CPP_SRC_DIR, "ArrowIterator"
+    )
+    NANOARROW_LOGGING_SRC_DIR = os.path.join(NANOARROW_CPP_SRC_DIR, "Logging")
+
+    ext.sources += [
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowIterator.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowChunkIterator.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowTableIterator.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "SnowflakeType.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "BinaryConverter.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "BooleanConverter.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "DecimalConverter.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "DateConverter.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "FixedSizeListConverter.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "FloatConverter.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "IntConverter.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "StringConverter.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "TimeConverter.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "TimeStampConverter.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "Python", "Common.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "Python", "Helpers.cpp"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "Util", "time.cpp"),
+        NANOARROW_LOGGING_SRC_DIR + "/logging.cpp",
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "nanoarrow.c"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "nanoarrow_ipc.c"),
+        os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "flatcc.c"),
+    ]
+    ext.include_dirs.append(NANOARROW_ARROW_ITERATOR_SRC_DIR)
+    ext.include_dirs.append(NANOARROW_LOGGING_SRC_DIR)
+
+    if sys.platform == "win32":
+        if not any("/std" not in s for s in ext.extra_compile_args):
+            ext.extra_compile_args.append("/std:c++17")
+    elif sys.platform == "linux" or sys.platform == "darwin":
+        if "std=" not in os.environ.get("CXXFLAGS", ""):
+            ext.extra_compile_args.append("-std=c++17")
+            ext.extra_compile_args.append("-D_GLIBCXX_USE_CXX11_ABI=0")
+        if sys.platform == "darwin" and "macosx-version-min" not in os.environ.get(
+            "CXXFLAGS", ""
+        ):
+            ext.extra_compile_args.append("-mmacosx-version-min=10.13")
+
+    # sys.platform for linux used to return with version suffix, (i.e. linux2, linux3)
+    # After version 3.3, it will always be just 'linux'
+    # https://docs.python.org/3/library/sys.html#sys.platform
+    if sys.platform == "linux":
+        ext.extra_link_args += ["-Wl,-rpath,$ORIGIN"]
+    elif sys.platform == "darwin":
+        # rpath,$ORIGIN only work on linux, did not work on darwin. use @loader_path instead
+        # fyi, https://medium.com/@donblas/fun-with-rpath-otool-and-install-name-tool-e3e41ae86172
+        ext.extra_link_args += ["-rpath", "@loader_path"]
+    return [ext]
+
+
+if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS:
+    extensions = get_extensions()
+
+    class MyBuildWheel(bdist_wheel):
+        def get_tag(self):
+            python, abi, plat = super().get_tag()
+
+            if python.startswith("cp"):
+                # on CPython, our wheels are abi3 and compatible back to 3.8
+                return "cp38", "abi3", plat
+
+            return python, abi, plat
 
     class MyBuildExt(build_ext):
         def build_extension(self, ext):
-            if options["debug"]:
-                ext.extra_compile_args.append("-g")
-                ext.extra_link_args.append("-g")
-            current_dir = os.getcwd()
-
-            if ext.name == "snowflake.connector.nanoarrow_arrow_iterator":
-                NANOARROW_CPP_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp")
-                NANOARROW_ARROW_ITERATOR_SRC_DIR = os.path.join(
-                    NANOARROW_CPP_SRC_DIR, "ArrowIterator"
-                )
-                NANOARROW_LOGGING_SRC_DIR = os.path.join(
-                    NANOARROW_CPP_SRC_DIR, "Logging"
-                )
-
-                ext.sources += [
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowIterator.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowChunkIterator.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowTableIterator.cpp"
-                    ),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "SnowflakeType.cpp"),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "BinaryConverter.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "BooleanConverter.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "DecimalConverter.cpp"
-                    ),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "DateConverter.cpp"),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "FixedSizeListConverter.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "FloatConverter.cpp"
-                    ),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "IntConverter.cpp"),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "StringConverter.cpp"
-                    ),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "TimeConverter.cpp"),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "TimeStampConverter.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "Python", "Common.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "Python", "Helpers.cpp"
-                    ),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "Util", "time.cpp"),
-                    NANOARROW_LOGGING_SRC_DIR + "/logging.cpp",
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "nanoarrow.c"),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "nanoarrow_ipc.c"),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "flatcc.c"),
-                ]
-                ext.include_dirs.append(NANOARROW_ARROW_ITERATOR_SRC_DIR)
-                ext.include_dirs.append(NANOARROW_LOGGING_SRC_DIR)
-
-                if sys.platform == "win32":
-                    if not any("/std" not in s for s in ext.extra_compile_args):
-                        ext.extra_compile_args.append("/std:c++17")
-                elif sys.platform == "linux" or sys.platform == "darwin":
-                    if "std=" not in os.environ.get("CXXFLAGS", ""):
-                        ext.extra_compile_args.append("-std=c++17")
-                        ext.extra_compile_args.append("-D_GLIBCXX_USE_CXX11_ABI=0")
-                    if (
-                        sys.platform == "darwin"
-                        and "macosx-version-min" not in os.environ.get("CXXFLAGS", "")
-                    ):
-                        ext.extra_compile_args.append("-mmacosx-version-min=10.13")
-
-                ext.library_dirs.append(
-                    os.path.join(current_dir, self.build_lib, "snowflake", "connector")
-                )
-
-                # sys.platform for linux used to return with version suffix, (i.e. linux2, linux3)
-                # After version 3.3, it will always be just 'linux'
-                # https://docs.python.org/3/library/sys.html#sys.platform
-                if sys.platform == "linux":
-                    ext.extra_link_args += ["-Wl,-rpath,$ORIGIN"]
-                elif sys.platform == "darwin":
-                    # rpath,$ORIGIN only work on linux, did not work on darwin. use @loader_path instead
-                    # fyi, https://medium.com/@donblas/fun-with-rpath-otool-and-install-name-tool-e3e41ae86172
-                    ext.extra_link_args += ["-rpath", "@loader_path"]
-
             original__compile = self.compiler._compile
 
             # the following is required by nanoarrow to compile c files
@@ -184,7 +168,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
             finally:
                 self.compiler._compile = original__compile
 
-    cmd_class = {"build_ext": MyBuildExt}
+    cmd_class = {
+        "build_ext": MyBuildExt,
+        "bdist_wheel": MyBuildWheel,
+    }
 
 setup(
     version=version,

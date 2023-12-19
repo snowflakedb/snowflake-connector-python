@@ -21,7 +21,7 @@
 namespace sf
 {
 
-CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy)
+CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, bool use_numpy)
 : CArrowIterator(arrow_bytes, arrow_bytes_size), m_latestReturnedRow(nullptr), m_context(context)
 {
   if (py::checkPyError()) {
@@ -31,7 +31,7 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, i
   m_rowIndexInBatch = -1;
   m_rowCountInBatch = 0;
   m_latestReturnedRow.reset();
-  m_useNumpy = PyObject_IsTrue(use_numpy);
+  m_useNumpy = use_numpy;
 
   m_batchCount = m_ipcArrowArrayVec.size();
   m_columnCount = m_batchCount > 0 ? m_ipcArrowSchema->n_children : 0;
@@ -40,7 +40,7 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes, i
                m_columnCount, m_useNumpy);
 }
 
-std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
+ReturnVal CArrowChunkIterator::next()
 {
   m_rowIndexInBatch++;
 
@@ -48,7 +48,7 @@ std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
   {
     this->createRowPyObject();
     SF_CHECK_PYTHON_ERR()
-    return std::make_shared<ReturnVal>(m_latestReturnedRow.get(), nullptr);
+    return ReturnVal(m_latestReturnedRow.get(), nullptr);
   }
   else
   {
@@ -69,13 +69,13 @@ std::shared_ptr<ReturnVal> CArrowChunkIterator::next()
       this->createRowPyObject();
       SF_CHECK_PYTHON_ERR()
 
-      return std::make_shared<ReturnVal>(m_latestReturnedRow.get(), nullptr);
+      return ReturnVal(m_latestReturnedRow.get(), nullptr);
     }
   }
 
   /** It looks like no one will decrease the ref of this Py_None, so we don't
    * increment the ref count here */
-  return std::make_shared<ReturnVal>(Py_None, nullptr);
+  return ReturnVal(Py_None, nullptr);
 }
 
 void CArrowChunkIterator::createRowPyObject()
@@ -83,11 +83,13 @@ void CArrowChunkIterator::createRowPyObject()
   m_latestReturnedRow.reset(PyTuple_New(m_columnCount));
   for (int i = 0; i < m_columnCount; i++)
   {
-    // PyTuple_SET_ITEM steals a reference to the PyObject returned by toPyObject below
-    PyTuple_SET_ITEM(
+    // PyTuple_SetItem steals a reference to the PyObject returned by toPyObject below
+    const int ret = PyTuple_SetItem(
         m_latestReturnedRow.get(),
         i,
         m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
+    (void)ret;
+    assert(ret == 0);
   }
   return;
 }
@@ -460,7 +462,7 @@ void CArrowChunkIterator::initColumnConverters()
 
 DictCArrowChunkIterator::DictCArrowChunkIterator(PyObject* context,
                                                  char* arrow_bytes, int64_t arrow_bytes_size,
-                                                 PyObject* use_numpy)
+                                                 bool use_numpy)
 : CArrowChunkIterator(context, arrow_bytes, arrow_bytes_size, use_numpy)
 {
 }

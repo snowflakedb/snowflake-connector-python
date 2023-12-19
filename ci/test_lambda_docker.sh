@@ -6,7 +6,7 @@ PYTHON_VERSION="${1:-3.8}"
 PYTHON_SHORT_VERSION="$(echo "$PYTHON_VERSION" | tr -d .)"
 # In case this is not run locally and not on Jenkins
 
-if [[ ! -d "$CONNECTOR_DIR/dist/" ]] || [[ $(ls $CONNECTOR_DIR/dist/*cp${PYTHON_SHORT_VERSION}*manylinux2014*.whl) == '' ]]; then
+if [[ ! -d "$CONNECTOR_DIR/dist/" ]] || [[ $(ls $CONNECTOR_DIR/dist/*abi3*manylinux2014*.whl) == '' ]]; then
   echo "Missing wheel files, going to compile Python connector in Docker..."
   $THIS_DIR/build_docker.sh $PYTHON_VERSION
   cp $CONNECTOR_DIR/dist/repaired_wheels/*cp${PYTHON_SHORT_VERSION}*manylinux2014*.whl $CONNECTOR_DIR/dist/

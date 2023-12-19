@@ -41,7 +41,7 @@ public:
   {
   }
 
-  explicit UniqueRef(UniqueRef&& other) : UniqueRef(other.release())
+  UniqueRef(UniqueRef&& other) : UniqueRef(other.release())
   {
   }
 
@@ -56,10 +56,16 @@ public:
     reset();
   }
 
+  // Decrement the refcount of the object we're point at. This is
+  // compatible with `Py_CLEAR()`.
   void reset(PyObject* pyObj = nullptr)
   {
-    Py_XDECREF(m_pyObj);
+    // We could use `Py_XDECREF(m_pyObj); m_pyObj = pyObj;`, but
+    // if the `Py_XDECREF` calls a destructor that uses this object,
+    // then the object is in a bad state.
+    PyObject *toDelete = m_pyObj;
     m_pyObj = pyObj;
+    Py_XDECREF(toDelete);
   }
 
   PyObject* release() noexcept
@@ -77,6 +83,11 @@ public:
   bool empty() const noexcept
   {
     return m_pyObj == nullptr;
+  }
+
+  explicit operator bool() const noexcept
+  {
+    return !empty();
   }
 
 private:

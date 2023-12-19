@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-
+// TODO: Warning about not used.
 static const char* NANOARROW_TYPE_ENUM_STRING[] = {
     "NANOARROW_TYPE_UNINITIALIZED",
     "NANOARROW_TYPE_NA",
@@ -96,7 +96,7 @@ static const char* NANOARROW_TYPE_ENUM_STRING[] = {
     Py_XDECREF(type);\
     Py_XDECREF(traceback);\
 \
-    return std::make_shared<ReturnVal>(nullptr, m_currentPyException.get());\
+    return ReturnVal(nullptr, m_currentPyException.get());\
   }
 
 namespace sf
@@ -133,12 +133,12 @@ public:
   /**
    * @return a python object which might be current row or an Arrow Table
    */
-  virtual std::shared_ptr<ReturnVal> next() = 0;
+  virtual ReturnVal next() = 0;
   virtual std::vector<uintptr_t> getArrowArrayPtrs() { return {}; };
   virtual std::vector<uintptr_t> getArrowSchemaPtrs() { return {}; };
 
   /** check whether initialization succeeded or encountered error */
-  std::shared_ptr<ReturnVal> checkInitializationStatus();
+  ReturnVal checkInitializationStatus();
 
 protected:
   static Logger* logger;

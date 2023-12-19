@@ -198,16 +198,16 @@ m_convert_number_to_decimal(number_to_decimal)
   PyArg_Parse(tz.get(), "s", &m_timezone);
 }
 
-std::shared_ptr<ReturnVal> CArrowTableIterator::next()
+ReturnVal CArrowTableIterator::next()
 {
   bool firstDone = this->convertRecordBatchesToTable_nanoarrow();
   if (firstDone && !m_ipcArrowArrayVec.empty())
   {
-    return std::make_shared<ReturnVal>(Py_True, nullptr);
+    return ReturnVal(Py_True, nullptr);
   }
   else
   {
-    return std::make_shared<ReturnVal>(Py_None, nullptr);
+    return ReturnVal(Py_None, nullptr);
   }
 }
 
@@ -503,6 +503,7 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
               "the nanosecond part over 6-digits in the Snowflake database, the timestamp must be "
               "between '1677-09-21 00:12:43.145224192' and '2262-04-11 23:47:16.854775807' to not overflow."
               , epoch, fraction);
+            // Note that this has special handling in `ArrowIterator.cpp`.
             throw std::overflow_error(errorInfo.c_str());
           } else {
             has_overflow_to_downscale = true;
