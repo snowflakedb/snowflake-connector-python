@@ -1334,11 +1334,11 @@ class SnowflakeCursor:
         return self._result_set._fetch_arrow_batches()
 
     @overload
-    def fetch_arrow_all(self, force_return_table: Literal[False] = False) -> None:
+    def fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None:
         ...
 
     @overload
-    def fetch_arrow_all(self, force_return_table: Literal[True] = True) -> Table:
+    def fetch_arrow_all(self, force_return_table: Literal[True]) -> Table:
         ...
 
     def fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:

@@ -174,11 +174,11 @@ class ResultSet(Iterable[list]):
         return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow")
 
     @overload
-    def _fetch_arrow_all(self, force_return_table: Literal[False] = False) -> None:
+    def _fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None:
         ...
 
     @overload
-    def _fetch_arrow_all(self, force_return_table: Literal[True] = True) -> Table:
+    def _fetch_arrow_all(self, force_return_table: Literal[True]) -> Table:
         ...
 
     def _fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
