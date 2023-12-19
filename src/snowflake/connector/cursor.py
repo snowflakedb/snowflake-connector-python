@@ -15,6 +15,7 @@ import time
 import uuid
 import warnings
 from enum import Enum
+from importlib import util
 from logging import getLogger
 from threading import Lock, Timer
 from types import TracebackType
@@ -76,16 +77,16 @@ if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeProgressPercentage
     from .result_batch import ResultBatch
+    from pyarrow import Table
 
 T = TypeVar("T", bound=collections.abc.Sequence)
 
 logger = getLogger(__name__)
 
-if installed_pandas:
-    from pyarrow import Table
-else:
+
+if not util.find_spec("pyarrow"):
     logger.debug("Failed to import pyarrow. Cannot use pandas fetch API")
-    Table = None
+
 
 try:
     from .nanoarrow_arrow_iterator import PyArrowIterator  # NOQA
