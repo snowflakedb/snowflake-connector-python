@@ -133,13 +133,26 @@ def test_with_config(db_parameters):
 
 def test_with_tokens(db_parameters):
     """Creates a connection using session and master token."""
-    cnx = snowflake.connector.connect(
+    initial_cnx = snowflake.connector.connect(
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
         account=db_parameters["account"],
-        session_token=db_parameters["session_token"],
-        master_token=db_parameters["master_token"],
+        protocol=db_parameters["protocol"],
+        timezone="UTC",
     )
-    assert cnx, "invalid cnx"
-    cnx.close()
+    assert initial_cnx, "invalid initial cnx"
+    master_token = initial_cnx._rest._master_token
+    session_token = initial_cnx._rest._token
+    token_cnx = snowflake.connector.connect(
+        account=db_parameters["account"],
+        session_token=session_token,
+        master_token=master_token,
+    )
+    assert token_cnx, "invalid second cnx"
+    initial_cnx.close()
+    token_cnx.close()
 
 
 def test_keep_alive_true(db_parameters):
