@@ -160,22 +160,29 @@ class SessionPoolAsync(SessionPool):
         self._active_sessions.clear()
         self._idle_sessions.clear()
 
+
 # YICHUAN: In theory we should never need to pass in loop because it is only called from inside async functions, and
 # the loop running when the ClientSession was created should be the loop it will always run on, even when it is cached
 # for later reuse
-def make_client_session(loop: asyncio.BaseEventLoop | None = None) -> aiohttp.ClientSession:
+def make_client_session(
+    loop: asyncio.BaseEventLoop | None = None,
+) -> aiohttp.ClientSession:
     return aiohttp.ClientSession(
         auth=None,  # YICHUAN: auth=None so auth headers aren't overriden inside ClientSession requests
         trust_env=True,  # YICHUAN: So aiohttp will read the proxy variables set in proxy.set_proxies
-        connector=ssl_connector.SnowflakeSSLConnector(loop=loop),
+        connector=ssl_connector.SnowflakeSSLConnector(
+            loop=loop, ssl=ssl_connector.create_context()
+        ),
         # loop=loop, # YICHUAN: If we specify loop for connector, the session will borrow it
     )
 
 
 def get_default_aiohttp_session_request_kwargs(url: str | None = None):
     kwargs = {
-        "proxy": None,  # to make sure env variables for proxy aren't overriden
-        "ssl": ssl_connector.create_context(),
+        "proxy": None,  # YICHUAN: To make sure env variables for proxy aren't overriden
+        # YICHUAN: We specify SSLContext in make_client_session instead so that the same SSLContext is used for all
+        # requests, which is necessary for connection caching and reuse
+        "ssl": None,
     }
     if url is not None:
         kwargs |= {
