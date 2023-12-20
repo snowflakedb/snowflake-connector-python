@@ -73,11 +73,11 @@ from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
     from pandas import DataFrame
+    from pyarrow import Table
 
     from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeProgressPercentage
     from .result_batch import ResultBatch
-    from pyarrow import Table
 
 T = TypeVar("T", bound=collections.abc.Sequence)
 
