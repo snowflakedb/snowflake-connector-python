@@ -699,7 +699,6 @@ class ArrowResultBatch(ResultBatch):
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
         table = self.to_arrow(connection=connection)
-        print(f"table.nbytes is {table.nbytes}")
         df = table.to_pandas(**kwargs)
         del table
         return df
