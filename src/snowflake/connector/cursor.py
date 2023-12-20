@@ -84,8 +84,12 @@ T = TypeVar("T", bound=collections.abc.Sequence)
 logger = getLogger(__name__)
 
 
-if not util.find_spec("pyarrow"):
-    logger.debug("Failed to import pyarrow. Cannot use pandas fetch API")
+if not installed_pandas:
+    logger.debug(
+        "Failed to import pyarrow or pandas. Cannot use pandas fetch API. Please "
+        "install snowflake-connector-python with the `pandas` extra to use these "
+        "features."
+    )
 
 
 try:
