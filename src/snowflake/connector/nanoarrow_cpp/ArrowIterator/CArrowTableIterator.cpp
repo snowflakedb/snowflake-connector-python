@@ -6,7 +6,6 @@
 #include "SnowflakeType.hpp"
 #include "Python/Common.hpp"
 #include "Util/time.hpp"
-#include <memory>
 #include <string>
 #include <cstring>
 #include <vector>
@@ -198,16 +197,16 @@ m_convert_number_to_decimal(number_to_decimal)
   PyArg_Parse(tz.get(), "s", &m_timezone);
 }
 
-std::shared_ptr<ReturnVal> CArrowTableIterator::next()
+ReturnVal CArrowTableIterator::next()
 {
   bool firstDone = this->convertRecordBatchesToTable_nanoarrow();
   if (firstDone && !m_ipcArrowArrayVec.empty())
   {
-    return std::make_shared<ReturnVal>(Py_True, nullptr);
+    return ReturnVal(Py_True, nullptr);
   }
   else
   {
-    return std::make_shared<ReturnVal>(Py_None, nullptr);
+    return ReturnVal(Py_None, nullptr);
   }
 }
 
@@ -305,10 +304,10 @@ void CArrowTableIterator::convertScaledFixedNumberColumnToDecimalColumn_nanoarro
         SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending null to arrow array, error code: %d", returnCode);
     } else {
         auto originalVal = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
-        std::shared_ptr<ArrowDecimal> arrowDecimal = std::make_shared<ArrowDecimal>();
-        ArrowDecimalInit(arrowDecimal.get(), 128, 38, scale);
-        ArrowDecimalSetInt(arrowDecimal.get(), originalVal);
-        returnCode = ArrowArrayAppendDecimal(newArray, arrowDecimal.get());
+        ArrowDecimal arrowDecimal;
+        ArrowDecimalInit(&arrowDecimal, 128, 38, scale);
+        ArrowDecimalSetInt(&arrowDecimal, originalVal);
+        returnCode = ArrowArrayAppendDecimal(newArray, &arrowDecimal);
         SF_CHECK_ARROW_RC(returnCode, "[Snowflake Exception] error appending decimal to arrow array, error code: %d", returnCode);
     }
   }

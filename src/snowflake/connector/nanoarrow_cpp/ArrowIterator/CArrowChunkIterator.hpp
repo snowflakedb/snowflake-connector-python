@@ -37,7 +37,7 @@ public:
   /**
    * @return a python tuple object which contains all data in current row
    */
-  std::shared_ptr<ReturnVal> next() override;
+  ReturnVal next() override;
 
 protected:
   /**
