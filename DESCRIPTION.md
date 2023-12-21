@@ -8,8 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.6.1(TBD)
+- v3.7.0(TBD)
 
+  - Added a new boolean parameter `force_return_table` to `SnowflakeCursor.fetch_arrow_all` to force returning `pyarrow.Table` in case of zero rows.
   - Cleanup some C++ code warnings and performance issues.
 
 - v3.6.0(December 09,2023)
