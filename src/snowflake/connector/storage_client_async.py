@@ -18,10 +18,8 @@ import aiohttp
 from .constants import FileHeader, ResultStatus
 from .encryption_util import SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
-from .network_async import (
-    EventLoopThreadRunner,
-    get_default_aiohttp_session_request_kwargs,
-)
+from .event_loop_runner import LOOP_RUNNER
+from .network_async import get_default_aiohttp_session_request_kwargs, make_client_session
 from .storage_client import SnowflakeStorageClient
 
 logger = getLogger(__name__)
@@ -38,18 +36,6 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
         aiohttp.ClientConnectionError,
     )
 
-    @property
-    def _loop_runner(self) -> EventLoopThreadRunner:
-        if self.meta.sfagent and self.meta.sfagent._cursor.connection:
-            return self.meta.sfagent._cursor.connection._rest._loop_runner
-        else:
-            # YICHUAN: This will not be an issue in the future as we progressively make higher-level functions async
-            # because at that point, the loop runner will have a wider scope; currently, SnowflakeRestfulAsync owns the
-            # loop runner, so we're locked to it
-            raise Exception(
-                "PUT/GET with use_async unsupported without active SnowflakeConnection"
-            )
-
     @abstractmethod
     async def get_file_header_async(self, filename: str) -> FileHeader | None:
         pass
@@ -59,7 +45,7 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
         logger.debug(f"Preprocessing {meta.src_file_name}")
 
         # check if file exists on remote
-        file_header = self._loop_runner.run_coro(
+        file_header = LOOP_RUNNER.run_coro(
             self.get_file_header_async(meta.dst_file_name)
         )
         if not meta.overwrite:
@@ -117,7 +103,7 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
         for chunk_id in range(self.num_of_chunks):
             self.retry_count[chunk_id] = 0
         if self.chunked_transfer and self.num_of_chunks > 1:
-            self._loop_runner.run_coro(self._initiate_multipart_upload_async())
+            LOOP_RUNNER.run_coro(self._initiate_multipart_upload_async())
 
     @abstractmethod
     async def _has_expired_token_async(self, response: aiohttp.ClientResponse) -> bool:
@@ -130,20 +116,22 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
         retry_id: int,
     ) -> aiohttp.ClientResponse:
         url = ""  # YICHUAN: Not sure why this is a bytes string in original version, but aiohttp doesn't like bytes
-        if not self.meta.sfagent and self.meta.sfagent._cursor.connection:
-            raise Exception(
-                "PUT/GET with use_async unsupported without active SnowflakeConnection"
-            )
-        conn = self.meta.sfagent._cursor.connection
+        if self.meta.sfagent and self.meta.sfagent._cursor.connection:
+            conn = self.meta.sfagent._cursor.connection
 
         while self.retry_count[retry_id] < self.max_retry:
             cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
             try:
-                logger.debug("storage client request with session from connection")
+                if conn:
+                    logger.debug("storage client request with session from connection")
+                    session_manager = conn._rest._use_requests_session_async(url)
+                else:
+                    logger.debug("storage client request with new session")
+                    session_manager = make_client_session()
 
                 # YICHUAN: Self explanatory, of course get_request_args needs to be modified for aiohttp as well
-                async with conn._rest._use_requests_session_async(url) as session:
+                async with session_manager as session:
                     response = await session.request(
                         method=verb,
                         url=url,
@@ -194,7 +182,7 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
             os.makedirs(base_dir)
 
         # HEAD
-        file_header = self._loop_runner.run_coro(
+        file_header = LOOP_RUNNER.run_coro(
             self.get_file_header_async(self.meta.real_src_file_name)
         )
 
@@ -218,7 +206,7 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
         meta = self.meta
         if self.successful_transfers == self.num_of_chunks:
             if self.num_of_chunks > 1:
-                self._loop_runner.run_coro(self._complete_multipart_upload_async())
+                LOOP_RUNNER.run_coro(self._complete_multipart_upload_async())
             meta.result_status = ResultStatus.UPLOADED
             meta.dst_file_size = meta.upload_size
             logger.debug(f"{meta.src_file_name} upload is completed.")
@@ -227,7 +215,7 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
             meta.dst_file_size = 0
             logger.debug(f"{meta.src_file_name} upload is aborted.")
             if self.num_of_chunks > 1:
-                self._loop_runner.run_coro(self._abort_multipart_upload_async())
+                LOOP_RUNNER.run_coro(self._abort_multipart_upload_async())
             meta.result_status = ResultStatus.ERROR
 
     def finish_download(self) -> None:
@@ -245,7 +233,7 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
                 # One example of this is the utils that use presigned url
                 # for upload/download and not the storage client library.
                 if meta.presigned_url is not None:
-                    file_header = self._loop_runner.run_coro(
+                    file_header = LOOP_RUNNER.run_coro(
                         self.get_file_header_async(meta.src_file_name)
                     )
                     self.encryption_metadata = file_header.encryption_metadata
@@ -288,7 +276,7 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
             if new_stream:
                 fd.close()
         logger.debug(f"Uploading chunk {chunk_id} of file {self.data_file}")
-        self._loop_runner.run_coro(self._upload_chunk_async(chunk_id, _data))
+        LOOP_RUNNER.run_coro(self._upload_chunk_async(chunk_id, _data))
         logger.debug(f"Successfully uploaded chunk {chunk_id} of file {self.data_file}")
 
     @abstractmethod
@@ -296,7 +284,7 @@ class SnowflakeStorageClientAsync(SnowflakeStorageClient):
         pass
 
     def download_chunk(self, chunk_id: int) -> None:
-        self._loop_runner.run_coro(self._download_chunk_async(chunk_id))
+        LOOP_RUNNER.run_coro(self._download_chunk_async(chunk_id))
 
     @abstractmethod
     async def _download_chunk_async(self, chunk_id: int) -> None:

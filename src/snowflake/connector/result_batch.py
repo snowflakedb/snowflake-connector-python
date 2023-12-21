@@ -377,7 +377,7 @@ class ResultBatch(abc.ABC):
         | Iterator[Table]
         | Iterator[DataFrame]
     ):
-        """Downloads the data from from blob storage that this ResultChunk points at.
+        """Downloads the data from blob storage that this ResultChunk points at.
 
         This function is the one that does the actual work for ``self.__iter__``.
 

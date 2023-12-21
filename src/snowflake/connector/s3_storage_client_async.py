@@ -19,6 +19,7 @@ from .constants import (
     FileHeader,
     ResultStatus,
 )
+from .event_loop_runner import LOOP_RUNNER
 from .s3_storage_client import (
     AMZ_IV,
     AMZ_KEY,
@@ -52,7 +53,7 @@ class SnowflakeS3RestClientAsync(SnowflakeStorageClientAsync, SnowflakeS3RestCli
             return False
         else:
             if use_accelerate_endpoint is None:
-                use_accelerate_endpoint = self._loop_runner.run_coro(
+                use_accelerate_endpoint = LOOP_RUNNER.run_coro(
                     self._get_bucket_accelerate_config_async(
                         self.s3location.bucket_name
                     )
