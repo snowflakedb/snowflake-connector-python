@@ -1,7 +1,5 @@
 FROM public.ecr.aws/lambda/python:3.12-x86_64
 
-RUN yum install -y git
-
 WORKDIR /home/user/snowflake-connector-python
 RUN chmod 777 /home/user/snowflake-connector-python
 ENV PATH="${PATH}:/opt/python/cp312-cp312/bin/"
