@@ -253,7 +253,7 @@ def test_authbyplugin_abc_api():
 
     # Verify method signatures
     # update_body
-    if sys.version_info <= (3, 11):
+    if sys.version_info < (3, 12):
         assert inspect.isfunction(bc.update_body)
         assert str(inspect.signature(bc.update_body).parameters) == (
             "OrderedDict([('self', <Parameter \"self\">), "
