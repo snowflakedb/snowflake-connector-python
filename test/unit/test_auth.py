@@ -299,23 +299,40 @@ def test_authbyplugin_abc_api():
         # see https://github.com/python/cpython/issues/101446
         assert inspect.isfunction(bc.update_body)
         assert str(inspect.signature(bc.update_body).parameters) == (
-            """OrderedDict({'self': <Parameter "self">, 'body': <Parameter "body: 'dict[Any, Any]'">})"""
+            """OrderedDict({'self': <Parameter "self">, \
+'body': <Parameter "body: 'dict[Any, Any]'">})"""
         )
 
         # authenticate
         assert inspect.isfunction(bc.prepare)
         assert str(inspect.signature(bc.prepare).parameters) == (
-            """OrderedDict({'self': <Parameter "self">, 'conn': <Parameter "conn: 'SnowflakeConnection'">, 'authenticator': <Parameter "authenticator: 'str'">, 'service_name': <Parameter "service_name: 'str | None'">, 'account': <Parameter "account: 'str'">, 'user': <Parameter "user: 'str'">, 'password': <Parameter "password: 'str | None'">, 'kwargs': <Parameter "**kwargs: 'Any'">})"""
+            """OrderedDict({'self': <Parameter "self">, \
+'conn': <Parameter "conn: 'SnowflakeConnection'">, \
+'authenticator': <Parameter "authenticator: 'str'">, \
+'service_name': <Parameter "service_name: 'str | None'">, \
+'account': <Parameter "account: 'str'">, \
+'user': <Parameter "user: 'str'">, \
+'password': <Parameter "password: 'str | None'">, \
+'kwargs': <Parameter "**kwargs: 'Any'">})"""
         )
 
         # handle_failure
         assert inspect.isfunction(bc._handle_failure)
         assert str(inspect.signature(bc._handle_failure).parameters) == (
-            """OrderedDict({'self': <Parameter "self">, 'conn': <Parameter "conn: 'SnowflakeConnection'">, 'ret': <Parameter "ret: 'dict[Any, Any]'">, 'kwargs': <Parameter "**kwargs: 'Any'">})"""
+            """OrderedDict({'self': <Parameter "self">, \
+'conn': <Parameter "conn: 'SnowflakeConnection'">, \
+'ret': <Parameter "ret: 'dict[Any, Any]'">, \
+'kwargs': <Parameter "**kwargs: 'Any'">})"""
         )
 
         # handle_timeout
         assert inspect.isfunction(bc.handle_timeout)
         assert str(inspect.signature(bc.handle_timeout).parameters) == (
-            """OrderedDict({'self': <Parameter "self">, 'authenticator': <Parameter "authenticator: 'str'">, 'service_name': <Parameter "service_name: 'str | None'">, 'account': <Parameter "account: 'str'">, 'user': <Parameter "user: 'str'">, 'password': <Parameter "password: 'str'">, 'kwargs': <Parameter "**kwargs: 'Any'">})"""
+            """OrderedDict({'self': <Parameter "self">, \
+'authenticator': <Parameter "authenticator: 'str'">, \
+'service_name': <Parameter "service_name: 'str | None'">, \
+'account': <Parameter "account: 'str'">, \
+'user': <Parameter "user: 'str'">, \
+'password': <Parameter "password: 'str'">, \
+'kwargs': <Parameter "**kwargs: 'Any'">})"""
         )
