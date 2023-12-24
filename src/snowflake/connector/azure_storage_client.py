@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import os
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 from logging import getLogger
 from random import choice
 from string import hexdigits
@@ -90,7 +90,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             headers = {}
 
         def generate_authenticated_url_and_rest_args() -> tuple[bytes, dict[str, Any]]:
-            curtime = datetime.utcnow()
+            curtime = datetime.now(timezone.utc)
             timestamp = curtime.strftime("YYYY-MM-DD")
             sas_token = self.credentials.creds["AZURE_SAS_TOKEN"]
             if sas_token and sas_token.startswith("?"):

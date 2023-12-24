@@ -10,7 +10,7 @@ import tempfile
 import time
 from datetime import date, datetime
 from datetime import time as datetime_time
-from datetime import timedelta
+from datetime import timedelta, timezone
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -86,7 +86,7 @@ insert into {name} values(
 """
     with conn_cnx(paramstyle="qmark") as cnx:
         cnx.cursor().execute(CREATE_TABLE.format(name=db_parameters["name"]))
-    current_utctime = datetime.utcnow()
+    current_utctime = datetime.now(timezone.utc)
     current_localtime = pytz.utc.localize(current_utctime, is_dst=False).astimezone(
         pytz.timezone(PST_TZ)
     )

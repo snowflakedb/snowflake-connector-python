@@ -11,7 +11,7 @@ import logging
 import os
 import pickle
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
 
@@ -254,7 +254,7 @@ def test_insert_timestamp_select(conn, db_parameters):
     """
     PST_TZ = "America/Los_Angeles"
     JST_TZ = "Asia/Tokyo"
-    current_timestamp = datetime.utcnow()
+    current_timestamp = datetime.now(timezone.utc)
     current_timestamp = current_timestamp.replace(tzinfo=pytz.timezone(PST_TZ))
     current_date = current_timestamp.date()
     current_time = current_timestamp.time()

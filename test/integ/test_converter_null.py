@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import snowflake.connector
 from snowflake.connector.converter import ZERO_EPOCH
@@ -56,7 +56,7 @@ select  current_timestamp(),
     assert NUMERIC_VALUES.match(ret[1])
     con.cursor().execute("create or replace table testtb(c1 timestamp_ntz(6))")
     try:
-        current_time = datetime.utcnow()
+        current_time = datetime.now(timezone.utc)
         # binding value should have no impact
         con.cursor().execute("insert into testtb(c1) values(%s)", (current_time,))
         ret = con.cursor().execute("select * from testtb").fetchone()[0]

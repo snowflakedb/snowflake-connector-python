@@ -7,7 +7,7 @@ from __future__ import annotations
 import binascii
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 from io import IOBase
 from logging import getLogger
 from operator import itemgetter
@@ -308,7 +308,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
 
         def generate_authenticated_url_and_args_v4() -> tuple[bytes, dict[str, bytes]]:
-            t = datetime.utcnow()
+            t = datetime.now(timezone.utc)
             amzdate = t.strftime("%Y%m%dT%H%M%SZ")
             short_amzdate = amzdate[:8]
             x_amz_headers["x-amz-date"] = amzdate
