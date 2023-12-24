@@ -86,7 +86,7 @@ insert into {name} values(
 """
     with conn_cnx(paramstyle="qmark") as cnx:
         cnx.cursor().execute(CREATE_TABLE.format(name=db_parameters["name"]))
-    current_utctime = datetime.now(timezone.utc)
+    current_utctime = datetime.now(timezone.utc).replace(tzinfo=None)
     current_localtime = pytz.utc.localize(current_utctime, is_dst=False).astimezone(
         pytz.timezone(PST_TZ)
     )

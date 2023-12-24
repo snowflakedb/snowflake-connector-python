@@ -103,7 +103,7 @@ class AuthByKeyPair(AuthByPlugin):
         account = account.upper()
         user = user.upper()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if isinstance(self._private_key, bytes):
             try:

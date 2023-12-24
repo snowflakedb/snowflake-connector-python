@@ -359,7 +359,7 @@ field_delimiter = '|'
 error_on_column_count_mismatch=false);
 """,
         )
-        current_time = datetime.datetime.now(datetime.timezone.utc)
+        current_time = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         current_time = current_time.replace(tzinfo=pytz.timezone("America/Los_Angeles"))
         current_date = datetime.date.today()
         other_time = current_time.replace(tzinfo=pytz.timezone("Asia/Tokyo"))

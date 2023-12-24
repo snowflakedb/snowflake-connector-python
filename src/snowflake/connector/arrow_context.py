@@ -33,7 +33,7 @@ try:
 except ImportError:
     tzlocal = None
 
-ZERO_EPOCH = datetime.fromtimestamp(0, timezone.utc)
+ZERO_EPOCH = datetime.fromtimestamp(0, timezone.utc).replace(tzinfo=None)
 
 logger = getLogger(__name__)
 
@@ -99,9 +99,9 @@ class ArrowConverterContext:
         return t.replace(tzinfo=tzinfo)
 
     def TIMESTAMP_NTZ_to_python(self, epoch: int, microseconds: int) -> datetime:
-        return datetime.fromtimestamp(epoch, timezone.utc) + timedelta(
-            microseconds=microseconds
-        )
+        return datetime.fromtimestamp(epoch, timezone.utc).replace(
+            tzinfo=None
+        ) + timedelta(microseconds=microseconds)
 
     def TIMESTAMP_NTZ_to_python_windows(
         self, epoch: int, microseconds: int

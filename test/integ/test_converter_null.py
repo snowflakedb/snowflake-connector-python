@@ -56,7 +56,7 @@ select  current_timestamp(),
     assert NUMERIC_VALUES.match(ret[1])
     con.cursor().execute("create or replace table testtb(c1 timestamp_ntz(6))")
     try:
-        current_time = datetime.now(timezone.utc)
+        current_time = datetime.now(timezone.utc).replace(tzinfo=None)
         # binding value should have no impact
         con.cursor().execute("insert into testtb(c1) values(%s)", (current_time,))
         ret = con.cursor().execute("select * from testtb").fetchone()[0]

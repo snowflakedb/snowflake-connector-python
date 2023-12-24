@@ -83,9 +83,9 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
             value=value, scale=scale
         )
         if not tz:
-            return datetime.fromtimestamp(0, timezone.utc) + timedelta(
-                seconds=seconds, microseconds=fraction
-            )
+            return datetime.fromtimestamp(0, timezone.utc).replace(
+                tzinfo=None
+            ) + timedelta(seconds=seconds, microseconds=fraction)
         return datetime.fromtimestamp(0, tz=tz) + timedelta(
             seconds=seconds, microseconds=fraction
         )

@@ -90,7 +90,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             headers = {}
 
         def generate_authenticated_url_and_rest_args() -> tuple[bytes, dict[str, Any]]:
-            curtime = datetime.now(timezone.utc)
+            curtime = datetime.now(timezone.utc).replace(tzinfo=None)
             timestamp = curtime.strftime("YYYY-MM-DD")
             sas_token = self.credentials.creds["AZURE_SAS_TOKEN"]
             if sas_token and sas_token.startswith("?"):

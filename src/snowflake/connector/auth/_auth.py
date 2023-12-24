@@ -392,7 +392,7 @@ class Auth:
                     "Token expires at: %s. "
                     "Current Time: %s",
                     str(auth_instance._jwt_token_exp),
-                    str(datetime.now(timezone.utc)),
+                    str(datetime.now(timezone.utc).replace(tzinfo=None)),
                 )
             from . import AuthByUsrPwdMfa
 

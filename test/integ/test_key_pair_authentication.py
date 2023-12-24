@@ -57,10 +57,10 @@ def test_get_token_from_private_key(input_account, expected_account):
         == decoded_token.get("iss").upper()
     )
     # Token should be valid for 24 hours. Assert that the token's expiration time is between 23 and 24 hours from now.
-    assert datetime.now(timezone.utc) + timedelta(
+    assert datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
         minutes=1360
     ) < datetime.fromtimestamp(decoded_token.get("exp"))
-    assert datetime.now(timezone.utc) + timedelta(
+    assert datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
         minutes=1441
     ) > datetime.fromtimestamp(decoded_token.get("exp"))
 

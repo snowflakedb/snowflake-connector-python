@@ -261,7 +261,7 @@ class OCSPTelemetryData:
         return telemetry_data
         # To be updated once Python Driver has out of band telemetry.
         # telemetry_client = TelemetryClient()
-        # telemetry_client.add_log_to_batch(TelemetryData(telemetry_data, datetime.now(timezone.utc)))
+        # telemetry_client.add_log_to_batch(TelemetryData(telemetry_data, datetime.now(timezone.utc).replace(tzinfo=None))
 
 
 class OCSPServer:
@@ -851,7 +851,7 @@ class SnowflakeOCSP:
     MAX_CLOCK_SKEW = 900
 
     # Epoch time
-    ZERO_EPOCH = datetime.fromtimestamp(0, timezone.utc)
+    ZERO_EPOCH = datetime.fromtimestamp(0, timezone.utc).replace(tzinfo=None)
 
     # Timestamp format for logging
     OUTPUT_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%SZ"
