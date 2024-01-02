@@ -131,6 +131,7 @@ def test_with_config(db_parameters):
         cnx.close()
 
 
+@pytest.mark.skipolddriver
 def test_with_tokens(db_parameters):
     """Creates a connection using session and master token."""
     initial_cnx = snowflake.connector.connect(
