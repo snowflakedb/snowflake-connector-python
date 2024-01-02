@@ -32,7 +32,7 @@ def test_https_host_report(caplog):
         host_type="OUT_OF_BAND_TELEMETRY",
     )
 
-    assert "DNS:client-telemetry.snowflakecomputing.com" in ".".join(
+    assert "URL Check: Connected Successfully" in ".".join(
         connection_diag.test_results["OUT_OF_BAND_TELEMETRY"]
     )
 
