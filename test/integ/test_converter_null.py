@@ -27,6 +27,7 @@ def test_converter_no_converter_to_python(db_parameters):
         port=db_parameters["port"],
         account=db_parameters["account"],
         database=db_parameters["database"],
+        warehouse=db_parameters["warehouse"],
         schema=db_parameters["schema"],
         protocol=db_parameters["protocol"],
         timezone="UTC",
