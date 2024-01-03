@@ -530,9 +530,14 @@ def test_config_file_resolution_sfdirs_nondefault(tmp_path, monkeypatch):
         assert isinstance(_resolve_platform_dirs(), SFPlatformDirs)
 
 
-def test_config_file_resolution_non_sfdirs(monkeypatch):
+def test_config_file_resolution_non_sfdirs(tmp_path, monkeypatch):
     with monkeypatch.context() as m:
-        m.delenv("SNOWFLAKE_HOME", raising=False)
+        # 2024-01-03(bwarsaw): It's not enough to remove SNOWFLAKE_HOME from the environment, because
+        # _resolve_platform_dirs() defaults to ~/.snowflake, so if the user running the tests has this
+        # directory, the test will fail.  Instead, ensure that this environment variable points to a
+        # non-existent directory.
+        fake_home = tmp_path / ".snowflake"
+        m.setenv("SNOWFLAKE_HOME", str(fake_home))
         assert not isinstance(_resolve_platform_dirs(), SFPlatformDirs)
 
 
