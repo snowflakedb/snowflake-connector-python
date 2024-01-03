@@ -15,7 +15,6 @@ import time
 import uuid
 import warnings
 from enum import Enum
-from importlib import util
 from logging import getLogger
 from threading import Lock, Timer
 from types import TracebackType
