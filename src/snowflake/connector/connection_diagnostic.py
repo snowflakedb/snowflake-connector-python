@@ -218,8 +218,13 @@ class ConnectionDiagnostic:
                                    Host: {host}\r\n
                                    User-Agent: snowflake-connector-python-diagnostic
                                    \r\n\r\n"""
-                sock.send(str.encode(http_request))
-                sock.recv(4096).decode("utf-8")
+                try:
+                    sock.send(str.encode(http_request))
+                except Exception as e:
+                    self.__append_message(
+                        host_type,
+                        f"{host}:{port}: URL Check: Failed: Unknown Exception: {e}",
+                    )
                 conn.close()
                 return certificate
             else:
