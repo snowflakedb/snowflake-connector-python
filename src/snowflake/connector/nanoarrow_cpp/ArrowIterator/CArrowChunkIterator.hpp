@@ -79,6 +79,10 @@ class CArrowChunkIterator : public CArrowIterator {
   bool m_useNumpy;
 
   void initColumnConverters();
+
+  void log_schema(ArrowSchema* schema, int ident);
+  void log_metadata(const char* metadata, int ident);
+  void log_array(ArrowArrayView* array, int ident);
 };
 
 class DictCArrowChunkIterator : public CArrowChunkIterator {
