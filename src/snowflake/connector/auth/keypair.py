@@ -8,7 +8,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from logging import getLogger
 from typing import Any
 
@@ -103,7 +103,7 @@ class AuthByKeyPair(AuthByPlugin):
         account = account.upper()
         user = user.upper()
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if isinstance(self._private_key, bytes):
             try:

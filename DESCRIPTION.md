@@ -12,6 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
   - Added a new boolean parameter `force_return_table` to `SnowflakeCursor.fetch_arrow_all` to force returning `pyarrow.Table` in case of zero rows.
   - Cleanup some C++ code warnings and performance issues.
+  - Added support for Python 3.12
   - Make local testing more robust against implicit assumptions.
 
 - v3.6.0(December 09,2023)
