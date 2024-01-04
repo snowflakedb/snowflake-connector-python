@@ -14,19 +14,23 @@ CONNECTION_PARAMETERS = {
 }
 ```
 
-### Running a single test
-
-Assuming that all dependencies are installed, running a single test is as simple as:
-`python -m pytest test/integ/test_connection.py::test_basic`.
-
 ### Running a suite of tests
 
-We use `tox` to run test suites and other utilities.
+We use `tox` version 4 to run test suites and other utilities.
 
 To run the most important tests, execute:
 
 ```shell
 tox -e "fix_lint,py37{,-pandas,-sso}"
+```
+
+### Running a single test
+
+Enter the tox environment you want (e.g. `py38`) and run `pytest` from there:
+
+```shell
+source .tox/py38/bin/activate
+pytest -v test/integ/test_connection.py::test_basic
 ```
 
 ## Test types
