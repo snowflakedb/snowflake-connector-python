@@ -51,6 +51,7 @@ timestamps {
           'Test Python 39': { build job: 'RT-PyConnector39-PC',parameters: params},
           'Test Python 310': { build job: 'RT-PyConnector310-PC',parameters: params},
           'Test Python 311': { build job: 'RT-PyConnector311-PC',parameters: params},
+          'Test Python 312': { build job: 'RT-PyConnector312-PC',parameters: params},
           )
         }
       }

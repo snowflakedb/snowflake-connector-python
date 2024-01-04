@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from os import path
 
 import jwt
@@ -57,12 +57,12 @@ def test_get_token_from_private_key(input_account, expected_account):
         == decoded_token.get("iss").upper()
     )
     # Token should be valid for 24 hours. Assert that the token's expiration time is between 23 and 24 hours from now.
-    assert datetime.utcnow() + timedelta(minutes=1360) < datetime.fromtimestamp(
-        decoded_token.get("exp")
-    )
-    assert datetime.utcnow() + timedelta(minutes=1441) > datetime.fromtimestamp(
-        decoded_token.get("exp")
-    )
+    assert datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+        minutes=1360
+    ) < datetime.fromtimestamp(decoded_token.get("exp"))
+    assert datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+        minutes=1441
+    ) > datetime.fromtimestamp(decoded_token.get("exp"))
 
 
 @pytest.mark.skipolddriver

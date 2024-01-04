@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta, tzinfo
+from datetime import datetime, time, timedelta, timezone, tzinfo
 from functools import partial
 from logging import getLogger
 
@@ -83,9 +83,9 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
             value=value, scale=scale
         )
         if not tz:
-            return datetime.utcfromtimestamp(0) + timedelta(
-                seconds=seconds, microseconds=fraction
-            )
+            return datetime.fromtimestamp(0, timezone.utc).replace(
+                tzinfo=None
+            ) + timedelta(seconds=seconds, microseconds=fraction)
         return datetime.fromtimestamp(0, tz=tz) + timedelta(
             seconds=seconds, microseconds=fraction
         )

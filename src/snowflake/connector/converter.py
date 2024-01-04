@@ -11,7 +11,7 @@ import json
 import time
 from datetime import date, datetime
 from datetime import time as dt_t
-from datetime import timedelta, tzinfo
+from datetime import timedelta, timezone, tzinfo
 from functools import partial
 from logging import getLogger
 from math import ceil
@@ -42,7 +42,7 @@ except ImportError:
 BITS_FOR_TIMEZONE = 14
 ZERO_TIMEDELTA = timedelta(seconds=0)
 ZERO_EPOCH_DATE = date(1970, 1, 1)
-ZERO_EPOCH = datetime.utcfromtimestamp(0)
+ZERO_EPOCH = datetime.fromtimestamp(0, timezone.utc).replace(tzinfo=None)
 ZERO_FILL = "000000000"
 
 logger = getLogger(__name__)
@@ -220,7 +220,11 @@ class SnowflakeConverter:
 
         def conv(value: str) -> date:
             try:
-                return datetime.utcfromtimestamp(int(value) * 86400).date()
+                return (
+                    datetime.fromtimestamp(int(value) * 86400, timezone.utc)
+                    .replace(tzinfo=None)
+                    .date()
+                )
             except (OSError, ValueError) as e:
                 logger.debug("Failed to convert: %s", e)
                 ts = ZERO_EPOCH + timedelta(seconds=int(value) * (24 * 60 * 60))
@@ -318,11 +322,19 @@ class SnowflakeConverter:
         scale = ctx["scale"]
 
         def conv0(value: str) -> time:
-            return datetime.utcfromtimestamp(float(value)).time()
+            return (
+                datetime.fromtimestamp(float(value), timezone.utc)
+                .replace(tzinfo=None)
+                .time()
+            )
 
         def conv(value: str) -> dt_t:
             microseconds = float(value[0 : -scale + 6])
-            return datetime.utcfromtimestamp(microseconds).time()
+            return (
+                datetime.fromtimestamp(microseconds, timezone.utc)
+                .replace(tzinfo=None)
+                .time()
+            )
 
         return conv if scale > 6 else conv0
 
@@ -763,5 +775,7 @@ class SnowflakeConverter:
             value=value, scale=scale
         )
         if not tz:
-            return datetime.utcfromtimestamp(seconds) + timedelta(microseconds=fraction)
+            return datetime.fromtimestamp(seconds, timezone.utc).replace(
+                tzinfo=None
+            ) + timedelta(microseconds=fraction)
         return datetime.fromtimestamp(seconds, tz=tz) + timedelta(microseconds=fraction)
