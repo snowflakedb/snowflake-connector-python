@@ -148,6 +148,9 @@ def test_with_tokens(db_parameters):
     session_token = initial_cnx._rest._token
     token_cnx = snowflake.connector.connect(
         account=db_parameters["account"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        protocol=db_parameters["protocol"],
         session_token=session_token,
         master_token=master_token,
     )
