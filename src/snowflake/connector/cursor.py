@@ -72,6 +72,7 @@ from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
     from pandas import DataFrame
+    from pyarrow import Table
 
     from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeProgressPercentage
@@ -81,11 +82,14 @@ T = TypeVar("T", bound=collections.abc.Sequence)
 
 logger = getLogger(__name__)
 
-if installed_pandas:
-    from pyarrow import Table
-else:
-    logger.debug("Failed to import pyarrow. Cannot use pandas fetch API")
-    Table = None
+
+if not installed_pandas:
+    logger.debug(
+        "Failed to import pyarrow or pandas. Cannot use pandas fetch API. Please "
+        "install snowflake-connector-python with the `pandas` extra to use these "
+        "features."
+    )
+
 
 try:
     from .nanoarrow_arrow_iterator import PyArrowIterator  # NOQA
