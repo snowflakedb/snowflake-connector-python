@@ -14,6 +14,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Cleanup some C++ code warnings and performance issues.
   - Added support for Python 3.12
   - Make local testing more robust against implicit assumptions.
+  - Fixed PyArrow Table type hinting
 
 - v3.6.0(December 09,2023)
 
