@@ -15,6 +15,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added support for Python 3.12
   - Make local testing more robust against implicit assumptions.
   - Fixed PyArrow Table type hinting
+  - Added support for connecting using an existing connection via the session and master token.
 
 - v3.6.0(December 09,2023)
 
