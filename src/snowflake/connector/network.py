@@ -613,9 +613,8 @@ class SnowflakeRestful:
             token=self.token,
         )
         if not ret.get("success"):
-            logger.error("WIPWAP")
             logger.error("Failed to heartbeat. code: %s, url: %s", ret.get("code"), url)
-            return ret
+        return ret
 
     def delete_session(self, retry: bool = False) -> None:
         """Deletes the session."""

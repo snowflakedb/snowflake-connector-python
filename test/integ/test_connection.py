@@ -32,7 +32,7 @@ from snowflake.connector.errorcode import (
     ER_NO_ACCOUNT_NAME,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from snowflake.connector.errors import Error, ForbiddenError, UnauthorizedError
+from snowflake.connector.errors import Error, ForbiddenError
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
@@ -176,7 +176,7 @@ def test_with_tokens_expired(db_parameters):
     session_token = initial_cnx._rest._token
     initial_cnx.close()
 
-    with pytest.raises(UnauthorizedError):
+    with pytest.raises(Error):
         token_cnx = snowflake.connector.connect(
             account=db_parameters["account"],
             host=db_parameters["host"],

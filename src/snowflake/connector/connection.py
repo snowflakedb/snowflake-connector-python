@@ -89,13 +89,7 @@ from .errorcode import (
     ER_NO_USER,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from .errors import (
-    DatabaseError,
-    Error,
-    OperationalError,
-    ProgrammingError,
-    UnauthorizedError,
-)
+from .errors import DatabaseError, Error, OperationalError, ProgrammingError
 from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
@@ -939,8 +933,17 @@ class SnowflakeConnection:
                 self._master_validity_in_seconds,
             )
             heartbeat_ret = auth._rest._heartbeat()
-            if not heartbeat_ret.get("success"):
-                raise UnauthorizedError
+            logger.debug(heartbeat_ret)
+            if not heartbeat_ret or not heartbeat_ret.get("success"):
+                Error.errorhandler_wrapper(
+                    self,
+                    None,
+                    ProgrammingError,
+                    {
+                        "msg": "Session and master tokens invalid",
+                        "errno": ER_INVALID_VALUE,
+                    },
+                )
             else:
                 logger.debug("Session and master token validation successful.")
 
