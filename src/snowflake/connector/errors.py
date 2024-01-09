@@ -484,6 +484,19 @@ class ForbiddenError(Error):
         )
 
 
+class UnauthorizedError(Error):
+    """Exception for 401 HTTP error for retry."""
+
+    def __init__(self, **kwargs) -> None:
+        Error.__init__(
+            self,
+            msg=kwargs.get("msg") or "HTTP 401: Unauthorized",
+            errno=kwargs.get("errno"),
+            sqlstate=kwargs.get("sqlstate"),
+            sfqid=kwargs.get("sfqid"),
+        )
+
+
 class RequestTimeoutError(Error):
     """Exception for 408 HTTP error for retry."""
 

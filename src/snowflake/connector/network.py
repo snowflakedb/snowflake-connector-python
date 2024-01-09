@@ -595,7 +595,7 @@ class SnowflakeRestful:
                 },
             )
 
-    def _heartbeat(self) -> None:
+    def _heartbeat(self) -> Any | dict[Any, Any] | dict[str, Any] | None:
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
@@ -613,7 +613,9 @@ class SnowflakeRestful:
             token=self.token,
         )
         if not ret.get("success"):
+            logger.error("WIPWAP")
             logger.error("Failed to heartbeat. code: %s, url: %s", ret.get("code"), url)
+            return ret
 
     def delete_session(self, retry: bool = False) -> None:
         """Deletes the session."""

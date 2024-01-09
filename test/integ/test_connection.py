@@ -32,7 +32,7 @@ from snowflake.connector.errorcode import (
     ER_NO_ACCOUNT_NAME,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from snowflake.connector.errors import Error, ForbiddenError
+from snowflake.connector.errors import Error, ForbiddenError, UnauthorizedError
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
@@ -157,6 +157,35 @@ def test_with_tokens(db_parameters):
     assert token_cnx, "invalid second cnx"
     initial_cnx.close()
     token_cnx.close()
+
+
+@pytest.mark.skipolddriver
+def test_with_tokens_expired(db_parameters):
+    """Creates a connection using session and master token."""
+    initial_cnx = snowflake.connector.connect(
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        protocol=db_parameters["protocol"],
+        timezone="UTC",
+    )
+    assert initial_cnx, "invalid initial cnx"
+    master_token = initial_cnx._rest._master_token
+    session_token = initial_cnx._rest._token
+    initial_cnx.close()
+
+    with pytest.raises(UnauthorizedError):
+        token_cnx = snowflake.connector.connect(
+            account=db_parameters["account"],
+            host=db_parameters["host"],
+            port=db_parameters["port"],
+            protocol=db_parameters["protocol"],
+            session_token=session_token,
+            master_token=master_token,
+        )
+        token_cnx.close()
 
 
 def test_keep_alive_true(db_parameters):

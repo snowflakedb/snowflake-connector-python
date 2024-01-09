@@ -89,7 +89,13 @@ from .errorcode import (
     ER_NO_USER,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from .errors import DatabaseError, Error, OperationalError, ProgrammingError
+from .errors import (
+    DatabaseError,
+    Error,
+    OperationalError,
+    ProgrammingError,
+    UnauthorizedError,
+)
 from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
@@ -932,8 +938,11 @@ class SnowflakeConnection:
                 self._master_token,
                 self._master_validity_in_seconds,
             )
-            auth._rest._heartbeat()
-            logger.debug("Session and master token validation successful.")
+            heartbeat_ret = auth._rest._heartbeat()
+            if not heartbeat_ret.get("success"):
+                raise UnauthorizedError
+            else:
+                logger.debug("Session and master token validation successful.")
 
         else:
             if self.auth_class is not None:
@@ -1138,7 +1147,7 @@ class SnowflakeConnection:
             ]:
                 self._authenticator = auth_tmp
 
-        if not self._master_token and not self._session_token:
+        if not (self._master_token and self._session_token):
             if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
                 # OAuth Authentication does not require a username
                 Error.errorhandler_wrapper(
