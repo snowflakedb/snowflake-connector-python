@@ -176,7 +176,7 @@ def test_with_tokens_expired(db_parameters):
     session_token = initial_cnx._rest._token
     initial_cnx.close()
 
-    with pytest.raises(Error):
+    with pytest.raises(ProgrammingError):
         token_cnx = snowflake.connector.connect(
             account=db_parameters["account"],
             host=db_parameters["host"],
