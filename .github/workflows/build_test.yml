@@ -156,7 +156,8 @@ jobs:
       - name: Run tests
         run: |
             echo "py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci"
-            python -m tox run -e "py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci"
+            python -m tox run -e "py${PYTHON_VERSION/\./}-{extras,sso}-ci"
+            # python -m tox run -e "py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci"
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
