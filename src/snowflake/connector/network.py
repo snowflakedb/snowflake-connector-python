@@ -595,7 +595,7 @@ class SnowflakeRestful:
                 },
             )
 
-    def _heartbeat(self) -> Any | dict[Any, Any] | dict[str, Any] | None:
+    def _heartbeat(self) -> Any | dict[Any, Any] | None:
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
