@@ -5,6 +5,6 @@ RUN chmod 777 /home/user/snowflake-connector-python
 ENV PATH="${PATH}:/opt/python/cp312-cp312/bin/"
 ENV PYTHONPATH="${PYTHONPATH}:/home/user/snowflake-connector-python/ci/docker/connector_test_lambda/"
 
-RUN pip3 install -U pip setuptools wheel tox tox-external_wheels
+RUN pip3 install -U pip setuptools wheel tox>=4
 
 CMD [ "app.handler" ]

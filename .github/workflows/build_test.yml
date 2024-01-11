@@ -36,7 +36,7 @@ jobs:
       - name: Upgrade setuptools, pip and wheel
         run: python -m pip install -U setuptools pip wheel
       - name: Install tox
-        run: python -m pip install tox
+        run: python -m pip install tox>=4
       - name: Set PY
         run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> $GITHUB_ENV
       - uses: actions/cache@v3
@@ -44,7 +44,7 @@ jobs:
           path: ~/.cache/pre-commit
           key: pre-commit|${{ env.PY }}|${{ hashFiles('.pre-commit-config.yaml') }}
       - name: Run fix_lint
-        run: python -m tox -e fix_lint
+        run: python -m tox run -e fix_lint
 
   dependency:
     name: Check dependency
@@ -61,9 +61,9 @@ jobs:
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
       - name: Install tox
-        run: python -m pip install tox tox-external-wheels
+        run: python -m pip install tox>=4
       - name: Run tests
-        run: python -m tox -e dependency
+        run: python -m tox run -e dependency
 
   build:
     needs: lint
@@ -152,9 +152,9 @@ jobs:
       - name: Upgrade setuptools, pip and wheel
         run: python -m pip install -U setuptools pip wheel
       - name: Install tox
-        run: python -m pip install tox tox-external-wheels
+        run: python -m pip install tox>=4
       - name: Run tests
-        run: python -m tox -e "py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci"
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
@@ -162,7 +162,7 @@ jobs:
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - name: Combine coverages
-        run: python -m tox -e coverage --skip-missing-interpreters false
+        run: python -m tox run -e coverage --skip-missing-interpreters false
         shell: bash
       - uses: actions/upload-artifact@v3
         with:
@@ -201,9 +201,9 @@ jobs:
       - name: Upgrade setuptools, pip and wheel
         run: python -m pip install -U setuptools pip wheel
       - name: Install tox
-        run: python -m pip install tox
+        run: python -m pip install tox>=4
       - name: Run tests
-        run: python -m tox -e olddriver
+        run: python -m tox run -e olddriver
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
@@ -233,9 +233,9 @@ jobs:
       - name: Upgrade setuptools, pip and wheel
         run: python -m pip install -U setuptools pip wheel
       - name: Install tox
-        run: python -m pip install tox
+        run: python -m pip install tox>=4
       - name: Run tests
-        run: python -m tox -e noarrowextension
+        run: python -m tox run -e noarrowextension
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
@@ -347,7 +347,7 @@ jobs:
       - name: Upgrade setuptools and pip
         run: python -m pip install -U setuptools pip wheel
       - name: Install tox
-        run: python -m pip install tox
+        run: python -m pip install tox>=4
       - name: Collect all coverages to one dir
         run: |
           python -c '
@@ -362,7 +362,7 @@ jobs:
               print("{} copy to {}".format(src_file, dst_file))
               shutil.copy(str(src_file), str(dst_file))'
       - name: Combine coverages
-        run: python -m tox -e coverage
+        run: python -m tox run -e coverage
       - name: Publish html coverage
         uses: actions/upload-artifact@v3
         with:
