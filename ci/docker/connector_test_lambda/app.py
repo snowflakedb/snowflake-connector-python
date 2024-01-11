@@ -21,7 +21,7 @@ def run_tests():
         "tox",
         "run",
         "-e",
-        f"py{PY_SHORT_VER}{{-lambda}}-ci",
+        f"py{PY_SHORT_VER}-lambda-ci",
         "-c",
         f"{REPO_PATH}/tox.ini",
         "--workdir",
