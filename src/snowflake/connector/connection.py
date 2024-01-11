@@ -256,6 +256,18 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # Enable sending retryReason in response header for query-requests
+    "session_token": (
+        None,
+        (type(None), str),
+    ),  # session token from another connection, to be provided together with master token
+    "master_token": (
+        None,
+        (type(None), str),
+    ),  # master token from another connection, to be provided together with session token
+    "master_validity_in_seconds": (
+        None,
+        (type(None), int),
+    ),  # master token validity in seconds
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -913,100 +925,123 @@ class SnowflakeConnection:
 
         # Setup authenticator
         auth = Auth(self.rest)
-        if self.auth_class is not None:
-            if type(
-                self.auth_class
-            ) not in FIRST_PARTY_AUTHENTICATORS and not issubclass(
-                type(self.auth_class), AuthByKeyPair
-            ):
-                raise TypeError("auth_class must be a child class of AuthByKeyPair")
-                # TODO: add telemetry for custom auth
-            self.auth_class = self.auth_class
-        elif self._authenticator == DEFAULT_AUTHENTICATOR:
-            self.auth_class = AuthByDefault(
-                password=self._password,
-                timeout=self._login_timeout,
-                backoff_generator=self._backoff_generator,
+
+        if self._session_token and self._master_token:
+            auth._rest.update_tokens(
+                self._session_token,
+                self._master_token,
+                self._master_validity_in_seconds,
             )
-        elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
-            self._session_parameters[PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = (
-                self._client_store_temporary_credential if IS_LINUX else True
-            )
-            auth.read_temporary_credentials(
-                self.host,
-                self.user,
-                self._session_parameters,
-            )
-            # Depending on whether self._rest.id_token is available we do different
-            #  auth_instance
-            if self._rest.id_token is None:
-                self.auth_class = AuthByWebBrowser(
-                    application=self.application,
-                    protocol=self._protocol,
-                    host=self.host,
-                    port=self.port,
-                    timeout=self._login_timeout,
-                    backoff_generator=self._backoff_generator,
+            heartbeat_ret = auth._rest._heartbeat()
+            logger.debug(heartbeat_ret)
+            if not heartbeat_ret or not heartbeat_ret.get("success"):
+                Error.errorhandler_wrapper(
+                    self,
+                    None,
+                    ProgrammingError,
+                    {
+                        "msg": "Session and master tokens invalid",
+                        "errno": ER_INVALID_VALUE,
+                    },
                 )
             else:
-                self.auth_class = AuthByIdToken(
-                    id_token=self._rest.id_token,
-                    application=self.application,
-                    protocol=self._protocol,
-                    host=self.host,
-                    port=self.port,
+                logger.debug("Session and master token validation successful.")
+
+        else:
+            if self.auth_class is not None:
+                if type(
+                    self.auth_class
+                ) not in FIRST_PARTY_AUTHENTICATORS and not issubclass(
+                    type(self.auth_class), AuthByKeyPair
+                ):
+                    raise TypeError("auth_class must be a child class of AuthByKeyPair")
+                    # TODO: add telemetry for custom auth
+                self.auth_class = self.auth_class
+            elif self._authenticator == DEFAULT_AUTHENTICATOR:
+                self.auth_class = AuthByDefault(
+                    password=self._password,
                     timeout=self._login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
-
-        elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
-            private_key = self._private_key
-
-            if self._private_key_file:
-                private_key = _get_private_bytes_from_file(
-                    self._private_key_file,
-                    self._private_key_file_pwd,
-                )
-
-            self.auth_class = AuthByKeyPair(
-                private_key=private_key,
-                timeout=self._login_timeout,
-                backoff_generator=self._backoff_generator,
-            )
-        elif self._authenticator == OAUTH_AUTHENTICATOR:
-            self.auth_class = AuthByOAuth(
-                oauth_token=self._token,
-                timeout=self._login_timeout,
-                backoff_generator=self._backoff_generator,
-            )
-        elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
-            self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
-                self._client_request_mfa_token if IS_LINUX else True
-            )
-            if self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN]:
+            elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+                self._session_parameters[
+                    PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL
+                ] = (self._client_store_temporary_credential if IS_LINUX else True)
                 auth.read_temporary_credentials(
                     self.host,
                     self.user,
                     self._session_parameters,
                 )
-            self.auth_class = AuthByUsrPwdMfa(
-                password=self._password,
-                mfa_token=self.rest.mfa_token,
-                timeout=self._login_timeout,
-                backoff_generator=self._backoff_generator,
-            )
-        else:
-            # okta URL, e.g., https://<account>.okta.com/
-            self.auth_class = AuthByOkta(
-                application=self.application,
-                timeout=self._login_timeout,
-                backoff_generator=self._backoff_generator,
-            )
+                # Depending on whether self._rest.id_token is available we do different
+                #  auth_instance
+                if self._rest.id_token is None:
+                    self.auth_class = AuthByWebBrowser(
+                        application=self.application,
+                        protocol=self._protocol,
+                        host=self.host,
+                        port=self.port,
+                        timeout=self._login_timeout,
+                        backoff_generator=self._backoff_generator,
+                    )
+                else:
+                    self.auth_class = AuthByIdToken(
+                        id_token=self._rest.id_token,
+                        application=self.application,
+                        protocol=self._protocol,
+                        host=self.host,
+                        port=self.port,
+                        timeout=self._login_timeout,
+                        backoff_generator=self._backoff_generator,
+                    )
 
-        self.authenticate_with_retry(self.auth_class)
+            elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
+                private_key = self._private_key
 
-        self._password = None  # ensure password won't persist
-        self.auth_class.reset_secrets()
+                if self._private_key_file:
+                    private_key = _get_private_bytes_from_file(
+                        self._private_key_file,
+                        self._private_key_file_pwd,
+                    )
+
+                self.auth_class = AuthByKeyPair(
+                    private_key=private_key,
+                    timeout=self._login_timeout,
+                    backoff_generator=self._backoff_generator,
+                )
+            elif self._authenticator == OAUTH_AUTHENTICATOR:
+                self.auth_class = AuthByOAuth(
+                    oauth_token=self._token,
+                    timeout=self._login_timeout,
+                    backoff_generator=self._backoff_generator,
+                )
+            elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+                self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
+                    self._client_request_mfa_token if IS_LINUX else True
+                )
+                if self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN]:
+                    auth.read_temporary_credentials(
+                        self.host,
+                        self.user,
+                        self._session_parameters,
+                    )
+                self.auth_class = AuthByUsrPwdMfa(
+                    password=self._password,
+                    mfa_token=self.rest.mfa_token,
+                    timeout=self._login_timeout,
+                    backoff_generator=self._backoff_generator,
+                )
+            else:
+                # okta URL, e.g., https://<account>.okta.com/
+                self.auth_class = AuthByOkta(
+                    application=self.application,
+                    timeout=self._login_timeout,
+                    backoff_generator=self._backoff_generator,
+                )
+
+            self.authenticate_with_retry(self.auth_class)
+
+            self._password = None  # ensure password won't persist
+            self.auth_class.reset_secrets()
 
         self.initialize_query_context_cache()
 
@@ -1115,34 +1150,35 @@ class SnowflakeConnection:
             ]:
                 self._authenticator = auth_tmp
 
-        if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
-            # OAuth Authentication does not require a username
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {"msg": "User is empty", "errno": ER_NO_USER},
-            )
+        if not (self._master_token and self._session_token):
+            if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
+                # OAuth Authentication does not require a username
+                Error.errorhandler_wrapper(
+                    self,
+                    None,
+                    ProgrammingError,
+                    {"msg": "User is empty", "errno": ER_NO_USER},
+                )
 
-        if self._private_key or self._private_key_file:
-            self._authenticator = KEY_PAIR_AUTHENTICATOR
+            if self._private_key or self._private_key_file:
+                self._authenticator = KEY_PAIR_AUTHENTICATOR
 
-        if (
-            self.auth_class is None
-            and self._authenticator
-            not in [
-                EXTERNAL_BROWSER_AUTHENTICATOR,
-                OAUTH_AUTHENTICATOR,
-                KEY_PAIR_AUTHENTICATOR,
-            ]
-            and not self._password
-        ):
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
-            )
+            if (
+                self.auth_class is None
+                and self._authenticator
+                not in [
+                    EXTERNAL_BROWSER_AUTHENTICATOR,
+                    OAUTH_AUTHENTICATOR,
+                    KEY_PAIR_AUTHENTICATOR,
+                ]
+                and not self._password
+            ):
+                Error.errorhandler_wrapper(
+                    self,
+                    None,
+                    ProgrammingError,
+                    {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
+                )
 
         if not self._account:
             Error.errorhandler_wrapper(
