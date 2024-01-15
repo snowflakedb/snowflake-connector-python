@@ -183,13 +183,11 @@ def test_write_pandas_with_overwrite(
                         overwrite=True,
                         index=index,
                     )
-                # the original table shouldn't have any change
-                assert (
-                    result
-                    == cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
-                )
-                # Check number of rows
-                assert result["COUNT(*)"] == 1
+                
+                # because of the way we handle the error above, the original table is dropped
+                # therefore it will raise an error if we try to SELECT from it
+                with pytest.raises(ProgrammingError, match="does not exist"):
+                    cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
 
             if not quote_identifiers:
                 original_result = (
