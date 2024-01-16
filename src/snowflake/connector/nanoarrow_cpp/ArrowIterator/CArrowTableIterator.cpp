@@ -108,14 +108,14 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow() {
 
         case SnowflakeType::Type::ANY:
         case SnowflakeType::Type::ARRAY:
+        case SnowflakeType::Type::BINARY:
         case SnowflakeType::Type::BOOLEAN:
         case SnowflakeType::Type::CHAR:
-        case SnowflakeType::Type::OBJECT:
-        case SnowflakeType::Type::BINARY:
-        case SnowflakeType::Type::VARIANT:
-        case SnowflakeType::Type::TEXT:
-        case SnowflakeType::Type::REAL:
         case SnowflakeType::Type::DATE:
+        case SnowflakeType::Type::OBJECT:
+        case SnowflakeType::Type::REAL:
+        case SnowflakeType::Type::TEXT:
+        case SnowflakeType::Type::VARIANT:
         case SnowflakeType::Type::VECTOR: {
           // Do not need to convert
           break;
