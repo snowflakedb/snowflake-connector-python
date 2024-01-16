@@ -65,7 +65,7 @@ def test_exception_raise_during_diag_fail(monkeypatch, caplog):
             warehouse="TESTWH",
             enable_connection_diag=True,
         )
-    except BaseException:
+    except Exception:
         pass
 
     assert "Diagnostic Test Failure" in caplog.text
