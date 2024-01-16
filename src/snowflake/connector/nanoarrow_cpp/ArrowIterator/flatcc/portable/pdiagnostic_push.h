@@ -24,7 +24,7 @@
  */
 
 #if defined(_MSC_VER)
-#pragma warning(push)
+#pragma warning( push )
 #define PDIAGNOSTIC_PUSHED_MSVC 1
 #else
 #define PDIAGNOSTIC_PUSHED_MSVC 0
@@ -43,9 +43,9 @@
 #define PDIAGNOSTIC_PUSHED_GCC 1
 #else
 #define PDIAGNOSTIC_PUSHED_GCC 0
-#endif  // GNUC >= 4.6
+#endif // GNUC >= 4.6
 #else
 #define PDIAGNOSTIC_PUSHED_GCC 0
-#endif  // defined(__GNUC__) && !defined(__clang__)
+#endif // defined(__GNUC__) && !defined(__clang__)
 
 #include "pdiagnostic.h"

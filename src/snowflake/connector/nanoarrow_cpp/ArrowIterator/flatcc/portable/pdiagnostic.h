@@ -1,4 +1,5 @@
-/* There is intentionally no include guard in this file. */
+ /* There is intentionally no include guard in this file. */
+
 
 /*
  * Usage: optionally disable any of these before including.
@@ -14,7 +15,7 @@
  */
 
 #ifdef _MSC_VER
-#pragma warning(disable : 4668) /* preprocessor name not defined */
+#pragma warning(disable: 4668) /* preprocessor name not defined */
 #endif
 
 #if !defined(PDIAGNOSTIC_AWARE_MSVC) && defined(_MSC_VER)
@@ -30,8 +31,7 @@
 #endif
 
 #if !defined(PDIAGNOSTIC_AWARE_GCC) && defined(__GNUC__) && !defined(__clang__)
-/* Can disable some warnings even if push is not available (gcc-4.2 vs gcc-4.7)
- */
+/* Can disable some warnings even if push is not available (gcc-4.2 vs gcc-4.7) */
 #if (__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 2)
 #define PDIAGNOSTIC_AWARE_GCC 1
 #endif
@@ -41,8 +41,7 @@
 #define PDIAGNOSTIC_AWARE_GCC 0
 #endif
 
-#if defined(PDIAGNOSTIC_IGNORE_UNUSED_FUNCTION) || \
-    defined(PDIAGNOSTIC_IGNORE_UNUSED)
+#if defined(PDIAGNOSTIC_IGNORE_UNUSED_FUNCTION) || defined(PDIAGNOSTIC_IGNORE_UNUSED)
 #if PDIAGNOSTIC_AWARE_CLANG
 #pragma clang diagnostic ignored "-Wunused-function"
 #elif PDIAGNOSTIC_AWARE_GCC
@@ -51,10 +50,9 @@
 #endif
 #undef PDIAGNOSTIC_IGNORE_UNUSED_FUNCTION
 
-#if defined(PDIAGNOSTIC_IGNORE_UNUSED_VARIABLE) || \
-    defined(PDIAGNOSTIC_IGNORE_UNUSED)
+#if defined(PDIAGNOSTIC_IGNORE_UNUSED_VARIABLE) || defined(PDIAGNOSTIC_IGNORE_UNUSED)
 #if PDIAGNOSTIC_AWARE_MSVC
-#pragma warning(disable : 4101) /* unused local variable */
+#pragma warning(disable: 4101) /* unused local variable */
 #elif PDIAGNOSTIC_AWARE_CLANG
 #pragma clang diagnostic ignored "-Wunused-variable"
 #elif PDIAGNOSTIC_AWARE_GCC
@@ -63,8 +61,7 @@
 #endif
 #undef PDIAGNOSTIC_IGNORE_UNUSED_VARIABLE
 
-#if defined(PDIAGNOSTIC_IGNORE_UNUSED_PARAMETER) || \
-    defined(PDIAGNOSTIC_IGNORE_UNUSED)
+#if defined(PDIAGNOSTIC_IGNORE_UNUSED_PARAMETER) || defined(PDIAGNOSTIC_IGNORE_UNUSED)
 #if PDIAGNOSTIC_AWARE_CLANG
 #pragma clang diagnostic ignored "-Wunused-parameter"
 #elif PDIAGNOSTIC_AWARE_GCC
@@ -75,7 +72,7 @@
 
 #undef PDIAGNOSTIC_IGNORE_UNUSED
 
-#if defined(__cplusplus) && __cplusplus < 201103L
+#if defined (__cplusplus) && __cplusplus < 201103L
 #if PDIAGNOSTIC_AWARE_CLANG
 /* Needed for < C++11 clang C++ static_assert */
 #pragma clang diagnostic ignored "-Wc11-extensions"

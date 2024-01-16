@@ -16,15 +16,15 @@ extern "C" {
 
 #if defined(_MSC_VER)
 /* Needed when flagging code in or out and more. */
-#pragma warning(disable : 4127) /* conditional expression is constant */
+#pragma warning(disable: 4127) /* conditional expression is constant */
 /* happens also in MS's own headers. */
-#pragma warning(disable : 4668) /* preprocessor name not defined */
+#pragma warning(disable: 4668) /* preprocessor name not defined */
 /* MSVC does not respect double parenthesis for intent */
-#pragma warning(disable : 4706) /* assignment within conditional expression */
+#pragma warning(disable: 4706) /* assignment within conditional expression */
 /* `inline` only advisory anyway. */
-#pragma warning(disable : 4710) /* function not inlined */
+#pragma warning(disable: 4710) /* function not inlined */
 /* Well, we don't intend to add the padding manually. */
-#pragma warning(disable : 4820) /* x bytes padding added in struct */
+#pragma warning(disable: 4820) /* x bytes padding added in struct */
 
 /*
  * Don't warn that fopen etc. are unsafe
@@ -41,8 +41,7 @@ extern "C" {
  * but warns. Truly portable code should perhaps not use this feature,
  * but this is not the place to complain about it.
  */
-#pragma warning( \
-    disable : 4201) /* nonstandard extension used: nameless struct/union */
+#pragma warning(disable: 4201) /* nonstandard extension used: nameless struct/union */
 
 #endif /* _MSV_VER */
 

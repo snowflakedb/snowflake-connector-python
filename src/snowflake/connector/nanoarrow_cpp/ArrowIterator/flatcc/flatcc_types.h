@@ -54,12 +54,9 @@ extern "C" {
 #define FLATBUFFERS_BOOL_MAX UINT8_MAX
 #define FLATBUFFERS_THASH_MAX UINT32_MAX
 
-#define FLATBUFFERS_ID_MAX \
-  (FLATBUFFERS_VOFFSET_MAX / sizeof(flatbuffers_voffset_t) - 3)
-/* Vectors of empty structs can yield div by zero, so we must guard against
- * this. */
-#define FLATBUFFERS_COUNT_MAX(elem_size) \
-  (FLATBUFFERS_UOFFSET_MAX / ((elem_size) == 0 ? 1 : (elem_size)))
+#define FLATBUFFERS_ID_MAX (FLATBUFFERS_VOFFSET_MAX / sizeof(flatbuffers_voffset_t) - 3)
+/* Vectors of empty structs can yield div by zero, so we must guard against this. */
+#define FLATBUFFERS_COUNT_MAX(elem_size) (FLATBUFFERS_UOFFSET_MAX/((elem_size) == 0 ? 1 : (elem_size)))
 
 #define FLATBUFFERS_UOFFSET_WIDTH 32
 #define FLATBUFFERS_COUNT_WIDTH 32

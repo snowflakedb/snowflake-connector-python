@@ -16,9 +16,9 @@ extern "C" {
 #include <stdlib.h>
 #include <string.h>
 
-#include "flatcc/flatcc_alloc.h"
-#include "flatcc/flatcc_iov.h"
 #include "flatcc/flatcc_types.h"
+#include "flatcc/flatcc_iov.h"
+#include "flatcc/flatcc_alloc.h"
 
 /*
  * The buffer steadily grows during emission but the design allows for
@@ -55,8 +55,8 @@ extern "C" {
 #ifndef FLATCC_EMITTER_PAGE_SIZE
 #define FLATCC_EMITTER_MAX_PAGE_SIZE 3000
 #define FLATCC_EMITTER_PAGE_MULTIPLE 64
-#define FLATCC_EMITTER_PAGE_SIZE \
-  ((FLATCC_EMITTER_MAX_PAGE_SIZE) & ~(2 * (FLATCC_EMITTER_PAGE_MULTIPLE)-1))
+#define FLATCC_EMITTER_PAGE_SIZE ((FLATCC_EMITTER_MAX_PAGE_SIZE) &\
+    ~(2 * (FLATCC_EMITTER_PAGE_MULTIPLE) - 1))
 #endif
 
 #ifndef FLATCC_EMITTER_ALLOC
@@ -65,10 +65,8 @@ extern "C" {
  * <stdlib.h> does not always provide aligned_alloc, so include whatever
  * is required when enabling this feature.
  */
-#define FLATCC_EMITTER_ALLOC(n)                             \
-  aligned_alloc(FLATCC_EMITTER_PAGE_MULTIPLE,               \
-                (((n) + FLATCC_EMITTER_PAGE_MULTIPLE - 1) & \
-                 ~(FLATCC_EMITTER_PAGE_MULTIPLE - 1)))
+#define FLATCC_EMITTER_ALLOC(n) aligned_alloc(FLATCC_EMITTER_PAGE_MULTIPLE,\
+        (((n) + FLATCC_EMITTER_PAGE_MULTIPLE - 1) & ~(FLATCC_EMITTER_PAGE_MULTIPLE - 1)))
 #ifndef FLATCC_EMITTER_FREE
 #define FLATCC_EMITTER_FREE(p) aligned_free(p)
 #endif
@@ -86,15 +84,15 @@ typedef struct flatcc_emitter_page flatcc_emitter_page_t;
 typedef struct flatcc_emitter flatcc_emitter_t;
 
 struct flatcc_emitter_page {
-  uint8_t page[FLATCC_EMITTER_PAGE_SIZE];
-  flatcc_emitter_page_t *next;
-  flatcc_emitter_page_t *prev;
-  /*
-   * The offset is relative to page start, but not necessarily
-   * to any present content if part of front or back page,
-   * and undefined for unused pages.
-   */
-  flatbuffers_soffset_t page_offset;
+    uint8_t page[FLATCC_EMITTER_PAGE_SIZE];
+    flatcc_emitter_page_t *next;
+    flatcc_emitter_page_t *prev;
+    /*
+     * The offset is relative to page start, but not necessarily
+     * to any present content if part of front or back page,
+     * and undefined for unused pages.
+     */
+    flatbuffers_soffset_t page_offset;
 };
 
 /*
@@ -103,19 +101,20 @@ struct flatcc_emitter_page {
  * with the `flatcc_emitter` function.
  */
 struct flatcc_emitter {
-  flatcc_emitter_page_t *front, *back;
-  uint8_t *front_cursor;
-  size_t front_left;
-  uint8_t *back_cursor;
-  size_t back_left;
-  size_t used;
-  size_t capacity;
-  size_t used_average;
+    flatcc_emitter_page_t *front, *back;
+    uint8_t *front_cursor;
+    size_t front_left;
+    uint8_t *back_cursor;
+    size_t back_left;
+    size_t used;
+    size_t capacity;
+    size_t used_average;
 };
 
 /* Optional helper to ensure emitter is zeroed initially. */
-static inline void flatcc_emitter_init(flatcc_emitter_t *E) {
-  memset(E, 0, sizeof(*E));
+static inline void flatcc_emitter_init(flatcc_emitter_t *E)
+{
+    memset(E, 0, sizeof(*E));
 }
 
 /* Deallocates all buffer memory making the emitter ready for next use. */
@@ -155,8 +154,9 @@ int flatcc_emitter_recycle_page(flatcc_emitter_t *E, flatcc_emitter_page_t *p);
  * function of the amount emitted data so the flatbuilder itself can
  * also provide this information.
  */
-static inline size_t flatcc_emitter_get_buffer_size(flatcc_emitter_t *E) {
-  return E->used;
+static inline size_t flatcc_emitter_get_buffer_size(flatcc_emitter_t *E)
+{
+    return E->used;
 }
 
 /*
@@ -168,18 +168,18 @@ static inline size_t flatcc_emitter_get_buffer_size(flatcc_emitter_t *E) {
  * If `size_out` is not null, it is set to the buffer size, or 0 if
  * operation failed.
  */
-static inline void *flatcc_emitter_get_direct_buffer(flatcc_emitter_t *E,
-                                                     size_t *size_out) {
-  if (E->front == E->back) {
-    if (size_out) {
-      *size_out = E->used;
+static inline void *flatcc_emitter_get_direct_buffer(flatcc_emitter_t *E, size_t *size_out)
+{
+    if (E->front == E->back) {
+        if (size_out) {
+            *size_out = E->used;
+        }
+        return E->front_cursor;
     }
-    return E->front_cursor;
-  }
-  if (size_out) {
-    *size_out = 0;
-  }
-  return 0;
+    if (size_out) {
+        *size_out = 0;
+    }
+    return 0;
 }
 
 /*
@@ -204,8 +204,9 @@ void *flatcc_emitter_copy_buffer(flatcc_emitter_t *E, void *buf, size_t size);
  * This function is compatible with the `flatbuilder_emit_fun`
  * type defined in "flatbuilder.h".
  */
-int flatcc_emitter(void *emit_context, const flatcc_iovec_t *iov, int iov_count,
-                   flatbuffers_soffset_t offset, size_t len);
+int flatcc_emitter(void *emit_context,
+        const flatcc_iovec_t *iov, int iov_count,
+        flatbuffers_soffset_t offset, size_t len);
 
 #ifdef __cplusplus
 }

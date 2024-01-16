@@ -131,3 +131,7 @@ repos:
   hooks:
   - id: clang-format
     types_or: [c++, c]
+    exclude: >
+        (?x)^(
+            src/snowflake/connector/nanoarrow_cpp/ArrowIterator/flatcc/.*\.h|
+        )$
