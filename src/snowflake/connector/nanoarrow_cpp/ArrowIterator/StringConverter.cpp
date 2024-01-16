@@ -3,20 +3,17 @@
 //
 
 #include "StringConverter.hpp"
+
 #include <memory>
 
-namespace sf
-{
-Logger* StringConverter::logger = new Logger("snowflake.connector.StringConverter");
+namespace sf {
+Logger* StringConverter::logger =
+    new Logger("snowflake.connector.StringConverter");
 
-StringConverter::StringConverter(ArrowArrayView* array)
-: m_array(array)
-{
-}
+StringConverter::StringConverter(ArrowArrayView* array) : m_array(array) {}
 
-PyObject* StringConverter::toPyObject(int64_t rowIndex) const
-{
-  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
+PyObject* StringConverter::toPyObject(int64_t rowIndex) const {
+  if (ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
   }
   ArrowStringView stringView = ArrowArrayViewGetStringUnsafe(m_array, rowIndex);

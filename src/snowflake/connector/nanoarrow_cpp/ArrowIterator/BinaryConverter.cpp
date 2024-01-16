@@ -3,20 +3,17 @@
 //
 
 #include "BinaryConverter.hpp"
+
 #include <memory>
 
-namespace sf
-{
-Logger* BinaryConverter::logger = new Logger("snowflake.connector.BinaryConverter");
+namespace sf {
+Logger* BinaryConverter::logger =
+    new Logger("snowflake.connector.BinaryConverter");
 
-BinaryConverter::BinaryConverter(ArrowArrayView* array)
-: m_array(array)
-{
-}
+BinaryConverter::BinaryConverter(ArrowArrayView* array) : m_array(array) {}
 
-PyObject* BinaryConverter::toPyObject(int64_t rowIndex) const
-{
-  if(ArrowArrayViewIsNull(m_array, rowIndex)) {
+PyObject* BinaryConverter::toPyObject(int64_t rowIndex) const {
+  if (ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
   }
   ArrowStringView stringView = ArrowArrayViewGetStringUnsafe(m_array, rowIndex);
