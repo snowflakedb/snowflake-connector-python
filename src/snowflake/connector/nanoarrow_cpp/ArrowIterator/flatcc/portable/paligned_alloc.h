@@ -50,22 +50,20 @@ extern "C" {
  * indicates that the system has builtin aligned_alloc
  * If it doesn't, the section after detection provides an implemention.
  */
-#if defined(__MINGW32__)
+#if defined (__MINGW32__)
 /* MingW does not provide aligned_alloc despite defining _ISOC11_SOURCE */
 #define PORTABLE_C11_ALIGNED_ALLOC 0
-#elif defined(_ISOC11_SOURCE)
+#elif defined (_ISOC11_SOURCE)
 /* glibc aligned_alloc detection, but MingW is not truthful */
 #define PORTABLE_C11_ALIGNED_ALLOC 1
-#elif defined(__GLIBC__)
-/* aligned_alloc is not available in glibc just because __STDC_VERSION__ >=
- * 201112L. */
+#elif defined (__GLIBC__)
+/* aligned_alloc is not available in glibc just because __STDC_VERSION__ >= 201112L. */
 #define PORTABLE_C11_ALIGNED_ALLOC 0
-#elif defined(__clang__)
+#elif defined (__clang__)
 #define PORTABLE_C11_ALIGNED_ALLOC 0
 #elif defined(__IBMC__)
 #define PORTABLE_C11_ALIGNED_ALLOC 0
-#elif (defined(__STDC__) && __STDC__ && defined(__STDC_VERSION__) && \
-       __STDC_VERSION__ >= 201112L)
+#elif (defined(__STDC__) && __STDC__ && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L)
 #define PORTABLE_C11_ALIGNED_ALLOC 1
 #else
 #define PORTABLE_C11_ALIGNED_ALLOC 0
@@ -100,8 +98,7 @@ extern "C" {
 #endif
 
 /* https://forum.kde.org/viewtopic.php?p=66274 */
-#if (defined(__STDC__) && __STDC__ && defined(__STDC_VERSION__) && \
-     __STDC_VERSION__ >= 201112L)
+#if (defined(__STDC__) && __STDC__ && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L)
 /* C11 or newer */
 #include <stdalign.h>
 #endif
@@ -129,25 +126,26 @@ extern "C" {
 
 #if defined(__GNUC__)
 #if !defined(__GNUCC__)
-extern int posix_memalign(void **, size_t, size_t);
+extern int posix_memalign (void **, size_t, size_t);
 #elif __GNUCC__ < 5
-extern int posix_memalign(void **, size_t, size_t);
+extern int posix_memalign (void **, size_t, size_t);
 #endif
 #endif
 
-static inline void *__portable_aligned_alloc(size_t alignment, size_t size) {
-  int err;
-  void *p = 0;
+static inline void *__portable_aligned_alloc(size_t alignment, size_t size)
+{
+    int err;
+    void *p = 0;
 
-  if (alignment < sizeof(void *)) {
-    alignment = sizeof(void *);
-  }
-  err = posix_memalign(&p, alignment, size);
-  if (err && p) {
-    free(p);
-    p = 0;
-  }
-  return p;
+    if (alignment < sizeof(void *)) {
+        alignment = sizeof(void *);
+    }
+    err = posix_memalign(&p, alignment, size);
+    if (err && p) {
+        free(p);
+        p = 0;
+    }
+    return p;
 }
 
 #ifdef PORTABLE_DEBUG_ALIGNED_ALLOC
@@ -161,28 +159,30 @@ static inline void *__portable_aligned_alloc(size_t alignment, size_t size) {
 
 #else
 
-static inline void *__portable_aligned_alloc(size_t alignment, size_t size) {
-  char *raw;
-  void *buf;
-  size_t total_size = (size + alignment - 1 + sizeof(void *));
+static inline void *__portable_aligned_alloc(size_t alignment, size_t size)
+{
+    char *raw;
+    void *buf;
+    size_t total_size = (size + alignment - 1 + sizeof(void *));
 
-  if (alignment < sizeof(void *)) {
-    alignment = sizeof(void *);
-  }
-  raw = (char *)(size_t)malloc(total_size);
-  buf = raw + alignment - 1 + sizeof(void *);
-  buf = (void *)(((size_t)buf) & ~(alignment - 1));
-  ((void **)buf)[-1] = raw;
-  return buf;
+    if (alignment < sizeof(void *)) {
+        alignment = sizeof(void *);
+    }
+    raw = (char *)(size_t)malloc(total_size);
+    buf = raw + alignment - 1 + sizeof(void *);
+    buf = (void *)(((size_t)buf) & ~(alignment - 1));
+    ((void **)buf)[-1] = raw;
+    return buf;
 }
 
-static inline void __portable_aligned_free(void *p) {
-  char *raw;
+static inline void __portable_aligned_free(void *p)
+{
+    char *raw;
 
-  if (p) {
-    raw = (char *)((void **)p)[-1];
-    free(raw);
-  }
+    if (p) {
+        raw = (char*)((void **)p)[-1];
+        free(raw);
+    }
 }
 
 #define aligned_alloc(alignment, size) __portable_aligned_alloc(alignment, size)

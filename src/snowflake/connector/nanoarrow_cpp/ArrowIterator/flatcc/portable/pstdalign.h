@@ -43,8 +43,7 @@
 /* https://github.com/dvidelabs/flatcc/issues/130 */
 #ifndef __alignas_is_defined
 #if defined(__cplusplus)
-#if __cplusplus == 201103 && !defined(__clang__) && \
-    ((__GNUC__ > 8) || (__GNUC__ == 8 && __GNUC_MINOR__ >= 3))
+#if __cplusplus == 201103 && !defined(__clang__) && ((__GNUC__ > 8) || (__GNUC__ == 8 && __GNUC_MINOR__ >= 3))
 #define __alignas_is_defined 1
 #define __alignof_is_defined 1
 #include <stdalign.h>
@@ -73,7 +72,7 @@
 #endif
 #endif
 
-/* https://lists.gnu.org/archive/html/bug-gnulib/2015-08/msg00003.html */
+ /* https://lists.gnu.org/archive/html/bug-gnulib/2015-08/msg00003.html */
 #if defined(__cplusplus)
 #if !defined(_MSC_VER)
 #include <stdalign.h>
@@ -84,8 +83,7 @@
 #endif
 #elif PORTABLE_HAS_INCLUDE_STDALIGN
 #include <stdalign.h>
-#elif !defined(__clang__) && \
-    ((__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 7))
+#elif !defined(__clang__) && ((__GNUC__ > 4) || (__GNUC__ == 4 && __GNUC_MINOR__ >= 7))
 #include <stdalign.h>
 #elif defined(HAVE_STDALIGN_H)
 #include <stdaligh.h>
@@ -100,7 +98,7 @@ extern "C" {
 #endif
 
 #if (!defined(__clang__) && defined(__GNUC__) && \
-     ((__GNUC__ < 4) || (__GNUC__ == 4 && __GNUC_MINOR__ < 7)))
+        ((__GNUC__ < 4) || (__GNUC__ == 4 && __GNUC_MINOR__ < 7)))
 #undef PORTABLE_C11_STDALIGN_MISSING
 #define PORTABLE_C11_STDALIGN_MISSING
 #endif
@@ -110,9 +108,8 @@ extern "C" {
 #define PORTABLE_C11_STDALIGN_MISSING
 #endif
 
-#if ((defined(__STDC__) && __STDC__ && defined(__STDC_VERSION__) && \
-      __STDC_VERSION__ >= 201112L) &&                               \
-     !defined(PORTABLE_C11_STDALIGN_MISSING))
+#if ((defined(__STDC__) && __STDC__ && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) && \
+    !defined(PORTABLE_C11_STDALIGN_MISSING))
 /* C11 or newer */
 #include <stdalign.h>
 #else
@@ -128,7 +125,7 @@ extern "C" {
 
 #elif defined(_MSC_VER)
 
-#define _Alignas(t) __declspec(align(t))
+#define _Alignas(t) __declspec (align(t))
 #define _Alignof(t) __alignof(t)
 
 #elif defined(__TINYC__)

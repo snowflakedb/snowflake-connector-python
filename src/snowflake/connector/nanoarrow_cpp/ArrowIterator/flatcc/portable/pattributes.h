@@ -31,6 +31,7 @@
  * like `#define fallthrough pattribute(fallthrough)`.
  */
 
+
 #ifndef PATTRIBUTES_H
 #define PATTRIBUTES_H
 
@@ -43,35 +44,38 @@ extern "C" {
 #endif
 
 #ifdef __has_c_attribute
-#define PORTABLE_HAS_C_ATTRIBUTE(x) __has_c_attribute(x)
+# define PORTABLE_HAS_C_ATTRIBUTE(x) __has_c_attribute(x)
 #else
-#define PORTABLE_HAS_C_ATTRIBUTE(x) 0
+# define PORTABLE_HAS_C_ATTRIBUTE(x) 0
 #endif
 
 #ifdef __has_attribute
-#define PORTABLE_HAS_ATTRIBUTE(x) __has_attribute(x)
+# define PORTABLE_HAS_ATTRIBUTE(x) __has_attribute(x)
 #else
-#define PORTABLE_HAS_ATTRIBUTE(x) 0
+# define PORTABLE_HAS_ATTRIBUTE(x) 0
 #endif
+
 
 /* https://en.cppreference.com/w/c/language/attributes/fallthrough */
 #if PORTABLE_HAS_C_ATTRIBUTE(__fallthrough__)
-#define pattribute_fallthrough [[__fallthrough__]]
+# define pattribute_fallthrough [[__fallthrough__]]
 #elif PORTABLE_HAS_ATTRIBUTE(__fallthrough__)
-#define pattribute_fallthrough __attribute__((__fallthrough__))
+# define pattribute_fallthrough __attribute__((__fallthrough__))
 #else
-#define pattribute_fallthrough ((void)0)
+# define pattribute_fallthrough ((void)0)
 #endif
+
 
 #define pattribute(x) pattribute_##x
 
 #if PORTABLE_EXPOSE_ATTRIBUTES
 
 #ifndef fallthrough
-#define fallthrough pattribute(fallthrough)
+# define fallthrough pattribute(fallthrough)
 #endif
 
 #endif
+
 
 #ifdef __cplusplus
 }

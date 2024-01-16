@@ -79,32 +79,33 @@ extern "C" {
 #else /* FLATCC_USE_GENERIC_ALIGNED_ALLOC */
 
 #ifndef FLATCC_ALIGNED_ALLOC
-static inline void *__flatcc_aligned_alloc(size_t alignment, size_t size) {
-  char *raw;
-  void *buf;
-  size_t total_size = (size + alignment - 1 + sizeof(void *));
+static inline void *__flatcc_aligned_alloc(size_t alignment, size_t size)
+{
+    char *raw;
+    void *buf;
+    size_t total_size = (size + alignment - 1 + sizeof(void *));
 
-  if (alignment < sizeof(void *)) {
-    alignment = sizeof(void *);
-  }
-  raw = (char *)(size_t)FLATCC_ALLOC(total_size);
-  buf = raw + alignment - 1 + sizeof(void *);
-  buf = (void *)(((size_t)buf) & ~(alignment - 1));
-  ((void **)buf)[-1] = raw;
-  return buf;
+    if (alignment < sizeof(void *)) {
+        alignment = sizeof(void *);
+    }
+    raw = (char *)(size_t)FLATCC_ALLOC(total_size);
+    buf = raw + alignment - 1 + sizeof(void *);
+    buf = (void *)(((size_t)buf) & ~(alignment - 1));
+    ((void **)buf)[-1] = raw;
+    return buf;
 }
-#define FLATCC_ALIGNED_ALLOC(alignment, size) \
-  __flatcc_aligned_alloc(alignment, size)
+#define FLATCC_ALIGNED_ALLOC(alignment, size) __flatcc_aligned_alloc(alignment, size)
 #endif /* FLATCC_USE_GENERIC_ALIGNED_ALLOC */
 
 #ifndef FLATCC_ALIGNED_FREE
-static inline void __flatcc_aligned_free(void *p) {
-  char *raw;
+static inline void __flatcc_aligned_free(void *p)
+{
+    char *raw;
 
-  if (!p) return;
-  raw = ((void **)p)[-1];
+    if (!p) return;
+    raw = ((void **)p)[-1];
 
-  FLATCC_FREE(raw);
+    FLATCC_FREE(raw);
 }
 #define FLATCC_ALIGNED_FREE(p) __flatcc_aligned_free(p)
 #endif
