@@ -5,21 +5,20 @@
 #ifndef PC_BOOLEANCONVERTER_HPP
 #define PC_BOOLEANCONVERTER_HPP
 
-#include "IColumnConverter.hpp"
-#include "nanoarrow.h"
 #include <memory>
 
-namespace sf
-{
+#include "IColumnConverter.hpp"
+#include "nanoarrow.h"
 
-class BooleanConverter : public IColumnConverter
-{
-public:
+namespace sf {
+
+class BooleanConverter : public IColumnConverter {
+ public:
   explicit BooleanConverter(ArrowArrayView* array);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
-private:
+ private:
   ArrowArrayView* m_array;
 };
 

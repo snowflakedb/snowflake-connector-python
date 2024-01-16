@@ -49,7 +49,8 @@ extern "C" {
 #include <stdint.h>
 #endif
 
-/* These are needed to simplify accessor macros and are not found in <endian.h>. */
+/* These are needed to simplify accessor macros and are not found in <endian.h>.
+ */
 #ifndef le8toh
 #define le8toh(n) (n)
 #endif
@@ -77,36 +78,50 @@ extern "C" {
 #error "flatbuffers has no defined endiannesss"
 #endif
 
- __flatcc_define_basic_scalar_accessors(flatbuffers_, flatbuffers_endian)
+__flatcc_define_basic_scalar_accessors(flatbuffers_, flatbuffers_endian)
 
- __flatcc_define_integer_accessors(flatbuffers_bool, flatbuffers_bool_t,
-         FLATBUFFERS_BOOL_WIDTH, flatbuffers_endian)
- __flatcc_define_integer_accessors(flatbuffers_union_type, flatbuffers_union_type_t,
-         FLATBUFFERS_UTYPE_WIDTH, flatbuffers_endian)
+    __flatcc_define_integer_accessors(flatbuffers_bool, flatbuffers_bool_t,
+                                      FLATBUFFERS_BOOL_WIDTH,
+                                      flatbuffers_endian)
+        __flatcc_define_integer_accessors(flatbuffers_union_type,
+                                          flatbuffers_union_type_t,
+                                          FLATBUFFERS_UTYPE_WIDTH,
+                                          flatbuffers_endian)
 
- __flatcc_define_integer_accessors(__flatbuffers_uoffset, flatbuffers_uoffset_t,
-         FLATBUFFERS_UOFFSET_WIDTH, flatbuffers_endian)
- __flatcc_define_integer_accessors(__flatbuffers_soffset, flatbuffers_soffset_t,
-         FLATBUFFERS_SOFFSET_WIDTH, flatbuffers_endian)
- __flatcc_define_integer_accessors(__flatbuffers_voffset, flatbuffers_voffset_t,
-         FLATBUFFERS_VOFFSET_WIDTH, flatbuffers_endian)
- __flatcc_define_integer_accessors(__flatbuffers_utype, flatbuffers_utype_t,
-         FLATBUFFERS_UTYPE_WIDTH, flatbuffers_endian)
- __flatcc_define_integer_accessors(__flatbuffers_thash, flatbuffers_thash_t,
-         FLATBUFFERS_THASH_WIDTH, flatbuffers_endian)
+            __flatcc_define_integer_accessors(__flatbuffers_uoffset,
+                                              flatbuffers_uoffset_t,
+                                              FLATBUFFERS_UOFFSET_WIDTH,
+                                              flatbuffers_endian)
+                __flatcc_define_integer_accessors(__flatbuffers_soffset,
+                                                  flatbuffers_soffset_t,
+                                                  FLATBUFFERS_SOFFSET_WIDTH,
+                                                  flatbuffers_endian)
+                    __flatcc_define_integer_accessors(__flatbuffers_voffset,
+                                                      flatbuffers_voffset_t,
+                                                      FLATBUFFERS_VOFFSET_WIDTH,
+                                                      flatbuffers_endian)
+                        __flatcc_define_integer_accessors(
+                            __flatbuffers_utype, flatbuffers_utype_t,
+                            FLATBUFFERS_UTYPE_WIDTH, flatbuffers_endian)
+                            __flatcc_define_integer_accessors(
+                                __flatbuffers_thash, flatbuffers_thash_t,
+                                FLATBUFFERS_THASH_WIDTH, flatbuffers_endian)
 
-/* flatcc/portable/pendian.h sets LITTLE/BIG flags if possible, and always defines le16toh. */
+/* flatcc/portable/pendian.h sets LITTLE/BIG flags if possible, and always
+ * defines le16toh. */
 #ifndef flatbuffers_is_native_pe
 #if defined(__LITTLE_ENDIAN__) || FLATBUFFERS_LITTLEENDIAN
 #undef FLATBUFFERS_LITTLEENDIAN
 #define FLATBUFFERS_LITTLEENDIAN 1
 #define flatbuffers_is_native_pe() (FLATBUFFERS_PROTOCOL_IS_LE)
-#elif defined(__BIG_ENDIAN__) || (defined(FLATBUFFERS_LITTLEENDIAN) && !FLATBUFFERS_LITTLEENDIAN)
+#elif defined(__BIG_ENDIAN__) || \
+    (defined(FLATBUFFERS_LITTLEENDIAN) && !FLATBUFFERS_LITTLEENDIAN)
 #undef FLATBUFFERS_LITTLEENDIAN
 #define FLATBUFFERS_LITTLEENDIAN 0
 #define flatbuffers_is_native_pe() (FLATBUFFERS_PROTOCOL_IS_BE)
 #else
-#define flatbuffers_is_native_pe() (__FLATBUFFERS_CONCAT(flatbuffers_endian, 16toh)(1) == 1)
+#define flatbuffers_is_native_pe() \
+  (__FLATBUFFERS_CONCAT(flatbuffers_endian, 16toh)(1) == 1)
 #endif
 #endif
 

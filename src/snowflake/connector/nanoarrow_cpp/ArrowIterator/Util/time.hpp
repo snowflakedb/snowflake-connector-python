@@ -6,17 +6,16 @@
 #define PC_UTIL_TIME_HPP
 
 #include <string>
+
 #include "Python/Common.hpp"
 
 #ifdef _WIN32
 #include <algorithm>
 #endif
 
-namespace sf
-{
+namespace sf {
 
-namespace internal
-{
+namespace internal {
 /** python datetime.time has only support 6 bit precision, which is formated
  * double in this file */
 
@@ -41,15 +40,12 @@ const std::string FIELD_NAME_FRACTION = "fraction";
  * care not to cause int overflow by a huge parameter n.
  * And since we are using -stdc++11 now, we can only use constexpr in this way.
  * When we move to -stdc++14, we can have a more elegant way, e.g., loop. */
-constexpr int pow10Int(int n)
-{
-  return n == 0 ? 1 : 10 * pow10Int(n - 1);
-}
+constexpr int pow10Int(int n) { return n == 0 ? 1 : 10 * pow10Int(n - 1); }
 
 struct TimeSpec {
-    int64_t seconds;
-    int64_t microseconds;
-    TimeSpec(int64_t units, int32_t scale);
+  int64_t seconds;
+  int64_t microseconds;
+  TimeSpec(int64_t units, int32_t scale);
 };
 
 // TODO: I think we can just keep int64_t version, since we can call the

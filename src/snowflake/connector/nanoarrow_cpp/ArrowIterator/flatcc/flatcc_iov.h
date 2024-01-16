@@ -14,8 +14,8 @@ extern "C" {
  */
 typedef struct flatcc_iovec flatcc_iovec_t;
 struct flatcc_iovec {
-    void *iov_base;
-    size_t iov_len;
+  void *iov_base;
+  size_t iov_len;
 };
 
 /*

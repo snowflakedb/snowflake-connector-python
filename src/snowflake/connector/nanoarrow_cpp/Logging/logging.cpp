@@ -3,13 +3,13 @@
 //
 
 #include "logging.hpp"
-#include "Python/Helpers.hpp"
+
 #include <cstdio>
 
-namespace sf
-{
-std::string Logger::formatString(const char *format, ...)
-{
+#include "Python/Helpers.hpp"
+
+namespace sf {
+std::string Logger::formatString(const char *format, ...) {
   char msg[1000] = {0};
   va_list args;
   va_start(args, format);
@@ -19,8 +19,7 @@ std::string Logger::formatString(const char *format, ...)
   return std::string(msg);
 }
 
-void Logger::setupPyLogger()
-{
+void Logger::setupPyLogger() {
   py::UniqueRef pyLoggingModule;
   py::importPythonModule("snowflake.connector.snow_logging", pyLoggingModule);
   PyObject *logger =
@@ -29,15 +28,11 @@ void Logger::setupPyLogger()
   m_pyLogger.reset(logger);
 }
 
-Logger::Logger(const char *name)
-: m_name(name)
-{
-}
+Logger::Logger(const char *name) : m_name(name) {}
 
-void Logger::log(int level, const char *path_name, const char *func_name, int line_num, const char *msg)
-{
-  if (m_pyLogger.get() == nullptr)
-  {
+void Logger::log(int level, const char *path_name, const char *func_name,
+                 int line_num, const char *msg) {
+  if (m_pyLogger.get() == nullptr) {
     setupPyLogger();
   }
 
@@ -62,9 +57,8 @@ void Logger::log(int level, const char *path_name, const char *func_name, int li
   PyObject_Call(call_log.get(), Py_BuildValue("()"), keywords.get());
 }
 
-
-void Logger::debug(const char *path_name, const char *func_name, int line_num, const char *format, ...)
-{
+void Logger::debug(const char *path_name, const char *func_name, int line_num,
+                   const char *format, ...) {
   char msg[1000] = {0};
   va_list args;
   va_start(args, format);
@@ -74,8 +68,8 @@ void Logger::debug(const char *path_name, const char *func_name, int line_num, c
   Logger::log(DEBUG, path_name, func_name, line_num, msg);
 }
 
-void Logger::info(const char *path_name, const char *func_name, int line_num, const char *format, ...)
-{
+void Logger::info(const char *path_name, const char *func_name, int line_num,
+                  const char *format, ...) {
   char msg[1000] = {0};
   va_list args;
   va_start(args, format);
@@ -85,8 +79,8 @@ void Logger::info(const char *path_name, const char *func_name, int line_num, co
   Logger::log(INFO, path_name, func_name, line_num, msg);
 }
 
-void Logger::warn(const char *path_name, const char *func_name, int line_num, const char *format, ...)
-{
+void Logger::warn(const char *path_name, const char *func_name, int line_num,
+                  const char *format, ...) {
   char msg[1000] = {0};
   va_list args;
   va_start(args, format);
@@ -96,16 +90,15 @@ void Logger::warn(const char *path_name, const char *func_name, int line_num, co
   Logger::log(WARN, path_name, func_name, line_num, msg);
 }
 
-void Logger::error(const char *path_name, const char *func_name, int line_num, const char *format, ...)
-{
+void Logger::error(const char *path_name, const char *func_name, int line_num,
+                   const char *format, ...) {
   char msg[1000] = {0};
   va_list args;
   va_start(args, format);
   vsnprintf(msg, sizeof(msg), format, args);
   va_end(args);
 
-
   Logger::log(ERROR, path_name, func_name, line_num, msg);
 }
 
-}
+}  // namespace sf

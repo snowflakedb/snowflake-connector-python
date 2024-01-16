@@ -54,15 +54,16 @@ class Exception : public std::exception {
 };
 
 #if defined(NANOARROW_DEBUG)
-#define _NANOARROW_THROW_NOT_OK_IMPL(NAME, EXPR, EXPR_STR)                      \
-  do {                                                                          \
-    const int NAME = (EXPR);                                                    \
-    if (NAME) {                                                                 \
-      throw nanoarrow::Exception(                                               \
-          std::string(EXPR_STR) + std::string(" failed with errno ") +          \
-          std::to_string(NAME) + std::string("\n * ") + std::string(__FILE__) + \
-          std::string(":") + std::to_string(__LINE__) + std::string("\n"));     \
-    }                                                                           \
+#define _NANOARROW_THROW_NOT_OK_IMPL(NAME, EXPR, EXPR_STR)             \
+  do {                                                                 \
+    const int NAME = (EXPR);                                           \
+    if (NAME) {                                                        \
+      throw nanoarrow::Exception(                                      \
+          std::string(EXPR_STR) + std::string(" failed with errno ") + \
+          std::to_string(NAME) + std::string("\n * ") +                \
+          std::string(__FILE__) + std::string(":") +                   \
+          std::to_string(__LINE__) + std::string("\n"));               \
+    }                                                                  \
   } while (0)
 #else
 #define _NANOARROW_THROW_NOT_OK_IMPL(NAME, EXPR, EXPR_STR)            \
@@ -76,9 +77,9 @@ class Exception : public std::exception {
   } while (0)
 #endif
 
-#define NANOARROW_THROW_NOT_OK(EXPR)                                                   \
-  _NANOARROW_THROW_NOT_OK_IMPL(_NANOARROW_MAKE_NAME(errno_status_, __COUNTER__), EXPR, \
-                               #EXPR)
+#define NANOARROW_THROW_NOT_OK(EXPR) \
+  _NANOARROW_THROW_NOT_OK_IMPL(      \
+      _NANOARROW_MAKE_NAME(errno_status_, __COUNTER__), EXPR, #EXPR)
 
 /// @}
 
@@ -88,9 +89,12 @@ namespace internal {
 ///
 /// @{
 
-static inline void init_pointer(struct ArrowSchema* data) { data->release = nullptr; }
+static inline void init_pointer(struct ArrowSchema* data) {
+  data->release = nullptr;
+}
 
-static inline void move_pointer(struct ArrowSchema* src, struct ArrowSchema* dst) {
+static inline void move_pointer(struct ArrowSchema* src,
+                                struct ArrowSchema* dst) {
   ArrowSchemaMove(src, dst);
 }
 
@@ -100,9 +104,12 @@ static inline void release_pointer(struct ArrowSchema* data) {
   }
 }
 
-static inline void init_pointer(struct ArrowArray* data) { data->release = nullptr; }
+static inline void init_pointer(struct ArrowArray* data) {
+  data->release = nullptr;
+}
 
-static inline void move_pointer(struct ArrowArray* src, struct ArrowArray* dst) {
+static inline void move_pointer(struct ArrowArray* src,
+                                struct ArrowArray* dst) {
   ArrowArrayMove(src, dst);
 }
 
@@ -127,27 +134,38 @@ static inline void release_pointer(ArrowArrayStream* data) {
   }
 }
 
-static inline void init_pointer(struct ArrowBuffer* data) { ArrowBufferInit(data); }
+static inline void init_pointer(struct ArrowBuffer* data) {
+  ArrowBufferInit(data);
+}
 
-static inline void move_pointer(struct ArrowBuffer* src, struct ArrowBuffer* dst) {
+static inline void move_pointer(struct ArrowBuffer* src,
+                                struct ArrowBuffer* dst) {
   ArrowBufferMove(src, dst);
 }
 
-static inline void release_pointer(struct ArrowBuffer* data) { ArrowBufferReset(data); }
+static inline void release_pointer(struct ArrowBuffer* data) {
+  ArrowBufferReset(data);
+}
 
-static inline void init_pointer(struct ArrowBitmap* data) { ArrowBitmapInit(data); }
+static inline void init_pointer(struct ArrowBitmap* data) {
+  ArrowBitmapInit(data);
+}
 
-static inline void move_pointer(struct ArrowBitmap* src, struct ArrowBitmap* dst) {
+static inline void move_pointer(struct ArrowBitmap* src,
+                                struct ArrowBitmap* dst) {
   ArrowBitmapMove(src, dst);
 }
 
-static inline void release_pointer(struct ArrowBitmap* data) { ArrowBitmapReset(data); }
+static inline void release_pointer(struct ArrowBitmap* data) {
+  ArrowBitmapReset(data);
+}
 
 static inline void init_pointer(struct ArrowArrayView* data) {
   ArrowArrayViewInitFromType(data, NANOARROW_TYPE_UNINITIALIZED);
 }
 
-static inline void move_pointer(struct ArrowArrayView* src, struct ArrowArrayView* dst) {
+static inline void move_pointer(struct ArrowArrayView* src,
+                                struct ArrowArrayView* dst) {
   ArrowArrayViewMove(src, dst);
 }
 
@@ -181,8 +199,8 @@ class Unique {
   /// \brief Call data's release callback if valid
   void reset() { release_pointer(&data_); }
 
-  /// \brief Call data's release callback if valid and move ownership of the data
-  /// pointed to by data
+  /// \brief Call data's release callback if valid and move ownership of the
+  /// data pointed to by data
   void reset(T* data) {
     reset();
     move_pointer(data, &data_);
@@ -288,15 +306,19 @@ class EmptyArrayStream {
  private:
   static int get_schema_wrapper(struct ArrowArrayStream* stream,
                                 struct ArrowSchema* schema) {
-    return reinterpret_cast<EmptyArrayStream*>(stream->private_data)->get_schema(schema);
+    return reinterpret_cast<EmptyArrayStream*>(stream->private_data)
+        ->get_schema(schema);
   }
 
-  static int get_next_wrapper(struct ArrowArrayStream* stream, struct ArrowArray* array) {
-    return reinterpret_cast<EmptyArrayStream*>(stream->private_data)->get_next(array);
+  static int get_next_wrapper(struct ArrowArrayStream* stream,
+                              struct ArrowArray* array) {
+    return reinterpret_cast<EmptyArrayStream*>(stream->private_data)
+        ->get_next(array);
   }
 
   static const char* get_last_error_wrapper(struct ArrowArrayStream* stream) {
-    return reinterpret_cast<EmptyArrayStream*>(stream->private_data)->get_last_error();
+    return reinterpret_cast<EmptyArrayStream*>(stream->private_data)
+        ->get_last_error();
   }
 
   static void release_wrapper(struct ArrowArrayStream* stream) {
@@ -306,7 +328,8 @@ class EmptyArrayStream {
   }
 };
 
-/// \brief Implementation of an ArrowArrayStream backed by a vector of ArrowArray objects
+/// \brief Implementation of an ArrowArrayStream backed by a vector of
+/// ArrowArray objects
 class VectorArrayStream : public EmptyArrayStream {
  public:
   /// \brief Create a UniqueArrowArrayStream from an existing array
@@ -325,7 +348,8 @@ class VectorArrayStream : public EmptyArrayStream {
   static UniqueArrayStream MakeUnique(struct ArrowSchema* schema,
                                       std::vector<UniqueArray> arrays) {
     UniqueArrayStream stream;
-    (new VectorArrayStream(schema, std::move(arrays)))->MakeStream(stream.get());
+    (new VectorArrayStream(schema, std::move(arrays)))
+        ->MakeStream(stream.get());
     return stream;
   }
 

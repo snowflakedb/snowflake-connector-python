@@ -3,22 +3,20 @@
 //
 
 #include "Helpers.hpp"
-#include "Common.hpp"
+
 #include <string>
 
-namespace sf
-{
+#include "Common.hpp"
 
-namespace py
-{
+namespace sf {
+
+namespace py {
 
 using Logger = ::sf::Logger;
 
-void importPythonModule(const std::string& moduleName, UniqueRef& ref)
-{
+void importPythonModule(const std::string& moduleName, UniqueRef& ref) {
   PyObject* module = PyImport_ImportModule(moduleName.c_str());
-  if (checkPyError())
-  {
+  if (checkPyError()) {
     return;
   }
   ref.reset(module);
@@ -26,12 +24,11 @@ void importPythonModule(const std::string& moduleName, UniqueRef& ref)
 }
 
 void importPythonModule(const std::string& moduleName, UniqueRef& ref,
-                        Logger& logger)
-{
+                        Logger& logger) {
   PyObject* module = PyImport_ImportModule(moduleName.c_str());
-  if (checkPyError())
-  {
-    logger.error(__FILE__, __func__, __LINE__, "import python module '%s' failed", moduleName.c_str());
+  if (checkPyError()) {
+    logger.error(__FILE__, __func__, __LINE__,
+                 "import python module '%s' failed", moduleName.c_str());
     return;
   }
   ref.reset(module);
@@ -39,11 +36,9 @@ void importPythonModule(const std::string& moduleName, UniqueRef& ref,
 }
 
 void importFromModule(const UniqueRef& moduleRef, const std::string& name,
-                      UniqueRef& ref)
-{
+                      UniqueRef& ref) {
   PyObject* attr = PyObject_GetAttrString(moduleRef.get(), name.c_str());
-  if (checkPyError())
-  {
+  if (checkPyError()) {
     return;
   }
   ref.reset(attr);
@@ -51,12 +46,11 @@ void importFromModule(const UniqueRef& moduleRef, const std::string& name,
 }
 
 void importFromModule(const UniqueRef& moduleRef, const std::string& name,
-                      UniqueRef& ref, Logger& logger)
-{
+                      UniqueRef& ref, Logger& logger) {
   PyObject* attr = PyObject_GetAttrString(moduleRef.get(), name.c_str());
-  if (checkPyError())
-  {
-    logger.error(__FILE__, __func__, __LINE__, "import python attribute '%s' failed", name.c_str());
+  if (checkPyError()) {
+    logger.error(__FILE__, __func__, __LINE__,
+                 "import python attribute '%s' failed", name.c_str());
     return;
   }
   ref.reset(attr);

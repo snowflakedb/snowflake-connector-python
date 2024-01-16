@@ -5,7 +5,6 @@
 extern "C" {
 #endif
 
-
 /* Include portability layer here since all other files depend on it. */
 #ifdef FLATCC_PORTABLE
 #include "flatcc/portable/portable.h"
@@ -62,7 +61,6 @@ extern "C" {
 #if !defined(FLATCC_TRACE_VERIFY)
 #define FLATCC_TRACE_VERIFY 0
 #endif
-
 
 /*
  * Limit recursion level for tables. Actual level may be deeper

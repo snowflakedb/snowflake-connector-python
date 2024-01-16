@@ -5,49 +5,48 @@
 #ifndef PC_DECIMALCONVERTER_HPP
 #define PC_DECIMALCONVERTER_HPP
 
+#include <memory>
+
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
 #include "nanoarrow.h"
-#include <memory>
 
-namespace sf
-{
+namespace sf {
 
-class DecimalBaseConverter : public IColumnConverter
-{
-public:
+class DecimalBaseConverter : public IColumnConverter {
+ public:
   DecimalBaseConverter();
   virtual ~DecimalBaseConverter() = default;
 
-protected:
+ protected:
   py::UniqueRef& m_pyDecimalConstructor;
 
-private:
+ private:
   static py::UniqueRef& initPyDecimalConstructor();
 };
 
-class DecimalFromDecimalConverter : public DecimalBaseConverter
-{
-public:
-  explicit DecimalFromDecimalConverter(PyObject* context, ArrowArrayView* array, int scale);
+class DecimalFromDecimalConverter : public DecimalBaseConverter {
+ public:
+  explicit DecimalFromDecimalConverter(PyObject* context, ArrowArrayView* array,
+                                       int scale);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
-private:
+ private:
   ArrowArrayView* m_array;
   PyObject* m_context;
   int m_scale;
   /** no need for this converter to store precision*/
 };
 
-class DecimalFromIntConverter : public DecimalBaseConverter
-{
-public:
-  explicit DecimalFromIntConverter(ArrowArrayView* array, int precision, int scale);
+class DecimalFromIntConverter : public DecimalBaseConverter {
+ public:
+  explicit DecimalFromIntConverter(ArrowArrayView* array, int precision,
+                                   int scale);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
-private:
+ private:
   ArrowArrayView* m_array;
   int m_precision;  // looks like the precision here is not useful, and this
                     // will be removed soon when it's been confirmed
@@ -55,22 +54,21 @@ private:
   int m_scale;
 };
 
-
-class NumpyDecimalConverter : public IColumnConverter
-{
-public:
-  explicit NumpyDecimalConverter(ArrowArrayView* array, int precision, int scale, PyObject * context);
+class NumpyDecimalConverter : public IColumnConverter {
+ public:
+  explicit NumpyDecimalConverter(ArrowArrayView* array, int precision,
+                                 int scale, PyObject* context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
-private:
+ private:
   ArrowArrayView* m_array;
 
   int m_precision;
 
   int m_scale;
 
-  PyObject * m_context;
+  PyObject* m_context;
 };
 
 }  // namespace sf

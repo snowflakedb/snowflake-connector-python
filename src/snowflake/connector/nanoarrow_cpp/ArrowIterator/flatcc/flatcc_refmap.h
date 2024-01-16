@@ -65,16 +65,16 @@ typedef flatbuffers_soffset_t flatcc_refmap_ref_t;
 static const flatcc_refmap_ref_t flatcc_refmap_not_found = 0;
 
 struct flatcc_refmap_item {
-    const void *src;
-    flatcc_refmap_ref_t ref;
+  const void *src;
+  flatcc_refmap_ref_t ref;
 };
 
 struct flatcc_refmap {
-    size_t count;
-    size_t buckets;
-    struct flatcc_refmap_item *table;
-    /* Use stack allocation for small maps. */
-    struct flatcc_refmap_item min_table[FLATCC_REFMAP_MIN_BUCKETS];
+  size_t count;
+  size_t buckets;
+  struct flatcc_refmap_item *table;
+  /* Use stack allocation for small maps. */
+  struct flatcc_refmap_item min_table[FLATCC_REFMAP_MIN_BUCKETS];
 };
 
 /*
@@ -82,12 +82,11 @@ struct flatcc_refmap {
  * May be replaced by memset 0, but `init` avoids clearing the
  * stack allocated initial hash table until it is needed.
  */
-static inline int flatcc_refmap_init(flatcc_refmap_t *refmap)
-{
-    refmap->count = 0;
-    refmap->buckets = 0;
-    refmap->table = 0;
-    return 0;
+static inline int flatcc_refmap_init(flatcc_refmap_t *refmap) {
+  refmap->count = 0;
+  refmap->buckets = 0;
+  refmap->table = 0;
+  return 0;
 }
 
 /*
@@ -110,7 +109,8 @@ void flatcc_refmap_reset(flatcc_refmap_t *refmap);
  * Returns flatcc_refmap_not_found (default 0) if the `src` pointer was
  * not found.
  */
-flatcc_refmap_ref_t flatcc_refmap_find(flatcc_refmap_t *refmap, const void *src);
+flatcc_refmap_ref_t flatcc_refmap_find(flatcc_refmap_t *refmap,
+                                       const void *src);
 
 /*
  * Inserts a `src` source pointer and its associated `ref` reference
@@ -124,7 +124,9 @@ flatcc_refmap_ref_t flatcc_refmap_find(flatcc_refmap_t *refmap, const void *src)
  *
  * Returns the input ref or not_found on allocation error.
  */
-flatcc_refmap_ref_t flatcc_refmap_insert(flatcc_refmap_t *refmap, const void *src, flatcc_refmap_ref_t ref);
+flatcc_refmap_ref_t flatcc_refmap_insert(flatcc_refmap_t *refmap,
+                                         const void *src,
+                                         flatcc_refmap_ref_t ref);
 
 /*
  * Set the hash table to accommodate at least `count` items while staying
