@@ -65,8 +65,8 @@ extern "C" {
 #include <stdint.h>
 #endif
 
-#include "flatcc_flatbuffers.h"
 #include "flatcc_emitter.h"
+#include "flatcc_flatbuffers.h"
 #include "flatcc_refmap.h"
 
 /* It is possible to enable logging here. */
@@ -94,7 +94,6 @@ extern "C" {
 #define FLATCC_BUILDER_SKIP_CHECKS 0
 #endif
 
-
 /*
  * When adding the same field to a table twice this is either an error
  * or the existing field is returned, potentially introducing garbage
@@ -117,13 +116,13 @@ typedef flatbuffers_utype_t flatcc_builder_utype_t;
  * creates union specific ref types.
  */
 typedef struct flatcc_builder_union_ref {
-    flatcc_builder_utype_t type;
-    flatcc_builder_ref_t value;
+  flatcc_builder_utype_t type;
+  flatcc_builder_ref_t value;
 } flatcc_builder_union_ref_t;
 
 typedef struct flatcc_builder_union_vec_ref {
-    flatcc_builder_ref_t type;
-    flatcc_builder_ref_t value;
+  flatcc_builder_ref_t type;
+  flatcc_builder_ref_t value;
 } flatcc_builder_union_vec_ref_t;
 
 /**
@@ -163,25 +162,25 @@ typedef flatbuffers_uoffset_t flatcc_builder_identifier_t;
  * frame.
  */
 enum flatcc_builder_alloc_type {
-    /* The stack where vtables are build. */
-    flatcc_builder_alloc_vs,
-    /* The stack where data structures are build. */
-    flatcc_builder_alloc_ds,
-    /* The virtual table buffer cache, holds a copy of each vt seen. */
-    flatcc_builder_alloc_vb,
-    /* The patch log, remembers table fields with outstanding offset refs. */
-    flatcc_builder_alloc_pl,
-    /* The stack of frames for nested types. */
-    flatcc_builder_alloc_fs,
-    /* The hash table part of the virtual table cache. */
-    flatcc_builder_alloc_ht,
-    /* The vtable descriptor buffer, i.e. list elements for emitted vtables. */
-    flatcc_builder_alloc_vd,
-    /* User stack frame for custom data. */
-    flatcc_builder_alloc_us,
+  /* The stack where vtables are build. */
+  flatcc_builder_alloc_vs,
+  /* The stack where data structures are build. */
+  flatcc_builder_alloc_ds,
+  /* The virtual table buffer cache, holds a copy of each vt seen. */
+  flatcc_builder_alloc_vb,
+  /* The patch log, remembers table fields with outstanding offset refs. */
+  flatcc_builder_alloc_pl,
+  /* The stack of frames for nested types. */
+  flatcc_builder_alloc_fs,
+  /* The hash table part of the virtual table cache. */
+  flatcc_builder_alloc_ht,
+  /* The vtable descriptor buffer, i.e. list elements for emitted vtables. */
+  flatcc_builder_alloc_vd,
+  /* User stack frame for custom data. */
+  flatcc_builder_alloc_us,
 
-    /* Number of allocation buffers. */
-    flatcc_builder_alloc_buffer_count
+  /* Number of allocation buffers. */
+  flatcc_builder_alloc_buffer_count
 };
 
 /** Must reflect the `flatcc_builder_alloc_type` enum. */
@@ -259,7 +258,8 @@ enum flatcc_builder_alloc_type {
  * to fail.
  */
 typedef int flatcc_builder_emit_fun(void *emit_context,
-        const flatcc_iovec_t *iov, int iov_count, flatbuffers_soffset_t offset, size_t len);
+                                    const flatcc_iovec_t *iov, int iov_count,
+                                    flatbuffers_soffset_t offset, size_t len);
 
 /*
  * Returns a pointer to static padding used in emitter calls. May
@@ -285,8 +285,9 @@ extern const uint8_t flatcc_builder_padding_base[];
  * buffer should be deallocate if non-zero, and return success (0)
  * regardless.
  */
-typedef int flatcc_builder_alloc_fun(void *alloc_context,
-        flatcc_iovec_t *b, size_t request, int zero_fill, int alloc_type);
+typedef int flatcc_builder_alloc_fun(void *alloc_context, flatcc_iovec_t *b,
+                                     size_t request, int zero_fill,
+                                     int alloc_type);
 
 /*
  * The number of hash slots there will be allocated space for. The
@@ -301,27 +302,27 @@ typedef int flatcc_builder_alloc_fun(void *alloc_context,
 
 typedef struct __flatcc_builder_buffer_frame __flatcc_builder_buffer_frame_t;
 struct __flatcc_builder_buffer_frame {
-    flatcc_builder_identifier_t identifier;
-    flatcc_builder_ref_t mark;
-    flatbuffers_uoffset_t vs_end;
-    flatbuffers_uoffset_t nest_id;
-    uint16_t flags;
-    uint16_t block_align;
+  flatcc_builder_identifier_t identifier;
+  flatcc_builder_ref_t mark;
+  flatbuffers_uoffset_t vs_end;
+  flatbuffers_uoffset_t nest_id;
+  uint16_t flags;
+  uint16_t block_align;
 };
 
 typedef struct __flatcc_builder_vector_frame __flatcc_builder_vector_frame_t;
 struct __flatcc_builder_vector_frame {
-    flatbuffers_uoffset_t elem_size;
-    flatbuffers_uoffset_t count;
-    flatbuffers_uoffset_t max_count;
+  flatbuffers_uoffset_t elem_size;
+  flatbuffers_uoffset_t count;
+  flatbuffers_uoffset_t max_count;
 };
 
 typedef struct __flatcc_builder_table_frame __flatcc_builder_table_frame_t;
 struct __flatcc_builder_table_frame {
-    flatbuffers_uoffset_t vs_end;
-    flatbuffers_uoffset_t pl_end;
-    uint32_t vt_hash;
-    flatbuffers_voffset_t id_end;
+  flatbuffers_uoffset_t vs_end;
+  flatbuffers_uoffset_t pl_end;
+  uint32_t vt_hash;
+  flatbuffers_voffset_t id_end;
 };
 
 /*
@@ -344,16 +345,16 @@ struct __flatcc_builder_table_frame {
  */
 typedef struct __flatcc_builder_frame __flatcc_builder_frame_t;
 struct __flatcc_builder_frame {
-    flatbuffers_uoffset_t ds_first;
-    flatbuffers_uoffset_t type_limit;
-    flatbuffers_uoffset_t ds_offset;
-    uint16_t align;
-    uint16_t type;
-    union {
-        __flatcc_builder_table_frame_t table;
-        __flatcc_builder_vector_frame_t vector;
-        __flatcc_builder_buffer_frame_t buffer;
-    } container;
+  flatbuffers_uoffset_t ds_first;
+  flatbuffers_uoffset_t type_limit;
+  flatbuffers_uoffset_t ds_offset;
+  uint16_t align;
+  uint16_t type;
+  union {
+    __flatcc_builder_table_frame_t table;
+    __flatcc_builder_vector_frame_t vector;
+    __flatcc_builder_buffer_frame_t buffer;
+  } container;
 };
 
 /**
@@ -365,92 +366,101 @@ struct __flatcc_builder_frame {
 typedef struct flatcc_builder flatcc_builder_t;
 
 struct flatcc_builder {
-    /* Next entry on reserved stack in `alloc_pl` buffer. */
-    flatbuffers_voffset_t *pl;
-    /* Next entry on reserved stack in `alloc_vs` buffer. */
-    flatbuffers_voffset_t *vs;
-    /* One above the highest entry in vs, used to track vt_size. */
-    flatbuffers_voffset_t id_end;
-    /* The evolving vtable hash updated with every new field. */
-    uint32_t vt_hash;
+  /* Next entry on reserved stack in `alloc_pl` buffer. */
+  flatbuffers_voffset_t *pl;
+  /* Next entry on reserved stack in `alloc_vs` buffer. */
+  flatbuffers_voffset_t *vs;
+  /* One above the highest entry in vs, used to track vt_size. */
+  flatbuffers_voffset_t id_end;
+  /* The evolving vtable hash updated with every new field. */
+  uint32_t vt_hash;
 
-    /* Pointer to ds_first. */
-    uint8_t *ds;
-    /* Offset from `ds` on current frame. */
-    flatbuffers_uoffset_t ds_offset;
-    /* ds buffer size relative to ds_first, clamped to max size of current type. */
-    flatbuffers_uoffset_t ds_limit;
+  /* Pointer to ds_first. */
+  uint8_t *ds;
+  /* Offset from `ds` on current frame. */
+  flatbuffers_uoffset_t ds_offset;
+  /* ds buffer size relative to ds_first, clamped to max size of current type.
+   */
+  flatbuffers_uoffset_t ds_limit;
 
-    /* ds_first, ds_first + ds_offset is current ds stack range. */
-    flatbuffers_uoffset_t ds_first;
-    /* Points to currently open frame in `alloc_fs` buffer. */
-    __flatcc_builder_frame_t *frame;
+  /* ds_first, ds_first + ds_offset is current ds stack range. */
+  flatbuffers_uoffset_t ds_first;
+  /* Points to currently open frame in `alloc_fs` buffer. */
+  __flatcc_builder_frame_t *frame;
 
-    /* Only significant to emitter function, if at all. */
-    void *emit_context;
-    /* Only significant to allocator function, if at all. */
-    void *alloc_context;
-    /* Customizable write function that both appends and prepends data. */
-    flatcc_builder_emit_fun *emit;
-    /* Customizable allocator that also deallocates. */
-    flatcc_builder_alloc_fun *alloc;
-    /* Buffers indexed by `alloc_type` */
-    flatcc_iovec_t buffers[FLATCC_BUILDER_ALLOC_BUFFER_COUNT];
-    /* Number of slots in ht given as 1 << ht_width. */
-    size_t ht_width;
+  /* Only significant to emitter function, if at all. */
+  void *emit_context;
+  /* Only significant to allocator function, if at all. */
+  void *alloc_context;
+  /* Customizable write function that both appends and prepends data. */
+  flatcc_builder_emit_fun *emit;
+  /* Customizable allocator that also deallocates. */
+  flatcc_builder_alloc_fun *alloc;
+  /* Buffers indexed by `alloc_type` */
+  flatcc_iovec_t buffers[FLATCC_BUILDER_ALLOC_BUFFER_COUNT];
+  /* Number of slots in ht given as 1 << ht_width. */
+  size_t ht_width;
 
-    /* The location in vb to add next cached vtable. */
-    flatbuffers_uoffset_t vb_end;
-    /* Where to allocate next vtable descriptor for hash table. */
-    flatbuffers_uoffset_t vd_end;
-    /* Ensure final buffer is aligned to at least this. Nested buffers get their own `min_align`. */
-    uint16_t min_align;
-    /* The current active objects alignment isolated from nested activity. */
-    uint16_t align;
-    /* The current buffers block alignment used when emitting buffer. */
-    uint16_t block_align;
-    /* Signed virtual address range used for `flatcc_builder_ref_t` and emitter. */
-    flatcc_builder_ref_t emit_start;
-    flatcc_builder_ref_t emit_end;
-    /* 0 for top level, and end of buffer ref for nested buffers (can also be 0). */
-    flatcc_builder_ref_t buffer_mark;
-    /* Next nest_id. */
-    flatbuffers_uoffset_t nest_count;
-    /* Unique id to prevent sharing of vtables across buffers. */
-    flatbuffers_uoffset_t nest_id;
-    /* Current nesting level. Helpful to state-machines with explicit stack and to check `max_level`. */
-    int level;
-    /* Aggregate check for allocated frame and max_level. */
-    int limit_level;
-    /* Track size prefixed buffer. */
-    uint16_t buffer_flags;
+  /* The location in vb to add next cached vtable. */
+  flatbuffers_uoffset_t vb_end;
+  /* Where to allocate next vtable descriptor for hash table. */
+  flatbuffers_uoffset_t vd_end;
+  /* Ensure final buffer is aligned to at least this. Nested buffers get their
+   * own `min_align`. */
+  uint16_t min_align;
+  /* The current active objects alignment isolated from nested activity. */
+  uint16_t align;
+  /* The current buffers block alignment used when emitting buffer. */
+  uint16_t block_align;
+  /* Signed virtual address range used for `flatcc_builder_ref_t` and emitter.
+   */
+  flatcc_builder_ref_t emit_start;
+  flatcc_builder_ref_t emit_end;
+  /* 0 for top level, and end of buffer ref for nested buffers (can also be 0).
+   */
+  flatcc_builder_ref_t buffer_mark;
+  /* Next nest_id. */
+  flatbuffers_uoffset_t nest_count;
+  /* Unique id to prevent sharing of vtables across buffers. */
+  flatbuffers_uoffset_t nest_id;
+  /* Current nesting level. Helpful to state-machines with explicit stack and to
+   * check `max_level`. */
+  int level;
+  /* Aggregate check for allocated frame and max_level. */
+  int limit_level;
+  /* Track size prefixed buffer. */
+  uint16_t buffer_flags;
 
-    /* Settings that may happen with no frame allocated. */
+  /* Settings that may happen with no frame allocated. */
 
-    flatcc_builder_identifier_t identifier;
+  flatcc_builder_identifier_t identifier;
 
-    /* Settings that survive reset (emitter, alloc, and contexts also survive): */
+  /* Settings that survive reset (emitter, alloc, and contexts also survive): */
 
-    /* If non-zero, vtable cache gets flushed periodically. */
-    size_t vb_flush_limit;
-    /* If non-zero, fails on deep nesting to help drivers with a stack, such as recursive parsers etc. */
-    int max_level;
-    /* If non-zero, do not cluster vtables at end, only emit negative offsets (0 by default). */
-    int disable_vt_clustering;
+  /* If non-zero, vtable cache gets flushed periodically. */
+  size_t vb_flush_limit;
+  /* If non-zero, fails on deep nesting to help drivers with a stack, such as
+   * recursive parsers etc. */
+  int max_level;
+  /* If non-zero, do not cluster vtables at end, only emit negative offsets (0
+   * by default). */
+  int disable_vt_clustering;
 
-    /* Set if the default emitter is being used. */
-    int is_default_emitter;
-    /* Only used with default emitter. */
-    flatcc_emitter_t default_emit_context;
+  /* Set if the default emitter is being used. */
+  int is_default_emitter;
+  /* Only used with default emitter. */
+  flatcc_emitter_t default_emit_context;
 
-    /* Offset to the last entered user frame on the user frame stack, after frame header, or 0. */
-    size_t user_frame_offset;
+  /* Offset to the last entered user frame on the user frame stack, after frame
+   * header, or 0. */
+  size_t user_frame_offset;
 
-    /* The offset to the end of the most recent user frame. */
-    size_t user_frame_end;
+  /* The offset to the end of the most recent user frame. */
+  size_t user_frame_end;
 
-    /* The optional user supplied refmap for cloning DAG's - not shared with nested buffers. */
-    flatcc_refmap_t *refmap;
+  /* The optional user supplied refmap for cloning DAG's - not shared with
+   * nested buffers. */
+  flatcc_refmap_t *refmap;
 };
 
 /**
@@ -480,8 +490,10 @@ int flatcc_builder_init(flatcc_builder_t *B);
  * Returns -1 on failure, 0 on success.
  */
 int flatcc_builder_custom_init(flatcc_builder_t *B,
-        flatcc_builder_emit_fun *emit, void *emit_context,
-        flatcc_builder_alloc_fun *alloc, void *alloc_context);
+                               flatcc_builder_emit_fun *emit,
+                               void *emit_context,
+                               flatcc_builder_alloc_fun *alloc,
+                               void *alloc_context);
 
 /*
  * Returns (flatcc_emitter_t *) if the default context is used.
@@ -501,8 +513,8 @@ void *flatcc_builder_get_emit_context(flatcc_builder_t *B);
  * Returns -1 if allocator complains during buffer reduction, 0 on
  * success.
  */
-int flatcc_builder_custom_reset(flatcc_builder_t *B,
-        int reduce_buffers, int set_defaults);
+int flatcc_builder_custom_reset(flatcc_builder_t *B, int reduce_buffers,
+                                int set_defaults);
 
 /*
  * Same as `flatcc_builder_custom_reset` with default arguments
@@ -523,8 +535,8 @@ void flatcc_builder_clear(flatcc_builder_t *B);
  * set minimum sizes. Hash tables are allocated to the exact requested
  * size. See also `alloc_fun`.
  */
-int flatcc_builder_default_alloc(void *alloc_context,
-        flatcc_iovec_t *b, size_t request, int zero_fill, int alloc_type);
+int flatcc_builder_default_alloc(void *alloc_context, flatcc_iovec_t *b,
+                                 size_t request, int zero_fill, int alloc_type);
 
 /**
  * If non-zero, the vtable cache will get flushed whenever it reaches
@@ -564,7 +576,8 @@ uint16_t flatcc_builder_push_buffer_alignment(flatcc_builder_t *B);
  * `create_buffer_call`. The alignments merge back up in the buffer
  * hierarchy so the top level buffer gets the largest of all aligments.
  */
-void flatcc_builder_pop_buffer_alignment(flatcc_builder_t *B, uint16_t buffer_align);
+void flatcc_builder_pop_buffer_alignment(flatcc_builder_t *B,
+                                         uint16_t buffer_align);
 
 /**
  * This value may be of interest when the buffer has been ended, for
@@ -670,25 +683,25 @@ void flatcc_builder_set_vtable_clustering(flatcc_builder_t *B, int enable);
  * refmap goes out of scope before that happens it is important
  * to call set_refmap with null and manually clear the refmap.
  */
-static inline flatcc_refmap_t *flatcc_builder_set_refmap(flatcc_builder_t *B, flatcc_refmap_t *refmap)
-{
-    flatcc_refmap_t *refmap_old;
+static inline flatcc_refmap_t *flatcc_builder_set_refmap(
+    flatcc_builder_t *B, flatcc_refmap_t *refmap) {
+  flatcc_refmap_t *refmap_old;
 
-    refmap_old = B->refmap;
-    B->refmap = refmap;
-    return refmap_old;
+  refmap_old = B->refmap;
+  B->refmap = refmap;
+  return refmap_old;
 }
 
 /* Retrieves the current refmap, or null. */
-static inline flatcc_refmap_t *flatcc_builder_get_refmap(flatcc_builder_t *B)
-{
-    return B->refmap;
+static inline flatcc_refmap_t *flatcc_builder_get_refmap(flatcc_builder_t *B) {
+  return B->refmap;
 }
 
 /* Finds a reference, or a null reference if no refmap is active.  * */
-static inline flatcc_builder_ref_t flatcc_builder_refmap_find(flatcc_builder_t *B, const void *src)
-{
-    return B->refmap ? flatcc_refmap_find(B->refmap, src) : flatcc_refmap_not_found;
+static inline flatcc_builder_ref_t flatcc_builder_refmap_find(
+    flatcc_builder_t *B, const void *src) {
+  return B->refmap ? flatcc_refmap_find(B->refmap, src)
+                   : flatcc_refmap_not_found;
 }
 
 /*
@@ -699,20 +712,18 @@ static inline flatcc_builder_ref_t flatcc_builder_refmap_find(flatcc_builder_t *
  * Note that if an existing item exists, the ref is replaced
  * and the new, not the old, ref is returned.
  */
-static inline flatcc_builder_ref_t flatcc_builder_refmap_insert(flatcc_builder_t *B, const void *src, flatcc_builder_ref_t ref)
-{
-    return B->refmap ? flatcc_refmap_insert(B->refmap, src, ref) : ref;
+static inline flatcc_builder_ref_t flatcc_builder_refmap_insert(
+    flatcc_builder_t *B, const void *src, flatcc_builder_ref_t ref) {
+  return B->refmap ? flatcc_refmap_insert(B->refmap, src, ref) : ref;
 }
 
-static inline void flatcc_builder_refmap_reset(flatcc_builder_t *B)
-{
-    if (B->refmap) flatcc_refmap_reset(B->refmap);
+static inline void flatcc_builder_refmap_reset(flatcc_builder_t *B) {
+  if (B->refmap) flatcc_refmap_reset(B->refmap);
 }
-
 
 enum flatcc_builder_buffer_flags {
-    flatcc_builder_is_nested = 1,
-    flatcc_builder_with_size = 2,
+  flatcc_builder_is_nested = 1,
+  flatcc_builder_with_size = 2,
 };
 
 /**
@@ -773,10 +784,9 @@ enum flatcc_builder_buffer_flags {
  * since the idea of `create_buffer` is to avoid allocation in the first
  * place.
  */
-flatcc_builder_ref_t flatcc_builder_create_buffer(flatcc_builder_t *B,
-        const char identifier[FLATBUFFERS_IDENTIFIER_SIZE],
-        uint16_t block_align,
-        flatcc_builder_ref_t ref, uint16_t align, int flags);
+flatcc_builder_ref_t flatcc_builder_create_buffer(
+    flatcc_builder_t *B, const char identifier[FLATBUFFERS_IDENTIFIER_SIZE],
+    uint16_t block_align, flatcc_builder_ref_t ref, uint16_t align, int flags);
 
 /**
  * Creates a struct within the current buffer without using any
@@ -796,7 +806,8 @@ flatcc_builder_ref_t flatcc_builder_create_buffer(flatcc_builder_t *B,
  * FlatBuffer.
  */
 flatcc_builder_ref_t flatcc_builder_create_struct(flatcc_builder_t *B,
-        const void *data, size_t size, uint16_t align);
+                                                  const void *data, size_t size,
+                                                  uint16_t align);
 
 /**
  * Starts a struct and returns a pointer that should be used immediately
@@ -805,8 +816,8 @@ flatcc_builder_ref_t flatcc_builder_create_struct(flatcc_builder_t *B,
  * as argument to `end_buffer` or as a union value. See also
  * `create_struct`.
  */
-void *flatcc_builder_start_struct(flatcc_builder_t *B,
-        size_t size, uint16_t align);
+void *flatcc_builder_start_struct(flatcc_builder_t *B, size_t size,
+                                  uint16_t align);
 
 /**
  * Return a pointer also returned at start struct, e.g. for endian
@@ -865,9 +876,9 @@ flatcc_builder_ref_t flatcc_builder_end_struct(flatcc_builder_t *B);
  * `flags` can be `with_size` but `is_nested` is derived from context
  * see also `create_buffer`.
  */
-int flatcc_builder_start_buffer(flatcc_builder_t *B,
-        const char identifier[FLATBUFFERS_IDENTIFIER_SIZE],
-        uint16_t block_align, int flags);
+int flatcc_builder_start_buffer(
+    flatcc_builder_t *B, const char identifier[FLATBUFFERS_IDENTIFIER_SIZE],
+    uint16_t block_align, int flags);
 
 /**
  * The root object should be a struct or a table to conform to the
@@ -877,7 +888,8 @@ int flatcc_builder_start_buffer(flatcc_builder_t *B,
  * context, that is, while the current buffer is the deepest nested
  * buffer on the stack.
  */
-flatcc_builder_ref_t flatcc_builder_end_buffer(flatcc_builder_t *B, flatcc_builder_ref_t root);
+flatcc_builder_ref_t flatcc_builder_end_buffer(flatcc_builder_t *B,
+                                               flatcc_builder_ref_t root);
 
 /**
  * The embed buffer is mostly intended to add an existing buffer as a
@@ -922,26 +934,27 @@ flatcc_builder_ref_t flatcc_builder_end_buffer(flatcc_builder_t *B, flatcc_build
  * impplied.
  */
 flatcc_builder_ref_t flatcc_builder_embed_buffer(flatcc_builder_t *B,
-        uint16_t block_align,
-        const void *data, size_t size, uint16_t align, int flags);
+                                                 uint16_t block_align,
+                                                 const void *data, size_t size,
+                                                 uint16_t align, int flags);
 
 /**
  * Applies to the innermost open buffer. The identifier may be null or
  * contain all zero. Overrides any identifier given to the start buffer
  * call.
  */
-void flatcc_builder_set_identifier(flatcc_builder_t *B,
-        const char identifier[FLATBUFFERS_IDENTIFIER_SIZE]);
+void flatcc_builder_set_identifier(
+    flatcc_builder_t *B, const char identifier[FLATBUFFERS_IDENTIFIER_SIZE]);
 
 enum flatcc_builder_type {
-    flatcc_builder_empty = 0,
-    flatcc_builder_buffer,
-    flatcc_builder_struct,
-    flatcc_builder_table,
-    flatcc_builder_vector,
-    flatcc_builder_offset_vector,
-    flatcc_builder_string,
-    flatcc_builder_union_vector
+  flatcc_builder_empty = 0,
+  flatcc_builder_buffer,
+  flatcc_builder_struct,
+  flatcc_builder_table,
+  flatcc_builder_vector,
+  flatcc_builder_offset_vector,
+  flatcc_builder_string,
+  flatcc_builder_union_vector
 };
 
 /**
@@ -961,7 +974,8 @@ enum flatcc_builder_type flatcc_builder_get_type(flatcc_builder_t *B);
  * type. get_type_at(B, 0) is always `flatcc_builder_empty` and so are any
  * level above `get_level`.
  */
-enum flatcc_builder_type flatcc_builder_get_type_at(flatcc_builder_t *B, int level);
+enum flatcc_builder_type flatcc_builder_get_type_at(flatcc_builder_t *B,
+                                                    int level);
 
 /**
  * The user stack is available for custom data. It may be used as
@@ -1077,9 +1091,9 @@ flatcc_builder_ref_t flatcc_builder_get_buffer_mark(flatcc_builder_t *B);
  * as long as it is within same builder context, but it will not construct
  * valid FlatBuffers because the buffer cannot be extracted in isolation).
  */
-flatcc_builder_vt_ref_t flatcc_builder_create_vtable(flatcc_builder_t *B,
-        const flatbuffers_voffset_t *vt,
-        flatbuffers_voffset_t vt_size);
+flatcc_builder_vt_ref_t flatcc_builder_create_vtable(
+    flatcc_builder_t *B, const flatbuffers_voffset_t *vt,
+    flatbuffers_voffset_t vt_size);
 
 /**
  * Support function to `create_vtable`. See also the uncached version
@@ -1111,9 +1125,9 @@ flatcc_builder_vt_ref_t flatcc_builder_create_vtable(flatcc_builder_t *B,
  * table is not very sensitive to collissions as it uses externally
  * chained hashing with move to front semantics.
  */
-flatcc_builder_vt_ref_t flatcc_builder_create_cached_vtable(flatcc_builder_t *B,
-        const flatbuffers_voffset_t *vt,
-        flatbuffers_voffset_t vt_size, uint32_t vt_hash);
+flatcc_builder_vt_ref_t flatcc_builder_create_cached_vtable(
+    flatcc_builder_t *B, const flatbuffers_voffset_t *vt,
+    flatbuffers_voffset_t vt_size, uint32_t vt_hash);
 
 /*
  * Based on Knuth's prime multiplier.
@@ -1125,15 +1139,20 @@ flatcc_builder_vt_ref_t flatcc_builder_create_cached_vtable(flatcc_builder_t *B,
  */
 #ifndef FLATCC_SLOW_MUL
 #ifndef FLATCC_BUILDER_INIT_VT_HASH
-#define FLATCC_BUILDER_INIT_VT_HASH(hash) { (hash) = (uint32_t)0x2f693b52UL; }
+#define FLATCC_BUILDER_INIT_VT_HASH(hash) \
+  { (hash) = (uint32_t)0x2f693b52UL; }
 #endif
 #ifndef FLATCC_BUILDER_UPDATE_VT_HASH
-#define FLATCC_BUILDER_UPDATE_VT_HASH(hash, id, offset) \
-        { (hash) = (((((uint32_t)id ^ (hash)) * (uint32_t)2654435761UL)\
-                ^ (uint32_t)(offset)) * (uint32_t)2654435761UL); }
+#define FLATCC_BUILDER_UPDATE_VT_HASH(hash, id, offset)             \
+  {                                                                 \
+    (hash) = (((((uint32_t)id ^ (hash)) * (uint32_t)2654435761UL) ^ \
+               (uint32_t)(offset)) *                                \
+              (uint32_t)2654435761UL);                              \
+  }
 #endif
 #ifndef FLATCC_BUILDER_BUCKET_VT_HASH
-#define FLATCC_BUILDER_BUCKET_VT_HASH(hash, width) (((uint32_t)(hash)) >> (32 - (width)))
+#define FLATCC_BUILDER_BUCKET_VT_HASH(hash, width) \
+  (((uint32_t)(hash)) >> (32 - (width)))
 #endif
 #endif
 
@@ -1145,17 +1164,17 @@ flatcc_builder_vt_ref_t flatcc_builder_create_cached_vtable(flatcc_builder_t *B,
  * experiment and replace.
  */
 #ifndef FLATCC_BUILDER_INIT_VT_HASH
-#define FLATCC_BUILDER_INIT_VT_HASH(hash) { (hash) = 5381; }
+#define FLATCC_BUILDER_INIT_VT_HASH(hash) \
+  { (hash) = 5381; }
 #endif
 #ifndef FLATCC_BUILDER_UPDATE_VT_HASH
 #define FLATCC_BUILDER_UPDATE_VT_HASH(hash, id, offset) \
-        { (hash) = ((((hash) << 5) ^ (id)) << 5) ^ (offset); }
+  { (hash) = ((((hash) << 5) ^ (id)) << 5) ^ (offset); }
 #endif
 #ifndef FLATCC_BUILDER_BUCKET_VT_HASH
-#define FLATCC_BUILDER_BUCKET_VT_HASH(hash, width) (((1 << (width)) - 1) & (hash))
+#define FLATCC_BUILDER_BUCKET_VT_HASH(hash, width) \
+  (((1 << (width)) - 1) & (hash))
 #endif
-
-
 
 /**
  * Normally use `start_table` instead of this call.
@@ -1190,10 +1209,10 @@ flatcc_builder_vt_ref_t flatcc_builder_create_cached_vtable(flatcc_builder_t *B,
  * the source data is modified in order to translate references intok
  * offsets before emitting the table.
  */
-flatcc_builder_ref_t flatcc_builder_create_table(flatcc_builder_t *B,
-        const void *data, size_t size, uint16_t align,
-        flatbuffers_voffset_t *offsets, int offset_count,
-        flatcc_builder_vt_ref_t vt_ref);
+flatcc_builder_ref_t flatcc_builder_create_table(
+    flatcc_builder_t *B, const void *data, size_t size, uint16_t align,
+    flatbuffers_voffset_t *offsets, int offset_count,
+    flatcc_builder_vt_ref_t vt_ref);
 
 /**
  * Starts a table, typically following a start_buffer call as an
@@ -1274,7 +1293,9 @@ flatcc_builder_ref_t flatcc_builder_end_table(flatcc_builder_t *B);
  *
  * Returns 1 if all fields are matched, 0 otherwise.
  */
-int flatcc_builder_check_required(flatcc_builder_t *B, const flatbuffers_voffset_t *required, int count);
+int flatcc_builder_check_required(flatcc_builder_t *B,
+                                  const flatbuffers_voffset_t *required,
+                                  int count);
 
 /**
  * Same as `check_required` when called with a single element.
@@ -1283,7 +1304,8 @@ int flatcc_builder_check_required(flatcc_builder_t *B, const flatbuffers_voffset
  * array first. Useful when dealing with untrusted intput such as parsed
  * text from an external source.
  */
-int flatcc_builder_check_required_field(flatcc_builder_t *B, flatbuffers_voffset_t id);
+int flatcc_builder_check_required_field(flatcc_builder_t *B,
+                                        flatbuffers_voffset_t id);
 
 /**
  * Checks that a union field is valid.
@@ -1303,7 +1325,8 @@ int flatcc_builder_check_required_field(flatcc_builder_t *B, flatbuffers_voffset
  * while the table field should only be checked here because it can
  * (and must) be absent when the type is NONE (= 0).
  */
-int flatcc_builder_check_union_field(flatcc_builder_t *B, flatbuffers_voffset_t id);
+int flatcc_builder_check_union_field(flatcc_builder_t *B,
+                                     flatbuffers_voffset_t id);
 
 /**
  * A struct, enum or scalar added should be stored in little endian in
@@ -1342,7 +1365,8 @@ int flatcc_builder_check_union_field(flatcc_builder_t *B, flatbuffers_voffset_t 
  * vtable entry. The call may also be dropped in this case to reduce
  * the vtable size - the difference will be in null detection.
  */
-void *flatcc_builder_table_add(flatcc_builder_t *B, int id, size_t size, uint16_t align);
+void *flatcc_builder_table_add(flatcc_builder_t *B, int id, size_t size,
+                               uint16_t align);
 
 /**
  * Returns a pointer to the buffer holding the last field added. The
@@ -1357,7 +1381,9 @@ void *flatcc_builder_table_edit(flatcc_builder_t *B, size_t size);
  * it is returned. Useful when adding a larger struct already encoded in
  * little endian.
  */
-void *flatcc_builder_table_add_copy(flatcc_builder_t *B, int id, const void *data, size_t size, uint16_t align);
+void *flatcc_builder_table_add_copy(flatcc_builder_t *B, int id,
+                                    const void *data, size_t size,
+                                    uint16_t align);
 
 /**
  * Add a string, vector, or sub-table depending on the type if the
@@ -1375,7 +1401,8 @@ void *flatcc_builder_table_add_copy(flatcc_builder_t *B, int id, const void *dat
  * Before that point, it is not required that the offset is written
  * to.
  */
-flatcc_builder_ref_t *flatcc_builder_table_add_offset(flatcc_builder_t *B, int id);
+flatcc_builder_ref_t *flatcc_builder_table_add_offset(flatcc_builder_t *B,
+                                                      int id);
 
 /*
  * Adds a union type and reference in a single operation and returns 0
@@ -1390,7 +1417,7 @@ flatcc_builder_ref_t *flatcc_builder_table_add_offset(flatcc_builder_t *B, int i
  * together will other small fields.
  */
 int flatcc_builder_table_add_union(flatcc_builder_t *B, int id,
-        flatcc_builder_union_ref_t uref);
+                                   flatcc_builder_union_ref_t uref);
 
 /*
  * Adds a union type vector and value vector in a single operations
@@ -1403,7 +1430,7 @@ int flatcc_builder_table_add_union(flatcc_builder_t *B, int id,
  * the value vector.
  */
 int flatcc_builder_table_add_union_vector(flatcc_builder_t *B, int id,
-        flatcc_builder_union_vec_ref_t uvref);
+                                          flatcc_builder_union_vec_ref_t uvref);
 /**
  * Creates a vector in a single operation using an externally supplied
  * buffer. This completely bypasses the stack, but the size must be
@@ -1429,8 +1456,9 @@ int flatcc_builder_table_add_union_vector(flatcc_builder_t *B, int id,
  * which can always hold the vector in 1GB excluding the size field when
  * sizeof(uoffset_t) = 4.
  */
-flatcc_builder_ref_t flatcc_builder_create_vector(flatcc_builder_t *B,
-        const void *data, size_t count, size_t elem_size, uint16_t align, size_t max_count);
+flatcc_builder_ref_t flatcc_builder_create_vector(
+    flatcc_builder_t *B, const void *data, size_t count, size_t elem_size,
+    uint16_t align, size_t max_count);
 
 /**
  * Starts a vector on the stack.
@@ -1447,7 +1475,7 @@ flatcc_builder_ref_t flatcc_builder_create_vector(flatcc_builder_t *B,
  * Returns 0 on success.
  */
 int flatcc_builder_start_vector(flatcc_builder_t *B, size_t elem_size,
-        uint16_t align, size_t max_count);
+                                uint16_t align, size_t max_count);
 
 /**
  * Emits the vector constructed on the stack by start_vector.
@@ -1497,7 +1525,8 @@ void *flatcc_builder_vector_push(flatcc_builder_t *B, const void *data);
  * Returns the buffer holding a modifiable copy of the added content,
  * or null on error.
  */
-void *flatcc_builder_append_vector(flatcc_builder_t *B, const void *data, size_t count);
+void *flatcc_builder_append_vector(flatcc_builder_t *B, const void *data,
+                                   size_t count);
 
 /**
  * Removes elements already added to vector that has not been ended.
@@ -1519,8 +1548,8 @@ int flatcc_builder_truncate_vector(flatcc_builder_t *B, size_t count);
  *
  * See also `flatcc_builder_create_offset_vector_direct`.
  */
-flatcc_builder_ref_t flatcc_builder_create_offset_vector(flatcc_builder_t *B,
-        const flatcc_builder_ref_t *data, size_t count);
+flatcc_builder_ref_t flatcc_builder_create_offset_vector(
+    flatcc_builder_t *B, const flatcc_builder_ref_t *data, size_t count);
 
 /*
  * NOTE: this call takes non-const source array of references
@@ -1530,9 +1559,8 @@ flatcc_builder_ref_t flatcc_builder_create_offset_vector(flatcc_builder_t *B,
  * source references are destroyed. In return the vector can be
  * emitted directly without passing over the stack.
  */
-flatcc_builder_ref_t flatcc_builder_create_offset_vector_direct(flatcc_builder_t *B,
-        flatcc_builder_ref_t *data, size_t count);
-
+flatcc_builder_ref_t flatcc_builder_create_offset_vector_direct(
+    flatcc_builder_t *B, flatcc_builder_ref_t *data, size_t count);
 
 /**
  * Starts a vector holding offsets to tables or strings. Before
@@ -1555,8 +1583,8 @@ flatcc_builder_ref_t flatcc_builder_end_offset_vector(flatcc_builder_t *B);
  * the `type` vector is already known. Use standand offset vector calls
  * prior to this call.
  */
-flatcc_builder_ref_t flatcc_builder_end_offset_vector_for_unions(flatcc_builder_t *B,
-        const flatcc_builder_utype_t *type);
+flatcc_builder_ref_t flatcc_builder_end_offset_vector_for_unions(
+    flatcc_builder_t *B, const flatcc_builder_utype_t *type);
 
 /** Returns the number of elements currently on the stack. */
 size_t flatcc_builder_offset_vector_count(flatcc_builder_t *B);
@@ -1577,7 +1605,8 @@ void *flatcc_builder_offset_vector_edit(flatcc_builder_t *B);
  * references in DAG form when contained in the sammer, excluding any
  * nested, sibling or parent buffers.
  */
-flatcc_builder_ref_t *flatcc_builder_extend_offset_vector(flatcc_builder_t *B, size_t count);
+flatcc_builder_ref_t *flatcc_builder_extend_offset_vector(flatcc_builder_t *B,
+                                                          size_t count);
 
 /** Similar to truncate_vector. */
 int flatcc_builder_truncate_offset_vector(flatcc_builder_t *B, size_t count);
@@ -1588,8 +1617,8 @@ int flatcc_builder_truncate_offset_vector(flatcc_builder_t *B, size_t count);
  * Returns the buffer holding a modifiable copy of the added content,
  * or null on error.
  */
-flatcc_builder_ref_t *flatcc_builder_offset_vector_push(flatcc_builder_t *B,
-        flatcc_builder_ref_t ref);
+flatcc_builder_ref_t *flatcc_builder_offset_vector_push(
+    flatcc_builder_t *B, flatcc_builder_ref_t ref);
 
 /**
  * Takes an array of refs as argument to do a multi push operation.
@@ -1597,8 +1626,8 @@ flatcc_builder_ref_t *flatcc_builder_offset_vector_push(flatcc_builder_t *B,
  * Returns the buffer holding a modifiable copy of the added content,
  * or null on error.
  */
-flatcc_builder_ref_t *flatcc_builder_append_offset_vector(flatcc_builder_t *B,
-        const flatcc_builder_ref_t *refs, size_t count);
+flatcc_builder_ref_t *flatcc_builder_append_offset_vector(
+    flatcc_builder_t *B, const flatcc_builder_ref_t *refs, size_t count);
 
 /**
  * All union vector operations are like offset vector operations,
@@ -1613,8 +1642,8 @@ flatcc_builder_ref_t *flatcc_builder_append_offset_vector(flatcc_builder_t *B,
  * Creates a union vector which is in reality two vectors, a type vector
  * and an offset vector. Both vectors references are returned.
  */
-flatcc_builder_union_vec_ref_t flatcc_builder_create_union_vector(flatcc_builder_t *B,
-        const flatcc_builder_union_ref_t *urefs, size_t count);
+flatcc_builder_union_vec_ref_t flatcc_builder_create_union_vector(
+    flatcc_builder_t *B, const flatcc_builder_union_ref_t *urefs, size_t count);
 
 /*
  * NOTE: this call takes non-const source array of references
@@ -1628,8 +1657,9 @@ flatcc_builder_union_vec_ref_t flatcc_builder_create_union_vector(flatcc_builder
  * Unlike `create_offset_vector` we do allow null references but only if
  * the union type is NONE (0).
  */
-flatcc_builder_union_vec_ref_t flatcc_builder_create_union_vector_direct(flatcc_builder_t *B,
-        const flatcc_builder_utype_t *types, flatcc_builder_ref_t *data, size_t count);
+flatcc_builder_union_vec_ref_t flatcc_builder_create_union_vector_direct(
+    flatcc_builder_t *B, const flatcc_builder_utype_t *types,
+    flatcc_builder_ref_t *data, size_t count);
 
 /*
  * Creates just the type vector part of a union vector. This is
@@ -1639,8 +1669,8 @@ flatcc_builder_union_vec_ref_t flatcc_builder_create_union_vector_direct(flatcc_
  * but the values must be handled one by one as prescribed by
  * the type. The values can be added separately as an offset vector.
  */
-flatcc_builder_ref_t flatcc_builder_create_type_vector(flatcc_builder_t *B,
-        const flatcc_builder_utype_t *types, size_t count);
+flatcc_builder_ref_t flatcc_builder_create_type_vector(
+    flatcc_builder_t *B, const flatcc_builder_utype_t *types, size_t count);
 
 /**
  * Starts a vector holding types and offsets to tables or strings. Before
@@ -1658,7 +1688,8 @@ int flatcc_builder_start_union_vector(flatcc_builder_t *B);
  * become offsets to the vector start and splits the union references
  * into a type vector and an offset vector.
  */
-flatcc_builder_union_vec_ref_t flatcc_builder_end_union_vector(flatcc_builder_t *B);
+flatcc_builder_union_vec_ref_t flatcc_builder_end_union_vector(
+    flatcc_builder_t *B);
 
 /** Returns the number of elements currently on the stack. */
 size_t flatcc_builder_union_vector_count(flatcc_builder_t *B);
@@ -1675,7 +1706,8 @@ void *flatcc_builder_union_vector_edit(flatcc_builder_t *B);
  * unique non-null reference with a valid union type to match, or it
  * must be null with a zero union type.
  */
-flatcc_builder_union_ref_t *flatcc_builder_extend_union_vector(flatcc_builder_t *B, size_t count);
+flatcc_builder_union_ref_t *flatcc_builder_extend_union_vector(
+    flatcc_builder_t *B, size_t count);
 
 /** Similar to truncate_vector. */
 int flatcc_builder_truncate_union_vector(flatcc_builder_t *B, size_t count);
@@ -1686,8 +1718,8 @@ int flatcc_builder_truncate_union_vector(flatcc_builder_t *B, size_t count);
  * Returns the buffer holding a modifiable copy of the added content,
  * or null on error.
  */
-flatcc_builder_union_ref_t *flatcc_builder_union_vector_push(flatcc_builder_t *B,
-        flatcc_builder_union_ref_t uref);
+flatcc_builder_union_ref_t *flatcc_builder_union_vector_push(
+    flatcc_builder_t *B, flatcc_builder_union_ref_t uref);
 
 /**
  * Takes an array of union_refs as argument to do a multi push operation.
@@ -1695,8 +1727,8 @@ flatcc_builder_union_ref_t *flatcc_builder_union_vector_push(flatcc_builder_t *B
  * Returns the buffer holding a modifiable copy of the added content,
  * or null on error.
  */
-flatcc_builder_union_ref_t *flatcc_builder_append_union_vector(flatcc_builder_t *B,
-        const flatcc_builder_union_ref_t *urefs, size_t count);
+flatcc_builder_union_ref_t *flatcc_builder_append_union_vector(
+    flatcc_builder_t *B, const flatcc_builder_union_ref_t *urefs, size_t count);
 
 /**
  * Faster string operation that avoids temporary stack storage. The
@@ -1706,11 +1738,11 @@ flatcc_builder_union_ref_t *flatcc_builder_append_union_vector(flatcc_builder_t 
  * have a zero termination added, not included in length.
  */
 flatcc_builder_ref_t flatcc_builder_create_string(flatcc_builder_t *B,
-        const char *s, size_t len);
+                                                  const char *s, size_t len);
 
 /** `create_string` up to zero termination of source. */
 flatcc_builder_ref_t flatcc_builder_create_string_str(flatcc_builder_t *B,
-        const char *s);
+                                                      const char *s);
 
 /**
  * `create_string` up to zero termination or at most max_len of source.
@@ -1719,7 +1751,9 @@ flatcc_builder_ref_t flatcc_builder_create_string_str(flatcc_builder_t *B,
  * the source is longer than `max_len`, but unlike `strncpy` it will
  * always add zero termination.
  */
-flatcc_builder_ref_t flatcc_builder_create_string_strn(flatcc_builder_t *B, const char *s, size_t max_len);
+flatcc_builder_ref_t flatcc_builder_create_string_strn(flatcc_builder_t *B,
+                                                       const char *s,
+                                                       size_t max_len);
 
 /**
  * Starts an empty string that can be extended subsequently.
@@ -1751,13 +1785,15 @@ char *flatcc_builder_extend_string(flatcc_builder_t *B, size_t len);
  * Returns the buffer holding a modifiable copy of the added content,
  * or null on error.
  */
-char *flatcc_builder_append_string(flatcc_builder_t *B, const char *s, size_t len);
+char *flatcc_builder_append_string(flatcc_builder_t *B, const char *s,
+                                   size_t len);
 
 /** `append_string` up to zero termination of source. */
 char *flatcc_builder_append_string_str(flatcc_builder_t *B, const char *s);
 
 /** `append_string` up zero termination or at most max_len of source. */
-char *flatcc_builder_append_string_strn(flatcc_builder_t *B, const char *s, size_t max_len);
+char *flatcc_builder_append_string_strn(flatcc_builder_t *B, const char *s,
+                                        size_t max_len);
 
 /**
  * Similar to `truncate_vector` available for consistency and a slight
@@ -1785,7 +1821,6 @@ size_t flatcc_builder_string_len(flatcc_builder_t *B);
  * accessible up the length of string currently on the stack.
  */
 char *flatcc_builder_string_edit(flatcc_builder_t *B);
-
 
 /*
  * Only for use with the default emitter.
@@ -1858,7 +1893,8 @@ void *flatcc_builder_finalize_buffer(flatcc_builder_t *B, size_t *size_out);
  * `flatcc_builder_aligned_free` to make sure the correct deallocation
  * function is used.
  */
-void *flatcc_builder_finalize_aligned_buffer(flatcc_builder_t *B, size_t *size_out);
+void *flatcc_builder_finalize_aligned_buffer(flatcc_builder_t *B,
+                                             size_t *size_out);
 
 /*
  * A stable implementation of `aligned_alloc` that is not sensitive
@@ -1899,7 +1935,8 @@ void flatcc_builder_free(void *p);
  *
  * Other emitters have custom interfaces for reaching their content.
  */
-void *flatcc_builder_copy_buffer(flatcc_builder_t *B, void *buffer, size_t size);
+void *flatcc_builder_copy_buffer(flatcc_builder_t *B, void *buffer,
+                                 size_t size);
 
 #ifdef __cplusplus
 }

@@ -78,7 +78,7 @@ extern "C" {
 #ifndef bswap64
 #define bswap64 swap64
 #endif
-#elif defined(__GNUC__)  /* Supported since at least GCC 4.4 */
+#elif defined(__GNUC__) /* Supported since at least GCC 4.4 */
 #ifndef bswap32
 #define bswap32 __builtin_bswap32
 #endif
@@ -88,28 +88,25 @@ extern "C" {
 #endif
 
 #ifndef bswap16
-#define bswap16(v)                                                          \
-      (((uint16_t)(v) << 8) | ((uint16_t)(v) >> 8))
+#define bswap16(v) (((uint16_t)(v) << 8) | ((uint16_t)(v) >> 8))
 #endif
 
 #ifndef bswap32
-#define bswap32(v)                                                          \
-      ((((uint32_t)(v) << 24))                                              \
-          | (((uint32_t)(v) << 8) & UINT32_C(0x00FF0000))                   \
-          | (((uint32_t)(v) >> 8) & UINT32_C(0x0000FF00))                   \
-          | (((uint32_t)(v) >> 24)))
+#define bswap32(v)                                                           \
+  ((((uint32_t)(v) << 24)) | (((uint32_t)(v) << 8) & UINT32_C(0x00FF0000)) | \
+   (((uint32_t)(v) >> 8) & UINT32_C(0x0000FF00)) | (((uint32_t)(v) >> 24)))
 #endif
 
 #ifndef bswap64
-#define bswap64(v)                                                          \
-      ((((uint64_t)(v) << 56))                                              \
-          | (((uint64_t)(v) << 40) & UINT64_C(0x00FF000000000000))          \
-          | (((uint64_t)(v) << 24) & UINT64_C(0x0000FF0000000000))          \
-          | (((uint64_t)(v) << 8) & UINT64_C(0x000000FF00000000))           \
-          | (((uint64_t)(v) >> 8) & UINT64_C(0x00000000FF000000))           \
-          | (((uint64_t)(v) >> 24) & UINT64_C(0x0000000000FF0000))          \
-          | (((uint64_t)(v) >> 40) & UINT64_C(0x000000000000FF00))          \
-          | (((uint64_t)(v) >> 56)))
+#define bswap64(v)                                          \
+  ((((uint64_t)(v) << 56)) |                                \
+   (((uint64_t)(v) << 40) & UINT64_C(0x00FF000000000000)) | \
+   (((uint64_t)(v) << 24) & UINT64_C(0x0000FF0000000000)) | \
+   (((uint64_t)(v) << 8) & UINT64_C(0x000000FF00000000)) |  \
+   (((uint64_t)(v) >> 8) & UINT64_C(0x00000000FF000000)) |  \
+   (((uint64_t)(v) >> 24) & UINT64_C(0x0000000000FF0000)) | \
+   (((uint64_t)(v) >> 40) & UINT64_C(0x000000000000FF00)) | \
+   (((uint64_t)(v) >> 56)))
 #endif
 
 #ifndef bswap8

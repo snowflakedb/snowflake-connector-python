@@ -24,26 +24,25 @@ extern "C" {
 #include "flatcc/portable/pstdalign.h"
 
 /* Handle fallthrough attribute in switch statements. */
-#include "flatcc/portable/pattributes.h"
-
 #include "flatcc/flatcc_alloc.h"
 #include "flatcc/flatcc_assert.h"
+#include "flatcc/portable/pattributes.h"
 
-#define __FLATBUFFERS_PASTE2(a, b) a ## b
-#define __FLATBUFFERS_PASTE3(a, b, c) a ## b ## c
+#define __FLATBUFFERS_PASTE2(a, b) a##b
+#define __FLATBUFFERS_PASTE3(a, b, c) a##b##c
 #define __FLATBUFFERS_CONCAT(a, b) __FLATBUFFERS_PASTE2(a, b)
 
 /*
  * "flatcc_endian.h" requires the preceeding include files,
  * or compatible definitions.
  */
-#include "flatcc/portable/pendian.h"
-#include "flatcc/flatcc_types.h"
 #include "flatcc/flatcc_endian.h"
 #include "flatcc/flatcc_identifier.h"
+#include "flatcc/flatcc_types.h"
+#include "flatcc/portable/pendian.h"
 
 #ifndef FLATBUFFERS_WRAP_NAMESPACE
-#define FLATBUFFERS_WRAP_NAMESPACE(ns, x) ns ## _ ## x
+#define FLATBUFFERS_WRAP_NAMESPACE(ns, x) ns##_##x
 #endif
 
 #endif /* flatcc_flatbuffers_defined */

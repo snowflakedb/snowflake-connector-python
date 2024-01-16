@@ -3,7 +3,8 @@
 
 #ifndef PRId16
 
-#if (defined(__STDC__) && __STDC__ && defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L)
+#if (defined(__STDC__) && __STDC__ && defined(__STDC_VERSION__) && \
+     __STDC_VERSION__ >= 199901L)
 /* C99 or newer */
 #include <inttypes.h>
 #else
@@ -45,7 +46,7 @@
 #define PRIx16 PRINTF_INT16_MODIFIER "x"
 #endif
 
-# endif /* __STDC__ */
+#endif /* __STDC__ */
 
 #endif /* PRId16 */
 
