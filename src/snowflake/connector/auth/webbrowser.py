@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
 import socket
 import time
 import webbrowser
@@ -134,7 +135,7 @@ class AuthByWebBrowser(AuthByPlugin):
             socket_connection.listen(0)  # no backlog
             callback_port = socket_connection.getsockname()[1]
 
-            if conn.disable_console_login:
+            if conn._disable_console_login:
                 logger.debug("step 1: query GS to obtain SSO url")
                 sso_url = self._get_sso_url(
                     conn, authenticator, service_name, account, callback_port, user
@@ -278,15 +279,13 @@ class AuthByWebBrowser(AuthByPlugin):
             content.append(f"Access-Control-Allow-Origin: {self._origin}")
             content.append("Vary: Accept-Encoding, Origin")
         else:
-            msg = """
+            msg = f"""
 <!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>SAML Response for Snowflake</title></head>
 <body>
-Your identity was confirmed and propagated to Snowflake {}.
+Your identity was confirmed and propagated to Snowflake {self._application}.
 You can close this window now and go back where you started from.
-</body></html>""".format(
-                self._application
-            )
+</body></html>"""
         content.append(f"Content-Length: {len(msg)}")
         content.append("")
         content.append(msg)
@@ -420,12 +419,20 @@ You can close this window now and go back where you started from.
         self._proof_key = data["proofKey"]
         return sso_url
 
-    @staticmethod
-    def _get_console_login_url(conn: SnowflakeConnection, port: int, user: str) -> str:
+    def _get_console_login_url(
+        self, conn: SnowflakeConnection, port: int, user: str
+    ) -> str:
+        self._proof_key = secrets.token_urlsafe(32)
         url = (
             conn._rest.server_url
-            + "/console/login/?"
-            + urlencode({"login_name": user, "client_port": port})
+            + "/console/login?"
+            + urlencode(
+                {
+                    "login_name": user,
+                    "browser_mode_redirect_port": port,
+                    "proof_key": self._proof_key,
+                }
+            )
         )
         logger.debug(f"Console Log In URL: {url}")
         return url

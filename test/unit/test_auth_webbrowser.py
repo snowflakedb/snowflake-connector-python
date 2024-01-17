@@ -38,7 +38,8 @@ INVALID_SSO_URL = "this is an invalid URL"
 CLIENT_PORT = 12345
 SNOWFLAKE_PORT = 443
 HOST = "testaccount.snowflakecomputing.com"
-REF_CONSOLE_LOGIN_SSO_URL = f"http://{HOST}:{SNOWFLAKE_PORT}/console/login/?login_name={USER}&client_port={CLIENT_PORT}"
+PROOF_KEY = "F5mR7M2J4y0jgG9CqyyWqEpyFT2HG48HFUByOS3tGaI"
+REF_CONSOLE_LOGIN_SSO_URL = f"http://{HOST}:{SNOWFLAKE_PORT}/console/login?login_name={USER}&browser_mode_redirect_port={CLIENT_PORT}&proof_key={PROOF_KEY}"
 
 
 def mock_webserver(target_instance, application, port):
@@ -48,7 +49,8 @@ def mock_webserver(target_instance, application, port):
 
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
-def test_auth_webbrowser_get(disable_console_login):
+@patch("secrets.token_urlsafe", return_value=PROOF_KEY)
+def test_auth_webbrowser_get(_, disable_console_login):
     """Authentication by WebBrowser positive test case."""
     ref_token = "MOCK_TOKEN"
 
@@ -104,7 +106,8 @@ def test_auth_webbrowser_get(disable_console_login):
 
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
-def test_auth_webbrowser_post(disable_console_login):
+@patch("secrets.token_urlsafe", return_value=PROOF_KEY)
+def test_auth_webbrowser_post(_, disable_console_login):
     """Authentication by WebBrowser positive test case with POST."""
     ref_token = "MOCK_TOKEN"
 
@@ -172,8 +175,9 @@ def test_auth_webbrowser_post(disable_console_login):
         ("http://example.com/sso?token=MOCK_TOKEN", False),
     ],
 )
+@patch("secrets.token_urlsafe", return_value=PROOF_KEY)
 def test_auth_webbrowser_fail_webbrowser(
-    monkeypatch, capsys, input_text, expected_error, disable_console_login
+    _, capsys, input_text, expected_error, disable_console_login
 ):
     """Authentication by WebBrowser with failed to start web browser case."""
     rest = _init_rest(
@@ -233,7 +237,8 @@ def test_auth_webbrowser_fail_webbrowser(
 
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
-def test_auth_webbrowser_fail_webserver(capsys, disable_console_login):
+@patch("secrets.token_urlsafe", return_value=PROOF_KEY)
+def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
     """Authentication by WebBrowser with failed to start web browser case."""
     rest = _init_rest(
         REF_SSO_URL, REF_PROOF_KEY, disable_console_login=disable_console_login
@@ -299,7 +304,7 @@ def _init_rest(
     connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
-    connection.disable_console_login = disable_console_login
+    connection._disable_console_login = disable_console_login
     type(connection).application = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_name = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_version = PropertyMock(

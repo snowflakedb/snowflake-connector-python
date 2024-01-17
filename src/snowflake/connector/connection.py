@@ -269,7 +269,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), int),
     ),  # master token validity in seconds
     "disable_console_login": (
-        False,
+        True,
         bool,
     ),  # Disable console login and fall back to getting SSO URL from GS
 }
