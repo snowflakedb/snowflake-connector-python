@@ -4,8 +4,7 @@
 
 #include "SnowflakeType.hpp"
 
-namespace sf
-{
+namespace sf {
 
 std::unordered_map<std::string, SnowflakeType::Type>
     SnowflakeType::m_strEnumIndex = {

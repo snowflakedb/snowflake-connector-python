@@ -99,7 +99,7 @@ def random_ocsp_response_validation_cache():
     )
     try:
         os.unlink(file_path[platform.system().lower()])
-    except BaseException:
+    except Exception:
         pass
 
 
