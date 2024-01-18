@@ -6,6 +6,7 @@
 #define PC_SNOWFLAKETYPE_HPP
 
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 
