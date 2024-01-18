@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -422,7 +423,7 @@ You can close this window now and go back where you started from.
     def _get_console_login_url(
         self, conn: SnowflakeConnection, port: int, user: str
     ) -> str:
-        self._proof_key = secrets.token_urlsafe(32)
+        self._proof_key = base64.b64encode(secrets.token_bytes(32)).decode("ascii")
         url = (
             conn._rest.server_url
             + "/console/login?"
