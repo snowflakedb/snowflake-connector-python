@@ -268,6 +268,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # master token validity in seconds
+    "disable_console_login": (
+        True,
+        bool,
+    ),  # Disable console login and fall back to getting SSO URL from GS
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
