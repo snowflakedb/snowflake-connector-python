@@ -5,12 +5,14 @@
 
 from __future__ import annotations
 
+import base64
 from unittest import mock
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
 from snowflake.connector import SnowflakeConnection
+from snowflake.connector.compat import urlencode
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import (
@@ -38,8 +40,11 @@ INVALID_SSO_URL = "this is an invalid URL"
 CLIENT_PORT = 12345
 SNOWFLAKE_PORT = 443
 HOST = "testaccount.snowflakecomputing.com"
-PROOF_KEY = "F5mR7M2J4y0jgG9CqyyWqEpyFT2HG48HFUByOS3tGaI"
-REF_CONSOLE_LOGIN_SSO_URL = f"http://{HOST}:{SNOWFLAKE_PORT}/console/login?login_name={USER}&browser_mode_redirect_port={CLIENT_PORT}&proof_key={PROOF_KEY}"
+PROOF_KEY = b"F5mR7M2J4y0jgG9CqyyWqEpyFT2HG48HFUByOS3tGaI"
+REF_CONSOLE_LOGIN_SSO_URL = (
+    f"http://{HOST}:{SNOWFLAKE_PORT}/console/login?login_name={USER}&browser_mode_redirect_port={CLIENT_PORT}&"
+    + urlencode({"proof_key": base64.b64encode(PROOF_KEY).decode("ascii")})
+)
 
 
 def mock_webserver(target_instance, application, port):
@@ -49,7 +54,7 @@ def mock_webserver(target_instance, application, port):
 
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
-@patch("secrets.token_urlsafe", return_value=PROOF_KEY)
+@patch("secrets.token_bytes", return_value=PROOF_KEY)
 def test_auth_webbrowser_get(_, disable_console_login):
     """Authentication by WebBrowser positive test case."""
     ref_token = "MOCK_TOKEN"
@@ -106,7 +111,7 @@ def test_auth_webbrowser_get(_, disable_console_login):
 
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
-@patch("secrets.token_urlsafe", return_value=PROOF_KEY)
+@patch("secrets.token_bytes", return_value=PROOF_KEY)
 def test_auth_webbrowser_post(_, disable_console_login):
     """Authentication by WebBrowser positive test case with POST."""
     ref_token = "MOCK_TOKEN"
@@ -175,7 +180,7 @@ def test_auth_webbrowser_post(_, disable_console_login):
         ("http://example.com/sso?token=MOCK_TOKEN", False),
     ],
 )
-@patch("secrets.token_urlsafe", return_value=PROOF_KEY)
+@patch("secrets.token_bytes", return_value=PROOF_KEY)
 def test_auth_webbrowser_fail_webbrowser(
     _, capsys, input_text, expected_error, disable_console_login
 ):
@@ -237,7 +242,7 @@ def test_auth_webbrowser_fail_webbrowser(
 
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
-@patch("secrets.token_urlsafe", return_value=PROOF_KEY)
+@patch("secrets.token_bytes", return_value=PROOF_KEY)
 def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
     """Authentication by WebBrowser with failed to start web browser case."""
     rest = _init_rest(
