@@ -11,10 +11,16 @@
 #include "CArrowIterator.hpp"
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
+#include "SnowflakeType.hpp"
+#include "logging.hpp"
 #include "nanoarrow.h"
 #include "nanoarrow.hpp"
 
 namespace sf {
+
+std::shared_ptr<sf::IColumnConverter> getConverterFromSchema(
+    ArrowSchema* schema, ArrowArrayView* array, PyObject* context,
+    bool useNumpy, Logger* logger);
 
 /**
  * Arrow chunk iterator implementation in C++. The caller (python arrow chunk
