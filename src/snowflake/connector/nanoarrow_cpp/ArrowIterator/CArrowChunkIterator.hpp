@@ -79,7 +79,6 @@ class CArrowChunkIterator : public CArrowIterator {
   bool m_useNumpy;
 
   void initColumnConverters();
-
 };
 
 class DictCArrowChunkIterator : public CArrowChunkIterator {
