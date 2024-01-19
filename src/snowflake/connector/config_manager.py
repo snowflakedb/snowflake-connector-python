@@ -336,7 +336,7 @@ class ConfigManager:
             ):
                 # for non-Windows, suggest change to 0600 permissions.
                 chmod_message = (
-                    f". To change owner, run `chown $USER {str(filep)}`. To restrict permissions, run `chmod 0600 {str(filep)}`."
+                    f'.\n * To change owner, run `chown $USER "{str(filep)}"`.\n * To restrict permissions, run `chmod 0600 "{str(filep)}"`.\n'
                     if not IS_WINDOWS
                     else ""
                 )
