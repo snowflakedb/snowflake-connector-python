@@ -378,8 +378,13 @@ std::shared_ptr<sf::IColumnConverter> getConverterFromSchema(
             returnCode);
         scale =
             std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-        byteLength = std::stoi(
-            std::string(byteLengthString.data, byteLengthString.size_bytes));
+
+        // Byte Length may be unset if TIMESTAMP_TZ is the child of a structured type
+        // In this case rely on the default value.
+        if (byteLengthString.data != nullptr) {
+          byteLength = std::stoi(
+              std::string(byteLengthString.data, byteLengthString.size_bytes));
+        }
       }
       switch (byteLength) {
         case 8: {
