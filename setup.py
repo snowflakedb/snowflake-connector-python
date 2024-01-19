@@ -94,6 +94,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                         *((file,) if isinstance(file, str) else file)
                     )
                     for file in {
+                        "ArrayConverter.cpp",
                         "BinaryConverter.cpp",
                         "BooleanConverter.cpp",
                         "CArrowChunkIterator.cpp",
@@ -104,6 +105,8 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                         "FixedSizeListConverter.cpp",
                         "FloatConverter.cpp",
                         "IntConverter.cpp",
+                        "MapConverter.cpp",
+                        "ObjectConverter.cpp",
                         "SnowflakeType.cpp",
                         "StringConverter.cpp",
                         "TimeConverter.cpp",
