@@ -5,81 +5,70 @@
 #ifndef PC_PYTHON_COMMON_HPP
 #define PC_PYTHON_COMMON_HPP
 
-// Support for not having PY_SSIZE_T_CLEAN defined will end in Python 3.10. It causes
-//  argument parsing to not accept integers, leaving only Py_ssize_t as an option
+// Support for not having PY_SSIZE_T_CLEAN defined will end in Python 3.10. It
+// causes
+//  argument parsing to not accept integers, leaving only Py_ssize_t as an
+//  option
 #define PY_SSIZE_T_CLEAN
 
-// We have to make sure that we import Python.h once for special flags that need to be
+// We have to make sure that we import Python.h once for special flags that need
+// to be
 //  set before importing it
 #include <Python.h>
+
 #include "Util/macros.hpp"
 
-namespace sf
-{
+namespace sf {
 
-namespace py
-{
-inline bool checkPyError()
-{
-  return UNLIKELY(PyErr_Occurred());
-}
+namespace py {
+inline bool checkPyError() { return UNLIKELY(PyErr_Occurred()); }
 
 /**
  * A RAII class to wrap the PyObject*. The semantics are like std::unique_ptr.
  */
-class UniqueRef
-{
-public:
+class UniqueRef {
+ public:
   UniqueRef(const UniqueRef&) = delete;
   UniqueRef& operator=(const UniqueRef&) = delete;
 
-  UniqueRef() : m_pyObj(nullptr)
-  {
-  }
+  UniqueRef() : m_pyObj(nullptr) {}
 
-  explicit UniqueRef(PyObject* pyObj) : m_pyObj(pyObj)
-  {
-  }
+  explicit UniqueRef(PyObject* pyObj) : m_pyObj(pyObj) {}
 
-  explicit UniqueRef(UniqueRef&& other) : UniqueRef(other.release())
-  {
-  }
+  UniqueRef(UniqueRef&& other) : UniqueRef(other.release()) {}
 
-  UniqueRef& operator=(UniqueRef&& other)
-  {
+  UniqueRef& operator=(UniqueRef&& other) {
     reset(other.release());
     return *this;
   }
 
-  ~UniqueRef()
-  {
-    reset();
-  }
+  ~UniqueRef() { reset(); }
 
-  void reset(PyObject* pyObj = nullptr)
-  {
-    Py_XDECREF(m_pyObj);
+  // Make this `UniqueRef` take ownership of the reference
+  // `pyObj`, if it is not null. If this `UniqueRef` previously
+  // owned a reference, it is released (via decrementing the
+  // refcount).
+  //
+  // This provides a similar guarantee as `Py_SETREF()` or
+  // `Py_CLEAR()`, by setting the new reference before
+  // decrementing the old reference.
+  void reset(PyObject* pyObj = nullptr) {
+    PyObject* toDelete = m_pyObj;
     m_pyObj = pyObj;
+    Py_XDECREF(toDelete);
   }
 
-  PyObject* release() noexcept
-  {
+  PyObject* release() noexcept {
     PyObject* tmp = m_pyObj;
     m_pyObj = nullptr;
     return tmp;
   }
 
-  PyObject* get() const noexcept
-  {
-    return m_pyObj;
-  }
+  PyObject* get() const noexcept { return m_pyObj; }
 
-  bool empty() const noexcept
-  {
-    return m_pyObj == nullptr;
-  }
+  bool empty() const noexcept { return m_pyObj == nullptr; }
 
-private:
+ private:
   PyObject* m_pyObj;
 };
 
@@ -89,25 +78,18 @@ private:
  * We have to acquire the python GIL every time we call a Python/C API to ensure
  * there is only one python thread running all the time.
  */
-class PyUniqueLock
-{
-public:
+class PyUniqueLock {
+ public:
   PyUniqueLock(const PyUniqueLock&) = delete;
   PyUniqueLock& operator=(const PyUniqueLock&) = delete;
   PyUniqueLock(PyUniqueLock&&) = delete;
   PyUniqueLock& operator=(PyUniqueLock&&) = delete;
 
-  PyUniqueLock()
-  {
-    m_state = PyGILState_Ensure();
-  }
+  PyUniqueLock() { m_state = PyGILState_Ensure(); }
 
-  ~PyUniqueLock()
-  {
-    PyGILState_Release(m_state);
-  }
+  ~PyUniqueLock() { PyGILState_Release(m_state); }
 
-private:
+ private:
   PyGILState_STATE m_state;
 };
 

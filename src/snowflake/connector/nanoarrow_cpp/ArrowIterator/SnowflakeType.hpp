@@ -5,19 +5,17 @@
 #ifndef PC_SNOWFLAKETYPE_HPP
 #define PC_SNOWFLAKETYPE_HPP
 
+
+#include <algorithm>
 #include <cstdint>
 #include <string>
-#include <algorithm>
 #include <unordered_map>
 
-namespace sf
-{
+namespace sf {
 
-class SnowflakeType
-{
-public:
-  enum class Type : uint8_t
-  {
+class SnowflakeType {
+ public:
+  enum class Type : uint8_t {
     ANY = 0,
     ARRAY = 1,
     BINARY = 2,
@@ -37,13 +35,12 @@ public:
     VECTOR = 16
   };
 
-  static SnowflakeType::Type snowflakeTypeFromString(std::string str)
-  {
+  static SnowflakeType::Type snowflakeTypeFromString(std::string str) {
     std::transform(str.begin(), str.end(), str.begin(), ::toupper);
     return m_strEnumIndex.at(str);
   }
 
-private:
+ private:
   static std::unordered_map<std::string, SnowflakeType::Type> m_strEnumIndex;
 };
 

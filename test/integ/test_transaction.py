@@ -78,6 +78,7 @@ def test_connection_context_manager(request, db_parameters):
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "database": db_parameters["database"],
+        "warehouse": db_parameters["warehouse"],
         "schema": db_parameters["schema"],
         "timezone": "UTC",
     }

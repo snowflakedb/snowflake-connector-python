@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from glob import glob
 from os import path
 from time import gmtime, strftime, time
@@ -19,7 +19,7 @@ from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
-ZERO_EPOCH = datetime.utcfromtimestamp(0)
+ZERO_EPOCH = datetime.fromtimestamp(0, timezone.utc).replace(tzinfo=None)
 
 OCSP_CACHE_SERVER_INTERVAL = 20 * 60 * 60  # seconds
 

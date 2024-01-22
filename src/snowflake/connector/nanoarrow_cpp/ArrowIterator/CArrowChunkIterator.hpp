@@ -5,29 +5,35 @@
 #ifndef PC_ARROWCHUNKITERATOR_HPP
 #define PC_ARROWCHUNKITERATOR_HPP
 
-#include "CArrowIterator.hpp"
-#include "IColumnConverter.hpp"
-#include "Python/Common.hpp"
-#include "nanoarrow.h"
-#include "nanoarrow.hpp"
 #include <memory>
 #include <vector>
 
-namespace sf
-{
+#include "CArrowIterator.hpp"
+#include "IColumnConverter.hpp"
+#include "Python/Common.hpp"
+#include "SnowflakeType.hpp"
+#include "logging.hpp"
+#include "nanoarrow.h"
+#include "nanoarrow.hpp"
+
+namespace sf {
+
+std::shared_ptr<sf::IColumnConverter> getConverterFromSchema(
+    ArrowSchema* schema, ArrowArrayView* array, PyObject* context,
+    bool useNumpy, Logger* logger);
 
 /**
  * Arrow chunk iterator implementation in C++. The caller (python arrow chunk
  * iterator object)
  * will ask for nextRow to be returned back to Python
  */
-class CArrowChunkIterator : public CArrowIterator
-{
-public:
+class CArrowChunkIterator : public CArrowIterator {
+ public:
   /**
    * Constructor
    */
-  CArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy);
+  CArrowChunkIterator(PyObject* context, char* arrow_bytes,
+                      int64_t arrow_bytes_size, PyObject* use_numpy);
 
   /**
    * Destructor
@@ -37,9 +43,9 @@ public:
   /**
    * @return a python tuple object which contains all data in current row
    */
-  std::shared_ptr<ReturnVal> next() override;
+  ReturnVal next() override;
 
-protected:
+ protected:
   /**
    * @return python object of tuple which is tuple of all row values
    */
@@ -53,7 +59,7 @@ protected:
   /** row index inside current record batch (start from 0) */
   int m_rowIndexInBatch;
 
-private:
+ private:
   /** number of columns */
   int m_columnCount;
 
@@ -75,20 +81,17 @@ private:
   void initColumnConverters();
 };
 
-class DictCArrowChunkIterator : public CArrowChunkIterator
-{
-public:
-  DictCArrowChunkIterator(PyObject* context, char* arrow_bytes, int64_t arrow_bytes_size, PyObject *use_numpy);
+class DictCArrowChunkIterator : public CArrowChunkIterator {
+ public:
+  DictCArrowChunkIterator(PyObject* context, char* arrow_bytes,
+                          int64_t arrow_bytes_size, PyObject* use_numpy);
 
   ~DictCArrowChunkIterator() = default;
 
-private:
-
+ private:
   void createRowPyObject() override;
-
 };
 
-
-}
+}  // namespace sf
 
 #endif  // PC_ARROWCHUNKITERATOR_HPP

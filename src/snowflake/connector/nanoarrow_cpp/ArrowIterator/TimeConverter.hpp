@@ -5,24 +5,23 @@
 #ifndef PC_TIMECONVERTER_HPP
 #define PC_TIMECONVERTER_HPP
 
+#include <memory>
+
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
 #include "Python/Helpers.hpp"
 #include "Util/time.hpp"
 #include "nanoarrow.h"
-#include <memory>
 
-namespace sf
-{
+namespace sf {
 
-class TimeConverter : public IColumnConverter
-{
-public:
+class TimeConverter : public IColumnConverter {
+ public:
   explicit TimeConverter(ArrowArrayView* array, int32_t scale);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
-private:
+ private:
   /** can be arrow::Int32Array and arrow::Int64Array */
   ArrowArrayView* m_array;
 

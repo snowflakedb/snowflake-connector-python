@@ -5,16 +5,18 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
+import secrets
 import socket
 import time
 import webbrowser
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
-from ..compat import parse_qs, urlparse, urlsplit
+from ..compat import parse_qs, urlencode, urlparse, urlsplit
 from ..constants import (
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
@@ -134,10 +136,14 @@ class AuthByWebBrowser(AuthByPlugin):
             socket_connection.listen(0)  # no backlog
             callback_port = socket_connection.getsockname()[1]
 
-            logger.debug("step 1: query GS to obtain SSO url")
-            sso_url = self._get_sso_url(
-                conn, authenticator, service_name, account, callback_port, user
-            )
+            if conn._disable_console_login:
+                logger.debug("step 1: query GS to obtain SSO url")
+                sso_url = self._get_sso_url(
+                    conn, authenticator, service_name, account, callback_port, user
+                )
+            else:
+                logger.debug("step 1: constructing console login url")
+                sso_url = self._get_console_login_url(conn, callback_port, user)
 
             logger.debug("Validate SSO URL")
             if not is_valid_url(sso_url):
@@ -274,15 +280,13 @@ class AuthByWebBrowser(AuthByPlugin):
             content.append(f"Access-Control-Allow-Origin: {self._origin}")
             content.append("Vary: Accept-Encoding, Origin")
         else:
-            msg = """
+            msg = f"""
 <!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>SAML Response for Snowflake</title></head>
 <body>
-Your identity was confirmed and propagated to Snowflake {}.
+Your identity was confirmed and propagated to Snowflake {self._application}.
 You can close this window now and go back where you started from.
-</body></html>""".format(
-                self._application
-            )
+</body></html>"""
         content.append(f"Content-Length: {len(msg)}")
         content.append("")
         content.append(msg)
@@ -415,3 +419,21 @@ You can close this window now and go back where you started from.
         sso_url = data["ssoUrl"]
         self._proof_key = data["proofKey"]
         return sso_url
+
+    def _get_console_login_url(
+        self, conn: SnowflakeConnection, port: int, user: str
+    ) -> str:
+        self._proof_key = base64.b64encode(secrets.token_bytes(32)).decode("ascii")
+        url = (
+            conn._rest.server_url
+            + "/console/login?"
+            + urlencode(
+                {
+                    "login_name": user,
+                    "browser_mode_redirect_port": port,
+                    "proof_key": self._proof_key,
+                }
+            )
+        )
+        logger.debug(f"Console Log In URL: {url}")
+        return url

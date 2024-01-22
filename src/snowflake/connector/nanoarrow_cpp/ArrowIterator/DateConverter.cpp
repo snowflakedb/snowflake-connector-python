@@ -3,18 +3,17 @@
 //
 
 #include "DateConverter.hpp"
-#include "Python/Helpers.hpp"
+
 #include <memory>
 
-namespace sf
-{
+#include "Python/Helpers.hpp"
+
+namespace sf {
 Logger* DateConverter::logger = new Logger("snowflake.connector.DateConverter");
 
-py::UniqueRef& DateConverter::initPyDatetimeDate()
-{
+py::UniqueRef& DateConverter::initPyDatetimeDate() {
   static py::UniqueRef pyDatetimeDate;
-  if (pyDatetimeDate.empty())
-  {
+  if (pyDatetimeDate.empty()) {
     py::UniqueRef pyDatetimeModule;
     py::importPythonModule("datetime", pyDatetimeModule);
     py::importFromModule(pyDatetimeModule, "date", pyDatetimeDate);
@@ -24,36 +23,29 @@ py::UniqueRef& DateConverter::initPyDatetimeDate()
 }
 
 DateConverter::DateConverter(ArrowArrayView* array)
-: m_array(array),
-  m_pyDatetimeDate(initPyDatetimeDate())
-{
-}
+    : m_array(array), m_pyDatetimeDate(initPyDatetimeDate()) {}
 
-PyObject* DateConverter::toPyObject(int64_t rowIndex) const
-{
-    if(ArrowArrayViewIsNull(m_array, rowIndex)) {
+PyObject* DateConverter::toPyObject(int64_t rowIndex) const {
+  if (ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
-    }
+  }
 
-    int64_t deltaDays = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
-    return PyObject_CallMethod(m_pyDatetimeDate.get(), "fromordinal", "i",
-                               epochDay + deltaDays);
+  int64_t deltaDays = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
+  return PyObject_CallMethod(m_pyDatetimeDate.get(), "fromordinal", "i",
+                             epochDay + deltaDays);
 }
 
-NumpyDateConverter::NumpyDateConverter(ArrowArrayView* array, PyObject * context)
-: m_array(array),
-  m_context(context)
-{
-}
+NumpyDateConverter::NumpyDateConverter(ArrowArrayView* array, PyObject* context)
+    : m_array(array), m_context(context) {}
 
-PyObject* NumpyDateConverter::toPyObject(int64_t rowIndex) const
-{
-    if(ArrowArrayViewIsNull(m_array, rowIndex)) {
+PyObject* NumpyDateConverter::toPyObject(int64_t rowIndex) const {
+  if (ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
-    }
+  }
 
-    int64_t deltaDays = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
-    return PyObject_CallMethod(m_context, "DATE_to_numpy_datetime64", "i", deltaDays);
+  int64_t deltaDays = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
+  return PyObject_CallMethod(m_context, "DATE_to_numpy_datetime64", "i",
+                             deltaDays);
 }
 
 }  // namespace sf

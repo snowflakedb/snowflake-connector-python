@@ -6,7 +6,7 @@
 #   - This script assumes that ../dist/repaired_wheels has the wheel(s) built for all versions to be tested
 #   - This is the script that test_docker.sh runs inside of the docker container
 
-PYTHON_VERSIONS="${1:-3.8 3.9 3.10 3.11}"
+PYTHON_VERSIONS="${1:-3.8 3.9 3.10 3.11 3.12}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 

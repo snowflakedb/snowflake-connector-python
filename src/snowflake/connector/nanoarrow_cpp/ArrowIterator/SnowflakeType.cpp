@@ -4,8 +4,7 @@
 
 #include "SnowflakeType.hpp"
 
-namespace sf
-{
+namespace sf {
 
 std::unordered_map<std::string, SnowflakeType::Type>
     SnowflakeType::m_strEnumIndex = {
@@ -15,13 +14,12 @@ std::unordered_map<std::string, SnowflakeType::Type>
         {"BOOLEAN", SnowflakeType::Type::BOOLEAN},
         {"CHAR", SnowflakeType::Type::CHAR},
         {"DATE", SnowflakeType::Type::DATE},
+        {"DOUBLE PRECISION", SnowflakeType::Type::REAL},
+        {"DOUBLE", SnowflakeType::Type::REAL},
         {"FIXED", SnowflakeType::Type::FIXED},
+        {"FLOAT", SnowflakeType::Type::REAL},
         {"OBJECT", SnowflakeType::Type::OBJECT},
         {"REAL", SnowflakeType::Type::REAL},
-        {"FLOAT", SnowflakeType::Type::REAL},
-        {"DOUBLE", SnowflakeType::Type::REAL},
-        {"DOUBLE PRECISION", SnowflakeType::Type::REAL},
-        {"VARCHAR", SnowflakeType::Type::TEXT},
         {"STRING", SnowflakeType::Type::TEXT},
         {"TEXT", SnowflakeType::Type::TEXT},
         {"TIME", SnowflakeType::Type::TIME},
@@ -29,6 +27,7 @@ std::unordered_map<std::string, SnowflakeType::Type>
         {"TIMESTAMP_LTZ", SnowflakeType::Type::TIMESTAMP_LTZ},
         {"TIMESTAMP_NTZ", SnowflakeType::Type::TIMESTAMP_NTZ},
         {"TIMESTAMP_TZ", SnowflakeType::Type::TIMESTAMP_TZ},
+        {"VARCHAR", SnowflakeType::Type::TEXT},
         {"VARIANT", SnowflakeType::Type::VARIANT},
         {"VECTOR", SnowflakeType::Type::VECTOR}};
 

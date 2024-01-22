@@ -8,6 +8,15 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.7.0(TBD)
+
+  - Added a new boolean parameter `force_return_table` to `SnowflakeCursor.fetch_arrow_all` to force returning `pyarrow.Table` in case of zero rows.
+  - Cleanup some C++ code warnings and performance issues.
+  - Added support for Python 3.12
+  - Make local testing more robust against implicit assumptions.
+  - Fixed PyArrow Table type hinting
+  - Added support for connecting using an existing connection via the session and master token.
+  - Added support for connecting to Snowflake by authenticating with multiple SAML IDP using external browser.
 
 - v3.6.0(December 09,2023)
 

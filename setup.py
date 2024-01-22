@@ -75,6 +75,8 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
             if options["debug"]:
                 ext.extra_compile_args.append("-g")
                 ext.extra_link_args.append("-g")
+                ext.extra_compile_args.append("-O0")
+                ext.extra_link_args.append("-O0")
             current_dir = os.getcwd()
 
             if ext.name == "snowflake.connector.nanoarrow_arrow_iterator":
@@ -88,51 +90,35 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
 
                 ext.sources += [
                     os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowIterator.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowChunkIterator.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "CArrowTableIterator.cpp"
-                    ),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "SnowflakeType.cpp"),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "BinaryConverter.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "BooleanConverter.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "DecimalConverter.cpp"
-                    ),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "DateConverter.cpp"),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "FixedSizeListConverter.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "FloatConverter.cpp"
-                    ),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "IntConverter.cpp"),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "StringConverter.cpp"
-                    ),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "TimeConverter.cpp"),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "TimeStampConverter.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "Python", "Common.cpp"
-                    ),
-                    os.path.join(
-                        NANOARROW_ARROW_ITERATOR_SRC_DIR, "Python", "Helpers.cpp"
-                    ),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "Util", "time.cpp"),
-                    NANOARROW_LOGGING_SRC_DIR + "/logging.cpp",
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "nanoarrow.c"),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "nanoarrow_ipc.c"),
-                    os.path.join(NANOARROW_ARROW_ITERATOR_SRC_DIR, "flatcc.c"),
+                        NANOARROW_ARROW_ITERATOR_SRC_DIR,
+                        *((file,) if isinstance(file, str) else file)
+                    )
+                    for file in {
+                        "BinaryConverter.cpp",
+                        "BooleanConverter.cpp",
+                        "CArrowChunkIterator.cpp",
+                        "CArrowIterator.cpp",
+                        "CArrowTableIterator.cpp",
+                        "DateConverter.cpp",
+                        "DecimalConverter.cpp",
+                        "FixedSizeListConverter.cpp",
+                        "FloatConverter.cpp",
+                        "IntConverter.cpp",
+                        "SnowflakeType.cpp",
+                        "StringConverter.cpp",
+                        "TimeConverter.cpp",
+                        "TimeStampConverter.cpp",
+                        "flatcc.c",
+                        "nanoarrow.c",
+                        "nanoarrow_ipc.c",
+                        ("Python", "Common.cpp"),
+                        ("Python", "Helpers.cpp"),
+                        ("Util", "time.cpp"),
+                    }
                 ]
+                ext.sources.append(
+                    os.path.join(NANOARROW_LOGGING_SRC_DIR, "logging.cpp")
+                )
                 ext.include_dirs.append(NANOARROW_ARROW_ITERATOR_SRC_DIR)
                 ext.include_dirs.append(NANOARROW_LOGGING_SRC_DIR)
 

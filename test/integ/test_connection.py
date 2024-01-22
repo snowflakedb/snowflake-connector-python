@@ -131,6 +131,60 @@ def test_with_config(db_parameters):
         cnx.close()
 
 
+@pytest.mark.skipolddriver
+def test_with_tokens(conn_cnx, db_parameters):
+    """Creates a connection using session and master token."""
+    try:
+        with conn_cnx(
+            timezone="UTC",
+        ) as initial_cnx:
+            assert initial_cnx, "invalid initial cnx"
+            master_token = initial_cnx.rest._master_token
+            session_token = initial_cnx.rest._token
+            with snowflake.connector.connect(
+                account=db_parameters["account"],
+                host=db_parameters["host"],
+                port=db_parameters["port"],
+                protocol=db_parameters["protocol"],
+                session_token=session_token,
+                master_token=master_token,
+            ) as token_cnx:
+                assert token_cnx, "invalid second cnx"
+    except Exception:
+        # This is my way of guaranteeing that we'll not expose the
+        # sensitive information that this test needs to handle.
+        # db_parameter contains passwords.
+        pytest.fail("something failed", pytrace=False)
+
+
+@pytest.mark.skipolddriver
+def test_with_tokens_expired(conn_cnx, db_parameters):
+    """Creates a connection using session and master token."""
+    try:
+        with conn_cnx(
+            timezone="UTC",
+        ) as initial_cnx:
+            assert initial_cnx, "invalid initial cnx"
+            master_token = initial_cnx._rest._master_token
+            session_token = initial_cnx._rest._token
+
+        with pytest.raises(ProgrammingError):
+            token_cnx = snowflake.connector.connect(
+                account=db_parameters["account"],
+                host=db_parameters["host"],
+                port=db_parameters["port"],
+                protocol=db_parameters["protocol"],
+                session_token=session_token,
+                master_token=master_token,
+            )
+            token_cnx.close()
+    except Exception:
+        # This is my way of guaranteeing that we'll not expose the
+        # sensitive information that this test needs to handle.
+        # db_parameter contains passwords.
+        pytest.fail("something failed", pytrace=False)
+
+
 def test_keep_alive_true(db_parameters):
     """Creates a connection with client_session_keep_alive parameter."""
     config = {

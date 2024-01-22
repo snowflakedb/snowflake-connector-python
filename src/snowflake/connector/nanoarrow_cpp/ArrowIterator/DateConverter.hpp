@@ -5,23 +5,22 @@
 #ifndef PC_DATECONVERTER_HPP
 #define PC_DATECONVERTER_HPP
 
+#include <memory>
+
 #include "IColumnConverter.hpp"
 #include "Python/Common.hpp"
 #include "logging.hpp"
 #include "nanoarrow.h"
-#include <memory>
 
-namespace sf
-{
+namespace sf {
 
-class DateConverter : public IColumnConverter
-{
-public:
+class DateConverter : public IColumnConverter {
+ public:
   explicit DateConverter(ArrowArrayView* array);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
-private:
+ private:
   static py::UniqueRef& initPyDatetimeDate();
 
   ArrowArrayView* m_array;
@@ -34,17 +33,16 @@ private:
   py::UniqueRef& m_pyDatetimeDate;
 };
 
-class NumpyDateConverter : public IColumnConverter
-{
-public:
-  explicit NumpyDateConverter(ArrowArrayView* array, PyObject * context);
+class NumpyDateConverter : public IColumnConverter {
+ public:
+  explicit NumpyDateConverter(ArrowArrayView* array, PyObject* context);
 
   PyObject* toPyObject(int64_t rowIndex) const override;
 
-private:
+ private:
   ArrowArrayView* m_array;
 
-  PyObject * m_context;
+  PyObject* m_context;
 };
 
 }  // namespace sf

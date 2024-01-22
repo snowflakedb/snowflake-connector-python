@@ -22,15 +22,18 @@
 
 #ifdef NANOARROW_NAMESPACE
 
-#define ArrowIpcCheckRuntime NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcCheckRuntime)
+#define ArrowIpcCheckRuntime \
+  NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcCheckRuntime)
 #define ArrowIpcSharedBufferIsThreadSafe \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcSharedBufferIsThreadSafe)
 #define ArrowIpcSharedBufferInit \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcSharedBufferInit)
 #define ArrowIpcSharedBufferReset \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcSharedBufferReset)
-#define ArrowIpcDecoderInit NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderInit)
-#define ArrowIpcDecoderReset NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderReset)
+#define ArrowIpcDecoderInit \
+  NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderInit)
+#define ArrowIpcDecoderReset \
+  NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderReset)
 #define ArrowIpcDecoderPeekHeader \
   NANOARROW_SYMBOL(NANOARROW_NAMESPACE, ArrowIpcDecoderPeekHeader)
 #define ArrowIpcDecoderVerifyHeader \
@@ -114,11 +117,12 @@ enum ArrowIpcCompressionType {
 /// \brief Feature flag for a stream that uses compression
 #define NANOARROW_IPC_FEATURE_COMPRESSED_BODY 2
 
-/// \brief Checks the nanoarrow runtime to make sure the run/build versions match
+/// \brief Checks the nanoarrow runtime to make sure the run/build versions
+/// match
 ArrowErrorCode ArrowIpcCheckRuntime(struct ArrowError* error);
 
-/// \brief A structure representing a reference-counted buffer that may be passed to
-/// ArrowIpcDecoderDecodeArrayFromShared().
+/// \brief A structure representing a reference-counted buffer that may be
+/// passed to ArrowIpcDecoderDecodeArrayFromShared().
 struct ArrowIpcSharedBuffer {
   struct ArrowBuffer private_src;
 };
@@ -191,21 +195,22 @@ void ArrowIpcDecoderReset(struct ArrowIpcDecoder* decoder);
 /// \brief Peek at a message header
 ///
 /// The first 8 bytes of an Arrow IPC message are 0xFFFFFF followed by the size
-/// of the header as a little-endian 32-bit integer. ArrowIpcDecoderPeekHeader() reads
-/// these bytes and returns ESPIPE if there are not enough remaining bytes in data to read
-/// the entire header message, EINVAL if the first 8 bytes are not valid, ENODATA if the
-/// Arrow end-of-stream indicator has been reached, or NANOARROW_OK otherwise.
+/// of the header as a little-endian 32-bit integer. ArrowIpcDecoderPeekHeader()
+/// reads these bytes and returns ESPIPE if there are not enough remaining bytes
+/// in data to read the entire header message, EINVAL if the first 8 bytes are
+/// not valid, ENODATA if the Arrow end-of-stream indicator has been reached, or
+/// NANOARROW_OK otherwise.
 ArrowErrorCode ArrowIpcDecoderPeekHeader(struct ArrowIpcDecoder* decoder,
                                          struct ArrowBufferView data,
                                          struct ArrowError* error);
 
 /// \brief Verify a message header
 ///
-/// Runs ArrowIpcDecoderPeekHeader() to ensure data is sufficiently large but additionally
-/// runs flatbuffer verification to ensure that decoding the data will not access
-/// memory outside of the buffer specified by data. ArrowIpcDecoderVerifyHeader() will
-/// also set decoder.header_size_bytes, decoder.body_size_bytes, decoder.metadata_version,
-/// and decoder.message_type.
+/// Runs ArrowIpcDecoderPeekHeader() to ensure data is sufficiently large but
+/// additionally runs flatbuffer verification to ensure that decoding the data
+/// will not access memory outside of the buffer specified by data.
+/// ArrowIpcDecoderVerifyHeader() will also set decoder.header_size_bytes,
+/// decoder.body_size_bytes, decoder.metadata_version, and decoder.message_type.
 ///
 /// Returns as ArrowIpcDecoderPeekHeader() and additionally will
 /// return EINVAL if flatbuffer verification fails.
@@ -215,27 +220,28 @@ ArrowErrorCode ArrowIpcDecoderVerifyHeader(struct ArrowIpcDecoder* decoder,
 
 /// \brief Decode a message header
 ///
-/// Runs ArrowIpcDecoderPeekHeader() to ensure data is sufficiently large and decodes
-/// the content of the message header. If data contains a schema message,
-/// decoder.endianness and decoder.feature_flags is set and ArrowIpcDecoderDecodeSchema()
-/// can be used to obtain the decoded schema. If data contains a record batch message,
-/// decoder.codec is set and a successful call can be followed by a call to
-/// ArrowIpcDecoderDecodeArray().
+/// Runs ArrowIpcDecoderPeekHeader() to ensure data is sufficiently large and
+/// decodes the content of the message header. If data contains a schema
+/// message, decoder.endianness and decoder.feature_flags is set and
+/// ArrowIpcDecoderDecodeSchema() can be used to obtain the decoded schema. If
+/// data contains a record batch message, decoder.codec is set and a successful
+/// call can be followed by a call to ArrowIpcDecoderDecodeArray().
 ///
 /// In almost all cases this should be preceded by a call to
-/// ArrowIpcDecoderVerifyHeader() to ensure decoding does not access data outside of the
-/// specified buffer.
+/// ArrowIpcDecoderVerifyHeader() to ensure decoding does not access data
+/// outside of the specified buffer.
 ///
-/// Returns EINVAL if the content of the message cannot be decoded or ENOTSUP if the
-/// content of the message uses features not supported by this library.
+/// Returns EINVAL if the content of the message cannot be decoded or ENOTSUP if
+/// the content of the message uses features not supported by this library.
 ArrowErrorCode ArrowIpcDecoderDecodeHeader(struct ArrowIpcDecoder* decoder,
                                            struct ArrowBufferView data,
                                            struct ArrowError* error);
 
 /// \brief Decode an ArrowSchema
 ///
-/// After a successful call to ArrowIpcDecoderDecodeHeader(), retrieve an ArrowSchema.
-/// The caller is responsible for releasing the schema if NANOARROW_OK is returned.
+/// After a successful call to ArrowIpcDecoderDecodeHeader(), retrieve an
+/// ArrowSchema. The caller is responsible for releasing the schema if
+/// NANOARROW_OK is returned.
 ///
 /// Returns EINVAL if the decoder did not just decode a schema message or
 /// NANOARROW_OK otherwise.
@@ -246,10 +252,10 @@ ArrowErrorCode ArrowIpcDecoderDecodeSchema(struct ArrowIpcDecoder* decoder,
 /// \brief Set the ArrowSchema used to decode future record batch messages
 ///
 /// Prepares the decoder for future record batch messages
-/// of this type. The decoder takes ownership of schema if NANOARROW_OK is returned.
-/// Note that you must call this explicitly after decoding a
-/// Schema message (i.e., the decoder does not assume that the last-decoded
-/// schema message applies to future record batch messages).
+/// of this type. The decoder takes ownership of schema if NANOARROW_OK is
+/// returned. Note that you must call this explicitly after decoding a Schema
+/// message (i.e., the decoder does not assume that the last-decoded schema
+/// message applies to future record batch messages).
 ///
 /// Returns EINVAL if schema validation fails or NANOARROW_OK otherwise.
 ArrowErrorCode ArrowIpcDecoderSetSchema(struct ArrowIpcDecoder* decoder,
@@ -269,49 +275,50 @@ ArrowErrorCode ArrowIpcDecoderSetEndianness(struct ArrowIpcDecoder* decoder,
 
 /// \brief Decode an ArrowArrayView
 ///
-/// After a successful call to ArrowIpcDecoderDecodeHeader(), deserialize the content
-/// of body into an internally-managed ArrowArrayView and return it. Note that field index
-/// does not equate to column index if any columns contain nested types. Use a value of -1
-/// to decode the entire array into a struct. The pointed-to ArrowArrayView is owned by
-/// the ArrowIpcDecoder and must not be released.
+/// After a successful call to ArrowIpcDecoderDecodeHeader(), deserialize the
+/// content of body into an internally-managed ArrowArrayView and return it.
+/// Note that field index does not equate to column index if any columns contain
+/// nested types. Use a value of -1 to decode the entire array into a struct.
+/// The pointed-to ArrowArrayView is owned by the ArrowIpcDecoder and must not
+/// be released.
 ///
-/// For streams that match system endianness and do not use compression, this operation
-/// will not perform any heap allocations; however, the buffers referred to by the
-/// returned ArrowArrayView are only valid as long as the buffer referred to by body stays
-/// valid.
+/// For streams that match system endianness and do not use compression, this
+/// operation will not perform any heap allocations; however, the buffers
+/// referred to by the returned ArrowArrayView are only valid as long as the
+/// buffer referred to by body stays valid.
 ArrowErrorCode ArrowIpcDecoderDecodeArrayView(struct ArrowIpcDecoder* decoder,
-                                              struct ArrowBufferView body, int64_t i,
+                                              struct ArrowBufferView body,
+                                              int64_t i,
                                               struct ArrowArrayView** out,
                                               struct ArrowError* error);
 
 /// \brief Decode an ArrowArray
 ///
-/// After a successful call to ArrowIpcDecoderDecodeHeader(), assemble an ArrowArray given
-/// a message body and a field index. Note that field index does not equate to column
-/// index if any columns contain nested types. Use a value of -1 to decode the entire
-/// array into a struct. The caller is responsible for releasing the array if
-/// NANOARROW_OK is returned.
+/// After a successful call to ArrowIpcDecoderDecodeHeader(), assemble an
+/// ArrowArray given a message body and a field index. Note that field index
+/// does not equate to column index if any columns contain nested types. Use a
+/// value of -1 to decode the entire array into a struct. The caller is
+/// responsible for releasing the array if NANOARROW_OK is returned.
 ///
-/// Returns EINVAL if the decoder did not just decode a record batch message, ENOTSUP
-/// if the message uses features not supported by this library, or or NANOARROW_OK
-/// otherwise.
-ArrowErrorCode ArrowIpcDecoderDecodeArray(struct ArrowIpcDecoder* decoder,
-                                          struct ArrowBufferView body, int64_t i,
-                                          struct ArrowArray* out,
-                                          enum ArrowValidationLevel validation_level,
-                                          struct ArrowError* error);
+/// Returns EINVAL if the decoder did not just decode a record batch message,
+/// ENOTSUP if the message uses features not supported by this library, or or
+/// NANOARROW_OK otherwise.
+ArrowErrorCode ArrowIpcDecoderDecodeArray(
+    struct ArrowIpcDecoder* decoder, struct ArrowBufferView body, int64_t i,
+    struct ArrowArray* out, enum ArrowValidationLevel validation_level,
+    struct ArrowError* error);
 
 /// \brief Decode an ArrowArray from an owned buffer
 ///
-/// This implementation takes advantage of the fact that it can avoid copying individual
-/// buffers. In all cases the caller must ArrowIpcSharedBufferReset() body after one or
-/// more calls to ArrowIpcDecoderDecodeArrayFromShared(). If
-/// ArrowIpcSharedBufferIsThreadSafe() returns 0, out must not be released by another
-/// thread.
+/// This implementation takes advantage of the fact that it can avoid copying
+/// individual buffers. In all cases the caller must ArrowIpcSharedBufferReset()
+/// body after one or more calls to ArrowIpcDecoderDecodeArrayFromShared(). If
+/// ArrowIpcSharedBufferIsThreadSafe() returns 0, out must not be released by
+/// another thread.
 ArrowErrorCode ArrowIpcDecoderDecodeArrayFromShared(
-    struct ArrowIpcDecoder* decoder, struct ArrowIpcSharedBuffer* shared, int64_t i,
-    struct ArrowArray* out, enum ArrowValidationLevel validation_level,
-    struct ArrowError* error);
+    struct ArrowIpcDecoder* decoder, struct ArrowIpcSharedBuffer* shared,
+    int64_t i, struct ArrowArray* out,
+    enum ArrowValidationLevel validation_level, struct ArrowError* error);
 
 /// \brief An user-extensible input data source
 struct ArrowIpcInputStream {
@@ -348,23 +355,25 @@ ArrowErrorCode ArrowIpcInputStreamInitBuffer(struct ArrowIpcInputStream* stream,
 /// if file_ptr fails to close. If this behaviour is needed, pass false to
 /// close_on_release and handle closing the file independently from stream.
 ArrowErrorCode ArrowIpcInputStreamInitFile(struct ArrowIpcInputStream* stream,
-                                           void* file_ptr, int close_on_release);
+                                           void* file_ptr,
+                                           int close_on_release);
 
 /// \brief Options for ArrowIpcArrayStreamReaderInit()
 struct ArrowIpcArrayStreamReaderOptions {
   /// \brief The field index to extract.
   ///
-  /// Defaults to -1 (i.e., read all fields). Note that this field index refers to
-  /// the flattened tree of children and not necessarily the column index.
+  /// Defaults to -1 (i.e., read all fields). Note that this field index refers
+  /// to the flattened tree of children and not necessarily the column index.
   int64_t field_index;
 
-  /// \brief Set to a non-zero value to share the message body buffer among decoded arrays
+  /// \brief Set to a non-zero value to share the message body buffer among
+  /// decoded arrays
   ///
   /// Sharing buffers is a good choice when (1) using memory-mapped IO
-  /// (since unreferenced portions of the file are often not loaded into memory) or
-  /// (2) if all data from all columns are about to be referenced anyway. When loading
-  /// a single field there is probably no advantage to using shared buffers.
-  /// Defaults to the value of ArrowIpcSharedBufferIsThreadSafe().
+  /// (since unreferenced portions of the file are often not loaded into memory)
+  /// or (2) if all data from all columns are about to be referenced anyway.
+  /// When loading a single field there is probably no advantage to using shared
+  /// buffers. Defaults to the value of ArrowIpcSharedBufferIsThreadSafe().
   int use_shared_buffers;
 };
 

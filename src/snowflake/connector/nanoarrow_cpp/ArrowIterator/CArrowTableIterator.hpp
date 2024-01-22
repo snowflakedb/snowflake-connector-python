@@ -5,34 +5,30 @@
 #ifndef PC_ARROWTABLEITERATOR_HPP
 #define PC_ARROWTABLEITERATOR_HPP
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "CArrowIterator.hpp"
 #include "nanoarrow.h"
 #include "nanoarrow.hpp"
-#include <string>
-#include <memory>
-#include <vector>
 
-namespace sf
-{
+namespace sf {
 
 /**
  * Arrow table iterator implementation in C++.
  * The caller will ask for an Arrow Table to be returned back to Python
- * This conversion is zero-copy, just aggregate every columns from multiple record batches
- * and build a new table.
+ * This conversion is zero-copy, just aggregate every columns from multiple
+ * record batches and build a new table.
  */
-class CArrowTableIterator : public CArrowIterator
-{
-public:
+class CArrowTableIterator : public CArrowIterator {
+ public:
   /**
    * Constructor
    */
 
-  CArrowTableIterator(
-  PyObject* context,
-  char* arrow_bytes, int64_t arrow_bytes_size,
-  bool number_to_decimal
-  );
+  CArrowTableIterator(PyObject* context, char* arrow_bytes,
+                      int64_t arrow_bytes_size, bool number_to_decimal);
 
   /**
    * Destructor
@@ -42,11 +38,11 @@ public:
   /**
    * @return an arrow table containing all data in all record batches
    */
-  std::shared_ptr<ReturnVal> next() override;
+  ReturnVal next() override;
   std::vector<uintptr_t> getArrowArrayPtrs() override;
   std::vector<uintptr_t> getArrowSchemaPtrs() override;
 
-private:
+ private:
   // nanoarrow data
   std::vector<std::vector<nanoarrow::UniqueArray>> m_newArrays;
   std::vector<std::vector<nanoarrow::UniqueSchema>> m_newSchemas;
@@ -75,87 +71,71 @@ private:
   bool convertRecordBatchesToTable_nanoarrow();
 
   /**
-   * convert scaled fixed number column to Decimal, or Double column based on setting
+   * convert scaled fixed number column to Decimal, or Double column based on
+   * setting
    */
-  void convertScaledFixedNumberColumn_nanoarrow(
-    const unsigned int batchIdx,
-    const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const unsigned int scale
-  );
+  void convertScaledFixedNumberColumn_nanoarrow(const unsigned int batchIdx,
+                                                const int colIdx,
+                                                ArrowSchemaView* field,
+                                                ArrowArrayView* columnArray,
+                                                const unsigned int scale);
 
   /**
    * convert scaled fixed number column to Decimal column
    */
   void convertScaledFixedNumberColumnToDecimalColumn_nanoarrow(
-    const unsigned int batchIdx,
-    const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const unsigned int scale
-    );
+      const unsigned int batchIdx, const int colIdx, ArrowSchemaView* field,
+      ArrowArrayView* columnArray, const unsigned int scale);
 
   /**
    * convert scaled fixed number column to Double column
    */
   void convertScaledFixedNumberColumnToDoubleColumn_nanoarrow(
-    const unsigned int batchIdx,
-    const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const unsigned int scale
-    );
+      const unsigned int batchIdx, const int colIdx, ArrowSchemaView* field,
+      ArrowArrayView* columnArray, const unsigned int scale);
 
   /**
    * convert Snowflake Time column (Arrow int32/int64) to Arrow Time column
-   * Since Python/Pandas Time does not support nanoseconds, this function truncates values to microseconds if necessary
+   * Since Python/Pandas Time does not support nanoseconds, this function
+   * truncates values to microseconds if necessary
    */
-  void convertTimeColumn_nanoarrow(
-    const unsigned int batchIdx,
-    const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const int scale
-    );
+  void convertTimeColumn_nanoarrow(const unsigned int batchIdx,
+                                   const int colIdx, ArrowSchemaView* field,
+                                   ArrowArrayView* columnArray,
+                                   const int scale);
 
   /**
-   * convert Snowflake TimestampNTZ/TimestampLTZ column to Arrow Timestamp column
+   * convert Snowflake TimestampNTZ/TimestampLTZ column to Arrow Timestamp
+   * column
    */
-  void convertTimestampColumn_nanoarrow(
-    const unsigned int batchIdx,
-    const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const int scale,
-    const std::string timezone=""
-    );
+  void convertTimestampColumn_nanoarrow(const unsigned int batchIdx,
+                                        const int colIdx,
+                                        ArrowSchemaView* field,
+                                        ArrowArrayView* columnArray,
+                                        const int scale,
+                                        const std::string timezone = "");
 
   /**
    * convert Snowflake TimestampTZ column to Arrow Timestamp column in UTC
-   * Arrow Timestamp does not support time zone info in each value, so this method convert TimestampTZ to Arrow
-   * timestamp with UTC timezone
+   * Arrow Timestamp does not support time zone info in each value, so this
+   * method convert TimestampTZ to Arrow timestamp with UTC timezone
    */
-  void convertTimestampTZColumn_nanoarrow(
-    const unsigned int batchIdx,
-    const int colIdx,
-    ArrowSchemaView* field,
-    ArrowArrayView* columnArray,
-    const int scale,
-    const int byteLength,
-    const std::string timezone
-    );
+  void convertTimestampTZColumn_nanoarrow(const unsigned int batchIdx,
+                                          const int colIdx,
+                                          ArrowSchemaView* field,
+                                          ArrowArrayView* columnArray,
+                                          const int scale, const int byteLength,
+                                          const std::string timezone);
 
   /**
    * convert scaled fixed number to double
-   * if scale is small, then just divide based on the scale; otherwise, convert the value to string first and then
-   * convert to double to avoid precision loss
+   * if scale is small, then just divide based on the scale; otherwise, convert
+   * the value to string first and then convert to double to avoid precision
+   * loss
    */
   template <typename T>
-  double convertScaledFixedNumberToDouble(
-    const unsigned int scale,
-    T originalValue
-  );
+  double convertScaledFixedNumberToDouble(const unsigned int scale,
+                                          T originalValue);
 };
-}
+}  // namespace sf
 #endif  // PC_ARROWTABLEITERATOR_HPP

@@ -435,6 +435,10 @@ class SnowflakeRestful:
     def mfa_token(self, value: str) -> None:
         self._mfa_token = value
 
+    @property
+    def server_url(self) -> str:
+        return f"{self._protocol}://{self._host}:{self._port}"
+
     def close(self) -> None:
         if hasattr(self, "_token"):
             del self._token
@@ -595,7 +599,7 @@ class SnowflakeRestful:
                 },
             )
 
-    def _heartbeat(self) -> None:
+    def _heartbeat(self) -> Any | dict[Any, Any] | None:
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
@@ -614,6 +618,7 @@ class SnowflakeRestful:
         )
         if not ret.get("success"):
             logger.error("Failed to heartbeat. code: %s, url: %s", ret.get("code"), url)
+        return ret
 
     def delete_session(self, retry: bool = False) -> None:
         """Deletes the session."""
@@ -682,7 +687,7 @@ class SnowflakeRestful:
         if "Content-Length" in headers:
             del headers["Content-Length"]
 
-        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
+        full_url = f"{self.server_url}{url}"
         ret = self.fetch(
             "get",
             full_url,
@@ -719,7 +724,7 @@ class SnowflakeRestful:
         no_retry: bool = False,
         _include_retry_params: bool = False,
     ):
-        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
+        full_url = f"{self.server_url}{url}"
         if self._connection._probe_connection:
             from pprint import pprint
 
