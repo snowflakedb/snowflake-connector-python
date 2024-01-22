@@ -125,6 +125,7 @@ def structured_type_verify(conn_cnx, query, data):
         assert rows[0][0] == data, "Result values should match input examples."
 
 
+@pytest.mark.internal
 @pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
 def test_array(datatype, examples, conn_cnx):
     json_values = re.escape(json.dumps(examples, default=serialize))
@@ -135,6 +136,7 @@ def test_array(datatype, examples, conn_cnx):
     structured_type_verify(conn_cnx, query, examples)
 
 
+@pytest.mark.internal
 @pytest.mark.parametrize("key_type", ["varchar", "number"])
 @pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
 def test_map(key_type, datatype, examples, conn_cnx):
@@ -147,6 +149,7 @@ def test_map(key_type, datatype, examples, conn_cnx):
     structured_type_verify(conn_cnx, query, data)
 
 
+@pytest.mark.internal
 @pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
 def test_object(datatype, examples, conn_cnx):
     fields = [f"{datatype}_{i}" for i in range(len(examples))]
@@ -160,6 +163,7 @@ def test_object(datatype, examples, conn_cnx):
     structured_type_verify(conn_cnx, query, data)
 
 
+@pytest.mark.internal
 def test_nested_types(conn_cnx):
     data = {"child": [{"key1": {"struct_field": 1}}]}
     json_string = re.escape(json.dumps(data, default=serialize))
