@@ -88,8 +88,7 @@ def serialize(value):
         return value.hex()
     elif isinstance(value, (date, time)):
         return str(value)
-    else:
-        return value
+    return value
 
 
 @pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
