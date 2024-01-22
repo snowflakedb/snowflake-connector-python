@@ -33,10 +33,10 @@ ArrayConverter::ArrayConverter(ArrowSchemaView* schemaView,
     return;
   }
 
-  ArrowSchema* itemSchema = schemaView->schema->children[0];
+  ArrowSchema* item_schema = schemaView->schema->children[0];
   ArrowArrayView* item_array = array->children[0];
-  item_converter =
-      getConverterFromSchema(itemSchema, item_array, context, useNumpy, logger);
+  m_item_converter = getConverterFromSchema(item_schema, item_array, context,
+                                            useNumpy, logger);
 }
 
 PyObject* ArrayConverter::toPyObject(int64_t rowIndex) const {
@@ -56,7 +56,7 @@ PyObject* ArrayConverter::toPyObject(int64_t rowIndex) const {
 
   PyObject* list = PyList_New(end - start);
   for (int i = start; i < end; i++) {
-    PyList_SetItem(list, i - start, item_converter->toPyObject(i));
+    PyList_SetItem(list, i - start, m_item_converter->toPyObject(i));
   }
   return list;
 }

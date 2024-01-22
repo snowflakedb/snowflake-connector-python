@@ -42,15 +42,15 @@ MapConverter::MapConverter(ArrowSchemaView* schemaView, ArrowArrayView* array,
     return;
   }
 
-  ArrowSchema* keySchema = entries->children[0];
-  ArrowArrayView* keyArray = array->children[0]->children[0];
-  key_converter =
-      getConverterFromSchema(keySchema, keyArray, context, useNumpy, logger);
+  ArrowSchema* key_schema = entries->children[0];
+  ArrowArrayView* key_array = array->children[0]->children[0];
+  m_key_converter =
+      getConverterFromSchema(key_schema, key_array, context, useNumpy, logger);
 
-  ArrowSchema* valueSchema = entries->children[1];
-  ArrowArrayView* valueArray = array->children[0]->children[1];
-  value_converter = getConverterFromSchema(valueSchema, valueArray, context,
-                                           useNumpy, logger);
+  ArrowSchema* value_schema = entries->children[1];
+  ArrowArrayView* value_array = array->children[0]->children[1];
+  m_value_converter = getConverterFromSchema(value_schema, value_array, context,
+                                             useNumpy, logger);
 }
 
 PyObject* MapConverter::toPyObject(int64_t rowIndex) const {
@@ -70,8 +70,8 @@ PyObject* MapConverter::toPyObject(int64_t rowIndex) const {
 
   PyObject* dict = PyDict_New();
   for (int i = start; i < end; i++) {
-    PyDict_SetItem(dict, key_converter->toPyObject(i),
-                   value_converter->toPyObject(i));
+    PyDict_SetItem(dict, m_key_converter->toPyObject(i),
+                   m_value_converter->toPyObject(i));
   }
   return dict;
 }

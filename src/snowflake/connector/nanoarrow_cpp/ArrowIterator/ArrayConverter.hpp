@@ -25,7 +25,7 @@ class ArrayConverter : public IColumnConverter {
   void generateError(const std::string& msg) const;
 
   ArrowArrayView* m_array;
-  std::shared_ptr<sf::IColumnConverter> item_converter;
+  std::shared_ptr<sf::IColumnConverter> m_item_converter;
   static Logger* logger;
 };
 

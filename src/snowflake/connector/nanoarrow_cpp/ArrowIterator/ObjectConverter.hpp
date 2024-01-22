@@ -23,7 +23,7 @@ class ObjectConverter : public IColumnConverter {
   static Logger* logger;
   ArrowArrayView* m_array;
   int m_propertyCount;
-  std::vector<const char*> m_propertyNames;
+  std::vector<const char*> m_property_names;
   std::vector<std::shared_ptr<sf::IColumnConverter>> m_converters;
 };
 

@@ -25,8 +25,8 @@ class MapConverter : public IColumnConverter {
   void generateError(const std::string& msg) const;
 
   ArrowArrayView* m_array;
-  std::shared_ptr<sf::IColumnConverter> key_converter;
-  std::shared_ptr<sf::IColumnConverter> value_converter;
+  std::shared_ptr<sf::IColumnConverter> m_key_converter;
+  std::shared_ptr<sf::IColumnConverter> m_value_converter;
   static Logger* logger;
 };
 
