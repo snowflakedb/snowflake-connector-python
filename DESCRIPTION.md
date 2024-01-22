@@ -18,6 +18,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added support for connecting using an existing connection via the session and master token.
   - Added support for connecting to Snowflake by authenticating with multiple SAML IDP using external browser.
   - Added support for structured types (OBJECT, MAP, ARRAY) to nanoarrow converters.
+  - Fixed compilation issue due to missing cstdint header on gcc13.
 
 - v3.6.0(December 09,2023)
 
