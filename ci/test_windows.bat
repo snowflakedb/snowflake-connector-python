@@ -36,14 +36,22 @@ if %errorlevel% neq 0 goto :error
 call %venv_dir%\scripts\activate
 if %errorlevel% neq 0 goto :error
 
-python -m pip install -U pip "tox<4" tox-external-wheels
+python -m pip install -U pip "tox>=4"
 if %errorlevel% neq 0 goto :error
 
 cd %CONNECTOR_DIR%
 
 set JUNIT_REPORT_DIR=%workspace%
 set COV_REPORT_DIR=%workspace%
-tox -e py%pv%-{unit,integ,pandas,sso}-ci --external_wheels %connector_whl% -- --basetemp=%workspace%\pytest-tmp\
+
+set "TEST_ENVLIST="
+for %%e in (unit integ pandas sso) do (
+    set "TEST_ENVLIST=!TEST_ENVLIST!,fix-lint,py%pv%-%%e-ci,py%pv%-coverage"
+)
+:: remove the leading comma
+set "TEST_ENVLIST=%TEST_ENVLIST:~1%"
+
+tox -e %TEST_ENVLIST% --installpkg %connector_whl% -- --basetemp=%workspace%\pytest-tmp\
 if %errorlevel% neq 0 goto :error
 
 call deactivate
