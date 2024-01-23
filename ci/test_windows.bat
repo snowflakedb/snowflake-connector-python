@@ -46,7 +46,7 @@ set COV_REPORT_DIR=%workspace%
 
 set "TEST_ENVLIST="
 for %%e in (unit integ pandas sso) do (
-    set "TEST_ENVLIST=!TEST_ENVLIST!,fix-lint,py%pv%-%%e-ci,py%pv%-coverage"
+    set "TEST_ENVLIST=!TEST_ENVLIST!,fix_lint,py%pv%-%%e-ci,py%pv%-coverage"
 )
 :: remove the leading comma
 set "TEST_ENVLIST=%TEST_ENVLIST:~1%"
