@@ -11,7 +11,7 @@ THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 
 # Install one copy of tox
-python3 -m pip install -U tox tox-external-wheels
+python3 -m pip install -U tox>=4
 
 source ${THIS_DIR}/log_analyze_setup.sh
 
@@ -40,6 +40,6 @@ else
         TEST_ENVLIST=fix_lint,py${SHORT_VERSION}-{unit,integ,pandas,sso}-ci,py${SHORT_VERSION}-coverage
         echo "[Info] Running tox for ${TEST_ENVLIST}"
 
-        python3 -m tox -e ${TEST_ENVLIST} --external_wheels ${CONNECTOR_WHL}
+        python3 -m tox -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
     done
 fi
