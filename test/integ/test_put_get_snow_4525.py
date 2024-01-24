@@ -28,7 +28,7 @@ ratio number(5,2))
         temp_file = tmp_path / "bogus_files"
         with temp_file.open("wb") as random_binary_file:
             random_binary_file.write(os.urandom(1024))
-        cnx.cursor().execute(f"put file://{temp_file} @%{db_parameters['name']}")
+        cnx.cursor().execute(f"put file:///{temp_file} @%{db_parameters['name']}")
 
         with cnx.cursor() as c:
             c.execute(f"copy into {db_parameters['name']} on_error='skip_file'")
@@ -47,7 +47,7 @@ def test_load_bogus_json_file(tmp_path: pathlib.Path, conn_cnx, db_parameters):
 
         temp_file = tmp_path / "bogus_json_files"
         temp_file.write_bytes(os.urandom(1024))
-        cnx.cursor().execute(f"put file://{temp_file} @%{json_table}")
+        cnx.cursor().execute(f"put file:///{temp_file} @%{json_table}")
 
         with cnx.cursor() as c:
             c.execute(

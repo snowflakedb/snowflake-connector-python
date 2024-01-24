@@ -58,14 +58,14 @@ ratio number(6,2))
             ):
                 # upload with auto compress = True
                 cnx.cursor().execute(
-                    f"put 'file://{files}' @%{db_parameters['name']} auto_compress=True",
+                    f"put 'file:///{files}' @%{db_parameters['name']} auto_compress=True",
                 )
                 assert mocked_file_agent.agent._multipart_threshold == 10000
                 cnx.cursor().execute(f"remove @%{db_parameters['name']}")
 
                 # upload with auto compress = False
                 cnx.cursor().execute(
-                    f"put 'file://{files}' @%{db_parameters['name']} auto_compress=False",
+                    f"put 'file:///{files}' @%{db_parameters['name']} auto_compress=False",
                 )
                 assert mocked_file_agent.agent._multipart_threshold == 10000
 
@@ -74,7 +74,7 @@ ratio number(6,2))
                 # self.get_digest() needs to be called before self.get_file_header(meta.dst_file_name).
                 # SNOW-749141
                 cnx.cursor().execute(
-                    f"put 'file://{files}' @%{db_parameters['name']} auto_compress=False",
+                    f"put 'file:///{files}' @%{db_parameters['name']} auto_compress=False",
                 )  # do not add `overwrite=True` because overwrite will skip the code path to extract file header.
 
             c = cnx.cursor()

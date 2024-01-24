@@ -389,7 +389,7 @@ compression='gzip')
 max_file_size=10000000
 """,
         )
-        ret = run(cnx, "get @{name_unload}/ file://{tmp_dir_user}/")
+        ret = run(cnx, "get @{name_unload}/ file:///{tmp_dir_user}/")
 
         assert ret[0][2] == "DOWNLOADED", "Failed to download"
         cnt = 0
@@ -432,7 +432,7 @@ pct float,
 ratio number(6,2))
 """,
         )
-        run(cnx, "put 'file://{files}' @%{name}")
+        run(cnx, "put 'file:///{files}' @%{name}")
         run(cnx, "copy into {name}")
         rows = 0
         for rec in run(cnx, "select count(*) from {name}"):
@@ -475,7 +475,7 @@ ratio number(6,2))
         )
     try:
         with conn_cnx() as cnx:
-            run(cnx, "put 'file://{files}' @%{name}")
+            run(cnx, "put 'file:///{files}' @%{name}")
             run(cnx, "copy into {name}")
 
             rows = 0
@@ -529,7 +529,7 @@ ratio number(6,2))
         with conn_cnx() as cnx:
             success_cnt = 0
             skipped_cnt = 0
-            for rec in run(cnx, "put 'file://{files}' @%{name}"):
+            for rec in run(cnx, "put 'file:///{files}' @%{name}"):
                 logger.info("rec=%s", rec)
                 if rec[6] == "UPLOADED":
                     success_cnt += 1
@@ -548,7 +548,7 @@ ratio number(6,2))
 
             success_cnt = 0
             skipped_cnt = 0
-            for rec in run(cnx, "put 'file://{files}' @%{name}"):
+            for rec in run(cnx, "put 'file:///{files}' @%{name}"):
                 logger.info("rec=%s", rec)
                 if rec[6] == "UPLOADED":
                     success_cnt += 1
@@ -602,7 +602,7 @@ def test_put_collision(tmpdir, conn_cnx):
             success_cnt = 0
             skipped_cnt = 0
             for rec in cnx.cursor().execute(
-                "PUT 'file://{file}' @~/{stage_name}".format(
+                "PUT 'file:///{file}' @~/{stage_name}".format(
                     file=files1.replace("\\", "\\\\"), stage_name=stage_name
                 )
             ):
@@ -618,7 +618,7 @@ def test_put_collision(tmpdir, conn_cnx):
             success_cnt = 0
             skipped_cnt = 0
             for rec in cnx.cursor().execute(
-                "PUT 'file://{file}' @~/{stage_name}".format(
+                "PUT 'file:///{file}' @~/{stage_name}".format(
                     file=files2.replace("\\", "\\\\"), stage_name=stage_name
                 )
             ):
@@ -634,7 +634,7 @@ def test_put_collision(tmpdir, conn_cnx):
             success_cnt = 0
             skipped_cnt = 0
             for rec in cnx.cursor().execute(
-                "PUT 'file://{file}' @~/{stage_name} OVERWRITE=true".format(
+                "PUT 'file:///{file}' @~/{stage_name} OVERWRITE=true".format(
                     file=files2.replace("\\", "\\\\"), stage_name=stage_name
                 )
             ):
@@ -700,8 +700,8 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
 
     with conn_cnx() as cnx:
         try:
-            run(cnx, "PUT 'file://{files}' @~/{dir}")
-            # run(cnx, "PUT 'file://{files}' @~/{dir}")  # retry
+            run(cnx, "PUT 'file:///{files}' @~/{dir}")
+            # run(cnx, "PUT 'file:///{files}' @~/{dir}")  # retry
             all_recs = []
             for _ in range(100):
                 all_recs = run(cnx, "LIST @~/{dir}")
@@ -713,7 +713,7 @@ def test_put_get_large_files_s3(tmpdir, conn_cnx, db_parameters):
                     "cannot list all files. Potentially "
                     "PUT command missed uploading Files: {}".format(all_recs)
                 )
-            all_recs = run(cnx, "GET @~/{dir} 'file://{output_dir}'")
+            all_recs = run(cnx, "GET @~/{dir} 'file:///{output_dir}'")
             assert len(all_recs) == number_of_files
             assert all([rec[2] == "DOWNLOADED" for rec in all_recs])
         finally:
@@ -776,7 +776,7 @@ def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters, from_path, file_src)
         # GET detection failure
         commented_get_sql = """
 --- test comments
-GET @~/{name} file://{local_dir}"""
+GET @~/{name} file:///{local_dir}"""
 
         with pytest.raises(ProgrammingError):
             run(cnx, commented_get_sql)
