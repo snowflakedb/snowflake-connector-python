@@ -389,7 +389,7 @@ compression='gzip')
 max_file_size=10000000
 """,
         )
-        ret = run(cnx, "get @{name_unload}/ file://{tmp_dir_user}/")
+        ret = run(cnx, "get @{name_unload}/ 'file://{tmp_dir_user}/'")
 
         assert ret[0][2] == "DOWNLOADED", "Failed to download"
         cnt = 0
@@ -776,7 +776,7 @@ def test_put_get_with_hint(tmpdir, conn_cnx, db_parameters, from_path, file_src)
         # GET detection failure
         commented_get_sql = """
 --- test comments
-GET @~/{name} file://{local_dir}"""
+GET @~/{name} 'file://{local_dir}'"""
 
         with pytest.raises(ProgrammingError):
             run(cnx, commented_get_sql)

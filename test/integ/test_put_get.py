@@ -210,7 +210,7 @@ stage_file_format = (
             )
             cur.execute(
                 f"""
-put file://{test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1
+put 'file://{test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv' @%pytest_putget_t1
 """
             )
             assert cur.is_file_transfer
@@ -264,7 +264,7 @@ create or replace table pytest_putget_t2 (c1 STRING, c2 STRING, c3 STRING,
             )
             cur.execute(
                 f"""
-put file://{test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv
+put 'file://{test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv'
 @{test_data.stage_name}
 """
             )
@@ -338,7 +338,7 @@ stage_file_format = (format_name = 'vsv' field_delimiter = '|'
 
             # put local file
             cur.execute(
-                f"put file://{test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv @%pytest_t3"
+                f"put 'file://{test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv' @%pytest_t3"
             )
 
             # copy into table
@@ -654,7 +654,7 @@ def test_put_threshold(tmp_path, conn_cnx, is_public_test):
             "snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent",
             autospec=SnowflakeFileTransferAgent,
         ) as mock_agent:
-            cur.execute(f"put file://{file} @{stage_name} threshold=156")
+            cur.execute(f"put 'file://{file} @{stage_name}' threshold=156")
         assert mock_agent.call_args[1].get("multipart_threshold", -1) == 156
 
 
@@ -689,16 +689,16 @@ def test_multipart_put(conn_cnx, tmp_path, use_stream):
                 ):
                     if use_stream:
                         kw = {
-                            "command": f"put file://file0 @{stage_name}/sub/folders/ AUTO_COMPRESS=FALSE",
+                            "command": f"put 'file://file0 @{stage_name}/sub/folders/' AUTO_COMPRESS=FALSE",
                             "file_stream": BytesIO(upload_file.read_bytes()),
                         }
                     else:
                         kw = {
-                            "command": f"put file://{upload_file} @{stage_name}/sub/folders/ AUTO_COMPRESS=FALSE",
+                            "command": f"put 'file://{upload_file} @{stage_name}/sub/folders/' AUTO_COMPRESS=FALSE",
                         }
                     cur.execute(**kw)
             cur.execute(
-                f"get @{stage_name}/sub/folders/{upload_file.name} file://{get_dir}"
+                f"get @{stage_name}/sub/folders/{upload_file.name} 'file://{get_dir}'"
             )
     downloaded_file = get_dir / upload_file.name
     assert downloaded_file.exists()
@@ -735,7 +735,7 @@ def test_get_empty_file(tmp_path, conn_cnx):
             )
             empty_file = tmp_path / "foo.csv"
             with pytest.raises(OperationalError, match=".*the file does not exist.*$"):
-                cur.execute(f"GET @{stage_name}/foo.csv file://{tmp_path}")
+                cur.execute(f"GET @{stage_name}/foo.csv 'file://{tmp_path}'")
             assert not empty_file.exists()
 
 
@@ -753,7 +753,7 @@ def test_get_file_permission(tmp_path, conn_cnx, caplog):
             )
 
             with caplog.at_level(logging.ERROR):
-                cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
+                cur.execute(f"GET @{stage_name}/data.csv 'file://{tmp_path}'")
             assert "FileNotFoundError" not in caplog.text
 
             # get the default mask, usually it is 0o022
@@ -785,7 +785,7 @@ def test_get_multiple_files_with_same_name(tmp_path, conn_cnx, caplog):
             with caplog.at_level(logging.WARNING):
                 try:
                     cur.execute(
-                        f"GET @{stage_name} file://{tmp_path} PATTERN='.*data.csv.gz'"
+                        f"GET @{stage_name} 'file://{tmp_path}' PATTERN='.*data.csv.gz'"
                     )
                 except OperationalError:
                     # This is expected flakiness

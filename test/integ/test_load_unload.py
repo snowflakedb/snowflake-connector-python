@@ -200,7 +200,7 @@ AWS_SECRET_KEY={aws_secret_access_key}))
                 )
             )
             cur.execute(
-                """put file://{}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1""".format(
+                """put 'file://{}/ExecPlatform/Database/data/orders_10*.csv @%pytest_putget_t1'""".format(
                     str(test_data.test_data_dir)
                 )
             )
@@ -269,7 +269,7 @@ c4 STRING, c5 STRING, c6 STRING, c7 STRING, c8 STRING, c9 STRING)
 """
             )
             cur.execute(
-                """put file://{}/ExecPlatform/Database/data/orders_10*.csv @{}""".format(
+                """put 'file://{}/ExecPlatform/Database/data/orders_10*.csv' @{}""".format(
                     test_data.test_data_dir, test_data.stage_name
                 )
             )
@@ -360,7 +360,7 @@ alter stage {stage_name} set file_format = (format_name = 'VSV' )
 
             # put local file
             cur.execute(
-                "put file://{}/ExecPlatform/Database/data/orders_10*.csv @%pytest_t3".format(
+                "put 'file://{}/ExecPlatform/Database/data/orders_10*.csv' @%pytest_t3".format(
                     s3_test_data.test_data_dir
                 )
             )

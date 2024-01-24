@@ -71,7 +71,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path):
                     "file_format=(type=csv compression='gzip')"
                 )
                 csr.execute(
-                    f"get @%{table_name} file://{tmp_dir}",
+                    f"get @%{table_name} 'file://{tmp_dir}'",
                     _put_callback=SnowflakeAzureProgressPercentage,
                     _get_callback=SnowflakeAzureProgressPercentage,
                 )
@@ -124,7 +124,7 @@ def test_put_copy_many_files_azure(tmpdir, conn_cnx):
             """,
             )
             try:
-                all_recs = run(csr, "put file://{files} @%{name}")
+                all_recs = run(csr, "put 'file://{files} @%{name}'")
                 assert all([rec[6] == "UPLOADED" for rec in all_recs])
                 run(csr, "copy into {name}")
 
@@ -170,7 +170,7 @@ def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx):
             try:
                 success_cnt = 0
                 skipped_cnt = 0
-                for rec in run(csr, "put file://{files} @%{name}"):
+                for rec in run(csr, "put 'file://{files}' @%{name}"):
                     logger.info("rec=%s", rec)
                     if rec[6] == "UPLOADED":
                         success_cnt += 1
@@ -189,7 +189,7 @@ def test_put_copy_duplicated_files_azure(tmpdir, conn_cnx):
 
                 success_cnt = 0
                 skipped_cnt = 0
-                for rec in run(csr, "put file://{files} @%{name}"):
+                for rec in run(csr, "put 'file://{files}' @%{name}"):
                     logger.info("rec=%s", rec)
                     if rec[6] == "UPLOADED":
                         success_cnt += 1
@@ -244,7 +244,7 @@ def test_put_get_large_files_azure(tmpdir, conn_cnx):
 
     with conn_cnx() as cnx:
         try:
-            all_recs = run(cnx, "PUT file://{files} @~/{dir}")
+            all_recs = run(cnx, "PUT 'file://{files}' @~/{dir}")
             assert all([rec[6] == "UPLOADED" for rec in all_recs])
 
             for _ in range(60):
@@ -268,7 +268,7 @@ def test_put_get_large_files_azure(tmpdir, conn_cnx):
                     "cannot list all files. Potentially "
                     "PUT command missed uploading Files: {}".format(all_recs)
                 )
-            all_recs = run(cnx, "GET @~/{dir} file://{output_dir}")
+            all_recs = run(cnx, "GET @~/{dir} 'file://{output_dir}'")
             assert len(all_recs) == number_of_files
             assert all([rec[2] == "DOWNLOADED" for rec in all_recs])
         finally:
