@@ -74,7 +74,7 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path):
                     f"copy into @%{table_name} from {table_name} "
                     "file_format=(type=csv compression='gzip')"
                 )
-                csr.execute(f"get @%{table_name} 'file://{tmp_dir}'")
+                csr.execute(f"get @%{table_name} file://{tmp_dir}")
                 rec = csr.fetchone()
                 assert rec[0].startswith("data_"), "A file downloaded by GET"
                 assert rec[1] == 36, "Return right file size"
@@ -105,7 +105,7 @@ def test_put_with_invalid_token(tmpdir, conn_cnx):
             cnx.cursor().execute(
                 f"create or replace table {table_name} (a int, b string)"
             )
-            ret = cnx.cursor()._execute_helper(f"put 'file://{fname}' @%{table_name}")
+            ret = cnx.cursor()._execute_helper(f"put file://{fname} @%{table_name}")
             stage_info = ret["data"]["stageInfo"]
             stage_info["location"]
             stage_credentials = stage_info["creds"]

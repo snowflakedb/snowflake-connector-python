@@ -103,7 +103,7 @@ def test_auto_compress_switch(
             # get this file, if the client handle compression meta correctly
             get_dir = tmp_path / "get_dir"
             get_dir.mkdir()
-            cnx.cursor().execute(f"GET @~/{_test_name}/{file_name} 'file://{get_dir}'")
+            cnx.cursor().execute(f"GET @~/{_test_name}/{file_name} file://{get_dir}")
 
             downloaded_file = get_dir / (
                 uploaded_gz_name if auto_compress else file_name
@@ -153,7 +153,7 @@ def test_get_gzip_content_encoding(
                 get_dir.mkdir()
                 ret = (
                     cnx.cursor()
-                    .execute(f"GET @~/{_test_name}/{file_name} 'file://{get_dir}'")
+                    .execute(f"GET @~/{_test_name}/{file_name} file://{get_dir}")
                     .fetchone()
                 )
                 downloaded_file = get_dir / ret[0]
@@ -204,7 +204,7 @@ def test_sse_get_gzip_content_encoding(
                 ret = (
                     cnx.cursor()
                     .execute(
-                        f"GET @{stage_name}/{_test_name}/{orig_file_name} 'file://{get_dir}'"
+                        f"GET @{stage_name}/{_test_name}/{orig_file_name} file://{get_dir}"
                     )
                     .fetchone()
                 )

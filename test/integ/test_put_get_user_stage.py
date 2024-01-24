@@ -265,7 +265,7 @@ credentials=(
             cnx.cursor().execute(f"rm @{stage_name}")
             cnx.cursor().execute(f"copy into @{stage_name} from {random_str}")
             tmp_dir_user = str(tmpdir.mkdir("put_get_stage"))
-            cnx.cursor().execute(f"get @{stage_name}/ 'file://{tmp_dir_user}/'")
+            cnx.cursor().execute(f"get @{stage_name}/ file://{tmp_dir_user}/")
             for _, _, files in os.walk(tmp_dir_user):
                 for file in files:
                     mimetypes.init()
@@ -348,7 +348,7 @@ credentials=(
                 c.execute(
                     "alter session set disable_put_and_get_on_external_stage = false"
                 )
-                for rec in c.execute(f"put 'file://{files}' @{stage_name}"):
+                for rec in c.execute(f"put file://{files} @{stage_name}"):
                     logger.info(f"rec={rec}")
                     if rec[6] == "UPLOADED":
                         success_cnt += 1
@@ -371,7 +371,7 @@ credentials=(
             skipped_cnt = 0
             with cnx.cursor() as c:
                 for rec in c.execute(
-                    f"put 'file://{files} @{stage_name}'",
+                    f"put file://{files} @{stage_name}",
                     _raise_put_get_error=False,
                 ):
                     logger.info(f"rec={rec}")
@@ -395,7 +395,7 @@ credentials=(
             cnx.cursor().execute(f"rm @{stage_name}")
             cnx.cursor().execute(f"copy into @{stage_name} from {random_str}")
             tmp_dir_user = str(tmpdir.mkdir("stage2"))
-            cnx.cursor().execute(f"get @{stage_name}/ 'file://{tmp_dir_user}/'")
+            cnx.cursor().execute(f"get @{stage_name}/ file://{tmp_dir_user}/")
             for _, _, files in os.walk(tmp_dir_user):
                 for file in files:
                     mimetypes.init()
@@ -475,7 +475,7 @@ create or replace stage {stage_name}
                 cnx.cursor()
                 .execute(
                     """
-PUT 'file://{file} @{stage_name}'
+PUT file://{file} @{stage_name}
 """.format(
                         file=data_file, stage_name=stage_name
                     )
@@ -501,7 +501,7 @@ LIST @{stage_name}
                 cnx.cursor()
                 .execute(
                     """
-GET @{stage_name} 'file://{output_dir}'
+GET @{stage_name} file://{output_dir}
 """.format(
                         stage_name=stage_name, output_dir=output_dir
                     )

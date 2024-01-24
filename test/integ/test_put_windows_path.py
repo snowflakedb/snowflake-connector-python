@@ -29,7 +29,7 @@ def test_abc(conn_cnx, tmpdir, db_parameters):
         rec = con.cursor().execute(f"put {fileURI} @~/{subdir}0/").fetchall()
         assert rec[0][6] == "UPLOADED"
 
-        rec = con.cursor().execute(f"put 'file://{test_data}' @~/{subdir}1/").fetchall()
+        rec = con.cursor().execute(f"put file://{test_data} @~/{subdir}1/").fetchall()
         assert rec[0][6] == "UPLOADED"
 
         con.cursor().execute(f"rm @~/{subdir}0")

@@ -110,7 +110,7 @@ def test_put_get_with_gcp(
                     f"copy into @%{table_name} from {table_name} "
                     "file_format=(type=csv compression='gzip')"
                 )
-                csr.execute(f"get @%{table_name} 'file://{tmp_dir}'")
+                csr.execute(f"get @%{table_name} file://{tmp_dir}")
                 rec = csr.fetchone()
                 assert rec[0].startswith("data_"), "A file downloaded by GET"
                 assert rec[1] == 36, "Return right file size"
@@ -178,7 +178,7 @@ def test_put_copy_many_files_gcp(
             """,
             )
             try:
-                statement = "put 'file://{files}' @%{name}"
+                statement = "put file://{files} @%{name}"
                 if enable_gcs_downscoped:
                     statement += " overwrite = true"
 
@@ -246,7 +246,7 @@ def test_put_copy_duplicated_files_gcp(
             try:
                 success_cnt = 0
                 skipped_cnt = 0
-                put_statement = "put 'file://{files}' @%{name}"
+                put_statement = "put file://{files} @%{name}"
                 if enable_gcs_downscoped:
                     put_statement += " overwrite = true"
                 for rec in run(csr, put_statement):
@@ -342,7 +342,7 @@ def test_put_get_large_files_gcp(
                 if enable_gcs_downscoped:
                     # not raise error when the parameter is not available yet, using old behavior
                     raise e
-            all_recs = run(cnx, "PUT 'file://{files}' @~/{dir}")
+            all_recs = run(cnx, "PUT file://{files} @~/{dir}")
             assert all([rec[6] == "UPLOADED" for rec in all_recs])
 
             for _ in range(60):
@@ -366,7 +366,7 @@ def test_put_get_large_files_gcp(
                     "cannot list all files. Potentially "
                     f"PUT command missed uploading Files: {all_recs}"
                 )
-            all_recs = run(cnx, "GET @~/{dir} 'file://{output_dir}'")
+            all_recs = run(cnx, "GET @~/{dir} file://{output_dir}")
             assert len(all_recs) == number_of_files
             assert all([rec[2] == "DOWNLOADED" for rec in all_recs])
         finally:
@@ -420,7 +420,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx):
                         side_effect=mocked_put,
                     ):
                         csr.execute(
-                            f"put 'file://{fname}' @%{table_name} auto_compress=true parallel=30"
+                            f"put file://{fname} @%{table_name} auto_compress=true parallel=30"
                         )
                 assert csr.fetchone()[6] == "UPLOADED"
                 csr.execute(f"copy into {table_name} purge = true")
@@ -453,7 +453,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx):
                         else "request.get",
                         side_effect=mocked_get,
                     ):
-                        csr.execute(f"get @%{table_name} 'file://{tmp_dir}'")
+                        csr.execute(f"get @%{table_name} file://{tmp_dir}")
                     assert (
                         mocked_file_agent.agent._update_file_metas_with_presigned_url.call_count
                         == 2
@@ -502,8 +502,8 @@ def test_auto_compress_off_gcp(
                     raise e
             try:
                 cursor.execute(f"create or replace stage {stage_name}")
-                cursor.execute(f"put 'file://{fname}' @{stage_name} auto_compress=false")
-                cursor.execute(f"get @{stage_name} 'file://{tmpdir}'")
+                cursor.execute(f"put file://{fname} @{stage_name} auto_compress=false")
+                cursor.execute(f"get @{stage_name} file://{tmpdir}")
                 downloaded_file = os.path.join(str(tmpdir), "example.json")
                 assert cmp(fname, downloaded_file)
             finally:
@@ -587,7 +587,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                             side_effect=mocked_head,
                         ):
                             csr.execute(
-                                f"put 'file://{fname}' @%{table_name} auto_compress=true parallel=30"
+                                f"put file://{fname} @%{table_name} auto_compress=true parallel=30"
                             )
                     if error_code == 401:
                         assert (
@@ -625,7 +625,7 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                         else "requests.get",
                         ide_effect=mocked_get,
                     ):
-                        csr.execute(f"get @%{table_name} 'file://{tmp_dir}'")
+                        csr.execute(f"get @%{table_name} file://{tmp_dir}")
                     if error_code == 401:
                         assert (
                             mocked_file_agent.agent.renew_expired_client.call_count == 1
