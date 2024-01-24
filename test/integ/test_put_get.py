@@ -694,7 +694,7 @@ def test_multipart_put(conn_cnx, tmp_path, use_stream):
                         }
                     else:
                         kw = {
-                            "command": f"put 'file://{upload_file}' @{stage_name}/sub/folders/ AUTO_COMPRESS=FALSE",
+                            "command": f"put 'file://{upload_file} @{stage_name}/sub/folders/' AUTO_COMPRESS=FALSE",
                         }
                     cur.execute(**kw)
             cur.execute(
