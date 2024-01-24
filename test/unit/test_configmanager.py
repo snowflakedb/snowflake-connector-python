@@ -561,7 +561,7 @@ def test_warn_config_file_owner(tmp_path, monkeypatch):
         assert (
             str(c[0].message)
             == f"Bad owner or permissions on {str(c_file)}"
-            + f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `"chmod 0600 {str(c_file)}"`.'
+            + f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.'
         )
 
 
@@ -581,7 +581,7 @@ def test_warn_config_file_permissions(tmp_path):
         assert c1["b"] is True
     assert len(c) == 1
     chmod_message = (
-        f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `"chmod 0600 "{str(c_file)}"`.'
+        f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.'
         if not IS_WINDOWS
         else ""
     )
