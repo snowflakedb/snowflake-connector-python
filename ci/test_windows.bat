@@ -45,7 +45,7 @@ set JUNIT_REPORT_DIR=%workspace%
 set COV_REPORT_DIR=%workspace%
 
 set TEST_ENVLIST=fix_lint,py%pv%-unit-ci,py%pv%-integ-ci,py%pv%-pandas-ci,py%pv%-sso-ci,py%pv%-coverage
-tox -e %TEST_ENVLIST% --installpkg %connector_whl% -- --basetemp=%workspace%\pytest-tmp\
+tox -e %TEST_ENVLIST% --installpkg %connector_whl%
 if %errorlevel% neq 0 goto :error
 
 call deactivate
