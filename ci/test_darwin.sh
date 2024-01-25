@@ -21,7 +21,7 @@ gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS
 
 python3.8 -m venv venv
 . venv/bin/activate
-pip install tox tox-external_wheels
+pip install -U tox>=4
 
 # Run tests
 cd $CONNECTOR_DIR
@@ -29,9 +29,9 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     echo "[Info] Testing with ${PYTHON_VERSION}"
     SHORT_VERSION=$(python3 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
     CONNECTOR_WHL=$(ls ${CONNECTOR_DIR}/dist/snowflake_connector_python*cp${SHORT_VERSION}*.whl)
-    TEST_ENVLIST=fix_lint,py${SHORT_VERSION}-{unit,integ,pandas,sso}-ci,py${SHORT_VERSION}-coverage
+    TEST_ENVLIST=$(python3 -c "print('fix_lint,' + ','.join('py${SHORT_VERSION}-' + e + '-ci' for e in ['unit','integ','pandas','sso']) + ',py${SHORT_VERSION}-coverage')")
     echo "[Info] Running tox for ${TEST_ENVLIST}"
-    tox -e ${TEST_ENVLIST} --external_wheels ${CONNECTOR_WHL}
+    python3 -m tox -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
 done
 
 deactivate

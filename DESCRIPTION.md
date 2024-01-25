@@ -22,6 +22,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed PyArrow Table type hinting
   - Added support for connecting using an existing connection via the session and master token.
   - Added support for connecting to Snowflake by authenticating with multiple SAML IDP using external browser.
+  - Fixed compilation issue due to missing cstdint header on gcc13.
+  - Improved config permissions warning message.
 
 - v3.6.0(December 09,2023)
 
