@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "ArrayConverter.hpp"
 #include "BinaryConverter.hpp"
 #include "BooleanConverter.hpp"
 #include "DateConverter.hpp"
@@ -15,6 +16,8 @@
 #include "FixedSizeListConverter.hpp"
 #include "FloatConverter.hpp"
 #include "IntConverter.hpp"
+#include "MapConverter.hpp"
+#include "ObjectConverter.hpp"
 #include "StringConverter.hpp"
 #include "TimeConverter.hpp"
 #include "TimeStampConverter.hpp"
@@ -193,9 +196,7 @@ std::shared_ptr<sf::IColumnConverter> getConverterFromSchema(
     }
 
     case SnowflakeType::Type::ANY:
-    case SnowflakeType::Type::ARRAY:
     case SnowflakeType::Type::CHAR:
-    case SnowflakeType::Type::OBJECT:
     case SnowflakeType::Type::TEXT:
     case SnowflakeType::Type::VARIANT: {
       converter = std::make_shared<sf::StringConverter>(array);
@@ -378,8 +379,13 @@ std::shared_ptr<sf::IColumnConverter> getConverterFromSchema(
             returnCode);
         scale =
             std::stoi(std::string(scaleString.data, scaleString.size_bytes));
-        byteLength = std::stoi(
-            std::string(byteLengthString.data, byteLengthString.size_bytes));
+
+        // Byte Length may be unset if TIMESTAMP_TZ is the child of a structured
+        // type In this case rely on the default value.
+        if (byteLengthString.data != nullptr) {
+          byteLength = std::stoi(
+              std::string(byteLengthString.data, byteLengthString.size_bytes));
+        }
       }
       switch (byteLength) {
         case 8: {
@@ -405,6 +411,58 @@ std::shared_ptr<sf::IColumnConverter> getConverterFromSchema(
         }
       }
 
+      break;
+    }
+
+    case SnowflakeType::Type::ARRAY: {
+      switch (schemaView.type) {
+        case NANOARROW_TYPE_STRING:
+          converter = std::make_shared<sf::StringConverter>(array);
+          break;
+        case NANOARROW_TYPE_LIST:
+          converter = std::make_shared<sf::ArrayConverter>(&schemaView, array,
+                                                           context, useNumpy);
+          break;
+        default: {
+          std::string errorInfo = Logger::formatString(
+              "[Snowflake Exception] unknown arrow internal data type(%d) "
+              "for ARRAY data in %s",
+              NANOARROW_TYPE_ENUM_STRING[schemaView.type],
+              schemaView.schema->name);
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+          PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+          break;
+        }
+      }
+      break;
+    }
+
+    case SnowflakeType::Type::MAP: {
+      converter = std::make_shared<sf::MapConverter>(&schemaView, array,
+                                                     context, useNumpy);
+      break;
+    }
+
+    case SnowflakeType::Type::OBJECT: {
+      switch (schemaView.type) {
+        case NANOARROW_TYPE_STRING:
+          converter = std::make_shared<sf::StringConverter>(array);
+          break;
+        case NANOARROW_TYPE_STRUCT:
+          converter = std::make_shared<sf::ObjectConverter>(&schemaView, array,
+                                                            context, useNumpy);
+          break;
+        default: {
+          std::string errorInfo = Logger::formatString(
+              "[Snowflake Exception] unknown arrow internal data type(%d) "
+              "for OBJECT data in %s",
+              NANOARROW_TYPE_ENUM_STRING[schemaView.type],
+              schemaView.schema->name);
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+          PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+          break;
+        }
+      }
       break;
     }
 

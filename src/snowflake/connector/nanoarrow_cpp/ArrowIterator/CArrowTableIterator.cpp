@@ -112,6 +112,7 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow() {
         case SnowflakeType::Type::BOOLEAN:
         case SnowflakeType::Type::CHAR:
         case SnowflakeType::Type::DATE:
+        case SnowflakeType::Type::MAP:
         case SnowflakeType::Type::OBJECT:
         case SnowflakeType::Type::REAL:
         case SnowflakeType::Type::TEXT:

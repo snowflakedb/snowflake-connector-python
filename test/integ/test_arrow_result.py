@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import json
 import random
-from datetime import datetime, timedelta
+import re
+from datetime import date, datetime, time, timedelta, timezone
 
 import numpy
 import pytest
@@ -21,6 +23,154 @@ try:
     no_arrow_iterator_ext = False
 except ImportError:
     no_arrow_iterator_ext = True
+
+
+TIMESTAMP_FMT = "%Y-%m-%d %H:%M:%S"
+
+# Basic set of primitive types with synonymous types excluded
+PRIMITIVE_DATATYPE_EXAMPLES = {
+    "BINARY": [
+        None,
+        bytearray(b"\xAB"),
+        bytearray(b"\xFA\x42\x00"),
+    ],
+    "BOOLEAN": [None, True, False],
+    "CHAR": [None, "a", "b"],
+    "DATE": [
+        None,
+        date(2016, 7, 23),
+        date(1970, 1, 1),
+        date(1969, 12, 31),
+        date(1, 1, 1),
+        date(9999, 12, 31),
+    ],
+    "DOUBLE": [
+        -86.6426540296895,
+        3.14159265359,
+        1.7976931348623157e308,
+    ],
+    "NUMBER": [None, 1, 2, 3],
+    "INTEGER": [
+        None,
+        0,
+        99999999999999999999999999999999999999,
+        -99999999999999999999999999999999999999,
+    ],
+    "TIME": [
+        None,
+        time(0, 0, 0),
+        time(8, 59, 59),
+        time(12, 0, 0),
+        time(23, 0, 31),
+    ],
+    "TIMESTAMP_LTZ": [
+        None,
+        datetime.strptime("2024-01-01 12:00:00", TIMESTAMP_FMT).replace(
+            tzinfo=timezone.utc
+        ),
+    ],
+    "TIMESTAMP_NTZ": [
+        None,
+        datetime.strptime("2024-01-01 12:00:00", TIMESTAMP_FMT),
+    ],
+    "TIMESTAMP_TZ": [
+        None,
+        datetime.strptime("2024-01-01 12:00:00", TIMESTAMP_FMT).replace(
+            tzinfo=timezone.utc
+        ),
+    ],
+    "VARCHAR": [None, "ascii_test", b"\xf0\x9f\x98\x80".decode("utf-8")],
+}
+
+
+def serialize(value):
+    if isinstance(value, bytearray):
+        return value.hex()
+    elif isinstance(value, (date, time)):
+        return str(value)
+    return value
+
+
+@pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
+def test_datatypes(datatype, examples, conn_cnx):
+    json_values = re.escape(json.dumps(examples, default=serialize))
+    query = f"""
+    SELECT
+      value :: {datatype} as col
+    FROM
+      TABLE(FLATTEN(input => parse_json('{json_values}')));
+    """
+    with conn_cnx() as conn:
+        rows = conn.cursor().execute(query).fetchall()
+        if datatype == "DOUBLE":
+            for x, y in zip(sorted(r[0] for r in rows), sorted(examples)):
+                assert x == pytest.approx(y)
+        else:
+            assert [r[0] for r in rows] == examples
+
+
+def structured_type_verify(conn_cnx, query, data):
+    with conn_cnx() as conn:
+        conn.cursor().execute("alter session set use_cached_result=false")
+        conn.cursor().execute(
+            "alter session set enable_structured_types_in_client_response=true"
+        )
+        conn.cursor().execute(
+            "alter session set force_enable_structured_types_native_arrow_format=true"
+        )
+        rows = conn.cursor().execute(query).fetchall()
+        assert len(rows) == 1, "Result should only have one row."
+        assert len(rows[0]) == 1, "Result should only have one column."
+        assert rows[0][0] == data, "Result values should match input examples."
+
+
+@pytest.mark.internal
+@pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
+def test_array(datatype, examples, conn_cnx):
+    json_values = re.escape(json.dumps(examples, default=serialize))
+    query = f"""
+    SELECT
+      parse_json('{json_values}') :: array({datatype}) as col
+    """
+    structured_type_verify(conn_cnx, query, examples)
+
+
+@pytest.mark.internal
+@pytest.mark.parametrize("key_type", ["varchar", "number"])
+@pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
+def test_map(key_type, datatype, examples, conn_cnx):
+    data = {i if key_type == "number" else str(i): ex for i, ex in enumerate(examples)}
+    json_string = re.escape(json.dumps(data, default=serialize))
+    query = f"""
+    SELECT
+      parse_json('{json_string}') :: map({key_type}, {datatype}) as col
+    """
+    structured_type_verify(conn_cnx, query, data)
+
+
+@pytest.mark.internal
+@pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
+def test_object(datatype, examples, conn_cnx):
+    fields = [f"{datatype}_{i}" for i in range(len(examples))]
+    schema = ", ".join(f"{field} {datatype}" for field in fields)
+    data = {k: v for k, v in zip(fields, examples)}
+    json_string = re.escape(json.dumps(data, default=serialize))
+    query = f"""
+    SELECT
+      parse_json('{json_string}') :: object({schema}) as col
+    """
+    structured_type_verify(conn_cnx, query, data)
+
+
+@pytest.mark.internal
+def test_nested_types(conn_cnx):
+    data = {"child": [{"key1": {"struct_field": 1}}]}
+    json_string = re.escape(json.dumps(data, default=serialize))
+    query = f"""
+    SELECT
+      parse_json('{json_string}') :: object(child array(map (varchar, object(struct_field number)))) as col
+    """
+    structured_type_verify(conn_cnx, query, data)
 
 
 def test_select_tinyint(conn_cnx):

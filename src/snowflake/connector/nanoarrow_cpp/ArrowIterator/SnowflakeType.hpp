@@ -31,7 +31,8 @@ class SnowflakeType {
     TIMESTAMP_NTZ = 13,
     TIMESTAMP_TZ = 14,
     VARIANT = 15,
-    VECTOR = 16
+    VECTOR = 16,
+    MAP = 17,
   };
 
   static SnowflakeType::Type snowflakeTypeFromString(std::string str) {
