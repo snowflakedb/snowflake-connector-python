@@ -19,7 +19,7 @@ import random
 import secrets
 
 import util as stress_util
-from util import task_memory_decorator, task_time_execution_decorator
+from util import task_execution_decorator
 
 from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.nanoarrow_arrow_iterator import (
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--iteration_cnt",
         type=int,
-        default=10,
+        default=100000,
         help="how many times to run the test function, default is 100000",
     )
     parser.add_argument(
@@ -164,42 +164,43 @@ if __name__ == "__main__":
         ".".join([str(v) for v in VERSION if v is not None]),
     )
 
-    perf_check_task_for_loop_iterator = task_time_execution_decorator(
-        task_for_loop_iterator_expected_error
-        if args.test_error_method
-        else task_for_loop_iterator
-    )
-    memory_check_task_for_loop_iterator = task_memory_decorator(
-        task_for_loop_iterator_expected_error
-        if args.test_error_method
-        else task_for_loop_iterator
-    )
+    perf_record_file = "stress_perf_record"
+    memory_record_file = "stress_memory_record"
+    with open(perf_record_file, "w") as perf_file, open(
+        memory_record_file, "w"
+    ) as memory_file:
+        task_for_loop_iterator = task_execution_decorator(
+            task_for_loop_iterator_expected_error
+            if args.test_error_method
+            else task_for_loop_iterator,
+            perf_file,
+            memory_file,
+        )
 
-    execute_task(
-        memory_check_task_for_loop_iterator,
-        decode_bytes,
-        create_nanoarrow_pyarrow_iterator,
-        args.iteration_cnt,
-        args.use_table_unit,
-    )
-    memory_records = stress_util.collect_memory_records()
-    execute_task(
-        perf_check_task_for_loop_iterator,
-        decode_bytes,
-        create_nanoarrow_pyarrow_iterator,
-        args.iteration_cnt,
-        args.use_table_unit,
-    )
-    time_records = stress_util.collect_time_execution_records()
-
-    print("average time is", sum(time_records) / len(time_records))
+        execute_task(
+            task_for_loop_iterator,
+            decode_bytes,
+            create_nanoarrow_pyarrow_iterator,
+            args.iteration_cnt,
+            args.use_table_unit,
+        )
 
     if can_draw:
-        plt.plot([i for i in range(len(time_records))], time_records)
-        plt.title("per iteration execution time")
-        plt.show()
-        plt.plot(
-            [item[0] for item in memory_records], [item[1] for item in memory_records]
-        )
-        plt.title("memory usage")
-        plt.show()
+        with open(perf_record_file) as perf_file, open(
+            memory_record_file
+        ) as memory_file:
+            # sample rate
+            sample_rate = 100000  # sample every n count
+            perf_lines = perf_file.readlines()
+            perf_records = [float(line) for line in perf_lines][::sample_rate]
+
+            memory_lines = memory_file.readlines()
+            memory_records = [float(line) for line in memory_lines][::sample_rate]
+
+            plt.plot([i for i in range(len(perf_lines))], perf_lines)
+            plt.title("per iteration execution time")
+            plt.show(block=False)
+            plt.figure()
+            plt.plot([i for i in range(len(memory_lines))], memory_lines)
+            plt.title("memory usage")
+            plt.show(block=True)

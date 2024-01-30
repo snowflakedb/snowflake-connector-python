@@ -84,8 +84,10 @@ PyObject* DecimalFromDecimalConverter::toPyObject(int64_t rowIndex) const {
   ArrowDecimalGetBytes(&arrowDecimal, outBytes);
   PyObject* int128_bytes = PyBytes_FromStringAndSize(&outBytes, 16);
   */
-  return PyObject_CallMethod(m_context, "DECIMAL128_to_decimal", "Si",
-                             int128_bytes, m_scale);
+  PyObject* return_object = PyObject_CallMethod(
+      m_context, "DECIMAL128_to_decimal", "Si", int128_bytes, m_scale);
+  Py_DECREF(int128_bytes);
+  return return_object;
 }
 
 }  // namespace sf
