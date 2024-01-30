@@ -86,7 +86,7 @@ PyObject* DecimalFromDecimalConverter::toPyObject(int64_t rowIndex) const {
   */
   PyObject* return_object = PyObject_CallMethod(
       m_context, "DECIMAL128_to_decimal", "Si", int128_bytes, m_scale);
-  Py_DECREF(int128_bytes);
+  Py_XDECREF(int128_bytes);
   return return_object;
 }
 
