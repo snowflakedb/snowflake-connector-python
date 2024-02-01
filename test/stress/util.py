@@ -8,14 +8,26 @@ import psutil
 
 process = psutil.Process()
 
+SAMPLE_RATE = 10  # record data evey SAMPLE_RATE execution
+
 
 def task_execution_decorator(func, perf_file, memory_file):
+    count = 0
+
     def wrapper(*args, **kwargs):
         start = time.time()
         func(*args, **kwargs)
-        percent = process.memory_percent()
+        memory_usage = (
+            process.memory_info().rss / 1024 / 1024
+        )  # rss is of unit bytes, we get unit in MB
         period = time.time() - start
-        perf_file.write(str(period) + "\n")
-        memory_file.write(str(percent) + "\n")
+        nonlocal count
+        if count % SAMPLE_RATE == 0:
+            perf_file.write(str(period) + "\n")
+            print(f"execution time {count}")
+            print(f"memory usage: {memory_usage} MB")
+            print(f"execution time: {period} s")
+            memory_file.write(str(memory_usage) + "\n")
+        count += 1
 
     return wrapper

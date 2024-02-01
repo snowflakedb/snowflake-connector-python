@@ -136,7 +136,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data_file",
         type=str,
-        default="test_data",
+        default="stress_test_data/test_multi_column_row_decimal_data",
         help="a local file to read data from, the file contains base64 encoded string returned from snowflake",
     )
     parser.add_argument(
@@ -153,10 +153,16 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    with open(args.data_file) as f:
-        b64data = f.read()
+    try:
+        # file contains base64 encoded data
+        with open(args.data_file) as f:
+            b64data = f.read()
 
-    decode_bytes = base64.b64decode(b64data)
+        decode_bytes = base64.b64decode(b64data)
+    except UnicodeDecodeError:
+        # file contains raw bytes data
+        with open(args.data_file, "rb") as f:
+            decode_bytes = f.read()
 
     # if connector is pre-release, then it's nanoarrow based iterator
     print(
@@ -190,17 +196,16 @@ if __name__ == "__main__":
             memory_record_file
         ) as memory_file:
             # sample rate
-            sample_rate = 100000  # sample every n count
             perf_lines = perf_file.readlines()
-            perf_records = [float(line) for line in perf_lines][::sample_rate]
+            perf_records = [float(line) for line in perf_lines]
 
             memory_lines = memory_file.readlines()
-            memory_records = [float(line) for line in memory_lines][::sample_rate]
+            memory_records = [float(line) for line in memory_lines]
 
-            plt.plot([i for i in range(len(perf_lines))], perf_lines)
+            plt.plot([i for i in range(len(perf_records))], perf_records)
             plt.title("per iteration execution time")
             plt.show(block=False)
             plt.figure()
-            plt.plot([i for i in range(len(memory_lines))], memory_lines)
+            plt.plot([i for i in range(len(memory_records))], memory_records)
             plt.title("memory usage")
             plt.show(block=True)
