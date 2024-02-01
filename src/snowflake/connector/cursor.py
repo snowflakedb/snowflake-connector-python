@@ -993,7 +993,10 @@ class SnowflakeCursor:
             self._log_telemetry_job_data(
                 TelemetryField.TIME_CONSUME_FIRST_RESULT, time_consume_first_result
             )
-
+        if "success" not in ret:
+            raise Exception(
+                f"no success in cursor ret. command: {command}. rest: {ret}"
+            )
         if ret["success"]:
             logger.debug("SUCCESS")
             data = ret["data"]

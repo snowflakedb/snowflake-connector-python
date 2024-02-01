@@ -5,11 +5,16 @@ requests.sessions
 This module provides a Session object to manage and persist settings across
 requests (cookies, auth, proxies).
 """
+import gzip
+import http
 import os
 import sys
 import time
 from collections import OrderedDict
 from datetime import timedelta
+from http import HTTPStatus
+
+import urllib3
 
 from ._internal_utils import to_native_string
 from .adapters import HTTPAdapter
@@ -34,7 +39,7 @@ from .models import (  # noqa: F401
     DEFAULT_REDIRECT_LIMIT,
     REDIRECT_STATI,
     PreparedRequest,
-    Request,
+    Request, Response,
 )
 from .status_codes import codes
 from .structures import CaseInsensitiveDict
@@ -559,6 +564,30 @@ class Session(SessionRedirectMixin):
             If Tuple, ('cert', 'key') pair.
         :rtype: requests.Response
         """
+        import json as json_lib
+
+        if headers.get("Content-Encoding") == "gzip":
+            decoded_data_obj = json_lib.loads(gzip.decompress(data).decode())
+        elif "Content-Encoding" not in headers:
+            decoded_data_obj = json_lib.loads(data.decode())
+        else:
+            raise Exception()
+
+        import _snowflake
+
+        ret = _snowflake.execute_sql(
+            decoded_data_obj["sqlText"],
+            False,
+            "",  # TODO: statement parameters
+            None,  # TODO: binding variables
+            decoded_data_obj["asyncExec"]
+        )
+        resp = Response()
+        resp.status_code = http.HTTPStatus.OK
+        resp._content = ret
+        resp.raw = urllib3.HTTPResponse()
+        return resp
+
         # Create the Request.
         req = Request(
             method=method.upper(),

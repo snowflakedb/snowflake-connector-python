@@ -465,7 +465,11 @@ class SnowflakeRestful:
     ):
         if body is None:
             body = {}
-        if self.master_token is None and self.token is None:
+        if (
+            not self._connection._stored_proc_mode
+            and self.master_token is None
+            and self.token is None
+        ):
             Error.errorhandler_wrapper(
                 self._connection,
                 None,
@@ -975,6 +979,8 @@ class SnowflakeRestful:
                     )
             return None  # retry
         except Exception as e:
+            if self._connection._stored_proc_mode:
+                raise e
             if not no_retry:
                 raise e
             logger.debug("Ignored error", exc_info=True)
