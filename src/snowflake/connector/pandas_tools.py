@@ -449,7 +449,8 @@ def write_pandas(
             logger.debug(f"rename table with '{rename_table_sql}'")
             cursor.execute(rename_table_sql, _is_internal=True)
     except ProgrammingError:
-        if overwrite:
+        if overwrite and auto_create_table:
+            # drop table only if we created a new one with a random name
             drop_object(target_table_location, "table")
         raise
     finally:

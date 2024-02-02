@@ -171,7 +171,7 @@ def test_write_pandas_with_overwrite(
                     else "YEAR" in [col.name for col in result[0].description]
                 )
             else:
-                # Should fail because the table will be truncated and df3 schema doesnt match
+                # Should fail because the table will be truncated and df3 schema doesn't match
                 # (since df3 should at least have a subset of the columns of the target table)
                 with pytest.raises(ProgrammingError, match="invalid identifier"):
                     write_pandas(
@@ -183,11 +183,10 @@ def test_write_pandas_with_overwrite(
                         overwrite=True,
                         index=index,
                     )
-                
-                # because of the way we handle the error above, the original table is dropped
-                # therefore it will raise an error if we try to SELECT from it
-                with pytest.raises(ProgrammingError, match="does not exist"):
-                    cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
+
+                # Check that we have truncated the table but not dropped it in case or error.
+                result = cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
+                assert result["COUNT(*)"] == 0
 
             if not quote_identifiers:
                 original_result = (
@@ -202,7 +201,7 @@ def test_write_pandas_with_overwrite(
                         quote_identifiers=quote_identifiers,
                         auto_create_table=auto_create_table,
                         overwrite=True,
-                        index=index,
+                        index=False,
                     )
                 # the original table shouldn't have any change
                 assert (
