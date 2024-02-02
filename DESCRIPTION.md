@@ -83,6 +83,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added thread safety in telemetry when instantiating multiple connections concurrently.
   - Bumped platformdirs dependency from >=2.6.0,<3.9.0 to >=2.6.0,<4.0.0.0 and made necessary changes to allow this.
   - Removed the deprecation warning from the vendored urllib3 about urllib3.contrib.pyopenssl deprecation.
+  - Remove dependencies on Cryptodome and oscrypto and remove the `use_openssl_only` parameter. All connections now go through OpenSSL via the cryptography library, which was already a dependency.
   - Improved robustness in handling authentication response.
 
 - v3.2.0(September 06,2023)
