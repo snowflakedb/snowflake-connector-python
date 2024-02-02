@@ -8,50 +8,26 @@ import psutil
 
 process = psutil.Process()
 
-last_memory_record = None
-memory_records = []
-time_records = []
-memory_decoration_execution_time = 0
-print_to_console = False
+SAMPLE_RATE = 10  # record data evey SAMPLE_RATE execution
 
 
-def collect_memory_records():
-    memory_records.append(last_memory_record)
-    return memory_records
-
-
-def collect_time_execution_records():
-    return time_records
-
-
-def task_memory_decorator(func):
-    memory_records.clear()
-    global memory_decoration_execution_time
-    memory_decoration_execution_time = 0
-
-    def wrapper(*args, **kwargs):
-        global memory_decoration_execution_time
-        global print_to_console
-        global last_memory_record
-        func(*args, **kwargs)
-        percent = process.memory_percent()
-        if not memory_records or (memory_records and percent != memory_records[-1][1]):
-            memory_records.append((memory_decoration_execution_time, percent))
-        memory_decoration_execution_time += 1
-        last_memory_record = (memory_decoration_execution_time, percent)
-        if print_to_console:
-            print(memory_decoration_execution_time, percent)
-
-    return wrapper
-
-
-def task_time_execution_decorator(func):
-    time_records.clear()
+def task_execution_decorator(func, perf_file, memory_file):
+    count = 0
 
     def wrapper(*args, **kwargs):
         start = time.time()
         func(*args, **kwargs)
+        memory_usage = (
+            process.memory_info().rss / 1024 / 1024
+        )  # rss is of unit bytes, we get unit in MB
         period = time.time() - start
-        time_records.append(period)
+        nonlocal count
+        if count % SAMPLE_RATE == 0:
+            perf_file.write(str(period) + "\n")
+            print(f"execution time {count}")
+            print(f"memory usage: {memory_usage} MB")
+            print(f"execution time: {period} s")
+            memory_file.write(str(memory_usage) + "\n")
+        count += 1
 
     return wrapper
