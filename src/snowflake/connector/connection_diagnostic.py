@@ -211,7 +211,7 @@ class ConnectionDiagnostic:
                     conn.send(str.encode(connect))
                     conn.recv(4096).decode("utf-8")
 
-                context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                 sock = context.wrap_socket(conn, server_hostname=host)
                 certificate = ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
                 conn.close()

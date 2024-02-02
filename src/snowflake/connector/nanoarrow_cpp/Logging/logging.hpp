@@ -5,30 +5,34 @@
 #ifndef PC_LOGGING_HPP
 #define PC_LOGGING_HPP
 
-#include "Python/Common.hpp"
 #include <string>
 
-namespace sf
-{
+#include "Python/Common.hpp"
 
-class Logger
-{
-public:
+namespace sf {
+
+class Logger {
+ public:
   explicit Logger(const char *name);
 
-  void log(int level, const char *path_name, const char *func_name, int line_num, const char *msg);
+  void log(int level, const char *path_name, const char *func_name,
+           int line_num, const char *msg);
 
-  void debug(const char *path_name, const char *func_name, int line_num, const char *format, ...);
+  void debug(const char *path_name, const char *func_name, int line_num,
+             const char *format, ...);
 
-  void info(const char *path_name, const char *func_name, int line_num, const char *format, ...);
+  void info(const char *path_name, const char *func_name, int line_num,
+            const char *format, ...);
 
-  void warn(const char *path_name, const char *func_name, int line_num, const char *format, ...);
+  void warn(const char *path_name, const char *func_name, int line_num,
+            const char *format, ...);
 
-  void error(const char *path_name, const char *func_name, int line_num, const char *format, ...);
+  void error(const char *path_name, const char *func_name, int line_num,
+             const char *format, ...);
 
   static std::string formatString(const char *fmt, ...);
 
-private:
+ private:
   py::UniqueRef m_pyLogger;
   const char *const m_name;
   static constexpr int CRITICAL = 50;

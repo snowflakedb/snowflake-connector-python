@@ -18,6 +18,7 @@ exclude .pre-commit-config.yaml
 exclude license_header.txt
 exclude tox.ini
 exclude mypy.ini
+exclude .clang-format
 
 prune ci
 prune benchmark

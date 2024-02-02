@@ -11,7 +11,7 @@ import logging
 import tempfile
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from os import getenv, makedirs, mkdir, path, remove, removedirs, rmdir
 from os.path import expanduser
 from threading import Lock, Thread
@@ -392,7 +392,7 @@ class Auth:
                     "Token expires at: %s. "
                     "Current Time: %s",
                     str(auth_instance._jwt_token_exp),
-                    str(datetime.utcnow()),
+                    str(datetime.now(timezone.utc).replace(tzinfo=None)),
                 )
             from . import AuthByUsrPwdMfa
 

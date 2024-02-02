@@ -5,7 +5,7 @@
 #   - Versions to be tested should be passed in as the first argument, e.g: "3.8 3.9". If omitted 3.8-3.11 will be assumed.
 #   - This script uses .. to download the newest wheel files from S3
 
-PYTHON_VERSIONS="${1:-3.8 3.9 3.10 3.11}"
+PYTHON_VERSIONS="${1:-3.8 3.9 3.10 3.11 3.12}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 PARAMETERS_DIR="${CONNECTOR_DIR}/.github/workflows/parameters/public"
@@ -21,7 +21,7 @@ gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS
 
 python3.8 -m venv venv
 . venv/bin/activate
-pip install tox tox-external_wheels
+pip install -U tox>=4
 
 # Run tests
 cd $CONNECTOR_DIR
@@ -29,9 +29,9 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     echo "[Info] Testing with ${PYTHON_VERSION}"
     SHORT_VERSION=$(python3 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
     CONNECTOR_WHL=$(ls ${CONNECTOR_DIR}/dist/snowflake_connector_python*cp${SHORT_VERSION}*.whl)
-    TEST_ENVLIST=fix_lint,py${SHORT_VERSION}-{unit,integ,pandas,sso}-ci,py${SHORT_VERSION}-coverage
+    TEST_ENVLIST=$(python3 -c "print('fix_lint,' + ','.join('py${SHORT_VERSION}-' + e + '-ci' for e in ['unit','integ','pandas','sso']) + ',py${SHORT_VERSION}-coverage')")
     echo "[Info] Running tox for ${TEST_ENVLIST}"
-    tox -e ${TEST_ENVLIST} --external_wheels ${CONNECTOR_WHL}
+    python3 -m tox -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
 done
 
 deactivate

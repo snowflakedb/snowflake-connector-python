@@ -97,7 +97,9 @@ class TelemetryEvent(TelemetryEventBase):
         event.update(
             {
                 "UUID": str(uuid.uuid4()),
-                "Created_On": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                "Created_On": datetime.datetime.now(datetime.timezone.utc)
+                .replace(tzinfo=None)
+                .strftime("%Y-%m-%d %H:%M:%S"),
                 "Type": self.get_type(),
                 "SchemaVersion": 1,
             }

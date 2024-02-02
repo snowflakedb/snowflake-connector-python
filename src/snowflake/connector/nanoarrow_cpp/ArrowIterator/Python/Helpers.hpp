@@ -5,14 +5,13 @@
 #ifndef PC_PYTHON_HELPERS_HPP
 #define PC_PYTHON_HELPERS_HPP
 
-#include "logging.hpp"
 #include <string>
 
-namespace sf
-{
+#include "logging.hpp"
 
-namespace py
-{
+namespace sf {
+
+namespace py {
 
 class UniqueRef;
 

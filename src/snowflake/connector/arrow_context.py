@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import decimal
 import time
-from datetime import datetime, timedelta, tzinfo
+from datetime import datetime, timedelta, timezone, tzinfo
 from logging import getLogger
 from sys import byteorder
 from typing import TYPE_CHECKING
@@ -33,7 +33,7 @@ try:
 except ImportError:
     tzlocal = None
 
-ZERO_EPOCH = datetime.utcfromtimestamp(0)
+ZERO_EPOCH = datetime.fromtimestamp(0, timezone.utc).replace(tzinfo=None)
 
 logger = getLogger(__name__)
 
@@ -99,7 +99,9 @@ class ArrowConverterContext:
         return t.replace(tzinfo=tzinfo)
 
     def TIMESTAMP_NTZ_to_python(self, epoch: int, microseconds: int) -> datetime:
-        return datetime.utcfromtimestamp(epoch) + timedelta(microseconds=microseconds)
+        return datetime.fromtimestamp(epoch, timezone.utc).replace(
+            tzinfo=None
+        ) + timedelta(microseconds=microseconds)
 
     def TIMESTAMP_NTZ_to_python_windows(
         self, epoch: int, microseconds: int

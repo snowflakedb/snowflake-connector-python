@@ -9,7 +9,6 @@
 from cpython.ref cimport PyObject
 from cython.operator cimport dereference
 from libc.stdint cimport int64_t, uint8_t, uintptr_t
-from libcpp.memory cimport shared_ptr
 from libcpp.vector cimport vector
 
 INSTALLED_PYARROW = False
@@ -38,8 +37,8 @@ cdef extern from "CArrowIterator.hpp" namespace "sf":
         PyObject * exception;
 
     cdef cppclass CArrowIterator:
-        shared_ptr[ReturnVal] next() except +;
-        shared_ptr[ReturnVal] checkInitializationStatus() except +;
+        ReturnVal next() except +;
+        ReturnVal checkInitializationStatus() except +;
         vector[uintptr_t] getArrowArrayPtrs();
         vector[uintptr_t] getArrowSchemaPtrs();
 
@@ -87,7 +86,6 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef object context
     cdef CArrowIterator* cIterator
     cdef str unit
-    cdef shared_ptr[ReturnVal] cret
     cdef object use_dict_result
     cdef object cursor
     cdef vector[uintptr_t] nanoarrow_Table
@@ -159,33 +157,33 @@ cdef class PyArrowRowIterator(PyArrowIterator):
             self.arrow_bytes_size,
             <PyObject *> self.use_numpy
             )
-        self.cret = self.cIterator.checkInitializationStatus()
-        if self.cret.get().exception:
+        cdef ReturnVal cret = self.cIterator.checkInitializationStatus()
+        if cret.exception:
             Error.errorhandler_wrapper(
                 self.cursor.connection if self.cursor is not None else None,
                 self.cursor,
                 OperationalError,
                 {
-                    'msg': f'Failed to open arrow stream: {str(<object>self.cret.get().exception)}',
+                    'msg': f'Failed to open arrow stream: {str(<object>cret.exception)}',
                     'errno': ER_FAILED_TO_READ_ARROW_STREAM
                 })
         snow_logger.debug(msg=f"Batches read: {self.cIterator.getArrowArrayPtrs().size()}", path_name=__file__, func_name="__cinit__")
 
     def __next__(self):
-        self.cret = self.cIterator.next()
-        if not self.cret.get().successObj:
+        cdef ReturnVal cret = self.cIterator.next()
+        if not cret.successObj:
             Error.errorhandler_wrapper(
                 self.cursor.connection if self.cursor is not None else None,
                 self.cursor,
                 InterfaceError,
                 {
-                    'msg': f'Failed to convert current row, cause: {<object>self.cret.get().exception}',
+                    'msg': f'Failed to convert current row, cause: {<object>cret.exception}',
                     'errno': ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE
                 }
             )
             # it looks like this line can help us get into python and detect the global variable immediately
             # however, this log will not show up for unclear reason
-        ret = <object>self.cret.get().successObj
+        ret = <object>cret.successObj
 
         if ret is None:
             raise StopIteration
@@ -225,17 +223,17 @@ cdef class PyArrowTableIterator(PyArrowIterator):
             self.arrow_bytes_size,
             self.number_to_decimal,
         )
-        self.cret = self.cIterator.checkInitializationStatus()
-        if self.cret.get().exception:
+        cdef ReturnVal cret = self.cIterator.checkInitializationStatus()
+        if cret.exception:
             Error.errorhandler_wrapper(
                 self.cursor.connection if self.cursor is not None else None,
                 self.cursor,
                 OperationalError,
                 {
-                    'msg': f'Failed to open arrow stream: {str(<object>self.cret.get().exception)}',
+                    'msg': f'Failed to open arrow stream: {str(<object>cret.exception)}',
                     'errno': ER_FAILED_TO_READ_ARROW_STREAM
                 })
-        self.cret = self.cIterator.next()
+        cdef ReturnVal cret2 = self.cIterator.next()
         self.nanoarrow_Table = self.cIterator.getArrowArrayPtrs()
         self.nanoarrow_Schema = self.cIterator.getArrowSchemaPtrs()
         self.pyarrow_table = pyarrow.Table.from_batches(

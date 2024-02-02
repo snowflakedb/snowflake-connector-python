@@ -14,19 +14,34 @@ CONNECTION_PARAMETERS = {
 }
 ```
 
-### Running a single test
-
-Assuming that all dependencies are installed, running a single test is as simple as:
-`python -m pytest test/integ/test_connection.py::test_basic`.
-
 ### Running a suite of tests
 
-We use `tox` to run test suites and other utilities.
+We use `tox` version 4 to run test suites and other utilities.
 
 To run the most important tests, execute:
 
 ```shell
 tox -e "fix_lint,py37{,-pandas,-sso}"
+```
+
+**NOTE** Some integration tests may be sensitive to the cloud provider of the
+account that the test suite connects to.  The default `dev` provider acts like
+all cloud providers, but you may see some test failures during integration
+tests, depending on the actual cloud of the account you are connecting to.  To
+eliminate any such false failure, set the environment variable
+`cloud_provider` to one of `aws`, `gcp`, or `azure` as appropriate for the
+account you're running the integration tests against.  This is handled
+correctly in CI so should only affect your local testing.  In the future,
+we'll try to make this automatic by querying the account after the connection
+is made.
+
+### Running a single test
+
+Enter the tox environment you want (e.g. `py38`) and run `pytest` from there:
+
+```shell
+. .tox/py38/bin/activate
+pytest -v test/integ/test_connection.py::test_basic
 ```
 
 ## Test types

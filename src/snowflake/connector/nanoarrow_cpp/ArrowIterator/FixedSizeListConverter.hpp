@@ -12,16 +12,14 @@
 #include "nanoarrow.h"
 #include "nanoarrow.hpp"
 
-namespace sf
-{
+namespace sf {
 
-class FixedSizeListConverter : public IColumnConverter
-{
-public:
+class FixedSizeListConverter : public IColumnConverter {
+ public:
   explicit FixedSizeListConverter(ArrowArrayView* array);
   PyObject* toPyObject(int64_t rowIndex) const override;
 
-private:
+ private:
   void generateError(const std::string& msg) const;
 
   ArrowArrayView* m_array;
