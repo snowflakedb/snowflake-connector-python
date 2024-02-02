@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.7.1(TBD)
   - Fixed a memory leak in decimal data conversion.
+  - Fixed a bug where `write_pandas` wasn't truncating the target table.
 
 - v3.7.0(January 25,2024)
 
@@ -23,10 +24,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added support for structured types (OBJECT, MAP, ARRAY) to nanoarrow converters.
   - Fixed compilation issue due to missing cstdint header on gcc13.
   - Improved config permissions warning message.
-
-- v3.6.1(TBD)
-
-  - Fixed a bug where `write_pandas` wasn't truncating the target table.
 
 - v3.6.0(December 09,2023)
 
