@@ -201,7 +201,7 @@ def test_write_pandas_with_overwrite(
                         quote_identifiers=quote_identifiers,
                         auto_create_table=auto_create_table,
                         overwrite=True,
-                        index=False,
+                        index=index,
                     )
                 # the original table shouldn't have any change
                 assert (
