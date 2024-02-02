@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.7.1
+
+  - Bumped pandas dependency from >=1.0.0,<2.2.0 to >=1.0.0,<3.0.0.
+
 - v3.7.0(January 25,2024)
 
   - Added a new boolean parameter `force_return_table` to `SnowflakeCursor.fetch_arrow_all` to force returning `pyarrow.Table` in case of zero rows.
