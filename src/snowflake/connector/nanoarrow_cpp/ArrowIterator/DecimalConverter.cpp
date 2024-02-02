@@ -84,8 +84,18 @@ PyObject* DecimalFromDecimalConverter::toPyObject(int64_t rowIndex) const {
   ArrowDecimalGetBytes(&arrowDecimal, outBytes);
   PyObject* int128_bytes = PyBytes_FromStringAndSize(&outBytes, 16);
   */
-  return PyObject_CallMethod(m_context, "DECIMAL128_to_decimal", "Si",
-                             int128_bytes, m_scale);
+  PyObject* return_object = PyObject_CallMethod(
+      m_context, "DECIMAL128_to_decimal", "Si", int128_bytes, m_scale);
+  /**
+  int128_bytes is a new referenced created by PyBytes_FromStringAndSize,
+  to avoid memory leak we need to free it after usage
+  check docs:
+     https://docs.python.org/3/c-api/bytes.html#c.PyBytes_FromStringAndSize
+     https://docs.python.org/3/c-api/refcounting.html#c.Py_XDECREF
+
+  */
+  Py_XDECREF(int128_bytes);
+  return return_object;
 }
 
 }  // namespace sf

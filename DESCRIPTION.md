@@ -8,9 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.7.1
+- v3.7.1(TBD)
 
   - Bumped pandas dependency from >=1.0.0,<2.2.0 to >=1.0.0,<3.0.0.
+  - Fixed a memory leak in decimal data conversion.
 
 - v3.7.0(January 25,2024)
 

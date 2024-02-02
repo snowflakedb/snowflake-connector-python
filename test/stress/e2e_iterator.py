@@ -15,7 +15,7 @@ There are two scenarios:
 import argparse
 
 import util as stress_util
-from util import task_memory_decorator, task_time_execution_decorator
+from util import task_execution_decorator
 
 import snowflake.connector
 from parameters import CONNECTION_PARAMETERS
@@ -124,23 +124,31 @@ if __name__ == "__main__":
     ) as conn, conn.cursor() as cursor:
         test_table_name = args.test_table_name
 
-        memory_check_task = task_memory_decorator(task_fetch_arrow_batches)
-        execute_task(memory_check_task, cursor, test_table_name, args.iteration_cnt)
-        memory_records = stress_util.collect_memory_records()
-
-        perf_check_task = task_time_execution_decorator(task_fetch_arrow_batches)
-        execute_task(perf_check_task, cursor, test_table_name, args.iteration_cnt)
-        time_records = stress_util.collect_time_execution_records()
-
-        print("average time is", sum(time_records) / len(time_records))
+        perf_record_file = "stress_perf_record"
+        memory_record_file = "stress_memory_record"
+        with open(perf_record_file, "w") as perf_file, open(
+            memory_record_file, "w"
+        ) as memory_file:
+            task = task_execution_decorator(
+                task_fetch_arrow_batches, perf_file, memory_file
+            )
+            execute_task(task, cursor, test_table_name, args.iteration_cnt)
 
         if can_draw:
-            plt.plot([i for i in range(len(time_records))], time_records)
-            plt.title("per iteration execution time")
-            plt.show()
-            plt.plot(
-                [item[0] for item in memory_records],
-                [item[1] for item in memory_records],
-            )
-            plt.title("memory usage")
-            plt.show()
+            with open(perf_record_file) as perf_file, open(
+                memory_record_file
+            ) as memory_file:
+                # sample rate
+                perf_lines = perf_file.readlines()
+                perf_records = [float(line) for line in perf_lines]
+
+                memory_lines = memory_file.readlines()
+                memory_records = [float(line) for line in memory_lines]
+
+                plt.plot([i for i in range(len(perf_records))], perf_records)
+                plt.title("per iteration execution time")
+                plt.show(block=False)
+                plt.figure()
+                plt.plot([i for i in range(len(memory_records))], memory_records)
+                plt.title("memory usage")
+                plt.show(block=True)
