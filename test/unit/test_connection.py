@@ -17,6 +17,7 @@ import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from secrets import token_urlsafe
 
 import snowflake.connector
 from snowflake.connector.errors import (
@@ -423,6 +424,47 @@ def test_private_key_file_reading(tmp_path: Path):
                 account="test_account",
                 user="test_user",
                 private_key_file=str(key_file),
+            )
+    assert m.call_count == 1
+    assert m.call_args_list[0].kwargs["private_key"] == pkb
+
+
+def test_encrypted_private_key_file_reading(tmp_path: Path):
+    key_file = tmp_path / "key.pem"
+    private_key_password = token_urlsafe(25)
+    private_key = rsa.generate_private_key(
+        backend=default_backend(), public_exponent=65537, key_size=2048
+    )
+
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.BestAvailableEncryption(private_key_password.encode("utf-8")),
+    )
+
+    key_file.write_bytes(private_key_pem)
+
+    pkb = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    exc_msg = "stop execution"
+
+    with mock.patch(
+        "snowflake.connector.auth.keypair.AuthByKeyPair.__init__",
+        side_effect=Exception(exc_msg),
+    ) as m:
+        with pytest.raises(
+            Exception,
+            match=exc_msg,
+        ):
+            snowflake.connector.connect(
+                account="test_account",
+                user="test_user",
+                private_key_file=str(key_file),
+                private_key_file_pwd=private_key_password,
             )
     assert m.call_count == 1
     assert m.call_args_list[0].kwargs["private_key"] == pkb
