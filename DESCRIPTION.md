@@ -15,6 +15,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Bumped pyOpenSSL dependency from >=16.2.0,<24.0.0 to >=16.2.0,<25.0.0.
   - Fixed a memory leak in decimal data conversion.
   - Fixed a bug where `write_pandas` wasn't truncating the target table.
+  - Bumped keyring dependency lower bound to 23.1.0 to address security vulnerability.
 
 - v3.7.0(January 25,2024)
 
