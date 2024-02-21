@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.7.1(TBD)
+- v3.7.1(February 21, 2024)
 
   - Bumped pandas dependency from >=1.0.0,<2.2.0 to >=1.0.0,<3.0.0.
   - Bumped cryptography dependency from <42.0.0,>=3.1.0 to >=3.1.0,<43.0.0.
