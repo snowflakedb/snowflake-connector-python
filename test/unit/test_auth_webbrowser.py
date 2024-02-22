@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import base64
+import socket
 from unittest import mock
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
@@ -52,6 +53,72 @@ def mock_webserver(target_instance, application, port):
     _ = port
     target_instance._webserver_status = True
 
+def successful_web_callback(token):
+    return (
+        "\r\n".join(
+            [
+                f"GET /?token={token}&confirm=true HTTP/1.1",
+                "User-Agent: snowflake-agent",
+            ]
+        )
+    ).encode("utf-8")
+
+
+def _init_socket(recv_side_effect_func):
+    mock_socket_instance = MagicMock()
+    mock_socket_instance.getsockname.return_value = [None, CLIENT_PORT]
+
+    mock_socket_client = MagicMock()
+
+    mock_socket_client.recv.side_effect = recv_side_effect_func
+    mock_socket_instance.accept.return_value = (mock_socket_client, None)
+
+    return Mock(return_value=mock_socket_instance)
+
+
+class UnexpectedRecvArgs(Exception):
+    pass
+
+
+def recv_setup(recv_list):
+    recv_call_number = 0
+
+    def recv_side_effect(*args):
+        nonlocal recv_call_number
+        recv_call_number += 1
+
+        # if we should block (default behavior), then the only arg should be BUF_SIZE
+        if len(args) == 1:
+            return recv_list[recv_call_number - 1]
+
+        raise UnexpectedRecvArgs(
+            f"socket_client.recv call expected a single argeument, but received: {args}"
+        )
+
+    return recv_side_effect
+
+
+def recv_setup_with_msg_nowait(
+    ref_token, number_of_blocking_io_errors_before_success=1
+):
+    call_number = 0
+
+    def internally_scoped_function(*args):
+        nonlocal call_number
+        call_number += 1
+
+        # if we should NOT block, then the MSG_DONTWAIT flag should be second arg
+        if len(args) > 1 and args[1] == socket.MSG_DONTWAIT:
+            if call_number <= number_of_blocking_io_errors_before_success:
+                raise BlockingIOError()
+            else:
+                return successful_web_callback(ref_token)
+        else:
+            raise Exception(
+                f"socket_client.recv call expected the second arg to be socket.MSG_DONTWAINT, but received: {args}"
+            )
+
+    return internally_scoped_function
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
 @patch("secrets.token_bytes", return_value=PROOF_KEY)
@@ -63,51 +130,44 @@ def test_auth_webbrowser_get(_, disable_console_login):
         REF_SSO_URL, REF_PROOF_KEY, disable_console_login=disable_console_login
     )
 
+    # mock socket
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
+    )
+
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    # mock socket
-    mock_socket_instance = MagicMock()
-    mock_socket_instance.getsockname.return_value = [None, CLIENT_PORT]
-
-    mock_socket_client = MagicMock()
-    mock_socket_client.recv.return_value = (
-        "\r\n".join(
-            [
-                f"GET /?token={ref_token}&confirm=true HTTP/1.1",
-                "User-Agent: snowflake-agent",
-            ]
+    # Mock select.select to return socket client
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
         )
-    ).encode("utf-8")
-    mock_socket_instance.accept.return_value = (mock_socket_client, None)
-    mock_socket = Mock(return_value=mock_socket_instance)
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
+        body = {"data": {}}
+        auth.update_body(body)
+        assert body["data"]["TOKEN"] == ref_token
+        assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
 
-    auth = AuthByWebBrowser(
-        application=APPLICATION,
-        webbrowser_pkg=mock_webbrowser,
-        socket_pkg=mock_socket,
-    )
-    auth.prepare(
-        conn=rest._connection,
-        authenticator=AUTHENTICATOR,
-        service_name=SERVICE_NAME,
-        account=ACCOUNT,
-        user=USER,
-        password=PASSWORD,
-    )
-    assert not rest._connection.errorhandler.called  # no error
-    assert auth.assertion_content == ref_token
-    body = {"data": {}}
-    auth.update_body(body)
-    assert body["data"]["TOKEN"] == ref_token
-    assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
-
-    if disable_console_login:
-        mock_webbrowser.open_new.assert_called_once_with(REF_SSO_URL)
-        assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
-    else:
-        mock_webbrowser.open_new.assert_called_once_with(REF_CONSOLE_LOGIN_SSO_URL)
+        if disable_console_login:
+            mock_webbrowser.open_new.assert_called_once_with(REF_SSO_URL)
+            assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
+        else:
+            mock_webbrowser.open_new.assert_called_once_with(REF_CONSOLE_LOGIN_SSO_URL)
 
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
@@ -120,54 +180,58 @@ def test_auth_webbrowser_post(_, disable_console_login):
         REF_SSO_URL, REF_PROOF_KEY, disable_console_login=disable_console_login
     )
 
+    # mock socket
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup(
+            [
+                (
+                    "\r\n".join(
+                        [
+                            "POST / HTTP/1.1",
+                            "User-Agent: snowflake-agent",
+                            f"Host: localhost:{CLIENT_PORT}",
+                            "",
+                            f"token={ref_token}&confirm=true",
+                        ]
+                    )
+                ).encode("utf-8")
+            ]
+        )
+    )
+
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    # mock socket
-    mock_socket_instance = MagicMock()
-    mock_socket_instance.getsockname.return_value = [None, CLIENT_PORT]
-
-    mock_socket_client = MagicMock()
-    mock_socket_client.recv.return_value = (
-        "\r\n".join(
-            [
-                "POST / HTTP/1.1",
-                "User-Agent: snowflake-agent",
-                f"Host: localhost:{CLIENT_PORT}",
-                "",
-                f"token={ref_token}&confirm=true",
-            ]
+    # Mock select.select to return socket client
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
         )
-    ).encode("utf-8")
-    mock_socket_instance.accept.return_value = (mock_socket_client, None)
-    mock_socket = Mock(return_value=mock_socket_instance)
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
+        body = {"data": {}}
+        auth.update_body(body)
+        assert body["data"]["TOKEN"] == ref_token
+        assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
 
-    auth = AuthByWebBrowser(
-        application=APPLICATION,
-        webbrowser_pkg=mock_webbrowser,
-        socket_pkg=mock_socket,
-    )
-    auth.prepare(
-        conn=rest._connection,
-        authenticator=AUTHENTICATOR,
-        service_name=SERVICE_NAME,
-        account=ACCOUNT,
-        user=USER,
-        password=PASSWORD,
-    )
-    assert not rest._connection.errorhandler.called  # no error
-    assert auth.assertion_content == ref_token
-    body = {"data": {}}
-    auth.update_body(body)
-    assert body["data"]["TOKEN"] == ref_token
-    assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
-
-    if disable_console_login:
-        mock_webbrowser.open_new.assert_called_once_with(REF_SSO_URL)
-        assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
-    else:
-        mock_webbrowser.open_new.assert_called_once_with(REF_CONSOLE_LOGIN_SSO_URL)
+        if disable_console_login:
+            mock_webbrowser.open_new.assert_called_once_with(REF_SSO_URL)
+            assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
+        else:
+            mock_webbrowser.open_new.assert_called_once_with(REF_CONSOLE_LOGIN_SSO_URL)
 
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
@@ -190,25 +254,19 @@ def test_auth_webbrowser_fail_webbrowser(
     )
     ref_token = "MOCK_TOKEN"
 
+    # mock socket
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
+    )
+
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = False
 
-    # mock socket
-    mock_socket_instance = MagicMock()
-    mock_socket_instance.getsockname.return_value = [None, CLIENT_PORT]
-
-    mock_socket_client = MagicMock()
-    mock_socket_client.recv.return_value = (
-        "\r\n".join(["GET /?token=MOCK_TOKEN HTTP/1.1", "User-Agent: snowflake-agent"])
-    ).encode("utf-8")
-    mock_socket_instance.accept.return_value = (mock_socket_client, None)
-    mock_socket = Mock(return_value=mock_socket_instance)
-
     auth = AuthByWebBrowser(
         application=APPLICATION,
         webbrowser_pkg=mock_webbrowser,
-        socket_pkg=mock_socket,
+        socket_pkg=mock_socket_pkg,
     )
     with patch("builtins.input", return_value=input_text):
         auth.prepare(
@@ -249,45 +307,44 @@ def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
         REF_SSO_URL, REF_PROOF_KEY, disable_console_login=disable_console_login
     )
 
+    # mock socket
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup(
+            [("\r\n".join(["GARBAGE", "User-Agent: snowflake-agent"])).encode("utf-8")]
+        )
+    )
+
     # mock webbrowser
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = True
 
-    # mock socket
-    mock_socket_instance = MagicMock()
-    mock_socket_instance.getsockname.return_value = [None, CLIENT_PORT]
-
-    mock_socket_client = MagicMock()
-    mock_socket_client.recv.return_value = (
-        "\r\n".join(["GARBAGE", "User-Agent: snowflake-agent"])
-    ).encode("utf-8")
-    mock_socket_instance.accept.return_value = (mock_socket_client, None)
-    mock_socket = Mock(return_value=mock_socket_instance)
-
-    # case 1: invalid HTTP request
-    auth = AuthByWebBrowser(
-        application=APPLICATION,
-        webbrowser_pkg=mock_webbrowser,
-        socket_pkg=mock_socket,
-    )
-    auth.prepare(
-        conn=rest._connection,
-        authenticator=AUTHENTICATOR,
-        service_name=SERVICE_NAME,
-        account=ACCOUNT,
-        user=USER,
-        password=PASSWORD,
-    )
-    captured = capsys.readouterr()
-    assert captured.out == (
-        "Initiating login request with your identity provider. A browser window "
-        "should have opened for you to complete the login. If you can't see it, "
-        "check existing browser windows, or your OS settings. Press CTRL+C to "
-        f"abort and try again...\nGoing to open: {REF_SSO_URL if disable_console_login else REF_CONSOLE_LOGIN_SSO_URL} to authenticate...\n"
-    )
-    assert rest._connection.errorhandler.called  # an error
-    assert auth.assertion_content is None
-
+    # Mock select.select to return socket client
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
+        # case 1: invalid HTTP request
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        captured = capsys.readouterr()
+        assert captured.out == (
+            "Initiating login request with your identity provider. A browser window "
+            "should have opened for you to complete the login. If you can't see it, "
+            "check existing browser windows, or your OS settings. Press CTRL+C to "
+            f"abort and try again...\nGoing to open: {REF_SSO_URL if disable_console_login else REF_CONSOLE_LOGIN_SSO_URL} to authenticate...\n"
+        )
+        assert rest._connection.errorhandler.called  # an error
+        assert auth.assertion_content is None
 
 def _init_rest(
     ref_sso_url, ref_proof_key, success=True, message=None, disable_console_login=False
