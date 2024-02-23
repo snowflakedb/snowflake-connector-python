@@ -17,7 +17,7 @@ import webbrowser
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
-from ..compat import parse_qs, urlencode, urlparse, urlsplit
+from ..compat import IS_WINDOWS, parse_qs, urlencode, urlparse, urlsplit
 from ..constants import (
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
@@ -117,9 +117,12 @@ class AuthByWebBrowser(AuthByPlugin):
         logger.debug("authenticating by Web Browser")
 
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
-
+        
         if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
-            socket_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            if IS_WINDOWS:
+                logger.warning("Configuration SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not available in Windows. Ignoring.")
+            else:
+                socket_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
         try:
             try:
@@ -215,10 +218,17 @@ class AuthByWebBrowser(AuthByPlugin):
                 raw_data = bytearray()
                 socket_client = None
                 max_attempts = 15
+
                 msg_dont_wait = (
                     os.getenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "false").lower()
                     == "true"
                 )
+                if IS_WINDOWS:
+                    if msg_dont_wait:
+                        logger.warning(
+                            "Configuration SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT is not available in Windows. Ignoring."
+                        )
+                    msg_dont_wait = False
 
                 # when running in a containerized environment, socket_client.recv ocassionally returns an empty byte array
                 #   an immediate successive call to socket_client.recv gets the actual data
