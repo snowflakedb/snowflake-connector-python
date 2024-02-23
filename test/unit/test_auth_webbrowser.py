@@ -540,7 +540,7 @@ def test_auth_webbrowser_socket_recv_does_not_block_with_env_var(monkeypatch):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
 
     ref_token = "MOCK_TOKEN"
-    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY, disable_console_login=True)
 
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "true")
 
