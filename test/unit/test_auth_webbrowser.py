@@ -455,7 +455,7 @@ def test_auth_webbrowser_invalid_sso(monkeypatch):
 def test_auth_webbrowser_socket_recv_retries_up_to_15_times_on_empty_bytearray():
     """Authentication by WebBrowser retries on empty bytearray response from socket.recv"""
     ref_token = "MOCK_TOKEN"
-    rest = _init_rest(INVALID_SSO_URL, REF_PROOF_KEY, disable_console_login=True)
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY, disable_console_login=True)
 
     # mock socket
     mock_socket_pkg = _init_socket(
