@@ -53,6 +53,7 @@ def mock_webserver(target_instance, application, port):
     _ = port
     target_instance._webserver_status = True
 
+
 def successful_web_callback(token):
     return (
         "\r\n".join(
@@ -119,6 +120,7 @@ def recv_setup_with_msg_nowait(
             )
 
     return internally_scoped_function
+
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
 @patch("secrets.token_bytes", return_value=PROOF_KEY)
@@ -345,6 +347,7 @@ def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
         )
         assert rest._connection.errorhandler.called  # an error
         assert auth.assertion_content is None
+
 
 def _init_rest(
     ref_sso_url, ref_proof_key, success=True, message=None, disable_console_login=False

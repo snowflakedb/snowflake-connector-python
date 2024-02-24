@@ -117,10 +117,12 @@ class AuthByWebBrowser(AuthByPlugin):
         logger.debug("authenticating by Web Browser")
 
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
-        
+
         if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
             if IS_WINDOWS:
-                logger.warning("Configuration SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not available in Windows. Ignoring.")
+                logger.warning(
+                    "Configuration SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not available in Windows. Ignoring."
+                )
             else:
                 socket_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
