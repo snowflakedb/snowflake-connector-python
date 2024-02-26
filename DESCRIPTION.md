@@ -8,14 +8,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.7.1(TBD)
+- v3.7.1(February 21, 2024)
 
   - Bumped pandas dependency from >=1.0.0,<2.2.0 to >=1.0.0,<3.0.0.
   - Bumped cryptography dependency from <42.0.0,>=3.1.0 to >=3.1.0,<43.0.0.
   - Bumped pyOpenSSL dependency from >=16.2.0,<24.0.0 to >=16.2.0,<25.0.0.
   - Fixed a memory leak in decimal data conversion.
   - Fixed a bug where `write_pandas` wasn't truncating the target table.
-  - Set `ARROW_DEFAULT_MEMORY_POOL=system` as default memory allocator for `pyarrow.Table.to_pandas`.
+  - Bumped keyring dependency lower bound to 23.1.0 to address security vulnerability.
 
 - v3.7.0(January 25,2024)
 
