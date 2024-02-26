@@ -542,7 +542,7 @@ def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
 def test_auth_webbrowser_socket_recv_does_not_block_with_env_var(monkeypatch):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
 
-    if not IS_WINDOWS:
+    if IS_WINDOWS:
         # MSG_DONTWAIT is not supported on Windows, so this case is not applicable
         assert True
     else:
@@ -596,7 +596,7 @@ def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attempts(
 ):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
 
-    if not IS_WINDOWS:
+    if IS_WINDOWS:
         # MSG_DONTWAIT is not supported on Windows, so this case is not applicable
         assert True
     else:
