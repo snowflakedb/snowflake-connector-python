@@ -632,7 +632,9 @@ def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attempts(
         assert sleep_times == [0.25] * 14
 
 
-@pytest.mark.skipif(IS_WINDOWS, reason="SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not supported on Windows")
+@pytest.mark.skipif(
+    IS_WINDOWS, reason="SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not supported on Windows"
+)
 def test_auth_webbrowser_socket_reuseport_with_env_flag(monkeypatch):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
     ref_token = "MOCK_TOKEN"
