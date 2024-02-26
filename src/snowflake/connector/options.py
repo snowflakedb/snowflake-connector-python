@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import warnings
 from importlib.metadata import distributions
 from logging import getLogger
@@ -78,6 +79,10 @@ def _import_or_missing_pandas_option() -> (
         from pandas import DataFrame  # NOQA
 
         pyarrow = importlib.import_module("pyarrow")
+
+        # set default memory pool to system for pyarrow to_pandas conversion
+        if "ARROW_DEFAULT_MEMORY_POOL" not in os.environ:
+            os.environ["ARROW_DEFAULT_MEMORY_POOL"] = "system"
 
         # Check whether we have the currently supported pyarrow installed
         installed_packages = {
