@@ -539,153 +539,142 @@ def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
         assert sleep.call_count == 0
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="MSG_DONTWAIT is not supported on Windows")
 def test_auth_webbrowser_socket_recv_does_not_block_with_env_var(monkeypatch):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
+    ref_token = "MOCK_TOKEN"
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY, disable_console_login=True)
 
-    if IS_WINDOWS:
-        # MSG_DONTWAIT is not supported on Windows, so this case is not applicable
-        assert True
-    else:
-        ref_token = "MOCK_TOKEN"
-        rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY, disable_console_login=True)
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "true")
 
-        monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "true")
-
-        # mock socket
-        mock_socket_pkg = _init_socket(
-            recv_side_effect_func=recv_setup_with_msg_nowait(
-                ref_token, number_of_blocking_io_errors_before_success=14
-            )
+    # mock socket
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup_with_msg_nowait(
+            ref_token, number_of_blocking_io_errors_before_success=14
         )
+    )
 
-        # mock webbrowser
-        mock_webbrowser = MagicMock()
-        mock_webbrowser.open_new.return_value = True
+    # mock webbrowser
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = True
 
-        # Mock select.select to return socket client
-        with mock.patch(
-            "select.select", return_value=([mock_socket_pkg.return_value], [], [])
-        ), mock.patch("time.sleep") as sleep:
-            auth = AuthByWebBrowser(
-                application=APPLICATION,
-                webbrowser_pkg=mock_webbrowser,
-                socket_pkg=mock_socket_pkg,
-            )
-            auth.prepare(
-                conn=rest._connection,
-                authenticator=AUTHENTICATOR,
-                service_name=SERVICE_NAME,
-                account=ACCOUNT,
-                user=USER,
-                password=PASSWORD,
-            )
-            assert not rest._connection.errorhandler.called  # no error
-            assert auth.assertion_content == ref_token
-            body = {"data": {}}
-            auth.update_body(body)
-            assert body["data"]["TOKEN"] == ref_token
-            assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
-            assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
-            sleep_times = [t[0][0] for t in sleep.call_args_list]
-            assert sleep.call_count == 14
-            assert sleep_times == [0.25] * 14
+    # Mock select.select to return socket client
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch("time.sleep") as sleep:
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
+        body = {"data": {}}
+        auth.update_body(body)
+        assert body["data"]["TOKEN"] == ref_token
+        assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
+        assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
+        sleep_times = [t[0][0] for t in sleep.call_args_list]
+        assert sleep.call_count == 14
+        assert sleep_times == [0.25] * 14
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="MSG_DONTWAIT is not supported on Windows")
 def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attempts(
     monkeypatch,
 ):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
+    ref_token = "MOCK_TOKEN"
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
-    if IS_WINDOWS:
-        # MSG_DONTWAIT is not supported on Windows, so this case is not applicable
-        assert True
-    else:
-        ref_token = "MOCK_TOKEN"
-        rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "true")
 
-        monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "true")
-
-        # mock socket
-        mock_socket_pkg = _init_socket(
-            recv_side_effect_func=recv_setup_with_msg_nowait(
-                ref_token, number_of_blocking_io_errors_before_success=15
-            )
+    # mock socket
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup_with_msg_nowait(
+            ref_token, number_of_blocking_io_errors_before_success=15
         )
+    )
 
-        # mock webbrowser
-        mock_webbrowser = MagicMock()
-        mock_webbrowser.open_new.return_value = True
+    # mock webbrowser
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = True
 
-        # Mock select.select to return socket client
-        with mock.patch(
-            "select.select", return_value=([mock_socket_pkg.return_value], [], [])
-        ), mock.patch("time.sleep") as sleep:
-            auth = AuthByWebBrowser(
-                application=APPLICATION,
-                webbrowser_pkg=mock_webbrowser,
-                socket_pkg=mock_socket_pkg,
-            )
-            auth.prepare(
-                conn=rest._connection,
-                authenticator=AUTHENTICATOR,
-                service_name=SERVICE_NAME,
-                account=ACCOUNT,
-                user=USER,
-                password=PASSWORD,
-            )
-            assert rest._connection.errorhandler.called  # an error
-            assert auth.assertion_content is None
-            sleep_times = [t[0][0] for t in sleep.call_args_list]
-            assert sleep.call_count == 14
-            assert sleep_times == [0.25] * 14
+    # Mock select.select to return socket client
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ), mock.patch("time.sleep") as sleep:
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert rest._connection.errorhandler.called  # an error
+        assert auth.assertion_content is None
+        sleep_times = [t[0][0] for t in sleep.call_args_list]
+        assert sleep.call_count == 14
+        assert sleep_times == [0.25] * 14
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not supported on Windows")
 def test_auth_webbrowser_socket_reuseport_with_env_flag(monkeypatch):
     """Authentication by WebBrowser socket.recv Does not block, but retries if BlockingIOError thrown."""
-    if not IS_WINDOWS:
-        # SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not supported on Windows, so this case is not applicable
-        assert True
-    else:
-        ref_token = "MOCK_TOKEN"
-        rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
+    ref_token = "MOCK_TOKEN"
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
-        # mock socket
-        mock_socket_pkg = _init_socket(
-            recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
+    # mock socket
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
+    )
+
+    # mock webbrowser
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = True
+
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
+
+    # Mock select.select to return socket client
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
+        )
+        auth.prepare(
+            conn=rest._connection,
+            authenticator=AUTHENTICATOR,
+            service_name=SERVICE_NAME,
+            account=ACCOUNT,
+            user=USER,
+            password=PASSWORD,
+        )
+        assert mock_socket_pkg.return_value.setsockopt.call_count == 1
+        assert mock_socket_pkg.return_value.setsockopt.call_args.args == (
+            socket.SOL_SOCKET,
+            socket.SO_REUSEPORT,
+            1,
         )
 
-        # mock webbrowser
-        mock_webbrowser = MagicMock()
-        mock_webbrowser.open_new.return_value = True
-
-        monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
-
-        # Mock select.select to return socket client
-        with mock.patch(
-            "select.select", return_value=([mock_socket_pkg.return_value], [], [])
-        ):
-            auth = AuthByWebBrowser(
-                application=APPLICATION,
-                webbrowser_pkg=mock_webbrowser,
-                socket_pkg=mock_socket_pkg,
-            )
-            auth.prepare(
-                conn=rest._connection,
-                authenticator=AUTHENTICATOR,
-                service_name=SERVICE_NAME,
-                account=ACCOUNT,
-                user=USER,
-                password=PASSWORD,
-            )
-            assert mock_socket_pkg.return_value.setsockopt.call_count == 1
-            assert mock_socket_pkg.return_value.setsockopt.call_args.args == (
-                socket.SOL_SOCKET,
-                socket.SO_REUSEPORT,
-                1,
-            )
-
-            assert not rest._connection.errorhandler.called  # no error
-            assert auth.assertion_content == ref_token
+        assert not rest._connection.errorhandler.called  # no error
+        assert auth.assertion_content == ref_token
 
 
 def test_auth_webbrowser_socket_reuseport_option_not_set_with_false_flag(monkeypatch):
