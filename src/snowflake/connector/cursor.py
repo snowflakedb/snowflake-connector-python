@@ -210,7 +210,7 @@ class ResultMetadataV2:
         fields = None
         if type_code == FIELD_NAME_TO_ID["VECTOR"] and col.get("fields") is not None:
             fields = [
-                ResultMetadata.from_column({"name": None, **f}) for f in col["fields"]
+                ResultMetadataV2.from_column({"name": None, **f}) for f in col["fields"]
             ]
 
         return cls(
