@@ -166,7 +166,7 @@ class AuthByWebBrowser(AuthByPlugin):
                 )
                 return
 
-            print(
+            logger.info(
                 "Initiating login request with your identity provider. A "
                 "browser window should have opened for you to complete the "
                 "login. If you can't see it, check existing browser windows, "
@@ -174,9 +174,9 @@ class AuthByWebBrowser(AuthByPlugin):
             )
 
             logger.debug("step 2: open a browser")
-            print(f"Going to open: {sso_url} to authenticate...")
+            logger.info(f"Going to open: {sso_url} to authenticate...")
             if not self._webbrowser.open_new(sso_url):
-                print(
+                logger.warning(
                     "We were unable to open a browser window for you, "
                     "please open the url above manually then paste the "
                     "URL you are redirected to into the terminal."
