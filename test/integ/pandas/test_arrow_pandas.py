@@ -1276,7 +1276,6 @@ def test_to_arrow_datatypes(enable_structured_types, conn_cnx):
 
             batches = cur.get_result_batches()
             assert len(batches) == 1
-            # import pdb; pdb.set_trace()
             batch = batches[0]
             arrow_table = batch.to_arrow()
             for actual, expected in zip(arrow_table.schema, expected_types):
