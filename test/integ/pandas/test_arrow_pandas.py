@@ -1202,6 +1202,7 @@ def test_batch_to_pandas_arrow(conn_cnx, result_format):
                 assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
 
 
+@pytest.mark.internal
 @pytest.mark.parametrize("enable_structured_types", [True, False])
 def test_to_arrow_datatypes(enable_structured_types, conn_cnx):
     with conn_cnx() as cnx:
