@@ -201,28 +201,35 @@ class ResultMetadataV2:
         This differs from ResultMetadata in that it has newly-added fields which cannot be added to
         ResultMetadata since it is a named tuple.
         """
-        type_code = FIELD_NAME_TO_ID[
+        col_type = (
             col["extTypeName"].upper()
             if col.get("extTypeName")
             else col["type"].upper()
-        ]
+        )
 
-        fields = None
-        if type_code == FIELD_NAME_TO_ID["VECTOR"] and col.get("fields") is not None:
-            fields = [
-                ResultMetadata.from_column({"name": None, **f}) for f in col["fields"]
-            ]
+        fields = col.get("fields")
+        processed_fields: Optional[List[ResultMetadataV2]] = None
+        if fields is not None:
+            if col_type in {"VECTOR", "ARRAY", "OBJECT", "MAP"}:
+                processed_fields = [
+                    ResultMetadata.from_column({"name": None, **f})
+                    for f in col["fields"]
+                ]
+            else:
+                raise ValueError(
+                    f"Field parsing is not supported for columns of type {col_type}."
+                )
 
         return cls(
             col["name"],
-            type_code,
+            FIELD_NAME_TO_ID[col_type],
             col["nullable"],
             None,
             col["length"],
             col["precision"],
             col["scale"],
             col.get("vectorDimension"),
-            fields,
+            processed_fields,
         )
 
     def _to_result_metadata_v1(self):
