@@ -268,7 +268,6 @@ def test_auth_webbrowser_fail_webbrowser(
     mock_webbrowser = MagicMock()
     mock_webbrowser.open_new.return_value = False
 
-
     auth = AuthByWebBrowser(
         application=APPLICATION,
         webbrowser_pkg=mock_webbrowser,
@@ -331,7 +330,6 @@ def test_auth_webbrowser_fail_webserver(_, caplog, disable_console_login):
     with mock.patch(
         "select.select", return_value=([mock_socket_pkg.return_value], [], [])
     ):
-
         # case 1: invalid HTTP request
         auth = AuthByWebBrowser(
             application=APPLICATION,
