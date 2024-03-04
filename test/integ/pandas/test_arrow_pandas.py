@@ -1228,19 +1228,23 @@ def test_to_arrow_datatypes(enable_structured_types, conn_cnx):
             )
 
             if enable_structured_types:
-                for param in {
+                structured_params = {
                     "ENABLE_STRUCTURED_TYPES_IN_CLIENT_RESPONSE",
                     "IGNORE_CLIENT_VESRION_IN_STRUCTURED_TYPES_RESPONSE",
                     "FORCE_ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT",
-                }:
-                    cur.execute(f"alter session set {param}=true")
-                expected_types += (
-                    pyarrow.map_(pyarrow.string(), pyarrow.int64()),
-                    pyarrow.struct(
-                        {"city": pyarrow.string(), "population": pyarrow.float64()}
-                    ),
-                    pyarrow.list_(pyarrow.float64()),
-                )
+                }
+                try:
+                    for param in structured_params:
+                        cur.execute(f"alter session set {param}=true")
+                    expected_types += (
+                        pyarrow.map_(pyarrow.string(), pyarrow.int64()),
+                        pyarrow.struct(
+                            {"city": pyarrow.string(), "population": pyarrow.float64()}
+                        ),
+                        pyarrow.list_(pyarrow.float64()),
+                    )
+                finally:
+                    cur.execute(f"alter session unset {param}")
             else:
                 expected_types += (
                     pyarrow.string(),
@@ -1265,7 +1269,7 @@ def test_to_arrow_datatypes(enable_structured_types, conn_cnx):
             '0xAAAA' :: BINARY as BINARY_type,
             '01:02:03.123456789' :: TIME as TIME_type,
             true :: BOOLEAN as BOOLEAN_type,
-            TO_GEOGRAPHY('LINESTRING(13.4814 52.5015, -121.8212 36.8252)') as GEOGRAPHY_typejk,
+            TO_GEOGRAPHY('LINESTRING(13.4814 52.5015, -121.8212 36.8252)') as GEOGRAPHY_type,
             TO_GEOMETRY('LINESTRING(13.4814 52.5015, -121.8212 36.8252)') as GEOMETRY_type,
             [1,2,3,4,5] :: vector(float, 5) as VECTOR_type,
             object_construct('k1', 1, 'k2', 2, 'k3', 3, 'k4', 4, 'k5', 5) :: map(varchar, int) as MAP_type,

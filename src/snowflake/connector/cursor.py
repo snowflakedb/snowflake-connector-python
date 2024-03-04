@@ -212,7 +212,7 @@ class ResultMetadataV2:
         if fields is not None:
             if col_type in {"VECTOR", "ARRAY", "OBJECT", "MAP"}:
                 processed_fields = [
-                    ResultMetadata.from_column({"name": None, **f})
+                    ResultMetadataV2.from_column({"name": None, **f})
                     for f in col["fields"]
                 ]
             else:
