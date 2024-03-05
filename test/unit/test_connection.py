@@ -9,6 +9,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from secrets import token_urlsafe
 from textwrap import dedent
 from unittest import mock
 from unittest.mock import MagicMock, patch
@@ -17,7 +18,6 @@ import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from secrets import token_urlsafe
 
 import snowflake.connector
 from snowflake.connector.errors import (
@@ -439,7 +439,9 @@ def test_encrypted_private_key_file_reading(tmp_path: Path):
     private_key_pem = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.BestAvailableEncryption(private_key_password.encode("utf-8")),
+        encryption_algorithm=serialization.BestAvailableEncryption(
+            private_key_password.encode("utf-8")
+        ),
     )
 
     key_file.write_bytes(private_key_pem)
