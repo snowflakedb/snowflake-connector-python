@@ -26,10 +26,9 @@ from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
 from uuid import UUID
 
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
@@ -376,6 +375,9 @@ class SnowflakeConnection:
         If overwriting values from the default connection is desirable, supply
         the name explicitly.
         """
+        os.environ["SNOWFLAKE_RSO_ID"] = str(
+            kwargs.get("rso_id", -1)
+        )  # TODO: Set this in XP
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler

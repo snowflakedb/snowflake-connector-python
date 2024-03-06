@@ -59,6 +59,7 @@ from .gcs_storage_client import SnowflakeGCSRestClient
 from .local_storage_client import SnowflakeLocalStorageClient
 from .s3_storage_client import SnowflakeS3RestClient
 from .storage_client import SnowflakeFileEncryptionMaterial, SnowflakeStorageClient
+from .stored_proc_storage_client import StoredProcStorageClient
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
@@ -658,6 +659,8 @@ class SnowflakeFileTransferAgent:
     def _create_file_transfer_client(
         self, meta: SnowflakeFileMeta
     ) -> SnowflakeStorageClient:
+        # TODO: Inject the stored proc storage client into file_transfer_agent
+        return StoredProcStorageClient(meta, self._stage_info)
         if self._stage_location_type == LOCAL_FS:
             return SnowflakeLocalStorageClient(
                 meta,
@@ -693,7 +696,8 @@ class SnowflakeFileTransferAgent:
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 
     def _transfer_accelerate_config(self) -> None:
-        if self._stage_location_type == S3_FS and self._file_metadata:
+        # TODO: If injected, don't do this. Alternatively, change stage location type for stored proc response.
+        if False and self._stage_location_type == S3_FS and self._file_metadata:
             client = self._create_file_transfer_client(self._file_metadata[0])
             self._use_accelerate_endpoint = client.transfer_accelerate_config()
 
