@@ -718,6 +718,8 @@ class SnowflakeConnection:
 
     def close(self, retry: bool = True) -> None:
         """Closes the connection."""
+        # unregister to dereference connection object as it's already closed after the execution
+        atexit.unregister(self._close_at_exit)
         try:
             if not self.rest:
                 logger.debug("Rest object has been destroyed, cannot close session")
