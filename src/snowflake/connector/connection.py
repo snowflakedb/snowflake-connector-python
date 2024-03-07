@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import pathlib
@@ -434,12 +435,7 @@ class SnowflakeConnection:
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
-
-    def __del__(self) -> None:  # pragma: no cover
-        try:
-            self.close(retry=False)
-        except Exception:
-            pass
+        atexit.register(self._close_at_exit)
 
     @property
     def insecure_mode(self) -> bool:
@@ -1748,6 +1744,12 @@ class SnowflakeConnection:
                 sf_qid, None
             )  # Prevent KeyError when multiple threads try to remove the same query id
             self._done_async_sfqids[sf_qid] = None
+
+    def _close_at_exit(self):
+        try:
+            self.close(retry=False)
+        except Exception:
+            pass
 
     def get_query_status(self, sf_qid: str) -> QueryStatus:
         """Retrieves the status of query with sf_qid.

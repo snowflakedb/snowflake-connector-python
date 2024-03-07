@@ -20,6 +20,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
     - Add `SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT` flag (usage: `SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT=true`) to make a non-blocking socket.recv call and retry on Error
       - Consider using this if running in a containerized environment and externalbrowser auth frequently hangs while waiting for callback
       - NOTE: this has not been tested extensively, but has been shown to improve the experience when using WSL
+  - Improved cleanup logic for connection to rely on interpreter shutdown instead of the `__del__` method.
 
 - v3.7.1(February 21, 2024)
 
