@@ -33,7 +33,7 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
             stage_info["location"], os.path.basename(meta.dst_file_name)
         )
         if meta.local_location:
-            src_file_name = meta.real_src_file_name
+            src_file_name = self.data_file
             if src_file_name.startswith("/"):
                 src_file_name = src_file_name[1:]
             self.stage_file_name: str = os.path.join(

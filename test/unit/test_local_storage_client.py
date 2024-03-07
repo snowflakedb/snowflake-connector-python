@@ -58,8 +58,7 @@ def test_multi_chunk_download(multipart_threshold):
 
         meta = SnowflakeFileMeta(
             name=file_name,
-            src_file_name=str(stage_file),
-            real_src_file_name=str(file_name),
+            src_file_name=str(file_name),
             stage_location_type=LOCAL_FS,
             dst_file_name=file_name,
             local_location=local_dir,
