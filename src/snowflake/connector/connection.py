@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import atexit
+from contextlib import suppress
 import logging
 import os
 import pathlib
@@ -1748,10 +1749,8 @@ class SnowflakeConnection:
             self._done_async_sfqids[sf_qid] = None
 
     def _close_at_exit(self):
-        try:
+        with suppress(Exception):
             self.close(retry=False)
-        except Exception:
-            pass
 
     def get_query_status(self, sf_qid: str) -> QueryStatus:
         """Retrieves the status of query with sf_qid.
