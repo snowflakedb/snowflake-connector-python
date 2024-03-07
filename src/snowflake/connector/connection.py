@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import atexit
-from contextlib import suppress
 import logging
 import os
 import pathlib
@@ -18,6 +17,7 @@ import warnings
 import weakref
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
+from contextlib import suppress
 from difflib import get_close_matches
 from functools import partial
 from io import StringIO
