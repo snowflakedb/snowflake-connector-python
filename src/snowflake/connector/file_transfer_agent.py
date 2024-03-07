@@ -487,7 +487,9 @@ class SnowflakeFileTransferAgent:
                         logger.debug(
                             "Chunk queue busy, waiting in file done callback..."
                         )
-                        logger.debug("thread started to wait because reach max queue size")
+                        logger.debug(
+                            "thread started to wait because reach max queue size"
+                        )
                         cv_chunk_process.wait()
                         logger.debug("thread wait complete because queue size reduce")
                     for _chunk_id in range(done_client.num_of_chunks):
@@ -576,11 +578,19 @@ class SnowflakeFileTransferAgent:
             done_client: SnowflakeStorageClient,
         ) -> None:
             logger.debug(f"File {done_client.meta.name} reached postprocess callback")
-            logger.debug(f"network_tpe worker amount:{network_tpe._max_workers}, work queue:{network_tpe._work_queue}")
-            logger.debug(f"preprocess_tpe worker amount:{preprocess_tpe._max_workers}, work queue:{preprocess_tpe._work_queue}")
-            logger.debug(f"postprocess_tpe worker amount:{postprocess_tpe._max_workers}, work queue:{postprocess_tpe._work_queue}")
+            logger.debug(
+                f"network_tpe worker amount:{network_tpe._max_workers}, work queue:{network_tpe._work_queue}"
+            )
+            logger.debug(
+                f"preprocess_tpe worker amount:{preprocess_tpe._max_workers}, work queue:{preprocess_tpe._work_queue}"
+            )
+            logger.debug(
+                f"postprocess_tpe worker amount:{postprocess_tpe._max_workers}, work queue:{postprocess_tpe._work_queue}"
+            )
             with done_client.lock:
-                logger.debug("in post process, start to deal with unsuccessful download and notification")
+                logger.debug(
+                    "in post process, start to deal with unsuccessful download and notification"
+                )
                 if not success:
                     done_client.failed_transfers += 1
                     logger.debug(
@@ -657,7 +667,9 @@ class SnowflakeFileTransferAgent:
 
         with cv_main_thread:
             while transfer_metadata.num_files_completed < num_total_files:
-                logger.debug(f"main thread wait because download file number is {transfer_metadata.num_files_completed}/{num_total_files}")
+                logger.debug(
+                    f"main thread wait because download file number is {transfer_metadata.num_files_completed}/{num_total_files}"
+                )
                 cv_main_thread.wait()
                 if exception_caught_in_callback is not None:
                     raise exception_caught_in_callback
