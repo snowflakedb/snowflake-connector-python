@@ -457,11 +457,11 @@ class SnowflakeFileTransferAgent:
 
         def notify_file_completed() -> None:
             # Increment the number of completed files, then notify the main thread.
-            logger.debug(f"start notify main thread")
+            logger.debug("start notify main thread")
             with cv_main_thread:
                 transfer_metadata.num_files_completed += 1
                 cv_main_thread.notify()
-                logger.debug(f"notify main thread complete")
+                logger.debug("notify main thread complete")
 
         def preprocess_done_cb(
             success: bool,
@@ -487,9 +487,9 @@ class SnowflakeFileTransferAgent:
                         logger.debug(
                             "Chunk queue busy, waiting in file done callback..."
                         )
-                        logger.debug(f"thread started to wait because reach max queue size")
+                        logger.debug("thread started to wait because reach max queue size")
                         cv_chunk_process.wait()
-                        logger.debug(f"thread wait complete because queue size reduce")
+                        logger.debug("thread wait complete because queue size reduce")
                     for _chunk_id in range(done_client.num_of_chunks):
                         _callback = partial(
                             transfer_done_cb,
