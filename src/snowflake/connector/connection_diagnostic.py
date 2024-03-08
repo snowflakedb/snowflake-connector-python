@@ -214,6 +214,17 @@ class ConnectionDiagnostic:
                 context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                 sock = context.wrap_socket(conn, server_hostname=host)
                 certificate = ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
+                http_request = f"""GET / {host}:{port} HTTP/1.1\r\n
+                                   Host: {host}\r\n
+                                   User-Agent: snowflake-connector-python-diagnostic
+                                   \r\n\r\n"""
+                try:
+                    sock.send(str.encode(http_request))
+                except Exception as e:
+                    self.__append_message(
+                        host_type,
+                        f"{host}:{port}: URL Check: Failed: Unknown Exception: {e}",
+                    )
                 conn.close()
                 return certificate
             else:

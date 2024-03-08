@@ -37,6 +37,20 @@ def test_https_host_report(caplog):
     )
 
 
+def test_test_socket_get_cert(caplog):
+    connection_diag = ConnectionDiagnostic(
+        account="test", host="test.snowflakecomputing.com"
+    )
+    test_socket_get_cert = connection_diag._ConnectionDiagnostic__test_socket_get_cert
+    result = test_socket_get_cert(
+        host="client-telemetry.snowflakecomputing.com",
+        port=443,
+        host_type="OUT_OF_BAND_TELEMETRY",
+    )
+
+    assert "BEGIN CERTIFICATE" in result
+
+
 def test_decode_dict():
     test_dict = {b"CN": b"client-telemetry.snowflakecomputing.com"}
     result = _decode_dict(test_dict)
