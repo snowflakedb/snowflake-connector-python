@@ -52,8 +52,6 @@ class StoredProcStorageClient(SnowflakeStorageClient):
             if self.meta.local_location
             else None
         )
-        # CHUNK
-        self.num_of_grpc_chunks = 0
 
     def compress(self) -> None:
         if self.meta.require_compress:
@@ -125,42 +123,22 @@ class StoredProcStorageClient(SnowflakeStorageClient):
 
         self.meta.upload_size = wstream.padded_file_size
 
-    def prepare_download(self) -> None:
-        self.num_of_grpc_chunks = ceil(self.meta.src_file_size / GRPC_CHUNK_SIZE)
-
-    def download(self) -> None:
+    def download_chunk(self, chunk_id: int) -> None:
         import _sfstream
 
         rstream = _sfstream.SfStream(
-            self.meta.src_file_name,
+            self.stage_info["location"] + self.meta.src_file_name,
             file_type=_sfstream.FileType.STAGE,
             mode=_sfstream.Mode.READ,
             rso_id=int(os.environ.get("SNOWFLAKE_RSO_ID", -1)),
         )
         reader = BufferedReader(rstream)
 
-        with open(self.full_dst_file_name, "wb") as sfd:
+        with open(self.intermediate_dst_path, "wb") as sfd:
             # SfStream internally handles chunk reads
             sfd.write(reader.read())
 
         reader.close()
 
-    def finish_download(self) -> None:
-        self.meta.dst_file_size = os.stat(self.full_dst_file_name).st_size
-        self.meta.result_status = ResultStatus.DOWNLOADED
-
-    def delete_client_data(self) -> None:
-        """Deletes the tmp_dir and closes the source stream belonging to this client.
-        This function is idempotent."""
-        # TODO(SNOW-568420): Remove temp dir after os.rmdir is supported
-        # if os.path.exists(self.tmp_dir):
-        #     logger.debug(f"cleaning up tmp dir: {self.tmp_dir}")
-        #     shutil.rmtree(self.tmp_dir)
-        if self.meta.src_stream and not self.meta.src_stream.closed:
-            self.meta.src_stream.close()
-
     def _has_expired_token(self, response: requests.Response) -> bool:
         return False
-
-    def download_chunk(self, chunk_id: int) -> None:
-        pass
