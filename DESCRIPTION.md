@@ -8,8 +8,28 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- TBD
-  - Updated diagnostics to use system$allowlist instead of system$whitelist.
+- v3.7.2(TBD)
+
+  - Improved `externalbrowser` auth in containerized environments
+    - Instruct browser to not fetch `/favicon` on success page
+    - Simple retry strategy on empty socket.recv
+    - Add `SNOWFLAKE_AUTH_SOCKET_REUSE_PORT` flag (usage: `SNOWFLAKE_AUTH_SOCKET_REUSE_PORT=true`) to set the underlying socket's `SO_REUSEPORT` flag (described in the [socket man page](https://man7.org/linux/man-pages/man7/socket.7.html))
+      - Useful when the randomized port used in the localhost callback url is being followed before the container engine completes port forwarding to host
+      - Statically map a port between your host and container and allow that port to be reused in rapid succession with:
+         `SF_AUTH_SOCKET_PORT=3037 SNOWFLAKE_AUTH_SOCKET_REUSE_PORT=true poetry run python somescript.py`
+    - Add `SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT` flag (usage: `SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT=true`) to make a non-blocking socket.recv call and retry on Error
+      - Consider using this if running in a containerized environment and externalbrowser auth frequently hangs while waiting for callback
+      - NOTE: this has not been tested extensively, but has been shown to improve the experience when using WSL
+      - Updated diagnostics to use system$allowlist instead of system$whitelist.
+
+- v3.7.1(February 21, 2024)
+
+  - Bumped pandas dependency from >=1.0.0,<2.2.0 to >=1.0.0,<3.0.0.
+  - Bumped cryptography dependency from <42.0.0,>=3.1.0 to >=3.1.0,<43.0.0.
+  - Bumped pyOpenSSL dependency from >=16.2.0,<24.0.0 to >=16.2.0,<25.0.0.
+  - Fixed a memory leak in decimal data conversion.
+  - Fixed a bug where `write_pandas` wasn't truncating the target table.
+  - Bumped keyring dependency lower bound to 23.1.0 to address security vulnerability.
 
 - v3.7.0(January 25,2024)
 
@@ -56,6 +76,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added the `socket_timeout` argument to `snowflake.connector.connect` specifying socket read and connect timeout.
   - Fixed `login_timeout` and `network_timeout` behaviour. Retries of login and network requests are now properly halted after these timeouts expire.
   - Fixed bug for issue https://github.com/urllib3/urllib3/issues/1878 in vendored `urllib`.
+  - Add User-Agent header for diagnostic report for tracking.
 
 - v3.3.1(October 16,2023)
 

@@ -124,8 +124,10 @@ def DefaultConverterClass() -> type:
 
 def _get_private_bytes_from_file(
     private_key_file: str | bytes | os.PathLike[str] | os.PathLike[bytes],
-    private_key_file_pwd: bytes | None = None,
+    private_key_file_pwd: bytes | str | None = None,
 ) -> bytes:
+    if private_key_file_pwd is not None and isinstance(private_key_file_pwd, str):
+        private_key_file_pwd = private_key_file_pwd.encode("utf-8")
     with open(private_key_file, "rb") as key:
         private_key = serialization.load_pem_private_key(
             key.read(),
@@ -178,7 +180,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), str, RSAPrivateKey)),
     "private_key_file": (None, (type(None), str)),
-    "private_key_file_pwd": (None, (type(None), str)),
+    "private_key_file_pwd": (None, (type(None), str, bytes)),
     "token": (None, (type(None), str)),  # OAuth or JWT Token
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),

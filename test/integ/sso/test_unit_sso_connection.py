@@ -33,7 +33,7 @@ ID_TOKEN = "ID_TOKEN"
 def test_connect_externalbrowser(
     mockSnowflakeRestfulPostRequest, mockAuthByBrowserAuthenticate
 ):
-    """Connects with authentictor=externalbrowser mock."""
+    """Connects with authenticator=externalbrowser mock."""
     os.environ["SF_TEMPORARY_CREDENTIAL_CACHE_DIR"] = os.getenv(
         "WORKSPACE", os.path.expanduser("~")
     )

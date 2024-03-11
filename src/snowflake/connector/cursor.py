@@ -165,71 +165,8 @@ class ResultMetadata(NamedTuple):
         )
 
 
-class ResultMetadataV2Field:
-    """ResultMetadataV2Field represents the type information of one sub-type in a nested type."""
-
-    def __init__(
-        self,
-        type_code: int,
-        is_nullable: bool,
-        internal_size: int | None = None,
-        precision: int | None = None,
-        scale: int | None = None,
-        fields: list[ResultMetadataV2] | None = None,
-    ):
-        self._type_code = type_code
-        self._is_nullable = is_nullable
-        self._internal_size = internal_size
-        self._precision = precision
-        self._scale = scale
-        self._fields = fields
-
-    @classmethod
-    def from_column(cls, col: dict[str, Any]) -> ResultMetadataV2Field:
-        """Initializes a ResultMetadataV2Field object from a child of the column description in the query response."""
-        fields = None
-        if col.get("fields") is not None:
-            fields = [cls.from_column(f) for f in col["fields"]]
-        return cls(
-            FIELD_NAME_TO_ID[
-                col["extTypeName"].upper()
-                if col.get("extTypeName")
-                else col["type"].upper()
-            ],
-            col["nullable"],
-            col["length"],
-            col["precision"],
-            col["scale"],
-            fields,
-        )
-
-    @property
-    def type_code(self) -> int:
-        return self._type_code
-
-    @property
-    def is_nullable(self) -> bool:
-        return self._is_nullable
-
-    @property
-    def internal_size(self) -> int | None:
-        return self._internal_size
-
-    @property
-    def precision(self) -> int | None:
-        return self._precision
-
-    @property
-    def scale(self) -> int | None:
-        return self._scale
-
-    @property
-    def fields(self) -> list[ResultMetadataV2Field] | None:
-        return self._fields
-
-
 class ResultMetadataV2:
-    """ResultMetadataV2Field represents the type information of a single column.
+    """ResultMetadataV2 represents the type information of a single column.
 
     It is a replacement for ResultMetadata that contains additional attributes, currently
     `vector_dimension` and `fields`. This class will be unified with ResultMetadata in the
@@ -272,7 +209,9 @@ class ResultMetadataV2:
 
         fields = None
         if type_code == FIELD_NAME_TO_ID["VECTOR"] and col.get("fields") is not None:
-            fields = [ResultMetadataV2Field.from_column(f) for f in col["fields"]]
+            fields = [
+                ResultMetadataV2.from_column({"name": None, **f}) for f in col["fields"]
+            ]
 
         return cls(
             col["name"],
@@ -360,7 +299,7 @@ class ResultMetadataV2:
         return self._vector_dimension
 
     @property
-    def fields(self) -> list[ResultMetadataV2Field] | None:
+    def fields(self) -> list[ResultMetadataV2] | None:
         return self._fields
 
 

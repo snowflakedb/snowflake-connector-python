@@ -389,7 +389,7 @@ def write_pandas(
         target_table_location = build_location_helper(
             database,
             schema,
-            random_string() if overwrite else table_name,
+            random_string() if (overwrite and auto_create_table) else table_name,
             quote_identifiers,
         )
 
@@ -417,6 +417,11 @@ def write_pandas(
         )
 
     try:
+        if overwrite and (not auto_create_table):
+            truncate_sql = f"TRUNCATE TABLE {target_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
+            logger.debug(f"truncating table with '{truncate_sql}'")
+            cursor.execute(truncate_sql, _is_internal=True)
+
         copy_into_sql = (
             f"COPY INTO {target_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
             f"({columns}) "
@@ -432,7 +437,7 @@ def write_pandas(
         logger.debug(f"copying into with '{copy_into_sql}'")
         copy_results = cursor.execute(copy_into_sql, _is_internal=True).fetchall()
 
-        if overwrite:
+        if overwrite and auto_create_table:
             original_table_location = build_location_helper(
                 database=database,
                 schema=schema,
@@ -444,7 +449,8 @@ def write_pandas(
             logger.debug(f"rename table with '{rename_table_sql}'")
             cursor.execute(rename_table_sql, _is_internal=True)
     except ProgrammingError:
-        if overwrite:
+        if overwrite and auto_create_table:
+            # drop table only if we created a new one with a random name
             drop_object(target_table_location, "table")
         raise
     finally:
