@@ -660,6 +660,17 @@ class SnowflakeConnection:
 
     @property
     def connection_diag_whitelist_path(self):
+        """
+        Old version of ``connection_diag_allowlist_path``.
+        This used to be the original name, but snowflake backend
+        deprecated whitelist for allowlist. This name will be
+        deprecated in the future.
+        """
+        warnings.warn(
+            "connection_diag_whitelist_path has been deprecated, use connection_diag_allowlist_path instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self._connection_diag_whitelist_path
 
     @property
