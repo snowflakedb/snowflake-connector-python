@@ -43,7 +43,7 @@ def _decode_dict(d: dict[str, dict[str, Any]]):
     return result
 
 
-def _is_list_of_json_objects(allowlist: str | List[Dict[str, Any]]):
+def _is_list_of_json_objects(allowlist: List[Dict[str, Any]]):
     if isinstance(allowlist, list) and all(
         isinstance(item, dict) for item in allowlist
     ):
