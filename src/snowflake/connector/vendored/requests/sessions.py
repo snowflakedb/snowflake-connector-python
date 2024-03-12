@@ -566,57 +566,61 @@ class Session(SessionRedirectMixin):
         """
         import json as json_lib
 
-        if headers.get("Content-Encoding") == "gzip":
-            decoded_data_obj = json_lib.loads(gzip.decompress(data).decode())
-        elif "Content-Encoding" not in headers:
-            decoded_data_obj = json_lib.loads(data.decode())
+        decoded_data_obj = None
+        if data:
+            if headers.get("Content-Encoding") == "gzip":
+                decoded_data_obj = json_lib.loads(gzip.decompress(data).decode())
+            elif "Content-Encoding" not in headers:
+                decoded_data_obj = json_lib.loads(data.decode())
+            else:
+                raise Exception("Cannot decode data")
+
+        parsed_url = urlparse(url)
+        if parsed_url.path == "/queries/v1/query-request":
+            import _snowflake
+            ret = _snowflake.execute_sql(
+                decoded_data_obj["sqlText"],
+                False,
+                "",  # TODO: statement parameters
+                None,  # TODO: binding variables
+                decoded_data_obj["asyncExec"]
+            )
         else:
-            raise Exception()
+            # Create the Request.
+            req = Request(
+                method=method.upper(),
+                url=url,
+                headers=headers,
+                files=files,
+                data=data or {},
+                json=json,
+                params=params or {},
+                auth=auth,
+                cookies=cookies,
+                hooks=hooks,
+            )
+            prep = self.prepare_request(req)
 
-        import _snowflake
+            proxies = proxies or {}
 
-        ret = _snowflake.execute_sql(
-            decoded_data_obj["sqlText"],
-            False,
-            "",  # TODO: statement parameters
-            None,  # TODO: binding variables
-            decoded_data_obj["asyncExec"]
-        )
+            settings = self.merge_environment_settings(
+                prep.url, proxies, stream, verify, cert
+            )
+
+            # Send the request.
+            send_kwargs = {
+                "timeout": timeout,
+                "allow_redirects": allow_redirects,
+            }
+            send_kwargs.update(settings)
+            resp = self.send(prep, **send_kwargs)
+
+            return resp
+
         resp = Response()
         resp.status_code = http.HTTPStatus.OK
         resp._content = ret
         resp.raw = urllib3.HTTPResponse()
-        return resp
-
-        # Create the Request.
-        req = Request(
-            method=method.upper(),
-            url=url,
-            headers=headers,
-            files=files,
-            data=data or {},
-            json=json,
-            params=params or {},
-            auth=auth,
-            cookies=cookies,
-            hooks=hooks,
-        )
-        prep = self.prepare_request(req)
-
-        proxies = proxies or {}
-
-        settings = self.merge_environment_settings(
-            prep.url, proxies, stream, verify, cert
-        )
-
-        # Send the request.
-        send_kwargs = {
-            "timeout": timeout,
-            "allow_redirects": allow_redirects,
-        }
-        send_kwargs.update(settings)
-        resp = self.send(prep, **send_kwargs)
-
         return resp
 
     def get(self, url, **kwargs):

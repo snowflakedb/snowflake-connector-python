@@ -33,7 +33,7 @@ from .vendored import requests
 
 logger = getLogger(__name__)
 
-MAX_DOWNLOAD_RETRY = 10
+MAX_DOWNLOAD_RETRY = 1
 DOWNLOAD_TIMEOUT = 7  # seconds
 
 if TYPE_CHECKING:  # pragma: no cover
