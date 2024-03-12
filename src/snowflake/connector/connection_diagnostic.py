@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, AnyStr
 from urllib.request import getproxies
 
+import certifi
 import OpenSSL
 
 from .compat import IS_WINDOWS, urlparse
@@ -224,10 +225,7 @@ class ConnectionDiagnostic:
                     conn.recv(4096).decode("utf-8")
 
                 context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-                # For some reason SSL checks fail now
-                # the test does not care if cert is valid
-                context.check_hostname = False
-                context.verify_mode = ssl.CERT_NONE
+                context.load_verify_locations(certifi.where())
                 sock = context.wrap_socket(conn, server_hostname=host)
                 certificate = ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
                 http_request = f"""GET / {host}:{port} HTTP/1.1\r\n
