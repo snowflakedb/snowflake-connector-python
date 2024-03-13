@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, AnyStr
 from urllib.request import getproxies
 
+import certifi
 import OpenSSL
 
 from .compat import IS_WINDOWS, urlparse
@@ -30,8 +31,8 @@ if IS_WINDOWS:
     import winreg
 
 
-def _decode_dict(d):
-    result = {}
+def _decode_dict(d: dict[str, dict[str, Any]]):
+    result: dict[str, dict[str, Any]] = {}
     for key, value in d.items():
         if isinstance(key, bytes):
             key = key.decode()
@@ -41,6 +42,18 @@ def _decode_dict(d):
             value = _decode_dict(value)
         result.update({key: value})
     return result
+
+
+def _is_list_of_json_objects(allowlist: List[Dict[str, Any]]):
+    if isinstance(allowlist, list) and all(
+        isinstance(item, dict) for item in allowlist
+    ):
+        try:
+            json.dumps(allowlist)
+            return True
+        except TypeError:
+            return False
+    return False
 
 
 class ConnectionDiagnostic:
@@ -54,7 +67,7 @@ class ConnectionDiagnostic:
         account: str,
         host: str,
         connection_diag_log_path: str | None = None,
-        connection_diag_whitelist_path: str | None = None,
+        connection_diag_allowlist_path: str | None = None,
         proxy_host: str | None = None,
         proxy_port: str | None = None,
         proxy_user: str | None = None,
@@ -117,9 +130,9 @@ class ConnectionDiagnostic:
             if connection_diag_log_path is not None
             else None
         )
-        self.full_connection_diag_whitelist_path: Path | None = (
-            Path(connection_diag_whitelist_path)
-            if connection_diag_whitelist_path is not None
+        self.full_connection_diag_allowlist_path: Path | None = (
+            Path(connection_diag_allowlist_path)
+            if connection_diag_allowlist_path is not None
             else None
         )
         self.tmpdir: str = tempfile.gettempdir()
@@ -142,35 +155,35 @@ class ConnectionDiagnostic:
         )
         logger.info(f"Reporting to file {self.report_file}")
 
-        if self.full_connection_diag_whitelist_path is not None:
-            if not self.full_connection_diag_whitelist_path.is_absolute():
+        if self.full_connection_diag_allowlist_path is not None:
+            if not self.full_connection_diag_allowlist_path.is_absolute():
                 logger.warning(
-                    f"Path '{self.full_connection_diag_whitelist_path}' for connection test whitelist is not absolute."
+                    f"Path '{self.full_connection_diag_allowlist_path}' for connection test allowlist is not absolute."
                 )
                 logger.warning(
-                    "Will connect to Snowflake for whitelist json instead.  If you did not provide a valid "
+                    "Will connect to Snowflake for allowlist json instead.  If you did not provide a valid "
                     "password, please make sure to update and run again."
                 )
-                self.full_connection_diag_whitelist_path = None
-            elif not self.full_connection_diag_whitelist_path.exists():
+                self.full_connection_diag_allowlist_path = None
+            elif not self.full_connection_diag_allowlist_path.exists():
                 logger.warning(
-                    f"File '{self.full_connection_diag_whitelist_path}' for connection test whitelist does not exist."
+                    f"File '{self.full_connection_diag_allowlist_path}' for connection test allowlist does not exist."
                 )
                 logger.warning(
-                    "Will connect to Snowflake for whitelist json instead.  If you did not provide a valid "
+                    "Will connect to Snowflake for allowlist json instead.  If you did not provide a valid "
                     "password, please make sure to update and run again."
                 )
-                self.full_connection_diag_whitelist_path = None
+                self.full_connection_diag_allowlist_path = None
 
-        self.whitelist_sql: str = "select /* snowflake-connector-python:connection_diagnostics */ system$whitelist();"
+        self.allowlist_sql: str = "select /* snowflake-connector-python:connection_diagnostics */ system$allowlist();"
 
         if self.__is_privatelink():
             self.ocsp_urls.append(f"ocsp.{self.host}")
-            self.whitelist_sql = "select system$whitelist_privatelink();"
+            self.allowlist_sql = "select system$allowlist_privatelink();"
         else:
             self.ocsp_urls.append("ocsp.snowflakecomputing.com")
 
-        self.whitelist_retrieval_success: bool = False
+        self.allowlist_retrieval_success: bool = False
         self.cursor: SnowflakeCursor | None = None
 
     def __parse_proxy(self, proxy_url: str) -> tuple[str, str, str, str]:
@@ -212,6 +225,7 @@ class ConnectionDiagnostic:
                     conn.recv(4096).decode("utf-8")
 
                 context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                context.load_verify_locations(certifi.where())
                 sock = context.wrap_socket(conn, server_hostname=host)
                 certificate = ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
                 http_request = f"""GET / {host}:{port} HTTP/1.1\r\n
@@ -271,37 +285,52 @@ class ConnectionDiagnostic:
         return "SUCCESS"
 
     def run_post_test(self) -> None:
-        results: list[str] = []
-        if self.full_connection_diag_whitelist_path is None:
+        results: list[str] = None
+        if self.full_connection_diag_allowlist_path is None:
             if self.cursor is not None:
                 try:
                     results = self.cursor.execute(
-                        self.whitelist_sql, _is_internal=True
+                        self.allowlist_sql, _is_internal=True
                     ).fetchall()[0][0]
                     results = json.loads(str(results))
-                    self.whitelist_retrieval_success = True
+                    self.allowlist_retrieval_success = True
                 except Exception as e:
-                    logger.warning(f"Unable to do whitelist checks: exception: {e}")
+                    logger.warning(f"Unable to do allowlist checks: exception: {e}")
         else:
-            results_file = open(self.full_connection_diag_whitelist_path)
-            results = json.load(results_file)
-            self.whitelist_retrieval_success = True
+            results_file = open(self.full_connection_diag_allowlist_path)
+            try:
+                results = json.load(results_file)
+                self.allowlist_retrieval_success = True
+            except Exception as e:
+                self.__append_message(
+                    "INITIAL",
+                    f"Allowlist was not valid json: '{e}'.  Please run 'select system$allowlist();' and validate the file {self.full_connection_diag_allowlist_path} is correct.",
+                )
+                pass
 
-        for result in results:
-            host_type = result["type"]
-            host = result["host"]
-            host_port = result["port"]
+        if _is_list_of_json_objects(results):
+            for result in results:
+                host_type = result["type"]
+                host = result["host"]
+                host_port = result["port"]
 
-            if host_type in ("OCSP_RESPONDER"):
-                if host not in self.ocsp_urls:
-                    self.__test_socket_get_cert(
-                        host, port=host_port, host_type=host_type
-                    )
-            elif host_type in ("STAGE", "OUT_OF_BAND_TELEMETRY"):
-                try:
-                    self.__https_host_report(host, port=host_port, host_type=host_type)
-                except Exception:
-                    pass
+                if host_type in ("OCSP_RESPONDER"):
+                    if host not in self.ocsp_urls:
+                        self.__test_socket_get_cert(
+                            host, port=host_port, host_type=host_type
+                        )
+                elif host_type in ("STAGE", "OUT_OF_BAND_TELEMETRY"):
+                    try:
+                        self.__https_host_report(
+                            host, port=host_port, host_type=host_type
+                        )
+                    except Exception:
+                        pass
+        else:
+            self.__append_message(
+                "INITIAL",
+                "Allowlist is not a valid list of json objects. Please run 'select system$allowlist();' and provide as a json file using the connection_diag_allowlist_path option.",
+            )
 
     def __is_privatelink(self) -> bool:
         return "privatelink" in self.host
@@ -501,23 +530,25 @@ class ConnectionDiagnostic:
         )
 
         check_pattern = f"(^{'|^'.join(cert_authorities)})"
-        issuer = self.__get_issuer_string(self.cert_info[self.host]["issuer"])
-        if not re.search(check_pattern, issuer):
-            self.__append_message(
-                host_type,
-                f"There is likely a proxy because the issuer for {self.host} is "
-                f"not correct. Got {issuer} and expected one of {cert_authorities}",
-            )
+        if self.host in self.cert_info.keys():
+            issuer = self.__get_issuer_string(self.cert_info[self.host]["issuer"])
+            if not re.search(check_pattern, issuer):
+                self.__append_message(
+                    host_type,
+                    f"There is likely a proxy because the issuer for {self.host} is "
+                    f"not correct. Got {issuer} and expected one of {cert_authorities}",
+                )
 
         test_host = "www.google.com"
         self.__https_host_report(test_host, port=443, host_type="IGNORE")
-        issuer = self.__get_issuer_string(self.cert_info[test_host]["issuer"])
-        if not re.search(check_pattern, issuer):
-            self.__append_message(
-                host_type,
-                f"There is likely a proxy because the issuer for {test_host} is "
-                f"not correct. Got {issuer} and expected one of {cert_authorities}",
-            )
+        if test_host in self.cert_info.keys():
+            issuer = self.__get_issuer_string(self.cert_info[test_host]["issuer"])
+            if not re.search(check_pattern, issuer):
+                self.__append_message(
+                    host_type,
+                    f"There is likely a proxy because the issuer for {test_host} is "
+                    f"not correct. Got {issuer} and expected one of {cert_authorities}",
+                )
 
         # Get Windows proxy info from Registry just in case:
         if IS_WINDOWS:
@@ -595,19 +626,19 @@ class ConnectionDiagnostic:
             f"{snowflake_url_joined_results}\n"
         )
 
-        if self.whitelist_retrieval_success:
+        if self.allowlist_retrieval_success:
             snowflake_stage_joined_results = "\n".join(self.test_results["STAGE"])
             message = (
                 f"{message}\n"
                 "=========Snowflake Stage information===================================\n"
-                "We retrieved stage info from the whitelist\n"
+                "We retrieved stage info from the allowlist\n"
                 f"{snowflake_stage_joined_results}\n"
             )
         else:
             message = (
                 f"{message}\n"
                 "=========Snowflake Stage information - Unavailable=====================\n"
-                "We could not connect to Snowflake to get whitelist, so we do not have stage\n"
+                "We could not connect to Snowflake to get allowlist, so we do not have stage\n"
                 f"diagnostic info\n"
             )
 
@@ -616,21 +647,21 @@ class ConnectionDiagnostic:
             "=========Snowflake OCSP information===================================="
         )
         snowflake_ocsp_joined_results = "\n".join(self.test_results["OCSP_RESPONDER"])
-        if self.whitelist_retrieval_success:
+        if self.allowlist_retrieval_success:
             message = (
                 f"{message}\n"
-                "We were able to retrieve system whitelist.\n"
-                "These OCSP hosts came from the certificate and the whitelist."
+                "We were able to retrieve system allowlist.\n"
+                "These OCSP hosts came from the certificate and the allowlist."
             )
         else:
             message = (
                 f"{message}\n"
-                "We were unable to retrieve system whitelist.\n"
+                "We were unable to retrieve system allowlist.\n"
                 "These OCSP hosts only came from the certificate."
             )
         message = f"{message}\n" f"{snowflake_ocsp_joined_results}\n"
 
-        if self.whitelist_retrieval_success:
+        if self.allowlist_retrieval_success:
             snowflake_telemetry_joined_results = "\n".join(
                 self.test_results["OUT_OF_BAND_TELEMETRY"]
             )
