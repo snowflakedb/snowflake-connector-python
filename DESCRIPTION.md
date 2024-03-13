@@ -21,7 +21,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
       - Consider using this if running in a containerized environment and externalbrowser auth frequently hangs while waiting for callback
       - NOTE: this has not been tested extensively, but has been shown to improve the experience when using WSL
   - Bumped platformdirs from >=2.6.0,<4.0.0 to >=2.6.0,<5.0.0
-      - Updated diagnostics to use system$allowlist instead of system$whitelist.
+  - Updated diagnostics to use system$allowlist instead of system$whitelist.
 
 - v3.7.1(February 21, 2024)
 
