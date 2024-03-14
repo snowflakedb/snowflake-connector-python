@@ -441,6 +441,7 @@ class SnowflakeConnection:
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
+        # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
     @property
