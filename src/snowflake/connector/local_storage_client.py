@@ -33,9 +33,14 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
             stage_info["location"], os.path.basename(meta.dst_file_name)
         )
         if meta.local_location:
-            self.stage_file_name = self.full_dst_file_name
+            src_file_name = self.data_file
+            if src_file_name.startswith("/"):
+                src_file_name = src_file_name[1:]
+            self.stage_file_name: str = os.path.join(
+                stage_info["location"], src_file_name
+            )
             self.full_dst_file_name = os.path.join(
-                meta.local_location, meta.dst_file_name
+                meta.local_location, os.path.basename(meta.dst_file_name)
             )
 
     def get_file_header(self, filename: str) -> FileHeader | None:
@@ -64,7 +69,7 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
                     tfd.write(sfd.read(self.chunk_size))
 
     def finish_download(self) -> None:
-        shutil.copyfile(self.intermediate_dst_path, self.full_dst_file_name)
+        shutil.move(self.intermediate_dst_path, self.full_dst_file_name)
         self.meta.dst_file_size = os.stat(self.full_dst_file_name).st_size
         self.meta.result_status = ResultStatus.DOWNLOADED
 
