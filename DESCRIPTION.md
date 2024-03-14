@@ -22,8 +22,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
       - NOTE: this has not been tested extensively, but has been shown to improve the experience when using WSL
   - Bumped platformdirs from >=2.6.0,<4.0.0 to >=2.6.0,<5.0.0
   - Updated diagnostics to use system$allowlist instead of system$whitelist.
-  - Updated diagnostics to use system$allowlist instead of system$whitelist.
-  - Update `write_pandas` to skip TABLE IF NOT EXISTS in truncate mode
+  - Update `write_pandas` to skip TABLE IF NOT EXISTS in truncate mode.
+  - Improved cleanup logic for connection to rely on interpreter shutdown instead of the `__del__` method.
 
 - v3.7.1(February 21, 2024)
 
