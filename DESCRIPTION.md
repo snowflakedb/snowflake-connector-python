@@ -21,6 +21,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
       - Consider using this if running in a containerized environment and externalbrowser auth frequently hangs while waiting for callback
       - NOTE: this has not been tested extensively, but has been shown to improve the experience when using WSL
   - Added support for parsing structured type information in schema queries.
+  - Bumped platformdirs from >=2.6.0,<4.0.0 to >=2.6.0,<5.0.0
+  - Updated diagnostics to use system$allowlist instead of system$whitelist.
+  - Update `write_pandas` to skip TABLE IF NOT EXISTS in truncate mode.
+  - Improved cleanup logic for connection to rely on interpreter shutdown instead of the `__del__` method.
 
 - v3.7.1(February 21, 2024)
 
@@ -76,6 +80,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added the `socket_timeout` argument to `snowflake.connector.connect` specifying socket read and connect timeout.
   - Fixed `login_timeout` and `network_timeout` behaviour. Retries of login and network requests are now properly halted after these timeouts expire.
   - Fixed bug for issue https://github.com/urllib3/urllib3/issues/1878 in vendored `urllib`.
+  - Add User-Agent header for diagnostic report for tracking.
 
 - v3.3.1(October 16,2023)
 

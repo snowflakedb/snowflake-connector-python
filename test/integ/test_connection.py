@@ -1342,3 +1342,11 @@ def test_ocsp_mode_insecure(conn_cnx, is_public_test, caplog):
             assert "snowflake.connector.ocsp_snowflake" in caplog.text
         else:
             assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_connection_atexit_close(conn_cnx):
+    """Basic Connection test without schema."""
+    with conn_cnx() as conn:
+        conn._close_at_exit()
+        assert conn.is_closed()

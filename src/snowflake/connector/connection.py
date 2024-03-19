@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import pathlib
@@ -16,6 +17,7 @@ import warnings
 import weakref
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
+from contextlib import suppress
 from difflib import get_close_matches
 from functools import partial
 from io import StringIO
@@ -124,8 +126,10 @@ def DefaultConverterClass() -> type:
 
 def _get_private_bytes_from_file(
     private_key_file: str | bytes | os.PathLike[str] | os.PathLike[bytes],
-    private_key_file_pwd: bytes | None = None,
+    private_key_file_pwd: bytes | str | None = None,
 ) -> bytes:
+    if private_key_file_pwd is not None and isinstance(private_key_file_pwd, str):
+        private_key_file_pwd = private_key_file_pwd.encode("utf-8")
     with open(private_key_file, "rb") as key:
         private_key = serialization.load_pem_private_key(
             key.read(),
@@ -178,7 +182,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), str, RSAPrivateKey)),
     "private_key_file": (None, (type(None), str)),
-    "private_key_file_pwd": (None, (type(None), str)),
+    "private_key_file_pwd": (None, (type(None), str, bytes)),
     "token": (None, (type(None), str)),  # OAuth or JWT Token
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
@@ -235,7 +239,11 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "connection_diag_whitelist_path": (
         None,
         (type(None), str),
-    ),  # Path to connection diag whitelist json
+    ),  # Path to connection diag whitelist json - Deprecated remove in future
+    "connection_diag_allowlist_path": (
+        None,
+        (type(None), str),
+    ),  # Path to connection diag allowlist json
     "log_imported_packages_in_telemetry": (
         True,
         bool,
@@ -343,7 +351,8 @@ class SnowflakeConnection:
         enable_stage_s3_privatelink_for_us_east_1: when true, clients use regional s3 url to upload files.
         enable_connection_diag: when true, clients will generate a connectivity diagnostic report.
         connection_diag_log_path: path to location to create diag report with enable_connection_diag.
-        connection_diag_whitelist_path: path to a whitelist.json file to test with enable_connection_diag.
+        connection_diag_whitelist_path: path to a whitelist.json file to test with enable_connection_diag - deprecated remove in future
+        connection_diag_allowlist_path: path to a allowlist.json file to test with enable_connection_diag.
         json_result_force_utf8_decoding: When true, json result will be decoded in utf-8,
           when false, the encoding of the content is auto-detected. Default value is false.
           This parameter is only effective when the result format is JSON.
@@ -432,12 +441,8 @@ class SnowflakeConnection:
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
-
-    def __del__(self) -> None:  # pragma: no cover
-        try:
-            self.close(retry=False)
-        except Exception:
-            pass
+        # check SNOW-1218851 for long term improvement plan to refactor ocsp code
+        atexit.register(self._close_at_exit)
 
     @property
     def insecure_mode(self) -> bool:
@@ -655,7 +660,22 @@ class SnowflakeConnection:
 
     @property
     def connection_diag_whitelist_path(self):
+        """
+        Old version of ``connection_diag_allowlist_path``.
+        This used to be the original name, but snowflake backend
+        deprecated whitelist for allowlist. This name will be
+        deprecated in the future.
+        """
+        warnings.warn(
+            "connection_diag_whitelist_path has been deprecated, use connection_diag_allowlist_path instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         return self._connection_diag_whitelist_path
+
+    @property
+    def connection_diag_allowlist_path(self):
+        return self._connection_diag_allowlist_path
 
     @arrow_number_to_decimal.setter
     def arrow_number_to_decimal_setter(self, value: bool) -> None:
@@ -689,7 +709,9 @@ class SnowflakeConnection:
                 account=self.account,
                 host=self.host,
                 connection_diag_log_path=self.connection_diag_log_path,
-                connection_diag_whitelist_path=self.connection_diag_whitelist_path,
+                connection_diag_allowlist_path=self.connection_diag_allowlist_path
+                if self.connection_diag_allowlist_path is not None
+                else self.connection_diag_whitelist_path,
                 proxy_host=self.proxy_host,
                 proxy_port=self.proxy_port,
                 proxy_user=self.proxy_user,
@@ -720,6 +742,8 @@ class SnowflakeConnection:
 
     def close(self, retry: bool = True) -> None:
         """Closes the connection."""
+        # unregister to dereference connection object as it's already closed after the execution
+        atexit.unregister(self._close_at_exit)
         try:
             if not self.rest:
                 logger.debug("Rest object has been destroyed, cannot close session")
@@ -1746,6 +1770,10 @@ class SnowflakeConnection:
                 sf_qid, None
             )  # Prevent KeyError when multiple threads try to remove the same query id
             self._done_async_sfqids[sf_qid] = None
+
+    def _close_at_exit(self):
+        with suppress(Exception):
+            self.close(retry=False)
 
     def get_query_status(self, sf_qid: str) -> QueryStatus:
         """Retrieves the status of query with sf_qid.
