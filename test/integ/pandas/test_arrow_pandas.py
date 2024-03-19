@@ -1202,6 +1202,93 @@ def test_batch_to_pandas_arrow(conn_cnx, result_format):
                 assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
 
 
+@pytest.mark.internal
+@pytest.mark.parametrize("enable_structured_types", [True, False])
+def test_to_arrow_datatypes(enable_structured_types, conn_cnx):
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(SQL_ENABLE_ARROW)
+
+            expected_types = (
+                pyarrow.int64(),
+                pyarrow.float64(),
+                pyarrow.string(),
+                pyarrow.date64(),
+                pyarrow.timestamp("ns"),
+                pyarrow.string(),
+                pyarrow.timestamp("ns"),
+                pyarrow.timestamp("ns"),
+                pyarrow.timestamp("ns"),
+                pyarrow.binary(),
+                pyarrow.time64("ns"),
+                pyarrow.bool_(),
+                pyarrow.string(),
+                pyarrow.string(),
+                pyarrow.list_(pyarrow.float64(), 5),
+            )
+
+            if enable_structured_types:
+                structured_params = {
+                    "ENABLE_STRUCTURED_TYPES_IN_CLIENT_RESPONSE",
+                    "IGNORE_CLIENT_VESRION_IN_STRUCTURED_TYPES_RESPONSE",
+                    "FORCE_ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT",
+                }
+                try:
+                    for param in structured_params:
+                        cur.execute(f"alter session set {param}=true")
+                    expected_types += (
+                        pyarrow.map_(pyarrow.string(), pyarrow.int64()),
+                        pyarrow.struct(
+                            {"city": pyarrow.string(), "population": pyarrow.float64()}
+                        ),
+                        pyarrow.list_(pyarrow.float64()),
+                    )
+                finally:
+                    cur.execute(f"alter session unset {param}")
+            else:
+                expected_types += (
+                    pyarrow.string(),
+                    pyarrow.string(),
+                    pyarrow.string(),
+                )
+
+            # Ensure an empty batch to use default typing
+            # Otherwise arrow will resize types to save space
+            cur.execute(
+                """
+            select
+            1 :: INTEGER as FIXED_type,
+            2.0 :: FLOAT as REAL_type,
+            'test' :: TEXT as TEXT_type,
+            '2024-02-28' :: DATE as DATE_type,
+            '2020-03-12 01:02:03.123456789' :: TIMESTAMP as TIMESTAMP_type,
+            '{"foo": "bar"}' :: VARIANT as VARIANT_type,
+            '2020-03-12 01:02:03.123456789' :: TIMESTAMP_LTZ as TIMESTAMP_LTZ_type,
+            '2020-03-12 01:02:03.123456789' :: TIMESTAMP_TZ as TIMESTAMP_TZ_type,
+            '2020-03-12 01:02:03.123456789' :: TIMESTAMP_NTZ as TIMESTAMP_NTZ_type,
+            '0xAAAA' :: BINARY as BINARY_type,
+            '01:02:03.123456789' :: TIME as TIME_type,
+            true :: BOOLEAN as BOOLEAN_type,
+            TO_GEOGRAPHY('LINESTRING(13.4814 52.5015, -121.8212 36.8252)') as GEOGRAPHY_type,
+            TO_GEOMETRY('LINESTRING(13.4814 52.5015, -121.8212 36.8252)') as GEOMETRY_type,
+            [1,2,3,4,5] :: vector(float, 5) as VECTOR_type,
+            object_construct('k1', 1, 'k2', 2, 'k3', 3, 'k4', 4, 'k5', 5) :: map(varchar, int) as MAP_type,
+            object_construct('city', 'san jose', 'population', 0.05) :: object(city varchar, population float) as OBJECT_type,
+            [1.0, 3.1, 4.5] :: array(float) as ARRAY_type
+            WHERE 1=0
+            """
+            )
+
+            batches = cur.get_result_batches()
+            assert len(batches) == 1
+            batch = batches[0]
+            arrow_table = batch.to_arrow()
+            for actual, expected in zip(arrow_table.schema, expected_types):
+                assert (
+                    actual.type == expected
+                ), f"Expected {actual.name} :: {actual.type} column to be of type {expected}"
+
+
 def test_simple_arrow_fetch(conn_cnx):
     rowcount = 250_000
     with conn_cnx() as cnx:

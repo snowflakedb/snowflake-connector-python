@@ -44,38 +44,75 @@ class FieldType(NamedTuple):
 
 
 def vector_pa_type(metadata: ResultMetadataV2) -> DataType:
-    """Generate the Arrow type represented by the given vector column metadata.
-
+    """
+    Generate the Arrow type represented by the given vector column metadata.
     Vectors are represented as Arrow fixed-size lists.
     """
+    assert (
+        metadata.fields is not None and len(metadata.fields) == 1
+    ), "Invalid result metadata for vector type: expected a single field to be defined"
+    assert (
+        metadata.vector_dimension or 0
+    ) > 0, "Invalid result metadata for vector type: expected a positive dimension"
 
+    field_type = FIELD_TYPES[metadata.fields[0].type_code]
+    return pa.list_(field_type.pa_type(metadata.fields[0]), metadata.vector_dimension)
+
+
+def array_pa_type(metadata: ResultMetadataV2) -> DataType:
+    """
+    Generate the Arrow type represented by the given array column metadata.
+    """
+    # If fields is missing then structured types are not enabled.
+    # Fallback to json encoded string
     if metadata.fields is None:
-        raise ValueError(
-            "Invalid result metadata for vector type: expected sub-field metadata"
-        )
-    if len(metadata.fields) != 1:
-        raise ValueError(
-            "Invalid result metadata for vector type: expected a single sub-field metadata"
-        )
-    field_type = FIELD_ID_TO_NAME[metadata.fields[0].type_code]
+        return pa.string()
 
-    if metadata.vector_dimension is None:
-        raise ValueError(
-            "Invalid result metadata for vector type: expected a dimension"
-        )
-    elif metadata.vector_dimension <= 0:
-        raise ValueError(
-            "Invalid result metadata for vector type: expected a positive dimension"
-        )
+    assert (
+        len(metadata.fields) == 1
+    ), "Invalid result metadata for array type: expected a single field to be defined"
 
-    if field_type == "FIXED":
-        return pa.list_(pa.int32(), metadata.vector_dimension)
-    elif field_type == "REAL":
-        return pa.list_(pa.float32(), metadata.vector_dimension)
-    else:
-        raise ValueError(
-            f"Invalid result metadata for vector type: invalid element type: {field_type}"
-        )
+    field_type = FIELD_TYPES[metadata.fields[0].type_code]
+    return pa.list_(field_type.pa_type(metadata.fields[0]))
+
+
+def map_pa_type(metadata: ResultMetadataV2) -> DataType:
+    """
+    Generate the Arrow type represented by the given map column metadata.
+    """
+    # If fields is missing then structured types are not enabled.
+    # Fallback to json encoded string
+    if metadata.fields is None:
+        return pa.string()
+
+    assert (
+        len(metadata.fields or []) == 2
+    ), "Invalid result metadata for map type: expected a field for key and a field for value"
+    key_type = FIELD_TYPES[metadata.fields[0].type_code]
+    value_type = FIELD_TYPES[metadata.fields[1].type_code]
+    return pa.map_(
+        key_type.pa_type(metadata.fields[0]), value_type.pa_type(metadata.fields[1])
+    )
+
+
+def struct_pa_type(metadata: ResultMetadataV2) -> DataType:
+    """
+    Generate the Arrow type represented by the given struct column metadata.
+    """
+    # If fields is missing then structured types are not enabled.
+    # Fallback to json encoded string
+    if metadata.fields is None:
+        return pa.string()
+
+    assert all(
+        field.name is not None for field in metadata.fields
+    ), "All fields of a stuct type must have a name."
+    return pa.struct(
+        {
+            field.name: FIELD_TYPES[field.type_code].pa_type(field)
+            for field in metadata.fields
+        }
+    )
 
 
 # This type mapping holds column type definitions.
@@ -121,12 +158,8 @@ FIELD_TYPES: tuple[FieldType, ...] = (
         dbapi_type=[DBAPI_TYPE_TIMESTAMP],
         pa_type=lambda _: pa.timestamp("ns"),
     ),
-    FieldType(
-        name="OBJECT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda _: pa.string()
-    ),
-    FieldType(
-        name="ARRAY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda _: pa.string()
-    ),
+    FieldType(name="OBJECT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=struct_pa_type),
+    FieldType(name="ARRAY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=array_pa_type),
     FieldType(
         name="BINARY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda _: pa.binary()
     ),
@@ -143,6 +176,7 @@ FIELD_TYPES: tuple[FieldType, ...] = (
         name="GEOMETRY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()
     ),
     FieldType(name="VECTOR", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=vector_pa_type),
+    FieldType(name="MAP", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=map_pa_type),
 )
 
 FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
