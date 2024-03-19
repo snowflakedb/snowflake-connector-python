@@ -974,8 +974,7 @@ class SnowflakeCursor:
                 )
             query = query1
 
-        if logger.getEffectiveLevel() <= logging.INFO:
-            logger.info("query: [%s]", self._format_query_for_log(query))
+        logger.debug("query: [%s]", self._format_query_for_log(query))
         ret = self._execute_helper(query, **kwargs)
         self._sfqid = (
             ret["data"]["queryId"]

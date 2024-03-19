@@ -23,8 +23,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added support for parsing structured type information in schema queries.
   - Bumped platformdirs from >=2.6.0,<4.0.0 to >=2.6.0,<5.0.0
   - Updated diagnostics to use system$allowlist instead of system$whitelist.
-  - Update `write_pandas` to skip TABLE IF NOT EXISTS in truncate mode.
+  - Updated `write_pandas` to skip TABLE IF NOT EXISTS in truncate mode.
   - Improved cleanup logic for connection to rely on interpreter shutdown instead of the `__del__` method.
+  - Updated the logging level from INFO to DEBUG when logging the executed query using `SnowflakeCursor.execute`.
 
 - v3.7.1(February 21, 2024)
 
