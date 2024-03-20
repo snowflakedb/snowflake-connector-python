@@ -968,7 +968,7 @@ class SnowflakeCursor:
         if m:
             query1 = f"describe table {m.group(1)}"
             if logger.getEffectiveLevel() <= logging.WARNING:
-                logger.info(
+                logger.debug(
                     "query was rewritten: org=%s, new=%s",
                     " ".join(line.strip() for line in query.split("\n")),
                     query1,
@@ -987,7 +987,7 @@ class SnowflakeCursor:
             if "data" in ret and "sqlState" in ret["data"]
             else None
         )
-        logger.info("query execution done")
+        logger.debug("query execution done")
 
         self._first_chunk_time = get_time_millis()
 
