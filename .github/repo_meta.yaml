@@ -3,4 +3,4 @@ production: true
 code_owners_file_present: true
 release_branches:
   - main
-jira_area: Snowpark: Application Development Ecosystem
+jira_area: Snowpark: Clients and Libraries
