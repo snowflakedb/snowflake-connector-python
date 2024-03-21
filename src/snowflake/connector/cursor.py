@@ -922,6 +922,7 @@ class SnowflakeCursor:
         if not command:
             logger.warning("execute: no query is given to execute")
             return None
+        logger.debug("query: [%s]", self._format_query_for_log(command))
 
         _statement_params = _statement_params or dict()
         # If we need to add another parameter, please consider introducing a dict for all extra params
@@ -966,16 +967,13 @@ class SnowflakeCursor:
         m = DESC_TABLE_RE.match(query)
         if m:
             query1 = f"describe table {m.group(1)}"
-            if logger.getEffectiveLevel() <= logging.WARNING:
-                logger.info(
-                    "query was rewritten: org=%s, new=%s",
-                    " ".join(line.strip() for line in query.split("\n")),
-                    query1,
-                )
+            logger.debug(
+                "query was rewritten: org=%s, new=%s",
+                " ".join(line.strip() for line in query.split("\n")),
+                query1,
+            )
             query = query1
 
-        if logger.getEffectiveLevel() <= logging.INFO:
-            logger.info("query: [%s]", self._format_query_for_log(query))
         ret = self._execute_helper(query, **kwargs)
         self._sfqid = (
             ret["data"]["queryId"]
@@ -988,7 +986,7 @@ class SnowflakeCursor:
             if "data" in ret and "sqlState" in ret["data"]
             else None
         )
-        logger.info("query execution done")
+        logger.debug("query execution done")
 
         self._first_chunk_time = get_time_millis()
 
