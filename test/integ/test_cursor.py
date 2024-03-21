@@ -1276,7 +1276,7 @@ def test_desc_rewrite(conn, caplog):
                 cur.execute(f"desc {table_name}")
                 assert (
                     "snowflake.connector.cursor",
-                    20,
+                    10,
                     "query was rewritten: org=desc {table_name}, new=describe table {table_name}".format(
                         table_name=table_name
                     ),

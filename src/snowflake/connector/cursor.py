@@ -967,12 +967,11 @@ class SnowflakeCursor:
         m = DESC_TABLE_RE.match(query)
         if m:
             query1 = f"describe table {m.group(1)}"
-            if logger.getEffectiveLevel() <= logging.WARNING:
-                logger.debug(
-                    "query was rewritten: org=%s, new=%s",
-                    " ".join(line.strip() for line in query.split("\n")),
-                    query1,
-                )
+            logger.debug(
+                "query was rewritten: org=%s, new=%s",
+                " ".join(line.strip() for line in query.split("\n")),
+                query1,
+            )
             query = query1
 
         ret = self._execute_helper(query, **kwargs)
