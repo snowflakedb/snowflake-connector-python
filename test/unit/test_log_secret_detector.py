@@ -171,6 +171,12 @@ def test_password():
     assert err_str is None
     assert masked_str == "pwd:****"
 
+    random_password_truncated = "password=Afs..."
+    masked, masked_str, err_str = SecretDetector.mask_secrets(random_password_truncated)
+    assert masked
+    assert err_str is None
+    assert masked_str == "password=****"
+
 
 def test_token_password():
     long_token = (
