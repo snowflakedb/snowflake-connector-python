@@ -923,8 +923,22 @@ class SnowflakeOCSP:
         4. After validating all the certs, we save OCSP_RESPONSE_VALIDATION_CACHE and ocsp response json
          onto disk.
         """
+
+        if OCSP_RESPONSE_VALIDATION_CACHE is not None:
+            logger.debug(
+                f"SnowflakeOCSP.__init__: The lock status of OCSP_RESPONSE_VALIDATION_CACHE is: {OCSP_RESPONSE_VALIDATION_CACHE._lock.locked()}"
+            )
+        else:
+            logger.debug(
+                "SnowflakeOCSP.__init__: OCSP_RESPONSE_VALIDATION_CACHE is None"
+            )
         if not OCSP_RESPONSE_VALIDATION_CACHE:
+            logger.debug(
+                "SnowflakeOCSP.__init__: calling SnowflakeOCSP.OCSP_CACHE.read_file"
+            )
             SnowflakeOCSP.OCSP_CACHE.read_file(self)
+
+        logger.debug("SnowflakeOCSP.__init__: finished initialization")
 
     def validate_certfile(self, cert_filename, no_exception: bool = False):
         """Validates that the certificate is NOT revoked."""
