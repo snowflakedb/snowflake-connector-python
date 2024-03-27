@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import re
 from datetime import date, datetime, time, timedelta, timezone
@@ -14,6 +15,11 @@ import numpy
 import pytest
 
 import snowflake.connector
+
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
 
 pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 
@@ -82,6 +88,19 @@ PRIMITIVE_DATATYPE_EXAMPLES = {
     "VARCHAR": [None, "ascii_test", b"\xf0\x9f\x98\x80".decode("utf-8")],
 }
 
+ICEBERG_CONFIG = """
+CATALOG = 'SNOWFLAKE'
+EXTERNAL_VOLUME = 'python_connector_iceberg_exvol'
+BASE_LOCATION = 'python_connector_merge_gate';
+"""
+
+ICEBERG_UNSUPPORTED_TYPES = {
+    "CHAR",
+    "NUMBER",
+    "TIMESTAMP_TZ",
+    "INTEGER",  # Large integer example is incompatible
+}
+
 
 def serialize(value):
     if isinstance(value, bytearray):
@@ -91,66 +110,109 @@ def serialize(value):
     return value
 
 
+@pytest.mark.parametrize("iceberg", [True, False])
 @pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
-def test_datatypes(datatype, examples, conn_cnx):
+def test_datatypes(iceberg, datatype, examples, conn_cnx):
+    if iceberg and os.getenv("cloud_provider", "dev") not in {"dev", "aws"}:
+        pytest.skip("Iceberg only configured in AWS")
+    if iceberg and datatype in ICEBERG_UNSUPPORTED_TYPES:
+        pytest.skip(f"{datatype} is incompatible with iceberg")
+    table_name = f"arrow_datatype_test_table_{random_string(5)}"
+    iceberg_table, iceberg_config = ("iceberg", ICEBERG_CONFIG) if iceberg else ("", "")
     json_values = re.escape(json.dumps(examples, default=serialize))
     query = f"""
+    INSERT INTO
+      {table_name}
     SELECT
       value :: {datatype} as col
     FROM
       TABLE(FLATTEN(input => parse_json('{json_values}')));
     """
     with conn_cnx() as conn:
-        rows = conn.cursor().execute(query).fetchall()
-        if datatype == "DOUBLE":
-            for x, y in zip(sorted(r[0] for r in rows), sorted(examples)):
-                assert x == pytest.approx(y)
-        else:
-            assert [r[0] for r in rows] == examples
+        try:
+            conn.cursor().execute(
+                f"""
+            create {iceberg_table} table if not exists {table_name} (col {datatype}) {iceberg_config}
+            """
+            )
+            conn.cursor().execute(query)
+            rows = conn.cursor().execute(f"select * from {table_name}").fetchall()
+            if datatype == "DOUBLE":
+                for x, y in zip(sorted(r[0] for r in rows), sorted(examples)):
+                    assert x == pytest.approx(y)
+            else:
+                assert [r[0] for r in rows] == examples
+        finally:
+            conn.cursor().execute(f"drop table if exists {table_name}")
 
 
-def structured_type_verify(conn_cnx, query, data):
+def structured_type_verify(conn_cnx, query, data, schema, iceberg=False):
+    table_name = f"arrow_datatype_test_verifaction_table_{random_string(5)}"
     with conn_cnx() as conn:
-        conn.cursor().execute("alter session set use_cached_result=false")
-        conn.cursor().execute(
-            "alter session set enable_structured_types_in_client_response=true"
-        )
-        conn.cursor().execute(
-            "alter session set force_enable_structured_types_native_arrow_format=true"
-        )
-        rows = conn.cursor().execute(query).fetchall()
-        assert len(rows) == 1, "Result should only have one row."
-        assert len(rows[0]) == 1, "Result should only have one column."
-        assert rows[0][0] == data, "Result values should match input examples."
+        try:
+            conn.cursor().execute("alter session set use_cached_result=false")
+            conn.cursor().execute(
+                "alter session set enable_structured_types_in_client_response=true"
+            )
+            conn.cursor().execute(
+                "alter session set force_enable_structured_types_native_arrow_format=true"
+            )
+            iceberg_table, iceberg_config = (
+                ("iceberg", ICEBERG_CONFIG) if iceberg else ("", "")
+            )
+            conn.cursor().execute(
+                f"create {iceberg_table} table if not exists {table_name} {schema} {iceberg_config}"
+            )
+            conn.cursor().execute(f"insert into {table_name} {query}")
+            rows = conn.cursor().execute(f"select * from {table_name}").fetchall()
+            assert len(rows) == 1, "Result should only have one row."
+            assert len(rows[0]) == 1, "Result should only have one column."
+            assert rows[0][0] == data, "Result values should match input examples."
+        finally:
+            conn.cursor().execute(f"drop table if exists {table_name}")
 
 
 @pytest.mark.internal
+def test_do_internal_tests_really_get_run():
+    raise RuntimError(
+        "This test should fail if internal tests are actually getting run."
+    )
+
+
+@pytest.mark.internal
+@pytest.mark.parametrize("iceberg", [True, False])
 @pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
-def test_array(datatype, examples, conn_cnx):
+def test_array(iceberg, datatype, examples, conn_cnx):
     json_values = re.escape(json.dumps(examples, default=serialize))
     query = f"""
     SELECT
       parse_json('{json_values}') :: array({datatype}) as col
     """
-    structured_type_verify(conn_cnx, query, examples)
+    structured_type_verify(
+        conn_cnx, query, examples, f"(col array({datatype}))", iceberg
+    )
 
 
 @pytest.mark.internal
+@pytest.mark.parametrize("iceberg", [True, False])
 @pytest.mark.parametrize("key_type", ["varchar", "number"])
 @pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
-def test_map(key_type, datatype, examples, conn_cnx):
+def test_map(iceberg, key_type, datatype, examples, conn_cnx):
     data = {i if key_type == "number" else str(i): ex for i, ex in enumerate(examples)}
     json_string = re.escape(json.dumps(data, default=serialize))
     query = f"""
     SELECT
       parse_json('{json_string}') :: map({key_type}, {datatype}) as col
     """
-    structured_type_verify(conn_cnx, query, data)
+    structured_type_verify(
+        conn_cnx, query, data, f"(col map({key_type}, {datatype}))", iceberg
+    )
 
 
 @pytest.mark.internal
+@pytest.mark.parametrize("iceberg", [True, False])
 @pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
-def test_object(datatype, examples, conn_cnx):
+def test_object(iceberg, datatype, examples, conn_cnx):
     fields = [f"{datatype}_{i}" for i in range(len(examples))]
     schema = ", ".join(f"{field} {datatype}" for field in fields)
     data = {k: v for k, v in zip(fields, examples)}
@@ -159,7 +221,7 @@ def test_object(datatype, examples, conn_cnx):
     SELECT
       parse_json('{json_string}') :: object({schema}) as col
     """
-    structured_type_verify(conn_cnx, query, data)
+    structured_type_verify(conn_cnx, query, data, f"(col object({schema}))", iceberg)
 
 
 @pytest.mark.internal
