@@ -10,6 +10,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.7.2(TBD)
 
+- v3.8.0(April 04,2024)
+
+   -N/A
+
+
   - Improved `externalbrowser` auth in containerized environments
     - Instruct browser to not fetch `/favicon` on success page
     - Simple retry strategy on empty socket.recv
