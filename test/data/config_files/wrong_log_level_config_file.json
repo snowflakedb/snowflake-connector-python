@@ -1,0 +1,6 @@
+{
+    "common": {
+        "log_level": "wrong",
+        "log_path": "../data"
+    }
+}

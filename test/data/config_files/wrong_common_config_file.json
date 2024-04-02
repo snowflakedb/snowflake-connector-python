@@ -1,0 +1,6 @@
+{
+    "wrong": {
+        "log_level": "DEBUG",
+        "log_path": "../data"
+    }
+}
