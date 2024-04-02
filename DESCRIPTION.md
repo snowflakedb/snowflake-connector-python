@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.7.2(TBD)
+- v3.8.0(April 04,2024)
 
   - Improved `externalbrowser` auth in containerized environments
     - Instruct browser to not fetch `/favicon` on success page
