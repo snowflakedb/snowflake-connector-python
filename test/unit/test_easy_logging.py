@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import os.path
 
-THIS_DIR = os.path.dirname(os.path.realpath(__file__))
-from snowflake.connector.log_configuration import EasyLoggingConfigPython
+from snowflake.connector import EasyLoggingConfigPython
 
+THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 config_file_path = os.path.join(
     os.getcwd(), "../data", "config_files", "sf_client_config.json"
 )

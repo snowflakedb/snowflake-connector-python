@@ -9,8 +9,8 @@ import json
 import logging
 import os
 
+from snowflake.connector import SnowflakeConnection
 from snowflake.connector.secret_detector import SecretDetector
-from src.snowflake.connector import SnowflakeConnection
 
 
 def is_full_path(path: str) -> bool:
