@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os.path
+
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 from snowflake.connector.log_configuration import EasyLoggingConfigPython
 
