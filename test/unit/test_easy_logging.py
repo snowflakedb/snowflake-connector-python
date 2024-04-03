@@ -5,23 +5,23 @@
 from __future__ import annotations
 
 import os.path
-
+THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 from snowflake.connector.log_configuration import EasyLoggingConfigPython
 
 config_file_path = os.path.join(
-    os.getcwd(), "..", "data", "config_files", "sf_client_config.json"
+    os.getcwd(), "../data", "config_files", "sf_client_config.json"
 )
 wrong_common_config_file_path = os.path.join(
-    os.getcwd(), "..", "data", "config_files", "wrong_common_config_file.json"
+    os.getcwd(), "../data", "config_files", "wrong_common_config_file.json"
 )
 wrong_log_level_config_file_path = os.path.join(
-    os.getcwd(), "..", "data", "config_files", "wrong_log_level_config_file.json"
+    os.getcwd(), "../data", "config_files", "wrong_log_level_config_file.json"
 )
 wrong_log_path_level_config_file_path = os.path.join(
-    os.getcwd(), "..", "data", "config_files", "wrong_log_path_level_config_file.json"
+    os.getcwd(), "../data", "config_files", "wrong_log_path_level_config_file.json"
 )
 incomplete_config_file_path = os.path.join(
-    "..", "data", "config_files", "sf_client_config.json"
+    "../data", "config_files", "sf_client_config.json"
 )
 FAKE_CONNECTION_PARAMETERS = {"CLIENT_CONFIG_FILE": config_file_path}
 FAKE_CONNECTION_PARAMETERS_WITHOUT_FULL_PATH = {
