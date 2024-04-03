@@ -92,6 +92,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
     def transfer_accelerate_config(
         self, use_accelerate_endpoint: bool | None = None
     ) -> bool:
+        # accelerate cannot be used in China and us government
+        if self.region_name and ("cn" in self.region_name):
+            return False
         # if self.endpoint has been set, e.g. by metadata, no more config is needed.
         if self.endpoint is not None:
             return self.endpoint.find("s3-accelerate.amazonaws.com") >= 0
