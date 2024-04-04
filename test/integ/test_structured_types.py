@@ -40,7 +40,9 @@ def test_structured_array_types(conn_cnx):
             assert metadata.type_code == 10
 
 
-@pytest.mark.xfail(reason="SNOW-1305289: Param difference in aws environment", strict=False)
+@pytest.mark.xfail(
+    reason="SNOW-1305289: Param difference in aws environment", strict=False
+)
 def test_structured_map_types(conn_cnx):
     with conn_cnx() as cnx:
         cur = cnx.cursor()
