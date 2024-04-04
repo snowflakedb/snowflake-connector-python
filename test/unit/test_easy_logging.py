@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import os.path
 
 from snowflake.connector import EasyLoggingConfigPython
@@ -29,6 +30,41 @@ FAKE_CONNECTION_PARAMETERS_WITHOUT_FULL_PATH = {
     "CLIENT_CONFIG_FILE": incomplete_config_file_path
 }
 
+# create json file needed for test
+sf_client_config = {
+    "common": {
+        "log_level": "DEBUG",
+        "log_path": os.path.join(THIS_DIR, "../data")
+    }
+}
+wrong_common_config_file = {
+    "wrong": {
+        "log_level": "DEBUG",
+        "log_path": os.path.join(THIS_DIR, "../data")
+    }
+}
+wrong_log_level_config_file = {
+    "common": {
+        "log_level": "wrong",
+        "log_path": os.path.join(THIS_DIR, "../data")
+    }
+}
+wrong_log_path_level_config_file = {
+    "common": {
+        "log_level": "DEBUG",
+        "log_path": "../not_exist"
+    }
+}
+os.makedirs(os.path.join(THIS_DIR, "../data", "config_files"), exist_ok=True)
+with open(config_file_path, 'w') as file:
+    json.dump(sf_client_config, file)
+with open(wrong_common_config_file_path, 'w') as file:
+    json.dump(wrong_common_config_file, file)
+with open(wrong_log_level_config_file_path, 'w') as file:
+    json.dump(wrong_log_level_config_file, file)
+with open(wrong_log_path_level_config_file_path, 'w') as file:
+    json.dump(wrong_log_path_level_config_file, file)
+
 
 # read from home dir and drive dir will not be tested because it requires to create file under those dirs
 def test_parse_config_file_with_connection_parameter():
@@ -38,7 +74,7 @@ def test_parse_config_file_with_connection_parameter():
         and config.SF_CLIENT_CONFIG_FILE is None
     )
     assert config.log_level == "DEBUG"
-    assert config.log_path == "../data"
+    assert config.log_path == os.path.join(THIS_DIR, "../data")
 
 
 def test_parse_config_file_with_environment_variable():
@@ -51,7 +87,8 @@ def test_parse_config_file_with_environment_variable():
         and config.SF_CLIENT_CONFIG_FILE == config_file_path
     )
     assert config.log_level == "DEBUG"
-    assert config.log_path == "../data"
+    assert config.log_path == os.path.join(THIS_DIR, "../data")
+    os.environ.pop("SF_CLIENT_CONFIG_FILE", None)
 
 
 def test_parse_config_file_with_no_config_file():

@@ -1,6 +1,0 @@
-{
-    "common": {
-        "log_level": "DEBUG",
-        "log_path": "../not_exist"
-    }
-}
