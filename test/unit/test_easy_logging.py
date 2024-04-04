@@ -10,7 +10,7 @@ import toml
 
 from snowflake.connector import EasyLoggingConfigPython
 from snowflake.connector.constants import CONNECTIONS_FILE
-
+from snowflake.connector.config_manager import CONFIG_MANAGER
 
 @pytest.fixture(scope="function")
 def setup1():
@@ -49,6 +49,7 @@ def setup2():
         toml.dump(connection_content, f)
 
 
+@pytest.mark.skipolddriver
 def test_config_file_wrong_content(setup1):
     try:
         EasyLoggingConfigPython()
@@ -56,6 +57,7 @@ def test_config_file_wrong_content(setup1):
         assert f"config file at {CONNECTIONS_FILE} is not in correct form" in str(e)
 
 
+@pytest.mark.skipolddriver
 def test_log_path_not_full_path(setup2):
     try:
         EasyLoggingConfigPython()
