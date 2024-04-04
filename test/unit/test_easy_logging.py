@@ -6,27 +6,27 @@
 import os.path
 
 import pytest
-import toml
+import tomlkit
 
 from snowflake.connector import EasyLoggingConfigPython
 from snowflake.connector.constants import CONNECTIONS_FILE
-from snowflake.connector.config_manager import CONFIG_MANAGER
+
 
 @pytest.fixture(scope="function")
 def setup1():
     file_path = os.path.dirname(CONNECTIONS_FILE)
     if os.path.exists(file_path):
         with open(CONNECTIONS_FILE) as f:
-            connection_content = toml.load(f)
+            connection_content = tomlkit.parse(f.read())
             connection_content["common"] = {"log_level": "wrong"}
         with open(CONNECTIONS_FILE, "w") as f:
-            toml.dump(connection_content, f)
+            f.write(tomlkit.dumps(connection_content))
     else:
         os.makedirs(file_path, exist_ok=True)
     yield
     with open(CONNECTIONS_FILE, "w") as f:
         connection_content.pop("common")
-        toml.dump(connection_content, f)
+        f.write(tomlkit.dumps(connection_content))
 
 
 @pytest.fixture(scope="function")
@@ -34,19 +34,19 @@ def setup2():
     file_path = os.path.dirname(CONNECTIONS_FILE)
     if os.path.exists(file_path):
         with open(CONNECTIONS_FILE) as f:
-            connection_content = toml.load(f)
+            connection_content = tomlkit.parse(f.read())
             connection_content["common"] = {
                 "log_level": "DEBUG",
                 "log_path": "incomplete_path/",
             }
         with open(CONNECTIONS_FILE, "w") as f:
-            toml.dump(connection_content, f)
+            f.write(tomlkit.dumps(connection_content))
     else:
         os.makedirs(file_path, exist_ok=True)
     yield
     with open(CONNECTIONS_FILE, "w") as f:
         connection_content.pop("common")
-        toml.dump(connection_content, f)
+        f.write(tomlkit.dumps(connection_content))
 
 
 @pytest.mark.skipolddriver

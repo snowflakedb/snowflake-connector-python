@@ -23,12 +23,9 @@ class EasyLoggingConfigPython:
 
     def parse_config_file(self):
         CONFIG_MANAGER.read_config()
-        data = CONFIG_MANAGER['connections']
+        data = CONFIG_MANAGER["connections"]
         if "common" in data:
-            if (
-                "log_level" not in data["common"]
-                or "log_path" not in data["common"]
-            ):
+            if "log_level" not in data["common"] or "log_path" not in data["common"]:
                 raise ValueError(
                     f"config file at {CONNECTIONS_FILE} is not in correct form, please verify your config file"
                 )
