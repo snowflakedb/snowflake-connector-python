@@ -32,37 +32,25 @@ FAKE_CONNECTION_PARAMETERS_WITHOUT_FULL_PATH = {
 
 # create json file needed for test
 sf_client_config = {
-    "common": {
-        "log_level": "DEBUG",
-        "log_path": os.path.join(THIS_DIR, "../data")
-    }
+    "common": {"log_level": "DEBUG", "log_path": os.path.join(THIS_DIR, "../data")}
 }
 wrong_common_config_file = {
-    "wrong": {
-        "log_level": "DEBUG",
-        "log_path": os.path.join(THIS_DIR, "../data")
-    }
+    "wrong": {"log_level": "DEBUG", "log_path": os.path.join(THIS_DIR, "../data")}
 }
 wrong_log_level_config_file = {
-    "common": {
-        "log_level": "wrong",
-        "log_path": os.path.join(THIS_DIR, "../data")
-    }
+    "common": {"log_level": "wrong", "log_path": os.path.join(THIS_DIR, "../data")}
 }
 wrong_log_path_level_config_file = {
-    "common": {
-        "log_level": "DEBUG",
-        "log_path": "../not_exist"
-    }
+    "common": {"log_level": "DEBUG", "log_path": "../not_exist"}
 }
 os.makedirs(os.path.join(THIS_DIR, "../data", "config_files"), exist_ok=True)
-with open(config_file_path, 'w') as file:
+with open(config_file_path, "w") as file:
     json.dump(sf_client_config, file)
-with open(wrong_common_config_file_path, 'w') as file:
+with open(wrong_common_config_file_path, "w") as file:
     json.dump(wrong_common_config_file, file)
-with open(wrong_log_level_config_file_path, 'w') as file:
+with open(wrong_log_level_config_file_path, "w") as file:
     json.dump(wrong_log_level_config_file, file)
-with open(wrong_log_path_level_config_file_path, 'w') as file:
+with open(wrong_log_path_level_config_file_path, "w") as file:
     json.dump(wrong_log_path_level_config_file, file)
 
 
