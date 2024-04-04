@@ -10,16 +10,16 @@ from snowflake.connector import EasyLoggingConfigPython
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 config_file_path = os.path.join(
-    os.getcwd(), "../data", "config_files", "sf_client_config.json"
+    THIS_DIR, "../data", "config_files", "sf_client_config.json"
 )
 wrong_common_config_file_path = os.path.join(
-    os.getcwd(), "../data", "config_files", "wrong_common_config_file.json"
+    THIS_DIR, "../data", "config_files", "wrong_common_config_file.json"
 )
 wrong_log_level_config_file_path = os.path.join(
-    os.getcwd(), "../data", "config_files", "wrong_log_level_config_file.json"
+    THIS_DIR, "../data", "config_files", "wrong_log_level_config_file.json"
 )
 wrong_log_path_level_config_file_path = os.path.join(
-    os.getcwd(), "../data", "config_files", "wrong_log_path_level_config_file.json"
+    THIS_DIR, "../data", "config_files", "wrong_log_path_level_config_file.json"
 )
 incomplete_config_file_path = os.path.join(
     "../data", "config_files", "sf_client_config.json"
@@ -43,7 +43,7 @@ def test_parse_config_file_with_connection_parameter():
 
 def test_parse_config_file_with_environment_variable():
     os.environ["SF_CLIENT_CONFIG_FILE"] = os.path.join(
-        os.getcwd(), "..", "data", "config_files", "sf_client_config.json"
+        THIS_DIR, "..", "data", "config_files", "sf_client_config.json"
     )
     config = EasyLoggingConfigPython()
     assert (
