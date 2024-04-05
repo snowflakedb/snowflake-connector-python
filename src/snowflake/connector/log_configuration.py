@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 
 from snowflake.connector.config_manager import CONFIG_MANAGER
-from snowflake.connector.constants import CONNECTIONS_FILE
+from snowflake.connector.constants import CONFIG_FILE
 from snowflake.connector.secret_detector import SecretDetector
 
 
@@ -23,15 +23,14 @@ class EasyLoggingConfigPython:
 
     def parse_config_file(self):
         CONFIG_MANAGER.read_config()
-        data = CONFIG_MANAGER["connections"]
-        if "common" in data:
-            if "log_level" not in data["common"] or "log_path" not in data["common"]:
+        data = CONFIG_MANAGER.conf_file_cache
+        if common := data.get("common"):
+            if "log_level" not in common or "log_path" not in common:
                 raise ValueError(
-                    f"config file at {CONNECTIONS_FILE} is not in correct form, please verify your config file"
+                    f"config file at {CONFIG_FILE} is not in correct form, please verify your config file"
                 )
-            data = data["common"]
-            self.log_level = data["log_level"]
-            self.log_path = data["log_path"]
+            self.log_level = common["log_level"]
+            self.log_path = common["log_path"]
 
             # if log path does not exist, create it, else check accessibility
             if not os.path.exists(self.log_path):
@@ -42,7 +41,7 @@ class EasyLoggingConfigPython:
                 )
             if not os.path.isabs(self.log_path):
                 raise FileNotFoundError(
-                    f"given log path {self.log_path} is not full path"
+                    f"Log path must be an absolute file path: {self.log_path}"
                 )
 
     # create_log() is called outside __init__() so that it can be easily turned off
