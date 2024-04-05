@@ -80,7 +80,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
         )
         self.use_s3_regional_url = use_s3_regional_url
-        self.location_type = stage_info['locationType']
+        self.location_type = stage_info["locationType"]
 
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
         self.endpoint: str | None = None
@@ -94,7 +94,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         self, use_accelerate_endpoint: bool | None = None
     ) -> bool:
         # accelerate cannot be used in China and us government
-        if self.location_type == 'S3China':
+        if self.location_type == "S3China":
             return False
         # if self.endpoint has been set, e.g. by metadata, no more config is needed.
         if self.endpoint is not None:
