@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 
 from snowflake.connector.config_manager import CONFIG_MANAGER
-from snowflake.connector.constants import CONFIG_FILE, DIRS
+from snowflake.connector.constants import DIRS
 from snowflake.connector.secret_detector import SecretDetector
 
 
@@ -28,7 +28,11 @@ class EasyLoggingConfigPython:
         if log := data.get("log"):
             self.save_logs = log.get("save_logs") if log.get("save_logs") else False
             self.level = log.get("level") if log.get("level") else "INFO"
-            self.path = log.get("path") if log.get("path") else os.path.join(DIRS.user_config_path, "logs")
+            self.path = (
+                log.get("path")
+                if log.get("path")
+                else os.path.join(DIRS.user_config_path, "logs")
+            )
 
             # if log path does not exist, create it, else check accessibility
             if not os.path.exists(self.path):
