@@ -18,21 +18,21 @@ def setup1():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE) as f:
             connection_content = tomlkit.parse(f.read())
-            connection_content["common"] = {"log_level": "wrong"}
+            connection_content["log"] = {"log_level": "wrong"}
         with open(CONFIG_FILE, "w") as f:
             f.write(tomlkit.dumps(connection_content))
     else:
         os.makedirs(file_path, exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
             connection_content = {
-                "common": {
-                    "log_level": "wrong",
+                "log": {
+                    "level": "wrong",
                 }
             }
             f.write(tomlkit.dumps(connection_content))
     yield
     with open(CONFIG_FILE, "w") as f:
-        connection_content.pop("common")
+        connection_content.pop("log")
         f.write(tomlkit.dumps(connection_content))
 
 
@@ -42,9 +42,9 @@ def setup2():
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE) as f:
             connection_content = tomlkit.parse(f.read())
-            connection_content["common"] = {
-                "log_level": "DEBUG",
-                "log_path": "incomplete_path/",
+            connection_content["log"] = {
+                "level": "DEBUG",
+                "path": "incomplete_path/",
             }
         with open(CONFIG_FILE, "w") as f:
             f.write(tomlkit.dumps(connection_content))
@@ -52,15 +52,15 @@ def setup2():
         os.makedirs(file_path, exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
             connection_content = {
-                "common": {
-                    "log_level": "DEBUG",
-                    "log_path": "incomplete_path/",
+                "log": {
+                    "level": "DEBUG",
+                    "path": "incomplete_path/",
                 }
             }
             f.write(tomlkit.dumps(connection_content))
     yield
     with open(CONFIG_FILE, "w") as f:
-        connection_content.pop("common")
+        connection_content.pop("log")
         f.write(tomlkit.dumps(connection_content))
 
 
