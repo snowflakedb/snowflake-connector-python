@@ -49,7 +49,7 @@ class EasyLoggingConfigPython:
     # create_log() is called outside __init__() so that it can be easily turned off
     def create_log(self):
         if self.save_logs:
-            self.log_file_name = f"python-connector-{datetime.now()}.log"
+            self.log_file_name = f"python-connector-{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}.log"
             logging.basicConfig(
                 filename=self.path, level=logging.getLevelName(self.level)
             )
