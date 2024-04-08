@@ -393,14 +393,13 @@ def write_pandas(
             quote_identifiers,
         )
 
-        if auto_create_table:
-            create_table_sql = (
-                f"CREATE {table_type.upper()} TABLE IF NOT EXISTS {target_table_location} "
-                f"({create_table_columns})"
-                f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-            )
-            logger.debug(f"auto creating table with '{create_table_sql}'")
-            cursor.execute(create_table_sql, _is_internal=True)
+        create_table_sql = (
+            f"CREATE {table_type.upper()} TABLE IF NOT EXISTS {target_table_location} "
+            f"({create_table_columns})"
+            f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+        )
+        logger.debug(f"auto creating table with '{create_table_sql}'")
+        cursor.execute(create_table_sql, _is_internal=True)
         # need explicit casting when the underlying table schema is inferred
         parquet_columns = "$1:" + ",$1:".join(
             f"{quote}{snowflake_col}{quote}::{column_type_mapping[col]}"
