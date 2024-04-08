@@ -15,6 +15,6 @@ pytz==2024.1
 requests==2.31.0
 sortedcontainers==2.4.0
 tomlkit==0.12.4
-typing_extensions==4.10.0
+typing_extensions==4.11.0
 urllib3==1.26.18
-snowflake-connector-python==3.8.0
+snowflake-connector-python==3.8.1

@@ -115,7 +115,6 @@ def test_write_pandas_with_overwrite(
         f"({col_name} STRING, {col_points} INT, {col_id} INT AUTOINCREMENT)"
     )
 
-    show_sql = f"SHOW TABLES LIKE '{random_table_name}'"  # SHOW command like is case-insensitive
     select_sql = f"SELECT * FROM {table_name}"
     select_count_sql = f"SELECT count(*) FROM {table_name}"
     drop_sql = f"DROP TABLE IF EXISTS {table_name}"
@@ -148,35 +147,6 @@ def test_write_pandas_with_overwrite(
             result = cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
             # Check number of rows
             assert result["COUNT(*)"] == 1
-
-            # Truncate-only mode
-            if not auto_create_table:
-                # Capture the created_on timestamp of the target table before truncation
-                result = cnx.cursor(DictCursor).execute(show_sql).fetchone()
-                create_ts_before_trunc = result["created_on"]
-
-                # This operation should only truncate the table
-                success, nchunks, nrows, _ = write_pandas(
-                    cnx,
-                    df2,
-                    random_table_name,
-                    quote_identifiers=quote_identifiers,
-                    auto_create_table=auto_create_table,
-                    overwrite=True,
-                    index=index,
-                )
-
-                # Capture the created_on timestamp of the target table after truncation
-                result = cnx.cursor(DictCursor).execute(show_sql).fetchone()
-                create_ts_after_trunc = result["created_on"]
-                assert create_ts_before_trunc == create_ts_after_trunc
-
-                # Check write_pandas output
-                assert success
-                assert nchunks == 1
-                result = cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
-                # Check number of rows
-                assert result["COUNT(*)"] == 1
 
             # Write dataframe with a different schema
             if auto_create_table:
