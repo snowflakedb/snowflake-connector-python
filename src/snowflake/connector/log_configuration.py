@@ -26,14 +26,14 @@ class EasyLoggingConfigPython:
         CONFIG_MANAGER.read_config()
         data = CONFIG_MANAGER.conf_file_cache
         if log := data.get("log"):
-            self.save_logs = log.get("save_logs") if log.get("save_logs") else False
-            self.level = log.get("level") if log.get("level") else "INFO"
-            self.path = (
-                log.get("path")
-                if log.get("path")
-                else os.path.join(DIRS.user_config_path, "logs")
-            )
+            self.save_logs = log.get("save_logs", False)
+            self.level = log.get("level", "INFO")
+            self.path = log.get("path", os.path.join(DIRS.user_config_path, "logs"))
 
+            if not os.path.isabs(self.path):
+                raise FileNotFoundError(
+                    f"Log path must be an absolute file path: {self.path}"
+                )
             # if log path does not exist, create it, else check accessibility
             if not os.path.exists(self.path):
                 os.makedirs(self.path, exist_ok=True)
@@ -41,17 +41,14 @@ class EasyLoggingConfigPython:
                 raise PermissionError(
                     f"log path: {self.path} is not accessible, please verify your config file"
                 )
-            if not os.path.isabs(self.path):
-                raise FileNotFoundError(
-                    f"Log path must be an absolute file path: {self.path}"
-                )
 
     # create_log() is called outside __init__() so that it can be easily turned off
     def create_log(self):
         if self.save_logs:
             self.log_file_name = "python-connector.log"
             logging.basicConfig(
-                filename=self.path, level=logging.getLevelName(self.level)
+                filename=os.path.join(self.path, self.log_file_name),
+                level=logging.getLevelName(self.level),
             )
             for logger_name in ["snowflake.connector", "botocore", "boto3"]:
                 logger = logging.getLogger(logger_name)

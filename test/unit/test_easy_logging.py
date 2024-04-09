@@ -4,77 +4,80 @@
 
 
 import os.path
+from pathlib import Path
 
 import pytest
 import tomlkit
 
 from snowflake.connector import EasyLoggingConfigPython
+from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.constants import CONFIG_FILE
 
-
-@pytest.fixture(scope="function")
-def setup1():
-    file_path = os.path.dirname(CONFIG_FILE)
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE) as f:
-            connection_content = tomlkit.parse(f.read())
-            connection_content["log"] = {"log_level": "wrong"}
-        with open(CONFIG_FILE, "w") as f:
-            f.write(tomlkit.dumps(connection_content))
-    else:
-        os.makedirs(file_path, exist_ok=True)
-        with open(CONFIG_FILE, "w") as f:
-            connection_content = {
-                "log": {
-                    "level": "wrong",
-                }
-            }
-            f.write(tomlkit.dumps(connection_content))
-    yield
-    with open(CONFIG_FILE, "w") as f:
-        connection_content.pop("log")
-        f.write(tomlkit.dumps(connection_content))
+THIS_DIR = os.path.dirname(os.path.realpath(__file__))
+TEMP_CONFIG_FILE_DIR = os.path.join(THIS_DIR, "..", "data")
+NONEXIST_PATH = os.path.join(THIS_DIR, "..", "data", "non_exist")
+INABSOLUTE_PATH = os.path.join("..", "data")
+INACCESSIBLE_PATH = os.path.join(THIS_DIR, "..", "data", "inaccessible")
 
 
 @pytest.fixture(scope="function")
-def setup2():
-    file_path = os.path.dirname(CONFIG_FILE)
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE) as f:
-            connection_content = tomlkit.parse(f.read())
-            connection_content["log"] = {
-                "level": "DEBUG",
-                "path": "incomplete_path/",
-            }
-        with open(CONFIG_FILE, "w") as f:
-            f.write(tomlkit.dumps(connection_content))
-    else:
-        os.makedirs(file_path, exist_ok=True)
-        with open(CONFIG_FILE, "w") as f:
-            connection_content = {
-                "log": {
-                    "level": "DEBUG",
-                    "path": "incomplete_path/",
-                }
-            }
-            f.write(tomlkit.dumps(connection_content))
-    yield
-    with open(CONFIG_FILE, "w") as f:
-        connection_content.pop("log")
-        f.write(tomlkit.dumps(connection_content))
+def config_file_setup(request):
+    param = request.param
+    # making different config file dir for each test to avoid race condition on modifying config.toml
+    os.makedirs(os.path.join(TEMP_CONFIG_FILE_DIR, param), exist_ok=True)
+    temp_config_file_path = os.path.join(TEMP_CONFIG_FILE_DIR, param, "config.toml")
+    CONFIG_MANAGER.file_path = Path(temp_config_file_path)
 
-
-@pytest.mark.skipolddriver
-def test_config_file_wrong_content(setup1):
+    configs = {
+        "nonexist_path": {"log": {"save_logs": False, "path": NONEXIST_PATH}},
+        "inabsolute_path": {"log": {"save_logs": False, "path": INABSOLUTE_PATH}},
+        "inaccessible_path": {"log": {"save_logs": False, "path": INACCESSIBLE_PATH}},
+    }
+    # create inaccessible path and make it inaccessible
+    if not os.path.exists(INACCESSIBLE_PATH):
+        os.mkdir(INACCESSIBLE_PATH)
+    os.chmod(INACCESSIBLE_PATH, os.stat(INACCESSIBLE_PATH).st_mode & ~0o222)
     try:
-        EasyLoggingConfigPython()
-    except ValueError as e:
-        assert f"config file at {CONFIG_FILE} is not in correct form" in str(e)
+        # create temp config file
+        with open(temp_config_file_path, "w") as f:
+            f.write(tomlkit.dumps(configs[param]))
+        yield
+    finally:
+        # remove created dir and file, including log paths and config file paths
+        CONFIG_MANAGER.file_path = CONFIG_FILE
+        os.remove(temp_config_file_path)
+        os.rmdir(os.path.join(TEMP_CONFIG_FILE_DIR, param))
+
+        if os.path.exists(NONEXIST_PATH):
+            os.rmdir(NONEXIST_PATH)
+        if os.path.exists(INACCESSIBLE_PATH):
+            os.rmdir(INACCESSIBLE_PATH)
 
 
+@pytest.mark.parametrize("config_file_setup", ["nonexist_path"], indirect=True)
 @pytest.mark.skipolddriver
-def test_log_path_not_full_path(setup2):
+def test_config_file_nonexist_path(config_file_setup):
+    assert not os.path.exists(NONEXIST_PATH)
+    EasyLoggingConfigPython()
+    assert os.path.exists(NONEXIST_PATH)
+
+
+@pytest.mark.parametrize("config_file_setup", ["inabsolute_path"], indirect=True)
+@pytest.mark.skipolddriver
+def test_config_file_inabsolute_path(config_file_setup):
     try:
         EasyLoggingConfigPython()
     except FileNotFoundError as e:
-        assert "Log path must be an absolute file path: incomplete_path/" in str(e)
+        assert f"Log path must be an absolute file path: {INABSOLUTE_PATH}" in str(e)
+
+
+@pytest.mark.parametrize("config_file_setup", ["inaccessible_path"], indirect=True)
+@pytest.mark.skipolddriver
+def test_config_file_inaccessible_path(config_file_setup):
+    try:
+        EasyLoggingConfigPython()
+    except PermissionError as e:
+        assert (
+            f"log path: {INACCESSIBLE_PATH} is not accessible, please verify your config file"
+            in str(e)
+        )
