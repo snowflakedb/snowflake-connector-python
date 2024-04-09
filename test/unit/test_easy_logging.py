@@ -2,21 +2,27 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-
 import os.path
 from pathlib import Path
 
 import pytest
 import tomlkit
 
+import snowflake.connector
 from snowflake.connector import EasyLoggingConfigPython
 from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.constants import CONFIG_FILE
+from snowflake.connector.errors import ForbiddenError
 
 
 @pytest.fixture(scope="function")
 def temp_config_file(tmp_path_factory):
     return tmp_path_factory.mktemp("config_file_path") / "config.toml"
+
+
+@pytest.fixture(scope="function")
+def log_directory(tmp_path_factory):
+    return tmp_path_factory.mktemp("log")
 
 
 @pytest.fixture(scope="module")
@@ -35,9 +41,25 @@ def inabsolute_file(tmp_path_factory):
     return os.path.basename(directory)
 
 
+def fake_connector(**kwargs) -> snowflake.connector.SnowflakeConnection:
+    return snowflake.connector.connect(
+        user="user",
+        account="account",
+        password="testpassword",
+        database="TESTDB",
+        warehouse="TESTWH",
+        **kwargs,
+    )
+
+
 @pytest.fixture(scope="function")
 def config_file_setup(
-    request, temp_config_file, nonexist_file, inaccessible_file, inabsolute_file
+    request,
+    temp_config_file,
+    nonexist_file,
+    inaccessible_file,
+    inabsolute_file,
+    log_directory,
 ):
     param = request.param
     # making different config file dir for each test to avoid race condition on modifying config.toml
@@ -48,6 +70,8 @@ def config_file_setup(
         "inaccessible_path": {
             "log": {"save_logs": False, "path": str(inaccessible_file)}
         },
+        "save_logs": {"log": {"save_logs": True, "path": str(log_directory)}},
+        "no_save_logs": {"log": {"save_logs": False, "path": str(log_directory)}},
     }
     # create inaccessible path and make it inaccessible
     os.chmod(inaccessible_file, os.stat(inaccessible_file).st_mode & ~0o222)
@@ -86,3 +110,28 @@ def test_config_file_inaccessible_path(config_file_setup, inaccessible_file):
         f"log path: {str(inaccessible_file)} is not accessible, please verify your config file"
         in str(e)
     )
+
+
+@pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
+@pytest.mark.skipolddriver
+def test_save_logs(config_file_setup, log_directory):
+    easy_logging = EasyLoggingConfigPython()
+    easy_logging.create_log()
+    with pytest.raises(ForbiddenError):
+        _ = fake_connector()
+
+    assert os.path.exists(os.path.join(log_directory, "python-connector.log"))
+    with open(os.path.join(log_directory, "python-connector.log")) as f:
+        data = f.read()
+        assert data is not None and data != ""
+
+
+@pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
+@pytest.mark.skipolddriver
+def test_no_save_logs(config_file_setup, log_directory):
+    easy_logging = EasyLoggingConfigPython()
+    easy_logging.create_log()
+    with pytest.raises(ForbiddenError):
+        _ = fake_connector()
+
+    assert not os.path.exists(os.path.join(log_directory, "python-connector.log"))
