@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime
+from logging.handlers import TimedRotatingFileHandler
 
 from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.constants import DIRS
@@ -49,16 +49,16 @@ class EasyLoggingConfigPython:
     # create_log() is called outside __init__() so that it can be easily turned off
     def create_log(self):
         if self.save_logs:
-            self.log_file_name = (
-                f"python-connector-{datetime.now().strftime('%Y-%m-%d-%H:%M:%S')}.log"
-            )
+            self.log_file_name = "python-connector.log"
             logging.basicConfig(
                 filename=self.path, level=logging.getLevelName(self.level)
             )
             for logger_name in ["snowflake.connector", "botocore", "boto3"]:
                 logger = logging.getLogger(logger_name)
                 logger.setLevel(logging.getLevelName(self.level))
-                ch = logging.FileHandler(os.path.join(self.path, self.log_file_name))
+                ch = TimedRotatingFileHandler(
+                    os.path.join(self.path, self.log_file_name), when="midnight"
+                )
                 ch.setLevel(logging.getLevelName(self.level))
                 ch.setFormatter(
                     SecretDetector(
