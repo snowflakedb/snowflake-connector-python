@@ -13,13 +13,14 @@ from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.constants import DIRS
 from snowflake.connector.secret_detector import SecretDetector
 
+LOG_FILE_NAME = "python-connector.log"
+
 
 class EasyLoggingConfigPython:
     def __init__(self):
         self.path = None
         self.level = None
         self.save_logs = None
-        self.log_file_name = None
         self.parse_config_file()
 
     def parse_config_file(self):
@@ -45,16 +46,15 @@ class EasyLoggingConfigPython:
     # create_log() is called outside __init__() so that it can be easily turned off
     def create_log(self):
         if self.save_logs:
-            self.log_file_name = "python-connector.log"
             logging.basicConfig(
-                filename=os.path.join(self.path, self.log_file_name),
+                filename=os.path.join(self.path, LOG_FILE_NAME),
                 level=logging.getLevelName(self.level),
             )
             for logger_name in ["snowflake.connector", "botocore", "boto3"]:
                 logger = logging.getLogger(logger_name)
                 logger.setLevel(logging.getLevelName(self.level))
                 ch = TimedRotatingFileHandler(
-                    os.path.join(self.path, self.log_file_name), when="midnight"
+                    os.path.join(self.path, LOG_FILE_NAME), when="midnight"
                 )
                 ch.setLevel(logging.getLevelName(self.level))
                 ch.setFormatter(
