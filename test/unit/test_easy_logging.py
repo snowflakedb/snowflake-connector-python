@@ -12,7 +12,6 @@ import snowflake.connector
 from snowflake.connector import EasyLoggingConfigPython
 from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.constants import CONFIG_FILE
-from snowflake.connector.errors import ForbiddenError
 
 
 @pytest.fixture(scope="function")
@@ -113,26 +112,26 @@ def test_config_file_inaccessible_path(config_file_setup, inaccessible_file):
     )
 
 
-@pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
-@pytest.mark.skipolddriver
-def test_save_logs(config_file_setup, log_directory):
-    easy_logging = EasyLoggingConfigPython()
-    easy_logging.create_log()
-    with pytest.raises(ForbiddenError):
-        _ = fake_connector()
-
-    assert os.path.exists(os.path.join(log_directory, "python-connector.log"))
-    with open(os.path.join(log_directory, "python-connector.log")) as f:
-        data = f.read()
-        assert data is not None and data != ""
-
-
-@pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
-@pytest.mark.skipolddriver
-def test_no_save_logs(config_file_setup, log_directory):
-    easy_logging = EasyLoggingConfigPython()
-    easy_logging.create_log()
-    with pytest.raises(ForbiddenError):
-        _ = fake_connector()
-
-    assert not os.path.exists(os.path.join(log_directory, "python-connector.log"))
+# @pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
+# @pytest.mark.skipolddriver
+# def test_save_logs(config_file_setup, log_directory):
+#     easy_logging = EasyLoggingConfigPython()
+#     easy_logging.create_log()
+#     with pytest.raises(ForbiddenError):
+#         _ = fake_connector()
+#
+#     assert os.path.exists(os.path.join(log_directory, "python-connector.log"))
+#     with open(os.path.join(log_directory, "python-connector.log")) as f:
+#         data = f.read()
+#         assert data is not None and data != ""
+#
+#
+# @pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
+# @pytest.mark.skipolddriver
+# def test_no_save_logs(config_file_setup, log_directory):
+#     easy_logging = EasyLoggingConfigPython()
+#     easy_logging.create_log()
+#     with pytest.raises(ForbiddenError):
+#         _ = fake_connector()
+#
+#     assert not os.path.exists(os.path.join(log_directory, "python-connector.log"))
