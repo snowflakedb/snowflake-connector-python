@@ -3,6 +3,7 @@
 #
 import logging
 import os.path
+import platform
 import stat
 from pathlib import Path
 
@@ -107,6 +108,9 @@ def test_config_file_inabsolute_path(config_file_setup, inabsolute_file):
 
 @pytest.mark.parametrize("config_file_setup", ["inaccessible_path"], indirect=True)
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(
+    platform.system() == "Windows", reason="Test only applicable to Windows"
+)
 def test_config_file_inaccessible_path(config_file_setup, inaccessible_file):
     with pytest.raises(PermissionError) as e:
         EasyLoggingConfigPython()
@@ -130,12 +134,12 @@ def test_config_file_inaccessible_path(config_file_setup, inaccessible_file):
 #         assert data is not None and data != ""
 #
 #
-# @pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
-# @pytest.mark.skipolddriver
-# def test_no_save_logs(config_file_setup, log_directory):
-#     easy_logging = EasyLoggingConfigPython()
-#     easy_logging.create_log()
-#     with pytest.raises(ForbiddenError):
-#         _ = fake_connector()
-#
-#     assert not os.path.exists(os.path.join(log_directory, "python-connector.log"))
+@pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
+@pytest.mark.skipolddriver
+def test_no_save_logs(config_file_setup, log_directory):
+    easy_logging = EasyLoggingConfigPython()
+    easy_logging.create_log()
+    with pytest.raises(ForbiddenError):
+        _ = fake_connector()
+
+    assert not os.path.exists(os.path.join(log_directory, "python-connector.log"))
