@@ -3,6 +3,7 @@
 #
 import logging
 import os.path
+import stat
 from pathlib import Path
 
 import pytest
@@ -73,7 +74,10 @@ def config_file_setup(
         "no_save_logs": {"log": {"save_logs": False, "path": str(log_directory)}},
     }
     # create inaccessible path and make it inaccessible
-    os.chmod(inaccessible_file, os.stat(inaccessible_file).st_mode & ~0o222)
+    os.chmod(
+        inaccessible_file,
+        os.stat(inaccessible_file).st_mode & stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH,
+    )
     try:
         # create temp config file
         with open(temp_config_file, "w") as f:
