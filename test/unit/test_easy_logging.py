@@ -1,7 +1,7 @@
 #
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
-
+import logging
 import os.path
 from pathlib import Path
 
@@ -83,6 +83,7 @@ def config_file_setup(
     finally:
         # remove created dir and file, including log paths and config file paths
         CONFIG_MANAGER.file_path = CONFIG_FILE
+        logging.shutdown()
 
 
 @pytest.mark.parametrize("config_file_setup", ["nonexist_path"], indirect=True)
