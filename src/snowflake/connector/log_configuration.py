@@ -18,9 +18,9 @@ LOG_FILE_NAME = "python-connector.log"
 
 class EasyLoggingConfigPython:
     def __init__(self):
-        self.path = None
-        self.level = None
-        self.save_logs = None
+        self.path: str | None = None
+        self.level: str | None = None
+        self.save_logs: bool = False
         self.parse_config_file()
 
     def parse_config_file(self):
