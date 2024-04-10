@@ -14,6 +14,7 @@ import snowflake.connector
 from snowflake.connector import EasyLoggingConfigPython
 from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.constants import CONFIG_FILE
+from snowflake.connector.errors import ForbiddenError
 
 
 @pytest.fixture(scope="function")
