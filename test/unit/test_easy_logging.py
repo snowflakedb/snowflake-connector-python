@@ -76,7 +76,8 @@ def config_file_setup(
     # create inaccessible path and make it inaccessible
     os.chmod(
         inaccessible_file,
-        os.stat(inaccessible_file).st_mode & stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH,
+        os.stat(inaccessible_file).st_mode
+        & ~(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH),
     )
     try:
         # create temp config file
