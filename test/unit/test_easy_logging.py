@@ -4,7 +4,7 @@
 import logging
 import os.path
 import platform
-import stat
+from logging import getLogger
 from pathlib import Path
 
 import pytest
@@ -14,7 +14,6 @@ import snowflake.connector
 from snowflake.connector import EasyLoggingConfigPython
 from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.constants import CONFIG_FILE
-from snowflake.connector.errors import ForbiddenError
 
 
 @pytest.fixture(scope="function")
@@ -76,10 +75,7 @@ def config_file_setup(
         "no_save_logs": {"log": {"save_logs": False, "path": str(log_directory)}},
     }
     # create inaccessible path and make it inaccessible
-    os.chmod(
-        inaccessible_file,
-        ~(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH),
-    )
+    os.chmod(inaccessible_file, os.stat(inaccessible_file).st_mode & ~0o222)
     try:
         # create temp config file
         with open(temp_config_file, "w") as f:
@@ -121,26 +117,26 @@ def test_config_file_inaccessible_path(config_file_setup, inaccessible_file):
     )
 
 
-# @pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
-# @pytest.mark.skipolddriver
-# def test_save_logs(config_file_setup, log_directory):
-#     easy_logging = EasyLoggingConfigPython()
-#     easy_logging.create_log()
-#     with pytest.raises(ForbiddenError):
-#         _ = fake_connector()
-#
-#     assert os.path.exists(os.path.join(log_directory, "python-connector.log"))
-#     with open(os.path.join(log_directory, "python-connector.log")) as f:
-#         data = f.read()
-#         assert data is not None and data != ""
-#
-#
+@pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
+@pytest.mark.skipolddriver
+def test_save_logs(config_file_setup, log_directory):
+    easy_logging = EasyLoggingConfigPython()
+    easy_logging.create_log()
+    logger = getLogger("snowflake.connector")
+    logger.info("this is a test logger")
+
+    assert os.path.exists(os.path.join(log_directory, "python-connector.log"))
+    with open(os.path.join(log_directory, "python-connector.log")) as f:
+        data = f.read()
+        assert "this is a test logger" in data
+
+
 @pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
 @pytest.mark.skipolddriver
 def test_no_save_logs(config_file_setup, log_directory):
     easy_logging = EasyLoggingConfigPython()
     easy_logging.create_log()
-    with pytest.raises(ForbiddenError):
-        _ = fake_connector()
+    logger = getLogger("snowflake.connector")
+    logger.info("this is a test logger")
 
     assert not os.path.exists(os.path.join(log_directory, "python-connector.log"))
