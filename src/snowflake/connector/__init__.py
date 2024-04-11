@@ -44,6 +44,7 @@ from .errors import (
     ProgrammingError,
     _Warning,
 )
+from .log_configuration import EasyLoggingConfigPython
 from .version import VERSION
 
 logging.getLogger(__name__).addHandler(NullHandler())
@@ -92,4 +93,5 @@ __all__ = [
     "DATETIME",
     "ROWID",
     # Extended data type (experimental)
+    "EasyLoggingConfigPython",
 ]
