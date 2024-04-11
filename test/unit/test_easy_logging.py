@@ -85,10 +85,6 @@ def config_file_setup(
     finally:
         # remove created dir and file, including log paths and config file paths
         CONFIG_MANAGER.file_path = CONFIG_FILE
-        for handler in logger.handlers:
-            if type(handler).__name__ == "TimedRotatingFileHandler":
-                logger.removeHandler(handler)
-        print(logger.handlers)
 
 
 @pytest.mark.parametrize("config_file_setup", ["nonexist_path"], indirect=True)
@@ -131,6 +127,9 @@ def test_save_logs(config_file_setup, log_directory):
     with open(os.path.join(log_directory, "python-connector.log")) as f:
         data = f.read()
         assert "this is a test logger" in data
+    for handler in logger.handlers:
+        if type(handler).__name__ == "TimedRotatingFileHandler":
+            logger.removeHandler(handler)
 
 
 @pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
