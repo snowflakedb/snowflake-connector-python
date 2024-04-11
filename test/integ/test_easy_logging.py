@@ -10,10 +10,15 @@ from pathlib import Path
 from test.integ.conftest import create_connection
 
 import pytest
-import tomlkit
 
-from snowflake.connector.config_manager import CONFIG_MANAGER
-from snowflake.connector.constants import CONFIG_FILE
+pytestmark = pytest.mark.skipolddriver
+try:
+    import tomlkit
+
+    from snowflake.connector.config_manager import CONFIG_MANAGER
+    from snowflake.connector.constants import CONFIG_FILE
+except ModuleNotFoundError:
+    pass
 
 
 @pytest.fixture(scope="function")
@@ -45,7 +50,6 @@ def config_file_setup(request, temp_config_file, log_directory):
 
 
 @pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
-@pytest.mark.skipolddriver
 def test_save_logs(db_parameters, config_file_setup, log_directory):
     create_connection("default")
 
@@ -61,7 +65,6 @@ def test_save_logs(db_parameters, config_file_setup, log_directory):
 
 
 @pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
-@pytest.mark.skipolddriver
 def test_no_save_logs(config_file_setup, log_directory):
     create_connection("default")
 
