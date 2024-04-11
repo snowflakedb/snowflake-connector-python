@@ -10,10 +10,14 @@ import platform
 from logging import getLogger
 from pathlib import Path
 
-import tomlkit
+try:
+    import tomlkit
+
+    from snowflake.connector import EasyLoggingConfigPython
+except ModuleNotFoundError:
+    pass
 
 import snowflake.connector
-from snowflake.connector import EasyLoggingConfigPython
 from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.constants import CONFIG_FILE
 
