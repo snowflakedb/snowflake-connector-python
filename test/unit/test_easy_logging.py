@@ -127,9 +127,10 @@ def test_save_logs(config_file_setup, log_directory):
     with open(os.path.join(log_directory, "python-connector.log")) as f:
         data = f.read()
         assert "this is a test logger" in data
-    for handler in logger.handlers:
-        if type(handler).__name__ == "TimedRotatingFileHandler":
-            logger.removeHandler(handler)
+    # reset log level
+    getLogger("snowflake.connector").setLevel(10)
+    getLogger("botocore").setLevel(0)
+    getLogger("boto3").setLevel(0)
 
 
 @pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
