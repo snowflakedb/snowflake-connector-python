@@ -92,6 +92,7 @@ from .errorcode import (
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
 from .errors import DatabaseError, Error, OperationalError, ProgrammingError
+from .log_configuration import EasyLoggingConfigPython
 from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
@@ -383,6 +384,9 @@ class SnowflakeConnection:
         If overwriting values from the default connection is desirable, supply
         the name explicitly.
         """
+        # initiate easy logging during every connection
+        easy_logging = EasyLoggingConfigPython()
+        easy_logging.create_log()
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler
