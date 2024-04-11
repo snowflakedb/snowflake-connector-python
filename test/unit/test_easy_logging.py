@@ -1,7 +1,6 @@
 #
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
-import logging
 import os.path
 import platform
 from logging import getLogger
@@ -14,6 +13,8 @@ import snowflake.connector
 from snowflake.connector import EasyLoggingConfigPython
 from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.constants import CONFIG_FILE
+
+logger = getLogger("snowflake.connector")
 
 
 @pytest.fixture(scope="function")
@@ -84,7 +85,10 @@ def config_file_setup(
     finally:
         # remove created dir and file, including log paths and config file paths
         CONFIG_MANAGER.file_path = CONFIG_FILE
-        logging.shutdown()
+        for handler in logger.handlers:
+            if type(handler).__name__ == "TimedRotatingFileHandler":
+                logger.removeHandler(handler)
+        print(logger.handlers)
 
 
 @pytest.mark.parametrize("config_file_setup", ["nonexist_path"], indirect=True)
@@ -122,9 +126,7 @@ def test_config_file_inaccessible_path(config_file_setup, inaccessible_file):
 def test_save_logs(config_file_setup, log_directory):
     easy_logging = EasyLoggingConfigPython()
     easy_logging.create_log()
-    logger = getLogger("snowflake.connector")
     logger.info("this is a test logger")
-
     assert os.path.exists(os.path.join(log_directory, "python-connector.log"))
     with open(os.path.join(log_directory, "python-connector.log")) as f:
         data = f.read()
@@ -136,7 +138,6 @@ def test_save_logs(config_file_setup, log_directory):
 def test_no_save_logs(config_file_setup, log_directory):
     easy_logging = EasyLoggingConfigPython()
     easy_logging.create_log()
-    logger = getLogger("snowflake.connector")
     logger.info("this is a test logger")
 
     assert not os.path.exists(os.path.join(log_directory, "python-connector.log"))
