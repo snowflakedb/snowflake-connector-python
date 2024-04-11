@@ -14,12 +14,12 @@ try:
     import tomlkit
 
     from snowflake.connector import EasyLoggingConfigPython
+    from snowflake.connector.config_manager import CONFIG_MANAGER
+    from snowflake.connector.constants import CONFIG_FILE
 except ModuleNotFoundError:
     pass
 
 import snowflake.connector
-from snowflake.connector.config_manager import CONFIG_MANAGER
-from snowflake.connector.constants import CONFIG_FILE
 
 logger = getLogger("snowflake.connector")
 
