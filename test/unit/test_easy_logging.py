@@ -1,18 +1,25 @@
 #
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+import pytest
+
+pytestmark = pytest.mark.skipolddriver
+
 import os.path
 import platform
 from logging import getLogger
 from pathlib import Path
 
-import pytest
-import tomlkit
+try:
+    import tomlkit
+
+    from snowflake.connector import EasyLoggingConfigPython
+    from snowflake.connector.config_manager import CONFIG_MANAGER
+    from snowflake.connector.constants import CONFIG_FILE
+except ModuleNotFoundError:
+    pass
 
 import snowflake.connector
-from snowflake.connector import EasyLoggingConfigPython
-from snowflake.connector.config_manager import CONFIG_MANAGER
-from snowflake.connector.constants import CONFIG_FILE
 
 logger = getLogger("snowflake.connector")
 
@@ -88,7 +95,6 @@ def config_file_setup(
 
 
 @pytest.mark.parametrize("config_file_setup", ["nonexist_path"], indirect=True)
-@pytest.mark.skipolddriver
 def test_config_file_nonexist_path(config_file_setup, nonexist_file):
     assert not os.path.exists(nonexist_file)
     EasyLoggingConfigPython()
@@ -96,7 +102,6 @@ def test_config_file_nonexist_path(config_file_setup, nonexist_file):
 
 
 @pytest.mark.parametrize("config_file_setup", ["inabsolute_path"], indirect=True)
-@pytest.mark.skipolddriver
 def test_config_file_inabsolute_path(config_file_setup, inabsolute_file):
     with pytest.raises(FileNotFoundError) as e:
         EasyLoggingConfigPython()
@@ -104,7 +109,6 @@ def test_config_file_inabsolute_path(config_file_setup, inabsolute_file):
 
 
 @pytest.mark.parametrize("config_file_setup", ["inaccessible_path"], indirect=True)
-@pytest.mark.skipolddriver
 @pytest.mark.skipif(
     platform.system() == "Windows", reason="Test only applicable to Windows"
 )
@@ -118,7 +122,6 @@ def test_config_file_inaccessible_path(config_file_setup, inaccessible_file):
 
 
 @pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
-@pytest.mark.skipolddriver
 def test_save_logs(config_file_setup, log_directory):
     easy_logging = EasyLoggingConfigPython()
     easy_logging.create_log()
@@ -134,7 +137,6 @@ def test_save_logs(config_file_setup, log_directory):
 
 
 @pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
-@pytest.mark.skipolddriver
 def test_no_save_logs(config_file_setup, log_directory):
     easy_logging = EasyLoggingConfigPython()
     easy_logging.create_log()
