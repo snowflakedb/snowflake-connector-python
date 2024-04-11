@@ -280,6 +280,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # Disable console login and fall back to getting SSO URL from GS
+    "debug_arrow_chunk": (
+        False,
+        bool,
+    ),  # log raw arrow chunk for debugging purpuse in case there is malformed arrow data
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")

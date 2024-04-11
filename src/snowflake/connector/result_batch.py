@@ -664,7 +664,12 @@ class ArrowResultBatch(ResultBatch):
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]:
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
         if self._local:
-            return self._from_data(self._data, iter_unit)
+            try:
+                return self._from_data(self._data, iter_unit)
+            except BaseException:
+                if connection and connection._debug_arrow_chunk:
+                    logger.debug(f"arrow data can not be parsed: {self._data}")
+                raise
         response = self._download(connection=connection)
         logger.debug(f"started loading result batch id: {self.id}")
         with TimerContextManager() as load_metric:
