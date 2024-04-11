@@ -31,6 +31,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Improved cleanup logic for connection to rely on interpreter shutdown instead of the `__del__` method.
   - Updated the logging level from INFO to DEBUG when logging the executed query using `SnowflakeCursor.execute`.
   - Fixed a bug that the truncated password in log is not masked.
+  - Disabled accelerate when connecting to endpoint in China.
 
 - v3.7.1(February 21, 2024)
 
