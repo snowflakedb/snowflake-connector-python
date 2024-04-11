@@ -80,7 +80,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
         )
         self.use_s3_regional_url = use_s3_regional_url
-        self.location_type = stage_info["locationType"]
+        self.location_type = stage_info.get("locationType")
 
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
         self.endpoint: str | None = None
