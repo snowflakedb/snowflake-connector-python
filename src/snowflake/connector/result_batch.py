@@ -667,13 +667,18 @@ class ArrowResultBatch(ResultBatch):
             try:
                 return self._from_data(self._data, iter_unit)
             except BaseException:
-                if connection and connection._debug_arrow_chunk:
+                if connection and getattr(connection, "_debug_arrow_chunk", False):
                     logger.debug(f"arrow data can not be parsed: {self._data}")
                 raise
         response = self._download(connection=connection)
         logger.debug(f"started loading result batch id: {self.id}")
         with TimerContextManager() as load_metric:
-            loaded_data = self._load(response, iter_unit)
+            try:
+                loaded_data = self._load(response, iter_unit)
+            except BaseException:
+                if connection and getattr(connection, "_debug_arrow_chunk", False):
+                    logger.debug(f"arrow data can not be parsed: {response}")
+                raise
         logger.debug(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         return loaded_data
