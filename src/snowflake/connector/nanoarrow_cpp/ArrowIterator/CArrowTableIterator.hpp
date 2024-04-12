@@ -26,7 +26,6 @@ class CArrowTableIterator : public CArrowIterator {
   /**
    * Constructor
    */
-
   CArrowTableIterator(PyObject* context, char* arrow_bytes,
                       int64_t arrow_bytes_size, bool number_to_decimal);
 
@@ -44,8 +43,6 @@ class CArrowTableIterator : public CArrowIterator {
 
  private:
   // nanoarrow data
-  std::vector<std::vector<nanoarrow::UniqueArray>> m_newArrays;
-  std::vector<std::vector<nanoarrow::UniqueSchema>> m_newSchemas;
   std::vector<nanoarrow::UniqueSchema> m_ipcSchemaArrayVec;
 
   bool m_tableConverted = false;
@@ -61,7 +58,7 @@ class CArrowTableIterator : public CArrowIterator {
    * Reconstruct record batches with type conversion in place
    */
   void reconstructRecordBatches();
-
+  void convertIfNeeded(ArrowSchema* columnSchema, ArrowArrayView* columnArray);
   void reconstructRecordBatches_nanoarrow();
 
   /**
@@ -74,9 +71,7 @@ class CArrowTableIterator : public CArrowIterator {
    * convert scaled fixed number column to Decimal, or Double column based on
    * setting
    */
-  void convertScaledFixedNumberColumn_nanoarrow(const unsigned int batchIdx,
-                                                const int colIdx,
-                                                ArrowSchemaView* field,
+  void convertScaledFixedNumberColumn_nanoarrow(ArrowSchemaView* field,
                                                 ArrowArrayView* columnArray,
                                                 const unsigned int scale);
 
@@ -84,23 +79,22 @@ class CArrowTableIterator : public CArrowIterator {
    * convert scaled fixed number column to Decimal column
    */
   void convertScaledFixedNumberColumnToDecimalColumn_nanoarrow(
-      const unsigned int batchIdx, const int colIdx, ArrowSchemaView* field,
-      ArrowArrayView* columnArray, const unsigned int scale);
+      ArrowSchemaView* field, ArrowArrayView* columnArray,
+      const unsigned int scale);
 
   /**
    * convert scaled fixed number column to Double column
    */
   void convertScaledFixedNumberColumnToDoubleColumn_nanoarrow(
-      const unsigned int batchIdx, const int colIdx, ArrowSchemaView* field,
-      ArrowArrayView* columnArray, const unsigned int scale);
+      ArrowSchemaView* field, ArrowArrayView* columnArray,
+      const unsigned int scale);
 
   /**
    * convert Snowflake Time column (Arrow int32/int64) to Arrow Time column
    * Since Python/Pandas Time does not support nanoseconds, this function
    * truncates values to microseconds if necessary
    */
-  void convertTimeColumn_nanoarrow(const unsigned int batchIdx,
-                                   const int colIdx, ArrowSchemaView* field,
+  void convertTimeColumn_nanoarrow(ArrowSchemaView* field,
                                    ArrowArrayView* columnArray,
                                    const int scale);
 
@@ -108,9 +102,7 @@ class CArrowTableIterator : public CArrowIterator {
    * convert Snowflake TimestampNTZ/TimestampLTZ column to Arrow Timestamp
    * column
    */
-  void convertTimestampColumn_nanoarrow(const unsigned int batchIdx,
-                                        const int colIdx,
-                                        ArrowSchemaView* field,
+  void convertTimestampColumn_nanoarrow(ArrowSchemaView* field,
                                         ArrowArrayView* columnArray,
                                         const int scale,
                                         const std::string timezone = "");
@@ -120,9 +112,7 @@ class CArrowTableIterator : public CArrowIterator {
    * Arrow Timestamp does not support time zone info in each value, so this
    * method convert TimestampTZ to Arrow timestamp with UTC timezone
    */
-  void convertTimestampTZColumn_nanoarrow(const unsigned int batchIdx,
-                                          const int colIdx,
-                                          ArrowSchemaView* field,
+  void convertTimestampTZColumn_nanoarrow(ArrowSchemaView* field,
                                           ArrowArrayView* columnArray,
                                           const int scale, const int byteLength,
                                           const std::string timezone);

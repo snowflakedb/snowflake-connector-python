@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import itertools
 import json
+import os
 import random
 import re
 from datetime import date, datetime, time, timedelta, timezone
@@ -15,6 +17,11 @@ import pytest
 
 import snowflake.connector
 
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    from ..randomize import random_string
+
 pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 
 try:
@@ -23,6 +30,13 @@ try:
     no_arrow_iterator_ext = False
 except ImportError:
     no_arrow_iterator_ext = True
+
+try:
+    import pandas
+
+    pandas_available = True
+except ImportError:
+    pandas_available = False
 
 
 TIMESTAMP_FMT = "%Y-%m-%d %H:%M:%S"
@@ -82,6 +96,85 @@ PRIMITIVE_DATATYPE_EXAMPLES = {
     "VARCHAR": [None, "ascii_test", b"\xf0\x9f\x98\x80".decode("utf-8")],
 }
 
+# Some datatypes do not match 1:1 with the original data
+PANDAS_REPRS = dict()
+if pandas_available:
+    PANDAS_REPRS = {
+        "TIMESTAMP_LTZ": [
+            pandas.NaT,
+            pandas.Timestamp("2024-01-01 12:00:00+0000", tz="UTC"),
+        ],
+        "TIMESTAMP_NTZ": [pandas.NaT, pandas.Timestamp("2024-01-01 12:00:00")],
+        "TIMESTAMP_TZ": [
+            pandas.NaT,
+            pandas.Timestamp("2024-01-01 12:00:00+0000", tz="UTC"),
+        ],
+        "NUMBER": [numpy.NAN, 1.0, 2.0, 3.0],
+    }
+
+ICEBERG_CONFIG = """
+CATALOG = 'SNOWFLAKE'
+EXTERNAL_VOLUME = 'python_connector_iceberg_exvol'
+BASE_LOCATION = 'python_connector_merge_gate';
+"""
+
+ICEBERG_UNSUPPORTED_TYPES = {
+    "CHAR",
+    "NUMBER",
+    "TIMESTAMP_TZ",
+    "INTEGER",  # Large integer example is incompatible
+}
+
+
+ICEBERG_UNSUPPORTED_NESTED_TYPES = {
+    # SNOW-1320508: Timestamp_LTZ has incorrect scale in iceberg tables
+    "TIMESTAMP_LTZ",
+}
+
+# iceberg testing is only configured in aws at the moment
+ICEBERG_ENVIRONMENTS = {"dev", "aws"}
+ICEBERG_SUPPORTED = os.getenv("cloud_provider", "dev") in ICEBERG_ENVIRONMENTS
+
+PANDAS_UNSUPPORTED_NESTED_TYPES = {
+    # SNOW-1326075: Timestamp types drop information when converted to pandas
+    "TIMESTAMP_LTZ",
+    "TIMESTAMP_NTZ",
+    "TIMESTAMP_TZ",
+    "TIME",
+}
+
+# Generate all valid test cases. By using pytest.param with an id you can
+# run a specific test case easier like so:
+# pytest 'test/integ/test_arrow_result.py::test_dataypes[BINARY-iceberg-pandas]'
+DATATYPE_TEST_CONFIGURATIONS = [
+    pytest.param(
+        datatype,
+        PRIMITIVE_DATATYPE_EXAMPLES[datatype],
+        iceberg,
+        pandas,
+        id=f"{datatype}{'-iceberg' if iceberg else ''}{'-pandas' if pandas else ''}",
+    )
+    for iceberg, pandas, datatype in itertools.product(
+        [True, False], [True, False], PRIMITIVE_DATATYPE_EXAMPLES
+    )
+    # Run all tests when not converting to pandas or using iceberg
+    if iceberg is False
+    # Only run iceberg tests on applicable types
+    or (ICEBERG_SUPPORTED and iceberg and datatype not in ICEBERG_UNSUPPORTED_TYPES)
+]
+
+STRUCTURED_DATATYPE_TEST_CONFIGURATIONS = [
+    test
+    for test in DATATYPE_TEST_CONFIGURATIONS
+    if not test.values[3]
+    # Don't run tests for unsupported pandas types
+    or (
+        pandas_available
+        and test.values[3]
+        and test.values[0] not in PANDAS_UNSUPPORTED_NESTED_TYPES
+    )
+]
+
 
 def serialize(value):
     if isinstance(value, bytearray):
@@ -91,8 +184,60 @@ def serialize(value):
     return value
 
 
-@pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
-def test_datatypes(datatype, examples, conn_cnx):
+def verify_datatypes(conn_cnx, query, examples, schema, iceberg=False, pandas=False):
+    table_name = f"arrow_datatype_test_verifaction_table_{random_string(5)}"
+    with conn_cnx() as conn:
+        try:
+            conn.cursor().execute("alter session set use_cached_result=false")
+            # conn.cursor().execute(
+            #     "alter session set enable_structured_types_in_client_response=true"
+            # )
+            # conn.cursor().execute(
+            #     "alter session set force_enable_structured_types_native_arrow_format=true"
+            # )
+            iceberg_table, iceberg_config = (
+                ("iceberg", ICEBERG_CONFIG) if iceberg else ("", "")
+            )
+            conn.cursor().execute(
+                f"create {iceberg_table} table if not exists {table_name} {schema} {iceberg_config}"
+            )
+            conn.cursor().execute(f"insert into {table_name} {query}")
+            cur = conn.cursor().execute(f"select * from {table_name}")
+            if pandas:
+                pandas_verify(cur, examples)
+            else:
+                datatype_verify(cur, examples)
+        finally:
+            conn.cursor().execute(f"drop table if exists {table_name}")
+
+
+def datatype_verify(cur, data):
+    rows = cur.fetchall()
+    assert len(rows) == len(data), "Result should have same number of rows as examples"
+    for row, datum in zip(rows, data):
+        assert len(row) == 1, "Result should only have one column."
+        assert row[0] == datum, "Result values should match input examples."
+
+
+def pandas_verify(cur, data):
+    pdf = cur.fetch_pandas_all()
+    assert len(pdf) == len(data), "Result should have same number of rows as examples"
+    for value, datum in zip(pdf.COL.to_list(), data):
+        if isinstance(value, numpy.ndarray):
+            value = value.tolist()
+        # Numpy nans have to be checked with isnan. nan != nan according to numpy
+        if isinstance(datum, float) and numpy.isnan(datum):
+            assert numpy.isnan(value), "nan values should return nan."
+        else:
+            assert (
+                value == datum or value is datum
+            ), f"Result value {value} should match input example {datum}."
+
+
+@pytest.mark.parametrize(
+    "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
+)
+def test_datatypes(datatype, examples, iceberg, pandas, conn_cnx):
     json_values = re.escape(json.dumps(examples, default=serialize))
     query = f"""
     SELECT
@@ -100,57 +245,49 @@ def test_datatypes(datatype, examples, conn_cnx):
     FROM
       TABLE(FLATTEN(input => parse_json('{json_values}')));
     """
-    with conn_cnx() as conn:
-        rows = conn.cursor().execute(query).fetchall()
-        if datatype == "DOUBLE":
-            for x, y in zip(sorted(r[0] for r in rows), sorted(examples)):
-                assert x == pytest.approx(y)
-        else:
-            assert [r[0] for r in rows] == examples
+    if pandas:
+        examples = PANDAS_REPRS.get(datatype, examples)
+    verify_datatypes(conn_cnx, query, examples, f"(col {datatype})", iceberg, pandas)
 
 
-def structured_type_verify(conn_cnx, query, data):
-    with conn_cnx() as conn:
-        conn.cursor().execute("alter session set use_cached_result=false")
-        conn.cursor().execute(
-            "alter session set enable_structured_types_in_client_response=true"
-        )
-        conn.cursor().execute(
-            "alter session set force_enable_structured_types_native_arrow_format=true"
-        )
-        rows = conn.cursor().execute(query).fetchall()
-        assert len(rows) == 1, "Result should only have one row."
-        assert len(rows[0]) == 1, "Result should only have one column."
-        assert rows[0][0] == data, "Result values should match input examples."
-
-
-@pytest.mark.internal
-@pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
-def test_array(datatype, examples, conn_cnx):
+@pytest.mark.parametrize(
+    "datatype,examples,iceberg,pandas", STRUCTURED_DATATYPE_TEST_CONFIGURATIONS
+)
+def test_array(datatype, examples, iceberg, pandas, conn_cnx):
     json_values = re.escape(json.dumps(examples, default=serialize))
     query = f"""
     SELECT
       parse_json('{json_values}') :: array({datatype}) as col
     """
-    structured_type_verify(conn_cnx, query, examples)
+    verify_datatypes(
+        conn_cnx, query, [examples], f"(col array({datatype}))", iceberg, pandas
+    )
 
 
-@pytest.mark.internal
 @pytest.mark.parametrize("key_type", ["varchar", "number"])
-@pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
-def test_map(key_type, datatype, examples, conn_cnx):
-    data = {i if key_type == "number" else str(i): ex for i, ex in enumerate(examples)}
+@pytest.mark.parametrize(
+    "datatype,examples,iceberg,pandas", STRUCTURED_DATATYPE_TEST_CONFIGURATIONS
+)
+def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
+    if iceberg and key_type == "number":
+        pytest.skip("Iceberg does not support number keys.")
+    data = {str(i) if key_type == "varchar" else i: ex for i, ex in enumerate(examples)}
     json_string = re.escape(json.dumps(data, default=serialize))
     query = f"""
     SELECT
       parse_json('{json_string}') :: map({key_type}, {datatype}) as col
     """
-    structured_type_verify(conn_cnx, query, data)
+    if pandas:
+        examples = PANDAS_REPRS.get(datatype, examples)
+    verify_datatypes(
+        conn_cnx, query, [data], f"(col map({key_type}, {datatype}))", iceberg, pandas
+    )
 
 
-@pytest.mark.internal
-@pytest.mark.parametrize("datatype,examples", list(PRIMITIVE_DATATYPE_EXAMPLES.items()))
-def test_object(datatype, examples, conn_cnx):
+@pytest.mark.parametrize(
+    "datatype,examples,iceberg,pandas", STRUCTURED_DATATYPE_TEST_CONFIGURATIONS
+)
+def test_object(datatype, examples, iceberg, pandas, conn_cnx):
     fields = [f"{datatype}_{i}" for i in range(len(examples))]
     schema = ", ".join(f"{field} {datatype}" for field in fields)
     data = {k: v for k, v in zip(fields, examples)}
@@ -159,18 +296,30 @@ def test_object(datatype, examples, conn_cnx):
     SELECT
       parse_json('{json_string}') :: object({schema}) as col
     """
-    structured_type_verify(conn_cnx, query, data)
+    if pandas:
+        examples = PANDAS_REPRS.get(datatype, examples)
+    verify_datatypes(
+        conn_cnx, query, [data], f"(col object({schema}))", iceberg, pandas
+    )
 
 
-@pytest.mark.internal
-def test_nested_types(conn_cnx):
-    data = {"child": [{"key1": {"struct_field": 1}}]}
+@pytest.mark.parametrize("pandas", [True, False])
+@pytest.mark.parametrize("iceberg", [True, False])
+def test_nested_types(conn_cnx, iceberg, pandas):
+    data = {"child": [{"key1": {"struct_field": "value"}}]}
     json_string = re.escape(json.dumps(data, default=serialize))
     query = f"""
     SELECT
-      parse_json('{json_string}') :: object(child array(map (varchar, object(struct_field number)))) as col
+      parse_json('{json_string}') :: object(child array(map (varchar, object(struct_field varchar)))) as col
     """
-    structured_type_verify(conn_cnx, query, data)
+    verify_datatypes(
+        conn_cnx,
+        query,
+        [data],
+        "(col object(child array(map (varchar, object(struct_field varchar)))))",
+        iceberg,
+        pandas,
+    )
 
 
 def test_select_tinyint(conn_cnx):
