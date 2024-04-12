@@ -189,12 +189,6 @@ def verify_datatypes(conn_cnx, query, examples, schema, iceberg=False, pandas=Fa
     with conn_cnx() as conn:
         try:
             conn.cursor().execute("alter session set use_cached_result=false")
-            # conn.cursor().execute(
-            #     "alter session set enable_structured_types_in_client_response=true"
-            # )
-            # conn.cursor().execute(
-            #     "alter session set force_enable_structured_types_native_arrow_format=true"
-            # )
             iceberg_table, iceberg_config = (
                 ("iceberg", ICEBERG_CONFIG) if iceberg else ("", "")
             )
