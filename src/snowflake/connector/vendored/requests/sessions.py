@@ -7,12 +7,15 @@ requests (cookies, auth, proxies).
 """
 import gzip
 import http
+import io
 import os
+import re
 import sys
 import time
 from collections import OrderedDict
 from datetime import timedelta
 from http import HTTPStatus
+from urllib.parse import unquote
 
 import urllib3
 
@@ -61,6 +64,8 @@ if sys.platform == "win32":
     preferred_clock = time.perf_counter
 else:
     preferred_clock = time.time
+
+RESULT_STAGE_REGEX = r"results.*\/[a-f0-9]{8}\b-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-\b[a-f0-9]{12}.*\?"
 
 
 def merge_setting(request_setting, session_setting, dict_class=OrderedDict):
@@ -573,7 +578,7 @@ class Session(SessionRedirectMixin):
             elif "Content-Encoding" not in headers:
                 decoded_data_obj = json_lib.loads(data.decode())
             else:
-                raise Exception("Cannot decode data")
+                raise Exception(f"Cannot decode data. {data}")
 
         parsed_url = urlparse(url)
         if parsed_url.path == "/queries/v1/query-request":
@@ -585,37 +590,24 @@ class Session(SessionRedirectMixin):
                 None,  # TODO: binding variables
                 decoded_data_obj["asyncExec"]
             )
+        elif re.search(RESULT_STAGE_REGEX, unquote(url)):
+            def _parse_chunk_url_for_sfstream(chunk_url):
+                result = re.search(RESULT_STAGE_REGEX, unquote(chunk_url))
+                url = result.group(0)
+                slash_index = url.index("/")
+                return url[slash_index + 1: -1]
+
+            import _sfstream
+            chunk_url = _parse_chunk_url_for_sfstream(url)
+            chunk_content_stream = _sfstream.SfStream(
+                chunk_url, _sfstream.FileType.RESULT
+            )
+            read_data = io.BufferedReader(chunk_content_stream).read()
+            if read_data[0:2] == b"\x1f\x8b":
+                read_data = gzip.decompress(read_data)
+            ret = read_data
         else:
-            # Create the Request.
-            req = Request(
-                method=method.upper(),
-                url=url,
-                headers=headers,
-                files=files,
-                data=data or {},
-                json=json,
-                params=params or {},
-                auth=auth,
-                cookies=cookies,
-                hooks=hooks,
-            )
-            prep = self.prepare_request(req)
-
-            proxies = proxies or {}
-
-            settings = self.merge_environment_settings(
-                prep.url, proxies, stream, verify, cert
-            )
-
-            # Send the request.
-            send_kwargs = {
-                "timeout": timeout,
-                "allow_redirects": allow_redirects,
-            }
-            send_kwargs.update(settings)
-            resp = self.send(prep, **send_kwargs)
-
-            return resp
+            raise Exception(f"parsed url: {parsed_url}, data: {data}, headers: {headers}")
 
         resp = Response()
         resp.status_code = http.HTTPStatus.OK
