@@ -2,16 +2,16 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-from __future__ import annotations
-
-import os
-from logging import getLogger
-from pathlib import Path
 from test.integ.conftest import create_connection
 
 import pytest
 
 pytestmark = pytest.mark.skipolddriver
+
+import os.path
+from logging import getLogger
+from pathlib import Path
+
 try:
     import tomlkit
 
@@ -56,12 +56,13 @@ def test_save_logs(db_parameters, config_file_setup, log_directory):
     assert os.path.exists(os.path.join(log_directory, "python-connector.log"))
     with open(os.path.join(log_directory, "python-connector.log")) as f:
         data = f.read()
+    try:
         assert "Snowflake Connector for Python" in data
-
-    # set logger back to default
-    getLogger("snowflake.connector").setLevel(10)
-    getLogger("botocore").setLevel(0)
-    getLogger("boto3").setLevel(0)
+    finally:
+        # set logger back to default
+        getLogger("snowflake.connector").setLevel(10)
+        getLogger("botocore").setLevel(0)
+        getLogger("boto3").setLevel(0)
 
 
 @pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
