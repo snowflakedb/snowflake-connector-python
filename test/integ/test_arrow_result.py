@@ -155,7 +155,9 @@ DATATYPE_TEST_CONFIGURATIONS = [
         id=f"{datatype}{'-iceberg' if iceberg else ''}{'-pandas' if pandas else ''}",
     )
     for iceberg, pandas, datatype in itertools.product(
-        [True, False], [True, False], PRIMITIVE_DATATYPE_EXAMPLES
+        [True, False],
+        [True, False] if pandas_available else [False],
+        PRIMITIVE_DATATYPE_EXAMPLES,
     )
     # Run all tests when not converting to pandas or using iceberg
     if iceberg is False
