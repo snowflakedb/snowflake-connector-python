@@ -133,7 +133,11 @@ ICEBERG_UNSUPPORTED_NESTED_TYPES = {
 
 # iceberg testing is only configured in aws at the moment
 ICEBERG_ENVIRONMENTS = {"dev", "aws"}
+STRUCTRED_TYPE_ENVIRONMENTS = {"dev", "aws"}
 ICEBERG_SUPPORTED = os.getenv("cloud_provider", "dev") in ICEBERG_ENVIRONMENTS
+STRUCTURED_TYPES_SUPPORTED = (
+    os.getenv("cloud_provider", "dev") in STRUCTRED_TYPE_ENVIRONMENTS
+)
 
 PANDAS_UNSUPPORTED_NESTED_TYPES = {
     # SNOW-1326075: Timestamp types drop information when converted to pandas
@@ -246,6 +250,9 @@ def test_datatypes(datatype, examples, iceberg, pandas, conn_cnx):
     verify_datatypes(conn_cnx, query, examples, f"(col {datatype})", iceberg, pandas)
 
 
+@pytest.mark.skipif(
+    not STRUCTURED_TYPES_SUPPORTED, reason="structured types not supported in this env"
+)
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", STRUCTURED_DATATYPE_TEST_CONFIGURATIONS
 )
@@ -260,6 +267,9 @@ def test_array(datatype, examples, iceberg, pandas, conn_cnx):
     )
 
 
+@pytest.mark.skipif(
+    not STRUCTURED_TYPES_SUPPORTED, reason="structured types not supported in this env"
+)
 @pytest.mark.parametrize("key_type", ["varchar", "number"])
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", STRUCTURED_DATATYPE_TEST_CONFIGURATIONS
@@ -280,6 +290,9 @@ def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
     )
 
 
+@pytest.mark.skipif(
+    not STRUCTURED_TYPES_SUPPORTED, reason="structured types not supported in this env"
+)
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", STRUCTURED_DATATYPE_TEST_CONFIGURATIONS
 )
@@ -299,7 +312,10 @@ def test_object(datatype, examples, iceberg, pandas, conn_cnx):
     )
 
 
-@pytest.mark.parametrize("pandas", [True, False])
+@pytest.mark.skipif(
+    not STRUCTURED_TYPES_SUPPORTED, reason="structured types not supported in this env"
+)
+@pytest.mark.parametrize("pandas", [True, False] if pandas_available else [False])
 @pytest.mark.parametrize("iceberg", [True, False])
 def test_nested_types(conn_cnx, iceberg, pandas):
     data = {"child": [{"key1": {"struct_field": "value"}}]}
