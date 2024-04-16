@@ -12,6 +12,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
   - Added easy logging configuration so that users can easily generate log file by setup log config in `$SNOWFLAKE_HOME/config.toml`.
   - Improved s3 acceleration logic when connecting to China endpoint.
+  - Added support for structured types to fetch_pandas_all
+  - Added additional testing around structured type use in iceberg tables.
 
 - v3.8.1(April 09, 2024)
 
@@ -36,8 +38,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Improved cleanup logic for connection to rely on interpreter shutdown instead of the `__del__` method.
   - Updated the logging level from INFO to DEBUG when logging the executed query using `SnowflakeCursor.execute`.
   - Fixed a bug that the truncated password in log is not masked.
-  - Added support for structured types to fetch_pandas_all
-  - Added additional testing around structured type use in iceberg tables.
 
 - v3.7.1(February 21, 2024)
 
