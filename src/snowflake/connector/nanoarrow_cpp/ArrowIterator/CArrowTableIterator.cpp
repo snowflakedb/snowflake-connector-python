@@ -80,9 +80,10 @@ void CArrowTableIterator::convertIfNeeded(ArrowSchema* columnSchema,
 
     case SnowflakeType::Type::ARRAY: {
       switch (columnSchemaView.type) {
-        case NANOARROW_TYPE_STRING:
+        case NANOARROW_TYPE_STRING: {
           // No need to convert json encoded array
           break;
+        }
         case NANOARROW_TYPE_LIST: {
           if (columnSchemaView.schema->n_children != 1) {
             std::string errorInfo = Logger::formatString(
@@ -111,6 +112,7 @@ void CArrowTableIterator::convertIfNeeded(ArrowSchema* columnSchema,
           break;
         }
       }
+      break;
     }
     case SnowflakeType::Type::MAP: {
       if (columnSchemaView.schema->n_children != 1) {
@@ -121,7 +123,7 @@ void CArrowTableIterator::convertIfNeeded(ArrowSchema* columnSchema,
             columnSchemaView.schema->n_children);
         logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-        return;
+        break;
       }
 
       ArrowSchema* entries = columnSchemaView.schema->children[0];
@@ -132,7 +134,7 @@ void CArrowTableIterator::convertIfNeeded(ArrowSchema* columnSchema,
             entries->n_children);
         logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
         PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-        return;
+        break;
       }
 
       ArrowSchema* key_schema = entries->children[0];
