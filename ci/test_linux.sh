@@ -37,9 +37,10 @@ else
         echo "[Info] Testing with ${PYTHON_VERSION}"
         SHORT_VERSION=$(python3.10 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
         CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/snowflake_connector_python*cp${SHORT_VERSION}*manylinux2014*.whl | sort -r | head -n 1)
-        TEST_ENVLIST=fix_lint,py${SHORT_VERSION}-{unit,integ,pandas,sso}-ci,py${SHORT_VERSION}-coverage
+        TEST_LIST=`echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
+        TEST_ENVLIST=fix_lint,$TEST_LIST,py${PYTHON_VERSION/\./}-coverage
         echo "[Info] Running tox for ${TEST_ENVLIST}"
 
-        python3.10 -m tox -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
+        python3.10 -m tox run -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
     done
 fi

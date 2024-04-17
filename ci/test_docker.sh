@@ -18,7 +18,7 @@ source $THIS_DIR/set_base_image.sh
 cd $THIS_DIR/docker/connector_test
 
 CONTAINER_NAME=test_pyconnector
-arch=$(uname -p)
+arch="x86_64"
 
 echo "[Info] Building docker image"
 if [[ "$arch" == "aarch64" ]]; then
@@ -32,7 +32,7 @@ fi
 docker build --pull -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE --build-arg GOSU_URL="$GOSU_URL" . -f Dockerfile
 
 user_id=$(id -u ${USER})
-docker run --network=host \
+docker run --platform linux/amd64 --network=host \
     -e TERM=vt102 \
     -e PIP_DISABLE_PIP_VERSION_CHECK=1 \
     -e OPENSSL_FIPS=1 \

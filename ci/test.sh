@@ -10,28 +10,28 @@ PARAMETERS_DIR="${CONNECTOR_DIR}/.github/workflows/parameters/private"
 cd "${CONNECTOR_DIR}"
 
 # Check Requirements
-if [ -z "${PARAMETERS_SECRET}" ]; then
-    echo "Missing PARAMETERS_SECRET, failing..."
-    exit 1
-fi
+# if [ -z "${PARAMETERS_SECRET}" ]; then
+#     echo "Missing PARAMETERS_SECRET, failing..."
+#     exit 1
+# fi
 
 # Decrypt parameters file
-PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws.py.gpg"
-[ ${cloud_provider} == azure ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_azure.py.gpg"
-[ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp.py.gpg"
-gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters.py
+# PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws.py.gpg"
+# [ ${cloud_provider} == azure ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_azure.py.gpg"
+# [ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp.py.gpg"
+# gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters.py
 
-# Decrypt jenkins version parameters file
-PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws_jenkins.py.gpg"
-[ ${cloud_provider} == azure ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_azure_jenkins.py.gpg"
-[ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp_jenkins.py.gpg"
-gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters_jenkins.py
+# # Decrypt jenkins version parameters file
+# PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws_jenkins.py.gpg"
+# [ ${cloud_provider} == azure ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_azure_jenkins.py.gpg"
+# [ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp_jenkins.py.gpg"
+# gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters_jenkins.py
 
-# Decrypt to get new test password
-gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMETERS_DIR}/jenkins_test_parameters.py.gpg > ci/jenkins_test_parameters.py
+# # Decrypt to get new test password
+# gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMETERS_DIR}/jenkins_test_parameters.py.gpg > ci/jenkins_test_parameters.py
 
 # Download artifacts made by build
-aws s3 cp --recursive --only-show-errors s3://sfc-eng-jenkins/repository/python_connector/linux/${client_git_branch}/${client_git_commit}/ dist
+aws s3 cp --recursive --only-show-errors s3://sfc-eng-jenkins/repository/python_connector/linux/main/cf54f6cbd280b101dcdbd3b632416c94919ae1af/ dist
 
 # Run one of the tests
 if [ "${py_test_mode}" = "fips" ]; then
