@@ -167,7 +167,6 @@ def test_autocommit_parameters(db_parameters):
         protocol=db_parameters["protocol"],
         schema=db_parameters["schema"],
         database=db_parameters["database"],
-        warehouse=db_parameters["warehouse"],
         autocommit=False,
     ) as cnx:
         exe(
