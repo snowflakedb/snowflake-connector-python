@@ -8,12 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.9.0(TBD)
-
 - v3.9.0(April 20,2024)
-
-   -N/A
-
 
   - Added easy logging configuration so that users can easily generate log file by setup log config in `$SNOWFLAKE_HOME/config.toml`.
   - Improved s3 acceleration logic when connecting to China endpoint.
