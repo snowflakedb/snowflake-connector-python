@@ -13,7 +13,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added easy logging configuration so that users can easily generate log file by setup log config in `$SNOWFLAKE_HOME/config.toml`.
   - Improved s3 acceleration logic when connecting to China endpoint.
   - Added support for structured types to fetch_pandas_all
-  - Added additional testing around structured type use in iceberg tables.
 
 - v3.8.1(April 09, 2024)
 
