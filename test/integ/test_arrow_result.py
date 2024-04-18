@@ -100,6 +100,8 @@ PRIMITIVE_DATATYPE_EXAMPLES = {
 
 # Some datatypes do not match 1:1 with the original data
 PANDAS_REPRS = dict()
+PANDAS_ARRAY_REPRS = dict()
+PANDAS_STRUCTURED_REPRS = dict()
 if pandas_available:
     PANDAS_REPRS = {
         "TIMESTAMP_LTZ": [
@@ -113,6 +115,21 @@ if pandas_available:
         ],
         "NUMBER": [numpy.NAN, 1.0, 2.0, 3.0],
     }
+
+    PANDAS_STRUCTURED_REPRS = {
+        # SNOW-1326075: Timestamp types drop information when converted to pandas
+        "TIMESTAMP_LTZ": [None, 1704110400000000000],
+        "TIMESTAMP_NTZ": [None, 1704110400000000000],
+        "TIMESTAMP_TZ": [None, 1704110400000000000],
+    }
+
+ICEBERG_STRUCTURED_REPRS = {
+    # SNOW-1320508: Timestamp types have incorrect scale in iceberg tables
+    "TIMESTAMP_LTZ": [None, 9223372036854775807],
+    "TIMESTAMP_NTZ": [None, 9223372036854775807],
+    "TIMESTAMP_TZ": [None, 9223372036854775807],
+}
+
 
 # semi-structured types don't always preserve data through serialization
 SEMI_STRUCTURED_REPRS = {
@@ -146,26 +163,16 @@ ICEBERG_UNSUPPORTED_TYPES = {
 }
 
 
-ICEBERG_UNSUPPORTED_NESTED_TYPES = {
-    # SNOW-1320508: Timestamp_LTZ has incorrect scale in iceberg tables
-    "TIMESTAMP_LTZ",
-}
-
 # iceberg testing is only configured in aws at the moment
-ICEBERG_ENVIRONMENTS = {"dev", "aws"}
-STRUCTRED_TYPE_ENVIRONMENTS = {"dev", "aws"}
-ICEBERG_SUPPORTED = os.getenv("cloud_provider", "dev") in ICEBERG_ENVIRONMENTS
-STRUCTURED_TYPES_SUPPORTED = (
-    os.getenv("cloud_provider", "dev") in STRUCTRED_TYPE_ENVIRONMENTS
-)
+ICEBERG_ENVIRONMENTS = {"aws"}
+STRUCTRED_TYPE_ENVIRONMENTS = {"aws"}
+CLOUD = os.getenv("cloud_provider", "dev")
+RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
 
-PANDAS_UNSUPPORTED_NESTED_TYPES = {
-    # SNOW-1326075: Timestamp types drop information when converted to pandas
-    "TIMESTAMP_LTZ",
-    "TIMESTAMP_NTZ",
-    "TIMESTAMP_TZ",
-    "TIME",
-}
+ICEBERG_SUPPORTED = CLOUD in ICEBERG_ENVIRONMENTS and RUNNING_ON_GH or CLOUD == "dev"
+STRUCTURED_TYPES_SUPPORTED = (
+    CLOUD in STRUCTRED_TYPE_ENVIRONMENTS and RUNNING_ON_GH or CLOUD == "dev"
+)
 
 # Generate all valid test cases. By using pytest.param with an id you can
 # run a specific test case easier like so:
@@ -187,18 +194,6 @@ DATATYPE_TEST_CONFIGURATIONS = [
     if iceberg is False
     # Only run iceberg tests on applicable types
     or (ICEBERG_SUPPORTED and iceberg and datatype not in ICEBERG_UNSUPPORTED_TYPES)
-]
-
-STRUCTURED_DATATYPE_TEST_CONFIGURATIONS = [
-    test
-    for test in DATATYPE_TEST_CONFIGURATIONS
-    if not test.values[3]
-    # Don't run tests for unsupported pandas types
-    or (
-        pandas_available
-        and test.values[3]
-        and test.values[0] not in PANDAS_UNSUPPORTED_NESTED_TYPES
-    )
 ]
 
 
@@ -298,7 +293,7 @@ def test_datatypes(datatype, examples, iceberg, pandas, conn_cnx):
 
 
 @pytest.mark.parametrize(
-    "datatype,examples,iceberg,pandas", STRUCTURED_DATATYPE_TEST_CONFIGURATIONS
+    "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
 def test_array(datatype, examples, iceberg, pandas, conn_cnx):
     json_values = re.escape(json.dumps(examples, default=serialize))
@@ -307,6 +302,11 @@ def test_array(datatype, examples, iceberg, pandas, conn_cnx):
         col_type = f"array({datatype})"
         if datatype == "VARIANT":
             examples = [dumps(ex) if ex else ex for ex in examples]
+        elif pandas:
+            if iceberg:
+                examples = ICEBERG_STRUCTURED_REPRS.get(datatype, examples)
+            else:
+                examples = PANDAS_STRUCTURED_REPRS.get(datatype, examples)
     else:
         col_type = "array"
         examples = SEMI_STRUCTURED_REPRS.get(datatype, examples)
@@ -331,7 +331,7 @@ def test_array(datatype, examples, iceberg, pandas, conn_cnx):
 )
 @pytest.mark.parametrize("key_type", ["varchar", "number"])
 @pytest.mark.parametrize(
-    "datatype,examples,iceberg,pandas", STRUCTURED_DATATYPE_TEST_CONFIGURATIONS
+    "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
 def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
     if iceberg and key_type == "number":
@@ -339,50 +339,85 @@ def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
     data = {str(i) if key_type == "varchar" else i: ex for i, ex in enumerate(examples)}
     json_string = re.escape(json.dumps(data, default=serialize))
 
+    if datatype == "VARIANT":
+        data = {k: dumps(v) if v else v for k, v in data.items()}
+    elif pandas:
+        examples = PANDAS_STRUCTURED_REPRS.get(datatype, examples)
+        data = {
+            str(i) if key_type == "varchar" else i: ex for i, ex in enumerate(examples)
+        }
+
     query = f"""
     SELECT
       parse_json('{json_string}') :: map({key_type}, {datatype}) as col
     """
-    if datatype == "VARIANT":
-        data = {k: dumps(v) if v else v for k, v in data.items()}
-    verify_datatypes(
-        conn_cnx, query, [data], f"(col map({key_type}, {datatype}))", iceberg, pandas
-    )
+
+    if iceberg and pandas and datatype in ICEBERG_STRUCTURED_REPRS:
+        with pytest.raises(ValueError):
+            # SNOW-1320508: Timestamp types nested in maps currently cause an exception for iceberg tables
+            verify_datatypes(
+                conn_cnx,
+                query,
+                [data],
+                f"(col map({key_type}, {datatype}))",
+                iceberg,
+                pandas,
+            )
+    else:
+        verify_datatypes(
+            conn_cnx,
+            query,
+            [data],
+            f"(col map({key_type}, {datatype}))",
+            iceberg,
+            pandas,
+        )
 
 
 @pytest.mark.parametrize(
-    "datatype,examples,iceberg,pandas", STRUCTURED_DATATYPE_TEST_CONFIGURATIONS
+    "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
 def test_object(datatype, examples, iceberg, pandas, conn_cnx):
     fields = [f"{datatype}_{i}" for i in range(len(examples))]
+    data = {k: v for k, v in zip(fields, examples)}
+    json_string = re.escape(json.dumps(data, default=serialize))
 
     if STRUCTURED_TYPES_SUPPORTED:
         schema = ", ".join(f"{field} {datatype}" for field in fields)
         col_type = f"object({schema})"
+        if datatype == "VARIANT":
+            examples = [dumps(s) if s else s for s in examples]
+        elif pandas:
+            if iceberg:
+                examples = ICEBERG_STRUCTURED_REPRS.get(datatype, examples)
+            else:
+                examples = PANDAS_STRUCTURED_REPRS.get(datatype, examples)
     else:
         col_type = "object"
         examples = SEMI_STRUCTURED_REPRS.get(datatype, examples)
-
-    data = {k: v for k, v in zip(fields, examples)}
-    json_string = re.escape(json.dumps(data, default=serialize))
+    expected_data = {k: v for k, v in zip(fields, examples)}
 
     query = f"""
     SELECT
       parse_json('{json_string}') :: {col_type} as col
     """
-    if pandas:
-        examples = PANDAS_REPRS.get(datatype, examples)
-    if STRUCTURED_TYPES_SUPPORTED and datatype == "VARIANT":
-        data = {k: dumps(v) if v else v for k, v in data.items()}
-    verify_datatypes(
-        conn_cnx,
-        query,
-        [data],
-        f"(col {col_type})",
-        iceberg,
-        pandas,
-        not STRUCTURED_TYPES_SUPPORTED,
-    )
+
+    if iceberg and pandas and datatype in ICEBERG_STRUCTURED_REPRS:
+        with pytest.raises(ValueError):
+            # SNOW-1320508: Timestamp types nested in objects currently cause an exception for iceberg tables
+            verify_datatypes(
+                conn_cnx, query, [expected_data], f"(col {col_type})", iceberg, pandas
+            )
+    else:
+        verify_datatypes(
+            conn_cnx,
+            query,
+            [expected_data],
+            f"(col {col_type})",
+            iceberg,
+            pandas,
+            not STRUCTURED_TYPES_SUPPORTED,
+        )
 
 
 @pytest.mark.skipif(

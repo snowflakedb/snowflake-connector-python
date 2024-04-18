@@ -1314,7 +1314,16 @@ class SnowflakeCursor:
         return self._result_set._fetch_pandas_batches(**kwargs)
 
     def fetch_pandas_all(self, **kwargs: Any) -> DataFrame:
-        """Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk."""
+        """
+        Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk.
+
+        Returns:
+            A pandas dataframe containing the cursors query results.
+
+        Note:
+            Timestamp types that are nested in structured types may not be accurately represented
+            due to a limitation in the pyarrow to pandas conversion.
+        """
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
             self._prefetch_hook()
