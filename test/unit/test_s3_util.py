@@ -481,3 +481,21 @@ def test_accelerate_in_china_endpoint():
         8 * megabyte,
     )
     assert not rest_client.transfer_accelerate_config()
+
+    rest_client = SnowflakeS3RestClient(
+        meta,
+        StorageCredential(
+            creds,
+            MagicMock(autospec=SnowflakeConnection),
+            "GET file:/tmp/file.txt @~",
+        ),
+        {
+            "locationType": "S3",
+            "location": "bucket/path",
+            "creds": creds,
+            "region": "cn-north-1",
+            "endPoint": None,
+        },
+        8 * megabyte,
+    )
+    assert not rest_client.transfer_accelerate_config()
