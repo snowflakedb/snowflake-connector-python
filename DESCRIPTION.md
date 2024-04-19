@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.9.1(TBD)
+
+  - Fixed 400 error when connecting to a China endpoint.
+
 - v3.9.0(April 20,2024)
 
   - Added easy logging configuration so that users can easily generate log file by setup log config in `$SNOWFLAKE_HOME/config.toml`.
