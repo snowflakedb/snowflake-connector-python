@@ -10,7 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.9.1(April 22,2024)
 
-  - Fixed an issue that caused an HTTP 400 error when connecting to a China endpoint.
+  - Fixed an issue that caused a HTTP 400 error when connecting to a China endpoint.
 
 - v3.9.0(April 20,2024)
 
