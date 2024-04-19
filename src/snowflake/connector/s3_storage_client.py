@@ -94,7 +94,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         self, use_accelerate_endpoint: bool | None = None
     ) -> bool:
         # accelerate cannot be used in China and us government
-        if (self.location_type and "S3China" in self.location_type) or (
+        if (self.location_type and "S3China".lower() in self.location_type.lower()) or (
             self.region_name and self.region_name.startswith("cn-")
         ):
             return False
