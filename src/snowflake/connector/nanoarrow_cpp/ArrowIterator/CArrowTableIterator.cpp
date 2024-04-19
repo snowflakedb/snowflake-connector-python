@@ -115,55 +115,36 @@ void CArrowTableIterator::convertIfNeeded(ArrowSchema* columnSchema,
       break;
     }
     case SnowflakeType::Type::MAP: {
-      switch (columnSchemaView.type) {
-        case NANOARROW_TYPE_STRING: {
-          // No need to convert json encoded data
-          break;
-        }
-        case NANOARROW_TYPE_MAP: {
-          if (columnSchemaView.schema->n_children != 1) {
-            std::string errorInfo = Logger::formatString(
-                "[Snowflake Exception] invalid arrow schema for map entries "
-                "expected 1 "
-                "schema child, but got %d",
-                columnSchemaView.schema->n_children);
-            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-            PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-            break;
-          }
-
-          ArrowSchema* entries = columnSchemaView.schema->children[0];
-          if (entries->n_children != 2) {
-            std::string errorInfo = Logger::formatString(
-                "[Snowflake Exception] invalid arrow schema for map key/value "
-                "pair "
-                "expected 2 entries, but got %d",
-                entries->n_children);
-            logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-            PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-            break;
-          }
-
-          ArrowSchema* key_schema = entries->children[0];
-          ArrowArrayView* key_array = columnArray->children[0]->children[0];
-          convertIfNeeded(key_schema, key_array);
-
-          ArrowSchema* value_schema = entries->children[1];
-          ArrowArrayView* value_array = columnArray->children[0]->children[1];
-          convertIfNeeded(value_schema, value_array);
-          break;
-        }
-        default: {
-          std::string errorInfo = Logger::formatString(
-              "[Snowflake Exception] unknown arrow internal data type(%s) "
-              "for MAP data in %s",
-              NANOARROW_TYPE_ENUM_STRING[columnSchemaView.type],
-              columnSchemaView.schema->name);
-          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
-          PyErr_SetString(PyExc_Exception, errorInfo.c_str());
-          break;
-        }
+      if (columnSchemaView.schema->n_children != 1) {
+        std::string errorInfo = Logger::formatString(
+            "[Snowflake Exception] invalid arrow schema for map entries "
+            "expected 1 "
+            "schema child, but got %d",
+            columnSchemaView.schema->n_children);
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+        break;
       }
+
+      ArrowSchema* entries = columnSchemaView.schema->children[0];
+      if (entries->n_children != 2) {
+        std::string errorInfo = Logger::formatString(
+            "[Snowflake Exception] invalid arrow schema for map key/value "
+            "pair "
+            "expected 2 entries, but got %d",
+            entries->n_children);
+        logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+        PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+        break;
+      }
+
+      ArrowSchema* key_schema = entries->children[0];
+      ArrowArrayView* key_array = columnArray->children[0]->children[0];
+      convertIfNeeded(key_schema, key_array);
+
+      ArrowSchema* value_schema = entries->children[1];
+      ArrowArrayView* value_array = columnArray->children[0]->children[1];
+      convertIfNeeded(value_schema, value_array);
       break;
     }
 
