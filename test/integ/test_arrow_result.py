@@ -100,7 +100,6 @@ PRIMITIVE_DATATYPE_EXAMPLES = {
 
 # Some datatypes do not match 1:1 with the original data
 PANDAS_REPRS = dict()
-PANDAS_ARRAY_REPRS = dict()
 PANDAS_STRUCTURED_REPRS = dict()
 if pandas_available:
     PANDAS_REPRS = {

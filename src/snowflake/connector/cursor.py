@@ -1323,6 +1323,7 @@ class SnowflakeCursor:
         Note:
             Timestamp types that are nested in structured types may not be accurately represented
             due to a limitation in the pyarrow to pandas conversion.
+            See here for more information: https://github.com/apache/arrow/issues/4116
         """
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
