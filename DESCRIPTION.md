@@ -9,7 +9,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 - v3.10.0 (TBD)
-  - Added support for structured types to fetch_pandas_all
+  - Added support for structured types to fetch_pandas_all.
+  - Fixed an issue that endpoint for China s3 is not formed correctly.
 
 - v3.9.1(April 22,2024)
 
