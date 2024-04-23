@@ -94,9 +94,11 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         self, use_accelerate_endpoint: bool | None = None
     ) -> bool:
         # accelerate cannot be used in China and us government
-        if (self.location_type and "S3China".lower() in self.location_type.lower()) or (
-            self.region_name and self.region_name.startswith("cn-")
-        ):
+        if self.region_name and self.region_name.startswith("cn-"):
+            self.endpoint = (
+                f"https://{self.s3location.bucket_name}."
+                f"s3.{self.region_name}.amazonaws.com.cn"
+            )
             return False
         # if self.endpoint has been set, e.g. by metadata, no more config is needed.
         if self.endpoint is not None:
