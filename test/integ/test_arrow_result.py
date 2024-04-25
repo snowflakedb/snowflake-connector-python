@@ -248,10 +248,16 @@ def pandas_verify(cur, data, deserialize):
             value = json.loads(value)
         if isinstance(value, numpy.ndarray):
             value = value.tolist()
+
         # Numpy nans have to be checked with isnan. nan != nan according to numpy
         if isinstance(value, float) and numpy.isnan(value):
             assert datum is None or numpy.isnan(datum), "nan values should return nan."
         else:
+            if isinstance(value, dict):
+                value = {
+                    k: v.tolist() if isinstance(v, numpy.ndarray) else v
+                    for k, v in value.items()
+                }
             assert (
                 value == datum or value is datum
             ), f"Result value {value} should match input example {datum}."
@@ -340,11 +346,14 @@ def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
 
     if datatype == "VARIANT":
         data = {k: dumps(v) if v else v for k, v in data.items()}
+        if pandas:
+            data = list(data.items())
     elif pandas:
         examples = PANDAS_STRUCTURED_REPRS.get(datatype, examples)
-        data = {
-            str(i) if key_type == "varchar" else i: ex for i, ex in enumerate(examples)
-        }
+        data = [
+            (str(i) if key_type == "varchar" else i, ex)
+            for i, ex in enumerate(examples)
+        ]
 
     query = f"""
     SELECT
@@ -431,6 +440,14 @@ def test_nested_types(conn_cnx, iceberg, pandas):
     SELECT
       parse_json('{json_string}') :: object(child array(map (varchar, object(struct_field varchar)))) as col
     """
+    if pandas:
+        data = {
+            "child": [
+                [
+                    ("key1", {"struct_field": "value"}),
+                ]
+            ]
+        }
     verify_datatypes(
         conn_cnx,
         query,
