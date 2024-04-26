@@ -703,10 +703,7 @@ class ArrowResultBatch(ResultBatch):
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
         table = self.to_arrow(connection=connection)
-        # By default arrow returns maps as kv tuples in order to allow duplicate keys.
-        # Snowflake does not support duplicate keys in maps. In order to better match
-        # pyspark this will return maps as dictionaries which would remove duplicate keys.
-        return table.to_pandas(**{"maps_as_pydicts": "strict", **kwargs})
+        return table.to_pandas(**kwargs)
 
     def _get_pandas_iter(
         self, connection: SnowflakeConnection | None = None, **kwargs
