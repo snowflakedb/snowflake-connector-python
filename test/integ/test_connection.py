@@ -1350,3 +1350,15 @@ def test_connection_atexit_close(conn_cnx):
     with conn_cnx() as conn:
         conn._close_at_exit()
         assert conn.is_closed()
+
+
+def test_token_file_path(tmp_path, db_parameters):
+    fake_token = "some token"
+    token_file_path = tmp_path / "token"
+    with open(token_file_path, "w") as f:
+        f.write(fake_token)
+
+    conn = snowflake.connector.connect(**db_parameters, token=fake_token)
+    assert conn._token == fake_token
+    conn = snowflake.connector.connect(**db_parameters, token_file_path=token_file_path)
+    assert conn._token == fake_token

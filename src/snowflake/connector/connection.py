@@ -1182,6 +1182,11 @@ class SnowflakeConnection:
             ]:
                 self._authenticator = auth_tmp
 
+        # read OAuth token from
+        if "token_file_path" in kwargs:
+            with open(kwargs["token_file_path"]) as f:
+                self._token = f.read()
+
         if not (self._master_token and self._session_token):
             if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
                 # OAuth Authentication does not require a username
