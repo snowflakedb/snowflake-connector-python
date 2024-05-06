@@ -359,6 +359,7 @@ class SnowflakeConnection:
           This parameter is only effective when the result format is JSON.
         server_session_keep_alive: When true, the connector does not destroy the session on the Snowflake server side
           before the connector shuts down. Default value is false.
+        token_file_path: The file path of the token file.
     """
 
     OCSP_ENV_LOCK = Lock()
