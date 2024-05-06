@@ -226,8 +226,6 @@ void CArrowTableIterator::convertIfNeeded(ArrowSchema* columnSchema,
         scale =
             std::stoi(std::string(scaleString.data, scaleString.size_bytes));
       }
-
-      logger->error(__FILE__, __func__, __LINE__, "scale: %d", scale);
       convertTimestampColumn_nanoarrow(&columnSchemaView, columnArray, scale,
                                        m_timezone);
       break;
