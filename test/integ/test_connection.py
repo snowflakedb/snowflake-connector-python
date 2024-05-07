@@ -1352,6 +1352,7 @@ def test_connection_atexit_close(conn_cnx):
         assert conn.is_closed()
 
 
+@pytest.mark.skipolddriver
 def test_token_file_path(tmp_path, db_parameters):
     fake_token = "some token"
     token_file_path = tmp_path / "token"
