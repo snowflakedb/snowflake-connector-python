@@ -1184,8 +1184,9 @@ class SnowflakeConnection:
                 self._authenticator = auth_tmp
 
         # read OAuth token from
-        if "token_file_path" in kwargs:
-            with open(kwargs["token_file_path"]) as f:
+        token_file_path = kwargs.get("token_file_path")
+        if token_file_path:
+            with open(token_file_path) as f:
                 self._token = f.read()
 
         if not (self._master_token and self._session_token):
