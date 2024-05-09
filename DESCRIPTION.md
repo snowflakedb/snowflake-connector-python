@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.11.0(TBD)
+
+  - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.
+
 - v3.10.0(April 29,2024)
 
   - Added support for structured types to fetch_pandas_all.
