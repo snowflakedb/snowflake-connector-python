@@ -280,6 +280,7 @@ class SnowflakeStorageClient(ABC):
         while self.retry_count[retry_id] < self.max_retry:
             cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
+            rest_kwargs["timeout"] = (10, 600)
             try:
                 if conn:
                     with conn._rest._use_requests_session(url) as session:
