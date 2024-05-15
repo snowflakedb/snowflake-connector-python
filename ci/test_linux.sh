@@ -11,7 +11,7 @@ THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 
 # Install one copy of tox
-python3 -m pip install -U tox>=4
+python3.10 -m pip install -U tox>=4
 
 source ${THIS_DIR}/log_analyze_setup.sh
 
@@ -22,8 +22,8 @@ else
 fi
 
 # replace test password with a more complex one, and generate known ssm file
-python3 -m pip install -U snowflake-connector-python --only-binary=cffi >& /dev/null
-python3 ${THIS_DIR}/change_snowflake_test_pwd.py
+python3.10 -m pip install -U snowflake-connector-python --only-binary=cffi >& /dev/null
+python3.10 ${THIS_DIR}/change_snowflake_test_pwd.py
 mv ${CONNECTOR_DIR}/test/parameters_jenkins.py ${CONNECTOR_DIR}/test/parameters.py
 
 # Run tests
@@ -31,15 +31,16 @@ cd $CONNECTOR_DIR
 if [[ "$is_old_driver" == "true" ]]; then
     # Old Driver Test
     echo "[Info] Running old connector tests"
-    python3 -m tox -e olddriver
+    python3.10 -m tox -e olddriver
 else
     for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
         echo "[Info] Testing with ${PYTHON_VERSION}"
-        SHORT_VERSION=$(python3 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
+        SHORT_VERSION=$(python3.10 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
         CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/snowflake_connector_python*cp${SHORT_VERSION}*manylinux2014*.whl | sort -r | head -n 1)
-        TEST_ENVLIST=fix_lint,py${SHORT_VERSION}-{unit,integ,pandas,sso}-ci,py${SHORT_VERSION}-coverage
+        TEST_LIST=`echo py${PYTHON_VERSION/\./}-{unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
+        TEST_ENVLIST=fix_lint,$TEST_LIST,py${PYTHON_VERSION/\./}-coverage
         echo "[Info] Running tox for ${TEST_ENVLIST}"
 
-        python3 -m tox -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
+        python3.10 -m tox run -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
     done
 fi

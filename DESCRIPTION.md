@@ -8,6 +8,24 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.11.0(TBD)
+
+  - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.
+
+- v3.10.0(April 29,2024)
+
+  - Added support for structured types to fetch_pandas_all.
+  - Fixed an issue relating to incorrectly formed China S3 endpoints.
+
+- v3.9.1(April 22,2024)
+
+  - Fixed an issue that caused a HTTP 400 error when connecting to a China endpoint.
+
+- v3.9.0(April 20,2024)
+
+  - Added easy logging configuration so that users can easily generate log file by setup log config in `$SNOWFLAKE_HOME/config.toml`.
+  - Improved s3 acceleration logic when connecting to China endpoint.
+
 - v3.8.1(April 09, 2024)
 
   - Reverted the change "Updated `write_pandas` to skip TABLE IF NOT EXISTS in truncate mode." introduced in v3.8.0 (yanked) as it's a breaking change. `write_pandas` will be fixed in the future in a non-breaking way.

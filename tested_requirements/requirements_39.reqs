@@ -4,10 +4,10 @@ certifi==2024.2.2
 cffi==1.16.0
 charset-normalizer==3.3.2
 cryptography==42.0.5
-filelock==3.13.3
-idna==3.6
+filelock==3.13.4
+idna==3.7
 packaging==24.0
-platformdirs==4.2.0
+platformdirs==4.2.1
 pycparser==2.22
 PyJWT==2.8.0
 pyOpenSSL==24.1.0
@@ -17,4 +17,4 @@ sortedcontainers==2.4.0
 tomlkit==0.12.4
 typing_extensions==4.11.0
 urllib3==1.26.18
-snowflake-connector-python==3.8.1
+snowflake-connector-python==3.10.0

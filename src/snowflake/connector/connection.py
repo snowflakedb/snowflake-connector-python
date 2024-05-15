@@ -92,6 +92,7 @@ from .errorcode import (
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
 from .errors import DatabaseError, Error, OperationalError, ProgrammingError
+from .log_configuration import EasyLoggingConfigPython
 from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
@@ -362,6 +363,7 @@ class SnowflakeConnection:
           This parameter is only effective when the result format is JSON.
         server_session_keep_alive: When true, the connector does not destroy the session on the Snowflake server side
           before the connector shuts down. Default value is false.
+        token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -387,6 +389,9 @@ class SnowflakeConnection:
         If overwriting values from the default connection is desirable, supply
         the name explicitly.
         """
+        # initiate easy logging during every connection
+        easy_logging = EasyLoggingConfigPython()
+        easy_logging.create_log()
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
         self._errorhandler = Error.default_errorhandler
@@ -1181,6 +1186,12 @@ class SnowflakeConnection:
                 USR_PWD_MFA_AUTHENTICATOR,
             ]:
                 self._authenticator = auth_tmp
+
+        # read OAuth token from
+        token_file_path = kwargs.get("token_file_path")
+        if token_file_path:
+            with open(token_file_path) as f:
+                self._token = f.read()
 
         if not (self._master_token and self._session_token):
             if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
