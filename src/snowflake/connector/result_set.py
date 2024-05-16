@@ -78,9 +78,9 @@ def result_set_iterator(
             )
             future = pool.submit(unfetched_batches.popleft().create_iter, **kw)
             unconsumed_batches.append(future)
-        done, _ = wait(unconsumed_batches, return_when=ALL_COMPLETED)
-        while done:
-            yield from done.pop().result()
+        _, _ = wait(unconsumed_batches, return_when=ALL_COMPLETED)
+        while unconsumed_batches:
+            yield from unconsumed_batches.popleft().result()
     final()
 
 
