@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import inspect
 from collections import deque
-from concurrent.futures import Future
+from concurrent.futures import ALL_COMPLETED, Future, wait
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
 from typing import (
@@ -42,8 +42,10 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = getLogger(__name__)
 
 
-def done_callback(future):
-    yield from future.result()
+def callback(future):
+    a = future.result()
+    print("done callback", a)
+    yield from a
 
 
 def result_set_iterator(
@@ -69,13 +71,15 @@ def result_set_iterator(
     with ThreadPoolExecutor(prefetch_thread_num) as pool:
         logger.debug("beginning to schedule result batch downloads")
         yield from first_batch_iter
-
         while unfetched_batches:
             logger.debug(
                 f"queuing download of result batch id: {unfetched_batches[0].id}"
             )
             future = pool.submit(unfetched_batches.popleft().create_iter, **kw)
-            future.add_done_callback(done_callback)
+            unconsumed_batches.append(future)
+        done, _ = wait(unconsumed_batches, return_when=ALL_COMPLETED)
+        while done:
+            yield from done.pop().result()
     final()
 
 
