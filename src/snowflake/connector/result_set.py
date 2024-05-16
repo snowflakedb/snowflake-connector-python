@@ -42,6 +42,10 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = getLogger(__name__)
 
 
+def done_callback(future):
+    yield from future.result()
+
+
 def result_set_iterator(
     first_batch_iter: Iterator[tuple],
     unconsumed_batches: Deque[Future[Iterator[tuple]]],
@@ -63,42 +67,15 @@ def result_set_iterator(
     """
 
     with ThreadPoolExecutor(prefetch_thread_num) as pool:
-        # Fill up window
-
         logger.debug("beginning to schedule result batch downloads")
+        yield from first_batch_iter
 
-        for _ in range(min(prefetch_thread_num, len(unfetched_batches))):
+        while unfetched_batches:
             logger.debug(
                 f"queuing download of result batch id: {unfetched_batches[0].id}"
             )
-            unconsumed_batches.append(
-                pool.submit(unfetched_batches.popleft().create_iter, **kw)
-            )
-
-        yield from first_batch_iter
-
-        i = 1
-        while unconsumed_batches:
-            logger.debug(f"user requesting to consume result batch {i}")
-
-            # Submit the next un-fetched batch to the pool
-            if unfetched_batches:
-                logger.debug(
-                    f"queuing download of result batch id: {unfetched_batches[0].id}"
-                )
-                future = pool.submit(unfetched_batches.popleft().create_iter, **kw)
-                unconsumed_batches.append(future)
-
-            future = unconsumed_batches.popleft()
-
-            # this will raise an exception if one has occurred
-            batch_iterator = future.result()
-
-            logger.debug(f"user began consuming result batch {i}")
-            yield from batch_iterator
-            logger.debug(f"user finished consuming result batch {i}")
-
-            i += 1
+            future = pool.submit(unfetched_batches.popleft().create_iter, **kw)
+            future.add_done_callback(done_callback)
     final()
 
 
