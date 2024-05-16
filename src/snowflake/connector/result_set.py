@@ -42,12 +42,6 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = getLogger(__name__)
 
 
-def callback(future):
-    a = future.result()
-    print("done callback", a)
-    yield from a
-
-
 def result_set_iterator(
     first_batch_iter: Iterator[tuple],
     unconsumed_batches: Deque[Future[Iterator[tuple]]],
@@ -70,6 +64,13 @@ def result_set_iterator(
 
     with ThreadPoolExecutor(prefetch_thread_num) as pool:
         logger.debug("beginning to schedule result batch downloads")
+        for _ in range(min(prefetch_thread_num, len(unfetched_batches))):
+            logger.debug(
+                f"queuing download of result batch id: {unfetched_batches[0].id}"
+            )
+            unconsumed_batches.append(
+                pool.submit(unfetched_batches.popleft().create_iter, **kw)
+            )
         yield from first_batch_iter
         while unfetched_batches:
             logger.debug(
