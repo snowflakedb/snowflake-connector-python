@@ -28,6 +28,7 @@ from cryptography.hazmat.backends import default_backend
 
 logger = getLogger(__name__)
 
+
 class RSASSHAlgorithm(jwt_algorithms.RSAAlgorithm):
     def sign(self, msg: bytes, key_name: str) -> bytes:
         agent = paramiko.Agent()
