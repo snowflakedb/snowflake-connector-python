@@ -14,9 +14,8 @@ from logging import getLogger
 from typing import Any
 
 import jwt
-from jwt import algorithms as jwt_algorithms
-
 import paramiko
+from jwt import algorithms as jwt_algorithms
 
 from ..errorcode import ER_CONNECTION_TIMEOUT, ER_INVALID_PRIVATE_KEY, ER_KEY_NAME_NOT_FOUND
 from ..errors import OperationalError, ProgrammingError
