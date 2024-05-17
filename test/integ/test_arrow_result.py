@@ -5,8 +5,10 @@
 
 from __future__ import annotations
 
+import base64
 import itertools
 import json
+import logging
 import os
 import random
 import re
@@ -16,7 +18,7 @@ import numpy
 import pytest
 
 import snowflake.connector
-from snowflake.connector.errors import ProgrammingError
+from snowflake.connector.errors import OperationalError, ProgrammingError
 
 try:
     from snowflake.connector.util_text import random_string
@@ -1101,6 +1103,20 @@ def iterate_over_test_chunk(
                 for i in range(0, row_count):
                     arrow_res = cursor_arrow.fetchone()
                     assert str(arrow_res[0]) == expected[i]
+
+
+@pytest.mark.parametrize("debug_arrow_chunk", [True, False])
+def test_arrow_bad_data(conn_cnx, caplog, debug_arrow_chunk):
+    with caplog.at_level(logging.DEBUG):
+        with conn_cnx(
+            debug_arrow_chunk=debug_arrow_chunk
+        ) as arrow_cnx, arrow_cnx.cursor() as cursor:
+            cursor.execute("select 1")
+            cursor._result_set.batches[0]._data = base64.b64encode(b"wrong_data")
+            with pytest.raises(OperationalError):
+                cursor.fetchone()
+    expr = bool("arrow data can not be parsed" in caplog.text)
+    assert expr if debug_arrow_chunk else not expr
 
 
 def init(conn_cnx, table, column, values):
