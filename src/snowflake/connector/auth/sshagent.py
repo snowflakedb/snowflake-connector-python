@@ -8,29 +8,57 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
+import struct
 from datetime import datetime, timedelta, timezone
 from logging import getLogger
 from typing import Any
 
 import jwt
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    PublicFormat,
-    load_der_private_key,
-)
+from jwt import algorithms as jwt_algorithms
 
-from ..errorcode import ER_CONNECTION_TIMEOUT, ER_INVALID_PRIVATE_KEY
+import paramiko
+
+from ..errorcode import ER_CONNECTION_TIMEOUT, ER_INVALID_PRIVATE_KEY, ER_KEY_NAME_NOT_FOUND
 from ..errors import OperationalError, ProgrammingError
 from ..network import KEY_PAIR_AUTHENTICATOR
 from .by_plugin import AuthByPlugin, AuthType
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
+
 logger = getLogger(__name__)
 
+class RSASSHAlgorithm(jwt_algorithms.RSAAlgorithm):
+    def sign(self, msg: bytes, key_name: str) -> bytes:
+        agent = paramiko.Agent()
+        all_keys = agent.get_keys()
+        found_key = None
+        for key in all_keys:
+            if key.comment == key_name:
+                found_key = key
+                break
 
-class AuthByKeyPair(AuthByPlugin):
-    """Key pair based authentication."""
+        if found_key is None:
+            raise ProgrammingError(
+                msg=f"Failed to find key {key_name} in agent",
+                errno=ER_KEY_NAME_NOT_FOUND,
+            )
+
+        ssh_signature = found_key.sign_ssh_data(msg, "rsa-sha2-256")
+        pos = 0
+        length = struct.unpack(">I", ssh_signature[pos:pos + 4])[0]
+        pos += 4
+        pos += length
+        length = struct.unpack(">I", ssh_signature[pos:pos + 4])[0]
+        pos += 4
+        return ssh_signature[pos:]
+
+    def prepare_key(self, key: str) -> str:
+        return key
+
+
+class AuthBySSHAgent(AuthByPlugin):
+    """SSH Agent based authentication."""
 
     ALGORITHM = "RS256"
     ISSUER = "iss"
@@ -43,21 +71,20 @@ class AuthByKeyPair(AuthByPlugin):
 
     def __init__(
         self,
-        private_key: bytes | RSAPrivateKey,
+        key_name: str,
         lifetime_in_seconds: int = LIFETIME,
         **kwargs,
     ) -> None:
-        """Inits AuthByKeyPair class with private key.
+        """Inits AuthBySSHAgent class with SSH Agent key name.
 
         Args:
-            private_key: a byte array of der formats of private key, or an
-                object that implements the `RSAPrivateKey` interface.
+            key_name: string of the key pair name from the ssh-agent to use
             lifetime_in_seconds: number of seconds the JWT token will be valid
         """
         super().__init__(
             max_retry_attempts=int(
                 os.getenv(
-                    "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
+                    "JWT_CNXN_RETRY_ATTEMPTS", AuthBySSHAgent.DEFAULT_JWT_RETRY_ATTEMPTS
                 )
             ),
             **kwargs,
@@ -69,13 +96,13 @@ class AuthByKeyPair(AuthByPlugin):
                 seconds=int(
                     os.getenv(
                         "JWT_CNXN_WAIT_TIME",
-                        AuthByKeyPair.DEFAULT_JWT_CNXN_WAIT_TIME,
+                        AuthBySSHAgent.DEFAULT_JWT_CNXN_WAIT_TIME,
                     )
                 )
             ).total_seconds()
         )
 
-        self._private_key: bytes | RSAPrivateKey | None = private_key
+        self._key_name: str | None = key_name
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
@@ -83,11 +110,12 @@ class AuthByKeyPair(AuthByPlugin):
         )
 
     def reset_secrets(self) -> None:
-        self._private_key = None
+        # doesn't contain any secrets
+        return
 
     @property
     def type_(self) -> AuthType:
-        return AuthType.KEY_PAIR_SSH
+        return AuthType.KEY_PAIR
 
     def prepare(
         self,
@@ -105,35 +133,9 @@ class AuthByKeyPair(AuthByPlugin):
 
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        if isinstance(self._private_key, bytes):
-            try:
-                private_key = load_der_private_key(
-                    data=self._private_key,
-                    password=None,
-                    backend=default_backend(),
-                )
-            except Exception as e:
-                raise ProgrammingError(
-                    msg=f"Failed to load private key: {e}\nPlease provide a valid "
-                    "unencrypted rsa private key in DER format as bytes object",
-                    errno=ER_INVALID_PRIVATE_KEY,
-                )
+        key_name = self._key_name
 
-            if not isinstance(private_key, RSAPrivateKey):
-                raise ProgrammingError(
-                    msg=f"Private key type ({private_key.__class__.__name__}) not supported."
-                    "\nPlease provide a valid rsa private key in DER format as bytes "
-                    "object",
-                    errno=ER_INVALID_PRIVATE_KEY,
-                )
-        elif isinstance(self._private_key, RSAPrivateKey):
-            private_key = self._private_key
-        else:
-            raise TypeError(
-                f"Expected bytes or RSAPrivateKey, got {type(self._private_key)}"
-            )
-
-        public_key_fp = self.calculate_public_key_fingerprint(private_key)
+        public_key_fp, public_key = self.get_public_key_and_fingerprint(key_name)
 
         self._jwt_token_exp = now + self._lifetime
         payload = {
@@ -142,8 +144,10 @@ class AuthByKeyPair(AuthByPlugin):
             self.ISSUE_TIME: now,
             self.EXPIRE_TIME: self._jwt_token_exp,
         }
+        jwt.unregister_algorithm(self.ALGORITHM)
+        jwt.register_algorithm(self.ALGORITHM, RSASSHAlgorithm(self.ALGORITHM))
 
-        _jwt_token = jwt.encode(payload, private_key, algorithm=self.ALGORITHM)
+        _jwt_token = jwt.encode(payload, key_name, algorithm=self.ALGORITHM)
 
         # jwt.encode() returns bytes in pyjwt 1.x and a string
         # in pyjwt 2.x
@@ -158,22 +162,46 @@ class AuthByKeyPair(AuthByPlugin):
         return {"success": False}
 
     @staticmethod
-    def calculate_public_key_fingerprint(private_key):
+    def get_public_key_and_fingerprint(key_name):
         # get public key bytes
-        public_key_der = private_key.public_key().public_bytes(
-            Encoding.DER, PublicFormat.SubjectPublicKeyInfo
-        )
+        agent = paramiko.Agent()
+        all_keys = agent.get_keys()
+        found_key = None
+        for key in all_keys:
+            if key.comment == key_name:
+                found_key = key
+                break
 
-        # take sha256 on raw bytes and then do base64 encode
-        sha256hash = hashlib.sha256()
-        sha256hash.update(public_key_der)
+        if found_key is None:
+            raise ProgrammingError(
+                msg=f"Failed to find key {key_name} in agent",
+                errno=ER_KEY_NAME_NOT_FOUND,
+            )
 
-        public_key_fp = "SHA256:" + base64.b64encode(sha256hash.digest()).decode(
-            "utf-8"
+        if found_key.algorithm_name != "RSA":
+            raise ProgrammingError(
+                msg=f"Unsupported key type {found_key.algorithm_name}",
+                errno=ER_INVALID_PRIVATE_KEY,
+            )
+
+        # Need to convert from SSH fingerprint to RSA fingerprint
+        base64_key = found_key.get_base64()
+        rsa_base64_key = f"ssh-rsa {base64_key}"
+        decoded_key = serialization.load_ssh_public_key(rsa_base64_key.encode("utf-8"), default_backend())
+        der_bytes = decoded_key.public_bytes(
+            serialization.Encoding.DER,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
         )
+        fingerprint_sha256 = hashlib.sha256()
+        fingerprint_sha256.update(der_bytes)
+        fingerprint = fingerprint_sha256.digest()
+        b64_fp = base64.b64encode(fingerprint).decode("utf-8")
+
+        public_key_fp = f"SHA256:{b64_fp}"
+        public_key = found_key.get_base64()
         logger.debug("Public key fingerprint is %s", public_key_fp)
 
-        return public_key_fp
+        return public_key_fp, public_key
 
     def update_body(self, body: dict[Any, Any]) -> None:
         body["data"]["AUTHENTICATOR"] = KEY_PAIR_AUTHENTICATOR

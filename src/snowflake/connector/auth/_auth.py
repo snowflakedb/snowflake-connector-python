@@ -394,6 +394,18 @@ class Auth:
                     str(auth_instance._jwt_token_exp),
                     str(datetime.now(timezone.utc).replace(tzinfo=None)),
                 )
+
+            from . import AuthBySSHAgent
+
+            if isinstance(auth_instance, AuthBySSHAgent):
+                logger.debug(
+                    "JWT Token authentication failed. "
+                    "Token expires at: %s. "
+                    "Current Time: %s",
+                    str(auth_instance._jwt_token_exp),
+                    str(datetime.now(timezone.utc).replace(tzinfo=None)),
+                )
+
             from . import AuthByUsrPwdMfa
 
             if isinstance(auth_instance, AuthByUsrPwdMfa):
@@ -762,6 +774,18 @@ def get_token_from_private_key(
 
     auth_instance = AuthByKeyPair(
         private_key,
+        DAY_IN_SECONDS,
+    )  # token valid for 24 hours
+    return auth_instance.prepare(account=account, user=user)
+
+
+def get_token_from_ssh_key(
+        user: str, account: str, key_name: str | None
+) -> str:
+    from . import AuthBySSHAgent
+
+    auth_instance = AuthBySSHAgent(
+        key_name,
         DAY_IN_SECONDS,
     )  # token valid for 24 hours
     return auth_instance.prepare(account=account, user=user)
