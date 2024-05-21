@@ -10,7 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.10.1(May 21, 2024)
 
-  - Removed incorrect error log message in arrow data conversion.
+  - Removed an incorrect error log message that could occur during arrow data conversion.
 
 - v3.10.0(April 29,2024)
 
