@@ -186,7 +186,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "private_key": (None, (type(None), str, RSAPrivateKey)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
-    "key_name": (None, (type(None), str)),
+    "ssh_key_name": (None, (type(None), str)),
     "token": (None, (type(None), str)),  # OAuth or JWT Token
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
@@ -1049,9 +1049,9 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == KEY_PAIR_AUTHENTICATOR_SSH:
-                key_name = self._key_name
+                ssh_key_name = self._ssh_key_name
                 self.auth_class = AuthBySSHAgent(
-                    key_name=key_name,
+                    key_name=ssh_key_name,
                     timeout=self._login_timeout,
                     backoff_generator=self._backoff_generator,
                 )

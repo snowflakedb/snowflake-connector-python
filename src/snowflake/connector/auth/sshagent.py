@@ -44,13 +44,19 @@ class RSASSHAlgorithm(jwt_algorithms.RSAAlgorithm):
                 errno=ER_KEY_NAME_NOT_FOUND,
             )
 
+        # ssh_signature is in the format [unsigned int for length of block][data block]...
+        # first field is the signature type and the second field is the signed data chunk.
         ssh_signature = found_key.sign_ssh_data(msg, "rsa-sha2-256")
         pos = 0
+        # read length
         length = struct.unpack(">I", ssh_signature[pos:pos + 4])[0]
+        # advance past length field
         pos += 4
+        # advance past text of signature type
         pos += length
-        length = struct.unpack(">I", ssh_signature[pos:pos + 4])[0]
+        # advance past next length field
         pos += 4
+        # read the rest of the payload as signature
         return ssh_signature[pos:]
 
     def prepare_key(self, key: str) -> str:
@@ -133,7 +139,7 @@ class AuthBySSHAgent(AuthByPlugin):
 
         now = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        key_name = self._key_name
+        key_name = self._ssh_key_name
 
         public_key_fp, public_key = self.get_public_key_and_fingerprint(key_name)
 
