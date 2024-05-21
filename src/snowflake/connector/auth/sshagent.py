@@ -115,7 +115,7 @@ class AuthBySSHAgent(AuthByPlugin):
 
     @property
     def type_(self) -> AuthType:
-        return AuthType.KEY_PAIR
+        return AuthType.KEY_PAIR_SSH
 
     def prepare(
         self,

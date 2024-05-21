@@ -87,7 +87,7 @@ class AuthByKeyPair(AuthByPlugin):
 
     @property
     def type_(self) -> AuthType:
-        return AuthType.KEY_PAIR_SSH
+        return AuthType.KEY_PAIR
 
     def prepare(
         self,
