@@ -15,15 +15,18 @@ from typing import Any
 
 import jwt
 import paramiko
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 from jwt import algorithms as jwt_algorithms
 
-from ..errorcode import ER_CONNECTION_TIMEOUT, ER_INVALID_PRIVATE_KEY, ER_KEY_NAME_NOT_FOUND
+from ..errorcode import (
+    ER_CONNECTION_TIMEOUT,
+    ER_INVALID_PRIVATE_KEY,
+    ER_KEY_NAME_NOT_FOUND,
+)
 from ..errors import OperationalError, ProgrammingError
 from ..network import KEY_PAIR_AUTHENTICATOR
 from .by_plugin import AuthByPlugin, AuthType
-
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.backends import default_backend
 
 logger = getLogger(__name__)
 
@@ -49,7 +52,7 @@ class RSASSHAlgorithm(jwt_algorithms.RSAAlgorithm):
         ssh_signature = found_key.sign_ssh_data(msg, "rsa-sha2-256")
         pos = 0
         # read length
-        length = struct.unpack(">I", ssh_signature[pos:pos + 4])[0]
+        length = struct.unpack(">I", ssh_signature[pos : pos + 4])[0]
         # advance past length field
         pos += 4
         # advance past text of signature type
@@ -193,7 +196,9 @@ class AuthBySSHAgent(AuthByPlugin):
         # Need to convert from SSH fingerprint to RSA fingerprint
         base64_key = found_key.get_base64()
         rsa_base64_key = f"ssh-rsa {base64_key}"
-        decoded_key = serialization.load_ssh_public_key(rsa_base64_key.encode("utf-8"), default_backend())
+        decoded_key = serialization.load_ssh_public_key(
+            rsa_base64_key.encode("utf-8"), default_backend()
+        )
         der_bytes = decoded_key.public_bytes(
             serialization.Encoding.DER,
             serialization.PublicFormat.SubjectPublicKeyInfo,

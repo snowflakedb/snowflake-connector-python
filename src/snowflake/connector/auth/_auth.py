@@ -779,9 +779,7 @@ def get_token_from_private_key(
     return auth_instance.prepare(account=account, user=user)
 
 
-def get_token_from_ssh_key(
-        user: str, account: str, key_name: str | None
-) -> str:
+def get_token_from_ssh_key(user: str, account: str, key_name: str | None) -> str:
     from . import AuthBySSHAgent
 
     auth_instance = AuthBySSHAgent(

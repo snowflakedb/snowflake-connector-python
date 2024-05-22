@@ -39,10 +39,10 @@ from .auth import (
     Auth,
     AuthByDefault,
     AuthByKeyPair,
-    AuthBySSHAgent,
     AuthByOAuth,
     AuthByOkta,
     AuthByPlugin,
+    AuthBySSHAgent,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
 )
