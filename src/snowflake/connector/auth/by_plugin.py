@@ -50,6 +50,7 @@ class AuthType(Enum):
     DEFAULT = "SNOWFLAKE"  # default authenticator name
     EXTERNAL_BROWSER = "EXTERNALBROWSER"
     KEY_PAIR = "SNOWFLAKE_JWT"
+    KEY_PAIR_SSH = "SNOWFLAKE_JWT_SSH"
     OAUTH = "OAUTH"
     ID_TOKEN = "ID_TOKEN"
     USR_PWD_MFA = "USERNAME_PASSWORD_MFA"

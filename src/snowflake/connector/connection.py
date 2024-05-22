@@ -42,6 +42,7 @@ from .auth import (
     AuthByOAuth,
     AuthByOkta,
     AuthByPlugin,
+    AuthBySSHAgent,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
 )
@@ -97,6 +98,7 @@ from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
+    KEY_PAIR_AUTHENTICATOR_SSH,
     OAUTH_AUTHENTICATOR,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
@@ -184,6 +186,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "private_key": (None, (type(None), str, RSAPrivateKey)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
+    "ssh_key_name": (None, (type(None), str)),
     "token": (None, (type(None), str)),  # OAuth or JWT Token
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
@@ -1045,6 +1048,13 @@ class SnowflakeConnection:
                     timeout=self._login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
+            elif self._authenticator == KEY_PAIR_AUTHENTICATOR_SSH:
+                ssh_key_name = self._ssh_key_name
+                self.auth_class = AuthBySSHAgent(
+                    key_name=ssh_key_name,
+                    timeout=self._login_timeout,
+                    backoff_generator=self._backoff_generator,
+                )
             elif self._authenticator == OAUTH_AUTHENTICATOR:
                 self.auth_class = AuthByOAuth(
                     oauth_token=self._token,
@@ -1203,6 +1213,9 @@ class SnowflakeConnection:
                     {"msg": "User is empty", "errno": ER_NO_USER},
                 )
 
+            if self._key_name:
+                self._authenticator = KEY_PAIR_AUTHENTICATOR_SSH
+
             if self._private_key or self._private_key_file:
                 self._authenticator = KEY_PAIR_AUTHENTICATOR
 
@@ -1213,6 +1226,7 @@ class SnowflakeConnection:
                     EXTERNAL_BROWSER_AUTHENTICATOR,
                     OAUTH_AUTHENTICATOR,
                     KEY_PAIR_AUTHENTICATOR,
+                    KEY_PAIR_AUTHENTICATOR_SSH,
                 ]
                 and not self._password
             ):

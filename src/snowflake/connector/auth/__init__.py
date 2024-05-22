@@ -4,13 +4,19 @@
 
 from __future__ import annotations
 
-from ._auth import Auth, get_public_key_fingerprint, get_token_from_private_key
+from ._auth import (
+    Auth,
+    get_public_key_fingerprint,
+    get_token_from_private_key,
+    get_token_from_ssh_key,
+)
 from .by_plugin import AuthByPlugin, AuthType
 from .default import AuthByDefault
 from .idtoken import AuthByIdToken
 from .keypair import AuthByKeyPair
 from .oauth import AuthByOAuth
 from .okta import AuthByOkta
+from .sshagent import AuthBySSHAgent
 from .usrpwdmfa import AuthByUsrPwdMfa
 from .webbrowser import AuthByWebBrowser
 
@@ -18,6 +24,7 @@ FIRST_PARTY_AUTHENTICATORS = frozenset(
     (
         AuthByDefault,
         AuthByKeyPair,
+        AuthBySSHAgent,
         AuthByOAuth,
         AuthByOkta,
         AuthByUsrPwdMfa,
@@ -30,6 +37,7 @@ __all__ = [
     "AuthByPlugin",
     "AuthByDefault",
     "AuthByKeyPair",
+    "AuthBySSHAgent",
     "AuthByOAuth",
     "AuthByOkta",
     "AuthByUsrPwdMfa",
@@ -39,4 +47,5 @@ __all__ = [
     "FIRST_PARTY_AUTHENTICATORS",
     "get_public_key_fingerprint",
     "get_token_from_private_key",
+    "get_token_from_ssh_key",
 ]

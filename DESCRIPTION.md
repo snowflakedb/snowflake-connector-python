@@ -12,6 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
   - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.
   - Added support for `debug_arrow_chunk` connection parameter to allow debugging raw arrow data in case of arrow data parsing failure.
+  - Added support for `ssh_key_name` connection parameter to allow authentication using an SSH Agent
 
 - v3.10.0(April 29,2024)
 
