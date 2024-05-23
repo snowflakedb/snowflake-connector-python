@@ -14,7 +14,6 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from os import environ, path
 from unittest import mock
 
-from asn1crypto import pem
 from asn1crypto import x509 as asn1crypto509
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -601,10 +600,8 @@ def test_signature_verification(hash_algorithm):
         .sign(private_key, hash_algorithm, default_backend())
     )
 
-    cert_bytes = cert.public_bytes(Encoding.PEM)
-
     # in snowflake, we use lib asn1crypto to load certificate, not using lib cryptography
-    asy1_509_cert = asn1crypto509.Certificate.load(pem.unarmor(cert_bytes)[2])
+    asy1_509_cert = asn1crypto509.Certificate.load(cert.public_bytes(Encoding.DER))
 
     # sha3 family is not recognized by asn1crypto library
     if hash_algorithm.name.startswith("sha3-"):
