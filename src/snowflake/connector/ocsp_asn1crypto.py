@@ -50,8 +50,8 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
     # map signature algorithm name to digest class
     SIGNATURE_ALGORITHM_TO_DIGEST_CLASS = {
         "sha256": hashes.SHA256,
-        "sha384": hashes.SHA3_384,
-        "sha512": hashes.SHA3_512,
+        "sha384": hashes.SHA384,
+        "sha512": hashes.SHA512,
     }
 
     def encode_cert_id_key(self, hkey):

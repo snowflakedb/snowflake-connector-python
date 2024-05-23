@@ -12,6 +12,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
   - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.
   - Added support for `debug_arrow_chunk` connection parameter to allow debugging raw arrow data in case of arrow data parsing failure.
+  - Fixed a bug that OCSP certificate signed using SHA384 algorithm cannot be verified.
+
+- v3.10.1(May 21, 2024)
+
+  - Removed an incorrect error log message that could occur during arrow data conversion.
 
 - v3.10.0(April 29,2024)
 

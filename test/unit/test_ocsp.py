@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import platform
@@ -12,6 +13,13 @@ import time
 from concurrent.futures.thread import ThreadPoolExecutor
 from os import environ, path
 from unittest import mock
+
+from asn1crypto import x509 as asn1crypto509
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.serialization import Encoding
 
 try:
     from snowflake.connector.util_text import random_string
@@ -546,3 +554,68 @@ def test_building_new_retry():
     )
 
     del os.environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"]
+
+
+@pytest.mark.parametrize(
+    "hash_algorithm",
+    [
+        hashes.SHA256(),
+        hashes.SHA384(),
+        hashes.SHA512(),
+        hashes.SHA3_256(),
+        hashes.SHA3_384(),
+        hashes.SHA3_512(),
+    ],
+)
+def test_signature_verification(hash_algorithm):
+    # Generate a private key
+    private_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=1024, backend=default_backend()
+    )
+
+    # Generate a public key
+    public_key = private_key.public_key()
+
+    # Create a certificate
+    subject = x509.Name(
+        [
+            x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "US"),
+        ]
+    )
+
+    issuer = subject
+
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(public_key)
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.now())
+        .not_valid_after(datetime.datetime.now() + datetime.timedelta(days=365))
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName("example.com")]),
+            critical=False,
+        )
+        .sign(private_key, hash_algorithm, default_backend())
+    )
+
+    # in snowflake, we use lib asn1crypto to load certificate, not using lib cryptography
+    asy1_509_cert = asn1crypto509.Certificate.load(cert.public_bytes(Encoding.DER))
+
+    # sha3 family is not recognized by asn1crypto library
+    if hash_algorithm.name.startswith("sha3-"):
+        with pytest.raises(ValueError):
+            SFOCSP().verify_signature(
+                asy1_509_cert.hash_algo,
+                cert.signature,
+                asy1_509_cert,
+                asy1_509_cert["tbs_certificate"],
+            )
+    else:
+        SFOCSP().verify_signature(
+            asy1_509_cert.hash_algo,
+            cert.signature,
+            asy1_509_cert,
+            asy1_509_cert["tbs_certificate"],
+        )
