@@ -98,10 +98,11 @@ def test_put_get_accelerate_user_stage(tmpdir, conn_cnx, from_path, accelerate_c
             )
             config_accl = mocked_file_agent.agent._use_accelerate_endpoint
             if accelerate_config:
-                if not ((config_accl is True) and all(
-                    ele.find("s3-acc") >= 0 for ele in endpoints
-                )):
-                    raise ValueError(f'can not find s3-acc endpoin {str(endpoints)}')
+                if not (
+                    (config_accl is True)
+                    and all(ele.find("s3-acc") >= 0 for ele in endpoints)
+                ):
+                    raise ValueError(f"can not find s3-acc endpoint {str(endpoints)}")
             else:
                 assert (config_accl is False) and all(
                     ele.find("s3-acc") < 0 for ele in endpoints
