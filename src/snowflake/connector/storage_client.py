@@ -219,12 +219,6 @@ class SnowflakeStorageClient(ABC):
     def prepare_upload(self) -> None:
         meta = self.meta
 
-        if meta.upload_size < meta.multipart_threshold or not self.chunked_transfer:
-            self.num_of_chunks = 1
-        else:
-            self.num_of_chunks = ceil(meta.upload_size / self.chunk_size)
-        logger.debug(f"number of chunks {self.num_of_chunks}")
-
         if not self.preprocessed:
             self.preprocess()
         elif meta.encryption_material:
@@ -238,6 +232,11 @@ class SnowflakeStorageClient(ABC):
         else:
             self.data_file = meta.real_src_file_name
         logger.debug("finished preprocessing")
+        if meta.upload_size < meta.multipart_threshold or not self.chunked_transfer:
+            self.num_of_chunks = 1
+        else:
+            self.num_of_chunks = ceil(meta.upload_size / self.chunk_size)
+        logger.debug(f"number of chunks {self.num_of_chunks}")
         # clean up
         self.retry_count = {}
 
@@ -248,7 +247,7 @@ class SnowflakeStorageClient(ABC):
 
     def finish_upload(self) -> None:
         meta = self.meta
-        if self.successful_transfers == self.num_of_chunks:
+        if self.successful_transfers == self.num_of_chunks and self.num_of_chunks != 0:
             if self.num_of_chunks > 1:
                 self._complete_multipart_upload()
             meta.result_status = ResultStatus.UPLOADED
