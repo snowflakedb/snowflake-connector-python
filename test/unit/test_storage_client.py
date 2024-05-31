@@ -4,10 +4,24 @@
 from os import path
 from unittest.mock import MagicMock
 
-from snowflake.connector import SnowflakeConnection
-from snowflake.connector.constants import ResultStatus
-from snowflake.connector.file_transfer_agent import SnowflakeFileMeta, StorageCredential
-from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
+try:
+    from snowflake.connector import SnowflakeConnection
+    from snowflake.connector.constants import ResultStatus
+    from snowflake.connector.file_transfer_agent import (
+        SnowflakeFileMeta,
+        StorageCredential,
+    )
+    from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
+except ImportError:
+    # Compatibility for olddriver tests
+    from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED  # NOQA
+
+    SnowflakeFileMeta = dict
+    SnowflakeS3RestClient = None
+    RequestExceedMaxRetryError = None
+    StorageCredential = None
+    megabytes = 1024 * 1024
+    DEFAULT_MAX_RETRY = 5
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 megabyte = 1024 * 1024
