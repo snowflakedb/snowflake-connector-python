@@ -509,6 +509,20 @@ def test_empty_dataframe_write_pandas(
         ), f"sucess: {success}, num_chunks: {num_chunks}, num_rows: {num_rows}"
 
 
+def test_cursor_write_pandas(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+):
+    table_name = random_string(5, "empty_dataframe_")
+    df = pandas.DataFrame([], columns=["name", "balance"])
+    with conn_cnx() as cnx:
+        success, num_chunks, num_rows, _ = write_pandas(
+            cnx.cursor(), df, table_name, auto_create_table=True, table_type="temp"
+        )
+        assert (
+            success and num_chunks == 1 and num_rows == 0
+        ), f"sucess: {success}, num_chunks: {num_chunks}, num_rows: {num_rows}"
+
+
 @pytest.mark.parametrize(
     "database,schema,quote_identifiers,expected_location",
     [
