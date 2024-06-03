@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
+from snowflake.connector.connection import DEFAULT_CONFIGURATION
 from snowflake.connector.errors import (
     Error,
     ForbiddenError,
@@ -508,3 +509,23 @@ def test_expired_detection():
             with pytest.raises(ProgrammingError):
                 cur.execute("select 1;")
     assert conn.expired
+
+
+@pytest.mark.skipolddriver
+def test_disable_saml_url_check_config():
+    with mock.patch(
+        "snowflake.connector.network.SnowflakeRestful._post_request",
+        return_value={
+            "data": {
+                "serverVersion": "a.b.c",
+            },
+            "code": None,
+            "message": None,
+            "success": True,
+        },
+    ):
+        conn = fake_connector()
+        assert (
+            conn._disable_saml_url_check
+            == DEFAULT_CONFIGURATION.get("disable_saml_url_check")[0]
+        )

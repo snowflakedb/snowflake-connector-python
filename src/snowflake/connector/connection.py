@@ -285,6 +285,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # log raw arrow chunk for debugging purpuse in case there is malformed arrow data
+    "disable_saml_url_check": (
+        False,
+        bool,
+    ),  # disable saml url check in okta authentication
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
