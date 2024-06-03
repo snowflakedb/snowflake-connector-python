@@ -247,7 +247,7 @@ class SnowflakeStorageClient(ABC):
 
     def finish_upload(self) -> None:
         meta = self.meta
-        if self.successful_transfers == self.num_of_chunks:
+        if self.successful_transfers == self.num_of_chunks and self.num_of_chunks != 0:
             if self.num_of_chunks > 1:
                 self._complete_multipart_upload()
             meta.result_status = ResultStatus.UPLOADED
