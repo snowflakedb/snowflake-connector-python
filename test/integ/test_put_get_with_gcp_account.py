@@ -414,9 +414,11 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx):
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(
-                        "snowflake.connector.vendored.requests.put"
-                        if vendored_request
-                        else "request.put",
+                        (
+                            "snowflake.connector.vendored.requests.put"
+                            if vendored_request
+                            else "request.put"
+                        ),
                         side_effect=mocked_put,
                     ):
                         csr.execute(
@@ -448,9 +450,11 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx):
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(
-                        "snowflake.connector.vendored.requests.get"
-                        if vendored_request
-                        else "request.get",
+                        (
+                            "snowflake.connector.vendored.requests.get"
+                            if vendored_request
+                            else "request.get"
+                        ),
                         side_effect=mocked_get,
                     ):
                         csr.execute(f"get @%{table_name} file://{tmp_dir}")
@@ -575,15 +579,19 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(
-                        "snowflake.connector.vendored.requests.put"
-                        if vendored_request
-                        else "requests.put",
+                        (
+                            "snowflake.connector.vendored.requests.put"
+                            if vendored_request
+                            else "requests.put"
+                        ),
                         side_effect=mocked_put,
                     ):
                         with mock.patch(
-                            "snowflake.connector.vendored.requests.head"
-                            if vendored_request
-                            else "requests.head",
+                            (
+                                "snowflake.connector.vendored.requests.head"
+                                if vendored_request
+                                else "requests.head"
+                            ),
                             side_effect=mocked_head,
                         ):
                             csr.execute(
@@ -620,9 +628,11 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(
-                        "snowflake.connector.vendored.requests.get"
-                        if vendored_request
-                        else "requests.get",
+                        (
+                            "snowflake.connector.vendored.requests.get"
+                            if vendored_request
+                            else "requests.get"
+                        ),
                         ide_effect=mocked_get,
                     ):
                         csr.execute(f"get @%{table_name} file://{tmp_dir}")

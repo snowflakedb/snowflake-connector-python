@@ -1357,9 +1357,11 @@ def test_check_cannot_use_arrow_resultset(conn_cnx, caplog, snowsql):
             ):
                 with pytest.raises(
                     ProgrammingError,
-                    match="Currently SnowSQL doesn't support the result set in Apache Arrow format."
-                    if snowsql
-                    else "The result set in Apache Arrow format is not supported for the platform.",
+                    match=(
+                        "Currently SnowSQL doesn't support the result set in Apache Arrow format."
+                        if snowsql
+                        else "The result set in Apache Arrow format is not supported for the platform."
+                    ),
                 ) as pe:
                     cur.check_can_use_arrow_resultset()
                     assert pe.errno == (
@@ -1665,9 +1667,11 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
             fetch_next_fn()
             with pytest.raises(
                 InterfaceError,
-                match="date value out of range"
-                if IS_WINDOWS
-                else "year 10000 is out of range",
+                match=(
+                    "date value out of range"
+                    if IS_WINDOWS
+                    else "year 10000 is out of range"
+                ),
             ):
                 fetch_next_fn()
 

@@ -366,9 +366,9 @@ class ResultBatch(abc.ABC):
                 )
                 time.sleep(sleep_timer)
 
-        self._metrics[
-            DownloadMetrics.download.value
-        ] = download_metric.get_timing_millis()
+        self._metrics[DownloadMetrics.download.value] = (
+            download_metric.get_timing_millis()
+        )
         return response
 
     @abc.abstractmethod

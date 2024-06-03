@@ -239,9 +239,9 @@ def generate_telemetry_data_dict(
         {
             TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
             TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
-            TelemetryField.KEY_SOURCE.value: connection.application
-            if connection
-            else CLIENT_NAME,
+            TelemetryField.KEY_SOURCE.value: (
+                connection.application if connection else CLIENT_NAME
+            ),
             **from_dict,
         }
         if not is_oob_telemetry

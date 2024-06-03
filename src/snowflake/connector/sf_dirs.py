@@ -14,8 +14,7 @@ from platformdirs import PlatformDirs
 
 class PlatformDirsProto(Protocol):
     @property
-    def user_config_path(self) -> pathlib.Path:
-        ...
+    def user_config_path(self) -> pathlib.Path: ...
 
 
 def _resolve_platform_dirs() -> PlatformDirsProto:
