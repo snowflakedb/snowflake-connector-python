@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 from secrets import token_urlsafe
@@ -256,6 +257,7 @@ def test_missing_default_connection_conf_file(monkeypatch, tmp_path):
             """
         )
     )
+    config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     with monkeypatch.context() as m:
         m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
         m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
@@ -282,6 +284,7 @@ def test_missing_default_connection_conn_file(monkeypatch, tmp_path):
             """
         )
     )
+    connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     with monkeypatch.context() as m:
         m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
         m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
@@ -306,6 +309,7 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             """
         )
     )
+    config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     connections_file.write_text(
         dedent(
             """\
@@ -316,6 +320,7 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             """
         )
     )
+    connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     with monkeypatch.context() as m:
         m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
         m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)

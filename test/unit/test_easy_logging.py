@@ -1,6 +1,8 @@
 #
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+import stat
+
 import pytest
 
 pytestmark = pytest.mark.skipolddriver
@@ -26,7 +28,11 @@ logger = getLogger("snowflake.connector")
 
 @pytest.fixture(scope="function")
 def temp_config_file(tmp_path_factory):
-    return tmp_path_factory.mktemp("config_file_path") / "config.toml"
+    config_file = tmp_path_factory.mktemp("config_file_path") / "config.toml"
+    # Pre-create config file and setup correct permissions on it
+    config_file.touch()
+    config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    return config_file
 
 
 @pytest.fixture(scope="function")
