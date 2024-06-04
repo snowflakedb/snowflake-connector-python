@@ -122,7 +122,7 @@ def test_simple_config_read(tmp_files):
         name="output_format",
         choices=("json", "yaml", "toml"),
     )
-    TEST_PARSER.add_subparser(settings_parser)
+    TEST_PARSER.add_submanager(settings_parser)
     assert TEST_PARSER["connections"] == {
         "snowflake": {
             "account": "snowflake",
@@ -175,7 +175,7 @@ def test_simple_config_read_sliced(tmp_files):
         name="output_format",
         choices=("json", "yaml", "toml"),
     )
-    TEST_PARSER.add_subparser(settings_parser)
+    TEST_PARSER.add_submanager(settings_parser)
     assert TEST_PARSER["connections"] == {
         "snowflake": {
             "account": "snowflake",
@@ -214,7 +214,7 @@ def test_missing_value(tmp_files):
         name="output_format",
         choices=("json", "yaml", "toml"),
     )
-    TEST_PARSER.add_subparser(settings_parser)
+    TEST_PARSER.add_submanager(settings_parser)
     assert TEST_PARSER["connections"] == {
         "snowflake": {
             "account": "snowflake",
@@ -366,6 +366,7 @@ def test_complicated_nesting(monkeypatch, tmp_path):
             """
         )
     )
+    c_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     assert c1["sp"]["b"] is True
 
 
@@ -386,6 +387,7 @@ def test_error_invalid_toml(tmp_path):
             """
         )
     )
+    c_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     with pytest.raises(
         ConfigSourceError,
         match=re.escape(f"An unknown error happened while loading '{str(c_file)}'"),
@@ -659,7 +661,8 @@ def test_deprecationwarning_config_parser():
         str(w[-1].message)
         == "CONFIG_PARSER has been deprecated, use CONFIG_MANAGER instead"
     )
-    assert config_manager.CONFIG_MANAGER is config_manager.CONFIG_PARSER
+    with warnings.catch_warnings(record=True) as w:
+        assert config_manager.CONFIG_MANAGER is config_manager.CONFIG_PARSER
 
 
 def test_configoption_default_value(tmp_path, monkeypatch):
@@ -707,6 +710,7 @@ def test_defaultconnectionname(tmp_path, monkeypatch):
                 """
             )
         )
+        c_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
         # re-cache config file from disk
         CONFIG_MANAGER.file_path = c_file
         CONFIG_MANAGER.conf_file_cache = None

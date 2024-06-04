@@ -10,6 +10,7 @@ import logging
 import os
 import pathlib
 import queue
+import stat
 import threading
 import warnings
 import weakref
@@ -1264,6 +1265,7 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
             else:
                 tmp_connections_file = tmp_path / "connections.toml"
                 tmp_connections_file.write_text(tomlkit.dumps(doc))
+                tmp_connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
             with snowflake.connector.connect(
                 connection_name="default",
                 connections_file_path=tmp_connections_file,
