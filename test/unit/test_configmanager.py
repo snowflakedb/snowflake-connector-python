@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import os.path
 import re
 import shutil
@@ -589,6 +590,33 @@ def test_warn_config_file_permissions(tmp_path):
         str(c[0].message)
         == f"Bad owner or permissions on {str(c_file)}" + chmod_message
     )
+
+
+def test_log_debug_config_file_parent_dir_permissions(tmp_path, caplog):
+    tmp_dir = tmp_path / "tmp_dir"
+    tmp_dir.mkdir()
+    c_file = tmp_dir / "config.toml"
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    mod = tmp_dir.stat()
+    tmp_dir.chmod(0)
+
+    caplog.clear()
+
+    with caplog.at_level(logging.DEBUG):
+        c1.read_config()
+    assert not c1.conf_file_cache
+    assert "due to no permission on its parent directory" in caplog.text
+
+    tmp_dir.chmod(stat.S_IMODE(mod.st_mode))
+    shutil.rmtree(tmp_dir)
 
 
 def test_configoption_missing_root_manager():
