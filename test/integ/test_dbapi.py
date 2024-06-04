@@ -575,7 +575,7 @@ def test_description2(conn_local):
                 ("COL10", 10, None, None, None, None, True),
                 # array
                 #                ('col11', 11, ... # binary
-                ("COL12", 12, None, None, 0, 9, True)
+                ("COL12", 12, None, None, 0, 9, True),
                 # time
                 #                ('col13', 13, ... # boolean
             ]

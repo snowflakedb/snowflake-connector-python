@@ -165,9 +165,11 @@ class QueryContextCache:
                             "id": qce.id,
                             "timestamp": qce.read_timestamp,
                             "priority": qce.priority,
-                            "context": {"base64Data": qce.context}
-                            if qce.context is not None
-                            else {},
+                            "context": (
+                                {"base64Data": qce.context}
+                                if qce.context is not None
+                                else {}
+                            ),
                         }
                         for qce in self._tree_set
                     ]

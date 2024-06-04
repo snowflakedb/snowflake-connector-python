@@ -941,9 +941,9 @@ class SnowflakeFileTransferAgent:
             if len(response["src_locations"]) == len(self._encryption_material):
                 for idx, src_file in enumerate(self._src_files):
                     logger.debug(src_file)
-                    self._src_file_to_encryption_material[
-                        src_file
-                    ] = self._encryption_material[idx]
+                    self._src_file_to_encryption_material[src_file] = (
+                        self._encryption_material[idx]
+                    )
             elif len(self._encryption_material) != 0:
                 # some encryption material exists. Zero means no encryption
                 Error.errorhandler_wrapper(
@@ -1000,9 +1000,11 @@ class SnowflakeFileTransferAgent:
                         intermediate_stream=self._source_from_stream,
                         src_file_size=self._source_from_stream.seek(0, os.SEEK_END),
                         stage_location_type=self._stage_location_type,
-                        encryption_material=self._encryption_material[0]
-                        if len(self._encryption_material) > 0
-                        else None,
+                        encryption_material=(
+                            self._encryption_material[0]
+                            if len(self._encryption_material) > 0
+                            else None
+                        ),
                     )
                 )
                 self._source_from_stream.seek(0)
@@ -1035,9 +1037,11 @@ class SnowflakeFileTransferAgent:
                             src_file_name=file_name,
                             src_file_size=statinfo.st_size,
                             stage_location_type=self._stage_location_type,
-                            encryption_material=self._encryption_material[0]
-                            if len(self._encryption_material) > 0
-                            else None,
+                            encryption_material=(
+                                self._encryption_material[0]
+                                if len(self._encryption_material) > 0
+                                else None
+                            ),
                         )
                     )
         elif self._command_type == CMD_TYPE_DOWNLOAD:
@@ -1066,11 +1070,11 @@ class SnowflakeFileTransferAgent:
                         stage_location_type=self._stage_location_type,
                         local_location=self._local_location,
                         presigned_url=url,
-                        encryption_material=self._src_file_to_encryption_material[
-                            file_name
-                        ]
-                        if file_name in self._src_file_to_encryption_material
-                        else None,
+                        encryption_material=(
+                            self._src_file_to_encryption_material[file_name]
+                            if file_name in self._src_file_to_encryption_material
+                            else None
+                        ),
                     )
                 )
 

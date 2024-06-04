@@ -176,9 +176,11 @@ if __name__ == "__main__":
         memory_record_file, "w"
     ) as memory_file:
         task_for_loop_iterator = task_execution_decorator(
-            task_for_loop_iterator_expected_error
-            if args.test_error_method
-            else task_for_loop_iterator,
+            (
+                task_for_loop_iterator_expected_error
+                if args.test_error_method
+                else task_for_loop_iterator
+            ),
             perf_file,
             memory_file,
         )

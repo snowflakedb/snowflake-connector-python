@@ -750,9 +750,9 @@ def test_dashed_url(db_parameters):
             account="test-account",
         ) as cnx:
             assert cnx
-            cnx.commit = (
-                cnx.rollback
-            ) = lambda: None  # Skip tear down, there's only a mocked rest api
+            cnx.commit = cnx.rollback = (
+                lambda: None
+            )  # Skip tear down, there's only a mocked rest api
             assert any(
                 [
                     c[0][1].startswith("https://test-host:443")
@@ -774,9 +774,9 @@ def test_dashed_url_account_name(db_parameters):
             account="test-account",
         ) as cnx:
             assert cnx
-            cnx.commit = (
-                cnx.rollback
-            ) = lambda: None  # Skip tear down, there's only a mocked rest api
+            cnx.commit = cnx.rollback = (
+                lambda: None
+            )  # Skip tear down, there's only a mocked rest api
             assert any(
                 [
                     c[0][1].startswith(

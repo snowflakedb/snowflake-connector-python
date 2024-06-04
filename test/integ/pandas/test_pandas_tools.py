@@ -768,7 +768,12 @@ def test_autoincrement_insertion(
 @pytest.mark.parametrize("auto_create_table", [True, False])
 @pytest.mark.parametrize(
     "column_names",
-    [["00 name", "bAl_ance"], ['c""ol', '"col"'], ["c''ol", "'col'"], ["チリヌル", "熊猫"]],
+    [
+        ["00 name", "bAl_ance"],
+        ['c""ol', '"col"'],
+        ["c''ol", "'col'"],
+        ["チリヌル", "熊猫"],
+    ],
 )
 def test_special_name_quoting(
     conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],

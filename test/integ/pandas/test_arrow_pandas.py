@@ -699,7 +699,7 @@ def validate_pandas(
         for i in range(row_count):
             for j in range(col_count):
                 c_new = df_new.iat[i, j]
-                if type(cases[i]) == str and cases[i] == "NULL":
+                if type(cases[i]) is str and cases[i] == "NULL":
                     assert c_new is None or pandas.isnull(c_new), (
                         "{} row, {} column: original value is NULL, "
                         "new value is {}, values are not equal".format(i, j, c_new)
@@ -1190,13 +1190,13 @@ def test_batch_to_pandas_arrow(conn_cnx, result_format):
             # check that size, columns, and FOO column data is correct
             if result_format == "pandas":
                 df = batch.to_pandas()
-                assert type(df) == pandas.DataFrame
+                assert type(df) is pandas.DataFrame
                 assert df.shape == (10, 2)
                 assert all(df.columns == ["FOO", "BAR"])
                 assert list(df.FOO) == list(range(rowcount))
             elif result_format == "arrow":
                 arrow_table = batch.to_arrow()
-                assert type(arrow_table) == pyarrow.Table
+                assert type(arrow_table) is pyarrow.Table
                 assert arrow_table.shape == (10, 2)
                 assert arrow_table.column_names == ["FOO", "BAR"]
                 assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
@@ -1309,7 +1309,7 @@ def test_simple_arrow_fetch(conn_cnx):
             # the start and end points of each batch
             lo, hi = 0, 0
             for table in cur.fetch_arrow_batches():
-                assert type(table) == pyarrow.Table  # sanity type check
+                assert type(table) is pyarrow.Table  # sanity type check
 
                 # check that data is correct
                 length = len(table)

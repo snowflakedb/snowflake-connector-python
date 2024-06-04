@@ -153,9 +153,9 @@ class Error(BASE_EXCEPTION_CLASS):
             and not connection._telemetry.is_closed
         ):
             # Send with in-band telemetry
-            telemetry_data[
-                TelemetryField.KEY_TYPE.value
-            ] = TelemetryField.SQL_EXCEPTION.value
+            telemetry_data[TelemetryField.KEY_TYPE.value] = (
+                TelemetryField.SQL_EXCEPTION.value
+            )
             telemetry_data[TelemetryField.KEY_SOURCE.value] = connection.application
             telemetry_data[TelemetryField.KEY_EXCEPTION.value] = self.__class__.__name__
             ts = get_time_millis()
