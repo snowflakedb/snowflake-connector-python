@@ -1279,6 +1279,7 @@ class SnowflakeConnection:
         _update_current_object: bool = True,
         _no_retry: bool = False,
         timeout: int | None = None,
+        dataframe_ast: str | None = None,
     ) -> dict[str, Any]:
         """Executes a query with a sequence counter."""
         logger.debug("_cmd_query")
@@ -1288,6 +1289,8 @@ class SnowflakeConnection:
             "sequenceId": sequence_counter,
             "querySubmissionTime": get_time_millis(),
         }
+        if dataframe_ast is not None:
+            data["dataframeAst"] = dataframe_ast
         if statement_params is not None:
             data["parameters"] = statement_params
         if is_internal:
