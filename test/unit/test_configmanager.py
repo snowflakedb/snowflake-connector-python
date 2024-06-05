@@ -592,6 +592,7 @@ def test_warn_config_file_permissions(tmp_path):
     )
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
 def test_log_debug_config_file_parent_dir_permissions(tmp_path, caplog):
     tmp_dir = tmp_path / "tmp_dir"
     tmp_dir.mkdir()
