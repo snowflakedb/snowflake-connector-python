@@ -438,9 +438,12 @@ class OCSPServer:
     def generate_get_url(self, ocsp_url, b64data):
         # with prod1, calling ond not calling parse.quote_plus(b64data) both work
         parsed_url = urlsplit(ocsp_url)
-        from urllib import parse
+        # from urllib import parse
+        # b64data = parse.quote_plus(b64data)
 
-        b64data = parse.quote_plus(b64data)
+        # is the change safe? this seems related to how the responder implements the logic of handling url
+        # the concern here is if quote_plus would break existing cases
+        # however, there is another chance that this path always does not work and our test does not cover it.
         if self.OCSP_RETRY_URL is None:
             target_url = f"{ocsp_url}/{b64data}"
         else:
@@ -880,7 +883,7 @@ class SnowflakeOCSP:
         self,
         ocsp_response_cache_uri=None,
         use_ocsp_cache_server=None,
-        use_post_method: bool = False,
+        use_post_method: bool = True,
         use_fail_open: bool = True,
     ) -> None:
         self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)
@@ -1417,17 +1420,22 @@ class SnowflakeOCSP:
         headers = {HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT}
 
         if not OCSPServer.is_enabled_new_ocsp_endpoint():
+            # this is the core logic, get and post will construct different pay loads
             actual_method = "post" if self._use_post_method else "get"
             if self.OCSP_CACHE_SERVER.OCSP_RETRY_URL:
                 # no POST is supported for Retry URL at the moment.
                 actual_method = "get"
 
             if actual_method == "get":
-                # this will be called in the changed code
+                # the logic here feels weird, `actual_method` is `post`, but we are
+                # generating a "get" url and set payload to None which feels more like this is a "get" op?
+                # shouldn't the get and post be flipped?
                 b64data = self.decode_ocsp_request_b64(ocsp_request)
                 target_url = self.OCSP_CACHE_SERVER.generate_get_url(ocsp_url, b64data)
                 payload = None
             else:
+                # would enforcing "get" rather than "post" work?
+                # can try it by flipping the flag 'use_post_method' in ssl_wrap_socket
                 target_url = ocsp_url
                 payload = self.decode_ocsp_request(ocsp_request)
                 headers["Content-Type"] = "application/ocsp-request"
