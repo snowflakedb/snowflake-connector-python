@@ -75,28 +75,29 @@ class OCSPResponseValidationResult(NamedTuple):
 
 
 try:
-    OCSP_RESPONSE_VALIDATION_CACHE: SFDictFileCache[
-        tuple[bytes, bytes, bytes],
-        OCSPResponseValidationResult,
-    ] = SFDictFileCache(
-        entry_lifetime=constants.DAY_IN_SECONDS,
-        file_path={
-            "linux": os.path.join(
-                "~", ".cache", "snowflake", "ocsp_response_validation_cache"
-            ),
-            "darwin": os.path.join(
-                "~", "Library", "Caches", "Snowflake", "ocsp_response_validation_cache"
-            ),
-            "windows": os.path.join(
-                "~",
-                "AppData",
-                "Local",
-                "Snowflake",
-                "Caches",
-                "ocsp_response_validation_cache",
-            ),
-        },
-    )
+    raise OSError()  # for debug, force direct validation, not using cache
+    # OCSP_RESPONSE_VALIDATION_CACHE: SFDictFileCache[
+    #     tuple[bytes, bytes, bytes],
+    #     OCSPResponseValidationResult,
+    # ] = SFDictFileCache(
+    #     entry_lifetime=constants.DAY_IN_SECONDS,
+    #     file_path={
+    #         "linux": os.path.join(
+    #             "~", ".cache", "snowflake", "ocsp_response_validation_cache"
+    #         ),
+    #         "darwin": os.path.join(
+    #             "~", "Library", "Caches", "Snowflake", "ocsp_response_validation_cache"
+    #         ),
+    #         "windows": os.path.join(
+    #             "~",
+    #             "AppData",
+    #             "Local",
+    #             "Snowflake",
+    #             "Caches",
+    #             "ocsp_response_validation_cache",
+    #         ),
+    #     },
+    # )
 except OSError:
     # In case we run into some read/write permission error fall back onto
     #  in memory caching
@@ -435,7 +436,11 @@ class OCSPServer:
             )
 
     def generate_get_url(self, ocsp_url, b64data):
+        # with prod1, calling ond not calling parse.quote_plus(b64data) both work
         parsed_url = urlsplit(ocsp_url)
+        from urllib import parse
+
+        b64data = parse.quote_plus(b64data)
         if self.OCSP_RETRY_URL is None:
             target_url = f"{ocsp_url}/{b64data}"
         else:
@@ -875,7 +880,7 @@ class SnowflakeOCSP:
         self,
         ocsp_response_cache_uri=None,
         use_ocsp_cache_server=None,
-        use_post_method: bool = True,
+        use_post_method: bool = False,
         use_fail_open: bool = True,
     ) -> None:
         self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)
@@ -1089,7 +1094,9 @@ class SnowflakeOCSP:
         )
 
         try:
-            if not cache_status:
+            if (
+                cache_status
+            ):  # just for testing purpose, test validate against OCSP responder
                 telemetry_data.set_cache_hit(False)
                 logger.debug("getting OCSP response from CA's OCSP server")
                 ocsp_response = self._fetch_ocsp_response(
@@ -1416,6 +1423,7 @@ class SnowflakeOCSP:
                 actual_method = "get"
 
             if actual_method == "get":
+                # this will be called in the changed code
                 b64data = self.decode_ocsp_request_b64(ocsp_request)
                 target_url = self.OCSP_CACHE_SERVER.generate_get_url(ocsp_url, b64data)
                 payload = None
