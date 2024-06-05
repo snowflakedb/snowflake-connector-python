@@ -320,8 +320,15 @@ class ConfigManager:
         ):
             if sliceoptions.only_in_slice:
                 del read_config_file[section]
-            if not filep.exists():
+            try:
+                if not filep.exists():
+                    continue
+            except PermissionError:
+                LOGGER.debug(
+                    f"Fail to read configuration file from {str(filep)} due to no permission on its parent directory"
+                )
                 continue
+
             if (
                 sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
                 # Same check as openssh does for permissions
