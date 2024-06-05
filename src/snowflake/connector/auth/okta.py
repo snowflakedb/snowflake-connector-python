@@ -315,7 +315,9 @@ class AuthByOkta(AuthByPlugin):
             host=conn._rest._host,
             port=conn._rest._port,
         )
-        if not _is_prefix_equal(post_back_url, full_url):
+        if not getattr(conn, "_disable_saml_url_check", False) and not _is_prefix_equal(
+            post_back_url, full_url
+        ):
             Error.errorhandler_wrapper(
                 conn._rest._connection,
                 None,
