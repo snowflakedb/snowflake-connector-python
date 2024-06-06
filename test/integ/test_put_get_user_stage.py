@@ -44,6 +44,7 @@ def test_put_get_small_data_via_user_stage(is_public_test, tmpdir, conn_cnx, fro
     )
 
 
+@pytest.mark.skip(reason="endpoints don't have s3-acc string, skip it for now")
 @pytest.mark.internal
 @pytest.mark.skipolddriver
 @pytest.mark.aws
