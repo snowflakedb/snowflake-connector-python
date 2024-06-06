@@ -62,6 +62,7 @@ from . import constants
 from .backoff_policies import exponential_backoff
 from .cache import SFDictCache, SFDictFileCache
 from .telemetry import TelemetryField, generate_telemetry_data_dict
+from .url_util import url_encode_str
 
 
 class OCSPResponseValidationResult(NamedTuple):
@@ -436,8 +437,9 @@ class OCSPServer:
 
     def generate_get_url(self, ocsp_url, b64data):
         parsed_url = urlsplit(ocsp_url)
+        url_encoded_b64data = url_encode_str(b64data)
         if self.OCSP_RETRY_URL is None:
-            target_url = f"{ocsp_url}/{b64data}"
+            target_url = f"{ocsp_url}/{url_encoded_b64data}"
         else:
             # values of parsed_url.netloc and parsed_url.path based on oscp_url are as follows:
             # URL                                    NETLOC                         PATH
@@ -447,7 +449,9 @@ class OCSPServer:
             # "http://oneocsp.microsoft.com/ocsp"    "oneocsp.microsoft.com"        "/ocsp"
             # The check below is to treat first two urls same
             path = parsed_url.path if parsed_url.path != "/" else ""
-            target_url = self.OCSP_RETRY_URL.format(parsed_url.netloc + path, b64data)
+            target_url = self.OCSP_RETRY_URL.format(
+                parsed_url.netloc + path, url_encoded_b64data
+            )
 
         logger.debug("OCSP Retry URL is - %s", target_url)
         return target_url
