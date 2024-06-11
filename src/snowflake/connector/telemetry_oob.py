@@ -299,13 +299,22 @@ class TelemetryService:
         self.configure_deployment(connection_params)
         self.context = dict()
 
-        for key, value in connection_params.items():
-            if (
-                "password" not in key
-                and "passcode" not in key
-                and "privateKey" not in key
-            ):
-                self.context[key] = value
+        if val := connection_params.get("account"):
+            self.context["account"] = val
+        if val := connection_params.get("db"):
+            self.context["db"] = val
+        if val := connection_params.get("role"):
+            self.context["role"] = val
+        if val := connection_params.get("schema"):
+            self.context["schema"] = val
+        if val := connection_params.get("snowflakeclientinfo"):
+            self.context["snowflakeclientinfo"] = val
+        if val := connection_params.get("ssl"):
+            self.context["ssl"] = val
+        if val := connection_params.get("user"):
+            self.context["user"] = val
+        if val := connection_params.get("warehouse"):
+            self.context["warehouse"] = val
 
     def configure_deployment(self, connection_params) -> None:
         """Determines which deployment we are sending Telemetry OOB messages to."""
