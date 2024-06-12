@@ -17,6 +17,7 @@ def test_url_validator():
     assert is_valid_url("https://ssoTestURL.okta.com")
     assert is_valid_url("https://ssoTestURL.okta.com:8080")
     assert is_valid_url("https://ssoTestURL.okta.com/testpathvalue")
+    assert is_valid_url("https://sso.mercedes-benz.com/idp/startSSO.ping?PartnerSpId=https://athlon.eu-central-1.snowflakecomputing.com/")
 
     assert not is_valid_url("-a Calculator")
     assert not is_valid_url("This is a random text")
