@@ -79,8 +79,12 @@ def result_set_iterator(
             future = pool.submit(unfetched_batches.popleft().create_iter, **kw)
             unconsumed_batches.append(future)
         _, _ = wait(unconsumed_batches, return_when=ALL_COMPLETED)
+        i = 1
         while unconsumed_batches:
+            logger.debug(f"user began consuming result batch {i}")
             yield from unconsumed_batches.popleft().result()
+            logger.debug(f"user began consuming result batch {i}")
+            i += 1
     final()
 
 
