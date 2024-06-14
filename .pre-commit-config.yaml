@@ -5,7 +5,7 @@ repos:
         - id: check-hooks-apply
         - id: check-useless-excludes
 -   repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
+    rev: v4.6.0
     hooks:
     -   id: trailing-whitespace
         exclude: >
@@ -65,7 +65,7 @@ repos:
     hooks:
     -   id: check-manifest
 -   repo: https://github.com/PyCQA/isort
-    rev: 5.12.0
+    rev: 5.13.2
     hooks:
         - id: isort
         - id: isort
@@ -76,18 +76,18 @@ repos:
               - --append-only
           files: ^src/snowflake/connector/.*\.py$
 -   repo: https://github.com/asottile/pyupgrade
-    rev: v3.7.0
+    rev: v3.15.2
     hooks:
         - id: pyupgrade
           args: [--py38-plus]
 -   repo: https://github.com/PyCQA/flake8
-    rev: 6.0.0
+    rev: 7.0.0
     hooks:
       - id: flake8
         additional_dependencies:
           - flake8-bugbear
 -   repo: https://github.com/pre-commit/mirrors-mypy
-    rev: 'v1.4.0'
+    rev: 'v1.10.0'
     hooks:
     -   id: mypy
         files: |
@@ -120,7 +120,7 @@ repos:
             - types-pyOpenSSL
             - types-setuptools
 -   repo: https://github.com/psf/black
-    rev: 23.3.0
+    rev: 24.4.2
     hooks:
         - id: black
           args:

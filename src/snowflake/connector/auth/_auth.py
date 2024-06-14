@@ -417,27 +417,35 @@ class Auth:
         else:
             logger.debug(
                 "token = %s",
-                "******"
-                if ret["data"] and ret["data"].get("token") is not None
-                else "NULL",
+                (
+                    "******"
+                    if ret["data"] and ret["data"].get("token") is not None
+                    else "NULL"
+                ),
             )
             logger.debug(
                 "master_token = %s",
-                "******"
-                if ret["data"] and ret["data"].get("masterToken") is not None
-                else "NULL",
+                (
+                    "******"
+                    if ret["data"] and ret["data"].get("masterToken") is not None
+                    else "NULL"
+                ),
             )
             logger.debug(
                 "id_token = %s",
-                "******"
-                if ret["data"] and ret["data"].get("idToken") is not None
-                else "NULL",
+                (
+                    "******"
+                    if ret["data"] and ret["data"].get("idToken") is not None
+                    else "NULL"
+                ),
             )
             logger.debug(
                 "mfa_token = %s",
-                "******"
-                if ret["data"] and ret["data"].get("mfaToken") is not None
-                else "NULL",
+                (
+                    "******"
+                    if ret["data"] and ret["data"].get("mfaToken") is not None
+                    else "NULL"
+                ),
             )
             if not ret["data"]:
                 Error.errorhandler_wrapper(

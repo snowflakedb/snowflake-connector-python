@@ -129,12 +129,12 @@ class TelemetryEvent(TelemetryEventBase):
         # Add telemetry service generated tags
         tags[TelemetryField.KEY_OOB_DRIVER.value] = CLIENT_NAME
         tags[TelemetryField.KEY_OOB_VERSION.value] = str(SNOWFLAKE_CONNECTOR_VERSION)
-        tags[
-            TelemetryField.KEY_OOB_TELEMETRY_SERVER_DEPLOYMENT.value
-        ] = telemetry.deployment.name
-        tags[
-            TelemetryField.KEY_OOB_CONNECTION_STRING.value
-        ] = telemetry.get_connection_string()
+        tags[TelemetryField.KEY_OOB_TELEMETRY_SERVER_DEPLOYMENT.value] = (
+            telemetry.deployment.name
+        )
+        tags[TelemetryField.KEY_OOB_CONNECTION_STRING.value] = (
+            telemetry.get_connection_string()
+        )
         if telemetry.context and len(telemetry.context) > 0:
             for k, v in telemetry.context.items():
                 if v is not None:
@@ -351,9 +351,9 @@ class TelemetryService:
             if self.enabled:
                 event_name = "OCSPException"
                 if exception is not None:
-                    telemetry_data[
-                        TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value
-                    ] = str(exception)
+                    telemetry_data[TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value] = (
+                        str(exception)
+                    )
                 if stack_trace is not None:
                     telemetry_data[
                         TelemetryField.KEY_OOB_EXCEPTION_STACK_TRACE.value
@@ -404,9 +404,9 @@ class TelemetryService:
                     is_oob_telemetry=True,
                 )
                 if response:
-                    telemetry_data[
-                        TelemetryField.KEY_OOB_RESPONSE.value
-                    ] = response.json()
+                    telemetry_data[TelemetryField.KEY_OOB_RESPONSE.value] = (
+                        response.json()
+                    )
                     telemetry_data[
                         TelemetryField.KEY_OOB_RESPONSE_STATUS_LINE.value
                     ] = str(response.reason)
@@ -424,9 +424,9 @@ class TelemetryService:
                         retry_count
                     )
                 if exception:
-                    telemetry_data[
-                        TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value
-                    ] = str(exception)
+                    telemetry_data[TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value] = (
+                        str(exception)
+                    )
                 if stack_trace:
                     telemetry_data[
                         TelemetryField.KEY_OOB_EXCEPTION_STACK_TRACE.value
@@ -435,9 +435,9 @@ class TelemetryService:
                 if tags is None:
                     tags = dict()
 
-                tags[
-                    TelemetryField.KEY_OOB_RESPONSE_STATUS_CODE.value
-                ] = response_status_code
+                tags[TelemetryField.KEY_OOB_RESPONSE_STATUS_CODE.value] = (
+                    response_status_code
+                )
                 tags[TelemetryField.KEY_OOB_SQL_STATE.value] = str(sqlstate)
                 tags[TelemetryField.KEY_OOB_ERROR_CODE.value] = errno
 

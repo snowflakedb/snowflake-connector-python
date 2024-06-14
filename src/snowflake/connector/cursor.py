@@ -149,9 +149,11 @@ class ResultMetadata(NamedTuple):
     def from_column(cls, col: dict[str, Any]):
         """Initializes a ResultMetadata object from the column description in the query response."""
         type_code = FIELD_NAME_TO_ID[
-            col["extTypeName"].upper()
-            if col.get("extTypeName")
-            else col["type"].upper()
+            (
+                col["extTypeName"].upper()
+                if col.get("extTypeName")
+                else col["type"].upper()
+            )
         ]
 
         return cls(
@@ -546,12 +548,10 @@ class SnowflakeCursor:
         return None
 
     @overload
-    def callproc(self, procname: str) -> tuple:
-        ...
+    def callproc(self, procname: str) -> tuple: ...
 
     @overload
-    def callproc(self, procname: str, args: T) -> T:
-        ...
+    def callproc(self, procname: str, args: T) -> T: ...
 
     def callproc(self, procname: str, args=tuple()):
         """Call a stored procedure.
@@ -631,9 +631,9 @@ class SnowflakeCursor:
                 if str(result_format_val).upper() == "ARROW":
                     self.check_can_use_arrow_resultset()
                 elif result_format_val is None:
-                    statement_params[
-                        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
-                    ] = "JSON"
+                    statement_params[PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT] = (
+                        "JSON"
+                    )
 
         self._sequence_counter = self._connection._next_sequence_counter()
         self._request_id = uuid.uuid4()
@@ -760,9 +760,11 @@ class SnowflakeCursor:
         if params is not None and len(params) == 0:
             self._log_telemetry_job_data(
                 TelemetryField.EMPTY_SEQ_INTERPOLATION,
-                TelemetryData.TRUE
-                if self.connection._interpolate_empty_sequences
-                else TelemetryData.FALSE,
+                (
+                    TelemetryData.TRUE
+                    if self.connection._interpolate_empty_sequences
+                    else TelemetryData.FALSE
+                ),
             )
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.debug(
@@ -810,8 +812,7 @@ class SnowflakeCursor:
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
         _dataframe_ast: str | None = None,
-    ) -> Self | None:
-        ...
+    ) -> Self | None: ...
 
     @overload
     def execute(
@@ -841,8 +842,7 @@ class SnowflakeCursor:
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
         _dataframe_ast: str | None = None,
-    ) -> dict[str, Any] | None:
-        ...
+    ) -> dict[str, Any] | None: ...
 
     def execute(
         self,
@@ -1285,12 +1285,10 @@ class SnowflakeCursor:
         return self._result_set._fetch_arrow_batches()
 
     @overload
-    def fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None:
-        ...
+    def fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None: ...
 
     @overload
-    def fetch_arrow_all(self, force_return_table: Literal[True]) -> Table:
-        ...
+    def fetch_arrow_all(self, force_return_table: Literal[True]) -> Table: ...
 
     def fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
         """

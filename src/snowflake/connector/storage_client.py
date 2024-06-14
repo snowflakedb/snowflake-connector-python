@@ -74,7 +74,7 @@ class SnowflakeStorageClient(ABC):
     ) -> None:
         self.meta = meta
         self.stage_info = stage_info
-        self.retry_count: dict[int | str, int] = defaultdict(lambda: 0)
+        self.retry_count: dict[int | str, int] = defaultdict(int)
         self.tmp_dir = tempfile.mkdtemp()
         self.data_file: str | None = None
         self.encryption_metadata: EncryptionMetadata | None = None

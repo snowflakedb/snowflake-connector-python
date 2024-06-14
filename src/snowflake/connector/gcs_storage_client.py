@@ -203,9 +203,11 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                 encryption_metadata = EncryptionMetadata(
                     key=encryptiondata["WrappedContentKey"]["EncryptedKey"],
                     iv=encryptiondata["ContentEncryptionIV"],
-                    matdesc=response.headers[GCS_METADATA_MATDESC_KEY]
-                    if GCS_METADATA_MATDESC_KEY in response.headers
-                    else None,
+                    matdesc=(
+                        response.headers[GCS_METADATA_MATDESC_KEY]
+                        if GCS_METADATA_MATDESC_KEY in response.headers
+                        else None
+                    ),
                 )
 
         meta.gcs_file_header_digest = response.headers.get(GCS_METADATA_SFC_DIGEST)
@@ -359,9 +361,11 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                         encryption_metadata = EncryptionMetadata(
                             key=encryption_data["WrappedContentKey"]["EncryptedKey"],
                             iv=encryption_data["ContentEncryptionIV"],
-                            matdesc=response.headers[GCS_METADATA_MATDESC_KEY]
-                            if GCS_METADATA_MATDESC_KEY in response.headers
-                            else None,
+                            matdesc=(
+                                response.headers[GCS_METADATA_MATDESC_KEY]
+                                if GCS_METADATA_MATDESC_KEY in response.headers
+                                else None
+                            ),
                         )
                 meta.result_status = ResultStatus.UPLOADED
                 return FileHeader(

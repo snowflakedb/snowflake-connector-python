@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 from secrets import token_urlsafe
@@ -20,6 +21,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
+from snowflake.connector.connection import DEFAULT_CONFIGURATION
 from snowflake.connector.errors import (
     Error,
     ForbiddenError,
@@ -256,6 +258,7 @@ def test_missing_default_connection_conf_file(monkeypatch, tmp_path):
             """
         )
     )
+    config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     with monkeypatch.context() as m:
         m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
         m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
@@ -282,6 +285,7 @@ def test_missing_default_connection_conn_file(monkeypatch, tmp_path):
             """
         )
     )
+    connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     with monkeypatch.context() as m:
         m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
         m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
@@ -306,6 +310,7 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             """
         )
     )
+    config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     connections_file.write_text(
         dedent(
             """\
@@ -316,6 +321,7 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             """
         )
     )
+    connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     with monkeypatch.context() as m:
         m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
         m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
@@ -508,3 +514,23 @@ def test_expired_detection():
             with pytest.raises(ProgrammingError):
                 cur.execute("select 1;")
     assert conn.expired
+
+
+@pytest.mark.skipolddriver
+def test_disable_saml_url_check_config():
+    with mock.patch(
+        "snowflake.connector.network.SnowflakeRestful._post_request",
+        return_value={
+            "data": {
+                "serverVersion": "a.b.c",
+            },
+            "code": None,
+            "message": None,
+            "success": True,
+        },
+    ):
+        conn = fake_connector()
+        assert (
+            conn._disable_saml_url_check
+            == DEFAULT_CONFIGURATION.get("disable_saml_url_check")[0]
+        )

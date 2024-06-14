@@ -175,7 +175,9 @@ class ConnectionDiagnostic:
                 )
                 self.full_connection_diag_allowlist_path = None
 
-        self.allowlist_sql: str = "select /* snowflake-connector-python:connection_diagnostics */ system$allowlist();"
+        self.allowlist_sql: str = (
+            "select /* snowflake-connector-python:connection_diagnostics */ system$allowlist();"
+        )
 
         if self.__is_privatelink():
             self.ocsp_urls.append(f"ocsp.{self.host}")

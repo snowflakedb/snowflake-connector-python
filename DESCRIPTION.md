@@ -8,12 +8,15 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.11.0(TBD)
-
+- v3.11.0(June 17,2024)
   - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.
   - Added support for `debug_arrow_chunk` connection parameter to allow debugging raw arrow data in case of arrow data parsing failure.
+  - Added support for `disable_saml_url_check` connection parameter to disable SAML URL check in OKTA authentication.
   - Fixed a bug that OCSP certificate signed using SHA384 algorithm cannot be verified.
   - Fixed a bug that status code shown as uploaded when PUT command failed with 400 error.
+  - Fixed a bug that a PermissionError was raised when the current user does not have the right permission on parent directory of config file path.
+  - Fixed a bug that OCSP GET url is not encoded correctly when it contains a slash.
+  - Fixed a bug that an SSO URL didn't accept `:` in a query parameter, for instance, `https://sso.abc.com/idp/startSSO.ping?PartnerSpId=https://xyz.snowflakecomputing.com/`.
 
 - v3.10.1(May 21, 2024)
 

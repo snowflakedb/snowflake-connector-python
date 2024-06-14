@@ -82,9 +82,11 @@ def test_upload_retry_errors(errno, tmpdir):
         f.write(random_string(15))
     if RequestExceedMaxRetryError is None:
         with mock.patch(
-            "snowflake.connector.vendored.requests.put"
-            if vendored_request
-            else "requests.put",
+            (
+                "snowflake.connector.vendored.requests.put"
+                if vendored_request
+                else "requests.put"
+            ),
             side_effect=requests.exceptions.HTTPError(response=resp),
         ):
             SnowflakeGCSUtil.upload_file(f_name, meta, None, 99, 64000)

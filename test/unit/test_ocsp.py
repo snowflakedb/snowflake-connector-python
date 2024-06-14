@@ -485,6 +485,14 @@ def test_building_retry_url():
         == "http://ocsp.us-east-1.snowflakecomputing.com/retry/oneocsp.microsoft.com:8080/ocsp/1234"
     )
 
+    # ensure we handle slash correctly
+    assert (
+        OCSP_SERVER.generate_get_url(
+            "http://oneocsp.microsoft.com:8080/ocsp", "aa//bb/"
+        )
+        == "http://ocsp.us-east-1.snowflakecomputing.com/retry/oneocsp.microsoft.com:8080/ocsp/aa%2F%2Fbb%2F"
+    )
+
     # privatelink retry url with port
     OCSP_SERVER.OCSP_RETRY_URL = None
     OCSP_SERVER.CACHE_SERVER_URL = (

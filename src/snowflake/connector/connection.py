@@ -285,6 +285,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # log raw arrow chunk for debugging purpuse in case there is malformed arrow data
+    "disable_saml_url_check": (
+        False,
+        bool,
+    ),  # disable saml url check in okta authentication
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -718,9 +722,11 @@ class SnowflakeConnection:
                 account=self.account,
                 host=self.host,
                 connection_diag_log_path=self.connection_diag_log_path,
-                connection_diag_allowlist_path=self.connection_diag_allowlist_path
-                if self.connection_diag_allowlist_path is not None
-                else self.connection_diag_whitelist_path,
+                connection_diag_allowlist_path=(
+                    self.connection_diag_allowlist_path
+                    if self.connection_diag_allowlist_path is not None
+                    else self.connection_diag_whitelist_path
+                ),
                 proxy_host=self.proxy_host,
                 proxy_port=self.proxy_port,
                 proxy_user=self.proxy_user,
@@ -941,14 +947,14 @@ class SnowflakeConnection:
 
         if self._validate_default_parameters:
             # Snowflake will validate the requested database, schema, and warehouse
-            self._session_parameters[
-                PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS
-            ] = True
+            self._session_parameters[PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS] = (
+                True
+            )
 
         if self.client_session_keep_alive is not None:
-            self._session_parameters[
-                PARAMETER_CLIENT_SESSION_KEEP_ALIVE
-            ] = self._client_session_keep_alive
+            self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE] = (
+                self._client_session_keep_alive
+            )
 
         if self.client_session_keep_alive_heartbeat_frequency is not None:
             self._session_parameters[
@@ -956,9 +962,9 @@ class SnowflakeConnection:
             ] = self._validate_client_session_keep_alive_heartbeat_frequency()
 
         if self.client_prefetch_threads:
-            self._session_parameters[
-                PARAMETER_CLIENT_PREFETCH_THREADS
-            ] = self._validate_client_prefetch_threads()
+            self._session_parameters[PARAMETER_CLIENT_PREFETCH_THREADS] = (
+                self._validate_client_prefetch_threads()
+            )
 
         # Setup authenticator
         auth = Auth(self.rest)
@@ -1124,11 +1130,13 @@ class SnowflakeConnection:
                     warnings.warn(
                         "'{}' connection parameter should be of type '{}', but is a '{}'".format(
                             name,
-                            str(tuple(e.__name__ for e in accepted_types)).replace(
-                                "'", ""
-                            )
-                            if isinstance(accepted_types, tuple)
-                            else accepted_types.__name__,
+                            (
+                                str(tuple(e.__name__ for e in accepted_types)).replace(
+                                    "'", ""
+                                )
+                                if isinstance(accepted_types, tuple)
+                                else accepted_types.__name__
+                            ),
                             type(value).__name__,
                         ),
                         # Raise warning from where class was initiated
