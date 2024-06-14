@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.11.0(June 13,2024)
+- v3.11.0(June 17,2024)
   - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.
   - Added support for `debug_arrow_chunk` connection parameter to allow debugging raw arrow data in case of arrow data parsing failure.
   - Added support for `disable_saml_url_check` connection parameter to disable SAML URL check in OKTA authentication.
