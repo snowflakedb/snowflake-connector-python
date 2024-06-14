@@ -337,6 +337,7 @@ def test_array(datatype, examples, iceberg, pandas, conn_cnx):
     not STRUCTURED_TYPES_SUPPORTED, reason="Testing structured type feature."
 )
 def test_structured_type_binds(conn_cnx):
+    original_style = snowflake.connector.paramstyle
     snowflake.connector.paramstyle = "qmark"
     data = (
         1,
@@ -364,6 +365,7 @@ def test_structured_type_binds(conn_cnx):
                     f"insert into {table_name} values (?, ?, ?, ?, ?)", json_data
                 )
         finally:
+            snowflake.connector.paramstyle = original_style
             conn.cursor().execute(f"drop table if exists {table_name}")
 
 
