@@ -180,7 +180,7 @@ def write_pandas(
     create_temp_table: bool = False,
     overwrite: bool = False,
     table_type: Literal["", "temp", "temporary", "transient"] = "",
-    use_logical_type: bool | None = None,
+    use_logical_type: bool | None = True,
     **kwargs: Any,
 ) -> tuple[
     bool,

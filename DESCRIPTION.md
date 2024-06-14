@@ -8,6 +8,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v 4.0.0(TBD)
+
+  - Changed behavior of `write_pandas` by:
+
+    - `use_logical_type` set to `True` by default. With this, Snowflake can interpret Parquet logical types during data loading by default.
+
 - v3.11.0(TBD)
 
   - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.
