@@ -334,6 +334,42 @@ def test_array(datatype, examples, iceberg, pandas, conn_cnx):
 
 
 @pytest.mark.skipif(
+    not STRUCTURED_TYPES_SUPPORTED, reason="Testing structured type feature."
+)
+def test_structured_type_binds(conn_cnx):
+    original_style = snowflake.connector.paramstyle
+    snowflake.connector.paramstyle = "qmark"
+    data = (
+        1,
+        [True, False, True],
+        {"k1": 1, "k2": 2, "k3": 3, "k4": 4, "k5": 5},
+        {"city": "san jose", "population": 0.05},
+        [1.0, 3.1, 4.5],
+    )
+    json_data = [json.dumps(d) for d in data]
+    schema = "(num number, arr_b array(boolean), map map(varchar, int), obj object(city varchar, population float), arr_f array(float))"
+    table_name = f"arrow_structured_type_binds_test_{random_string(5)}"
+    with conn_cnx() as conn:
+        try:
+            conn.cursor().execute("alter session set enable_bind_stage_v2=Enable")
+            conn.cursor().execute(f"create table if not exists {table_name} {schema}")
+            conn.cursor().execute(
+                f"insert into {table_name} select ?, ?, ?, ?, ?", json_data
+            )
+            result = conn.cursor().execute(f"select * from {table_name}").fetchall()
+            assert result[0] == data
+
+            # Binds don't work with values statement yet
+            with pytest.raises(ProgrammingError):
+                conn.cursor().execute(
+                    f"insert into {table_name} values (?, ?, ?, ?, ?)", json_data
+                )
+        finally:
+            snowflake.connector.paramstyle = original_style
+            conn.cursor().execute(f"drop table if exists {table_name}")
+
+
+@pytest.mark.skipif(
     not STRUCTURED_TYPES_SUPPORTED, reason="map type not supported in this environment"
 )
 @pytest.mark.parametrize("key_type", ["varchar", "number"])
