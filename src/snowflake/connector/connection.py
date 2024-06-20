@@ -109,7 +109,7 @@ from .telemetry_oob import TelemetryService
 from .time_util import HeartBeatTimer, get_time_millis
 from .util_text import construct_hostname, parse_account, split_statements
 
-DEFAULT_CLIENT_PREFETCH_THREADS = 4
+DEFAULT_CLIENT_PREFETCH_THREADS = 10
 MAX_CLIENT_PREFETCH_THREADS = 10
 DEFAULT_BACKOFF_POLICY = exponential_backoff()
 
