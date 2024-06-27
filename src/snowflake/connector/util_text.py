@@ -235,14 +235,15 @@ def _concatenate_statements(
 
 def construct_hostname(region: str | None, account: str) -> str:
     """Constructs hostname from region and account."""
+    suffix = 'privatelink.snowflakecomputing.com' if 'privatelink' in account else 'snowflakecomputing.com'
     if region == "us-west-2":
         region = ""
     if region:
         if account.find(".") > 0:
             account = account[0 : account.find(".")]
-        host = f"{account}.{region}.snowflakecomputing.com"
+        host = f"{account}.{region}.{suffix}"
     else:
-        host = f"{account}.snowflakecomputing.com"
+        host = f"{account}.{suffix}"
     return host
 
 
