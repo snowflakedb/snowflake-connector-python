@@ -491,6 +491,7 @@ def test_drop_create_user(conn_cnx, db_parameters):
 
 
 @pytest.mark.timeout(15)
+@pytest.mark.skipolddriver
 def test_invalid_account_timeout():
     with pytest.raises(OperationalError):
         snowflake.connector.connect(
@@ -518,6 +519,7 @@ def test_invalid_proxy(db_parameters):
 
 
 @pytest.mark.timeout(15)
+@pytest.mark.skipolddriver
 def test_eu_connection(tmpdir):
     """Tests setting custom region.
 
@@ -544,6 +546,7 @@ def test_eu_connection(tmpdir):
         )
 
 
+@pytest.mark.skipolddriver
 def test_us_west_connection(tmpdir):
     """Tests default region setting.
 
