@@ -8,6 +8,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.12.0(TBD)
+  - Optimized `to_pandas()` performance by fully parallel downloading logic.
+
+
 - v3.11.0(June 17,2024)
   - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.
   - Added support for `debug_arrow_chunk` connection parameter to allow debugging raw arrow data in case of arrow data parsing failure.
@@ -17,7 +21,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug that a PermissionError was raised when the current user does not have the right permission on parent directory of config file path.
   - Fixed a bug that OCSP GET url is not encoded correctly when it contains a slash.
   - Fixed a bug that an SSO URL didn't accept `:` in a query parameter, for instance, `https://sso.abc.com/idp/startSSO.ping?PartnerSpId=https://xyz.snowflakecomputing.com/`.
-  - Optimized `to_pandas()` performance by fully parallel downloading logic.
 
 - v3.10.1(May 21, 2024)
 
