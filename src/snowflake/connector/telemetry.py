@@ -16,7 +16,7 @@ from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
 
 if TYPE_CHECKING:
     from .connection import SnowflakeConnection
-    from .network import SnowflakeRestful
+    from .snowflake_restful_interface import SnowflakeRestfulInterface
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +131,8 @@ class TelemetryClient:
     SF_PATH_TELEMETRY = "/telemetry/send"
     DEFAULT_FORCE_FLUSH_SIZE = 100
 
-    def __init__(self, rest: SnowflakeRestful, flush_size=None) -> None:
-        self._rest: SnowflakeRestful | None = rest
+    def __init__(self, rest: SnowflakeRestfulInterface, flush_size=None) -> None:
+        self._rest: SnowflakeRestfulInterface | None = rest
         self._log_batch = []
         self._flush_size = flush_size or TelemetryClient.DEFAULT_FORCE_FLUSH_SIZE
         self._lock = Lock()
