@@ -9,18 +9,19 @@ on:
 jobs:
   port_changes_to_sp:
     runs-on: ubuntu-latest
-
+    if: ${{!contains(github.event.pull_request.labels.*.name, 'DO_NOT_PORT_CHANGES_TO_SP')}}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
 
-      - name: Check PR description and labels
-        run: |
-          regex_pattern=".*https://github.com/snowflakedb/Stored-Proc-Python-Connector/pull/[0-9]+.*"
-          description=$(jq -r '.pull_request.body' $GITHUB_EVENT_PATH)
-          labels=$(jq -r '.pull_request.labels[].name' $GITHUB_EVENT_PATH)
+    - name: Check PR description and labels
+      run: |
+        regex_pattern=".*https://github.com/snowflakedb/Stored-Proc-Python-Connector/pull/[0-9]+.*"
+        description=$(jq -r '.pull_request.body' $GITHUB_EVENT_PATH)
 
-          if [[ ! $description =~ $regex_pattern ]] && [[ ! " $labels " =~ " DO_NOT_PORT_CHANGES_TO_SP " ]]; then
-            echo "Error: PR description must contain a regex or label DO_NOT_PORT_CHANGES_TO_SP"
-            exit 1
-          fi
+        if [[ ! $description =~ $regex_pattern ]]; then
+          echo "Error: PR description must contain a regex or label DO_NOT_PORT_CHANGES_TO_SP"
+          exit 1
+        fi
