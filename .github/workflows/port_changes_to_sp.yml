@@ -2,12 +2,12 @@ name: Port Changes to SP
 
 on:
   pull_request:
-    types:
-      - opened
-      - synchronize
+    types: [opened, synchronize, labeled, unlabeled]
+    branches:
+      - main
 
 jobs:
-  merge_gate:
+  port_changes_to_sp:
     runs-on: ubuntu-latest
 
     steps:
