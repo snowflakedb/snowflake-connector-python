@@ -193,23 +193,23 @@ class SnowflakeEncryptionUtil:
         encryption_material: SnowflakeFileEncryptionMaterial,
         in_filename: str,
         chunk_size: int = 64 * kilobyte,
-        tmp_dir: str | None = None,
     ) -> str:
-        """Decrypts a file and stores the output in the temporary directory.
+        """Decrypts a file and stores the output in the same dierctory of the incoming file.
 
         Args:
             metadata: The file's metadata input.
             encryption_material: The file's encryption material.
             in_filename: The name of the input file.
             chunk_size: The size of read chunks (Default value = block_size * 4 * 1024).
-            tmp_dir: Temporary directory to use, optional (Default value = None).
 
         Returns:
             The decrypted file's location.
         """
-        temp_output_file = f"{os.path.basename(in_filename)}#{random_string()}"
-        if tmp_dir:
-            temp_output_file = os.path.join(tmp_dir, temp_output_file)
+        # writing in same directory as in_filename
+        temp_output_file = os.path.join(
+            os.path.dirname(in_filename),
+            f"{os.path.basename(in_filename)}#{random_string()}",
+        )
 
         logger.debug("encrypted file: %s, tmp file: %s", in_filename, temp_output_file)
         with open(in_filename, "rb") as infile:
