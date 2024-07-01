@@ -601,6 +601,7 @@ class SnowflakeCursor:
         _no_results: bool = False,
         _is_put_get=None,
         _no_retry: bool = False,
+        dataframe_ast: str | None = None,
     ) -> dict[str, Any]:
         del self.messages[:]
 
@@ -704,6 +705,7 @@ class SnowflakeCursor:
                 _no_results=_no_results,
                 _no_retry=_no_retry,
                 timeout=real_timeout,
+                dataframe_ast=dataframe_ast,
             )
         finally:
             try:
@@ -809,6 +811,7 @@ class SnowflakeCursor:
         _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
+        _dataframe_ast: str | None = None,
     ) -> Self | None: ...
 
     @overload
@@ -838,6 +841,7 @@ class SnowflakeCursor:
         _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
+        _dataframe_ast: str | None = None,
     ) -> dict[str, Any] | None: ...
 
     def execute(
@@ -866,6 +870,7 @@ class SnowflakeCursor:
         _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
+        _dataframe_ast: str | None = None,
     ) -> Self | dict[str, Any] | None:
         """Executes a command/query.
 
@@ -900,6 +905,7 @@ class SnowflakeCursor:
             file_stream: File-like object to be uploaded with PUT
             num_statements: Query level parameter submitted in _statement_params constraining exact number of
             statements being submitted (or 0 if submitting an uncounted number) when using a multi-statement query.
+            _dataframe_ast: Base64-encoded dataframe request abstract syntax tree.
 
         Returns:
             The cursor itself, or None if some error happened, or the response returned
@@ -941,6 +947,7 @@ class SnowflakeCursor:
             "_no_results": _no_results,
             "_is_put_get": _is_put_get,
             "_no_retry": _no_retry,
+            "dataframe_ast": _dataframe_ast,
         }
 
         if self._connection.is_pyformat:
