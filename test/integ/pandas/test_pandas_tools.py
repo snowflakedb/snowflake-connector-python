@@ -454,7 +454,17 @@ def test_write_pandas_use_logical_type(
         microsecond=6,
         tzinfo=timezone(timedelta(hours=2)),
     )
-    df_write = pandas.DataFrame({col_name: [timestamp]})
+    timestamp_2 = datetime(
+        year=2020,
+        month=1,
+        day=2,
+        hour=3,
+        minute=4,
+        second=5,
+        microsecond=6,
+        tzinfo=timezone(timedelta(hours=4)),
+    )
+    df_write = pandas.DataFrame({col_name: [timestamp, timestamp_2]})
 
     with conn_cnx() as cnx:  # type: SnowflakeConnection
         cnx.cursor().execute(create_sql).fetchall()

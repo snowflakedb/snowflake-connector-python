@@ -22,7 +22,7 @@ from typing import (
 )
 
 from snowflake.connector import ProgrammingError
-from snowflake.connector.options import pandas
+from snowflake.connector.options import pandas, pyarrow
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
 from snowflake.connector.util_text import random_string
 
@@ -297,7 +297,8 @@ def write_pandas(
     # use_logical_type should be True when dataframe contains datetimes with timezone.
     # https://github.com/snowflakedb/snowflake-connector-python/issues/1687
     if not use_logical_type and any(
-        [pandas.api.types.is_datetime64tz_dtype(df[c]) for c in df.columns]
+        pyarrow.types.is_timestamp(t) and t.tz is not None
+        for t in pyarrow.Schema.from_pandas(df).types
     ):
         warnings.warn(
             "Dataframe contains a datetime with timezone column, but "
@@ -353,7 +354,9 @@ def write_pandas(
         # https://docs.snowflake.com/en/sql-reference/identifiers-syntax#double-quoted-identifiers
         snowflake_column_names = [str(c).replace('"', '""') for c in df.columns]
         tz_columns = [
-            str(c).replace('"', '""') for c in df.columns if pandas.api.types.is_datetime64tz_dtype(df[c])
+            str(c).replace('"', '""')
+            for c in df.columns
+            if pandas.api.types.is_datetime64tz_dtype(df[c])
         ]
     else:
         quote = ""
