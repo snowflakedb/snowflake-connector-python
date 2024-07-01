@@ -352,9 +352,15 @@ def write_pandas(
         # if the column name contains a double quote, we need to escape it by replacing with two double quotes
         # https://docs.snowflake.com/en/sql-reference/identifiers-syntax#double-quoted-identifiers
         snowflake_column_names = [str(c).replace('"', '""') for c in df.columns]
+        tz_columns = [
+            str(c).replace('"', '""') for c in df.columns if pandas.api.types.is_datetime64tz_dtype(df[c])
+        ]
     else:
         quote = ""
         snowflake_column_names = list(df.columns)
+        tz_columns = [
+            c for c in df.columns if pandas.api.types.is_datetime64tz_dtype(df[c])
+        ]
     columns = quote + f"{quote},{quote}".join(snowflake_column_names) + quote
 
     def drop_object(name: str, object_type: str) -> None:
@@ -376,6 +382,7 @@ def write_pandas(
         column_type_mapping = dict(
             cursor.execute(infer_schema_sql, _is_internal=True).fetchall()
         )
+        column_type_mapping.update({c: "TIMESTAMP_TZ" for c in tz_columns})
         # Infer schema can return the columns out of order depending on the chunking we do when uploading
         # so we have to iterate through the dataframe columns to make sure we create the table with its
         # columns in order
