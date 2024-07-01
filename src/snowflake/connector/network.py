@@ -86,6 +86,7 @@ from .errors import (
     ServiceUnavailableError,
     TooManyRequests,
 )
+from .snowflake_restful_interface import SnowflakeRestfulInterface
 from .sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
     SQLSTATE_CONNECTION_REJECTED,
@@ -319,11 +320,11 @@ class SnowflakeAuth(AuthBase):
 
 
 class SessionPool:
-    def __init__(self, rest: SnowflakeRestful) -> None:
+    def __init__(self, rest: SnowflakeRestfulInterface) -> None:
         # A stack of the idle sessions
         self._idle_sessions: list[Session] = []
         self._active_sessions: set[Session] = set()
-        self._rest: SnowflakeRestful = rest
+        self._rest: SnowflakeRestfulInterface = rest
 
     def get_session(self) -> Session:
         """Returns a session from the session pool or creates a new one."""
@@ -361,7 +362,7 @@ class SessionPool:
         self._idle_sessions.clear()
 
 
-class SnowflakeRestful:
+class SnowflakeRestful(SnowflakeRestfulInterface):
     """Snowflake Restful class."""
 
     def __init__(
