@@ -22,12 +22,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
-from snowflake.connector.errors import (
-    Error,
-    ForbiddenError,
-    OperationalError,
-    ProgrammingError,
-)
+from snowflake.connector.errors import Error, OperationalError, ProgrammingError
 
 from ..randomize import random_string
 from .mock_utils import mock_request_with_action, zero_backoff
@@ -344,7 +339,7 @@ def test_invalid_backoff_policy():
         # passing a non-generator function should not work
         _ = fake_connector(backoff_policy=lambda: None)
 
-    with pytest.raises(ForbiddenError):
+    with pytest.raises(OperationalError):
         # passing a generator function should make it pass config and error during connection
         _ = fake_connector(backoff_policy=zero_backoff)
 
