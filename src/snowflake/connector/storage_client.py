@@ -377,7 +377,6 @@ class SnowflakeStorageClient(ABC):
                     self.encryption_metadata,
                     meta.encryption_material,
                     str(self.intermediate_dst_path),
-                    tmp_dir=self.tmp_dir,
                 )
                 shutil.move(tmp_dst_file_name, self.full_dst_file_name)
                 self.intermediate_dst_path.unlink()
