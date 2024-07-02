@@ -166,7 +166,7 @@ def _create_temp_file_format(
 
 
 def write_pandas(
-    conn: SnowflakeConnection,
+    conn: SnowflakeConnection | SnowflakeCursor,
     df: pandas.DataFrame,
     table_name: str,
     database: str | None = None,
@@ -216,7 +216,7 @@ def write_pandas(
             success, nchunks, nrows, _ = write_pandas(cnx, df, 'customers')
 
     Args:
-        conn: Connection to be used to communicate with Snowflake.
+        conn: Connection or Cursor to be used to communicate with Snowflake.
         df: Dataframe we'd like to write back.
         table_name: Table name where we want to insert into.
         database: Database schema and table is in, if not provided the default one will be used (Default value = None).
@@ -315,7 +315,8 @@ def write_pandas(
     else:
         sql_use_logical_type = " USE_LOGICAL_TYPE = FALSE"
 
-    cursor = conn.cursor()
+    if isinstance(conn, SnowflakeConnection):
+        cursor = conn.cursor()
     stage_location = _create_temp_stage(
         cursor,
         database,
