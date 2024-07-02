@@ -61,17 +61,10 @@ def result_set_iterator(
     Just like ``ResultBatch`` iterator, this might yield an ``Exception`` to allow users
     to continue iterating through the rest of the ``ResultBatch``.
     """
-    is_fetch_all = kw.pop("is_fetch_all")
+    is_fetch_all = kw.pop("is_fetch_all", False)
     if is_fetch_all:
         with ThreadPoolExecutor(prefetch_thread_num) as pool:
             logger.debug("beginning to schedule result batch downloads")
-            for _ in range(min(prefetch_thread_num, len(unfetched_batches))):
-                logger.debug(
-                    f"queuing download of result batch id: {unfetched_batches[0].id}"
-                )
-                unconsumed_batches.append(
-                    pool.submit(unfetched_batches.popleft().create_iter, **kw)
-                )
             yield from first_batch_iter
             while unfetched_batches:
                 logger.debug(
@@ -265,7 +258,7 @@ class ResultSet(Iterable[list]):
         cases where we need to propagate some values to later ``_download`` calls.
         """
         # pop is_fetch_all and pass it to result_set_iterator
-        is_fetch_all = kwargs.pop("is_fetch_all", None)
+        is_fetch_all = kwargs.pop("is_fetch_all", False)
 
         # add connection so that result batches can use sessions
         kwargs["connection"] = self._cursor.connection
