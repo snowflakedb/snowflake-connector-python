@@ -12,6 +12,9 @@ RUN chmod 777 /home/user
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
+RUN sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo && \
+    sed -i s/^#.*baseurl=http/baseurl=http/g /etc/yum.repos.d/*.repo && \
+    sed -i s/^mirrorlist=http/#mirrorlist=http/g /etc/yum.repos.d/*.repo
 RUN yum install -y redhat-rpm-config gcc libffi-devel openssl openssl-devel centos-release-scl && \
     yum install -y rh-python38 rh-python38-python-devel && \
     yum clean all && \
