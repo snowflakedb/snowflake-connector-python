@@ -52,6 +52,7 @@ from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .config_manager import CONFIG_MANAGER, _get_default_connection_params
 from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
+    _PRIVATE_SNOWFLAKE_HOST_SUFFIX_REGEX,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -931,7 +932,7 @@ class SnowflakeConnection:
                 os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"],
             )
 
-        if self.host.endswith(".privatelink.snowflakecomputing.com"):
+        if re.search(_PRIVATE_SNOWFLAKE_HOST_SUFFIX_REGEX, self.host):
             SnowflakeConnection.setup_ocsp_privatelink(self.application, self.host)
         else:
             if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:

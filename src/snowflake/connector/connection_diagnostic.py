@@ -23,6 +23,7 @@ import OpenSSL
 
 from .compat import IS_WINDOWS, urlparse
 from .cursor import SnowflakeCursor
+from .url_util import extract_top_level_domain_from_hostname
 from .vendored import urllib3
 
 logger = getLogger(__name__)
@@ -89,15 +90,21 @@ class ConnectionDiagnostic:
         self.__append_message(
             host_type, f"Host based on specified account: {self.host}"
         )
-        if ".com.snowflakecomputing.com" in self.host:
-            self.host = host.split(".com.snow", 1)[0] + ".com"
+
+        top_level_domain = extract_top_level_domain_from_hostname(host)
+        if (
+            f".{top_level_domain}.snowflakecomputing.{top_level_domain}" in self.host
+        ):  # repeated domain name pattern
+            self.host = (
+                host.split(f".{top_level_domain}.snow", 1)[0] + f".{top_level_domain}"
+            )
             logger.warning(
-                f"Account should not have snowflakecomputing.com in it. You provided {host}.  "
+                f"Account should not have snowflakecomputing.{top_level_domain} in it. You provided {host}.  "
                 f"Continuing with fixed host."
             )
             self.__append_message(
                 host_type,
-                f"We removed extra .snowflakecomputing.com and will continue with host: "
+                f"We removed extra .snowflakecomputing.{top_level_domain} and will continue with host: "
                 f"{self.host}",
             )
         else:
@@ -183,7 +190,9 @@ class ConnectionDiagnostic:
             self.ocsp_urls.append(f"ocsp.{self.host}")
             self.allowlist_sql = "select system$allowlist_privatelink();"
         else:
-            self.ocsp_urls.append("ocsp.snowflakecomputing.com")
+            self.ocsp_urls.append(
+                f"ocsp.snowflakecomputing.{extract_top_level_domain_from_hostname(self.host)}"
+            )
 
         self.allowlist_retrieval_success: bool = False
         self.cursor: SnowflakeCursor | None = None

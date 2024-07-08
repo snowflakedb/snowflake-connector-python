@@ -11,6 +11,7 @@ import gzip
 import itertools
 import json
 import logging
+import re
 import time
 import traceback
 import uuid
@@ -46,6 +47,7 @@ from .compat import (
     urlparse,
 )
 from .constants import (
+    _SNOWFLAKE_HOST_SUFFIX_REGEX,
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
@@ -155,6 +157,7 @@ HEADER_SNOWFLAKE_TOKEN = 'Snowflake Token="{token}"'
 REQUEST_ID = "requestId"
 REQUEST_GUID = "request_guid"
 SNOWFLAKE_HOST_SUFFIX = ".snowflakecomputing.com"
+
 
 SNOWFLAKE_CONNECTOR_VERSION = SNOWFLAKE_CONNECTOR_VERSION
 PYTHON_VERSION = PYTHON_VERSION
@@ -856,7 +859,7 @@ class SnowflakeRestful:
     def add_request_guid(full_url: str) -> str:
         """Adds request_guid parameter for HTTP request tracing."""
         parsed_url = urlparse(full_url)
-        if not parsed_url.hostname.endswith(SNOWFLAKE_HOST_SUFFIX):
+        if not re.search(_SNOWFLAKE_HOST_SUFFIX_REGEX, parsed_url.hostname):
             return full_url
         request_guid = str(uuid.uuid4())
         suffix = urlencode({REQUEST_GUID: request_guid})

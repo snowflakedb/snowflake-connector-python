@@ -36,6 +36,12 @@ DBAPI_TYPE_BINARY = 1
 DBAPI_TYPE_NUMBER = 2
 DBAPI_TYPE_TIMESTAMP = 3
 
+_DEFAULT_HOSTNAME_TLD = "com"
+_SNOWFLAKE_HOST_SUFFIX_REGEX = r"snowflakecomputing\.[a-zA-Z]{1,63}$"
+_PRIVATE_SNOWFLAKE_HOST_SUFFIX_REGEX = (
+    r"\.privatelink\.snowflakecomputing\.[a-zA-Z]{1,63}$"
+)
+
 
 class FieldType(NamedTuple):
     name: str
