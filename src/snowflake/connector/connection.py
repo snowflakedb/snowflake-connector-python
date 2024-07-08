@@ -1678,7 +1678,7 @@ class SnowflakeConnection:
         self._client_session_keep_alive_heartbeat_frequency = int(
             self.client_session_keep_alive_heartbeat_frequency
         )
-        
+
         if self.client_session_keep_alive_heartbeat_frequency is None:
             # This is an unlikely scenario but covering it just in case.
             self._client_session_keep_alive_heartbeat_frequency = real_min
