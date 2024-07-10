@@ -10,7 +10,6 @@ import json
 import logging
 import uuid
 from collections import namedtuple
-from enum import Enum
 from queue import Queue
 from threading import Lock
 from typing import Any
@@ -25,16 +24,9 @@ from .vendored import requests
 logger = logging.getLogger(__name__)
 
 
-class _OOBTelemetryLevel(Enum):
-    OFF = 0
-    ERROR = 1
-    ALL = 2
-
-
 DEFAULT_BATCH_SIZE = 10
 DEFAULT_NUM_OF_RETRY_TO_TRIGGER_TELEMETRY = 10
 REQUEST_TIMEOUT = 3
-_OOB_TELEMETRY_LEVEL = _OOBTelemetryLevel.OFF
 
 TelemetryAPI = namedtuple("TelemetryAPI", ["url", "api_key"])
 TelemetryServer = namedtuple("TelemetryServer", ["name", "url", "api_key"])
@@ -181,7 +173,7 @@ class TelemetryService:
             raise Exception("This class is a singleton!")
         else:
             TelemetryService.__instance = self
-        self._enabled = True
+        self._enabled = False
         self._queue = Queue()
         self.batch_size = DEFAULT_BATCH_SIZE
         self.num_of_retry_to_trigger_telemetry = (
@@ -201,11 +193,11 @@ class TelemetryService:
     @property
     def enabled(self) -> bool:
         """Whether the Telemetry service is enabled or not."""
-        return self._enabled and _OOB_TELEMETRY_LEVEL != _OOBTelemetryLevel.OFF
+        return False
 
     def enable(self) -> None:
         """Enable Telemetry Service."""
-        self._enabled = True
+        self._enabled = False
 
     def disable(self) -> None:
         """Disable Telemetry Service."""
