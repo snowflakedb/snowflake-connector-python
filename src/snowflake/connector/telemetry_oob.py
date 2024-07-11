@@ -23,7 +23,6 @@ from .vendored import requests
 
 logger = logging.getLogger(__name__)
 
-
 DEFAULT_BATCH_SIZE = 10
 DEFAULT_NUM_OF_RETRY_TO_TRIGGER_TELEMETRY = 10
 REQUEST_TIMEOUT = 3
