@@ -237,6 +237,7 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
     """Tests heartbeat setting with custom frequency.
 
     Creates a connection with client_session_keep_alive_heartbeat_frequency parameter and set the minimum frequency.
+    Also if a value comes as string, should be properly converted to int and not fail assertion.
     """
     config = {
         "user": db_parameters["user"],
@@ -249,39 +250,12 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
         "protocol": db_parameters["protocol"],
         "timezone": "UTC",
         "client_session_keep_alive": True,
-        "client_session_keep_alive_heartbeat_frequency": 10,
+        "client_session_keep_alive_heartbeat_frequency": "10",
     }
     cnx = snowflake.connector.connect(**config)
     try:
         # The min value of client_session_keep_alive_heartbeat_frequency
         # is 1/16 of master token validity, so 14400 / 4 /4 => 900
-        assert cnx.client_session_keep_alive_heartbeat_frequency == 900
-    finally:
-        cnx.close()
-
-
-def test_keep_alive_heartbeat_frequency_str(db_parameters):
-    """Tests heartbeat setting with frequency specified as string.
-
-    Creates a connection with client_session_keep_alive_heartbeat_frequency
-    parameter incoming as str.
-    """
-    config = {
-        "user": db_parameters["user"],
-        "password": db_parameters["password"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "account": db_parameters["account"],
-        "schema": db_parameters["schema"],
-        "database": db_parameters["database"],
-        "protocol": db_parameters["protocol"],
-        "timezone": "UTC",
-        "client_session_keep_alive": True,
-        "client_session_keep_alive_heartbeat_frequency": "900",
-    }
-    cnx = snowflake.connector.connect(**config)
-    try:
-        # should be automatically converted to int and not fail
         assert cnx.client_session_keep_alive_heartbeat_frequency == 900
     finally:
         cnx.close()
