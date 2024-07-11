@@ -8,8 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.x.x(TBD)
-  - ..
+- v3.11.1(TBD)
   - Fixed a bug that specifying `client_session_keep_alive_heartbeat_frequency` in snowflake-sqlalchemy could crash the connector
 
 - v3.11.0(June 17,2024)

@@ -260,6 +260,33 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
         cnx.close()
 
 
+def test_keep_alive_heartbeat_frequency_str(db_parameters):
+    """Tests heartbeat setting with frequency specified as string.
+
+    Creates a connection with client_session_keep_alive_heartbeat_frequency
+    parameter incoming as str.
+    """
+    config = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "account": db_parameters["account"],
+        "schema": db_parameters["schema"],
+        "database": db_parameters["database"],
+        "protocol": db_parameters["protocol"],
+        "timezone": "UTC",
+        "client_session_keep_alive": True,
+        "client_session_keep_alive_heartbeat_frequency": "900",
+    }
+    cnx = snowflake.connector.connect(**config)
+    try:
+        # should be automatically converted to int and not fail
+        assert cnx.client_session_keep_alive_heartbeat_frequency == 900
+    finally:
+        cnx.close()
+
+
 def test_bad_db(db_parameters):
     """Attempts to use a bad DB."""
     cnx = snowflake.connector.connect(
