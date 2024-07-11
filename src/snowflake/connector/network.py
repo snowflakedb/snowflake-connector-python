@@ -487,6 +487,12 @@ class SnowflakeRestful:
             HTTP_HEADER_ACCEPT: accept_type,
             HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
+        try:
+            from opentelemetry.propagate import inject
+
+            inject(headers)
+        except ModuleNotFoundError as e:
+            logger.debug(f"Opentelemtry otel injection failed because of: {e}")
         if self._connection.service_name:
             headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
         if method == "post":
