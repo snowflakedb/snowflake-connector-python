@@ -233,6 +233,7 @@ def test_keep_alive_heartbeat_frequency(db_parameters):
         cnx.close()
 
 
+@pytest.mark.skipolddriver
 def test_keep_alive_heartbeat_frequency_min(db_parameters):
     """Tests heartbeat setting with custom frequency.
 
