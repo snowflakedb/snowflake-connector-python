@@ -190,9 +190,7 @@ class ConnectionDiagnostic:
             self.ocsp_urls.append(f"ocsp.{self.host}")
             self.allowlist_sql = "select system$allowlist_privatelink();"
         else:
-            self.ocsp_urls.append(
-                f"ocsp.snowflakecomputing.{extract_top_level_domain_from_hostname(self.host)}"
-            )
+            self.ocsp_urls.append(f"ocsp.snowflakecomputing.{top_level_domain}")
 
         self.allowlist_retrieval_success: bool = False
         self.cursor: SnowflakeCursor | None = None
