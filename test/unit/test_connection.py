@@ -23,6 +23,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 import snowflake.connector
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
 from snowflake.connector.errors import Error, OperationalError, ProgrammingError
+from snowflake.connector.network import SnowflakeRestful
 
 from ..randomize import random_string
 from .mock_utils import mock_request_with_action, zero_backoff
@@ -529,3 +530,19 @@ def test_disable_saml_url_check_config():
             conn._disable_saml_url_check
             == DEFAULT_CONFIGURATION.get("disable_saml_url_check")[0]
         )
+
+
+def test_request_guid():
+    assert (
+        SnowflakeRestful.add_request_guid(
+            "https://test.snowflakecomputing.com"
+        ).startswith("https://test.snowflakecomputing.com?request_guid=")
+        and SnowflakeRestful.add_request_guid(
+            "http://test.snowflakecomputing.cn?a=b"
+        ).startswith("http://test.snowflakecomputing.cn?a=b&request_guid=")
+        and SnowflakeRestful.add_request_guid(
+            "https://test.snowflakecomputing.com.cn"
+        ).startswith("https://test.snowflakecomputing.com.cn?request_guid=")
+        and SnowflakeRestful.add_request_guid("https://test.abc.cn?a=b")
+        == "https://test.abc.cn?a=b"
+    )

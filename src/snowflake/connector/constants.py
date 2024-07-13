@@ -38,10 +38,7 @@ DBAPI_TYPE_TIMESTAMP = 3
 
 _DEFAULT_HOSTNAME_TLD = "com"
 _TOP_LEVEL_DOMAIN_REGEX = r"\.[a-zA-Z]{1,63}$"
-_SNOWFLAKE_HOST_SUFFIX_REGEX = r"snowflakecomputing\.[a-zA-Z]{1,63}$"
-_PRIVATE_SNOWFLAKE_HOST_SUFFIX_REGEX = (
-    r"\.privatelink\.snowflakecomputing\.[a-zA-Z]{1,63}$"
-)
+_SNOWFLAKE_HOST_SUFFIX_REGEX = r"snowflakecomputing(\.[a-zA-Z]{1,63}){1,2}$"
 
 
 class FieldType(NamedTuple):

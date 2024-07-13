@@ -627,3 +627,78 @@ def test_signature_verification(hash_algorithm):
             asy1_509_cert,
             asy1_509_cert["tbs_certificate"],
         )
+
+
+def test_ocsp_server_domain_name():
+    default_ocsp_server = OCSPServer()
+    assert (
+        default_ocsp_server.DEFAULT_CACHE_SERVER_URL
+        == "http://ocsp.snowflakecomputing.com"
+        and default_ocsp_server.NEW_DEFAULT_CACHE_SERVER_BASE_URL
+        == "https://ocspssd.snowflakecomputing.com/ocsp/"
+        and default_ocsp_server.CACHE_SERVER_URL
+        == f"{default_ocsp_server.DEFAULT_CACHE_SERVER_URL}/{OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME}"
+    )
+
+    default_ocsp_server.reset_ocsp_endpoint("test.snowflakecomputing.cn")
+    assert (
+        default_ocsp_server.CACHE_SERVER_URL
+        == "https://ocspssd.snowflakecomputing.cn/ocsp/fetch"
+        and default_ocsp_server.OCSP_RETRY_URL
+        == "https://ocspssd.snowflakecomputing.cn/ocsp/retry"
+    )
+
+    default_ocsp_server.reset_ocsp_endpoint("test.privatelink.snowflakecomputing.cn")
+    assert (
+        default_ocsp_server.CACHE_SERVER_URL
+        == "https://ocspssd.test.privatelink.snowflakecomputing.cn/ocsp/fetch"
+        and default_ocsp_server.OCSP_RETRY_URL
+        == "https://ocspssd.test.privatelink.snowflakecomputing.cn/ocsp/retry"
+    )
+
+    default_ocsp_server.reset_ocsp_endpoint("cn-12345.global.snowflakecomputing.cn")
+    assert (
+        default_ocsp_server.CACHE_SERVER_URL
+        == "https://ocspssd-12345.global.snowflakecomputing.cn/ocsp/fetch"
+        and default_ocsp_server.OCSP_RETRY_URL
+        == "https://ocspssd-12345.global.snowflakecomputing.cn/ocsp/retry"
+    )
+
+    default_ocsp_server.reset_ocsp_endpoint("test.random.com")
+    assert (
+        default_ocsp_server.CACHE_SERVER_URL
+        == "https://ocspssd.snowflakecomputing.com/ocsp/fetch"
+        and default_ocsp_server.OCSP_RETRY_URL
+        == "https://ocspssd.snowflakecomputing.com/ocsp/retry"
+    )
+
+    default_ocsp_server = OCSPServer(top_level_domain="cn")
+    assert (
+        default_ocsp_server.DEFAULT_CACHE_SERVER_URL
+        == "http://ocsp.snowflakecomputing.cn"
+        and default_ocsp_server.NEW_DEFAULT_CACHE_SERVER_BASE_URL
+        == "https://ocspssd.snowflakecomputing.cn/ocsp/"
+        and default_ocsp_server.CACHE_SERVER_URL
+        == f"{default_ocsp_server.DEFAULT_CACHE_SERVER_URL}/{OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME}"
+    )
+
+    ocsp = SFOCSP(hostname="test.snowflakecomputing.cn")
+    assert (
+        ocsp.OCSP_CACHE_SERVER.DEFAULT_CACHE_SERVER_URL
+        == "http://ocsp.snowflakecomputing.cn"
+        and ocsp.OCSP_CACHE_SERVER.NEW_DEFAULT_CACHE_SERVER_BASE_URL
+        == "https://ocspssd.snowflakecomputing.cn/ocsp/"
+        and ocsp.OCSP_CACHE_SERVER.CACHE_SERVER_URL
+        == f"{default_ocsp_server.DEFAULT_CACHE_SERVER_URL}/{OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME}"
+    )
+
+    assert (
+        SnowflakeOCSP.OCSP_WHITELIST.match("www.snowflakecomputing.com")
+        and SnowflakeOCSP.OCSP_WHITELIST.match("www.snowflakecomputing.cn")
+        and SnowflakeOCSP.OCSP_WHITELIST.match("www.snowflakecomputing.com.cn")
+        and not SnowflakeOCSP.OCSP_WHITELIST.match("www.snowflakecomputing.com.cn.com")
+        and SnowflakeOCSP.OCSP_WHITELIST.match("s3.amazonaws.com")
+        and SnowflakeOCSP.OCSP_WHITELIST.match("s3.amazonaws.cn")
+        and SnowflakeOCSP.OCSP_WHITELIST.match("s3.amazonaws.com.cn")
+        and not SnowflakeOCSP.OCSP_WHITELIST.match("s3.amazonaws.com.cn.com")
+    )

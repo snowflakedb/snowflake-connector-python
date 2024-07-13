@@ -240,7 +240,12 @@ def construct_hostname(region: str | None, account: str) -> str:
     if region:
         if account.find(".") > 0:
             account = account[0 : account.find(".")]
-        host = f"{account}.{region}.snowflakecomputing.com"
+        top_level_domain = (
+            "com"
+            if not any(substring in region for substring in ["cn-", "CN-"])
+            else "cn"
+        )
+        host = f"{account}.{region}.snowflakecomputing.{top_level_domain}"
     else:
         host = f"{account}.snowflakecomputing.com"
     return host

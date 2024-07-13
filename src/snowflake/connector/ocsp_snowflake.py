@@ -313,9 +313,9 @@ class OCSPServer:
         replication ID is copied from the hostname.
         """
         top_level_domain = extract_top_level_domain_from_hostname(hname)
-        if hname.endswith(f"privatelink.snowflakecomputing.{top_level_domain}"):
+        if "privatelink.snowflakecomputing." in hname:
             temp_ocsp_endpoint = "".join(["https://ocspssd.", hname, "/ocsp/"])
-        elif hname.endswith(f"global.snowflakecomputing.{top_level_domain}"):
+        elif "global.snowflakecomputing." in hname:
             rep_id_begin = hname[hname.find("-") :]
             temp_ocsp_endpoint = "".join(["https://ocspssd", rep_id_begin, "/ocsp/"])
         elif not hname.endswith(f"snowflakecomputing.{top_level_domain}"):
@@ -838,8 +838,8 @@ class SnowflakeOCSP:
 
     OCSP_WHITELIST = re.compile(
         r"^"
-        r"(.*\.snowflakecomputing\.[a-zA-Z]{1,63}$"
-        r"|(?:|.*\.)s3.*\.amazonaws\.com$"  # start with s3 or .s3 in the middle
+        r"(.*\.snowflakecomputing(\.[a-zA-Z]{1,63}){1,2}$"
+        r"|(?:|.*\.)s3.*\.amazonaws(\.[a-zA-Z]{1,63}){1,2}$"  # start with s3 or .s3 in the middle
         r"|.*\.okta\.com$"
         r"|(?:|.*\.)storage\.googleapis\.com$"
         r"|.*\.blob\.core\.windows\.net$"

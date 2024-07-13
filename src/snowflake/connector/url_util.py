@@ -45,7 +45,7 @@ def url_encode_str(target: str | None) -> str:
     return urllib.parse.quote_plus(target, safe="")
 
 
-def extract_top_level_domain_from_hostname(hostname: str | None) -> str:
+def extract_top_level_domain_from_hostname(hostname: str | None = None) -> str:
     if not hostname:
         return "com"
     # RFC1034 for TLD spec, and https://data.iana.org/TLD/tlds-alpha-by-domain.txt for full TLD list
