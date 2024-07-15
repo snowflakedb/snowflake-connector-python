@@ -1287,6 +1287,7 @@ class SnowflakeConnection:
         _update_current_object: bool = True,
         _no_retry: bool = False,
         timeout: int | None = None,
+        dataframe_ast: str | None = None,
     ) -> dict[str, Any]:
         """Executes a query with a sequence counter."""
         logger.debug("_cmd_query")
@@ -1296,6 +1297,8 @@ class SnowflakeConnection:
             "sequenceId": sequence_counter,
             "querySubmissionTime": get_time_millis(),
         }
+        if dataframe_ast is not None:
+            data["dataframeAst"] = dataframe_ast
         if statement_params is not None:
             data["parameters"] = statement_params
         if is_internal:
@@ -1670,6 +1673,12 @@ class SnowflakeConnection:
         """Validate and return heartbeat frequency in seconds."""
         real_max = int(self.rest.master_validity_in_seconds / 4)
         real_min = int(real_max / 4)
+
+        # ensure the type is integer
+        self._client_session_keep_alive_heartbeat_frequency = int(
+            self.client_session_keep_alive_heartbeat_frequency
+        )
+
         if self.client_session_keep_alive_heartbeat_frequency is None:
             # This is an unlikely scenario but covering it just in case.
             self._client_session_keep_alive_heartbeat_frequency = real_min
@@ -1678,10 +1687,6 @@ class SnowflakeConnection:
         elif self.client_session_keep_alive_heartbeat_frequency < real_min:
             self._client_session_keep_alive_heartbeat_frequency = real_min
 
-        # ensure the type is integer
-        self._client_session_keep_alive_heartbeat_frequency = int(
-            self.client_session_keep_alive_heartbeat_frequency
-        )
         return self.client_session_keep_alive_heartbeat_frequency
 
     def _validate_client_prefetch_threads(self) -> int:

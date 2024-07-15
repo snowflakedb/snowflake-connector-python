@@ -172,7 +172,7 @@ class TelemetryService:
             raise Exception("This class is a singleton!")
         else:
             TelemetryService.__instance = self
-        self._enabled = True
+        self._enabled = False
         self._queue = Queue()
         self.batch_size = DEFAULT_BATCH_SIZE
         self.num_of_retry_to_trigger_telemetry = (
@@ -192,11 +192,11 @@ class TelemetryService:
     @property
     def enabled(self) -> bool:
         """Whether the Telemetry service is enabled or not."""
-        return self._enabled
+        return False
 
     def enable(self) -> None:
         """Enable Telemetry Service."""
-        self._enabled = True
+        self._enabled = False
 
     def disable(self) -> None:
         """Disable Telemetry Service."""
