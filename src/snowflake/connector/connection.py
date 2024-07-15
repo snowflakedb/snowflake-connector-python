@@ -1673,6 +1673,12 @@ class SnowflakeConnection:
         """Validate and return heartbeat frequency in seconds."""
         real_max = int(self.rest.master_validity_in_seconds / 4)
         real_min = int(real_max / 4)
+
+        # ensure the type is integer
+        self._client_session_keep_alive_heartbeat_frequency = int(
+            self.client_session_keep_alive_heartbeat_frequency
+        )
+
         if self.client_session_keep_alive_heartbeat_frequency is None:
             # This is an unlikely scenario but covering it just in case.
             self._client_session_keep_alive_heartbeat_frequency = real_min
@@ -1681,10 +1687,6 @@ class SnowflakeConnection:
         elif self.client_session_keep_alive_heartbeat_frequency < real_min:
             self._client_session_keep_alive_heartbeat_frequency = real_min
 
-        # ensure the type is integer
-        self._client_session_keep_alive_heartbeat_frequency = int(
-            self.client_session_keep_alive_heartbeat_frequency
-        )
         return self.client_session_keep_alive_heartbeat_frequency
 
     def _validate_client_prefetch_threads(self) -> int:
