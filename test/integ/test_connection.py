@@ -234,10 +234,12 @@ def test_keep_alive_heartbeat_frequency(db_parameters):
         cnx.close()
 
 
+@pytest.mark.skipolddriver
 def test_keep_alive_heartbeat_frequency_min(db_parameters):
     """Tests heartbeat setting with custom frequency.
 
     Creates a connection with client_session_keep_alive_heartbeat_frequency parameter and set the minimum frequency.
+    Also if a value comes as string, should be properly converted to int and not fail assertion.
     """
     config = {
         "user": db_parameters["user"],
@@ -250,7 +252,7 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
         "protocol": db_parameters["protocol"],
         "timezone": "UTC",
         "client_session_keep_alive": True,
-        "client_session_keep_alive_heartbeat_frequency": 10,
+        "client_session_keep_alive_heartbeat_frequency": "10",
     }
     cnx = snowflake.connector.connect(**config)
     try:
