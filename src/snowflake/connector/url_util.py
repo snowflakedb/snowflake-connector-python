@@ -50,4 +50,4 @@ def extract_top_level_domain_from_hostname(hostname: str | None = None) -> str:
         return "com"
     # RFC1034 for TLD spec, and https://data.iana.org/TLD/tlds-alpha-by-domain.txt for full TLD list
     match = re.search(_TOP_LEVEL_DOMAIN_REGEX, hostname)
-    return match.group(0)[1:] if match else "com"
+    return (match.group(0)[1:] if match else "com").lower()

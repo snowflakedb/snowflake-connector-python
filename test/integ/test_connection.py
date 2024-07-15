@@ -11,6 +11,7 @@ import os
 import pathlib
 import queue
 import stat
+import tempfile
 import threading
 import warnings
 import weakref
@@ -1368,3 +1369,40 @@ def test_token_file_path(tmp_path, db_parameters):
     assert conn._token == fake_token
     conn = snowflake.connector.connect(**db_parameters, token_file_path=token_file_path)
     assert conn._token == fake_token
+
+
+@pytest.mark.skipolddriver
+def test_mock_non_existing_server(conn_cnx, caplog):
+    from snowflake.connector.cache import SFDictCache
+
+    # this patch helps give a non-existing oscp cache server url
+    def patch_extrac_tld(**kwargs):
+        return "nonexistingtopleveldomain"
+
+    # disabling local cache and pointing ocsp cache server to a non-existing url
+    # connection should still work as it will directly validate the certs against CA servers
+    with tempfile.NamedTemporaryFile() as tmp, caplog.at_level(logging.DEBUG):
+        with (
+            mock.patch(
+                "snowflake.connector.url_util.extract_top_level_domain_from_hostname",
+                patch_extrac_tld,
+            ),
+            mock.patch(
+                "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
+                SFDictCache(),
+            ),
+            mock.patch(
+                "snowflake.connector.ocsp_snowflake.OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME",
+                tmp.name,
+            ),
+        ):
+            with conn_cnx():
+                pass
+        assert all(
+            s in caplog.text
+            for s in [
+                "Failed to read OCSP response cache file",
+                "It will validate with OCSP server.",
+                "writing OCSP response cache file to",
+            ]
+        )

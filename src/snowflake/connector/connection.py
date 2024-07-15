@@ -52,6 +52,7 @@ from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .config_manager import CONFIG_MANAGER, _get_default_connection_params
 from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
+    _DOMAIN_NAME_MAP,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -107,6 +108,7 @@ from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPO
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .telemetry_oob import TelemetryService
 from .time_util import HeartBeatTimer, get_time_millis
+from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
@@ -1177,6 +1179,10 @@ class SnowflakeConnection:
                 self._port = "443"
             if "protocol" not in kwargs:
                 self._protocol = "https"
+
+        logger.info(
+            f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), "GLOBAL")} Snowflake domain"
+        )
 
         # If using a custom auth class, we should set the authenticator
         # type to be the same as the custom auth class
