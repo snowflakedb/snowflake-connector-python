@@ -8,8 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.11.1(TBD)
-  - Fixed a bug that specifying `client_session_keep_alive_heartbeat_frequency` in snowflake-sqlalchemy could crash the connector
+- v3.12.0(TBD)
+  - Optimized `to_pandas()` performance by fully parallel downloading logic.
+  - Fixed a bug that specifying client_session_keep_alive_heartbeat_frequency in snowflake-sqlalchemy could crash the connector
 
 - v3.11.0(June 17,2024)
   - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.
