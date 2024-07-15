@@ -1181,7 +1181,7 @@ class SnowflakeConnection:
                 self._protocol = "https"
 
         logger.info(
-            f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), "GLOBAL")} Snowflake domain"
+            f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), 'GLOBAL')} Snowflake domain"
         )
 
         # If using a custom auth class, we should set the authenticator
