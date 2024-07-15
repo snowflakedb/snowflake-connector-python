@@ -40,6 +40,7 @@ from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
 from ..randomize import random_string
+from .conftest import RUNNING_ON_GH
 
 try:  # pragma: no cover
     from ..parameters import CONNECTION_PARAMETERS_ADMIN
@@ -1374,6 +1375,7 @@ def test_token_file_path(tmp_path, db_parameters):
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(not RUNNING_ON_GH, reason="no ocsp in the environment")
 def test_mock_non_existing_server(conn_cnx, caplog):
     from snowflake.connector.cache import SFDictCache
 
