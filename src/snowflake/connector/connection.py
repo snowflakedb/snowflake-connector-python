@@ -190,6 +190,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
     "application": (CLIENT_NAME, (type(None), str)),
+    # internal_application_name/version is used to tell the server the type of client connecting to
+    # Snowflake. There are some functionalities (e.g., MFA, Arrow result format) that
+    # Snowflake server doesn't support for new client types, which requires developers to
+    # add the new client type to the server to support these features.
     "internal_application_name": (CLIENT_NAME, (type(None), str)),
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
     "insecure_mode": (False, bool),  # Error security fix requirement
