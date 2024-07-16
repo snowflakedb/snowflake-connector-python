@@ -12,6 +12,7 @@ import logging
 import os
 import random
 import re
+from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta, timezone
 
 import numpy
@@ -175,6 +176,13 @@ STRUCTURED_TYPES_SUPPORTED = (
     CLOUD in STRUCTRED_TYPE_ENVIRONMENTS and RUNNING_ON_GH or CLOUD == "dev"
 )
 
+STRUCTURED_TYPE_PARAMETERS = {
+    "ENABLE_STRUCTURED_TYPES_IN_CLIENT_RESPONSE",
+    "ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT",
+    "FORCE_ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT",
+    "IGNORE_CLIENT_VESRION_IN_STRUCTURED_TYPES_RESPONSE",
+}
+
 # Generate all valid test cases. By using pytest.param with an id you can
 # run a specific test case easier like so:
 # pytest 'test/integ/test_arrow_result.py::test_dataypes[BINARY-iceberg-pandas]'
@@ -198,6 +206,15 @@ DATATYPE_TEST_CONFIGURATIONS = [
 ]
 
 
+@contextmanager
+def structured_type_wrapped_conn(conn_cnx):
+    with conn_cnx() as conn:
+        if STRUCTURED_TYPES_SUPPORTED:
+            for param in STRUCTURED_TYPE_PARAMETERS:
+                conn.cursor().execute(f"alter session set {param}=true").fetchall()
+        yield conn
+
+
 def serialize(value):
     if isinstance(value, bytearray):
         return value.hex()
@@ -214,7 +231,7 @@ def verify_datatypes(
     conn_cnx, query, examples, schema, iceberg=False, pandas=False, deserialize=False
 ):
     table_name = f"arrow_datatype_test_verifaction_table_{random_string(5)}"
-    with conn_cnx() as conn:
+    with structured_type_wrapped_conn(conn_cnx) as conn:
         try:
             conn.cursor().execute("alter session set use_cached_result=false")
             iceberg_table, iceberg_config = (
@@ -271,7 +288,7 @@ def pandas_verify(cur, data, deserialize):
 @pytest.mark.parametrize("datatype", ICEBERG_UNSUPPORTED_TYPES)
 def test_iceberg_negative(datatype, conn_cnx):
     table_name = f"arrow_datatype_test_verifaction_table_{random_string(5)}"
-    with conn_cnx() as conn:
+    with structured_type_wrapped_conn(conn_cnx) as conn:
         try:
             with pytest.raises(ProgrammingError):
                 conn.cursor().execute(
@@ -349,7 +366,7 @@ def test_structured_type_binds(conn_cnx):
     json_data = [json.dumps(d) for d in data]
     schema = "(num number, arr_b array(boolean), map map(varchar, int), obj object(city varchar, population float), arr_f array(float))"
     table_name = f"arrow_structured_type_binds_test_{random_string(5)}"
-    with conn_cnx() as conn:
+    with structured_type_wrapped_conn(conn_cnx) as conn:
         try:
             conn.cursor().execute("alter session set enable_bind_stage_v2=Enable")
             conn.cursor().execute(f"create table if not exists {table_name} {schema}")
