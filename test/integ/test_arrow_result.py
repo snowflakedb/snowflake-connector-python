@@ -176,13 +176,6 @@ STRUCTURED_TYPES_SUPPORTED = (
     CLOUD in STRUCTRED_TYPE_ENVIRONMENTS and RUNNING_ON_GH or CLOUD == "dev"
 )
 
-STRUCTURED_TYPE_PARAMETERS = {
-    "ENABLE_STRUCTURED_TYPES_IN_CLIENT_RESPONSE",
-    "ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT",
-    "FORCE_ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT",
-    "IGNORE_CLIENT_VESRION_IN_STRUCTURED_TYPES_RESPONSE",
-}
-
 # Generate all valid test cases. By using pytest.param with an id you can
 # run a specific test case easier like so:
 # pytest 'test/integ/test_arrow_result.py::test_dataypes[BINARY-iceberg-pandas]'
@@ -208,10 +201,17 @@ DATATYPE_TEST_CONFIGURATIONS = [
 
 @contextmanager
 def structured_type_wrapped_conn(conn_cnx):
-    with conn_cnx() as conn:
-        if STRUCTURED_TYPES_SUPPORTED:
-            for param in STRUCTURED_TYPE_PARAMETERS:
-                conn.cursor().execute(f"alter session set {param}=true").fetchall()
+    parameters = {"python_connector_query_result_format": "json"}
+    if STRUCTURED_TYPES_SUPPORTED:
+        parameters = {
+            "python_connector_query_result_format": "arrow",
+            "ENABLE_STRUCTURED_TYPES_IN_CLIENT_RESPONSE": True,
+            "ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT": True,
+            "FORCE_ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT": True,
+            "IGNORE_CLIENT_VESRION_IN_STRUCTURED_TYPES_RESPONSE": True,
+        }
+
+    with conn_cnx(session_parameters=parameters) as conn:
         yield conn
 
 
