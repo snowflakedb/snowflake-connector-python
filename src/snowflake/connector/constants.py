@@ -399,6 +399,7 @@ class IterUnit(Enum):
     TABLE_UNIT = "table"
 
 
+# File Transfer
 # Amazon S3 multipart upload limits
 # https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html
 S3_DEFAULT_CHUNK_SIZE = 8 * 1024**2
@@ -409,6 +410,10 @@ S3_MAX_PARTS = 10000
 
 S3_CHUNK_SIZE = 8388608  # boto3 default
 AZURE_CHUNK_SIZE = 4 * megabyte
+
+# https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
+REQUEST_CONNECTION_TIMEOUT = 10
+REQUEST_READ_TIMEOUT = 600
 
 DAY_IN_SECONDS = 60 * 60 * 24
 

@@ -19,7 +19,13 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 import OpenSSL
 
-from .constants import HTTP_HEADER_CONTENT_ENCODING, FileHeader, ResultStatus
+from .constants import (
+    HTTP_HEADER_CONTENT_ENCODING,
+    REQUEST_CONNECTION_TIMEOUT,
+    REQUEST_READ_TIMEOUT,
+    FileHeader,
+    ResultStatus,
+)
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
@@ -280,6 +286,7 @@ class SnowflakeStorageClient(ABC):
         while self.retry_count[retry_id] < self.max_retry:
             cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
+            rest_kwargs["timeout"] = (REQUEST_CONNECTION_TIMEOUT, REQUEST_READ_TIMEOUT)
             try:
                 if conn:
                     with conn._rest._use_requests_session(url) as session:
