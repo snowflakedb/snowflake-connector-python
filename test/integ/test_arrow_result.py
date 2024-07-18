@@ -201,7 +201,7 @@ DATATYPE_TEST_CONFIGURATIONS = [
 
 @contextmanager
 def structured_type_wrapped_conn(conn_cnx):
-    parameters = {"python_connector_query_result_format": "json"}
+    parameters = {}
     if STRUCTURED_TYPES_SUPPORTED:
         parameters = {
             "python_connector_query_result_format": "arrow",
