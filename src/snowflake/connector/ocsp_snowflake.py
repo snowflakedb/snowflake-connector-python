@@ -62,7 +62,7 @@ from . import constants
 from .backoff_policies import exponential_backoff
 from .cache import SFDictCache, SFDictFileCache
 from .telemetry import TelemetryField, generate_telemetry_data_dict
-from .url_util import url_encode_str
+from .url_util import extract_top_level_domain_from_hostname, url_encode_str
 
 
 class OCSPResponseValidationResult(NamedTuple):
@@ -268,15 +268,20 @@ class OCSPTelemetryData:
 class OCSPServer:
     MAX_RETRY = int(os.getenv("OCSP_MAX_RETRY", "3"))
 
-    def __init__(self) -> None:
-        self.DEFAULT_CACHE_SERVER_URL = "http://ocsp.snowflakecomputing.com"
+    def __init__(self, **kwargs) -> None:
+        top_level_domain = kwargs.pop(
+            "top_level_domain", constants._DEFAULT_HOSTNAME_TLD
+        )
+        self.DEFAULT_CACHE_SERVER_URL = (
+            f"http://ocsp.snowflakecomputing.{top_level_domain}"
+        )
         """
         The following will change to something like
         http://ocspssd.snowflakecomputing.com/ocsp/
         once the endpoint is up in the backend
         """
         self.NEW_DEFAULT_CACHE_SERVER_BASE_URL = (
-            "https://ocspssd.snowflakecomputing.com/ocsp/"
+            f"https://ocspssd.snowflakecomputing.{top_level_domain}/ocsp/"
         )
         if not OCSPServer.is_enabled_new_ocsp_endpoint():
             self.CACHE_SERVER_URL = os.getenv(
@@ -307,12 +312,13 @@ class OCSPServer:
         on the hostname the customer is trying to connect to. The deployment or in case of client failover, the
         replication ID is copied from the hostname.
         """
-        if hname.endswith("privatelink.snowflakecomputing.com"):
+        top_level_domain = extract_top_level_domain_from_hostname(hname)
+        if "privatelink.snowflakecomputing." in hname:
             temp_ocsp_endpoint = "".join(["https://ocspssd.", hname, "/ocsp/"])
-        elif hname.endswith("global.snowflakecomputing.com"):
+        elif "global.snowflakecomputing." in hname:
             rep_id_begin = hname[hname.find("-") :]
             temp_ocsp_endpoint = "".join(["https://ocspssd", rep_id_begin, "/ocsp/"])
-        elif not hname.endswith("snowflakecomputing.com"):
+        elif not hname.endswith(f"snowflakecomputing.{top_level_domain}"):
             temp_ocsp_endpoint = self.NEW_DEFAULT_CACHE_SERVER_BASE_URL
         else:
             hname_wo_acc = hname[hname.find(".") :]
@@ -832,8 +838,8 @@ class SnowflakeOCSP:
 
     OCSP_WHITELIST = re.compile(
         r"^"
-        r"(.*\.snowflakecomputing\.com$"
-        r"|(?:|.*\.)s3.*\.amazonaws\.com$"  # start with s3 or .s3 in the middle
+        r"(.*\.snowflakecomputing(\.[a-zA-Z]{1,63}){1,2}$"
+        r"|(?:|.*\.)s3.*\.amazonaws(\.[a-zA-Z]{1,63}){1,2}$"  # start with s3 or .s3 in the middle
         r"|.*\.okta\.com$"
         r"|(?:|.*\.)storage\.googleapis\.com$"
         r"|.*\.blob\.core\.windows\.net$"
@@ -881,6 +887,7 @@ class SnowflakeOCSP:
         use_ocsp_cache_server=None,
         use_post_method: bool = True,
         use_fail_open: bool = True,
+        **kwargs,
     ) -> None:
         self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)
 
@@ -888,7 +895,11 @@ class SnowflakeOCSP:
             logger.debug("WARNING - DRIVER CONFIGURED IN TEST MODE")
 
         self._use_post_method = use_post_method
-        self.OCSP_CACHE_SERVER = OCSPServer()
+        self.OCSP_CACHE_SERVER = OCSPServer(
+            top_level_domain=extract_top_level_domain_from_hostname(
+                kwargs.pop("hostname", None)
+            )
+        )
 
         self.debug_ocsp_failure_url = None
 
