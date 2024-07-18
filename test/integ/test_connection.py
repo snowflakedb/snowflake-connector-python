@@ -1388,7 +1388,7 @@ def test_mock_non_existing_server(conn_cnx, caplog):
     with tempfile.NamedTemporaryFile() as tmp, caplog.at_level(logging.DEBUG):
         with mock.patch(
             "snowflake.connector.url_util.extract_top_level_domain_from_hostname",
-            patch_extrac_tld,
+            return_value="nonexistingtopleveldomain",
         ):
             with mock.patch(
                 "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
