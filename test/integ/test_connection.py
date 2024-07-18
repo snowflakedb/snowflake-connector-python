@@ -1379,10 +1379,6 @@ def test_token_file_path(tmp_path, db_parameters):
 def test_mock_non_existing_server(conn_cnx, caplog):
     from snowflake.connector.cache import SFDictCache
 
-    # this patch helps give a non-existing oscp cache server url
-    def patch_extrac_tld(**kwargs):
-        return "nonexistingtopleveldomain"
-
     # disabling local cache and pointing ocsp cache server to a non-existing url
     # connection should still work as it will directly validate the certs against CA servers
     with tempfile.NamedTemporaryFile() as tmp, caplog.at_level(logging.DEBUG):
