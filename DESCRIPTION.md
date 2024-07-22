@@ -12,6 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Set default connection timeout of 10 seconds and socket read timeout of 10 minutes for HTTP calls in file transfer.
   - Optimized `to_pandas()` performance by fully parallel downloading logic.
   - Fixed a bug that specifying client_session_keep_alive_heartbeat_frequency in snowflake-sqlalchemy could crash the connector.
+  - Fixed incorrect type hint of connection parameter `private_key`.
   - Added support for connectivity to multiple domains.
   - Bumped keyring dependency from g>=23.1.0,<25.0.0 to g>=23.1.0,<26.0.0
 
