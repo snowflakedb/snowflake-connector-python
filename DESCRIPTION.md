@@ -8,12 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.12.0(TBD)
-
 - v3.12.0(July 26,2024)
-
-   -N/A
-
   - Set default connection timeout of 10 seconds and socket read timeout of 10 minutes for HTTP calls in file transfer.
   - Optimized `to_pandas()` performance by fully parallel downloading logic.
   - Fixed a bug that specifying client_session_keep_alive_heartbeat_frequency in snowflake-sqlalchemy could crash the connector.
