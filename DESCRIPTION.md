@@ -8,13 +8,14 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.12.0(TBD)
+- v3.12.0(July 24,2024)
   - Set default connection timeout of 10 seconds and socket read timeout of 10 minutes for HTTP calls in file transfer.
   - Optimized `to_pandas()` performance by fully parallel downloading logic.
   - Fixed a bug that specifying client_session_keep_alive_heartbeat_frequency in snowflake-sqlalchemy could crash the connector.
   - Fixed incorrect type hint of connection parameter `private_key`.
   - Added support for connectivity to multiple domains.
-  - Bumped keyring dependency from g>=23.1.0,<25.0.0 to g>=23.1.0,<26.0.0
+  - Bumped keyring dependency from >=23.1.0,<25.0.0 to >=23.1.0,<26.0.0.
+  - Disabled OOB Telemetry.
 
 - v3.11.0(June 17,2024)
   - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.
