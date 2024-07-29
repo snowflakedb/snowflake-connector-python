@@ -381,6 +381,7 @@ class SnowflakeRestful:
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
         )
+        self._counter = 0
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
         ssl_wrap_socket.FEATURE_OCSP_MODE = (
@@ -890,6 +891,11 @@ class SnowflakeRestful:
                 token=token,
                 **kwargs,
             )
+            if method.upper() == 'GET' and "/queries/" in full_url:
+                if self._counter == 0:
+                    pass
+                    #return_object = None
+                self._counter += 1
             if return_object is not None:
                 return return_object
             self._handle_unknown_error(method, full_url, headers, data, conn)
