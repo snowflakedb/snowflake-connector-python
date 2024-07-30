@@ -1,0 +1,707 @@
+#
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
+#
+
+from __future__ import annotations
+
+import asyncio
+import collections
+import contextlib
+import gzip
+import itertools
+import json
+import logging
+from typing import Any
+
+import OpenSSL.SSL
+
+from ..compat import (
+    FORBIDDEN,
+    OK,
+    UNAUTHORIZED,
+    BadStatusLine,
+    IncompleteRead,
+    urlencode,
+    urlparse,
+)
+from ..constants import OCSPMode
+from ..errorcode import (
+    ER_CONNECTION_TIMEOUT,
+    ER_FAILED_TO_CONNECT_TO_DB,
+    ER_FAILED_TO_REQUEST,
+    ER_RETRYABLE_CODE,
+)
+from ..errors import (
+    DatabaseError,
+    Error,
+    ForbiddenError,
+    InterfaceError,
+    OperationalError,
+    RefreshTokenError,
+)
+from ..network import (
+    DEFAULT_SOCKET_CONNECT_TIMEOUT,
+    EXTERNAL_BROWSER_AUTHENTICATOR,
+    MASTER_TOKEN_EXPIRED_GS_CODE,
+    NO_TOKEN,
+    QUERY_IN_PROGRESS_ASYNC_CODE,
+    QUERY_IN_PROGRESS_CODE,
+    REQUEST_TYPE_RENEW,
+    SESSION_EXPIRED_GS_CODE,
+    ReauthenticationRequest,
+    RetryRequest,
+    SessionPool,
+    SnowflakeRestful,
+    get_http_retryable_error,
+    is_login_request,
+    is_retryable_http_code,
+)
+from ..sqlstate import (
+    SQLSTATE_CONNECTION_REJECTED,
+    SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+)
+from ..time_util import TimeoutBackoffCtx, get_time_millis
+from .connection_async import SnowflakeConnectionAsync
+
+logger = logging.getLogger(__name__)
+
+try:
+    import aiohttp
+except ImportError:
+    logger.warning("Please install aiohttp to use asyncio features.")
+    raise
+
+
+def raise_okta_unauthorized_error(
+    connection: SnowflakeConnectionAsync | None, response: aiohttp.ClientResponse
+) -> None:
+    Error.errorhandler_wrapper(
+        connection,
+        None,
+        DatabaseError,
+        {
+            "msg": f"Failed to get authentication by OKTA: {response.status}: {response.reason}",
+            "errno": ER_FAILED_TO_CONNECT_TO_DB,
+            "sqlstate": SQLSTATE_CONNECTION_REJECTED,
+        },
+    )
+
+
+def raise_failed_request_error(
+    connection: SnowflakeConnectionAsync | None,
+    url: str,
+    method: str,
+    response: aiohttp.ClientResponse,
+) -> None:
+    Error.errorhandler_wrapper(
+        connection,
+        None,
+        InterfaceError,
+        {
+            "msg": f"{response.status} {response.reason}: {method} {url}",
+            "errno": ER_FAILED_TO_REQUEST,
+            "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+        },
+    )
+
+
+class SessionPoolAsync(SessionPool):
+    def __init__(self, rest: SnowflakeRestfulAsync) -> None:
+        super().__init__(rest)
+
+    async def close(self):
+        """Closes all active and idle sessions in this session pool."""
+        if self._active_sessions:
+            logger.debug(f"Closing {len(self._active_sessions)} active sessions")
+        for s in itertools.chain(self._active_sessions, self._idle_sessions):
+            try:
+                await s.close()
+            except Exception as e:
+                logger.info(f"Session cleanup failed: {e}")
+        self._active_sessions.clear()
+        self._idle_sessions.clear()
+
+
+class SnowflakeRestfulAsync(SnowflakeRestful):
+    def __init__(
+        self,
+        host: str = "127.0.0.1",
+        port: int = 8080,
+        protocol: str = "http",
+        inject_client_pause: int = 0,
+        connection: SnowflakeConnectionAsync | None = None,
+    ):
+        super().__init__(host, port, protocol, inject_client_pause, connection)
+        self._lock_token = asyncio.Lock()
+        self._sessions_map: dict[str | None, SessionPoolAsync] = (
+            collections.defaultdict(lambda: SessionPoolAsync(self))
+        )
+        self._ocsp_mode = (
+            self._connection._ocsp_mode() if self._connection else OCSPMode.FAIL_OPEN
+        )
+
+    async def close(self) -> None:
+        self._delete_tokens()
+        for session_pool in self._sessions_map.values():
+            await session_pool.close()
+
+    async def request(
+        self,
+        url,
+        body=None,
+        method: str = "post",
+        client: str = "sfsql",
+        timeout: int | None = None,
+        _no_results: bool = False,
+        _include_retry_params: bool = False,
+        _no_retry: bool = False,
+    ):
+        headers, body = self._prepare_request(body, client)
+        if method == "post":
+            return await self._post_request(
+                url,
+                headers,
+                json.dumps(body),
+                token=self.token,
+                _no_results=_no_results,
+                timeout=timeout,
+                _include_retry_params=_include_retry_params,
+                no_retry=_no_retry,
+            )
+        else:
+            return await self._get_request(
+                url,
+                headers,
+                token=self.token,
+                timeout=timeout,
+            )
+
+    async def update_tokens(
+        self,
+        session_token,
+        master_token,
+        master_validity_in_seconds=None,
+        id_token=None,
+        mfa_token=None,
+    ) -> None:
+        """Updates session and master tokens and optionally temporary credential."""
+        async with self._lock_token:
+            self._update_tokens(
+                session_token,
+                master_token,
+                master_validity_in_seconds,
+                id_token,
+                mfa_token,
+            )
+
+    async def _renew_session(self):
+        """Renew a session and master token."""
+        return await self._token_request(REQUEST_TYPE_RENEW)
+
+    async def _token_request(self, request_type):
+        url, headers, body, header_token = self._prepare_token_request(request_type)
+        ret = await self._post_request(
+            url,
+            headers,
+            json.dumps(body),
+            token=header_token,
+        )
+        if ret.get("success") and ret.get("data", {}).get("sessionToken"):
+            logger.debug("success: %s", ret)
+            await self.update_tokens(
+                ret["data"]["sessionToken"],
+                ret["data"].get("masterToken"),
+                master_validity_in_seconds=ret["data"].get("masterValidityInSeconds"),
+            )
+            logger.debug("updating session completed")
+            return ret
+        else:
+            self._handle_token_request_error(ret)
+
+    async def _heartbeat(self) -> Any | dict[Any, Any] | None:
+        headers, url = self._prepare_hearbeat_request()
+        ret = await self._post_request(
+            url,
+            headers,
+            None,
+            token=self.token,
+        )
+        if not ret.get("success"):
+            logger.error("Failed to heartbeat. code: %s, url: %s", ret.get("code"), url)
+        return ret
+
+    async def delete_session(self, retry: bool = False) -> None:
+        url, headers, body, retry_limit, num_retries, should_retry = (
+            self._prepare_delete_session_request(retry)
+        )
+        while should_retry and (num_retries < retry_limit):
+            try:
+                should_retry = False
+                ret = await self._post_request(
+                    url,
+                    headers,
+                    json.dumps(body),
+                    token=self.token,
+                    timeout=5,
+                    no_retry=True,
+                )
+                if not ret:
+                    if retry:
+                        should_retry = True
+                    else:
+                        return
+                elif ret.get("success"):
+                    return
+                err = ret.get("message")
+                if err is not None and ret.get("data"):
+                    err += ret["data"].get("errorMessage", "")
+                    # no exception is raised
+                logger.debug("error in deleting session. ignoring...: %s", err)
+            except Exception as e:
+                logger.debug("error in deleting session. ignoring...: %s", e)
+            finally:
+                num_retries += 1
+
+    async def _get_request(
+        self,
+        url: str,
+        headers: dict[str, str],
+        token: str = None,
+        timeout: int | None = None,
+    ) -> dict[str, Any]:
+        if "Content-Encoding" in headers:
+            del headers["Content-Encoding"]
+        if "Content-Length" in headers:
+            del headers["Content-Length"]
+
+        full_url = f"{self.server_url}{url}"
+        ret = await self.fetch(
+            "get",
+            full_url,
+            headers,
+            timeout=timeout,
+            token=token,
+        )
+        if ret.get("code") == SESSION_EXPIRED_GS_CODE:
+            try:
+                ret = await self._renew_session()
+            except ReauthenticationRequest as ex:
+                if self._connection._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR:
+                    raise ex.cause
+                ret = await self._connection._reauthenticate()
+            logger.debug(
+                "ret[code] = {code} after renew_session".format(
+                    code=(ret.get("code", "N/A"))
+                )
+            )
+            if ret.get("success"):
+                return await self._get_request(url, headers, token=self.token)
+
+        return ret
+
+    async def _post_request(
+        self,
+        url,
+        headers,
+        body,
+        token=None,
+        timeout: int | None = None,
+        socket_timeout: int | None = None,
+        _no_results: bool = False,
+        no_retry: bool = False,
+        _include_retry_params: bool = False,
+    ) -> dict[str, Any]:
+        full_url = f"{self.server_url}{url}"
+        # TODO: sync feature parity, probe connection
+        # if self._connection._probe_connection:
+        #     from pprint import pprint
+        #
+        #     ret = probe_connection(full_url)
+        #     pprint(ret)
+
+        ret = await self.fetch(
+            "post",
+            full_url,
+            headers,
+            data=body,
+            timeout=timeout,
+            token=token,
+            no_retry=no_retry,
+            _include_retry_params=_include_retry_params,
+            socket_timeout=socket_timeout,
+        )
+        logger.debug(
+            "ret[code] = {code}, after post request".format(
+                code=(ret.get("code", "N/A"))
+            )
+        )
+
+        if ret.get("code") == MASTER_TOKEN_EXPIRED_GS_CODE:
+            self._connection.expired = True
+        elif ret.get("code") == SESSION_EXPIRED_GS_CODE:
+            try:
+                ret = await self._renew_session()
+            except ReauthenticationRequest as ex:
+                if self._connection._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR:
+                    raise ex.cause
+                ret = await self._connection._reauthenticate()
+            logger.debug(
+                "ret[code] = {code} after renew_session".format(
+                    code=(ret.get("code", "N/A"))
+                )
+            )
+            if ret.get("success"):
+                return await self._post_request(
+                    url, headers, body, token=self.token, timeout=timeout
+                )
+
+        if isinstance(ret.get("data"), dict) and ret["data"].get("queryId"):
+            logger.debug("Query id: {}".format(ret["data"]["queryId"]))
+
+        if ret.get("code") == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
+            return ret
+
+        while ret.get("code") in (QUERY_IN_PROGRESS_CODE, QUERY_IN_PROGRESS_ASYNC_CODE):
+            if self._inject_client_pause > 0:
+                logger.debug("waiting for %s...", self._inject_client_pause)
+                await asyncio.sleep(self._inject_client_pause)
+            # ping pong
+            result_url = ret["data"]["getResultUrl"]
+            logger.debug("ping pong starting...")
+            ret = await self._get_request(
+                result_url, headers, token=self.token, timeout=timeout
+            )
+            logger.debug("ret[code] = %s", ret.get("code", "N/A"))
+            logger.debug("ping pong done")
+
+        return ret
+
+    async def fetch(
+        self,
+        method: str,
+        full_url: str,
+        headers: dict[str, Any],
+        data: dict[str, Any] | None = None,
+        timeout: int | None = None,
+        **kwargs,
+    ) -> dict[Any, Any]:
+        """Carry out API request with session management."""
+
+        class RetryCtx(TimeoutBackoffCtx):
+            def __init__(
+                self,
+                _include_retry_params: bool = False,
+                _include_retry_reason: bool = False,
+                **kwargs,
+            ) -> None:
+                super().__init__(**kwargs)
+                self.retry_reason = 0
+                self._include_retry_params = _include_retry_params
+                self._include_retry_reason = _include_retry_reason
+
+            def add_retry_params(self, full_url: str) -> str:
+                if self._include_retry_params and self.current_retry_count > 0:
+                    retry_params = {
+                        "clientStartTime": self._start_time_millis,
+                        "retryCount": self.current_retry_count,
+                    }
+                    if self._include_retry_reason:
+                        retry_params.update({"retryReason": self.retry_reason})
+                    suffix = urlencode(retry_params)
+                    sep = "&" if urlparse(full_url).query else "?"
+                    return full_url + sep + suffix
+                else:
+                    return full_url
+
+        include_retry_reason = self._connection._enable_retry_reason_in_query_response
+        include_retry_params = kwargs.pop("_include_retry_params", False)
+
+        async with self._use_requests_session(full_url) as session:
+            retry_ctx = RetryCtx(
+                _include_retry_params=include_retry_params,
+                _include_retry_reason=include_retry_reason,
+                timeout=(
+                    timeout if timeout is not None else self._connection.network_timeout
+                ),
+                backoff_generator=self._connection._backoff_generator,
+            )
+
+            retry_ctx.set_start_time()
+            while True:
+                ret = await self._request_exec_wrapper(
+                    session, method, full_url, headers, data, retry_ctx, **kwargs
+                )
+                if ret is not None:
+                    return ret
+
+    async def _request_exec_wrapper(
+        self,
+        session,
+        method,
+        full_url,
+        headers,
+        data,
+        retry_ctx,
+        no_retry: bool = False,
+        token=NO_TOKEN,
+        **kwargs,
+    ):
+        conn = self._connection
+        logger.debug(
+            "remaining request timeout: %s ms, retry cnt: %s",
+            retry_ctx.remaining_time_millis if retry_ctx.timeout is not None else "N/A",
+            retry_ctx.current_retry_count + 1,
+        )
+
+        full_url = retry_ctx.add_retry_params(full_url)
+        full_url = SnowflakeRestful.add_request_guid(full_url)
+        try:
+            return_object = await self._request_exec(
+                session=session,
+                method=method,
+                full_url=full_url,
+                headers=headers,
+                data=data,
+                token=token,
+                **kwargs,
+            )
+            if return_object is not None:
+                return return_object
+            self._handle_unknown_error(method, full_url, headers, data, conn)
+            return {}
+        except RetryRequest as e:
+            cause = e.args[0]
+            if no_retry:
+                self.log_and_handle_http_error_with_cause(
+                    e,
+                    full_url,
+                    method,
+                    retry_ctx.timeout,
+                    retry_ctx.current_retry_count,
+                    conn,
+                    timed_out=False,
+                )
+                return {}  # required for tests
+            if not retry_ctx.should_retry:
+                self.log_and_handle_http_error_with_cause(
+                    e,
+                    full_url,
+                    method,
+                    retry_ctx.timeout,
+                    retry_ctx.current_retry_count,
+                    conn,
+                )
+                return {}  # required for tests
+
+            logger.debug(
+                "retrying: errorclass=%s, "
+                "error=%s, "
+                "counter=%s, "
+                "sleeping=%s(s)",
+                type(cause),
+                cause,
+                retry_ctx.current_retry_count + 1,
+                retry_ctx.current_sleep_time,
+            )
+            await asyncio.sleep(float(retry_ctx.current_sleep_time))
+            retry_ctx.increment()
+
+            reason = getattr(cause, "errno", 0)
+            retry_ctx.retry_reason = reason
+
+            if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
+                # connection is reset by the server, the underlying connection is broken and can not be reused
+                # we need a new urllib3 http(s) connection in this case.
+                # We need to first close the old one so that urllib3 pool manager can create a new connection
+                # for new requests
+                try:
+                    logger.debug(
+                        "shutting down requests session adapter due to connection aborted"
+                    )
+                    session.get_adapter(full_url).close()
+                except Exception as close_adapter_exc:
+                    logger.debug(
+                        "Ignored error caused by closing https connection failure: %s",
+                        close_adapter_exc,
+                    )
+            return None  # retry
+        except Exception as e:
+            if not no_retry:
+                raise e
+            logger.debug("Ignored error", exc_info=True)
+            return {}
+
+    async def _request_exec(
+        self,
+        session: aiohttp.ClientSession,
+        method,
+        full_url,
+        headers,
+        data,
+        token,
+        catch_okta_unauthorized_error: bool = False,
+        is_raw_text: bool = False,
+        is_raw_binary: bool = False,
+        binary_data_handler=None,
+        socket_timeout: int | None = None,
+        is_okta_authentication: bool = False,
+    ):
+        if socket_timeout is None:
+            if self._connection.socket_timeout is not None:
+                logger.debug("socket_timeout specified in connection")
+                socket_timeout = self._connection.socket_timeout
+            else:
+                socket_timeout = DEFAULT_SOCKET_CONNECT_TIMEOUT
+        logger.debug("socket timeout: %s", socket_timeout)
+
+        try:
+            if not catch_okta_unauthorized_error and data and len(data) > 0:
+                headers["Content-Encoding"] = "gzip"
+                input_data = gzip.compress(data.encode("utf-8"))
+            else:
+                input_data = data
+
+            download_start_time = get_time_millis()
+            # socket timeout is constant. You should be able to receive
+            # the response within the time. If not, ConnectReadTimeout or
+            # ReadTimeout is raised.
+
+            # TODO: sync feature parity, verify/stream/auth
+            raw_ret = await session.request(
+                method=method,
+                url=full_url,
+                headers=headers,
+                data=input_data,
+                timeout=aiohttp.ClientTimeout(socket_timeout),
+            )
+            # raw_ret = session.request(
+            #     method=method,
+            #     url=full_url,
+            #     headers=headers,
+            #     data=input_data,
+            #     timeout=socket_timeout,
+            #     verify=True,
+            #     stream=is_raw_binary,
+            #     auth=SnowflakeAuth(token),
+            # )
+            download_end_time = get_time_millis()
+
+            try:
+                if raw_ret.status == OK:
+                    logger.debug("SUCCESS")
+                    if is_raw_text:
+                        ret = await raw_ret.text()
+                    elif is_raw_binary:
+                        content = await raw_ret.read()
+                        ret = binary_data_handler.to_iterator(
+                            content, download_end_time - download_start_time
+                        )
+                    else:
+                        ret = await raw_ret.json()
+                    return ret
+
+                if is_login_request(full_url) and raw_ret.status == FORBIDDEN:
+                    raise ForbiddenError
+
+                elif is_retryable_http_code(raw_ret.status):
+                    err = get_http_retryable_error(raw_ret.status)
+                    # retryable server exceptions
+                    if is_okta_authentication:
+                        raise RefreshTokenError(
+                            msg="OKTA authentication requires token refresh."
+                        )
+                    if is_login_request(full_url):
+                        logger.debug(
+                            "Received retryable response code while logging in. Will be handled by "
+                            f"authenticator. Ignore the following. Error stack: {err}",
+                            exc_info=True,
+                        )
+                        raise OperationalError(
+                            msg="Login request is retryable. Will be handled by authenticator",
+                            errno=ER_RETRYABLE_CODE,
+                        )
+                    else:
+                        logger.debug(f"{err}. Retrying...")
+                        raise RetryRequest(err)
+
+                elif raw_ret.status == UNAUTHORIZED and catch_okta_unauthorized_error:
+                    # OKTA Unauthorized errors
+                    raise_okta_unauthorized_error(self._connection, raw_ret)
+                    return None  # required for tests
+                else:
+                    raise_failed_request_error(
+                        self._connection, full_url, method, raw_ret
+                    )
+                    return None  # required for tests
+            finally:
+                raw_ret.close()  # ensure response is closed
+        except aiohttp.ClientSSLError as se:
+            logger.debug("Hit non-retryable SSL error, %s", str(se))
+
+        # TODO: sync feature parity, aiohttp network error handling
+        except (
+            BadStatusLine,
+            ConnectionError,
+            aiohttp.ClientConnectionError,
+            aiohttp.ClientPayloadError,
+            aiohttp.ClientResponseError,
+            asyncio.TimeoutError,
+            IncompleteRead,
+            OpenSSL.SSL.SysCallError,
+            KeyError,  # SNOW-39175: asn1crypto.keys.PublicKeyInfo
+            ValueError,
+            RuntimeError,
+            AttributeError,  # json decoding error
+        ) as err:
+            if is_login_request(full_url):
+                logger.debug(
+                    "Hit a timeout error while logging in. Will be handled by "
+                    f"authenticator. Ignore the following. Error stack: {err}",
+                    exc_info=True,
+                )
+                raise OperationalError(
+                    msg="ConnectionTimeout occurred during login. Will be handled by authenticator",
+                    errno=ER_CONNECTION_TIMEOUT,
+                )
+            else:
+                logger.debug(
+                    "Hit retryable client error. Retrying... Ignore the following "
+                    f"error stack: {err}",
+                    exc_info=True,
+                )
+                raise RetryRequest(err)
+        except Exception as err:
+            raise err
+
+    def make_requests_session(self) -> aiohttp.ClientSession:
+        s = aiohttp.ClientSession()
+        # TODO: sync feature parity, proxy support
+        # s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
+        # s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
+        # s._reuse_count = itertools.count()
+        return s
+
+    @contextlib.asynccontextmanager
+    async def _use_requests_session(self, url: str | None = None):
+        if self._connection.disable_request_pooling:
+            session = self.make_requests_session()
+            try:
+                yield session
+            finally:
+                await session.close()
+        else:
+            try:
+                hostname = urlparse(url).hostname
+            except Exception:
+                hostname = None
+
+            session_pool: SessionPool = self._sessions_map[hostname]
+            session = session_pool.get_session()
+            logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
+            try:
+                yield session
+            finally:
+                session_pool.return_session(session)
+                logger.debug(
+                    f"Session status for SessionPool '{hostname}', {session_pool}"
+                )

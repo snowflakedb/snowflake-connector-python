@@ -442,7 +442,7 @@ class SnowflakeRestful:
     def server_url(self) -> str:
         return f"{self._protocol}://{self._host}:{self._port}"
 
-    def close(self) -> None:
+    def _delete_tokens(self) -> None:
         if hasattr(self, "_token"):
             del self._token
         if hasattr(self, "_master_token"):
@@ -452,22 +452,13 @@ class SnowflakeRestful:
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
 
+    def close(self) -> None:
+        self._delete_tokens()
         for session_pool in self._sessions_map.values():
             session_pool.close()
 
-    def request(
-        self,
-        url,
-        body=None,
-        method: str = "post",
-        client: str = "sfsql",
-        timeout: int | None = None,
-        _no_results: bool = False,
-        _include_retry_params: bool = False,
-        _no_retry: bool = False,
-    ):
-        if body is None:
-            body = {}
+    def _prepare_request(self, body=None, client: str = "sfsql") -> tuple[dict, dict]:
+        body = body or {}
         if self.master_token is None and self.token is None:
             Error.errorhandler_wrapper(
                 self._connection,
@@ -498,6 +489,20 @@ class SnowflakeRestful:
             logger.debug(f"Opentelemtry otel injection failed because of: {e}")
         if self._connection.service_name:
             headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
+        return headers, body
+
+    def request(
+        self,
+        url,
+        body=None,
+        method: str = "post",
+        client: str = "sfsql",
+        timeout: int | None = None,
+        _no_results: bool = False,
+        _include_retry_params: bool = False,
+        _no_retry: bool = False,
+    ):
+        headers, body = self._prepare_request(body, client)
         if method == "post":
             return self._post_request(
                 url,
@@ -517,6 +522,20 @@ class SnowflakeRestful:
                 timeout=timeout,
             )
 
+    def _update_tokens(
+        self,
+        session_token,
+        master_token,
+        master_validity_in_seconds=None,
+        id_token=None,
+        mfa_token=None,
+    ) -> None:
+        self._token = session_token
+        self._master_token = master_token
+        self._id_token = id_token
+        self._mfa_token = mfa_token
+        self._master_validity_in_seconds = master_validity_in_seconds
+
     def update_tokens(
         self,
         session_token,
@@ -527,17 +546,19 @@ class SnowflakeRestful:
     ) -> None:
         """Updates session and master tokens and optionally temporary credential."""
         with self._lock_token:
-            self._token = session_token
-            self._master_token = master_token
-            self._id_token = id_token
-            self._mfa_token = mfa_token
-            self._master_validity_in_seconds = master_validity_in_seconds
+            self._update_tokens(
+                session_token,
+                master_token,
+                master_validity_in_seconds,
+                id_token,
+                mfa_token,
+            )
 
     def _renew_session(self):
         """Renew a session and master token."""
         return self._token_request(REQUEST_TYPE_RENEW)
 
-    def _token_request(self, request_type):
+    def _prepare_token_request(self, request_type) -> tuple[str, dict, dict, str]:
         logger.debug(
             "updating session. master_token: {}".format(
                 "****" if self.master_token else None
@@ -561,6 +582,42 @@ class SnowflakeRestful:
             "oldSessionToken": self.token,
             "requestType": request_type,
         }
+        return url, headers, body, header_token
+
+    def _handle_token_request_error(self, ret):
+        logger.debug("failed: %s", ret)
+        err = ret.get("message")
+        if err is not None and ret.get("data"):
+            err += ret["data"].get("errorMessage", "")
+        errno = ret.get("code") or ER_FAILED_TO_RENEW_SESSION
+        if errno in (
+            ID_TOKEN_EXPIRED_GS_CODE,
+            SESSION_EXPIRED_GS_CODE,
+            MASTER_TOKEN_NOTFOUND_GS_CODE,
+            MASTER_TOKEN_EXPIRED_GS_CODE,
+            MASTER_TOKEN_INVALD_GS_CODE,
+            BAD_REQUEST_GS_CODE,
+        ):
+            raise ReauthenticationRequest(
+                ProgrammingError(
+                    msg=err,
+                    errno=int(errno),
+                    sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                )
+            )
+        Error.errorhandler_wrapper(
+            self._connection,
+            None,
+            ProgrammingError,
+            {
+                "msg": err,
+                "errno": int(errno),
+                "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+            },
+        )
+
+    def _token_request(self, request_type):
+        url, headers, body, header_token = self._prepare_token_request(request_type)
         ret = self._post_request(
             url,
             headers,
@@ -577,38 +634,9 @@ class SnowflakeRestful:
             logger.debug("updating session completed")
             return ret
         else:
-            logger.debug("failed: %s", ret)
-            err = ret.get("message")
-            if err is not None and ret.get("data"):
-                err += ret["data"].get("errorMessage", "")
-            errno = ret.get("code") or ER_FAILED_TO_RENEW_SESSION
-            if errno in (
-                ID_TOKEN_EXPIRED_GS_CODE,
-                SESSION_EXPIRED_GS_CODE,
-                MASTER_TOKEN_NOTFOUND_GS_CODE,
-                MASTER_TOKEN_EXPIRED_GS_CODE,
-                MASTER_TOKEN_INVALD_GS_CODE,
-                BAD_REQUEST_GS_CODE,
-            ):
-                raise ReauthenticationRequest(
-                    ProgrammingError(
-                        msg=err,
-                        errno=int(errno),
-                        sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                    )
-                )
-            Error.errorhandler_wrapper(
-                self._connection,
-                None,
-                ProgrammingError,
-                {
-                    "msg": err,
-                    "errno": int(errno),
-                    "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                },
-            )
+            self._handle_token_request_error(ret)
 
-    def _heartbeat(self) -> Any | dict[Any, Any] | None:
+    def _prepare_hearbeat_request(self):
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
@@ -619,6 +647,10 @@ class SnowflakeRestful:
         request_id = str(uuid.uuid4())
         logger.debug("request_id: %s", request_id)
         url = "/session/heartbeat?" + urlencode({REQUEST_ID: request_id})
+        return url, headers
+
+    def _heartbeat(self) -> Any | dict[Any, Any] | None:
+        headers, url = self._prepare_hearbeat_request()
         ret = self._post_request(
             url,
             headers,
@@ -629,8 +661,7 @@ class SnowflakeRestful:
             logger.error("Failed to heartbeat. code: %s, url: %s", ret.get("code"), url)
         return ret
 
-    def delete_session(self, retry: bool = False) -> None:
-        """Deletes the session."""
+    def _prepare_delete_session_request(self, retry: bool = False):
         if self.master_token is None:
             Error.errorhandler_wrapper(
                 self._connection,
@@ -651,11 +682,14 @@ class SnowflakeRestful:
         }
         if self._connection.service_name:
             headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
+        # return tuple is (url, header, body, retry_limit, num_retries, should_retry)
+        return url, headers, {}, 3 if retry else 1, 0, True
 
-        body = {}
-        retry_limit = 3 if retry else 1
-        num_retries = 0
-        should_retry = True
+    def delete_session(self, retry: bool = False) -> None:
+        """Deletes the session."""
+        url, headers, body, retry_limit, num_retries, should_retry = (
+            self._prepare_delete_session_request(retry)
+        )
         while should_retry and (num_retries < retry_limit):
             try:
                 should_retry = False
