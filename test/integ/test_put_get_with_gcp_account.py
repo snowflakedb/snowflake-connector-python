@@ -57,7 +57,7 @@ logger = getLogger(__name__)
 pytestmark = pytest.mark.gcp
 
 
-@pytest.mark.parametrize("enable_gcs_downscoped", True)
+@pytest.mark.parametrize("enable_gcs_downscoped", [True])
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
@@ -127,7 +127,7 @@ def test_put_get_with_gcp(
     assert original_contents == contents, "Output is different from the original file"
 
 
-@pytest.mark.parametrize("enable_gcs_downscoped", True)
+@pytest.mark.parametrize("enable_gcs_downscoped", [True])
 def test_put_copy_many_files_gcp(
     tmpdir,
     conn_cnx,
@@ -192,7 +192,7 @@ def test_put_copy_many_files_gcp(
                 run(csr, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize("enable_gcs_downscoped", True)
+@pytest.mark.parametrize("enable_gcs_downscoped", [True])
 def test_put_copy_duplicated_files_gcp(
     tmpdir,
     conn_cnx,
@@ -288,7 +288,7 @@ def test_put_copy_duplicated_files_gcp(
                 run(csr, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize("enable_gcs_downscoped", True)
+@pytest.mark.parametrize("enable_gcs_downscoped", [True])
 def test_put_get_large_files_gcp(
     tmpdir,
     conn_cnx,
@@ -476,7 +476,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx):
     assert original_contents == contents, "Output is different from the original file"
 
 
-@pytest.mark.parametrize("enable_gcs_downscoped", True)
+@pytest.mark.parametrize("enable_gcs_downscoped", [True])
 def test_auto_compress_off_gcp(
     tmpdir,
     conn_cnx,
