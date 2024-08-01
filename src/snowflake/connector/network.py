@@ -568,7 +568,7 @@ class SnowflakeRestful:
             token=header_token,
         )
         if ret.get("success") and ret.get("data", {}).get("sessionToken"):
-            logger.debug("success: %s", ret)
+            logger.debug("success: %s", SecretDetector.mask_secrets(str(ret)))
             self.update_tokens(
                 ret["data"]["sessionToken"],
                 ret["data"].get("masterToken"),
@@ -577,7 +577,7 @@ class SnowflakeRestful:
             logger.debug("updating session completed")
             return ret
         else:
-            logger.debug("failed: %s", ret)
+            logger.debug("failed: %s", SecretDetector.mask_secrets(str(ret)))
             err = ret.get("message")
             if err is not None and ret.get("data"):
                 err += ret["data"].get("errorMessage", "")
