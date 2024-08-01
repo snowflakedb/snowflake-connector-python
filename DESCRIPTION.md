@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.13.0(TBD)
+- v3.12.1(TBD)
   - Fixed a bug that session token is logged when renewing session.
 
 - v3.12.0(July 24,2024)
