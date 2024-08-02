@@ -400,6 +400,23 @@ class SnowflakeConnection:
         the name explicitly.
         """
         # initiate easy logging during every connection
+        self._init_connection(kwargs, connection_name, connections_file_path)
+        self.connect(**kwargs)
+        self._telemetry = TelemetryClient(self._rest)
+        self.expired = False
+
+        # get the imported modules from sys.modules
+        self._log_telemetry_imported_packages()
+        # check SNOW-1218851 for long term improvement plan to refactor ocsp code
+        atexit.register(self._close_at_exit)
+
+    def _init_connection(
+        self,
+        connection_init_kwargs: dict,
+        connection_name: str | None = None,
+        connections_file_path: pathlib.Path | None = None,
+    ) -> dict:
+        ret_kwargs = connection_init_kwargs
         easy_logging = EasyLoggingConfigPython()
         easy_logging.create_log()
         self._lock_sequence_counter = Lock()
@@ -424,13 +441,13 @@ class SnowflakeConnection:
             setattr(self, f"_{name}", value)
 
         self.heartbeat_thread = None
-        is_kwargs_empty = not kwargs
+        is_kwargs_empty = not connection_init_kwargs
 
-        if "application" not in kwargs:
+        if "application" not in connection_init_kwargs:
             if ENV_VAR_PARTNER in os.environ.keys():
-                kwargs["application"] = os.environ[ENV_VAR_PARTNER]
+                connection_init_kwargs["application"] = os.environ[ENV_VAR_PARTNER]
             elif "streamlit" in sys.modules:
-                kwargs["application"] = "streamlit"
+                connection_init_kwargs["application"] = "streamlit"
 
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None
@@ -449,19 +466,12 @@ class SnowflakeConnection:
                     f"Invalid connection_name '{connection_name}',"
                     f" known ones are {list(connections.keys())}"
                 )
-            kwargs = {**connections[connection_name], **kwargs}
+            ret_kwargs = {**connections[connection_name], **connection_init_kwargs}
         elif is_kwargs_empty:
             # connection_name is None and kwargs was empty when called
-            kwargs = _get_default_connection_params()
+            ret_kwargs = _get_default_connection_params()
         self.__set_error_attributes()
-        self.connect(**kwargs)
-        self._telemetry = TelemetryClient(self._rest)
-        self.expired = False
-
-        # get the imported modules from sys.modules
-        self._log_telemetry_imported_packages()
-        # check SNOW-1218851 for long term improvement plan to refactor ocsp code
-        atexit.register(self._close_at_exit)
+        return ret_kwargs
 
     @property
     def insecure_mode(self) -> bool:
@@ -719,7 +729,7 @@ class SnowflakeConnection:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
         if len(kwargs) > 0:
-            self.__config(**kwargs)
+            self._config(**kwargs)
             TelemetryService.get_instance().update_context(kwargs)
 
         if self.enable_connection_diag:
@@ -1100,7 +1110,7 @@ class SnowflakeConnection:
             # and what would the heartbeat frequency be
             self._add_heartbeat()
 
-    def __config(self, **kwargs):
+    def _config(self, **kwargs):
         """Sets up parameters in the connection object."""
         logger.debug("__config")
         # Handle special cases first
@@ -1173,6 +1183,7 @@ class SnowflakeConnection:
                 msg="Invalid paramstyle is specified", errno=ER_INVALID_VALUE
             )
 
+        # TODO: asyncio plugin type check
         if self._auth_class and not isinstance(self._auth_class, AuthByPlugin):
             raise TypeError("auth_class must subclass AuthByPlugin")
 
@@ -1707,13 +1718,10 @@ class SnowflakeConnection:
         self._client_prefetch_threads = int(self.client_prefetch_threads)
         return self.client_prefetch_threads
 
-    def _update_parameters(
+    def _update_non_locking_parameters(
         self,
         parameters: dict[str, str | int | bool],
     ) -> None:
-        """Update session parameters."""
-        with self._lock_converter:
-            self.converter.set_parameters(parameters)
         for name, value in parameters.items():
             self._session_parameters[name] = value
             if PARAMETER_CLIENT_TELEMETRY_ENABLED == name:
@@ -1742,6 +1750,15 @@ class SnowflakeConnection:
                 self.enable_stage_s3_privatelink_for_us_east_1 = value
             elif PARAMETER_QUERY_CONTEXT_CACHE_SIZE == name:
                 self.query_context_cache_size = value
+
+    def _update_parameters(
+        self,
+        parameters: dict[str, str | int | bool],
+    ) -> None:
+        """Update session parameters."""
+        with self._lock_converter:
+            self.converter.set_parameters(parameters)
+        self._update_non_locking_parameters(parameters)
 
     def _format_query_for_log(self, query: str) -> str:
         ret = " ".join(line.strip() for line in query.split("\n"))

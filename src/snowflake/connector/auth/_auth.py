@@ -154,7 +154,7 @@ class Auth:
             },
         }
 
-    def authenticate(
+    def _prepare_authenticate_request(
         self,
         auth_instance: AuthByPlugin,
         account: str,
@@ -165,17 +165,8 @@ class Auth:
         role: str | None = None,
         passcode: str | None = None,
         passcode_in_password: bool = False,
-        mfa_callback: Callable[[], None] | None = None,
-        password_callback: Callable[[], str] | None = None,
         session_parameters: dict[Any, Any] | None = None,
-        # max time waiting for MFA response, currently unused
-        timeout: int | None = None,
-    ) -> dict[str, str | int | bool]:
-        logger.debug("authenticate")
-
-        if timeout is None:
-            timeout = auth_instance.timeout
-
+    ):
         if session_parameters is None:
             session_parameters = {}
 
@@ -204,9 +195,6 @@ class Auth:
         )
 
         body = copy.deepcopy(body_template)
-        # updating request body
-        logger.debug("assertion content: %s", auth_instance.assertion_content)
-        auth_instance.update_body(body)
 
         logger.debug(
             "account=%s, user=%s, database=%s, schema=%s, "
@@ -240,6 +228,47 @@ class Auth:
 
         if session_parameters:
             body["data"]["SESSION_PARAMETERS"] = session_parameters
+
+        return url, headers, body, body_template
+
+    def authenticate(
+        self,
+        auth_instance: AuthByPlugin,
+        account: str,
+        user: str,
+        database: str | None = None,
+        schema: str | None = None,
+        warehouse: str | None = None,
+        role: str | None = None,
+        passcode: str | None = None,
+        passcode_in_password: bool = False,
+        mfa_callback: Callable[[], None] | None = None,
+        password_callback: Callable[[], str] | None = None,
+        session_parameters: dict[Any, Any] | None = None,
+        # max time waiting for MFA response, currently unused
+        timeout: int | None = None,
+    ) -> dict[str, str | int | bool]:
+        logger.debug("authenticate")
+
+        if timeout is None:
+            timeout = auth_instance.timeout
+
+        url, headers, body, body_template = self._prepare_authenticate_request(
+            auth_instance,
+            account,
+            user,
+            database,
+            schema,
+            warehouse,
+            role,
+            passcode,
+            passcode_in_password,
+            session_parameters,
+        )
+
+        # updating request body
+        logger.debug("assertion content: %s", auth_instance.assertion_content)
+        auth_instance.update_body(body)
 
         logger.debug(
             "body['data']: %s",

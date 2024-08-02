@@ -11,7 +11,7 @@ import gzip
 import itertools
 import json
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import OpenSSL.SSL
 
@@ -42,6 +42,8 @@ from ..errors import (
 from ..network import (
     DEFAULT_SOCKET_CONNECT_TIMEOUT,
     EXTERNAL_BROWSER_AUTHENTICATOR,
+    HEADER_AUTHORIZATION_KEY,
+    HEADER_SNOWFLAKE_TOKEN,
     MASTER_TOKEN_EXPIRED_GS_CODE,
     NO_TOKEN,
     QUERY_IN_PROGRESS_ASYNC_CODE,
@@ -61,7 +63,6 @@ from ..sqlstate import (
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
 )
 from ..time_util import TimeoutBackoffCtx, get_time_millis
-from .connection_async import SnowflakeConnectionAsync
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,10 @@ try:
 except ImportError:
     logger.warning("Please install aiohttp to use asyncio features.")
     raise
+
+
+if TYPE_CHECKING:
+    from .connection_async import SnowflakeConnectionAsync
 
 
 def raise_okta_unauthorized_error(
@@ -566,11 +571,20 @@ class SnowflakeRestfulAsync(SnowflakeRestful):
             # the response within the time. If not, ConnectReadTimeout or
             # ReadTimeout is raised.
 
-            # TODO: sync feature parity, verify/stream/auth
+            # TODO: aiohttp auth parameter works differently than requests.session.request
+            #  we can check if there's other aiohttp built-in mechanism to update this
+            if HEADER_AUTHORIZATION_KEY in headers:
+                del headers[HEADER_AUTHORIZATION_KEY]
+            if token != NO_TOKEN:
+                headers[HEADER_AUTHORIZATION_KEY] = HEADER_SNOWFLAKE_TOKEN.format(
+                    token=token
+                )
+
+            # TODO: sync feature parity, parameters verify/stream
             raw_ret = await session.request(
                 method=method,
                 url=full_url,
-                headers=headers,
+                headers=headers,  # this includes auth headers
                 data=input_data,
                 timeout=aiohttp.ClientTimeout(socket_timeout),
             )
