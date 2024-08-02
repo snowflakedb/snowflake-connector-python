@@ -194,7 +194,7 @@ class SnowflakeEncryptionUtil:
         in_filename: str,
         chunk_size: int = 64 * kilobyte,
     ) -> str:
-        """Decrypts a file and stores the output in the same dierctory of the incoming file.
+        """Decrypts a file and stores the output in the same directory of the incoming file.
 
         Args:
             metadata: The file's metadata input.
