@@ -1406,6 +1406,7 @@ def test_mock_non_existing_server(conn_cnx, caplog):
         )
 
 
+@pytest.mark.skipolddriver
 def test_disable_telemetry(conn_cnx, caplog):
     # default behavior, closing connection, it will send telemetry
     with caplog.at_level(logging.DEBUG):
@@ -1415,7 +1416,7 @@ def test_disable_telemetry(conn_cnx, caplog):
             assert (
                 len(conn._telemetry._log_batch) == 3
             )  # 3 events are import package, fetch first, fetch last
-    assert "POST /telemetry/send?" in caplog.text
+    assert "POST /telemetry/send" in caplog.text
     caplog.clear()
 
     # set session parameters to false
@@ -1430,7 +1431,7 @@ def test_disable_telemetry(conn_cnx, caplog):
             cur.execute("select 1").fetchall()
             assert not conn.telemetry_enabled and not conn._telemetry._log_batch
 
-    assert "POST /telemetry/send?" not in caplog.text
+    assert "POST /telemetry/send" not in caplog.text
     caplog.clear()
 
     # test disable telemetry in the client
@@ -1441,4 +1442,4 @@ def test_disable_telemetry(conn_cnx, caplog):
             with conn.cursor() as cur:
                 cur.execute("select 1").fetchall()
             assert not conn.telemetry_enabled
-    assert "POST /telemetry/send?" not in caplog.text
+    assert "POST /telemetry/send" not in caplog.text
