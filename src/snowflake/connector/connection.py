@@ -641,7 +641,7 @@ class SnowflakeConnection:
         ):
             logger.info(
                 "Telemetry has been disabled by the session parameter CLIENT_TELEMETRY_ENABLED."
-                " Set parameter to true to enable telemetry."
+                " Set session parameter CLIENT_TELEMETRY_ENABLED to true to enable telemetry."
             )
 
     @property
