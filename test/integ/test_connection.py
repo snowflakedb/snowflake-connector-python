@@ -1404,3 +1404,41 @@ def test_mock_non_existing_server(conn_cnx, caplog):
                 "writing OCSP response cache file to",
             ]
         )
+
+
+def test_disable_telemetry(conn_cnx, caplog):
+    # default behavior, closing connection, it will send telemetry
+    with caplog.at_level(logging.DEBUG):
+        with conn_cnx() as conn:
+            with conn.cursor() as cur:
+                cur.execute("select 1").fetchall()
+            assert (
+                len(conn._telemetry._log_batch) == 3
+            )  # 3 events are import package, fetch first, fetch last
+    assert "POST /telemetry/send?" in caplog.text
+    caplog.clear()
+
+    # set session parameters to false
+    with caplog.at_level(logging.DEBUG):
+        with conn_cnx(
+            session_parameters={"CLIENT_TELEMETRY_ENABLED": False}
+        ) as conn, conn.cursor() as cur:
+            cur.execute("select 1").fetchall()
+            assert not conn.telemetry_enabled and not conn._telemetry._log_batch
+            # this enable won't work as the session parameter is set to false
+            conn.telemetry_enabled = True
+            cur.execute("select 1").fetchall()
+            assert not conn.telemetry_enabled and not conn._telemetry._log_batch
+
+    assert "POST /telemetry/send?" not in caplog.text
+    caplog.clear()
+
+    # test disable telemetry in the client
+    with caplog.at_level(logging.DEBUG):
+        with conn_cnx() as conn:
+            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 1
+            conn.telemetry_enabled = False
+            with conn.cursor() as cur:
+                cur.execute("select 1").fetchall()
+            assert not conn.telemetry_enabled
+    assert "POST /telemetry/send?" not in caplog.text

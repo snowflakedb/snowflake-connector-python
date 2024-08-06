@@ -409,7 +409,8 @@ class SnowflakeConnection:
         self.messages = []
         self._async_sfqids: dict[str, None] = {}
         self._done_async_sfqids: dict[str, None] = {}
-        self.telemetry_enabled = False
+        self._client_param_telemetry_enabled = True
+        self._server_param_telemetry_enabled = False
         self._session_parameters: dict[str, str | int | bool] = {}
         logger.info(
             "Snowflake Connector for Python Version: %s, "
@@ -626,11 +627,22 @@ class SnowflakeConnection:
 
     @property
     def telemetry_enabled(self) -> bool:
-        return self._telemetry_enabled
+        return bool(
+            self._client_param_telemetry_enabled
+            and self._server_param_telemetry_enabled
+        )
 
     @telemetry_enabled.setter
     def telemetry_enabled(self, value) -> None:
-        self._telemetry_enabled = True if value else False
+        self._client_param_telemetry_enabled = True if value else False
+        if (
+            self._client_param_telemetry_enabled
+            and not self._server_param_telemetry_enabled
+        ):
+            logger.info(
+                "Telemetry has been disabled by the session parameter CLIENT_TELEMETRY_ENABLED."
+                " Set parameter to true to enable telemetry."
+            )
 
     @property
     def service_name(self) -> str | None:
@@ -777,7 +789,7 @@ class SnowflakeConnection:
 
             # close telemetry first, since it needs rest to send remaining data
             logger.info("closed")
-            self._telemetry.close(send_on_close=retry)
+            self._telemetry.close(send_on_close=bool(retry and self.telemetry_enabled))
             if (
                 self._all_async_queries_finished()
                 and not self._server_session_keep_alive
@@ -1717,7 +1729,7 @@ class SnowflakeConnection:
         for name, value in parameters.items():
             self._session_parameters[name] = value
             if PARAMETER_CLIENT_TELEMETRY_ENABLED == name:
-                self.telemetry_enabled = value
+                self._server_param_telemetry_enabled = value
             elif PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED == name:
                 if value:
                     TelemetryService.get_instance().enable()
