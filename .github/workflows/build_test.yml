@@ -328,10 +328,71 @@ jobs:
             .coverage.py${{ env.shortver }}-lambda-ci
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
 
+  test-aio:
+    name: Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    needs: build
+    runs-on: ${{ matrix.os.image_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+         - image_name: ubuntu-latest
+           download_name: manylinux_x86_64
+         - image_name: macos-latest
+           download_name: macosx_x86_64
+         - image_name: windows-2019
+           download_name: win_amd64
+        python-version: ["3.10", "3.11", "3.12"]
+        cloud-provider: [aws, azure, gcp]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Setup parameters file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Download wheel(s)
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ matrix.os.download_name }}_py${{ matrix.python-version }}
+          path: dist
+      - name: Show wheels downloaded
+        run: ls -lh dist
+        shell: bash
+      - name: Upgrade setuptools, pip and wheel
+        run: python -m pip install -U setuptools pip wheel
+      - name: Install tox
+        run: python -m pip install tox>=4
+      - name: Run tests
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{aio}-ci | sed 's/ /,/g'`
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          TOX_PARALLEL_NO_SPINNER: 1
+        shell: bash
+      - name: Combine coverages
+        run: python -m tox run -e coverage --skip-missing-interpreters false
+        shell: bash
+      - uses: actions/upload-artifact@v3
+        with:
+          name: coverage_aio_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            .tox/.coverage
+            .tox/coverage.xml
+
   combine-coverage:
     if: ${{ success() || failure() }}
     name: Combine coverage
-    needs: [lint, test, test-fips, test-lambda]
+    needs: [lint, test, test-fips, test-lambda, test-aio]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
