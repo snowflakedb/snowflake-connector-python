@@ -31,12 +31,12 @@ def _resolve_platform_dirs() -> PlatformDirsProto:
         "appname": "snowflake",
         "appauthor": False,
     }
-    snowflake_home = os.path.expanduser(
+    snowflake_home = pathlib.Path(
         os.environ.get("SNOWFLAKE_HOME", "~/.snowflake/"),
-    )
-    if os.path.exists(snowflake_home):
+    ).expanduser()
+    if snowflake_home.exists():
         return SFPlatformDirs(
-            snowflake_home,
+            str(snowflake_home),
             **platformdir_kwargs,
         )
     else:
