@@ -523,6 +523,7 @@ def test_sf_dirs(tmp_path, version):
 
 def test_config_file_resolution_sfdirs_default():
     from pathlib import Path
+
     default_loc = Path("~/.snowflake").expanduser()
     existed_before = default_loc.exists()
     default_loc.mkdir(exist_ok=True)
