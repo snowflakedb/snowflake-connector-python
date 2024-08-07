@@ -13,7 +13,6 @@ import json
 import logging
 import re
 import time
-import traceback
 import uuid
 from collections import OrderedDict
 from threading import Lock
@@ -92,9 +91,7 @@ from .sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
     SQLSTATE_CONNECTION_REJECTED,
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-    SQLSTATE_IO_ERROR,
 )
-from .telemetry_oob import TelemetryService
 from .time_util import (
     DEFAULT_MASTER_VALIDITY_IN_SECONDS,
     TimeoutBackoffCtx,
@@ -230,14 +227,6 @@ def raise_failed_request_error(
     method: str,
     response: Response,
 ) -> None:
-    TelemetryService.get_instance().log_http_request_error(
-        f"HttpError{response.status_code}",
-        url,
-        method,
-        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-        ER_FAILED_TO_REQUEST,
-        response=response,
-    )
     Error.errorhandler_wrapper(
         connection,
         None,
@@ -902,32 +891,8 @@ class SnowflakeRestful:
             if return_object is not None:
                 return return_object
             self._handle_unknown_error(method, full_url, headers, data, conn)
-            TelemetryService.get_instance().log_http_request_error(
-                "HttpRequestUnknownError",
-                full_url,
-                method,
-                SQLSTATE_IO_ERROR,
-                ER_FAILED_TO_REQUEST,
-                retry_timeout=retry_ctx.timeout,
-                retry_count=retry_ctx.current_retry_count,
-            )
             return {}
         except RetryRequest as e:
-            if (
-                retry_ctx.current_retry_count
-                == TelemetryService.get_instance().num_of_retry_to_trigger_telemetry
-            ):
-                TelemetryService.get_instance().log_http_request_error(
-                    "HttpRequestRetry%dTimes" % retry_ctx.current_retry_count,
-                    full_url,
-                    method,
-                    SQLSTATE_IO_ERROR,
-                    ER_FAILED_TO_REQUEST,
-                    retry_timeout=retry_ctx.timeout,
-                    retry_count=retry_ctx.current_retry_count,
-                    exception=str(e),
-                    stack_trace=traceback.format_exc(),
-                )
             cause = e.args[0]
             if no_retry:
                 self.log_and_handle_http_error_with_cause(
@@ -1001,17 +966,6 @@ class SnowflakeRestful:
     ) -> None:
         cause = e.args[0]
         logger.error(cause, exc_info=True)
-        TelemetryService.get_instance().log_http_request_error(
-            "HttpRequestRetryTimeout" if timed_out else f"HttpRequestError: {cause}",
-            full_url,
-            method,
-            SQLSTATE_IO_ERROR,
-            ER_FAILED_TO_REQUEST,
-            retry_timeout=retry_timeout,
-            retry_count=retry_count,
-            exception=str(e),
-            stack_trace=traceback.format_exc(),
-        )
         if isinstance(cause, Error):
             Error.errorhandler_wrapper_from_cause(conn, cause)
         else:
@@ -1149,15 +1103,6 @@ class SnowflakeRestful:
                 raw_ret.close()  # ensure response is closed
         except SSLError as se:
             logger.debug("Hit non-retryable SSL error, %s", str(se))
-            TelemetryService.get_instance().log_http_request_error(
-                "CertificateException%s" % str(se),
-                full_url,
-                method,
-                SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                ER_FAILED_TO_REQUEST,
-                exception=se,
-                stack_trace=traceback.format_exc(),
-            )
 
         except (
             BadStatusLine,
@@ -1190,15 +1135,6 @@ class SnowflakeRestful:
                 )
                 raise RetryRequest(err)
         except Exception as err:
-            TelemetryService.get_instance().log_http_request_error(
-                "HttpException%s" % str(err),
-                full_url,
-                method,
-                SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                ER_FAILED_TO_REQUEST,
-                exception=err,
-                stack_trace=traceback.format_exc(),
-            )
             raise err
 
     def make_requests_session(self) -> Session:

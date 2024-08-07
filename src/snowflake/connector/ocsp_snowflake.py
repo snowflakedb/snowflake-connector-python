@@ -13,7 +13,6 @@ import re
 import sys
 import tempfile
 import time
-import traceback
 from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from logging import getLogger
@@ -56,7 +55,6 @@ from snowflake.connector.errorcode import (
 )
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
-from snowflake.connector.telemetry_oob import TelemetryService
 
 from . import constants
 from .backoff_policies import exponential_backoff
@@ -248,15 +246,6 @@ class OCSPTelemetryData:
                 TelemetryField.KEY_OOB_CACHE_HIT.value: self.cache_hit,
             },
             is_oob_telemetry=True,
-        )
-
-        telemetry_client = TelemetryService.get_instance()
-        telemetry_client.log_ocsp_exception(
-            event_type,
-            telemetry_data,
-            exception=str(exception),
-            stack_trace=traceback.format_exc(),
-            urgent=urgent,
         )
 
         return telemetry_data
