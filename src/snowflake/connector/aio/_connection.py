@@ -99,7 +99,8 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         self.messages = []
         self._async_sfqids: dict[str, None] = {}
         self._done_async_sfqids: dict[str, None] = {}
-        self.telemetry_enabled = False
+        self._client_param_telemetry_enabled = True
+        self._server_param_telemetry_enabled = False
         self._session_parameters: dict[str, str | int | bool] = {}
         logger.info(
             "Snowflake Connector for Python Version: %s, "
@@ -371,7 +372,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         for name, value in parameters.items():
             self._session_parameters[name] = value
             if PARAMETER_CLIENT_TELEMETRY_ENABLED == name:
-                self.telemetry_enabled = value
+                self._server_param_telemetry_enabled = value
             elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE == name:
                 # Only set if the local config is None.
                 # Always give preference to user config.
@@ -491,7 +492,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             logger.info("closed")
 
             # TODO: async telemetry support
-            # self._telemetry.close(send_on_close=retry)
+            # self._telemetry.close(send_on_close=bool(retry and self.telemetry_enabled))
             if (
                 self._all_async_queries_finished()
                 and not self._server_session_keep_alive
