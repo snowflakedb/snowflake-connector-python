@@ -61,7 +61,6 @@ from .constants import (
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
     PARAMETER_CLIENT_TELEMETRY_ENABLED,
-    PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED,
     PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
     PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1,
     PARAMETER_QUERY_CONTEXT_CACHE_SIZE,
@@ -106,7 +105,6 @@ from .network import (
 )
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
-from .telemetry_oob import TelemetryService
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
@@ -732,7 +730,6 @@ class SnowflakeConnection:
         logger.debug("connect")
         if len(kwargs) > 0:
             self.__config(**kwargs)
-            TelemetryService.get_instance().update_context(kwargs)
 
         if self.enable_connection_diag:
             exceptions_dict = {}
@@ -1730,11 +1727,6 @@ class SnowflakeConnection:
             self._session_parameters[name] = value
             if PARAMETER_CLIENT_TELEMETRY_ENABLED == name:
                 self._server_param_telemetry_enabled = value
-            elif PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED == name:
-                if value:
-                    TelemetryService.get_instance().enable()
-                else:
-                    TelemetryService.get_instance().disable()
             elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE == name:
                 # Only set if the local config is None.
                 # Always give preference to user config.
