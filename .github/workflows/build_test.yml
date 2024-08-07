@@ -329,7 +329,7 @@ jobs:
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
 
   test-aio:
-    name: Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    name: Test asyncio ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
     needs: build
     runs-on: ${{ matrix.os.image_name }}
     strategy:
