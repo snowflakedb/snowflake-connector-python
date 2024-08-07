@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.12.1(TBD)
   - Fixed a bug that session token is logged when renewing session.
+  - Fixed a bug that disabling client telemetry does not work.
 
 - v3.12.0(July 24,2024)
   - Set default connection timeout of 10 seconds and socket read timeout of 10 minutes for HTTP calls in file transfer.
