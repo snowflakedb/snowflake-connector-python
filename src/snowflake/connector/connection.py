@@ -61,7 +61,6 @@ from .constants import (
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
     PARAMETER_CLIENT_TELEMETRY_ENABLED,
-    PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED,
     PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
     PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1,
     PARAMETER_QUERY_CONTEXT_CACHE_SIZE,
@@ -106,7 +105,6 @@ from .network import (
 )
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
-from .telemetry_oob import TelemetryService
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
@@ -409,7 +407,8 @@ class SnowflakeConnection:
         self.messages = []
         self._async_sfqids: dict[str, None] = {}
         self._done_async_sfqids: dict[str, None] = {}
-        self.telemetry_enabled = False
+        self._client_param_telemetry_enabled = True
+        self._server_param_telemetry_enabled = False
         self._session_parameters: dict[str, str | int | bool] = {}
         logger.info(
             "Snowflake Connector for Python Version: %s, "
@@ -626,11 +625,22 @@ class SnowflakeConnection:
 
     @property
     def telemetry_enabled(self) -> bool:
-        return self._telemetry_enabled
+        return bool(
+            self._client_param_telemetry_enabled
+            and self._server_param_telemetry_enabled
+        )
 
     @telemetry_enabled.setter
     def telemetry_enabled(self, value) -> None:
-        self._telemetry_enabled = True if value else False
+        self._client_param_telemetry_enabled = True if value else False
+        if (
+            self._client_param_telemetry_enabled
+            and not self._server_param_telemetry_enabled
+        ):
+            logger.info(
+                "Telemetry has been disabled by the session parameter CLIENT_TELEMETRY_ENABLED."
+                " Set session parameter CLIENT_TELEMETRY_ENABLED to true to enable telemetry."
+            )
 
     @property
     def service_name(self) -> str | None:
@@ -720,7 +730,6 @@ class SnowflakeConnection:
         logger.debug("connect")
         if len(kwargs) > 0:
             self.__config(**kwargs)
-            TelemetryService.get_instance().update_context(kwargs)
 
         if self.enable_connection_diag:
             exceptions_dict = {}
@@ -777,7 +786,7 @@ class SnowflakeConnection:
 
             # close telemetry first, since it needs rest to send remaining data
             logger.info("closed")
-            self._telemetry.close(send_on_close=retry)
+            self._telemetry.close(send_on_close=bool(retry and self.telemetry_enabled))
             if (
                 self._all_async_queries_finished()
                 and not self._server_session_keep_alive
@@ -1717,12 +1726,7 @@ class SnowflakeConnection:
         for name, value in parameters.items():
             self._session_parameters[name] = value
             if PARAMETER_CLIENT_TELEMETRY_ENABLED == name:
-                self.telemetry_enabled = value
-            elif PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED == name:
-                if value:
-                    TelemetryService.get_instance().enable()
-                else:
-                    TelemetryService.get_instance().disable()
+                self._server_param_telemetry_enabled = value
             elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE == name:
                 # Only set if the local config is None.
                 # Always give preference to user config.

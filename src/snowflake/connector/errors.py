@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 from .compat import BASE_EXCEPTION_CLASS
 from .secret_detector import SecretDetector
 from .telemetry import TelemetryData, TelemetryField
-from .telemetry_oob import TelemetryService
 from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -167,11 +166,6 @@ class Error(BASE_EXCEPTION_CLASS):
                 )
             except AttributeError:
                 logger.debug("Cursor failed to log to telemetry.", exc_info=True)
-        elif connection is None:
-            # Send with out-of-band telemetry
-
-            telemetry_oob = TelemetryService.get_instance()
-            telemetry_oob.log_general_exception(self.__class__.__name__, telemetry_data)
 
     def exception_telemetry(
         self,
