@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.12.1(TBD)
   - Fixed a bug that session token is logged when renewing session.
+  - Use `pathlib` instead of `os` for default config file location resolution.
   - Fixed a bug that disabling client telemetry does not work.
 
 - v3.12.0(July 24,2024)
