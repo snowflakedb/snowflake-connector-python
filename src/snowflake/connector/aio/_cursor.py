@@ -13,6 +13,7 @@ from typing_extensions import Self
 
 from snowflake.connector import Error, IntegrityError, InterfaceError, ProgrammingError
 from snowflake.connector._sql_util import get_file_transfer_type
+from snowflake.connector.aio._file_transfer_agent import SnowflakeProgressPercentage
 from snowflake.connector.constants import PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
 from snowflake.connector.cursor import (
     CAN_USE_ARROW_RESULT_FORMAT,
@@ -25,7 +26,6 @@ from snowflake.connector.errorcode import (
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_INVALID_VALUE,
 )
-from snowflake.connector.file_transfer_agent import SnowflakeProgressPercentage
 from snowflake.connector.time_util import get_time_millis
 
 if TYPE_CHECKING:
@@ -190,7 +190,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             )
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
-                from ..file_transfer_agent import SnowflakeFileTransferAgent
+                from ._file_transfer_agent import SnowflakeFileTransferAgent
 
                 # Decide whether to use the old, or new code path
                 sf_file_transfer_agent = SnowflakeFileTransferAgent(
@@ -212,7 +212,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
                     multipart_threshold=data.get("threshold"),
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
                 )
-                sf_file_transfer_agent.execute()
+                await sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
                 self._total_rowcount = len(data["rowset"]) if "rowset" in data else -1
 
@@ -447,3 +447,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 break
             ret.append(row)
         return ret
+
+    @property
+    def connection(self) -> SnowflakeConnection:
+        return self._connection
