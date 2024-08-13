@@ -11,9 +11,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.12.1(TBD)
   - Fixed a bug that session token is logged when renewing session.
   - Fixed a bug that disabling client telemetry does not work.
+  - Fixed a bug where `login_timeout` when passed as string raised `TypeError` during login retry step.
   - Use `pathlib` instead of `os` for default config file location resolution.
   - Removed upper `cryptogaphy` version pin.
-  - Fixed a bug where `login_timeout` when passed as string raised `TypeError` during login retry step.
+  - Removed reference to script `snowflake-export-certs` (its backing module was already removed long ago)
 
 - v3.12.0(July 24,2024)
   - Set default connection timeout of 10 seconds and socket read timeout of 10 minutes for HTTP calls in file transfer.
