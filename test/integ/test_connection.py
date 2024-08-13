@@ -279,6 +279,25 @@ def test_bad_db(db_parameters):
     cnx.close()
 
 
+def test_with_string_login_timeout(db_parameters):
+    """Test that login_timeout when passed as string does not raise TypeError.
+
+    In this test, we pass bad login credentials to raise error and trigger login
+    timeout calculation. We expect to see DatabaseError instead of TypeError that
+    comes from str - int arithmetic.
+    """
+    with pytest.raises(DatabaseError):
+        snowflake.connector.connect(
+            protocol="http",
+            user="bogus",
+            password="bogus",
+            host=db_parameters["host"],
+            port=db_parameters["port"],
+            account=db_parameters["account"],
+            login_timeout="5",
+        )
+
+
 def test_bogus(db_parameters):
     """Attempts to login with invalid user name and password.
 

@@ -1018,7 +1018,7 @@ class SnowflakeConnection:
             elif self._authenticator == DEFAULT_AUTHENTICATOR:
                 self.auth_class = AuthByDefault(
                     password=self._password,
-                    timeout=self._login_timeout,
+                    timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
@@ -1038,7 +1038,7 @@ class SnowflakeConnection:
                         protocol=self._protocol,
                         host=self.host,
                         port=self.port,
-                        timeout=self._login_timeout,
+                        timeout=self.login_timeout,
                         backoff_generator=self._backoff_generator,
                     )
                 else:
@@ -1048,7 +1048,7 @@ class SnowflakeConnection:
                         protocol=self._protocol,
                         host=self.host,
                         port=self.port,
-                        timeout=self._login_timeout,
+                        timeout=self.login_timeout,
                         backoff_generator=self._backoff_generator,
                     )
 
@@ -1063,13 +1063,13 @@ class SnowflakeConnection:
 
                 self.auth_class = AuthByKeyPair(
                     private_key=private_key,
-                    timeout=self._login_timeout,
+                    timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHENTICATOR:
                 self.auth_class = AuthByOAuth(
                     oauth_token=self._token,
-                    timeout=self._login_timeout,
+                    timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
@@ -1085,14 +1085,14 @@ class SnowflakeConnection:
                 self.auth_class = AuthByUsrPwdMfa(
                     password=self._password,
                     mfa_token=self.rest.mfa_token,
-                    timeout=self._login_timeout,
+                    timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
                 self.auth_class = AuthByOkta(
                     application=self.application,
-                    timeout=self._login_timeout,
+                    timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
 
