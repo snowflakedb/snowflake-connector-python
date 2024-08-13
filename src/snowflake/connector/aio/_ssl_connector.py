@@ -44,12 +44,6 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
     ) -> Connection:
         connection = await super().connect(req, traces, timeout)
         protocol = connection.protocol
-        bool(
-            req.is_ssl()
-            and protocol is not None
-            and not getattr(protocol, "_snowflake_ocsp_validated", False)
-            and self._snowflake_ocsp_mode != OCSPMode.INSECURE
-        )
         if (
             req.is_ssl()
             and protocol is not None
