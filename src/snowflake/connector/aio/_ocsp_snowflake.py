@@ -37,6 +37,7 @@ from snowflake.connector.ocsp_snowflake import (
 from snowflake.connector.ocsp_snowflake import OCSPServer as OCSPServerSync
 from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP as SnowflakeOCSPSync
+from snowflake.connector.url_util import extract_top_level_domain_from_hostname
 
 logger = getLogger(__name__)
 
@@ -103,7 +104,7 @@ class OCSPServer(OCSPServerSync):
                         headers=headers,
                     )
                     if response.status == OK:
-                        ocsp.decode_ocsp_response_cache(response.json())
+                        ocsp.decode_ocsp_response_cache(await response.json())
                         elapsed_time = time.time() - start_time
                         logger.debug(
                             "ended downloading OCSP response cache file. "
@@ -134,6 +135,42 @@ class OCSPServer(OCSPServerSync):
 
 
 class SnowflakeOCSP(SnowflakeOCSPSync):
+    def __init__(
+        self,
+        ocsp_response_cache_uri=None,
+        use_ocsp_cache_server=None,
+        use_post_method: bool = True,
+        use_fail_open: bool = True,
+        **kwargs,
+    ) -> None:
+        self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)
+
+        if self.test_mode == "true":
+            logger.debug("WARNING - DRIVER CONFIGURED IN TEST MODE")
+
+        self._use_post_method = use_post_method
+        self.OCSP_CACHE_SERVER = OCSPServer(
+            top_level_domain=extract_top_level_domain_from_hostname(
+                kwargs.pop("hostname", None)
+            )
+        )
+
+        self.debug_ocsp_failure_url = None
+
+        if os.getenv("SF_OCSP_FAIL_OPEN") is not None:
+            # failOpen Env Variable is for internal usage/ testing only.
+            # Using it in production is not advised and not supported.
+            self.FAIL_OPEN = os.getenv("SF_OCSP_FAIL_OPEN").lower() == "true"
+        else:
+            self.FAIL_OPEN = use_fail_open
+
+        SnowflakeOCSP.OCSP_CACHE.reset_ocsp_response_cache_uri(ocsp_response_cache_uri)
+
+        if not OCSPServer.is_enabled_new_ocsp_endpoint():
+            self.OCSP_CACHE_SERVER.reset_ocsp_dynamic_cache_server_url(
+                use_ocsp_cache_server
+            )
+
     async def validate(
         self,
         hostname: str | None,
@@ -212,6 +249,64 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         logger.debug("ok" if not any_err else "failed")
         return results
 
+    async def _validate_issue_subject(
+        self,
+        issuer: Certificate,
+        subject: Certificate,
+        telemetry_data: OCSPTelemetryData,
+        hostname: str | None = None,
+        do_retry: bool = True,
+    ) -> tuple[
+        tuple[bytes, bytes, bytes],
+        [Exception | None, Certificate, Certificate, CertId, bytes],
+    ]:
+        cert_id, req = self.create_ocsp_request(issuer, subject)
+        cache_key = self.decode_cert_id_key(cert_id)
+        ocsp_response_validation_result = OCSP_RESPONSE_VALIDATION_CACHE.get(cache_key)
+
+        if (
+            ocsp_response_validation_result is None
+            or not ocsp_response_validation_result.validated
+        ):
+            r = await self.validate_by_direct_connection(
+                issuer,
+                subject,
+                telemetry_data,
+                hostname,
+                do_retry=do_retry,
+                cache_key=cache_key,
+            )
+            return cache_key, r
+        else:
+            return cache_key, (
+                ocsp_response_validation_result.exception,
+                ocsp_response_validation_result.issuer,
+                ocsp_response_validation_result.subject,
+                ocsp_response_validation_result.cert_id,
+                ocsp_response_validation_result.ocsp_response,
+            )
+
+    async def _check_ocsp_response_cache_server(
+        self,
+        cert_data: list[tuple[Certificate, Certificate]],
+    ) -> None:
+        """Checks if OCSP response is in cache, and if not it downloads the OCSP response cache from the server.
+
+        Args:
+          cert_data: Tuple of issuer and subject certificates.
+        """
+        in_cache = False
+        for issuer, subject in cert_data:
+            # check if any OCSP response is NOT in cache
+            cert_id, _ = self.create_ocsp_request(issuer, subject)
+            in_cache, _ = SnowflakeOCSP.OCSP_CACHE.find_cache(self, cert_id, subject)
+            if not in_cache:
+                # not found any
+                break
+
+        if not in_cache:
+            await self.OCSP_CACHE_SERVER.download_cache_from_server(self)
+
     async def _validate_certificates_sequential(
         self,
         cert_data: list[tuple[Certificate, Certificate]],
@@ -219,9 +314,8 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         hostname: str | None = None,
         do_retry: bool = True,
     ) -> list[tuple[Exception | None, Certificate, Certificate, CertId, bytes]]:
-        results = []
         try:
-            self._check_ocsp_response_cache_server(cert_data)
+            await self._check_ocsp_response_cache_server(cert_data)
         except RevocationCheckError as rce:
             telemetry_data.set_event_sub_type(
                 OCSPTelemetryData.ERROR_CODE_MAP[rce.errno]
@@ -233,49 +327,29 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
             )
 
         to_update_cache_dict = {}
-        for issuer, subject in cert_data:
-            cert_id, _ = self.create_ocsp_request(issuer=issuer, subject=subject)
-            cache_key = self.decode_cert_id_key(cert_id)
-            ocsp_response_validation_result = OCSP_RESPONSE_VALIDATION_CACHE.get(
-                cache_key
-            )
 
-            if (
-                ocsp_response_validation_result is None
-                or not ocsp_response_validation_result.validated
-            ):
-                # r is a tuple of (err, issuer, subject, cert_id, ocsp_response)
-                r = await self.validate_by_direct_connection(
+        task_results = await asyncio.gather(
+            *[
+                self._validate_issue_subject(
                     issuer,
                     subject,
-                    telemetry_data,
-                    hostname,
+                    hostname=hostname,
+                    telemetry_data=telemetry_data,
                     do_retry=do_retry,
-                    cache_key=cache_key,
                 )
+                for issuer, subject in cert_data
+            ]
+        )
+        results = [validate_result for _, validate_result in task_results]
+        for cache_key, validate_result in task_results:
+            if validate_result[0] is not None or validate_result[4] is not None:
+                to_update_cache_dict[cache_key] = OCSPResponseValidationResult(
+                    *validate_result,
+                    ts=int(time.time()),
+                    validated=True,
+                )
+                OCSPCache.CACHE_UPDATED = True
 
-                # When OCSP server is down, the validation fails and the oscp_response will be None, and in fail open
-                # case, we will also reset err to None.
-                # In this case we don't need to write the response to cache because there is no information from a
-                # connection error.
-                if r[0] is not None or r[4] is not None:
-                    to_update_cache_dict[cache_key] = OCSPResponseValidationResult(
-                        *r,
-                        ts=int(time.time()),
-                        validated=True,
-                    )
-                    OCSPCache.CACHE_UPDATED = True
-                results.append(r)
-            else:
-                results.append(
-                    (
-                        ocsp_response_validation_result.exception,
-                        ocsp_response_validation_result.issuer,
-                        ocsp_response_validation_result.subject,
-                        ocsp_response_validation_result.cert_id,
-                        ocsp_response_validation_result.ocsp_response,
-                    )
-                )
         OCSP_RESPONSE_VALIDATION_CACHE.update(to_update_cache_dict)
         return results
 
@@ -436,7 +510,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                             "OCSP response was successfully returned from OCSP "
                             "server."
                         )
-                        ret = response.content
+                        ret = await response.content.read()
                         break
                     elif max_retry > 1:
                         sleep_time = next(backoff)
