@@ -24,16 +24,15 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
-import sys
-
-if sys.version_info <= (3, 9):
-    raise RuntimeError(
-        "The asyncio support for Snowflake Python Connector is only supported on Python 3.10 or greater."
-    )
-
 
 class SnowflakeSSLConnector(aiohttp.TCPConnector):
     def __init__(self, *args, **kwargs):
+        import sys
+
+        if sys.version_info <= (3, 9):
+            raise RuntimeError(
+                "The asyncio support for Snowflake Python Connector is only supported on Python 3.10 or greater."
+            )
         self._snowflake_ocsp_mode = kwargs.pop(
             "snowflake_ocsp_mode", OCSPMode.FAIL_OPEN
         )
