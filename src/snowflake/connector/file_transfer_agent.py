@@ -486,7 +486,9 @@ class SnowflakeFileTransferAgent:
                             "Chunk queue busy, waiting in file done callback..."
                         )
                         cv_chunk_process.wait()
+                    print(done_client.num_of_chunks)
                     for _chunk_id in range(done_client.num_of_chunks):
+                        print(_chunk_id)
                         _callback = partial(
                             transfer_done_cb,
                             done_client=done_client,

@@ -244,13 +244,13 @@ class SnowflakeStorageClient(ABC):
         for chunk_id in range(self.num_of_chunks):
             self.retry_count[chunk_id] = 0
         if self.chunked_transfer and self.num_of_chunks > 1:
-            self._initiate_multipart_upload()
+            await self._initiate_multipart_upload()
 
     async def finish_upload(self) -> None:
         meta = self.meta
         if self.successful_transfers == self.num_of_chunks and self.num_of_chunks != 0:
             if self.num_of_chunks > 1:
-                self._complete_multipart_upload()
+                await self._complete_multipart_upload()
             meta.result_status = ResultStatus.UPLOADED
             meta.dst_file_size = meta.upload_size
             logger.debug(f"{meta.src_file_name} upload is completed.")
@@ -259,7 +259,7 @@ class SnowflakeStorageClient(ABC):
             meta.dst_file_size = 0
             logger.debug(f"{meta.src_file_name} upload is aborted.")
             if self.num_of_chunks > 1:
-                self._abort_multipart_upload()
+                await self._abort_multipart_upload()
             meta.result_status = ResultStatus.ERROR
 
     @abstractmethod
@@ -358,7 +358,7 @@ class SnowflakeStorageClient(ABC):
             fd.seek(self.chunk_size * chunk_id)
             fd.write(data)
 
-    async def finish_download(self) -> None:
+    def finish_download(self) -> None:
         meta = self.meta
         if self.num_of_chunks != 0 and self.successful_transfers == self.num_of_chunks:
             meta.result_status = ResultStatus.DOWNLOADED
@@ -434,15 +434,15 @@ class SnowflakeStorageClient(ABC):
         return
 
     # Override in S3
-    def _initiate_multipart_upload(self) -> None:
+    async def _initiate_multipart_upload(self) -> None:
         return
 
     # Override in S3
-    def _complete_multipart_upload(self) -> None:
+    async def _complete_multipart_upload(self) -> None:
         return
 
     # Override in S3
-    def _abort_multipart_upload(self) -> None:
+    async def _abort_multipart_upload(self) -> None:
         return
 
     def delete_client_data(self) -> None:

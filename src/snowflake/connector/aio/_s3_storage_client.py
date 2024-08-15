@@ -453,7 +453,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             query_parts=dict(query_parts),
         )
         if response.status == 200:
-            self.upload_id = ET.fromstring(response.content)[2].text
+            self.upload_id = ET.fromstring(await response.read())[2].text
             self.etags = [None] * self.num_of_chunks
         else:
             response.raise_for_status()
@@ -552,7 +552,6 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 ignore_content_encoding=True,
             )
             if response.status == 200:
-                print(response)
                 self.write_downloaded_chunk(0, await response.read())
                 self.meta.result_status = ResultStatus.DOWNLOADED
             response.raise_for_status()
@@ -570,7 +569,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 headers={"Range": f"bytes={_range}"},
             )
             if response.status in (200, 206):
-                self.write_downloaded_chunk(chunk_id, response.content)
+                self.write_downloaded_chunk(chunk_id, await response.read())
             response.raise_for_status()
 
     async def _get_bucket_accelerate_config(self, bucket_name: str) -> bool:
@@ -583,7 +582,6 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         response = await self._send_request_with_authentication_and_retry(
             url=url, verb="GET", retry_id=retry_id, query_parts=dict(query_parts)
         )
-        print(response)
         if response.status == 200:
             config = ET.fromstring(response.text)
             namespace = config.tag[: config.tag.index("}") + 1]

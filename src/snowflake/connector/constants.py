@@ -417,7 +417,7 @@ S3_CHUNK_SIZE = 8388608  # boto3 default
 AZURE_CHUNK_SIZE = 4 * megabyte
 
 # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
-REQUEST_CONNECTION_TIMEOUT = 10
+REQUEST_CONNECTION_TIMEOUT = 600
 REQUEST_READ_TIMEOUT = 600
 
 DAY_IN_SECONDS = 60 * 60 * 24
