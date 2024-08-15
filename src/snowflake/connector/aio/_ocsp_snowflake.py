@@ -16,6 +16,7 @@ from aiohttp.client_proto import ResponseHandler
 from asn1crypto.ocsp import CertId
 from asn1crypto.x509 import Certificate
 
+import snowflake.connector.ocsp_snowflake
 from snowflake.connector.backoff_policies import exponential_backoff
 from snowflake.connector.compat import OK
 from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
@@ -29,11 +30,7 @@ from snowflake.connector.errorcode import (
 )
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
-from snowflake.connector.ocsp_snowflake import (
-    OCSP_RESPONSE_VALIDATION_CACHE,
-    OCSPCache,
-    OCSPResponseValidationResult,
-)
+from snowflake.connector.ocsp_snowflake import OCSPCache, OCSPResponseValidationResult
 from snowflake.connector.ocsp_snowflake import OCSPServer as OCSPServerSync
 from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP as SnowflakeOCSPSync
@@ -63,7 +60,9 @@ class OCSPServer(OCSPServerSync):
                 # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
                 logger.debug(
                     "# of certificates: %u",
-                    len(OCSP_RESPONSE_VALIDATION_CACHE._cache),
+                    len(
+                        snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE._cache
+                    ),
                 )
             except RevocationCheckError as rce:
                 logger.debug(
@@ -135,6 +134,7 @@ class OCSPServer(OCSPServerSync):
 
 
 class SnowflakeOCSP(SnowflakeOCSPSync):
+
     def __init__(
         self,
         ocsp_response_cache_uri=None,
@@ -170,6 +170,9 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
             self.OCSP_CACHE_SERVER.reset_ocsp_dynamic_cache_server_url(
                 use_ocsp_cache_server
             )
+
+        if not snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE:
+            SnowflakeOCSP.OCSP_CACHE.read_file(self)
 
     async def validate(
         self,
@@ -262,7 +265,11 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
     ]:
         cert_id, req = self.create_ocsp_request(issuer, subject)
         cache_key = self.decode_cert_id_key(cert_id)
-        ocsp_response_validation_result = OCSP_RESPONSE_VALIDATION_CACHE.get(cache_key)
+        ocsp_response_validation_result = (
+            snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE.get(
+                cache_key
+            )
+        )
 
         if (
             ocsp_response_validation_result is None
@@ -350,7 +357,9 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                 )
                 OCSPCache.CACHE_UPDATED = True
 
-        OCSP_RESPONSE_VALIDATION_CACHE.update(to_update_cache_dict)
+        snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE.update(
+            to_update_cache_dict
+        )
         return results
 
     async def validate_by_direct_connection(
