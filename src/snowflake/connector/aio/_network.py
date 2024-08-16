@@ -30,7 +30,6 @@ from ..constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
     HTTP_HEADER_USER_AGENT,
-    REQUEST_CONNECTION_TIMEOUT,
     REQUEST_READ_TIMEOUT,
     OCSPMode,
 )
@@ -818,9 +817,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             raise err
 
     def make_requests_session(self) -> aiohttp.ClientSession:
-        s = aiohttp.ClientSession(
-            read_timeout=REQUEST_READ_TIMEOUT, conn_timeout=REQUEST_CONNECTION_TIMEOUT
-        )
+        s = aiohttp.ClientSession(read_timeout=REQUEST_READ_TIMEOUT, conn_timeout=600)
         # TODO: sync feature parity, proxy support
         # s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
         # s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
