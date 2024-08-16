@@ -82,6 +82,7 @@ from ..sqlstate import (
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
 )
 from ..time_util import TimeoutBackoffCtx, get_time_millis
+from ._ssl_connector import SnowflakeSSLConnector
 
 if TYPE_CHECKING:
     from snowflake.connector.aio import SnowflakeConnection
@@ -817,7 +818,12 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             raise err
 
     def make_requests_session(self) -> aiohttp.ClientSession:
-        s = aiohttp.ClientSession(read_timeout=REQUEST_READ_TIMEOUT, conn_timeout=600)
+        s = aiohttp.ClientSession(
+            connector=SnowflakeSSLConnector(snowflake_ocsp_mode=self._ocsp_mode),
+            read_timeout=REQUEST_READ_TIMEOUT, 
+            conn_timeout=600
+        )
+
         # TODO: sync feature parity, proxy support
         # s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
         # s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
