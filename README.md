@@ -52,3 +52,32 @@ These tools are integrated into `tox` to allow us to easily set them up universa
 * **coverage**: Runs `coverage.py` to combine generated coverage data files. Useful when multiple categories were run
   and we would like to have an overall coverage data file created for them.
 * **flake8**: (Deprecated) Similar to `fix_lint`, but only runs `flake8` checks.
+
+## Disable telemetry
+
+By default, the Snowflake Connector for Python collects telemetry data to improve the product.
+You can disable the telemetry data collection by setting the session parameter `CLIENT_TELEMETRY_ENABLED` to `False`
+when connecting to Snowflake:
+```python
+import snowflake.connector
+conn = snowflake.connector.connect(
+    user='XXXX',
+    password='XXXX',
+    account='XXXX',
+    session_parameters={
+      "CLIENT_TELEMETRY_ENABLED": False,
+    }
+)
+```
+
+Alternatively, you can disable the telemetry data collection
+by setting the `telemetry_enabled` property to `False` on the `SnowflakeConnection` object:
+```python
+import snowflake.connector
+conn = snowflake.connector.connect(
+    user='XXXX',
+    password='XXXX',
+    account='XXXX',
+)
+conn.telemetry_enabled = False
+```
