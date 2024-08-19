@@ -8,12 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.12.1(TBD)
-
-- v3.12.1(August 22,2024)
-
-   -N/A
-
+- v3.12.1(August 20,2024)
   - Fixed a bug that session token is logged when renewing session.
   - Fixed a bug that disabling client telemetry does not work.
   - Fixed a bug where `login_timeout` when passed as string raised `TypeError` during login retry step.
