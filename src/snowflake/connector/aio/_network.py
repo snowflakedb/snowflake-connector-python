@@ -820,10 +820,9 @@ class SnowflakeRestful(SnowflakeRestfulSync):
     def make_requests_session(self) -> aiohttp.ClientSession:
         s = aiohttp.ClientSession(
             connector=SnowflakeSSLConnector(snowflake_ocsp_mode=self._ocsp_mode),
-            read_timeout=REQUEST_READ_TIMEOUT, 
-            conn_timeout=600
+            read_timeout=REQUEST_READ_TIMEOUT,
+            conn_timeout=600,
         )
-
         # TODO: sync feature parity, proxy support
         # s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
         # s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
