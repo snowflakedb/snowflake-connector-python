@@ -679,6 +679,7 @@ class SnowflakeRestful:
         headers: dict[str, str],
         token: str = None,
         timeout: int | None = None,
+        is_fetch_query_status: bool = False,
     ) -> dict[str, Any]:
         if "Content-Encoding" in headers:
             del headers["Content-Encoding"]
@@ -692,6 +693,7 @@ class SnowflakeRestful:
             headers,
             timeout=timeout,
             token=token,
+            is_fetch_query_status=is_fetch_query_status,
         )
         if ret.get("code") == SESSION_EXPIRED_GS_CODE:
             try:
@@ -706,7 +708,12 @@ class SnowflakeRestful:
                 )
             )
             if ret.get("success"):
-                return self._get_request(url, headers, token=self.token)
+                return self._get_request(
+                    url,
+                    headers,
+                    token=self.token,
+                    is_fetch_query_status=is_fetch_query_status,
+                )
 
         return ret
 
@@ -779,7 +786,13 @@ class SnowflakeRestful:
             result_url = ret["data"]["getResultUrl"]
             logger.debug("ping pong starting...")
             ret = self._get_request(
-                result_url, headers, token=self.token, timeout=timeout
+                result_url,
+                headers,
+                token=self.token,
+                timeout=timeout,
+                is_fetch_query_status=bool(
+                    re.match(r"^/queries/.+/result$", result_url)
+                ),
             )
             logger.debug("ret[code] = %s", ret.get("code", "N/A"))
             logger.debug("ping pong done")
@@ -878,6 +891,7 @@ class SnowflakeRestful:
 
         full_url = retry_ctx.add_retry_params(full_url)
         full_url = SnowflakeRestful.add_request_guid(full_url)
+        is_fetch_query_status = kwargs.pop("is_fetch_query_status", False)
         try:
             return_object = self._request_exec(
                 session=session,
@@ -890,6 +904,10 @@ class SnowflakeRestful:
             )
             if return_object is not None:
                 return return_object
+            if is_fetch_query_status:
+                err_msg = "fetch query status failed and http request returned None, this is usually caused by transient network failures, retrying..."
+                logger.info(err_msg)
+                raise RetryRequest(err_msg)
             self._handle_unknown_error(method, full_url, headers, data, conn)
             return {}
         except RetryRequest as e:
