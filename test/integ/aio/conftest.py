@@ -90,4 +90,5 @@ def aio_connection(db_parameters):
         protocol=db_parameters["protocol"],
         timezone="UTC",
     )
-    return cnx
+    yield cnx
+    cnx.close()
