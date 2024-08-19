@@ -9,9 +9,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 
 - v3.12.1(August 20,2024)
-  - Fixed a bug that session token is logged when renewing session.
-  - Fixed a bug that disabling client telemetry does not work.
-  - Fixed a bug where `login_timeout` when passed as string raised `TypeError` during login retry step.
+  - Fixed a bug that logged the session token when renewing a session.
+  - Fixed a bug where disabling client telemetry did not work.
+  - Fixed a bug where passing `login_timeout` as a string raised a `TypeError` during the login retry step.
   - Use `pathlib` instead of `os` for default config file location resolution.
   - Removed upper `cryptogaphy` version pin.
   - Removed reference to script `snowflake-export-certs` (its backing module was already removed long ago)
