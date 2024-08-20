@@ -14,6 +14,7 @@ import pytest
 import snowflake.connector
 from snowflake.connector.errors import OperationalError
 
+
 def test_get_proxy_url():
     from snowflake.connector.proxy import get_proxy_url
 
