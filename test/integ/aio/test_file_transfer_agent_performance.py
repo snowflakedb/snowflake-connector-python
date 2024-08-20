@@ -51,15 +51,11 @@ def unzip_multiple_files(file_path: str, file_name: str):
                 os.remove(old_file)
 
 
-async def test_put_and_get_single_small_file(aio_connection, conn_cnx, db_parameters):
-    data_dir = os.path.abspath(
-        os.path.join(
-            os.getcwd(), "..", "..", "data", "test_put_and_get_single_small_file"
-        )
-    )
-    if not os.path.exists(data_dir):
-        os.mkdir(data_dir)
-    data_dir = data_dir.replace("\\", "\\\\")
+async def test_put_and_get_single_small_file(
+    aio_connection, conn_cnx, db_parameters, tmpdir
+):
+    datadir = tmpdir.mkdir("test_put_and_get_single_small_file")
+    data_dir = datadir.strpath
     target_file_name = "single_chunk_file.csv"
     with conn_cnx() as cnx:
         start = time()
@@ -106,15 +102,11 @@ async def test_put_and_get_single_small_file(aio_connection, conn_cnx, db_parame
     assert raw_content == downloaded_content
 
 
-async def test_put_and_get_multiple_small_file(aio_connection, conn_cnx, db_parameters):
-    data_dir = os.path.abspath(
-        os.path.join(
-            os.getcwd(), "..", "..", "data", "test_put_and_get_multiple_small_file"
-        )
-    )
-    if not os.path.exists(data_dir):
-        os.mkdir(data_dir)
-    data_dir = data_dir.replace("\\", "\\\\")
+async def test_put_and_get_multiple_small_file(
+    aio_connection, conn_cnx, db_parameters, tmpdir
+):
+    datadir = tmpdir.mkdir("test_put_and_get_multiple_small_file")
+    data_dir = datadir.strpath
     target_file_name = "single_chunk_file"
     with conn_cnx() as cnx:
         start = time()
