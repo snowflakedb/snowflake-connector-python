@@ -8,6 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.12.2(TBD)
+  - Fixed a bug where proxy settings were leaked through environmental variables
+
 - v3.12.1(August 20,2024)
   - Fixed a bug that logged the session token when renewing a session.
   - Fixed a bug where disabling client telemetry did not work.
