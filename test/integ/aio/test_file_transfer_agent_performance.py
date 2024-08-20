@@ -13,6 +13,8 @@ from snowflake.connector.util_text import random_string
 
 pytestmark = pytest.mark.asyncio
 
+CLOUD = os.getenv("cloud_provider", "dev")
+
 
 def read_csv(file_path: str):
     with open(file_path) as f:
@@ -53,6 +55,7 @@ def unzip_multiple_files(file_path: str, file_name: str):
                 os.remove(old_file)
 
 
+@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 async def test_put_and_get_single_small_file(
     aio_connection, conn_cnx, db_parameters, tmpdir
 ):
@@ -114,6 +117,7 @@ async def test_put_and_get_single_small_file(
     assert raw_content == downloaded_content
 
 
+@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 async def test_put_and_get_multiple_small_file(
     aio_connection, conn_cnx, db_parameters, tmpdir
 ):
