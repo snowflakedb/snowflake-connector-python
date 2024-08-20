@@ -9,6 +9,8 @@ from time import time
 
 import pytest
 
+from snowflake.connector.util_text import random_string
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -58,6 +60,10 @@ async def test_put_and_get_single_small_file(
     data_dir = datadir.strpath
     target_file_name = "single_chunk_file.csv"
     with conn_cnx() as cnx:
+        # create temp stage
+        temp_stage_name = random_string(5, "test_put_and_get_single_small_file_")
+        cnx.cursor().execute(f"create temporary stage {temp_stage_name}")
+        # get test file from stage with sync get and sync get performance
         start = time()
         cnx.cursor().execute(
             f"GET @{db_parameters['database']}.PUBLIC.teststage_python/{target_file_name} file://{data_dir}"
@@ -66,9 +72,10 @@ async def test_put_and_get_single_small_file(
         sync_download_time = end - start
         unzip_file(os.path.join(data_dir, f"{target_file_name}.gz"))
 
+        # put it to temp stage to avoid race condition, and get performance of sync transfer
         start = time()
         cnx.cursor().execute(
-            f"PUT file://{os.path.join(data_dir, target_file_name)} @{db_parameters['database']}.PUBLIC.teststage_python OVERWRITE = TRUE"
+            f"PUT file://{os.path.join(data_dir, target_file_name)} @{temp_stage_name} OVERWRITE = TRUE"
         )
         end = time()
         sync_upload_time = end - start
@@ -77,17 +84,22 @@ async def test_put_and_get_single_small_file(
 
     await aio_connection.connect()
     cursor = aio_connection.cursor()
+
+    # create temp stage for async
+    temp_stage_name = random_string(5, "test_put_and_get_single_small_file_async_")
+    await cursor.execute(f"create temporary stage {temp_stage_name}")
+
+    # get async put performance
     start = time()
     await cursor.execute(
-        f"PUT file://{os.path.join(data_dir, target_file_name)} @{db_parameters['database']}.PUBLIC.teststage_python OVERWRITE = TRUE"
+        f"PUT file://{os.path.join(data_dir, target_file_name)} @{temp_stage_name} OVERWRITE = TRUE"
     )
     end = time()
     async_upload_time = end - start
 
+    # get async get performance
     start = time()
-    await cursor.execute(
-        f"GET @{db_parameters['database']}.PUBLIC.teststage_python/{target_file_name} file://{data_dir}"
-    )
+    await cursor.execute(f"GET @{temp_stage_name}/{target_file_name} file://{data_dir}")
     end = time()
     async_download_time = end - start
 
@@ -109,6 +121,10 @@ async def test_put_and_get_multiple_small_file(
     data_dir = datadir.strpath
     target_file_name = "single_chunk_file"
     with conn_cnx() as cnx:
+        # create temp stage
+        temp_stage_name = random_string(5, "test_put_and_get_multiple_small_file_")
+        cnx.cursor().execute(f"create temporary stage {temp_stage_name}")
+        # get test file from stage with sync get and sync get performance
         start = time()
         cnx.cursor().execute(
             f"GET @{db_parameters['database']}.PUBLIC.teststage_python/{target_file_name} file://{data_dir}"
@@ -117,9 +133,10 @@ async def test_put_and_get_multiple_small_file(
         sync_download_time = end - start
         unzip_multiple_files(data_dir, target_file_name)
 
+        # put it to temp stage to avoid race condition, and get performance of sync transfer
         start = time()
         cnx.cursor().execute(
-            f"PUT file://{os.path.join(data_dir, target_file_name)}* @{db_parameters['database']}.PUBLIC.teststage_python OVERWRITE = TRUE"
+            f"PUT file://{os.path.join(data_dir, target_file_name)}* @{temp_stage_name} OVERWRITE = TRUE"
         )
         end = time()
         sync_upload_time = end - start
@@ -128,17 +145,22 @@ async def test_put_and_get_multiple_small_file(
 
     await aio_connection.connect()
     cursor = aio_connection.cursor()
+
+    # create temp stage for async
+    temp_stage_name = random_string(5, "test_put_and_get_multiple_small_file_async_")
+    await cursor.execute(f"create temporary stage {temp_stage_name}")
+
+    # get async put performance
     start = time()
     await cursor.execute(
-        f"PUT file://{os.path.join(data_dir, target_file_name)}* @{db_parameters['database']}.PUBLIC.teststage_python OVERWRITE = TRUE"
+        f"PUT file://{os.path.join(data_dir, target_file_name)}* @{temp_stage_name} OVERWRITE = TRUE"
     )
     end = time()
     async_upload_time = end - start
 
+    # get async get performance
     start = time()
-    await cursor.execute(
-        f"GET @{db_parameters['database']}.PUBLIC.teststage_python/{target_file_name} file://{data_dir}"
-    )
+    await cursor.execute(f"GET @{temp_stage_name}/{target_file_name} file://{data_dir}")
     end = time()
     async_download_time = end - start
 
