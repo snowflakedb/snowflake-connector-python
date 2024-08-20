@@ -53,7 +53,9 @@ def unzip_multiple_files(file_path: str, file_name: str):
 
 async def test_put_and_get_single_small_file(aio_connection, conn_cnx, db_parameters):
     data_dir = os.path.abspath(
-        os.path.join("..", "..", "data", "test_put_and_get_single_small_file")
+        os.path.join(
+            os.getcwd(), "..", "..", "data", "test_put_and_get_single_small_file"
+        )
     )
     if not os.path.exists(data_dir):
         os.mkdir(data_dir)
@@ -106,7 +108,9 @@ async def test_put_and_get_single_small_file(aio_connection, conn_cnx, db_parame
 
 async def test_put_and_get_multiple_small_file(aio_connection, conn_cnx, db_parameters):
     data_dir = os.path.abspath(
-        os.path.join("..", "..", "data", "test_put_and_get_multiple_small_file")
+        os.path.join(
+            os.getcwd(), "..", "..", "data", "test_put_and_get_multiple_small_file"
+        )
     )
     if not os.path.exists(data_dir):
         os.mkdir(data_dir)
