@@ -4,17 +4,14 @@
 
 from __future__ import annotations
 
-import binascii
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from io import IOBase
 from logging import getLogger
-from operator import itemgetter
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 import aiohttp
-from cryptography.hazmat.primitives import hashes, hmac
 
 from ..compat import quote, urlparse
 from ..constants import (
@@ -24,7 +21,8 @@ from ..constants import (
     ResultStatus,
 )
 from ..encryption_util import EncryptionMetadata
-from ._storage_client import SnowflakeStorageClient
+from ..s3_storage_client import SnowflakeS3RestClient as SnowflakeS3RestClientSync
+from ._storage_client import SnowflakeStorageClient as SnowflakeStorageClientAsync
 
 if TYPE_CHECKING:  # pragma: no cover
     from ._file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -52,7 +50,7 @@ class S3Location(NamedTuple):
     path: str
 
 
-class SnowflakeS3RestClient(SnowflakeStorageClient):
+class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSync):
     def __init__(
         self,
         meta: SnowflakeFileMeta,
@@ -67,7 +65,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         Args:
             stage_info:
         """
-        super().__init__(meta, stage_info, chunk_size, credentials=credentials)
+        SnowflakeStorageClientAsync.__init__(
+            self,
+            meta=meta,
+            stage_info=stage_info,
+            chunk_size=chunk_size,
+            credentials=credentials,
+        )
         # Signature version V4
         # Addressing style Virtual Host
         self.region_name: str = stage_info["region"]
@@ -91,199 +95,6 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         # self.transfer_accelerate_config(use_accelerate_endpoint)
         self.transfer_accelerate_config(False)
         # TODO: fix accelerate logic
-
-    def transfer_accelerate_config(
-        self, use_accelerate_endpoint: bool | None = None
-    ) -> bool:
-        # accelerate cannot be used in China and us government
-        if self.region_name and self.region_name.startswith("cn-"):
-            self.endpoint = (
-                f"https://{self.s3location.bucket_name}."
-                f"s3.{self.region_name}.amazonaws.com.cn"
-            )
-            return False
-        # if self.endpoint has been set, e.g. by metadata, no more config is needed.
-        if self.endpoint is not None:
-            return self.endpoint.find("s3-accelerate.amazonaws.com") >= 0
-        if self.use_s3_regional_url:
-            self.endpoint = (
-                f"https://{self.s3location.bucket_name}."
-                f"s3.{self.region_name}.amazonaws.com"
-            )
-            return False
-        else:
-            if use_accelerate_endpoint is None:
-                use_accelerate_endpoint = self._get_bucket_accelerate_config(
-                    self.s3location.bucket_name
-                )
-
-            if use_accelerate_endpoint:
-                self.endpoint = (
-                    f"https://{self.s3location.bucket_name}.s3-accelerate.amazonaws.com"
-                )
-            else:
-                self.endpoint = (
-                    f"https://{self.s3location.bucket_name}.s3.amazonaws.com"
-                )
-            return use_accelerate_endpoint
-
-    @staticmethod
-    def _sign_bytes(secret_key: bytes, _input: str) -> bytes:
-        """Applies HMAC-SHA-256 to given string with secret_key."""
-        h = hmac.HMAC(secret_key, hashes.SHA256())
-        h.update(_input.encode("utf-8"))
-        return h.finalize()
-
-    @staticmethod
-    def _sign_bytes_hex(secret_key: bytes, _input: str) -> bytes:
-        """Convenience function, same as _sign_bytes, but returns result in hex form."""
-        return binascii.hexlify(SnowflakeS3RestClient._sign_bytes(secret_key, _input))
-
-    @staticmethod
-    def _hash_bytes(_input: bytes) -> bytes:
-        """Applies SHA-256 hash to given bytes."""
-        digest = hashes.Hash(hashes.SHA256())
-        digest.update(_input)
-        return digest.finalize()
-
-    @staticmethod
-    def _hash_bytes_hex(_input: bytes) -> bytes:
-        """Convenience function, same as _hash_bytes, but returns result in hex form."""
-        return binascii.hexlify(SnowflakeS3RestClient._hash_bytes(_input))
-
-    @staticmethod
-    def _construct_query_string(
-        query_parts: tuple[tuple[str, str], ...],
-    ) -> str:
-        """Convenience function to build the query part of a URL from key-value pairs.
-
-        It filters out empty strings from the key, value pairs.
-        """
-        return "&".join(["=".join(filter(bool, e)) for e in query_parts])
-
-    @staticmethod
-    def _construct_canonicalized_and_signed_headers(
-        headers: dict[str, str | list[str]]
-    ) -> tuple[str, str]:
-        """Construct canonical headers as per AWS specs, returns the signed headers too.
-
-        Does not support sorting by values in case the keys are the same, don't send
-        in duplicate keys, but this is not possible with a dictionary anyways.
-        """
-        res = []
-        low_key_dict = {k.lower(): v for k, v in headers.items()}
-        sorted_headers = sorted(low_key_dict.keys())
-        _res = [(k, low_key_dict[k]) for k in sorted_headers]
-
-        for k, v in _res:
-            # if value is a list, convert to string delimited by comma
-            if isinstance(v, list):
-                v = ",".join(v)
-            # if multiline header, replace withs space
-            k = k.replace("\n", " ")
-            res.append(k.strip() + ":" + RE_MULTIPLE_SPACES.sub(" ", v.strip()))
-
-        ans = "\n".join(res)
-        if ans:
-            ans += "\n"
-
-        return ans, ";".join(sorted_headers)
-
-    @staticmethod
-    def _construct_canonical_request_and_signed_headers(
-        verb: str,
-        canonical_uri_parameter: str,
-        query_parts: dict[str, str],
-        canonical_headers: dict[str, str | list[str]] | None = None,
-        payload_hash: str = "",
-    ) -> tuple[str, str]:
-        """Build canonical request and also return signed headers.
-
-        Note: this doesn't support sorting by values in case the same key is given
-         more than once, but doing this is also not possible with a dictionary.
-        """
-        canonical_query_string = "&".join(
-            "=".join([k, v]) for k, v in sorted(query_parts.items(), key=itemgetter(0))
-        )
-        (
-            canonical_headers,
-            signed_headers,
-        ) = SnowflakeS3RestClient._construct_canonicalized_and_signed_headers(
-            canonical_headers
-        )
-
-        return (
-            "\n".join(
-                [
-                    verb,
-                    canonical_uri_parameter or "/",
-                    canonical_query_string,
-                    canonical_headers,
-                    signed_headers,
-                    payload_hash,
-                ]
-            ),
-            signed_headers,
-        )
-
-    @staticmethod
-    def _construct_string_to_sign(
-        region_name: str,
-        service_name: str,
-        amzdate: str,
-        short_amzdate: str,
-        canonical_request_hash: bytes,
-    ) -> tuple[str, str]:
-        """Given all the necessary information construct a V4 string to sign.
-
-        As per AWS specs it requires the scope, the hash of the canonical request and
-        the current date in the following format: YYYYMMDDTHHMMSSZ where T and Z are
-        constant characters.
-        This function generates the scope from the amzdate (which is just the date
-        portion of amzdate), region name and service we want to use (this is only s3
-        in our case).
-        """
-        scope = f"{short_amzdate}/{region_name}/{service_name}/aws4_request"
-        return (
-            "\n".join(
-                [
-                    "AWS4-HMAC-SHA256",
-                    amzdate,
-                    scope,
-                    canonical_request_hash.decode("utf-8"),
-                ]
-            ),
-            scope,
-        )
-
-    def _has_expired_token(self, response: aiohttp.ClientResponse) -> bool:
-        """Extract error code and error message from the S3's error response.
-
-        Expected format:
-        https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#RESTErrorResponses
-
-        Args:
-            response: Rest error response in XML format
-
-        Returns: True if the error response is caused by token expiration
-
-        """
-        if response.status != 400:
-            return False
-        message = response.text
-        if not message:
-            return False
-        err = ET.fromstring(message)
-        return err.find("Code").text == EXPIRED_TOKEN
-
-    @staticmethod
-    def _extract_bucket_name_and_path(stage_location) -> S3Location:
-        # split stage location as bucket name and path
-        bucket_name, _, path = stage_location.partition("/")
-        if path and not path.endswith("/"):
-            path += "/"
-
-        return S3Location(bucket_name=bucket_name, path=path)
 
     async def _send_request_with_authentication_and_retry(
         self,
@@ -416,25 +227,6 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             return None
         else:
             response.raise_for_status()
-
-    def _prepare_file_metadata(self) -> dict[str, Any]:
-        """Construct metadata for a file to be uploaded.
-
-        Returns: File metadata in a dict.
-
-        """
-        s3_metadata = {
-            META_PREFIX + SFC_DIGEST: self.meta.sha256_digest,
-        }
-        if self.encryption_metadata:
-            s3_metadata.update(
-                {
-                    META_PREFIX + AMZ_IV: self.encryption_metadata.iv,
-                    META_PREFIX + AMZ_KEY: self.encryption_metadata.key,
-                    META_PREFIX + AMZ_MATDESC: self.encryption_metadata.matdesc,
-                }
-            )
-        return s3_metadata
 
     # only needed in big file transfer
     # async def _initiate_multipart_upload(self) -> None:
@@ -595,3 +387,19 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             logger.debug(f"use_accelerate_endpoint: {use_accelerate_endpoint}")
             return use_accelerate_endpoint
         return False
+
+    async def _has_expired_token(self, response: aiohttp.ClientResponse) -> bool:
+        """Extract error code and error message from the S3's error response.
+        Expected format:
+        https://docs.aws.amazon.com/AmazonS3/latest/API/ErrorResponses.html#RESTErrorResponses
+        Args:
+            response: Rest error response in XML format
+        Returns: True if the error response is caused by token expiration
+        """
+        if response.status != 400:
+            return False
+        message = response.text
+        if not message:
+            return False
+        err = ET.fromstring(await response.read())
+        return err.find("Code").text == EXPIRED_TOKEN
