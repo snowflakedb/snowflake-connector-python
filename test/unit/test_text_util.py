@@ -7,7 +7,10 @@ import random
 
 import pytest
 
-from snowflake.connector.util_text import random_string
+try:
+    from snowflake.connector.util_text import random_string
+except ImportError:
+    pass
 
 pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 
