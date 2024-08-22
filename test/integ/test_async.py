@@ -123,7 +123,7 @@ def test_async_error(conn_cnx, caplog):
             with pytest.raises(DatabaseError) as e3, caplog.at_level(logging.INFO):
                 cur.fetchall()
             assert (
-                "SQL execution canceled" in str(e3)
+                "SQL execution canceled" in e3.value.msg
                 and f"Status of query '{sfqid}' is {QueryStatus.FAILED_WITH_ERROR.name}"
                 in caplog.text
             )
