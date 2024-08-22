@@ -8,6 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.12.2(TBD)
+  - Enhanced error handling for asynchronous queries, providing more detailed and informative error messages when an async query fails.
+
 - v3.12.1(August 20,2024)
   - Fixed a bug that logged the session token when renewing a session.
   - Fixed a bug where disabling client telemetry did not work.
