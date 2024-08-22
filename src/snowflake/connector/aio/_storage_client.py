@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import time
 from abc import abstractmethod
 from logging import getLogger
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable
 import aiohttp
 
 from ..constants import FileHeader, ResultStatus
+from ..encryption_util import SnowflakeEncryptionUtil
 from ..errors import RequestExceedMaxRetryError
 from ..storage_client import SnowflakeStorageClient as SnowflakeStorageClientSync
 from ..vendored import requests
@@ -140,6 +142,45 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
             # only needed in big file transfer
             # if self.num_of_chunks > 1:
             #     await self._abort_multipart_upload()
+            meta.result_status = ResultStatus.ERROR
+
+    async def finish_download(self) -> None:
+        meta = self.meta
+        if self.num_of_chunks != 0 and self.successful_transfers == self.num_of_chunks:
+            meta.result_status = ResultStatus.DOWNLOADED
+            if meta.encryption_material:
+                logger.debug(f"encrypted data file={self.full_dst_file_name}")
+                # For storage utils that do not have the privilege of
+                # getting the metadata early, both object and metadata
+                # are downloaded at once. In which case, the file meta will
+                # be updated with all the metadata that we need and
+                # then we can call get_file_header to get just that and also
+                # preserve the idea of getting metadata in the first place.
+                # One example of this is the utils that use presigned url
+                # for upload/download and not the storage client library.
+                if meta.presigned_url is not None:
+                    file_header = await self.get_file_header(meta.src_file_name)
+                    self.encryption_metadata = file_header.encryption_metadata
+
+                tmp_dst_file_name = SnowflakeEncryptionUtil.decrypt_file(
+                    self.encryption_metadata,
+                    meta.encryption_material,
+                    str(self.intermediate_dst_path),
+                    tmp_dir=self.tmp_dir,
+                )
+                shutil.move(tmp_dst_file_name, self.full_dst_file_name)
+                self.intermediate_dst_path.unlink()
+            else:
+                logger.debug(f"not encrypted data file={self.full_dst_file_name}")
+                shutil.move(str(self.intermediate_dst_path), self.full_dst_file_name)
+            stat_info = os.stat(self.full_dst_file_name)
+            meta.dst_file_size = stat_info.st_size
+        else:
+            # TODO: add more error details to result/meta
+            if os.path.isfile(self.full_dst_file_name):
+                os.unlink(self.full_dst_file_name)
+            logger.exception(f"Failed to download a file: {self.full_dst_file_name}")
+            meta.dst_file_size = -1
             meta.result_status = ResultStatus.ERROR
 
     async def _send_request_with_retry(

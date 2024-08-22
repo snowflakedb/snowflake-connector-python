@@ -156,11 +156,10 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
             result.result_status = result.result_status.value
 
     async def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
-        max_concurrency = self._parallel
-        logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
         files = [self._create_file_transfer_client(m) for m in metas]
         is_upload = self._command_type == CMD_TYPE_UPLOAD
         finish_upload_tasks = []
+        finish_download_tasks = []
 
         async def preprocess_done_cb(
             success: bool,
@@ -173,7 +172,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                     await done_client.finish_upload()
                     done_client.delete_client_data()
                 else:
-                    done_client.finish_download()
+                    await done_client.finish_download()
             elif done_client.meta.result_status == ResultStatus.SKIPPED:
                 # this case applies to upload only
                 return
@@ -193,7 +192,10 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                     )
                     tasks.append(task)
                 await asyncio.gather(*tasks)
-                await asyncio.gather(*finish_upload_tasks)
+                if is_upload:
+                    await asyncio.gather(*finish_upload_tasks)
+                else:
+                    await asyncio.gather(*finish_download_tasks)
 
         def transfer_done_cb(
             task: asyncio.Task,
@@ -225,35 +227,25 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                     finish_upload_tasks.append(finish_upload_task)
                     done_client.delete_client_data()
                 else:
-                    try:
-                        result = done_client.finish_download()
-                        is_successful = True
-                    except Exception as e:
-                        result = e
-                        is_successful = False
-                    postprocess_done_cb(
-                        is_successful,
-                        result,
-                        file_meta=done_client.meta,
-                        done_client=done_client,
+                    finish_download_task = asyncio.create_task(
+                        done_client.finish_download()
                     )
-
-                    logger.debug(
-                        f"submitting {done_client.meta.name} to done_postprocess"
+                    finish_download_task.add_done_callback(
+                        lambda t, task=finish_download_task, dc=done_client: postprocess_done_cb(
+                            task, dc
+                        )
                     )
 
         def postprocess_done_cb(
-            success: bool,
-            result: Any,
-            file_meta: SnowflakeFileMeta,
+            task: asyncio.Task,
             done_client: SnowflakeStorageClient,
         ) -> None:
             logger.debug(f"File {done_client.meta.name} reached postprocess callback")
 
-            if not success:
+            if task.exception():
                 done_client.failed_transfers += 1
                 logger.debug(
-                    f"File {done_client.meta.name} failed to transfer for unexpected exception {result}"
+                    f"File {done_client.meta.name} failed to transfer for unexpected exception {task.exception()}"
                 )
             # Whether there was an exception or not, we're done the file.
 
