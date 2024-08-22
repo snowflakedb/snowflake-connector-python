@@ -1817,21 +1817,6 @@ class SnowflakeConnection:
         with suppress(Exception):
             self.close(retry=False)
 
-    def get_query_status(self, sf_qid: str) -> QueryStatus:
-        """Retrieves the status of query with sf_qid.
-
-        Query status is returned as a QueryStatus.
-
-        Args:
-            sf_qid: Snowflake query id of interest.
-
-        Raises:
-            ValueError: if sf_qid is not a valid UUID string.
-        """
-        status, _ = self._get_query_status(sf_qid)
-        self._cache_query_status(sf_qid, status)
-        return status
-
     def _process_error_query_status(
         self,
         sf_qid,
@@ -1839,13 +1824,6 @@ class SnowflakeConnection:
         error_message: str = "",
         error_cls: type[Exception] = ProgrammingError,
     ) -> None:
-        """Processes the query status and response for errors.
-
-        Args:
-            status: Query status.
-            status_resp: Query status response.
-        """
-
         status_resp = status_resp or {}
         data = status_resp.get("data", {})
         queries = data.get("queries")
@@ -1871,6 +1849,21 @@ class SnowflakeConnection:
                 "sfqid": sf_qid,
             },
         )
+
+    def get_query_status(self, sf_qid: str) -> QueryStatus:
+        """Retrieves the status of query with sf_qid.
+
+        Query status is returned as a QueryStatus.
+
+        Args:
+            sf_qid: Snowflake query id of interest.
+
+        Raises:
+            ValueError: if sf_qid is not a valid UUID string.
+        """
+        status, _ = self._get_query_status(sf_qid)
+        self._cache_query_status(sf_qid, status)
+        return status
 
     def get_query_status_throw_if_error(self, sf_qid: str) -> QueryStatus:
         """Retrieves the status of query with sf_qid as a QueryStatus and raises an exception if the query terminated with an error.
