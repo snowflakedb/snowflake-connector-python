@@ -1656,14 +1656,13 @@ class SnowflakeCursor:
                 if retry_pattern_pos < (len(ASYNC_RETRY_PATTERN) - 1):
                     retry_pattern_pos += 1
             if status != QueryStatus.SUCCESS:
-                if self.connection.is_an_error(status):
-                    self.connection._process_error_query_status(sfqid, status_resp)
-                else:
-                    raise DatabaseError(
-                        "Status of query '{}' is {}, results are unavailable".format(
-                            sfqid, status.name
-                        )
-                    )
+                logger.info(f"Status of query '{sfqid}' is {status.name}")
+                self.connection._process_error_query_status(
+                    sfqid,
+                    status_resp,
+                    error_message="Status of query '{}' is {}, results are unavailable",
+                    error_cls=DatabaseError,
+                )
             self._inner_cursor.execute(f"select * from table(result_scan('{sfqid}'))")
             self._result = self._inner_cursor._result
             self._query_result_format = self._inner_cursor._query_result_format

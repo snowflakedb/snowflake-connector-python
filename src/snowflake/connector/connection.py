@@ -1832,30 +1832,40 @@ class SnowflakeConnection:
         self._cache_query_status(sf_qid, status)
         return status
 
-    def _process_error_query_status(self, sf_qid, status_resp: dict) -> None:
+    def _process_error_query_status(
+        self,
+        sf_qid,
+        status_resp: dict,
+        error_message: str = "",
+        error_cls: type[Exception] = ProgrammingError,
+    ) -> None:
         """Processes the query status and response for errors.
 
         Args:
             status: Query status.
             status_resp: Query status response.
         """
-        queries = status_resp["data"]["queries"]
+
+        status_resp = status_resp or {}
+        data = status_resp.get("data", {})
+        queries = data.get("queries")
+
         if sf_qid in self._async_sfqids:
             self._async_sfqids.pop(sf_qid, None)
         message = status_resp.get("message")
         if message is None:
             message = ""
-        code = queries[0].get("errorCode", -1)
+        code = queries[0].get("errorCode", -1) if queries else -1
         sql_state = None
         if "data" in status_resp:
-            message += queries[0].get("errorMessage", "") if len(queries) > 0 else ""
-            sql_state = status_resp["data"].get("sqlState")
+            message += queries[0].get("errorMessage", "") if queries else ""
+            sql_state = data.get("sqlState")
         Error.errorhandler_wrapper(
             self,
             None,
-            ProgrammingError,
+            error_cls,
             {
-                "msg": message,
+                "msg": message or error_message,
                 "errno": int(code),
                 "sqlstate": sql_state,
                 "sfqid": sf_qid,
