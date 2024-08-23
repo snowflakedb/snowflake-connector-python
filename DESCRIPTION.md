@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.12.2(TBD)
   - Enhanced error handling for asynchronous queries, providing more detailed and informative error messages when an async query fails.
+  - Improved implementation of `snowflake.connector.util_text.random_string` to avoid collisions.
 
 - v3.12.1(August 20,2024)
   - Fixed a bug that logged the session token when renewing a session.

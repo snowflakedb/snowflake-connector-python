@@ -282,5 +282,5 @@ def random_string(
         suffix: Suffix to add to random string generated.
         choices: A generator of things to choose from.
     """
-    random_part = "".join([random.choice(choices) for _ in range(length)])
+    random_part = "".join([random.Random().choice(choices) for _ in range(length)])
     return "".join([prefix, random_part, suffix])
