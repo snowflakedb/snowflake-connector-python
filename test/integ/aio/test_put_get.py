@@ -20,9 +20,9 @@ from snowflake.connector import OperationalError
 try:
     from snowflake.connector.util_text import random_string
 except ImportError:
-    from ...randomize import random_string
+    from test.randomize import random_string
 
-from ...generate_test_files import generate_k_lines_of_n_files
+from test.generate_test_files import generate_k_lines_of_n_files
 
 try:
     from ..parameters import CONNECTION_PARAMETERS_ADMIN

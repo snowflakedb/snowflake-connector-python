@@ -27,10 +27,10 @@ from snowflake.connector.file_transfer_agent import (
 try:
     from snowflake.connector.util_text import random_string
 except ImportError:
-    from ...randomize import random_string
+    from test.randomize import random_string
 
-from ...generate_test_files import generate_k_lines_of_n_files
-from ...integ_helpers import put_async
+from test.generate_test_files import generate_k_lines_of_n_files
+from test.integ_helpers import put_async
 
 if TYPE_CHECKING:
     from snowflake.connector.aio import SnowflakeConnection
