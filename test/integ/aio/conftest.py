@@ -88,6 +88,7 @@ def aio_connection(db_parameters):
         account=db_parameters["account"],
         database=db_parameters["database"],
         schema=db_parameters["schema"],
+        warehouse=db_parameters["warehouse"],
         protocol=db_parameters["protocol"],
         timezone="UTC",
     )

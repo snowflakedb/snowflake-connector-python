@@ -27,7 +27,7 @@ from .constants import (
     ResultStatus,
 )
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
-from .errors import RequestExceedMaxRetryError
+from .errors import OperationalError, RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
 from .vendored import requests
 from .vendored.requests import ConnectionError, Timeout
@@ -358,9 +358,13 @@ class SnowflakeStorageClient(ABC):
     def write_downloaded_chunk(self, chunk_id: int, data: bytes) -> None:
         """Writes given data to the temp location starting at chunk_id * chunk_size."""
         # TODO: should we use chunking and write content in smaller chunks?
-        with self.intermediate_dst_path.open("rb+") as fd:
-            fd.seek(self.chunk_size * chunk_id)
-            fd.write(data)
+        try:
+            with self.intermediate_dst_path.open("rb+") as fd:
+                fd.seek(self.chunk_size * chunk_id)
+                fd.write(data)
+        except FileNotFoundError:
+            # TODO: this is to align with sync file transfer
+            raise OperationalError
 
     def finish_download(self) -> None:
         meta = self.meta
