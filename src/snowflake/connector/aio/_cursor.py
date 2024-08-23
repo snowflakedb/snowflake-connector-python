@@ -1087,5 +1087,11 @@ class SnowflakeCursor(SnowflakeCursorSync):
         return self
 
 
-class DictCursor(DictCursorSync, SnowflakeCursor):
-    pass
+class DictCursor(SnowflakeCursor):
+    """Cursor returning results in a dictionary."""
+
+    def __init__(self, connection) -> None:
+        super().__init__(
+            connection,
+            use_dict_result=True,
+        )
