@@ -178,7 +178,7 @@ class SnowflakeEncryptionUtil:
         file_key = SnowflakeEncryptionUtil.get_secure_random(key_size)
         backend = default_backend()
         file_key_cipher = Cipher(
-            algorithms.AES(decoded_key), modes.CBC(key_iv_data), backend=backend
+            algorithms.AES(decoded_key), modes.GCM(key_iv_data), backend=backend
         )
         file_key_encryptor = file_key_cipher.encryptor()
         if key_aad:
