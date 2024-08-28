@@ -27,6 +27,7 @@ from .util_text import random_string
 
 block_size = int(algorithms.AES.block_size / 8)  # in bytes
 
+
 if TYPE_CHECKING:  # pragma: no cover
     from .storage_client import SnowflakeFileEncryptionMaterial
 
@@ -186,10 +187,10 @@ class SnowflakeEncryptionUtil:
                 base64.standard_b64decode(key_aad)
             )
         encrypted_file_key = (
-            file_key_encryptor.update(file_key) + file_key_encryptor.finalize()
+            file_key_encryptor.update(file_key)
+            + file_key_encryptor.finalize()
+            + file_key_encryptor.tag
         )
-        # encrypted_file_key_tag = file_key_encryptor.tag  # TODO: where to put tag?
-
         content_cipher = Cipher(
             algorithms.AES(file_key), modes.GCM(iv_data), backend=backend
         )
@@ -200,9 +201,10 @@ class SnowflakeEncryptionUtil:
             )
 
         encrypted_content = (
-            content_encryptor.update(src.read()) + content_encryptor.finalize()
+            content_encryptor.update(src.read())
+            + content_encryptor.finalize()
+            + content_encryptor.tag
         )
-        # encrypted_content_tag = content_encryptor.tag  # TODO: where to put tag?
         out.write(encrypted_content)
 
         mat_desc = MaterialDescriptor(
@@ -336,7 +338,6 @@ class SnowflakeEncryptionUtil:
         out: IO[bytes],
     ) -> None:
         """To read from `src` stream then decrypt to `out` stream."""
-        # TODO: where to get tag for both?
         key_base64 = metadata.key
         iv_base64 = metadata.iv
         key_iv_base64 = metadata.key_iv
@@ -344,6 +345,7 @@ class SnowflakeEncryptionUtil:
             encryption_material.query_stage_master_key
         )
         key_bytes = base64.standard_b64decode(key_base64)
+        key_bytes, key_tag = key_bytes[:-block_size], key_bytes[-block_size:]
         iv_bytes = base64.standard_b64decode(iv_base64)
         key_iv_bytes = base64.standard_b64decode(key_iv_base64)
         key_aad = base64.standard_b64decode(metadata.key_aad)
@@ -351,20 +353,24 @@ class SnowflakeEncryptionUtil:
 
         backend = default_backend()
         file_key_cipher = Cipher(
-            algorithms.AES(decoded_key), modes.GCM(key_iv_bytes), backend=backend
+            algorithms.AES(decoded_key),
+            modes.GCM(key_iv_bytes, key_tag),
+            backend=backend,
         )
         file_key_decryptor = file_key_cipher.decryptor()
         if key_aad:
             file_key_decryptor.authenticate_additional_data(key_aad)
         file_key = file_key_decryptor.update(key_bytes) + file_key_decryptor.finalize()
 
+        src_bytes = src.read()
+        src_bytes, data_tag = src_bytes[:-block_size], src_bytes[-block_size:]
         content_cipher = Cipher(
-            algorithms.AES(file_key), modes.GCM(iv_bytes), backend=backend
+            algorithms.AES(file_key), modes.GCM(iv_bytes, data_tag), backend=backend
         )
         content_decryptor = content_cipher.decryptor()
         if data_aad:
             content_decryptor.authenticate_additional_data(data_aad)
-        content = content_decryptor.update(src.read()) + content_decryptor.finalize()
+        content = content_decryptor.update(src_bytes) + content_decryptor.finalize()
         out.write(content)
 
     @staticmethod
