@@ -16,7 +16,13 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .compat import PKCS5_OFFSET, PKCS5_PAD, PKCS5_UNPAD
-from .constants import UTF8, EncryptionMetadata, MaterialDescriptor, kilobyte
+from .constants import (
+    UTF8,
+    CipherAlgorithm,
+    EncryptionMetadata,
+    MaterialDescriptor,
+    kilobyte,
+)
 from .util_text import random_string
 
 block_size = int(algorithms.AES.block_size / 8)  # in bytes
@@ -110,6 +116,10 @@ class SnowflakeEncryptionUtil:
             key=base64.b64encode(enc_kek).decode("utf-8"),
             iv=base64.b64encode(iv_data).decode("utf-8"),
             matdesc=matdesc_to_unicode(mat_desc),
+            cipher=None,
+            key_iv=None,
+            key_aad=None,
+            data_aad=None,
         )
         return metadata
 
@@ -145,6 +155,105 @@ class SnowflakeEncryptionUtil:
             with os.fdopen(temp_output_fd, "wb") as outfile:
                 metadata = SnowflakeEncryptionUtil.encrypt_stream(
                     encryption_material, infile, outfile, chunk_size
+                )
+        return metadata, temp_output_file
+
+    @staticmethod
+    def encrypt_stream_gcm(
+        encryption_material: SnowflakeFileEncryptionMaterial,
+        src: IO[bytes],
+        out: IO[bytes],
+        key_aad: str = "",
+        data_aad: str = "",
+    ):
+        logger = getLogger(__name__)
+        decoded_key = base64.standard_b64decode(
+            encryption_material.query_stage_master_key
+        )
+        key_size = len(decoded_key)
+        logger.debug("key_size = %s", key_size)
+
+        iv_data = SnowflakeEncryptionUtil.get_secure_random(block_size)
+        key_iv_data = SnowflakeEncryptionUtil.get_secure_random(key_size)
+        file_key = SnowflakeEncryptionUtil.get_secure_random(key_size)
+        backend = default_backend()
+        file_key_cipher = Cipher(
+            algorithms.AES(decoded_key), modes.CBC(key_iv_data), backend=backend
+        )
+        file_key_encryptor = file_key_cipher.encryptor()
+        if key_aad:
+            file_key_encryptor.authenticate_additional_data(
+                base64.standard_b64decode(key_aad)
+            )
+        encrypted_file_key = (
+            file_key_encryptor.update(file_key) + file_key_encryptor.finalize()
+        )
+        # encrypted_file_key_tag = file_key_encryptor.tag  # TODO: where to put tag?
+
+        content_cipher = Cipher(
+            algorithms.AES(file_key), modes.GCM(iv_data), backend=backend
+        )
+        content_encryptor = content_cipher.encryptor()
+        if data_aad:
+            content_encryptor.authenticate_additional_data(
+                base64.standard_b64decode(data_aad)
+            )
+
+        encrypted_content = (
+            content_encryptor.update(src.read()) + content_encryptor.finalize()
+        )
+        # encrypted_content_tag = content_encryptor.tag  # TODO: where to put tag?
+        out.write(encrypted_content)
+
+        mat_desc = MaterialDescriptor(
+            smk_id=encryption_material.smk_id,
+            query_id=encryption_material.query_id,
+            key_size=key_size * 8,
+        )
+        metadata = EncryptionMetadata(
+            key=base64.b64encode(encrypted_file_key).decode("utf-8"),
+            iv=base64.b64encode(iv_data).decode("utf-8"),
+            matdesc=matdesc_to_unicode(mat_desc),
+            cipher=str(CipherAlgorithm.AES_GCM),
+            key_iv=base64.b64encode(key_iv_data).decode("utf-8"),
+            key_aad=key_aad,
+            data_aad=data_aad,
+        )
+        return metadata
+
+    @staticmethod
+    def encrypt_file_gcm(
+        encryption_material: SnowflakeFileEncryptionMaterial,
+        in_filename: str,
+        tmp_dir: str | None = None,
+        key_aad: str = "",
+        data_aad: str = "",
+    ) -> tuple[EncryptionMetadata, str]:
+        """Encrypts a file in a temporary directory.
+
+        Args:
+            encryption_material: The encryption material for file.
+            in_filename: The input file's name.
+            chunk_size: The size of read chunks (Default value = block_size * 4 * 1024).
+            tmp_dir: Temporary directory to use, optional (Default value = None).
+
+        Returns:
+            The encryption metadata and the encrypted file's location.
+        """
+        logger = getLogger(__name__)
+        temp_output_fd, temp_output_file = tempfile.mkstemp(
+            text=False, dir=tmp_dir, prefix=os.path.basename(in_filename) + "#"
+        )
+        logger.debug(
+            "unencrypted file: %s, temp file: %s, tmp_dir: %s",
+            in_filename,
+            temp_output_file,
+            tmp_dir,
+        )
+        with open(in_filename, "rb") as infile:
+            with os.fdopen(temp_output_fd, "wb") as outfile:
+                metadata = SnowflakeEncryptionUtil.encrypt_stream_gcm(
+                    encryption_material, infile, outfile, key_aad, data_aad
                 )
         return metadata, temp_output_file
 
@@ -216,5 +325,75 @@ class SnowflakeEncryptionUtil:
             with open(temp_output_file, "wb") as outfile:
                 SnowflakeEncryptionUtil.decrypt_stream(
                     metadata, encryption_material, infile, outfile, chunk_size
+                )
+        return temp_output_file
+
+    @staticmethod
+    def decrypt_stream_gcm(
+        metadata: EncryptionMetadata,
+        encryption_material: SnowflakeFileEncryptionMaterial,
+        src: IO[bytes],
+        out: IO[bytes],
+    ) -> None:
+        """To read from `src` stream then decrypt to `out` stream."""
+        # TODO: where to get tag for both?
+        key_base64 = metadata.key
+        iv_base64 = metadata.iv
+        key_iv_base64 = metadata.key_iv
+        decoded_key = base64.standard_b64decode(
+            encryption_material.query_stage_master_key
+        )
+        key_bytes = base64.standard_b64decode(key_base64)
+        iv_bytes = base64.standard_b64decode(iv_base64)
+        key_iv_bytes = base64.standard_b64decode(key_iv_base64)
+        key_aad = base64.standard_b64decode(metadata.key_aad)
+        data_aad = base64.standard_b64decode(metadata.data_aad)
+
+        backend = default_backend()
+        file_key_cipher = Cipher(
+            algorithms.AES(decoded_key), modes.GCM(key_iv_bytes), backend=backend
+        )
+        file_key_decryptor = file_key_cipher.decryptor()
+        if key_aad:
+            file_key_decryptor.authenticate_additional_data(key_aad)
+        file_key = file_key_decryptor.update(key_bytes) + file_key_decryptor.finalize()
+
+        content_cipher = Cipher(
+            algorithms.AES(file_key), modes.GCM(iv_bytes), backend=backend
+        )
+        content_decryptor = content_cipher.decryptor()
+        if data_aad:
+            content_decryptor.authenticate_additional_data(data_aad)
+        content = content_decryptor.update(src.read()) + content_decryptor.finalize()
+        out.write(content)
+
+    @staticmethod
+    def decrypt_file_gcm(
+        metadata: EncryptionMetadata,
+        encryption_material: SnowflakeFileEncryptionMaterial,
+        in_filename: str,
+        tmp_dir: str | None = None,
+    ) -> str:
+        """Decrypts a file and stores the output in the temporary directory.
+
+        Args:
+            metadata: The file's metadata input.
+            encryption_material: The file's encryption material.
+            in_filename: The name of the input file.
+            chunk_size: The size of read chunks (Default value = block_size * 4 * 1024).
+            tmp_dir: Temporary directory to use, optional (Default value = None).
+
+        Returns:
+            The decrypted file's location.
+        """
+        temp_output_file = f"{os.path.basename(in_filename)}#{random_string()}"
+        if tmp_dir:
+            temp_output_file = os.path.join(tmp_dir, temp_output_file)
+
+        logger.debug("encrypted file: %s, tmp file: %s", in_filename, temp_output_file)
+        with open(in_filename, "rb") as infile:
+            with open(temp_output_file, "wb") as outfile:
+                SnowflakeEncryptionUtil.decrypt_stream_gcm(
+                    metadata, encryption_material, infile, outfile
                 )
         return temp_output_file

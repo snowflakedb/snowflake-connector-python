@@ -23,6 +23,7 @@ from .constants import (
     HTTP_HEADER_CONTENT_ENCODING,
     REQUEST_CONNECTION_TIMEOUT,
     REQUEST_READ_TIMEOUT,
+    CipherAlgorithm,
     FileHeader,
     ResultStatus,
 )
@@ -115,6 +116,14 @@ class SnowflakeStorageClient(ABC):
         self.failed_transfers: int = 0
         # only used when PRESIGNED_URL expires
         self.last_err_is_presigned_url = False
+        self._is_client_side_encrypted = self.stage_info.get(
+            "isClientSideEncrypted", True
+        )
+        self._ciphers = (
+            CipherAlgorithm(str(self.stage_info.get("ciphers").upper()))
+            if self.stage_info.get("ciphers", "")
+            else None
+        )
 
     def compress(self) -> None:
         if self.meta.require_compress:
@@ -233,7 +242,7 @@ class SnowflakeStorageClient(ABC):
 
         logger.debug(f"Preparing to upload {meta.src_file_name}")
 
-        if meta.encryption_material:
+        if meta.encryption_material and self._is_client_side_encrypted:
             self.encrypt()
         else:
             self.data_file = meta.real_src_file_name
