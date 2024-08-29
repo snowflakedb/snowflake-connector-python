@@ -15,6 +15,7 @@ from .compat import quote
 from .constants import (
     FILE_PROTOCOL,
     HTTP_HEADER_CONTENT_ENCODING,
+    CipherAlgorithm,
     FileHeader,
     ResultStatus,
     kilobyte,
@@ -119,6 +120,11 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         }
 
         if self.encryption_metadata:
+            algorithm = (
+                "AES_GCM_256"
+                if self.encryption_metadata.cipher == CipherAlgorithm.AES_GCM
+                else "AES_CBC_256"
+            )
             gcs_headers.update(
                 {
                     GCS_METADATA_ENCRYPTIONDATAPROP: json.dumps(
@@ -127,13 +133,16 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                             "WrappedContentKey": {
                                 "KeyId": "symmKey1",
                                 "EncryptedKey": self.encryption_metadata.key,
-                                "Algorithm": "AES_CBC_256",
+                                "Algorithm": algorithm,
                             },
                             "EncryptionAgent": {
                                 "Protocol": "1.0",
-                                "EncryptionAlgorithm": "AES_CBC_256",
+                                "EncryptionAlgorithm": algorithm,
                             },
                             "ContentEncryptionIV": self.encryption_metadata.iv,
+                            "KeyEncryptionIV": self.encryption_metadata.key_iv,
+                            "KeyAad": self.encryption_metadata.key_aad,
+                            "DataAad": self.encryption_metadata.data_aad,
                             "KeyWrappingMetadata": {"EncryptionLibrary": "Java 5.3.0"},
                         }
                     ),
@@ -208,6 +217,14 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                         if GCS_METADATA_MATDESC_KEY in response.headers
                         else None
                     ),
+                    cipher=(
+                        str(CipherAlgorithm.AES_GCM)
+                        if "AES_GCM" in encryptiondata["WrappedContentKey"]["Algorithm"]
+                        else str(CipherAlgorithm.AES_CBC)
+                    ),
+                    key_iv=encryptiondata.get("KeyEncryptionIV", ""),
+                    key_aad=encryptiondata.get("KeyAad", ""),
+                    data_aad=encryptiondata.get("DataAad"),
                 )
 
         meta.gcs_file_header_digest = response.headers.get(GCS_METADATA_SFC_DIGEST)

@@ -117,10 +117,10 @@ class SnowflakeEncryptionUtil:
             key=base64.b64encode(enc_kek).decode("utf-8"),
             iv=base64.b64encode(iv_data).decode("utf-8"),
             matdesc=matdesc_to_unicode(mat_desc),
-            cipher=None,
-            key_iv=None,
-            key_aad=None,
-            data_aad=None,
+            cipher=str(CipherAlgorithm.AES_CBC),
+            key_iv="",
+            key_aad="",
+            data_aad="",
         )
         return metadata
 

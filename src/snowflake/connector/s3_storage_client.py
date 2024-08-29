@@ -402,9 +402,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                     iv=metadata.get(META_PREFIX + AMZ_IV),
                     matdesc=metadata.get(META_PREFIX + AMZ_MATDESC),
                     cipher=metadata.get(META_PREFIX + AMZ_CIPHER),
-                    key_iv=metadata.get(META_PREFIX + AMZ_KEY_IV),
-                    key_aad=metadata.get(META_PREFIX + AMZ_KEY_AAD),
-                    data_aad=metadata.get(META_PREFIX + AMZ_DATA_AAD),
+                    key_iv=metadata.get(META_PREFIX + AMZ_KEY_IV, ""),
+                    key_aad=metadata.get(META_PREFIX + AMZ_KEY_AAD, ""),
+                    data_aad=metadata.get(META_PREFIX + AMZ_DATA_AAD, ""),
                 )
                 if metadata.get(META_PREFIX + AMZ_KEY)
                 else None
@@ -438,6 +438,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                     META_PREFIX + AMZ_IV: self.encryption_metadata.iv,
                     META_PREFIX + AMZ_KEY: self.encryption_metadata.key,
                     META_PREFIX + AMZ_MATDESC: self.encryption_metadata.matdesc,
+                    META_PREFIX + AMZ_CIPHER: self.encryption_metadata.cipher or "",
+                    META_PREFIX + AMZ_KEY_IV: self.encryption_metadata.key_iv or "",
+                    META_PREFIX + AMZ_KEY_AAD: self.encryption_metadata.key_aad or "",
+                    META_PREFIX + AMZ_DATA_AAD: self.encryption_metadata.data_aad or "",
                 }
             )
         return s3_metadata
