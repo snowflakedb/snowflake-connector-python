@@ -299,14 +299,25 @@ class MaterialDescriptor(NamedTuple):
     key_size: int
 
 
+class CipherAlgorithm(str, Enum):
+    AES_CBC = "AES_CBC"  # Use AES-ECB/AES-CBC
+    AES_GCM = "AES_GCM"  # Use AES-GCM/AES-GCM
+    AES_GCM_CBC = (
+        "AES_GCM,AES_CBC"  # Use AES-GCM if the code version supports, otherwise AES-CBC
+    )
+
+    def __str__(self):
+        return self.value
+
+
 class EncryptionMetadata(NamedTuple):
     key: str
     iv: str
     matdesc: str
-    cipher: str | None
-    key_iv: str | None
-    key_aad: str | None
-    data_aad: str | None
+    cipher: str = str(CipherAlgorithm.AES_CBC)
+    key_iv: str = ""
+    key_aad: str = ""
+    data_aad: str = ""
 
 
 class FileHeader(NamedTuple):
@@ -432,14 +443,3 @@ ENV_VAR_TEST_MODE = "SNOWFLAKE_TEST_MODE"
 
 
 _DOMAIN_NAME_MAP = {_DEFAULT_HOSTNAME_TLD: "GLOBAL", _CHINA_HOSTNAME_TLD: "CHINA"}
-
-
-class CipherAlgorithm(str, Enum):
-    AES_CBC = "AES_CBC"  # Use AES-ECB/AES-CBC
-    AES_GCM = "AES_GCM"  # Use AES-GCM/AES-GCM
-    AES_GCM_CBC = (
-        "AES_GCM,AES_CBC"  # Use AES-GCM if the code version supports, otherwise AES-CBC
-    )
-
-    def __str__(self):
-        return self.value
