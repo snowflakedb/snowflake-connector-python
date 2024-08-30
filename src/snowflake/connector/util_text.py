@@ -235,19 +235,24 @@ def _concatenate_statements(
 
 def construct_hostname(region: str | None, account: str) -> str:
     """Constructs hostname from region and account."""
+
+    def _is_china_region(r: str) -> bool:
+        # This is consistent with the Go driver:
+        # https://github.com/snowflakedb/gosnowflake/blob/f20a46475dce322f3f6b97b4a72f2807571e750b/dsn.go#L535
+        return r.lower().startswith("cn-")
+
     if region == "us-west-2":
         region = ""
     if region:
         if account.find(".") > 0:
             account = account[0 : account.find(".")]
-        top_level_domain = (
-            "com"
-            if not any(substring in region for substring in ["cn-", "CN-"])
-            else "cn"
-        )
+        top_level_domain = "cn" if _is_china_region(region) else "com"
         host = f"{account}.{region}.snowflakecomputing.{top_level_domain}"
     else:
-        host = f"{account}.snowflakecomputing.com"
+        top_level_domain = "com"
+        if account.find(".") > 0 and _is_china_region(account.split(".")[1]):
+            top_level_domain = "cn"
+        host = f"{account}.snowflakecomputing.{top_level_domain}"
     return host
 
 
