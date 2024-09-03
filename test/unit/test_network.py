@@ -12,6 +12,8 @@ from snowflake.connector import Error
 from snowflake.connector.network import SnowflakeRestful
 from snowflake.connector.vendored.requests import HTTPError, Response
 
+pytestmark = pytest.mark.skipolddriver
+
 
 def test_fetch():
     connection = mock_connection()
