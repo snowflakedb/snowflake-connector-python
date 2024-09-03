@@ -892,7 +892,14 @@ class SnowflakeRestful:
         full_url = retry_ctx.add_retry_params(full_url)
         full_url = SnowflakeRestful.add_request_guid(full_url)
         is_fetch_query_status = kwargs.pop("is_fetch_query_status", False)
-        raise_raw_http_failure = kwargs.pop("_raise_raw_http_failure", False)
+        # raise_raw_http_failure is not a public parameter and may change in the future
+        # it enables raising raw http errors that are not handled by
+        # connector, connector handles the following http error:
+        #  1. FORBIDDEN error when trying to login
+        #  2. retryable http code defined in method is_retryable_http_code
+        #  3. UNAUTHORIZED error when using okta authentication
+        # raise_raw_http_failure doesn't work for the 3 mentioned cases.
+        raise_raw_http_failure = kwargs.pop("raise_raw_http_failure", False)
         try:
             return_object = self._request_exec(
                 session=session,
@@ -901,7 +908,7 @@ class SnowflakeRestful:
                 headers=headers,
                 data=data,
                 token=token,
-                _raise_raw_http_failure=raise_raw_http_failure,
+                raise_raw_http_failure=raise_raw_http_failure,
                 **kwargs,
             )
             if return_object is not None:
@@ -1040,7 +1047,7 @@ class SnowflakeRestful:
         binary_data_handler=None,
         socket_timeout: int | None = None,
         is_okta_authentication: bool = False,
-        _raise_raw_http_failure: bool = False,
+        raise_raw_http_failure: bool = False,
     ):
         if socket_timeout is None:
             if self._connection.socket_timeout is not None:
@@ -1118,7 +1125,7 @@ class SnowflakeRestful:
                     raise_okta_unauthorized_error(self._connection, raw_ret)
                     return None  # required for tests
                 else:
-                    if _raise_raw_http_failure:
+                    if raise_raw_http_failure:
                         raw_ret.raise_for_status()
                     raise_failed_request_error(
                         self._connection, full_url, method, raw_ret
