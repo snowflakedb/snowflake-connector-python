@@ -49,6 +49,16 @@ def test_construct_hostname_basic():
     )
 
     assert (
+        construct_hostname(None, "account1.cn-central-1")
+        == "account1.cn-central-1.snowflakecomputing.cn"
+    )
+
+    assert (
+        construct_hostname("", "account1.cn-central-1")
+        == "account1.cn-central-1.snowflakecomputing.cn"
+    )
+
+    assert (
         construct_hostname("CN-central-1", "account1")
         == "account1.CN-central-1.snowflakecomputing.cn"
     )
