@@ -2,17 +2,17 @@
 #
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+
+import pytest
+
+pytestmark = pytest.mark.skipolddriver
 import io
 import unittest.mock
 from test.unit.mock_utils import mock_connection
 
-import pytest
-
 from snowflake.connector import Error
 from snowflake.connector.network import SnowflakeRestful
 from snowflake.connector.vendored.requests import HTTPError, Response
-
-pytestmark = pytest.mark.skipolddriver
 
 
 def test_fetch():
