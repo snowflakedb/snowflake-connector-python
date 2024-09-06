@@ -1819,7 +1819,7 @@ class SnowflakeConnection:
 
     def _process_error_query_status(
         self,
-        sf_qid,
+        sf_qid: str,
         status_resp: dict,
         error_message: str = "",
         error_cls: type[Exception] = ProgrammingError,

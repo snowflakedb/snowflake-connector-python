@@ -1660,7 +1660,7 @@ class SnowflakeCursor:
                 self.connection._process_error_query_status(
                     sfqid,
                     status_resp,
-                    error_message="Status of query '{}' is {}, results are unavailable",
+                    error_message=f"Status of query '{sfqid}' is {status.name}, results are unavailable",
                     error_cls=DatabaseError,
                 )
             self._inner_cursor.execute(f"select * from table(result_scan('{sfqid}'))")
