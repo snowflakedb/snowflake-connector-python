@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.12.2 (TBD)
   - Improved implementation of `snowflake.connector.util_text.random_string` to avoid collisions.
   - If the account specifies a region, and that region is in China, the TLD is now inferred to be snowflakecomputing.cn.
+  - Changed loglevel to WARNING for OCSP fail-open warning messages (was: ERROR)
 
 - v3.12.1(August 20,2024)
   - Fixed a bug that logged the session token when renewing a session.
