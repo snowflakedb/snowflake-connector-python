@@ -15,7 +15,7 @@ from contextlib import suppress
 from logging import getLogger
 from typing import Any
 
-from .. import (
+from snowflake.connector import (
     DatabaseError,
     EasyLoggingConfigPython,
     Error,
@@ -23,6 +23,7 @@ from .. import (
     ProgrammingError,
     proxy,
 )
+
 from .._query_context_cache import QueryContextCache
 from ..auth import AuthByIdToken
 from ..compat import urlencode

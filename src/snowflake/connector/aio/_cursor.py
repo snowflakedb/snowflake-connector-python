@@ -7,16 +7,28 @@ from __future__ import annotations
 import sys
 import uuid
 from logging import getLogger
-from typing import IO, TYPE_CHECKING, Any, Sequence
+from types import TracebackType
+from typing import IO, TYPE_CHECKING, Any, AsyncIterator, Literal, Sequence, overload
 
+from pandas import DataFrame
+from pyarrow import Table
 from typing_extensions import Self
 
-from snowflake.connector import Error, IntegrityError, InterfaceError, ProgrammingError
+from snowflake.connector import (
+    Error,
+    IntegrityError,
+    InterfaceError,
+    NotSupportedError,
+    ProgrammingError,
+)
 from snowflake.connector._sql_util import get_file_transfer_type
+from snowflake.connector.aio._result_batch import create_batches_from_response
+from snowflake.connector.aio._result_set import ResultSet, ResultSetIterator
 from snowflake.connector.constants import PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
 from snowflake.connector.cursor import (
     CAN_USE_ARROW_RESULT_FORMAT,
     DESC_TABLE_RE,
+    ResultMetadataV2,
     ResultState,
 )
 from snowflake.connector.cursor import SnowflakeCursor as SnowflakeCursorSync
@@ -24,6 +36,7 @@ from snowflake.connector.errorcode import (
     ER_CURSOR_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_INVALID_VALUE,
+    ER_NOT_POSITIVE_SIZE,
 )
 from snowflake.connector.file_transfer_agent import SnowflakeProgressPercentage
 from snowflake.connector.time_util import get_time_millis
@@ -43,6 +56,92 @@ class SnowflakeCursor(SnowflakeCursorSync):
         super().__init__(connection, use_dict_result)
         # the following fixes type hint
         self._connection: SnowflakeConnection = connection
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        while True:
+            _next = await self.fetchone()
+            if _next is None:
+                break
+            yield _next
+
+    async def __aenter__(self):
+        return self
+
+    def __del__(self):
+        # do nothing in async, __del__ is unreliable
+        pass
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Context manager with commit or rollback."""
+        await self.close()
+
+    async def close(self):
+        """Closes the cursor object.
+
+        Returns whether the cursor was closed during this call.
+        """
+        try:
+            if self.is_closed():
+                return False
+            async with self._lock_canceling:
+                self.reset(closing=True)
+                self._connection = None
+                del self.messages[:]
+                return True
+        except Exception:
+            return None
+
+    def _init_result_and_meta(self, data: dict[Any, Any]) -> None:
+        is_dml = self._is_dml(data)
+        self._query_result_format = data.get("queryResultFormat", "json")
+        logger.debug("Query result format: %s", self._query_result_format)
+
+        if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
+            self._total_rowcount = data["total"]
+
+        self._description: list[ResultMetadataV2] = [
+            ResultMetadataV2.from_column(col) for col in data["rowtype"]
+        ]
+
+        result_chunks = create_batches_from_response(
+            self, self._query_result_format, data, self._description
+        )
+
+        if not (is_dml or self.is_file_transfer):
+            logger.info(
+                "Number of results in first chunk: %s", result_chunks[0].rowcount
+            )
+
+        self._result_set = ResultSet(
+            self,
+            result_chunks,
+            self._connection.client_prefetch_threads,
+        )
+        self._rownumber = -1
+        self._result_state = ResultState.VALID
+
+        # don't update the row count when the result is returned from `describe` method
+        if is_dml and "rowset" in data and len(data["rowset"]) > 0:
+            updated_rows = 0
+            for idx, desc in enumerate(self._description):
+                if desc.name in (
+                    "number of rows updated",
+                    "number of multi-joined rows updated",
+                    "number of rows deleted",
+                ) or desc.name.startswith("number of rows inserted"):
+                    updated_rows += int(data["rowset"][0][idx])
+            if self._total_rowcount == -1:
+                self._total_rowcount = updated_rows
+            else:
+                self._total_rowcount += updated_rows
 
     async def execute(
         self,
@@ -415,14 +514,11 @@ class SnowflakeCursor(SnowflakeCursorSync):
         """Fetches one row."""
         if self._prefetch_hook is not None:
             self._prefetch_hook()
-        # TODO: aio result set
         if self._result is None and self._result_set is not None:
-            self._result = iter(self._result_set)
+            self._result: ResultSetIterator = await self._result_set._create_iter()
             self._result_state = ResultState.VALID
-
         try:
-            # TODO: aio result set / asyncio generator
-            _next = next(self._result, None)
+            _next = await self._result.get_next()
             if isinstance(_next, Exception):
                 Error.errorhandler_wrapper_from_ready_exception(
                     self._connection,
@@ -438,12 +534,102 @@ class SnowflakeCursor(SnowflakeCursorSync):
             else:
                 return None
 
-    async def fetchall(self) -> list[tuple] | list[dict]:
-        """Fetches all of the results."""
+    async def fetchmany(self, size: int | None = None) -> list[tuple] | list[dict]:
+        """Fetches the number of specified rows."""
+        if size is None:
+            size = self.arraysize
+
+        if size < 0:
+            errorvalue = {
+                "msg": (
+                    "The number of rows is not zero or " "positive number: {}"
+                ).format(size),
+                "errno": ER_NOT_POSITIVE_SIZE,
+            }
+            Error.errorhandler_wrapper(
+                self.connection, self, ProgrammingError, errorvalue
+            )
         ret = []
-        while True:
+        while size > 0:
             row = await self.fetchone()
             if row is None:
                 break
             ret.append(row)
+            if size is not None:
+                size -= 1
+
         return ret
+
+    async def fetchall(self) -> list[tuple] | list[dict]:
+        """Fetches all of the results."""
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
+        if self._result is None and self._result_set is not None:
+            self._result: ResultSetIterator = await self._result_set._create_iter(
+                is_fetch_all=True
+            )
+            self._result_state = ResultState.VALID
+
+        return await self._result.fetch_all_data()
+
+    async def fetch_arrow_batches(self) -> AsyncIterator[Table]:
+        self.check_can_use_arrow_resultset()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        # self._log_telemetry_job_data(
+        #     TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
+        # )
+        return await self._result_set._fetch_arrow_batches()
+
+    @overload
+    async def fetch_arrow_all(
+        self, force_return_table: Literal[False]
+    ) -> Table | None: ...
+
+    @overload
+    async def fetch_arrow_all(self, force_return_table: Literal[True]) -> Table: ...
+
+    async def fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
+        """
+        Args:
+            force_return_table: Set to True so that when the query returns zero rows,
+                an empty pyarrow table will be returned with schema using the highest bit length for each column.
+                Default value is False in which case None is returned in case of zero rows.
+        """
+        self.check_can_use_arrow_resultset()
+
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        # self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
+        return await self._result_set._fetch_arrow_all(
+            force_return_table=force_return_table
+        )
+
+    async def fetch_pandas_batches(self, **kwargs: Any) -> AsyncIterator[DataFrame]:
+        """Fetches a single Arrow Table."""
+        self.check_can_use_pandas()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        # TODO: async telemetry
+        # self._log_telemetry_job_data(
+        #     TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.TRUE
+        # )
+        return await self._result_set._fetch_pandas_batches(**kwargs)
+
+    async def fetch_pandas_all(self, **kwargs: Any) -> DataFrame:
+        self.check_can_use_pandas()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        # # TODO: async telemetry
+        # self._log_telemetry_job_data(
+        #     TelemetryField.PANDAS_FETCH_ALL, TelemetryData.TRUE
+        # )
+        return await self._result_set._fetch_pandas_all(**kwargs)
