@@ -1076,7 +1076,7 @@ class SnowflakeOCSP:
             "responder. Details:"
         )
         ocsp_warning = f"{static_warning} \n {ocsp_log}"
-        logger.error(ocsp_warning)
+        logger.warning(ocsp_warning)
 
     def validate_by_direct_connection(
         self,
