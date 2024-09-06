@@ -10,7 +10,7 @@ from test.unit.mock_utils import mock_connection
 import pytest
 
 try:
-    from snowflake.connector import Error
+    from snowflake.connector import Error, InterfaceError
     from snowflake.connector.network import SnowflakeRestful
     from snowflake.connector.vendored.requests import HTTPError, Response
 except ImportError:
@@ -50,3 +50,20 @@ def test_fetch():
             rest.fetch(**default_parameters, raise_raw_http_failure=True)
         assert exc.value.response.status_code == failed_response.status_code
         assert exc.value.response.reason == failed_response.reason
+
+        with pytest.raises(HTTPError) as exc:
+            rest.fetch(**default_parameters, raise_raw_http_failure=True, no_retry=True)
+        assert exc.value.response.status_code == failed_response.status_code
+        assert exc.value.response.reason == failed_response.reason
+
+        # if not setting the flag, the function returns an empty dictionary
+        assert (
+            rest.fetch(
+                **default_parameters, raise_raw_http_failure=False, no_retry=True
+            )
+            == {}
+        )
+        assert rest.fetch(**default_parameters, no_retry=True) == {}
+        # if no retry is set to False, the function raises an InterfaceError
+        with pytest.raises(InterfaceError) as exc:
+            assert rest.fetch(**default_parameters, no_retry=False)
