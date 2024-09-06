@@ -117,9 +117,11 @@ def test_async_error(conn_cnx, caplog):
                 cur.get_results_from_sfqid(q_id)
             assert e1.value.errno == e2.value.errno == sync_error.value.errno
 
-            sfqid = cur.execute_async("SELECT SYSTEM$WAIT(5)")["queryId"]
-            cur.execute(f"SELECT SYSTEM$CANCEL_QUERY('{sfqid}')")
+            sfqid = cur.execute_async("SELECT SYSTEM$WAIT(2)")["queryId"]
             cur.get_results_from_sfqid(sfqid)
+            with con.cursor() as cancel_cursor:
+                # use separate cursor to cancel as execute will overwrite the previous query status
+                cancel_cursor.execute(f"SELECT SYSTEM$CANCEL_QUERY('{sfqid}')")
             with pytest.raises(DatabaseError) as e3, caplog.at_level(logging.INFO):
                 cur.fetchall()
             assert (
