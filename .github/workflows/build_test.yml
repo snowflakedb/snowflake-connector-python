@@ -107,6 +107,7 @@ jobs:
         shell: bash
       - uses: actions/upload-artifact@v3
         with:
+          include-hidden-files: true
           name: ${{ matrix.os.id }}_py${{ matrix.python-version }}
           path: dist/
 
@@ -166,6 +167,7 @@ jobs:
         shell: bash
       - uses: actions/upload-artifact@v3
         with:
+          include-hidden-files: true
           name: coverage_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
             .tox/.coverage
@@ -277,6 +279,7 @@ jobs:
         shell: bash
       - uses: actions/upload-artifact@v3
         with:
+          include-hidden-files: true
           name: coverage_linux-fips-3.8-${{ matrix.cloud-provider }}
           path: |
             .coverage
@@ -323,6 +326,7 @@ jobs:
         shell: bash
       - uses: actions/upload-artifact@v3
         with:
+          include-hidden-files: true
           name: coverage_linux-lambda-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
             .coverage.py${{ env.shortver }}-lambda-ci
@@ -366,11 +370,13 @@ jobs:
       - name: Publish html coverage
         uses: actions/upload-artifact@v3
         with:
+          include-hidden-files: true
           name: overall_cov_html
           path: .tox/htmlcov
       - name: Publish xml coverage
         uses: actions/upload-artifact@v3
         with:
+          include-hidden-files: true
           name: overall_cov_xml
           path: .tox/coverage.xml
       - uses: codecov/codecov-action@v3
