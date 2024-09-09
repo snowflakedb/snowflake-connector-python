@@ -1817,6 +1817,39 @@ class SnowflakeConnection:
         with suppress(Exception):
             self.close(retry=False)
 
+    def _process_error_query_status(
+        self,
+        sf_qid: str,
+        status_resp: dict,
+        error_message: str = "",
+        error_cls: type[Exception] = ProgrammingError,
+    ) -> None:
+        status_resp = status_resp or {}
+        data = status_resp.get("data", {})
+        queries = data.get("queries")
+
+        if sf_qid in self._async_sfqids:
+            self._async_sfqids.pop(sf_qid, None)
+        message = status_resp.get("message")
+        if message is None:
+            message = ""
+        code = queries[0].get("errorCode", -1) if queries else -1
+        sql_state = None
+        if "data" in status_resp:
+            message += queries[0].get("errorMessage", "") if queries else ""
+            sql_state = data.get("sqlState")
+        Error.errorhandler_wrapper(
+            self,
+            None,
+            error_cls,
+            {
+                "msg": message or error_message,
+                "errno": int(code),
+                "sqlstate": sql_state,
+                "sfqid": sf_qid,
+            },
+        )
+
     def get_query_status(self, sf_qid: str) -> QueryStatus:
         """Retrieves the status of query with sf_qid.
 
@@ -1845,31 +1878,8 @@ class SnowflakeConnection:
         """
         status, status_resp = self._get_query_status(sf_qid)
         self._cache_query_status(sf_qid, status)
-        queries = status_resp["data"]["queries"]
         if self.is_an_error(status):
-            if sf_qid in self._async_sfqids:
-                self._async_sfqids.pop(sf_qid, None)
-            message = status_resp.get("message")
-            if message is None:
-                message = ""
-            code = queries[0].get("errorCode", -1)
-            sql_state = None
-            if "data" in status_resp:
-                message += (
-                    queries[0].get("errorMessage", "") if len(queries) > 0 else ""
-                )
-                sql_state = status_resp["data"].get("sqlState")
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": message,
-                    "errno": int(code),
-                    "sqlstate": sql_state,
-                    "sfqid": sf_qid,
-                },
-            )
+            self._process_error_query_status(sf_qid, status_resp)
         return status
 
     def initialize_query_context_cache(self) -> None:

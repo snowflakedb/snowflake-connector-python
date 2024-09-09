@@ -1638,7 +1638,8 @@ class SnowflakeCursor:
             no_data_counter = 0
             retry_pattern_pos = 0
             while True:
-                status = self.connection.get_query_status(sfqid)
+                status, status_resp = self.connection._get_query_status(sfqid)
+                self.connection._cache_query_status(sfqid, status)
                 if not self.connection.is_still_running(status):
                     break
                 if status == QueryStatus.NO_DATA:  # pragma: no cover
@@ -1655,10 +1656,12 @@ class SnowflakeCursor:
                 if retry_pattern_pos < (len(ASYNC_RETRY_PATTERN) - 1):
                     retry_pattern_pos += 1
             if status != QueryStatus.SUCCESS:
-                raise DatabaseError(
-                    "Status of query '{}' is {}, results are unavailable".format(
-                        sfqid, status.name
-                    )
+                logger.info(f"Status of query '{sfqid}' is {status.name}")
+                self.connection._process_error_query_status(
+                    sfqid,
+                    status_resp,
+                    error_message=f"Status of query '{sfqid}' is {status.name}, results are unavailable",
+                    error_cls=DatabaseError,
                 )
             self._inner_cursor.execute(f"select * from table(result_scan('{sfqid}'))")
             self._result = self._inner_cursor._result
