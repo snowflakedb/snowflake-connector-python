@@ -22,9 +22,6 @@ from typing import (
     overload,
 )
 
-from pandas import DataFrame
-from pyarrow import Table
-
 from snowflake.connector.aio._result_batch import (
     ArrowResultBatch,
     JSONResultBatch,
@@ -37,6 +34,9 @@ from snowflake.connector.result_set import ResultSet as ResultSetSync
 from ..options import pyarrow as pa
 
 if TYPE_CHECKING:
+    from pandas import DataFrame
+    from pyarrow import Table
+
     from snowflake.connector.aio._cursor import SnowflakeCursor
 
 logger = getLogger(__name__)
