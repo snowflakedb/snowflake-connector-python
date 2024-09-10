@@ -13,8 +13,6 @@ from logging import getLogger
 from types import TracebackType
 from typing import IO, TYPE_CHECKING, Any, AsyncIterator, Literal, Sequence, overload
 
-from pandas import DataFrame
-from pyarrow import Table
 from typing_extensions import Self
 
 import snowflake.connector.cursor
@@ -50,6 +48,9 @@ from snowflake.connector.telemetry import TelemetryField
 from snowflake.connector.time_util import get_time_millis
 
 if TYPE_CHECKING:
+    from pandas import DataFrame
+    from pyarrow import Table
+
     from snowflake.connector.aio import SnowflakeConnection
 
 logger = getLogger(__name__)
