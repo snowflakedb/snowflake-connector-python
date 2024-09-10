@@ -31,7 +31,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     CONNECTOR_WHL=$(ls ${CONNECTOR_DIR}/dist/snowflake_connector_python*cp${SHORT_VERSION}*.whl)
     TEST_ENVLIST=$(python3 -c "print('fix_lint,' + ','.join('py${SHORT_VERSION}-' + e + '-ci' for e in ['pandas']) + ',py${SHORT_VERSION}-coverage')")
     echo "[Info] Running tox for ${TEST_ENVLIST}"
-    python3 -m tox -e -vv ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
+    python3 -m tox -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL} -vv
 done
 
 deactivate
