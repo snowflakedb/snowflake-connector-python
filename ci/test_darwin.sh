@@ -19,9 +19,10 @@ PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws.py.gpg"
 [ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp.py.gpg"
 gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters.py
 
+rm -rf venv
 python3.10 -m venv venv
 . venv/bin/activate
-pip install -U tox>=4
+python3.10 -m pip install -U tox>=4
 
 # Run tests
 cd $CONNECTOR_DIR
@@ -29,9 +30,9 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     echo "[Info] Testing with ${PYTHON_VERSION}"
     SHORT_VERSION=$(python3 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
     CONNECTOR_WHL=$(ls ${CONNECTOR_DIR}/dist/snowflake_connector_python*cp${SHORT_VERSION}*.whl)
-    TEST_ENVLIST=$(python3 -c "print(','.join('py${SHORT_VERSION}-' + e + '-ci' for e in ['pandas']))")
+    TEST_ENVLIST=$(python3 -c "print('fix_lint,' + ','.join('py${SHORT_VERSION}-' + e + '-ci' for e in ['pandas']) + ',py${SHORT_VERSION}-coverage')")
     echo "[Info] Running tox for ${TEST_ENVLIST}"
-    python3 -m tox -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL} -vv
+    python3.10 -m tox -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
 done
 
 deactivate
