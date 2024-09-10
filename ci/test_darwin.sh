@@ -19,7 +19,7 @@ PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws.py.gpg"
 [ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp.py.gpg"
 gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters.py
 
-python3.8 -m venv venv
+python3.10 -m venv venv
 . venv/bin/activate
 pip install -U tox>=4
 
