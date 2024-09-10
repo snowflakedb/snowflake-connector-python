@@ -11,8 +11,6 @@ from logging import getLogger
 from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Sequence
 
 import aiohttp
-from pandas import DataFrame
-from pyarrow import Table
 
 from snowflake.connector import Error
 from snowflake.connector.aio._network import (
@@ -46,6 +44,9 @@ from snowflake.connector.result_batch import _create_nanoarrow_iterator
 from snowflake.connector.secret_detector import SecretDetector
 
 if TYPE_CHECKING:
+    from pandas import DataFrame
+    from pyarrow import Table
+
     from snowflake.connector.aio._connection import SnowflakeConnection
     from snowflake.connector.aio._cursor import SnowflakeCursor
 
