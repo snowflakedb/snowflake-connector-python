@@ -10,7 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.12.2(September 11,2024)
   - Improved error handling for asynchronous queries, providing more detailed and informative error messages when an async query fails.
-  - Improved inference of top level domains for accounts specifying a region in China, now defaulting to snowflakecomputing.cn.
+  - Improved inference of top-level domains for accounts specifying a region in China, now defaulting to snowflakecomputing.cn.
   - Improved implementation of the `snowflake.connector.util_text.random_string` to reduce the likelihood of collisions.
   - Updated the log level for OCSP fail-open warning messages from ERROR to WARNING.
 
