@@ -6,13 +6,14 @@
 from __future__ import annotations
 
 import base64
+import functools
 import math
 import os
 import random
 import secrets
 import time
 from typing import TYPE_CHECKING, Pattern, Sequence
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -54,6 +55,16 @@ def create_mock_response(status_code: int) -> Mock:
     mock_resp.status_code = status_code
     mock_resp.raw = "success" if status_code == OK else "fail"
     return mock_resp
+
+
+def create_async_mock_response(status: int) -> AsyncMock:
+    async def _create_async_mock_response(url, *, status, **kwargs):
+        resp = AsyncMock(status=status)
+        resp.read.return_value = "success" if status == OK else "fail"
+        resp.status = status
+        return resp
+
+    return functools.partial(_create_async_mock_response, status=status)
 
 
 def verify_log_tuple(

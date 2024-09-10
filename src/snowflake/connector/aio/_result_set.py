@@ -98,7 +98,9 @@ class ResultSetIterator:
             await self._final()
         else:
             download_tasks = deque()
-            for _ in range(len(self._unfetched_batches)):
+            for _ in range(
+                min(self._prefetch_thread_num, len(self._unfetched_batches))
+            ):
                 logger.debug(
                     f"queuing download of result batch id: {self._unfetched_batches[0].id}"
                 )

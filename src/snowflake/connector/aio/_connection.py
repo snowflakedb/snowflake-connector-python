@@ -12,8 +12,10 @@ import sys
 import traceback
 import uuid
 from contextlib import suppress
+from io import StringIO
 from logging import getLogger
-from typing import Any
+from types import TracebackType
+from typing import Any, AsyncIterator, Iterable
 
 from snowflake.connector import (
     DatabaseError,
@@ -26,7 +28,7 @@ from snowflake.connector import (
 
 from .._query_context_cache import QueryContextCache
 from ..auth import AuthByIdToken
-from ..compat import urlencode
+from ..compat import quote, urlencode
 from ..config_manager import CONFIG_MANAGER, _get_default_connection_params
 from ..connection import DEFAULT_CONFIGURATION
 from ..connection import SnowflakeConnection as SnowflakeConnectionSync
@@ -43,6 +45,7 @@ from ..constants import (
     PARAMETER_QUERY_CONTEXT_CACHE_SIZE,
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
+    QueryStatus,
 )
 from ..description import PLATFORM, PYTHON_VERSION, SNOWFLAKE_CONNECTOR_VERSION
 from ..errorcode import (
@@ -51,8 +54,10 @@ from ..errorcode import (
     ER_INVALID_VALUE,
 )
 from ..network import DEFAULT_AUTHENTICATOR, REQUEST_ID, ReauthenticationRequest
-from ..sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS
+from ..sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
+from ..telemetry import TelemetryData, TelemetryField
 from ..time_util import get_time_millis
+from ..util_text import split_statements
 from ._cursor import SnowflakeCursor
 from ._network import SnowflakeRestful
 from .auth import Auth, AuthByDefault, AuthByPlugin
@@ -84,135 +89,25 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         # atexit.register(self._close_at_exit) # TODO: async atexit support/test
 
-    def _init_connection_parameters(
+    async def __aenter__(self) -> SnowflakeConnection:
+        """Context manager."""
+        await self.connect()
+        return self
+
+    async def __aexit__(
         self,
-        connection_init_kwargs: dict,
-        connection_name: str | None = None,
-        connections_file_path: pathlib.Path | None = None,
-    ) -> dict:
-        ret_kwargs = connection_init_kwargs
-        easy_logging = EasyLoggingConfigPython()
-        easy_logging.create_log()
-        self._lock_sequence_counter = asyncio.Lock()
-        self.sequence_counter = 0
-        self._errorhandler = Error.default_errorhandler
-        self._lock_converter = asyncio.Lock()
-        self.messages = []
-        self._async_sfqids: dict[str, None] = {}
-        self._done_async_sfqids: dict[str, None] = {}
-        self._client_param_telemetry_enabled = True
-        self._server_param_telemetry_enabled = False
-        self._session_parameters: dict[str, str | int | bool] = {}
-        logger.info(
-            "Snowflake Connector for Python Version: %s, "
-            "Python Version: %s, Platform: %s",
-            SNOWFLAKE_CONNECTOR_VERSION,
-            PYTHON_VERSION,
-            PLATFORM,
-        )
-
-        self._rest = None
-        for name, (value, _) in DEFAULT_CONFIGURATION.items():
-            setattr(self, f"_{name}", value)
-
-        self.heartbeat_thread = None
-        is_kwargs_empty = not connection_init_kwargs
-
-        if "application" not in connection_init_kwargs:
-            if ENV_VAR_PARTNER in os.environ.keys():
-                connection_init_kwargs["application"] = os.environ[ENV_VAR_PARTNER]
-            elif "streamlit" in sys.modules:
-                connection_init_kwargs["application"] = "streamlit"
-
-        self.converter = None
-        self.query_context_cache: QueryContextCache | None = None
-        self.query_context_cache_size = 5
-        if connections_file_path is not None:
-            # Change config file path and force update cache
-            for i, s in enumerate(CONFIG_MANAGER._slices):
-                if s.section == "connections":
-                    CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
-                    CONFIG_MANAGER.read_config()
-                    break
-        if connection_name is not None:
-            connections = CONFIG_MANAGER["connections"]
-            if connection_name not in connections:
-                raise Error(
-                    f"Invalid connection_name '{connection_name}',"
-                    f" known ones are {list(connections.keys())}"
-                )
-            ret_kwargs = {**connections[connection_name], **connection_init_kwargs}
-        elif is_kwargs_empty:
-            # connection_name is None and kwargs was empty when called
-            ret_kwargs = _get_default_connection_params()
-        self.__set_error_attributes()  # TODO: error attributes async?
-        return ret_kwargs
-
-    @property
-    def client_prefetch_threads(self) -> int:
-        # TODO: use client_prefetch_threads as numbers for coroutines? how to communicate to users
-        logger.warning("asyncio does not support client_prefetch_threads")
-        return self._client_prefetch_threads
-
-    @client_prefetch_threads.setter
-    def client_prefetch_threads(self, value) -> None:
-        # TODO: use client_prefetch_threads as numbers for coroutines? how to communicate to users
-        logger.warning("asyncio does not support client_prefetch_threads")
-        self._client_prefetch_threads = value
-
-    @property
-    def rest(self) -> SnowflakeRestful | None:
-        return self._rest
-
-    async def connect(self) -> None:
-        """Establishes connection to Snowflake."""
-        logger.debug("connect")
-        if len(self._conn_parameters) > 0:
-            self.__config(**self._conn_parameters)
-
-        if self.enable_connection_diag:
-            exceptions_dict = {}
-            # TODO: we can make ConnectionDiagnostic async, do we need?
-            connection_diag = ConnectionDiagnostic(
-                account=self.account,
-                host=self.host,
-                connection_diag_log_path=self.connection_diag_log_path,
-                connection_diag_allowlist_path=(
-                    self.connection_diag_allowlist_path
-                    if self.connection_diag_allowlist_path is not None
-                    else self.connection_diag_whitelist_path
-                ),
-                proxy_host=self.proxy_host,
-                proxy_port=self.proxy_port,
-                proxy_user=self.proxy_user,
-                proxy_password=self.proxy_password,
-            )
-            try:
-                connection_diag.run_test()
-                await self.__open_connection()
-                connection_diag.cursor = self.cursor()
-            except Exception:
-                exceptions_dict["connection_test"] = traceback.format_exc()
-                logger.warning(
-                    f"""Exception during connection test:\n{exceptions_dict["connection_test"]} """
-                )
-            try:
-                connection_diag.run_post_test()
-            except Exception:
-                exceptions_dict["post_test"] = traceback.format_exc()
-                logger.warning(
-                    f"""Exception during post connection test:\n{exceptions_dict["post_test"]} """
-                )
-            finally:
-                connection_diag.generate_report()
-                if exceptions_dict:
-                    raise Exception(str(exceptions_dict))
-        else:
-            await self.__open_connection()
-
-    def _close_at_exit(self):
-        with suppress(Exception):
-            asyncio.get_event_loop().run_until_complete(self.close(retry=False))
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Context manager with commit or rollback teardown."""
+        if not self._session_parameters.get("AUTOCOMMIT", False):
+            # Either AUTOCOMMIT is turned off, or is not set so we default to old behavior
+            if exc_tb is None:
+                await self.commit()
+            else:
+                await self.rollback()
+        await self.close()
 
     async def __open_connection(self):
         """Opens a new network connection."""
@@ -332,81 +227,34 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 "asyncio client_session_keep_alive is not supported"
             )
 
-    def cursor(
-        self, cursor_class: type[SnowflakeCursor] = SnowflakeCursor
-    ) -> SnowflakeCursor:
-        logger.debug("cursor")
-        if not self.rest:
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                DatabaseError,
-                {
-                    "msg": "Connection is closed",
-                    "errno": ER_CONNECTION_IS_CLOSED,
-                    "sqlstate": SQLSTATE_CONNECTION_NOT_EXISTS,
-                },
+    async def _all_async_queries_finished(self) -> bool:
+        """Checks whether all async queries started by this Connection have finished executing."""
+
+        if not self._async_sfqids:
+            return True
+
+        queries = list(reversed(self._async_sfqids.keys()))
+
+        found_unfinished_query = False
+
+        async def async_query_check_helper(
+            sfq_id: str,
+        ) -> bool:
+            nonlocal found_unfinished_query
+            return found_unfinished_query or self.is_still_running(
+                await self.get_query_status(sfq_id)
             )
-        return cursor_class(self)
 
-    @property
-    def auth_class(self) -> AuthByPlugin | None:
-        return self._auth_class
-
-    @auth_class.setter
-    def auth_class(self, value: AuthByPlugin) -> None:
-        if isinstance(value, AuthByPlugin):
-            self._auth_class = value
-        else:
-            raise TypeError("auth_class must subclass AuthByPluginAsync")
-
-    async def _reauthenticate(self):
-        return await self._auth_class.reauthenticate(conn=self)
-
-    async def _update_parameters(
-        self,
-        parameters: dict[str, str | int | bool],
-    ) -> None:
-        """Update session parameters."""
-        async with self._lock_converter:
-            self.converter.set_parameters(parameters)
-        for name, value in parameters.items():
-            self._session_parameters[name] = value
-            if PARAMETER_CLIENT_TELEMETRY_ENABLED == name:
-                self._server_param_telemetry_enabled = value
-            elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE == name:
-                # Only set if the local config is None.
-                # Always give preference to user config.
-                if self.client_session_keep_alive is None:
-                    self.client_session_keep_alive = value
-            elif (
-                PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY == name
-                and self.client_session_keep_alive_heartbeat_frequency is None
-            ):
-                # Only set if local value hasn't been set already.
-                self.client_session_keep_alive_heartbeat_frequency = value
-            elif PARAMETER_SERVICE_NAME == name:
-                self.service_name = value
-            elif PARAMETER_CLIENT_PREFETCH_THREADS == name:
-                self.client_prefetch_threads = value
-            elif PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 == name:
-                self.enable_stage_s3_privatelink_for_us_east_1 = value
-            elif PARAMETER_QUERY_CONTEXT_CACHE_SIZE == name:
-                self.query_context_cache_size = value
-
-    async def authenticate_with_retry(self, auth_instance) -> None:
-        # make some changes if needed before real __authenticate
-        try:
-            await self._authenticate(auth_instance)
-        except ReauthenticationRequest as ex:
-            # cached id_token expiration error, we have cleaned id_token and try to authenticate again
-            logger.debug("ID token expired. Reauthenticating...: %s", ex)
-            if isinstance(auth_instance, AuthByIdToken):
-                # Note: SNOW-733835 IDToken auth needs to authenticate through
-                #  SSO if it has expired
-                await self._reauthenticate()
-            else:
-                await self._authenticate(auth_instance)
+        tasks = [
+            asyncio.create_task(async_query_check_helper(sfqid)) for sfqid in queries
+        ]
+        for task in asyncio.as_completed(tasks):
+            if await task:
+                found_unfinished_query = True
+                break
+        for task in tasks:
+            task.cancel()
+        return not found_unfinished_query
 
     async def _authenticate(self, auth_instance: AuthByPlugin):
         await auth_instance.prepare(
@@ -474,6 +322,259 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     continue
                 break
 
+    def _init_connection_parameters(
+        self,
+        connection_init_kwargs: dict,
+        connection_name: str | None = None,
+        connections_file_path: pathlib.Path | None = None,
+    ) -> dict:
+        ret_kwargs = connection_init_kwargs
+        easy_logging = EasyLoggingConfigPython()
+        easy_logging.create_log()
+        self._lock_sequence_counter = asyncio.Lock()
+        self.sequence_counter = 0
+        self._errorhandler = Error.default_errorhandler
+        self._lock_converter = asyncio.Lock()
+        self.messages = []
+        self._async_sfqids: dict[str, None] = {}
+        self._done_async_sfqids: dict[str, None] = {}
+        self._client_param_telemetry_enabled = True
+        self._server_param_telemetry_enabled = False
+        self._session_parameters: dict[str, str | int | bool] = {}
+        logger.info(
+            "Snowflake Connector for Python Version: %s, "
+            "Python Version: %s, Platform: %s",
+            SNOWFLAKE_CONNECTOR_VERSION,
+            PYTHON_VERSION,
+            PLATFORM,
+        )
+
+        self._rest = None
+        for name, (value, _) in DEFAULT_CONFIGURATION.items():
+            setattr(self, f"_{name}", value)
+
+        self.heartbeat_thread = None
+        is_kwargs_empty = not connection_init_kwargs
+
+        if "application" not in connection_init_kwargs:
+            if ENV_VAR_PARTNER in os.environ.keys():
+                connection_init_kwargs["application"] = os.environ[ENV_VAR_PARTNER]
+            elif "streamlit" in sys.modules:
+                connection_init_kwargs["application"] = "streamlit"
+
+        self.converter = None
+        self.query_context_cache: QueryContextCache | None = None
+        self.query_context_cache_size = 5
+        if connections_file_path is not None:
+            # Change config file path and force update cache
+            for i, s in enumerate(CONFIG_MANAGER._slices):
+                if s.section == "connections":
+                    CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
+                    CONFIG_MANAGER.read_config()
+                    break
+        if connection_name is not None:
+            connections = CONFIG_MANAGER["connections"]
+            if connection_name not in connections:
+                raise Error(
+                    f"Invalid connection_name '{connection_name}',"
+                    f" known ones are {list(connections.keys())}"
+                )
+            ret_kwargs = {**connections[connection_name], **connection_init_kwargs}
+        elif is_kwargs_empty:
+            # connection_name is None and kwargs was empty when called
+            ret_kwargs = _get_default_connection_params()
+        self.__set_error_attributes()  # TODO: error attributes async?
+        return ret_kwargs
+
+    async def _cancel_query(
+        self, sql: str, request_id: uuid.UUID
+    ) -> dict[str, bool | None]:
+        """Cancels the query with the exact SQL query and requestId."""
+        logger.debug("_cancel_query sql=[%s], request_id=[%s]", sql, request_id)
+        url_parameters = {REQUEST_ID: str(uuid.uuid4())}
+
+        return await self.rest.request(
+            "/queries/v1/abort-request?" + urlencode(url_parameters),
+            {
+                "sqlText": sql,
+                REQUEST_ID: str(request_id),
+            },
+        )
+
+    def _close_at_exit(self):
+        with suppress(Exception):
+            asyncio.get_event_loop().run_until_complete(self.close(retry=False))
+
+    async def _get_query_status(
+        self, sf_qid: str
+    ) -> tuple[QueryStatus, dict[str, Any]]:
+        """Retrieves the status of query with sf_qid and returns it with the raw response.
+
+        This is the underlying function used by the public get_status functions.
+
+        Args:
+            sf_qid: Snowflake query id of interest.
+
+        Raises:
+            ValueError: if sf_qid is not a valid UUID string.
+        """
+        try:
+            uuid.UUID(sf_qid)
+        except ValueError:
+            raise ValueError(f"Invalid UUID: '{sf_qid}'")
+        logger.debug(f"get_query_status sf_qid='{sf_qid}'")
+
+        status = "NO_DATA"
+        if self.is_closed():
+            return QueryStatus.DISCONNECTED, {"data": {"queries": []}}
+        status_resp = await self.rest.request(
+            "/monitoring/queries/" + quote(sf_qid), method="get", client="rest"
+        )
+        if "queries" not in status_resp["data"]:
+            return QueryStatus.FAILED_WITH_ERROR, status_resp
+        queries = status_resp["data"]["queries"]
+        if len(queries) > 0:
+            status = queries[0]["status"]
+        status_ret = QueryStatus[status]
+        return status_ret, status_resp
+
+    async def _log_telemetry(self, telemetry_data) -> None:
+        raise NotImplementedError("asyncio telemetry is not supported")
+
+    async def _log_telemetry_imported_packages(self) -> None:
+        if self._log_imported_packages_in_telemetry:
+            # filter out duplicates caused by submodules
+            # and internal modules with names starting with an underscore
+            imported_modules = {
+                k.split(".", maxsplit=1)[0]
+                for k in list(sys.modules)
+                if not k.startswith("_")
+            }
+            ts = get_time_millis()
+            await self._log_telemetry(
+                TelemetryData.from_telemetry_data_dict(
+                    from_dict={
+                        TelemetryField.KEY_TYPE.value: TelemetryField.IMPORTED_PACKAGES.value,
+                        TelemetryField.KEY_VALUE.value: str(imported_modules),
+                    },
+                    timestamp=ts,
+                    connection=self,
+                )
+            )
+
+    async def _next_sequence_counter(self) -> int:
+        """Gets next sequence counter. Used internally."""
+        async with self._lock_sequence_counter:
+            self.sequence_counter += 1
+            logger.debug("sequence counter: %s", self.sequence_counter)
+            return self.sequence_counter
+
+    async def _update_parameters(
+        self,
+        parameters: dict[str, str | int | bool],
+    ) -> None:
+        """Update session parameters."""
+        async with self._lock_converter:
+            self.converter.set_parameters(parameters)
+        for name, value in parameters.items():
+            self._session_parameters[name] = value
+            if PARAMETER_CLIENT_TELEMETRY_ENABLED == name:
+                self._server_param_telemetry_enabled = value
+            elif PARAMETER_CLIENT_SESSION_KEEP_ALIVE == name:
+                # Only set if the local config is None.
+                # Always give preference to user config.
+                if self.client_session_keep_alive is None:
+                    self.client_session_keep_alive = value
+            elif (
+                PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY == name
+                and self.client_session_keep_alive_heartbeat_frequency is None
+            ):
+                # Only set if local value hasn't been set already.
+                self.client_session_keep_alive_heartbeat_frequency = value
+            elif PARAMETER_SERVICE_NAME == name:
+                self.service_name = value
+            elif PARAMETER_CLIENT_PREFETCH_THREADS == name:
+                self.client_prefetch_threads = value
+            elif PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 == name:
+                self.enable_stage_s3_privatelink_for_us_east_1 = value
+            elif PARAMETER_QUERY_CONTEXT_CACHE_SIZE == name:
+                self.query_context_cache_size = value
+
+    async def _reauthenticate(self):
+        return await self._auth_class.reauthenticate(conn=self)
+
+    @property
+    def auth_class(self) -> AuthByPlugin | None:
+        return self._auth_class
+
+    @auth_class.setter
+    def auth_class(self, value: AuthByPlugin) -> None:
+        if isinstance(value, AuthByPlugin):
+            self._auth_class = value
+        else:
+            raise TypeError("auth_class must subclass AuthByPluginAsync")
+
+    @property
+    def client_prefetch_threads(self) -> int:
+        # TODO: use client_prefetch_threads as numbers for coroutines? how to communicate to users
+        logger.warning("asyncio does not support client_prefetch_threads")
+        return self._client_prefetch_threads
+
+    @client_prefetch_threads.setter
+    def client_prefetch_threads(self, value) -> None:
+        # TODO: use client_prefetch_threads as numbers for coroutines? how to communicate to users
+        logger.warning("asyncio does not support client_prefetch_threads")
+        self._client_prefetch_threads = value
+
+    @property
+    def rest(self) -> SnowflakeRestful | None:
+        return self._rest
+
+    async def authenticate_with_retry(self, auth_instance) -> None:
+        # make some changes if needed before real __authenticate
+        try:
+            await self._authenticate(auth_instance)
+        except ReauthenticationRequest as ex:
+            # cached id_token expiration error, we have cleaned id_token and try to authenticate again
+            logger.debug("ID token expired. Reauthenticating...: %s", ex)
+            if isinstance(auth_instance, AuthByIdToken):
+                # Note: SNOW-733835 IDToken auth needs to authenticate through
+                #  SSO if it has expired
+                await self._reauthenticate()
+            else:
+                await self._authenticate(auth_instance)
+
+    async def autocommit(self, mode) -> None:
+        """Sets autocommit mode to True, or False. Defaults to True."""
+        if not self.rest:
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                DatabaseError,
+                {
+                    "msg": "Connection is closed",
+                    "errno": ER_CONNECTION_IS_CLOSED,
+                    "sqlstate": SQLSTATE_CONNECTION_NOT_EXISTS,
+                },
+            )
+        if not isinstance(mode, bool):
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": f"Invalid parameter: {mode}",
+                    "errno": ER_INVALID_VALUE,
+                },
+            )
+        try:
+            await self.cursor().execute(f"ALTER SESSION SET autocommit={mode}")
+        except Error as e:
+            if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
+                logger.debug(
+                    "Autocommit feature is not enabled for this " "connection. Ignored"
+                )
+
     async def close(self, retry: bool = True) -> None:
         """Closes the connection."""
         # unregister to dereference connection object as it's already closed after the execution
@@ -495,7 +596,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             # TODO: async telemetry support
             # self._telemetry.close(send_on_close=bool(retry and self.telemetry_enabled))
             if (
-                self._all_async_queries_finished()
+                await self._all_async_queries_finished()
                 and not self._server_session_keep_alive
             ):
                 logger.info("No async queries seem to be running, deleting session")
@@ -603,9 +704,166 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
         return ret
 
-    async def _next_sequence_counter(self) -> int:
-        """Gets next sequence counter. Used internally."""
-        async with self._lock_sequence_counter:
-            self.sequence_counter += 1
-            logger.debug("sequence counter: %s", self.sequence_counter)
-            return self.sequence_counter
+    async def commit(self) -> None:
+        """Commits the current transaction."""
+        await self.cursor().execute("COMMIT")
+
+    async def connect(self, **kwargs) -> None:
+        """Establishes connection to Snowflake."""
+        logger.debug("connect")
+        if len(kwargs) > 0:
+            self.__config(**kwargs)
+        else:
+            self.__config(**self._conn_parameters)
+
+        if self.enable_connection_diag:
+            exceptions_dict = {}
+            # TODO: we can make ConnectionDiagnostic async, do we need?
+            connection_diag = ConnectionDiagnostic(
+                account=self.account,
+                host=self.host,
+                connection_diag_log_path=self.connection_diag_log_path,
+                connection_diag_allowlist_path=(
+                    self.connection_diag_allowlist_path
+                    if self.connection_diag_allowlist_path is not None
+                    else self.connection_diag_whitelist_path
+                ),
+                proxy_host=self.proxy_host,
+                proxy_port=self.proxy_port,
+                proxy_user=self.proxy_user,
+                proxy_password=self.proxy_password,
+            )
+            try:
+                connection_diag.run_test()
+                await self.__open_connection()
+                connection_diag.cursor = self.cursor()
+            except Exception:
+                exceptions_dict["connection_test"] = traceback.format_exc()
+                logger.warning(
+                    f"""Exception during connection test:\n{exceptions_dict["connection_test"]} """
+                )
+            try:
+                connection_diag.run_post_test()
+            except Exception:
+                exceptions_dict["post_test"] = traceback.format_exc()
+                logger.warning(
+                    f"""Exception during post connection test:\n{exceptions_dict["post_test"]} """
+                )
+            finally:
+                connection_diag.generate_report()
+                if exceptions_dict:
+                    raise Exception(str(exceptions_dict))
+        else:
+            await self.__open_connection()
+
+    def cursor(
+        self, cursor_class: type[SnowflakeCursor] = SnowflakeCursor
+    ) -> SnowflakeCursor:
+        logger.debug("cursor")
+        if not self.rest:
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                DatabaseError,
+                {
+                    "msg": "Connection is closed",
+                    "errno": ER_CONNECTION_IS_CLOSED,
+                    "sqlstate": SQLSTATE_CONNECTION_NOT_EXISTS,
+                },
+            )
+        return cursor_class(self)
+
+    async def execute_stream(
+        self,
+        stream: StringIO,
+        remove_comments: bool = False,
+        cursor_class: type[SnowflakeCursor] = SnowflakeCursor,
+        **kwargs,
+    ) -> AsyncIterator[SnowflakeCursor, None, None]:
+        """Executes a stream of SQL statements. This is a non-standard convenient method."""
+        split_statements_list = split_statements(
+            stream, remove_comments=remove_comments
+        )
+        # Note: split_statements_list is a list of tuples of sql statements and whether they are put/get
+        non_empty_statements = [e for e in split_statements_list if e[0]]
+        for sql, is_put_or_get in non_empty_statements:
+            cur = self.cursor(cursor_class=cursor_class)
+            await cur.execute(sql, _is_put_get=is_put_or_get, **kwargs)
+            yield cur
+
+    async def execute_string(
+        self,
+        sql_text: str,
+        remove_comments: bool = False,
+        return_cursors: bool = True,
+        cursor_class: type[SnowflakeCursor] = SnowflakeCursor,
+        **kwargs,
+    ) -> Iterable[SnowflakeCursor]:
+        """Executes a SQL text including multiple statements. This is a non-standard convenience method."""
+        stream = StringIO(sql_text)
+        ret = []
+        async for cursor in self.execute_stream(
+            stream, remove_comments=remove_comments, cursor_class=cursor_class, **kwargs
+        ):
+            ret.append(cursor)
+
+        return ret if return_cursors else list()
+
+    async def get_query_status(self, sf_qid: str) -> QueryStatus:
+        """Retrieves the status of query with sf_qid.
+
+        Query status is returned as a QueryStatus.
+
+        Args:
+            sf_qid: Snowflake query id of interest.
+
+        Raises:
+            ValueError: if sf_qid is not a valid UUID string.
+        """
+        status, _ = await self._get_query_status(sf_qid)
+        self._cache_query_status(sf_qid, status)
+        return status
+
+    async def get_query_status_throw_if_error(self, sf_qid: str) -> QueryStatus:
+        """Retrieves the status of query with sf_qid as a QueryStatus and raises an exception if the query terminated with an error.
+
+        Query status is returned as a QueryStatus.
+
+        Args:
+            sf_qid: Snowflake query id of interest.
+
+        Raises:
+            ValueError: if sf_qid is not a valid UUID string.
+        """
+        status, status_resp = await self._get_query_status(sf_qid)
+        self._cache_query_status(sf_qid, status)
+        queries = status_resp["data"]["queries"]
+        if self.is_an_error(status):
+            if sf_qid in self._async_sfqids:
+                self._async_sfqids.pop(sf_qid, None)
+            message = status_resp.get("message")
+            if message is None:
+                message = ""
+            code = queries[0].get("errorCode", -1)
+            sql_state = None
+            if "data" in status_resp:
+                message += (
+                    queries[0].get("errorMessage", "") if len(queries) > 0 else ""
+                )
+                sql_state = status_resp["data"].get("sqlState")
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": message,
+                    "errno": int(code),
+                    "sqlstate": sql_state,
+                    "sfqid": sf_qid,
+                },
+            )
+        return status
+
+    async def rollback(self) -> None:
+        """Rolls back the current transaction."""
+        await self.cursor().execute("ROLLBACK")
