@@ -181,6 +181,7 @@ def write_pandas(
     overwrite: bool = False,
     table_type: Literal["", "temp", "temporary", "transient"] = "",
     use_logical_type: bool | None = None,
+    copy_grants: bool | None = None,
     **kwargs: Any,
 ) -> tuple[
     bool,
@@ -237,14 +238,17 @@ def write_pandas(
             the passed in DataFrame. The table will not be created if it already exists
         create_temp_table: (Deprecated) Will make the auto-created table as a temporary table
         overwrite: When true, and if auto_create_table is true, then it drops the table. Otherwise, it
-        truncates the table. In both cases it will replace the existing contents of the table with that of the passed in
-            Pandas DataFrame.
+            truncates the table. In both cases it will replace the existing contents of the table with that of the
+            passed in Pandas DataFrame.
         table_type: The table type of to-be-created table. The supported table types include ``temp``/``temporary``
             and ``transient``. Empty means permanent table as per SQL convention.
         use_logical_type: Boolean that specifies whether to use Parquet logical types. With this file format option,
             Snowflake can interpret Parquet logical types during data loading. To enable Parquet logical types,
             set use_logical_type as True. Set to None to use Snowflakes default. For more information, see:
             https://docs.snowflake.com/en/sql-reference/sql/create-file-format
+        copy_grants: When true and when both overwrite is true and auto_create_table is true, the grants of the table
+            being overwritten will be copied to the new table. Otherwise, the new table will be created with only the
+            default/future grants defined on the schema/database.
 
 
     Returns:
@@ -314,6 +318,14 @@ def write_pandas(
         sql_use_logical_type = " USE_LOGICAL_TYPE = TRUE"
     else:
         sql_use_logical_type = " USE_LOGICAL_TYPE = FALSE"
+
+    if copy_grants and (not overwrite or not auto_create_table):
+        warnings.warn(
+            "copy_grants is only applied when used in combination with "
+            "overwrite and auto_create_table",
+            UserWarning,
+            stacklevel=2,
+        )
 
     cursor = conn.cursor()
     stage_location = _create_temp_stage(
@@ -444,10 +456,15 @@ def write_pandas(
                 name=table_name,
                 quote_identifiers=quote_identifiers,
             )
-            drop_object(original_table_location, "table")
-            rename_table_sql = f"ALTER TABLE {target_table_location} RENAME TO {original_table_location} /* Python:snowflake.connector.pandas_tools.write_pandas() */"
-            logger.debug(f"rename table with '{rename_table_sql}'")
-            cursor.execute(rename_table_sql, _is_internal=True)
+            clone_table_sql = (
+                f"CREATE OR REPLACE TABLE {original_table_location} "
+                f"CLONE {target_table_location} "
+                f"{'COPY GRANTS' if copy_grants else ''}"
+                f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+            )
+            logger.debug(f"clone table with '{clone_table_sql}'")
+            cursor.execute(clone_table_sql, _is_internal=True)
+            drop_object(target_table_location, "table")
     except ProgrammingError:
         if overwrite and auto_create_table:
             # drop table only if we created a new one with a random name
