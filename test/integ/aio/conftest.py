@@ -61,11 +61,6 @@ async def negative_db(
 
 
 @pytest.fixture
-def async_conn_cnx():
-    return db
-
-
-@pytest.fixture
 def conn_cnx():
     return db
 

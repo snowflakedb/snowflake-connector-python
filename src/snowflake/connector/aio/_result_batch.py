@@ -15,6 +15,10 @@ from pandas import DataFrame
 from pyarrow import Table
 
 from snowflake.connector import Error
+from snowflake.connector.aio._network import (
+    raise_failed_request_error,
+    raise_okta_unauthorized_error,
+)
 from snowflake.connector.aio._time_util import TimerContextManager
 from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.backoff_policies import exponential_backoff
@@ -26,8 +30,6 @@ from snowflake.connector.network import (
     RetryRequest,
     get_http_retryable_error,
     is_retryable_http_code,
-    raise_failed_request_error,
-    raise_okta_unauthorized_error,
 )
 from snowflake.connector.result_batch import (
     MAX_DOWNLOAD_RETRY,

@@ -5,14 +5,10 @@
 
 from __future__ import annotations
 
-import pytest
 
-pytestmark = pytest.mark.asyncio
-
-
-async def test_binding_fetching_boolean(async_conn_cnx, db_parameters):
+async def test_binding_fetching_boolean(conn_cnx, db_parameters):
     try:
-        async with async_conn_cnx() as cnx:
+        async with conn_cnx() as cnx:
             await cnx.cursor().execute(
                 """
 create or replace table {name} (c1 boolean, c2 integer)
@@ -21,7 +17,7 @@ create or replace table {name} (c1 boolean, c2 integer)
                 )
             )
 
-        async with async_conn_cnx() as cnx:
+        async with conn_cnx() as cnx:
             await cnx.cursor().execute(
                 """
 insert into {name} values(%s,%s), (%s,%s), (%s,%s)
@@ -63,7 +59,7 @@ SELECT CASE WHEN (null LIKE trim(null)) THEN null  ELSE null END
             assert not results[0][0]
 
     finally:
-        async with async_conn_cnx() as cnx:
+        async with conn_cnx() as cnx:
             await cnx.cursor().execute(
                 """
 drop table if exists {name}
@@ -73,8 +69,8 @@ drop table if exists {name}
             )
 
 
-async def test_boolean_from_compiler(async_conn_cnx):
-    async with async_conn_cnx() as cnx:
+async def test_boolean_from_compiler(conn_cnx):
+    async with conn_cnx() as cnx:
         ret = await (await cnx.cursor().execute("SELECT true")).fetchone()
         assert ret[0]
 

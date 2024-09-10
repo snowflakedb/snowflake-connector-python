@@ -14,10 +14,8 @@ from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.converter import _generate_tzinfo_from_tzoffset
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
-pytestmark = pytest.mark.asyncio
 
-
-async def test_fetch_timestamps(async_conn_cnx):
+async def test_fetch_timestamps(conn_cnx):
     PST_TZ = "America/Los_Angeles"
 
     tzdiff = 1860 - 1440  # -07:00
@@ -71,7 +69,7 @@ async def test_fetch_timestamps(async_conn_cnx):
     r38 = time(5, 7, 8, 100000)
     r39 = time(5, 7, 8)
 
-    async with async_conn_cnx() as cnx:
+    async with conn_cnx() as cnx:
         cur = cnx.cursor()
         await cur.execute(
             """
@@ -168,7 +166,7 @@ SELECT
         assert ret[39] == r39
 
 
-async def test_fetch_timestamps_snowsql(async_conn_cnx):
+async def test_fetch_timestamps_snowsql(conn_cnx):
     PST_TZ = "America/Los_Angeles"
 
     converter_class = SnowflakeConverterSnowSQL
@@ -215,7 +213,7 @@ SELECT
     '05:07:08.1'::time(1),
     '05:07:08'::time(0)
 """
-    async with async_conn_cnx(converter_class=converter_class) as cnx:
+    async with conn_cnx(converter_class=converter_class) as cnx:
         cur = cnx.cursor()
         await cur.execute(
             """
@@ -332,11 +330,11 @@ ALTER SESSION SET
         assert ret[39] == "05:07:08.000000"
 
 
-async def test_fetch_timestamps_negative_epoch(async_conn_cnx):
+async def test_fetch_timestamps_negative_epoch(conn_cnx):
     """Negative epoch."""
     r0 = _compose_ntz("-602594703.876544")
     r1 = _compose_ntz("1325594096.123456")
-    async with async_conn_cnx() as cnx:
+    async with conn_cnx() as cnx:
         cur = cnx.cursor()
         await cur.execute(
             """\
@@ -350,9 +348,9 @@ SELECT
         assert ret[1] == r1
 
 
-async def test_date_0001_9999(async_conn_cnx):
+async def test_date_0001_9999(conn_cnx):
     """Test 0001 and 9999 for all platforms."""
-    async with async_conn_cnx(
+    async with conn_cnx(
         converter_class=SnowflakeConverterSnowSQL, support_negative_year=True
     ) as cnx:
         cnx.cursor().execute(
@@ -385,9 +383,9 @@ SELECT
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason="year out of range error")
-async def test_five_or_more_digit_year_date_converter(async_conn_cnx):
+async def test_five_or_more_digit_year_date_converter(conn_cnx):
     """Past and future dates."""
-    async with async_conn_cnx(
+    async with conn_cnx(
         converter_class=SnowflakeConverterSnowSQL, support_negative_year=True
     ) as cnx:
         cnx.cursor().execute(
@@ -446,9 +444,9 @@ SELECT
         assert ret[4] == "-67-05-02"
 
 
-async def test_franction_followed_by_year_format(async_conn_cnx):
+async def test_franction_followed_by_year_format(conn_cnx):
     """Both year and franctions are included but fraction shows up followed by year."""
-    async with async_conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
+    async with conn_cnx(converter_class=SnowflakeConverterSnowSQL) as cnx:
         await cnx.cursor().execute(
             """
 alter session set python_connector_query_result_format='JSON'
@@ -470,7 +468,7 @@ SELECT
             assert rec[0] == "05:34:56.123456 Jan 03, 2012"
 
 
-async def test_fetch_fraction_timestamp(async_conn_cnx):
+async def test_fetch_fraction_timestamp(conn_cnx):
     """Additional fetch timestamp tests. Mainly used for SnowSQL which converts to string representations."""
     PST_TZ = "America/Los_Angeles"
 
@@ -490,7 +488,7 @@ SELECT
     '1970-01-01T00:00:00Z'::timestamp_tz(7),
     '1970-01-01T00:00:00'::timestamp_ntz(7)
 """
-    async with async_conn_cnx(converter_class=converter_class) as cnx:
+    async with conn_cnx(converter_class=converter_class) as cnx:
         cur = cnx.cursor()
         await cur.execute(
             """

@@ -8,13 +8,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from test.integ.test_converter_null import NUMERIC_VALUES
 
-import pytest
-
 import snowflake.connector.aio
 from snowflake.connector.converter import ZERO_EPOCH
 from snowflake.connector.converter_null import SnowflakeNoConverterToPython
-
-pytestmark = pytest.mark.asyncio
 
 
 async def test_converter_no_converter_to_python(db_parameters):

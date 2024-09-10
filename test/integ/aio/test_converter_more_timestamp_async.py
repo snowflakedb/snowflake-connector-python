@@ -6,16 +6,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-import pytest
 import pytz
 from dateutil.parser import parse
 
 from snowflake.connector.converter import ZERO_EPOCH, _generate_tzinfo_from_tzoffset
 
-pytestmark = pytest.mark.asyncio
 
-
-async def test_fetch_various_timestamps(async_conn_cnx):
+async def test_fetch_various_timestamps(conn_cnx):
     """More coverage of timestamp.
 
     Notes:
@@ -111,7 +108,7 @@ async def test_fetch_various_timestamps(async_conn_cnx):
             inp=d["inp"], dt=d["dt"], scale=d["scale"]
         )
     sql += "1"
-    async with async_conn_cnx() as cnx:
+    async with conn_cnx() as cnx:
         cur = cnx.cursor()
         await cur.execute(
             """

@@ -19,8 +19,6 @@ except ImportError:
 
 logger = getLogger(__name__)
 
-pytestmark = pytest.mark.asyncio
-
 
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."

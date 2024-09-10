@@ -32,8 +32,6 @@ from snowflake.connector import (
 from snowflake.connector.aio import DictCursor, SnowflakeCursor
 from snowflake.connector.compat import IS_WINDOWS
 
-pytestmark = pytest.mark.asyncio
-
 try:
     from snowflake.connector.cursor import ResultMetadata
 except ImportError:
@@ -93,8 +91,8 @@ except ImportError:
 
 
 @pytest.fixture
-async def conn(async_conn_cnx, db_parameters):
-    async with async_conn_cnx() as cnx:
+async def conn(conn_cnx, db_parameters):
+    async with conn_cnx() as cnx:
         await cnx.cursor().execute(
             """
 create table {name} (
@@ -113,9 +111,9 @@ b binary)
             )
         )
 
-    yield async_conn_cnx
+    yield conn_cnx
 
-    async with async_conn_cnx() as cnx:
+    async with conn_cnx() as cnx:
         await cnx.cursor().execute(
             "use {db}.{schema}".format(
                 db=db_parameters["database"], schema=db_parameters["schema"]
@@ -640,10 +638,10 @@ created_at timestamp, data variant)
 
 
 @pytest.mark.skipolddriver
-async def test_geography(async_conn_cnx):
+async def test_geography(conn_cnx):
     """Variant including JSON object."""
     name_geo = random_string(5, "test_geography_")
-    async with async_conn_cnx(
+    async with conn_cnx(
         session_parameters={
             "GEOGRAPHY_OUTPUT_FORMAT": "geoJson",
         },
@@ -670,10 +668,10 @@ async def test_geography(async_conn_cnx):
 
 
 @pytest.mark.skipolddriver
-async def test_geometry(async_conn_cnx):
+async def test_geometry(conn_cnx):
     """Variant including JSON object."""
     name_geo = random_string(5, "test_geometry_")
-    async with async_conn_cnx(
+    async with conn_cnx(
         session_parameters={
             "GEOMETRY_OUTPUT_FORMAT": "geoJson",
         },
@@ -700,13 +698,13 @@ async def test_geometry(async_conn_cnx):
 
 
 @pytest.mark.skipolddriver
-async def test_vector(async_conn_cnx, is_public_test):
+async def test_vector(conn_cnx, is_public_test):
     if is_public_test:
         pytest.xfail(
             reason="This feature hasn't been rolled out for public Snowflake deployments yet."
         )
     name_vectors = random_string(5, "test_vector_")
-    async with async_conn_cnx() as cnx:
+    async with conn_cnx() as cnx:
         async with cnx.cursor() as cur:
             # Seed test data
             expected_data_ints = [[1, 3, -5], [40, 1234567, 1], "NULL"]
@@ -754,17 +752,17 @@ async def test_vector(async_conn_cnx, is_public_test):
             assert len(data) == 0
 
 
-async def test_invalid_bind_data_type(async_conn_cnx):
+async def test_invalid_bind_data_type(conn_cnx):
     """Invalid bind data type."""
-    async with async_conn_cnx() as cnx:
+    async with conn_cnx() as cnx:
         with pytest.raises(errors.ProgrammingError):
             await cnx.cursor().execute("select 1 from dual where 1=%s", ([1, 2, 3],))
 
 
 # TODO: SNOW-1657469 for timeout
 @pytest.mark.skip
-async def test_timeout_query(async_conn_cnx):
-    async with async_conn_cnx() as cnx:
+async def test_timeout_query(conn_cnx):
+    async with conn_cnx() as cnx:
         async with cnx.cursor() as c:
             with pytest.raises(errors.ProgrammingError) as err:
                 await c.execute(
@@ -989,12 +987,10 @@ async def test_process_params(conn, db_parameters):
     ("interpolate_empty_sequences", "expected_outcome"), [(False, "%%s"), (True, "%s")]
 )
 async def test_process_params_empty(
-    async_conn_cnx, interpolate_empty_sequences, expected_outcome
+    conn_cnx, interpolate_empty_sequences, expected_outcome
 ):
     """SQL is interpolated if params aren't None."""
-    async with async_conn_cnx(
-        interpolate_empty_sequences=interpolate_empty_sequences
-    ) as cnx:
+    async with conn_cnx(interpolate_empty_sequences=interpolate_empty_sequences) as cnx:
         async with cnx.cursor() as cursor:
             await cursor.execute("select '%%s'", None)
             assert await cursor.fetchone() == ("%%s",)

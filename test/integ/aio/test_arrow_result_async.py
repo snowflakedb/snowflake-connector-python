@@ -21,7 +21,6 @@ from snowflake.connector.errors import OperationalError, ProgrammingError
 
 pytestmark = [
     pytest.mark.skipolddriver,  # old test driver tests won't run this module
-    pytest.mark.asyncio,
 ]
 
 
@@ -77,7 +76,7 @@ async def pandas_verify(cur, data, deserialize):
 
 
 async def verify_datatypes(
-    async_conn_cnx,
+    conn_cnx,
     query,
     examples,
     schema,
@@ -86,7 +85,7 @@ async def verify_datatypes(
     deserialize=False,
 ):
     table_name = f"arrow_datatype_test_verifaction_table_{random_string(5)}"
-    async with structured_type_wrapped_conn(async_conn_cnx) as conn:
+    async with structured_type_wrapped_conn(conn_cnx) as conn:
         try:
             await conn.cursor().execute("alter session set use_cached_result=false")
             iceberg_table, iceberg_config = (
@@ -106,7 +105,7 @@ async def verify_datatypes(
 
 
 @asynccontextmanager
-async def structured_type_wrapped_conn(async_conn_cnx):
+async def structured_type_wrapped_conn(conn_cnx):
     parameters = {}
     if STRUCTURED_TYPES_SUPPORTED:
         parameters = {
@@ -117,7 +116,7 @@ async def structured_type_wrapped_conn(async_conn_cnx):
             "IGNORE_CLIENT_VESRION_IN_STRUCTURED_TYPES_RESPONSE": True,
         }
 
-    async with async_conn_cnx(session_parameters=parameters) as conn:
+    async with conn_cnx(session_parameters=parameters) as conn:
         yield conn
 
 
@@ -126,9 +125,9 @@ async def structured_type_wrapped_conn(async_conn_cnx):
     not ICEBERG_SUPPORTED, reason="Iceberg not supported in this environment."
 )
 @pytest.mark.parametrize("datatype", ICEBERG_UNSUPPORTED_TYPES)
-async def test_iceberg_negative(datatype, async_conn_cnx):
+async def test_iceberg_negative(datatype, conn_cnx):
     table_name = f"arrow_datatype_test_verification_table_{random_string(5)}"
-    async with structured_type_wrapped_conn(async_conn_cnx) as conn:
+    async with structured_type_wrapped_conn(conn_cnx) as conn:
         try:
             with pytest.raises(ProgrammingError):
                 await conn.cursor().execute(
@@ -142,7 +141,7 @@ async def test_iceberg_negative(datatype, async_conn_cnx):
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-async def test_datatypes(datatype, examples, iceberg, pandas, async_conn_cnx):
+async def test_datatypes(datatype, examples, iceberg, pandas, conn_cnx):
     json_values = re.escape(json.dumps(examples, default=serialize))
     query = f"""
     SELECT
@@ -155,7 +154,7 @@ async def test_datatypes(datatype, examples, iceberg, pandas, async_conn_cnx):
     if datatype == "VARIANT":
         examples = [dumps(ex) for ex in examples]
     await verify_datatypes(
-        async_conn_cnx, query, examples, f"(col {datatype})", iceberg, pandas
+        conn_cnx, query, examples, f"(col {datatype})", iceberg, pandas
     )
 
 
@@ -163,7 +162,7 @@ async def test_datatypes(datatype, examples, iceberg, pandas, async_conn_cnx):
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-async def test_array(datatype, examples, iceberg, pandas, async_conn_cnx):
+async def test_array(datatype, examples, iceberg, pandas, conn_cnx):
     json_values = re.escape(json.dumps(examples, default=serialize))
 
     if STRUCTURED_TYPES_SUPPORTED:
@@ -184,7 +183,7 @@ async def test_array(datatype, examples, iceberg, pandas, async_conn_cnx):
       parse_json('{json_values}') :: {col_type} as col
     """
     await verify_datatypes(
-        async_conn_cnx,
+        conn_cnx,
         query,
         (examples,),
         f"(col {col_type})",
@@ -198,7 +197,7 @@ async def test_array(datatype, examples, iceberg, pandas, async_conn_cnx):
 @pytest.mark.skipif(
     not STRUCTURED_TYPES_SUPPORTED, reason="Testing structured type feature."
 )
-async def test_structured_type_binds(async_conn_cnx):
+async def test_structured_type_binds(conn_cnx):
     original_style = snowflake.connector.paramstyle
     snowflake.connector.paramstyle = "qmark"
     data = (
@@ -211,7 +210,7 @@ async def test_structured_type_binds(async_conn_cnx):
     json_data = [json.dumps(d) for d in data]
     schema = "(num number, arr_b array(boolean), map map(varchar, int), obj object(city varchar, population float), arr_f array(float))"
     table_name = f"arrow_structured_type_binds_test_{random_string(5)}"
-    async with structured_type_wrapped_conn(async_conn_cnx) as conn:
+    async with structured_type_wrapped_conn(conn_cnx) as conn:
         try:
             await conn.cursor().execute("alter session set enable_bind_stage_v2=Enable")
             await conn.cursor().execute(
@@ -243,7 +242,7 @@ async def test_structured_type_binds(async_conn_cnx):
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-async def test_map(key_type, datatype, examples, iceberg, pandas, async_conn_cnx):
+async def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
     if iceberg and key_type == "number":
         pytest.skip("Iceberg does not support number keys.")
     data = {str(i) if key_type == "varchar" else i: ex for i, ex in enumerate(examples)}
@@ -269,7 +268,7 @@ async def test_map(key_type, datatype, examples, iceberg, pandas, async_conn_cnx
         with pytest.raises(ValueError):
             # SNOW-1320508: Timestamp types nested in maps currently cause an exception for iceberg tables
             await verify_datatypes(
-                async_conn_cnx,
+                conn_cnx,
                 query,
                 [data],
                 f"(col map({key_type}, {datatype}))",
@@ -278,7 +277,7 @@ async def test_map(key_type, datatype, examples, iceberg, pandas, async_conn_cnx
             )
     else:
         await verify_datatypes(
-            async_conn_cnx,
+            conn_cnx,
             query,
             [data],
             f"(col map({key_type}, {datatype}))",
@@ -291,7 +290,7 @@ async def test_map(key_type, datatype, examples, iceberg, pandas, async_conn_cnx
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-async def test_object(datatype, examples, iceberg, pandas, async_conn_cnx):
+async def test_object(datatype, examples, iceberg, pandas, conn_cnx):
     fields = [f"{datatype}_{i}" for i in range(len(examples))]
     data = {k: v for k, v in zip(fields, examples)}
     json_string = re.escape(json.dumps(data, default=serialize))
@@ -320,7 +319,7 @@ async def test_object(datatype, examples, iceberg, pandas, async_conn_cnx):
         with pytest.raises(ValueError):
             # SNOW-1320508: Timestamp types nested in objects currently cause an exception for iceberg tables
             await verify_datatypes(
-                async_conn_cnx,
+                conn_cnx,
                 query,
                 [expected_data],
                 f"(col {col_type})",
@@ -329,7 +328,7 @@ async def test_object(datatype, examples, iceberg, pandas, async_conn_cnx):
             )
     else:
         await verify_datatypes(
-            async_conn_cnx,
+            conn_cnx,
             query,
             [expected_data],
             f"(col {col_type})",
@@ -345,7 +344,7 @@ async def test_object(datatype, examples, iceberg, pandas, async_conn_cnx):
 )
 @pytest.mark.parametrize("pandas", [True, False] if pandas_available else [False])
 @pytest.mark.parametrize("iceberg", [True, False])
-async def test_nested_types(async_conn_cnx, iceberg, pandas):
+async def test_nested_types(conn_cnx, iceberg, pandas):
     data = {"child": [{"key1": {"struct_field": "value"}}]}
     json_string = re.escape(json.dumps(data, default=serialize))
     query = f"""
@@ -361,7 +360,7 @@ async def test_nested_types(async_conn_cnx, iceberg, pandas):
             ]
         }
     await verify_datatypes(
-        async_conn_cnx,
+        conn_cnx,
         query,
         [data],
         "(col object(child array(map (varchar, object(struct_field varchar)))))",
@@ -371,7 +370,7 @@ async def test_nested_types(async_conn_cnx, iceberg, pandas):
 
 
 @pytest.mark.asyncio
-async def test_select_tinyint(async_conn_cnx):
+async def test_select_tinyint(conn_cnx):
     cases = [0, 1, -1, 127, -128]
     table = "test_arrow_tiny_int"
     column = "(a int)"
@@ -380,16 +379,16 @@ async def test_select_tinyint(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_scaled_tinyint(async_conn_cnx):
+async def test_select_scaled_tinyint(conn_cnx):
     cases = [0.0, 0.11, -0.11, 1.27, -1.28]
     table = "test_arrow_tiny_int"
     column = "(a number(5,3))"
@@ -398,16 +397,16 @@ async def test_select_scaled_tinyint(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_smallint(async_conn_cnx):
+async def test_select_smallint(conn_cnx):
     cases = [0, 1, -1, 127, -128, 128, -129, 32767, -32768]
     table = "test_arrow_small_int"
     column = "(a int)"
@@ -416,16 +415,16 @@ async def test_select_smallint(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_scaled_smallint(async_conn_cnx):
+async def test_select_scaled_smallint(conn_cnx):
     cases = ["0", "2.0", "-2.0", "32.767", "-32.768"]
     table = "test_arrow_small_int"
     column = "(a number(5,3))"
@@ -434,16 +433,16 @@ async def test_select_scaled_smallint(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_int(async_conn_cnx):
+async def test_select_int(conn_cnx):
     cases = [
         0,
         1,
@@ -466,16 +465,16 @@ async def test_select_int(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_scaled_int(async_conn_cnx):
+async def test_select_scaled_int(conn_cnx):
     cases = ["0", "0.123456789", "-0.123456789", "0.2147483647", "-0.2147483647"]
     table = "test_arrow_int"
     column = "(a number(10,9))"
@@ -484,16 +483,16 @@ async def test_select_scaled_int(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_bigint(async_conn_cnx):
+async def test_select_bigint(conn_cnx):
     cases = [
         0,
         1,
@@ -520,16 +519,16 @@ async def test_select_bigint(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_scaled_bigint(async_conn_cnx):
+async def test_select_scaled_bigint(conn_cnx):
     cases = [
         "0",
         "0.000000000000000001",
@@ -556,16 +555,16 @@ async def test_select_scaled_bigint(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_decimal(async_conn_cnx):
+async def test_select_decimal(conn_cnx):
     cases = [
         "10000000000000000000000000000000000000",
         "12345678901234567890123456789012345678",
@@ -578,16 +577,16 @@ async def test_select_decimal(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_scaled_decimal(async_conn_cnx):
+async def test_select_scaled_decimal(conn_cnx):
     cases = [
         "0",
         "0.000000000000000001",
@@ -614,16 +613,16 @@ async def test_select_scaled_decimal(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_large_scaled_decimal(async_conn_cnx):
+async def test_select_large_scaled_decimal(conn_cnx):
     cases = [
         "1.0000000000000000000000000000000000000",
         "1.2345678901234567890123456789012345678",
@@ -636,16 +635,16 @@ async def test_select_large_scaled_decimal(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_scaled_decimal_SNOW_133561(async_conn_cnx):
+async def test_scaled_decimal_SNOW_133561(conn_cnx):
     cases = [
         "0",
         "1.2345",
@@ -665,16 +664,16 @@ async def test_scaled_decimal_SNOW_133561(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk("num", async_conn_cnx, sql_text, row_count, col_count)
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("num", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_boolean(async_conn_cnx):
+async def test_select_boolean(conn_cnx):
     cases = ["true", "false", "true"]
     table = "test_arrow_boolean"
     column = "(a boolean)"
@@ -683,21 +682,19 @@ async def test_select_boolean(async_conn_cnx):
         + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk(
-        "boolean", async_conn_cnx, sql_text, row_count, col_count
-    )
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("boolean", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.skipif(
     no_arrow_iterator_ext, reason="arrow_iterator extension is not built."
 )
 @pytest.mark.asyncio
-async def test_select_double_precision(async_conn_cnx):
+async def test_select_double_precision(conn_cnx):
     cases = [
         # SNOW-31249
         "-86.6426540296895",
@@ -713,18 +710,18 @@ async def test_select_double_precision(async_conn_cnx):
     table = "test_arrow_double"
     column = "(a double)"
     values = "(" + "),(".join([f"{i}, {c}" for i, c in enumerate(cases)]) + ")"
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases)
     col_count = 1
     await iterate_over_test_chunk(
-        "float", async_conn_cnx, sql_text, row_count, col_count, expected=cases
+        "float", conn_cnx, sql_text, row_count, col_count, expected=cases
     )
-    await finish(async_conn_cnx, table)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_semi_structure(async_conn_cnx):
+async def test_select_semi_structure(conn_cnx):
     sql_text = """select array_construct(10, 20, 30),
         array_construct(null, 'hello', 3::double, 4, 5),
         array_construct(),
@@ -736,13 +733,11 @@ async def test_select_semi_structure(async_conn_cnx):
     """
     row_count = 1
     col_count = 8
-    await iterate_over_test_chunk(
-        "struct", async_conn_cnx, sql_text, row_count, col_count
-    )
+    await iterate_over_test_chunk("struct", conn_cnx, sql_text, row_count, col_count)
 
 
 @pytest.mark.asyncio
-async def test_select_vector(async_conn_cnx, is_public_test):
+async def test_select_vector(conn_cnx, is_public_test):
     if is_public_test:
         pytest.xfail(
             reason="This feature hasn't been rolled out for public Snowflake deployments yet."
@@ -755,18 +750,16 @@ async def test_select_vector(async_conn_cnx, is_public_test):
     """
     row_count = 1
     col_count = 4
-    await iterate_over_test_chunk(
-        "vector", async_conn_cnx, sql_text, row_count, col_count
-    )
+    await iterate_over_test_chunk("vector", conn_cnx, sql_text, row_count, col_count)
 
 
 @pytest.mark.asyncio
-async def test_select_time(async_conn_cnx):
+async def test_select_time(conn_cnx):
     for scale in range(10):
-        await select_time_with_scale(async_conn_cnx, scale)
+        await select_time_with_scale(conn_cnx, scale)
 
 
-async def select_time_with_scale(async_conn_cnx, scale):
+async def select_time_with_scale(conn_cnx, scale):
     cases = [
         "00:01:23",
         "00:01:23.1",
@@ -786,18 +779,16 @@ async def select_time_with_scale(async_conn_cnx, scale):
         + "),(".join([f"{i}, '{c}'" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk(
-        "time", async_conn_cnx, sql_text, row_count, col_count
-    )
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("time", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_date(async_conn_cnx):
+async def test_select_date(conn_cnx):
     cases = [
         "2016-07-23",
         "1970-01-01",
@@ -812,20 +803,18 @@ async def test_select_date(async_conn_cnx):
         + "),(".join([f"{i}, '{c}'" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
-    await iterate_over_test_chunk(
-        "date", async_conn_cnx, sql_text, row_count, col_count
-    )
-    await finish(async_conn_cnx, table)
+    await iterate_over_test_chunk("date", conn_cnx, sql_text, row_count, col_count)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.parametrize("scale", range(10))
 @pytest.mark.parametrize("type", ["timestampntz", "timestampltz", "timestamptz"])
 @pytest.mark.asyncio
-async def test_select_timestamp_with_scale(async_conn_cnx, scale, type):
+async def test_select_timestamp_with_scale(conn_cnx, scale, type):
     cases = [
         "2017-01-01 12:00:00",
         "2014-01-02 16:00:00",
@@ -848,24 +837,24 @@ async def test_select_timestamp_with_scale(async_conn_cnx, scale, type):
         + "),(".join([f"{i}, '{c}'" for i, c in enumerate(cases)])
         + f"), ({len(cases)}, NULL)"
     )
-    await init(async_conn_cnx, table, column, values)
+    await init(conn_cnx, table, column, values)
     sql_text = f"select a from {table} order by s"
     row_count = len(cases) + 2
     col_count = 1
     # TODO SNOW-534252
     await iterate_over_test_chunk(
         type,
-        async_conn_cnx,
+        conn_cnx,
         sql_text,
         row_count,
         col_count,
         eps=timedelta(microseconds=1),
     )
-    await finish(async_conn_cnx, table)
+    await finish(conn_cnx, table)
 
 
 @pytest.mark.asyncio
-async def test_select_with_string(async_conn_cnx):
+async def test_select_with_string(conn_cnx):
     col_count = 2
     row_count = 50000
     random_seed = get_random_seed()
@@ -876,13 +865,11 @@ async def test_select_with_string(async_conn_cnx):
         )
         + "table(generator(rowcount=>50000)) order by c1"
     )
-    await iterate_over_test_chunk(
-        "string", async_conn_cnx, sql_text, row_count, col_count
-    )
+    await iterate_over_test_chunk("string", conn_cnx, sql_text, row_count, col_count)
 
 
 @pytest.mark.asyncio
-async def test_select_with_bool(async_conn_cnx):
+async def test_select_with_bool(conn_cnx):
     col_count = 2
     row_count = 50000
     random_seed = get_random_seed()
@@ -892,13 +879,11 @@ async def test_select_with_bool(async_conn_cnx):
         )
         + f"table(generator(rowcount=>{row_count})) order by c1"
     )
-    await iterate_over_test_chunk(
-        "bool", async_conn_cnx, sql_text, row_count, col_count
-    )
+    await iterate_over_test_chunk("bool", conn_cnx, sql_text, row_count, col_count)
 
 
 @pytest.mark.asyncio
-async def test_select_with_float(async_conn_cnx):
+async def test_select_with_float(conn_cnx):
     col_count = 2
     row_count = 50000
     random_seed = get_random_seed()
@@ -916,7 +901,7 @@ async def test_select_with_float(async_conn_cnx):
     )
     await iterate_over_test_chunk(
         "float",
-        async_conn_cnx,
+        conn_cnx,
         sql_text,
         row_count,
         col_count,
@@ -925,8 +910,8 @@ async def test_select_with_float(async_conn_cnx):
 
 
 @pytest.mark.asyncio
-async def test_select_with_empty_resultset(async_conn_cnx):
-    async with async_conn_cnx() as cnx:
+async def test_select_with_empty_resultset(conn_cnx):
+    async with conn_cnx() as cnx:
         cursor = cnx.cursor()
         await cursor.execute("alter session set query_result_format='ARROW_FORCE'")
         await cursor.execute(
@@ -940,7 +925,7 @@ async def test_select_with_empty_resultset(async_conn_cnx):
 
 
 @pytest.mark.asyncio
-async def test_select_with_large_resultset(async_conn_cnx):
+async def test_select_with_large_resultset(conn_cnx):
     col_count = 5
     row_count = 1000000
     random_seed = get_random_seed()
@@ -957,13 +942,13 @@ async def test_select_with_large_resultset(async_conn_cnx):
     )
 
     await iterate_over_test_chunk(
-        "large_resultset", async_conn_cnx, sql_text, row_count, col_count
+        "large_resultset", conn_cnx, sql_text, row_count, col_count
     )
 
 
 @pytest.mark.asyncio
-async def test_dict_cursor(async_conn_cnx):
-    async with async_conn_cnx() as cnx:
+async def test_dict_cursor(conn_cnx):
+    async with conn_cnx() as cnx:
         async with cnx.cursor(snowflake.connector.aio.DictCursor) as c:
             await c.execute(
                 "alter session set python_connector_query_result_format='ARROW'"
@@ -987,8 +972,8 @@ async def test_dict_cursor(async_conn_cnx):
 
 
 @pytest.mark.asyncio
-async def test_fetch_as_numpy_val(async_conn_cnx):
-    async with async_conn_cnx(numpy=True) as cnx:
+async def test_fetch_as_numpy_val(conn_cnx):
+    async with conn_cnx(numpy=True) as cnx:
         cursor = cnx.cursor()
         await cursor.execute(
             "alter session set python_connector_query_result_format='ARROW'"
@@ -1027,10 +1012,10 @@ select '2019-08-10'::date, '2019-01-02 12:34:56.1234'::timestamp_ntz(4),
 
 
 async def iterate_over_test_chunk(
-    test_name, async_conn_cnx, sql_text, row_count, col_count, eps=None, expected=None
+    test_name, conn_cnx, sql_text, row_count, col_count, eps=None, expected=None
 ):
-    async with async_conn_cnx() as json_cnx:
-        async with async_conn_cnx() as arrow_cnx:
+    async with conn_cnx() as json_cnx:
+        async with conn_cnx() as arrow_cnx:
             if expected is None:
                 cursor_json = json_cnx.cursor()
                 await cursor_json.execute(
@@ -1078,9 +1063,9 @@ async def iterate_over_test_chunk(
 
 @pytest.mark.parametrize("debug_arrow_chunk", [True, False])
 @pytest.mark.asyncio
-async def test_arrow_bad_data(async_conn_cnx, caplog, debug_arrow_chunk):
+async def test_arrow_bad_data(conn_cnx, caplog, debug_arrow_chunk):
     with caplog.at_level(logging.DEBUG):
-        async with async_conn_cnx(
+        async with conn_cnx(
             debug_arrow_chunk=debug_arrow_chunk
         ) as arrow_cnx, arrow_cnx.cursor() as cursor:
             await cursor.execute("select 1")
@@ -1091,15 +1076,15 @@ async def test_arrow_bad_data(async_conn_cnx, caplog, debug_arrow_chunk):
     assert expr if debug_arrow_chunk else not expr
 
 
-async def init(async_conn_cnx, table, column, values):
-    async with async_conn_cnx() as json_cnx:
+async def init(conn_cnx, table, column, values):
+    async with conn_cnx() as json_cnx:
         cursor_json = json_cnx.cursor()
         column_with_seq = column[0] + "s number, " + column[1:]
         await cursor_json.execute(f"create or replace table {table} {column_with_seq}")
         await cursor_json.execute(f"insert into {table} values {values}")
 
 
-async def finish(async_conn_cnx, table):
-    async with async_conn_cnx() as json_cnx:
+async def finish(conn_cnx, table):
+    async with conn_cnx() as json_cnx:
         cursor_json = json_cnx.cursor()
         await cursor_json.execute(f"drop table IF EXISTS {table};")

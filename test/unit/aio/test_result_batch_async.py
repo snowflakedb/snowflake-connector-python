@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections import namedtuple
 from http import HTTPStatus
-from test.helpers import create_async_mock_response, create_mock_response
+from test.helpers import create_async_mock_response
 from unittest import mock
 
 import pytest
@@ -116,14 +116,15 @@ async def test_retryable_response_download(errcode, error_class):
         assert mock_get.call_count == MAX_DOWNLOAD_RETRY
 
 
-def test_unauthorized_response_download():
+async def test_unauthorized_response_download():
     """This tests that the Unauthorized response (401 status code) is handled correctly."""
-    with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
-        mock_get.return_value = create_mock_response(UNAUTHORIZED)
-
-        with mock.patch("time.sleep", return_value=None):
+    with mock.patch(
+        REQUEST_MODULE_PATH + ".get",
+        side_effect=create_async_mock_response(UNAUTHORIZED),
+    ) as mock_get:
+        with mock.patch("asyncio.sleep", return_value=None):
             with pytest.raises(DatabaseError) as ex:
-                _ = result_batch._download()
+                _ = await result_batch._download()
             error = ex.value
             assert error.errno == ER_FAILED_TO_CONNECT_TO_DB
             assert error.sqlstate == SQLSTATE_CONNECTION_REJECTED
@@ -132,30 +133,33 @@ def test_unauthorized_response_download():
 
 
 @pytest.mark.parametrize("status_code", [201, 302])
-def test_non_200_response_download(status_code):
+async def test_non_200_response_download(status_code):
     """This test checks that "success" codes which are not 200 still retry."""
-    with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
-        mock_get.return_value = create_mock_response(status_code)
-
-        with mock.patch("time.sleep", return_value=None):
+    with mock.patch(
+        REQUEST_MODULE_PATH + ".get",
+        side_effect=create_async_mock_response(status_code),
+    ) as mock_get:
+        with mock.patch("asyncio.sleep", return_value=None):
             with pytest.raises(InterfaceError) as ex:
-                _ = result_batch._download()
+                _ = await result_batch._download()
             error = ex.value
             assert error.errno == ER_FAILED_TO_REQUEST
             assert error.sqlstate == SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
         assert mock_get.call_count == MAX_DOWNLOAD_RETRY
 
 
-def test_retries_until_success():
+async def test_retries_until_success():
     with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
         error_codes = [BAD_REQUEST, UNAUTHORIZED, 201]
         # There is an OK added to the list of responses so that there is a success
         # and the retry loop ends.
-        mock_responses = [create_mock_response(code) for code in error_codes + [OK]]
+        mock_responses = [
+            create_async_mock_response(code)("") for code in error_codes + [OK]
+        ]
         mock_get.side_effect = mock_responses
 
-        with mock.patch("time.sleep", return_value=None):
-            res = result_batch._download()
-            assert res.raw == "success"
+        with mock.patch("asyncio.sleep", return_value=None):
+            res = await result_batch._download()
+            assert await res.read() == "success"
         # call `get` once for each error and one last time when it succeeds
         assert mock_get.call_count == len(error_codes) + 1
