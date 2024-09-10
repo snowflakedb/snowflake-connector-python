@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.12.2(September 10,2024)
+- v3.12.2(September 11,2024)
   - Improved error handling for asynchronous queries, providing more detailed and informative error messages when an async query fails.
   - Improved inference of TLD for accounts specifying a region in China, now defaulting to snowflakecomputing.cn.
   - Improved implementation of snowflake.connector.util_text.random_string to reduce the likelihood of collisions.
