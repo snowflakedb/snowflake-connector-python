@@ -827,7 +827,9 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         return s
 
     @contextlib.asynccontextmanager
-    async def _use_requests_session(self, url: str | None = None):
+    async def _use_requests_session(
+        self, url: str | None = None
+    ) -> aiohttp.ClientSession:
         if self._connection.disable_request_pooling:
             session = self.make_requests_session()
             try:

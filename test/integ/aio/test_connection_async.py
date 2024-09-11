@@ -2,11 +2,7 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-import pytest
-
 from snowflake.connector.aio import SnowflakeConnection
-
-pytestmark = pytest.mark.asyncio
 
 
 async def test_basic(db_parameters):
