@@ -30,12 +30,9 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     echo "[Info] Testing with ${PYTHON_VERSION}"
     SHORT_VERSION=$(python3 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
     CONNECTOR_WHL=$(ls ${CONNECTOR_DIR}/dist/snowflake_connector_python*cp${SHORT_VERSION}*.whl)
-    TEST_ENVLIST=$(python3 -c "print('fix_lint,' + ','.join('py${SHORT_VERSION}-' + e + '-ci' for e in ['pandas']) + ',py${SHORT_VERSION}-coverage')")
+    TEST_ENVLIST=$(python3 -c "print('fix_lint,' + ','.join('py${SHORT_VERSION}-' + e + '-ci' for e in ['unit','integ','pandas','sso']) + ',py${SHORT_VERSION}-coverage')")
     echo "[Info] Running tox for ${TEST_ENVLIST}"
-    python3.10 -m pip install pandas
-    python3.10 -m pip install pyarrow
-    python3.10 -c "import pandas"
-    # python3.10 -m tox -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
+    python3.10 -m tox run -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
 done
 
 deactivate
