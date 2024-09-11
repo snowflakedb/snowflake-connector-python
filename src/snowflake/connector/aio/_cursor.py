@@ -4,31 +4,53 @@
 
 from __future__ import annotations
 
+import asyncio
+import collections
+import re
 import sys
 import uuid
 from logging import getLogger
-from typing import IO, TYPE_CHECKING, Any, Sequence
+from types import TracebackType
+from typing import IO, TYPE_CHECKING, Any, AsyncIterator, Literal, Sequence, overload
 
 from typing_extensions import Self
 
-from snowflake.connector import Error, IntegrityError, InterfaceError, ProgrammingError
-from snowflake.connector._sql_util import get_file_transfer_type
-from snowflake.connector.constants import PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
-from snowflake.connector.cursor import (
-    CAN_USE_ARROW_RESULT_FORMAT,
-    DESC_TABLE_RE,
-    ResultState,
+import snowflake.connector.cursor
+from snowflake.connector import (
+    Error,
+    IntegrityError,
+    InterfaceError,
+    NotSupportedError,
+    ProgrammingError,
 )
+from snowflake.connector._sql_util import get_file_transfer_type
+from snowflake.connector.aio._result_batch import (
+    ResultBatch,
+    create_batches_from_response,
+)
+from snowflake.connector.aio._result_set import ResultSet, ResultSetIterator
+from snowflake.connector.constants import PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
+from snowflake.connector.cursor import DESC_TABLE_RE
+from snowflake.connector.cursor import DictCursor as DictCursorSync
+from snowflake.connector.cursor import ResultMetadata, ResultMetadataV2, ResultState
 from snowflake.connector.cursor import SnowflakeCursor as SnowflakeCursorSync
+from snowflake.connector.cursor import T
 from snowflake.connector.errorcode import (
     ER_CURSOR_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
+    ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
     ER_INVALID_VALUE,
+    ER_NOT_POSITIVE_SIZE,
 )
+from snowflake.connector.errors import BindUploadError
 from snowflake.connector.file_transfer_agent import SnowflakeProgressPercentage
+from snowflake.connector.telemetry import TelemetryField
 from snowflake.connector.time_util import get_time_millis
 
 if TYPE_CHECKING:
+    from pandas import DataFrame
+    from pyarrow import Table
+
     from snowflake.connector.aio import SnowflakeConnection
 
 logger = getLogger(__name__)
@@ -43,6 +65,331 @@ class SnowflakeCursor(SnowflakeCursorSync):
         super().__init__(connection, use_dict_result)
         # the following fixes type hint
         self._connection: SnowflakeConnection = connection
+        self._lock_canceling = asyncio.Lock()
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        while True:
+            _next = await self.fetchone()
+            if _next is None:
+                raise StopAsyncIteration
+            return _next
+
+    async def __aenter__(self):
+        return self
+
+    def __del__(self):
+        # do nothing in async, __del__ is unreliable
+        pass
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Context manager with commit or rollback."""
+        await self.close()
+
+    async def __cancel_query(self, query) -> None:
+        if self._sequence_counter >= 0 and not self.is_closed():
+            logger.debug("canceled. %s, request_id: %s", query, self._request_id)
+            async with self._lock_canceling:
+                raise NotImplementedError(
+                    "Canceling a query is not supported in async."
+                )
+
+    async def _describe_internal(
+        self, *args: Any, **kwargs: Any
+    ) -> list[ResultMetadataV2]:
+        """Obtain the schema of the result without executing the query.
+
+        This function takes the same arguments as execute, please refer to that function
+        for documentation.
+
+        This function is for internal use only
+
+        Returns:
+            The schema of the result, in the new result metadata format.
+        """
+        kwargs["_describe_only"] = kwargs["_is_internal"] = True
+        await self.execute(*args, **kwargs)
+        return self._description
+
+    async def _execute_helper(
+        self,
+        query: str,
+        timeout: int = 0,
+        statement_params: dict[str, str] | None = None,
+        binding_params: tuple | dict[str, dict[str, str]] = None,
+        binding_stage: str | None = None,
+        is_internal: bool = False,
+        describe_only: bool = False,
+        _no_results: bool = False,
+        _is_put_get=None,
+        _no_retry: bool = False,
+        dataframe_ast: str | None = None,
+    ) -> dict[str, Any]:
+        del self.messages[:]
+
+        if statement_params is not None and not isinstance(statement_params, dict):
+            Error.errorhandler_wrapper(
+                self.connection,
+                self,
+                ProgrammingError,
+                {
+                    "msg": "The data type of statement params is invalid. It must be dict.",
+                    "errno": ER_INVALID_VALUE,
+                },
+            )
+
+        # check if current installation include arrow extension or not,
+        # if not, we set statement level query result format to be JSON
+        if not snowflake.connector.cursor.CAN_USE_ARROW_RESULT_FORMAT:
+            logger.debug("Cannot use arrow result format, fallback to json format")
+            if statement_params is None:
+                statement_params = {
+                    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "JSON"
+                }
+            else:
+                result_format_val = statement_params.get(
+                    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
+                )
+                if str(result_format_val).upper() == "ARROW":
+                    self.check_can_use_arrow_resultset()
+                elif result_format_val is None:
+                    statement_params[PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT] = (
+                        "JSON"
+                    )
+
+        self._sequence_counter = await self._connection._next_sequence_counter()
+        self._request_id = uuid.uuid4()
+
+        logger.debug(f"Request id: {self._request_id}")
+
+        logger.debug("running query [%s]", self._format_query_for_log(query))
+        if _is_put_get is not None:
+            # if told the query is PUT or GET, use the information
+            self._is_file_transfer = _is_put_get
+        else:
+            # or detect it.
+            self._is_file_transfer = get_file_transfer_type(query) is not None
+        logger.debug("is_file_transfer: %s", self._is_file_transfer is not None)
+
+        real_timeout = (
+            timeout if timeout and timeout > 0 else self._connection.network_timeout
+        )
+
+        # TODO: asyncio timer bomb
+        # if real_timeout is not None:
+        #     self._timebomb = Timer(real_timeout, self.__cancel_query, [query])
+        #     self._timebomb.start()
+        #     logger.debug("started timebomb in %ss", real_timeout)
+        # else:
+        #     self._timebomb = None
+        #
+        # original_sigint = signal.getsignal(signal.SIGINT)
+        #
+        # def interrupt_handler(*_):  # pragma: no cover
+        #     try:
+        #         signal.signal(signal.SIGINT, exit_handler)
+        #     except (ValueError, TypeError):
+        #         # ignore failures
+        #         pass
+        #     try:
+        #         if self._timebomb is not None:
+        #             self._timebomb.cancel()
+        #             logger.debug("cancelled timebomb in finally")
+        #             self._timebomb = None
+        #         self.__cancel_query(query)
+        #     finally:
+        #         if original_sigint:
+        #             try:
+        #                 signal.signal(signal.SIGINT, original_sigint)
+        #             except (ValueError, TypeError):
+        #                 # ignore failures
+        #                 pass
+        #     raise KeyboardInterrupt
+        #
+        # try:
+        #     if not original_sigint == exit_handler:
+        #         signal.signal(signal.SIGINT, interrupt_handler)
+        # except ValueError:  # pragma: no cover
+        #     logger.debug(
+        #         "Failed to set SIGINT handler. " "Not in main thread. Ignored..."
+        #     )
+        ret: dict[str, Any] = {"data": {}}
+        try:
+            ret = await self._connection.cmd_query(
+                query,
+                self._sequence_counter,
+                self._request_id,
+                binding_params=binding_params,
+                binding_stage=binding_stage,
+                is_file_transfer=bool(self._is_file_transfer),
+                statement_params=statement_params,
+                is_internal=is_internal,
+                describe_only=describe_only,
+                _no_results=_no_results,
+                _no_retry=_no_retry,
+                timeout=real_timeout,
+                dataframe_ast=dataframe_ast,
+            )
+        finally:
+            pass
+            # TODO: async timer bomb
+            # try:
+            #     if original_sigint:
+            #         signal.signal(signal.SIGINT, original_sigint)
+            # except (ValueError, TypeError):  # pragma: no cover
+            #     logger.debug(
+            #         "Failed to reset SIGINT handler. Not in main " "thread. Ignored..."
+            #     )
+            # if self._timebomb is not None:
+            #     self._timebomb.cancel()
+            #     logger.debug("cancelled timebomb in finally")
+
+        if "data" in ret and "parameters" in ret["data"]:
+            parameters = ret["data"].get("parameters", list())
+            # Set session parameters for cursor object
+            for kv in parameters:
+                if "TIMESTAMP_OUTPUT_FORMAT" in kv["name"]:
+                    self._timestamp_output_format = kv["value"]
+                elif "TIMESTAMP_NTZ_OUTPUT_FORMAT" in kv["name"]:
+                    self._timestamp_ntz_output_format = kv["value"]
+                elif "TIMESTAMP_LTZ_OUTPUT_FORMAT" in kv["name"]:
+                    self._timestamp_ltz_output_format = kv["value"]
+                elif "TIMESTAMP_TZ_OUTPUT_FORMAT" in kv["name"]:
+                    self._timestamp_tz_output_format = kv["value"]
+                elif "DATE_OUTPUT_FORMAT" in kv["name"]:
+                    self._date_output_format = kv["value"]
+                elif "TIME_OUTPUT_FORMAT" in kv["name"]:
+                    self._time_output_format = kv["value"]
+                elif "TIMEZONE" in kv["name"]:
+                    self._timezone = kv["value"]
+                elif "BINARY_OUTPUT_FORMAT" in kv["name"]:
+                    self._binary_output_format = kv["value"]
+            # Set session parameters for connection object
+            await self._connection._update_parameters(
+                {p["name"]: p["value"] for p in parameters}
+            )
+
+        self.query = query
+        self._sequence_counter = -1
+        return ret
+
+    async def _init_result_and_meta(self, data: dict[Any, Any]) -> None:
+        is_dml = self._is_dml(data)
+        self._query_result_format = data.get("queryResultFormat", "json")
+        logger.debug("Query result format: %s", self._query_result_format)
+
+        if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
+            self._total_rowcount = data["total"]
+
+        self._description: list[ResultMetadataV2] = [
+            ResultMetadataV2.from_column(col) for col in data["rowtype"]
+        ]
+
+        result_chunks = create_batches_from_response(
+            self, self._query_result_format, data, self._description
+        )
+
+        if not (is_dml or self.is_file_transfer):
+            logger.info(
+                "Number of results in first chunk: %s", result_chunks[0].rowcount
+            )
+
+        self._result_set = ResultSet(
+            self,
+            result_chunks,
+            self._connection.client_prefetch_threads,
+        )
+        self._rownumber = -1
+        self._result_state = ResultState.VALID
+
+        # don't update the row count when the result is returned from `describe` method
+        if is_dml and "rowset" in data and len(data["rowset"]) > 0:
+            updated_rows = 0
+            for idx, desc in enumerate(self._description):
+                if desc.name in (
+                    "number of rows updated",
+                    "number of multi-joined rows updated",
+                    "number of rows deleted",
+                ) or desc.name.startswith("number of rows inserted"):
+                    updated_rows += int(data["rowset"][0][idx])
+            if self._total_rowcount == -1:
+                self._total_rowcount = updated_rows
+            else:
+                self._total_rowcount += updated_rows
+
+    async def _init_multi_statement_results(self, data: dict) -> None:
+        # self._log_telemetry_job_data(TelemetryField.MULTI_STATEMENT, TelemetryData.TRUE)
+        self.multi_statement_savedIds = data["resultIds"].split(",")
+        self._multi_statement_resultIds = collections.deque(
+            self.multi_statement_savedIds
+        )
+        if self._is_file_transfer:
+            Error.errorhandler_wrapper(
+                self.connection,
+                self,
+                ProgrammingError,
+                {
+                    "msg": "PUT/GET commands are not supported for multi-statement queries and cannot be executed.",
+                    "errno": ER_INVALID_VALUE,
+                },
+            )
+        await self.nextset()
+
+    async def _log_telemetry_job_data(
+        self, telemetry_field: TelemetryField, value: Any
+    ) -> None:
+        raise NotImplementedError("Telemetry is not supported in async.")
+
+    async def abort_query(self, qid: str) -> bool:
+        url = f"/queries/{qid}/abort-request"
+        ret = await self._connection.rest.request(url=url, method="post")
+        return ret.get("success")
+
+    @overload
+    async def callproc(self, procname: str) -> tuple: ...
+
+    @overload
+    async def callproc(self, procname: str, args: T) -> T: ...
+
+    async def callproc(self, procname: str, args=tuple()):
+        """Call a stored procedure.
+
+        Args:
+            procname: The stored procedure to be called.
+            args: Parameters to be passed into the stored procedure.
+
+        Returns:
+            The input parameters.
+        """
+        marker_format = "%s" if self._connection.is_pyformat else "?"
+        command = (
+            f"CALL {procname}({', '.join([marker_format for _ in range(len(args))])})"
+        )
+        await self.execute(command, args)
+        return args
+
+    async def close(self):
+        """Closes the cursor object.
+
+        Returns whether the cursor was closed during this call.
+        """
+        try:
+            if self.is_closed():
+                return False
+            async with self._lock_canceling:
+                self.reset(closing=True)
+                self._connection = None
+                del self.messages[:]
+                return True
+        except Exception:
+            return None
 
     async def execute(
         self,
@@ -225,7 +572,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
                     else -1
                 )
                 return data
-            self._init_result_and_meta(data)
+            await self._init_result_and_meta(data)
         else:
             self._total_rowcount = (
                 ret["data"]["total"] if "data" in ret and "total" in ret["data"] else -1
@@ -249,180 +596,158 @@ class SnowflakeCursor(SnowflakeCursorSync):
             Error.errorhandler_wrapper(self.connection, self, error_class, errvalue)
         return self
 
-    async def _execute_helper(
+    async def executemany(
         self,
-        query: str,
-        timeout: int = 0,
-        statement_params: dict[str, str] | None = None,
-        binding_params: tuple | dict[str, dict[str, str]] = None,
-        binding_stage: str | None = None,
-        is_internal: bool = False,
-        describe_only: bool = False,
-        _no_results: bool = False,
-        _is_put_get=None,
-        _no_retry: bool = False,
-        dataframe_ast: str | None = None,
-    ) -> dict[str, Any]:
-        del self.messages[:]
+        command: str,
+        seqparams: Sequence[Any] | dict[str, Any],
+        **kwargs: Any,
+    ) -> SnowflakeCursor:
+        """Executes a command/query with the given set of parameters sequentially."""
+        logger.debug("executing many SQLs/commands")
+        command = command.strip(" \t\n\r") if command else None
 
-        if statement_params is not None and not isinstance(statement_params, dict):
-            Error.errorhandler_wrapper(
-                self.connection,
-                self,
-                ProgrammingError,
-                {
-                    "msg": "The data type of statement params is invalid. It must be dict.",
-                    "errno": ER_INVALID_VALUE,
-                },
+        if not seqparams:
+            logger.warning(
+                "No parameters provided to executemany, returning without doing anything."
             )
+            return self
 
-        # check if current installation include arrow extension or not,
-        # if not, we set statement level query result format to be JSON
-        if not CAN_USE_ARROW_RESULT_FORMAT:
-            logger.debug("Cannot use arrow result format, fallback to json format")
-            if statement_params is None:
-                statement_params = {
-                    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "JSON"
-                }
-            else:
-                result_format_val = statement_params.get(
-                    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
-                )
-                if str(result_format_val).upper() == "ARROW":
-                    self.check_can_use_arrow_resultset()
-                elif result_format_val is None:
-                    statement_params[PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT] = (
-                        "JSON"
+        if self.INSERT_SQL_RE.match(command) and (
+            "num_statements" not in kwargs or kwargs.get("num_statements") == 1
+        ):
+            if self._connection.is_pyformat:
+                # TODO(SNOW-940692) - utilize multi-statement instead of rewriting the query and
+                #  accumulate results to mock the result from a single insert statement as formatted below
+                logger.debug("rewriting INSERT query")
+                command_wo_comments = re.sub(self.COMMENT_SQL_RE, "", command)
+                m = self.INSERT_SQL_VALUES_RE.match(command_wo_comments)
+                if not m:
+                    Error.errorhandler_wrapper(
+                        self.connection,
+                        self,
+                        InterfaceError,
+                        {
+                            "msg": "Failed to rewrite multi-row insert",
+                            "errno": ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
+                        },
                     )
 
-        self._sequence_counter = await self._connection._next_sequence_counter()
-        self._request_id = uuid.uuid4()
+                fmt = m.group(1)
+                values = []
+                for param in seqparams:
+                    logger.debug(f"parameter: {param}")
+                    values.append(
+                        fmt % self._connection._process_params_pyformat(param, self)
+                    )
+                command = command.replace(fmt, ",".join(values), 1)
+                await self.execute(command, **kwargs)
+                return self
+            else:
+                logger.debug("bulk insert")
+                # sanity check
+                row_size = len(seqparams[0])
+                for row in seqparams:
+                    if len(row) != row_size:
+                        error_value = {
+                            "msg": f"Bulk data size don't match. expected: {row_size}, "
+                            f"got: {len(row)}, command: {command}",
+                            "errno": ER_INVALID_VALUE,
+                        }
+                        Error.errorhandler_wrapper(
+                            self.connection, self, InterfaceError, error_value
+                        )
+                        return self
+                bind_size = len(seqparams) * row_size
+                bind_stage = None
+                if (
+                    bind_size
+                    > self.connection._session_parameters[
+                        "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
+                    ]
+                    > 0
+                ):
+                    # bind stage optimization
+                    try:
+                        raise NotImplementedError(
+                            "Bind stage is not supported yet in async."
+                        )
+                    except BindUploadError:
+                        logger.debug(
+                            "Failed to upload binds to stage, sending binds to "
+                            "Snowflake instead."
+                        )
+                binding_param = (
+                    None if bind_stage else list(map(list, zip(*seqparams)))
+                )  # transpose
+                await self.execute(
+                    command, params=binding_param, _bind_stage=bind_stage, **kwargs
+                )
+                return self
 
-        logger.debug(f"Request id: {self._request_id}")
-
-        logger.debug("running query [%s]", self._format_query_for_log(query))
-        if _is_put_get is not None:
-            # if told the query is PUT or GET, use the information
-            self._is_file_transfer = _is_put_get
+        self.reset()
+        if "num_statements" not in kwargs:
+            # fall back to old driver behavior when the user does not provide the parameter to enable
+            #  multi-statement optimizations for executemany
+            for param in seqparams:
+                await self.execute(command, params=param, _do_reset=False, **kwargs)
         else:
-            # or detect it.
-            self._is_file_transfer = get_file_transfer_type(query) is not None
-        logger.debug("is_file_transfer: %s", self._is_file_transfer is not None)
+            if re.search(";/s*$", command) is None:
+                command = command + "; "
+            if self._connection.is_pyformat:
+                processed_queries = [
+                    self._preprocess_pyformat_query(command, params)
+                    for params in seqparams
+                ]
+                query = "".join(processed_queries)
+                params = None
+            else:
+                query = command * len(seqparams)
+                params = [param for parameters in seqparams for param in parameters]
 
-        real_timeout = (
-            timeout if timeout and timeout > 0 else self._connection.network_timeout
-        )
-
-        # TODO: asyncio timer bomb
-        # if real_timeout is not None:
-        #     self._timebomb = Timer(real_timeout, self.__cancel_query, [query])
-        #     self._timebomb.start()
-        #     logger.debug("started timebomb in %ss", real_timeout)
-        # else:
-        #     self._timebomb = None
-        #
-        # original_sigint = signal.getsignal(signal.SIGINT)
-        #
-        # def interrupt_handler(*_):  # pragma: no cover
-        #     try:
-        #         signal.signal(signal.SIGINT, exit_handler)
-        #     except (ValueError, TypeError):
-        #         # ignore failures
-        #         pass
-        #     try:
-        #         if self._timebomb is not None:
-        #             self._timebomb.cancel()
-        #             logger.debug("cancelled timebomb in finally")
-        #             self._timebomb = None
-        #         self.__cancel_query(query)
-        #     finally:
-        #         if original_sigint:
-        #             try:
-        #                 signal.signal(signal.SIGINT, original_sigint)
-        #             except (ValueError, TypeError):
-        #                 # ignore failures
-        #                 pass
-        #     raise KeyboardInterrupt
-        #
-        # try:
-        #     if not original_sigint == exit_handler:
-        #         signal.signal(signal.SIGINT, interrupt_handler)
-        # except ValueError:  # pragma: no cover
-        #     logger.debug(
-        #         "Failed to set SIGINT handler. " "Not in main thread. Ignored..."
-        #     )
-        ret: dict[str, Any] = {"data": {}}
-        try:
-            ret = await self._connection.cmd_query(
-                query,
-                self._sequence_counter,
-                self._request_id,
-                binding_params=binding_params,
-                binding_stage=binding_stage,
-                is_file_transfer=bool(self._is_file_transfer),
-                statement_params=statement_params,
-                is_internal=is_internal,
-                describe_only=describe_only,
-                _no_results=_no_results,
-                _no_retry=_no_retry,
-                timeout=real_timeout,
-                dataframe_ast=dataframe_ast,
-            )
-        finally:
-            pass
-            # TODO: async timer bomb
-            # try:
-            #     if original_sigint:
-            #         signal.signal(signal.SIGINT, original_sigint)
-            # except (ValueError, TypeError):  # pragma: no cover
-            #     logger.debug(
-            #         "Failed to reset SIGINT handler. Not in main " "thread. Ignored..."
-            #     )
-            # if self._timebomb is not None:
-            #     self._timebomb.cancel()
-            #     logger.debug("cancelled timebomb in finally")
-
-        if "data" in ret and "parameters" in ret["data"]:
-            parameters = ret["data"].get("parameters", list())
-            # Set session parameters for cursor object
-            for kv in parameters:
-                if "TIMESTAMP_OUTPUT_FORMAT" in kv["name"]:
-                    self._timestamp_output_format = kv["value"]
-                elif "TIMESTAMP_NTZ_OUTPUT_FORMAT" in kv["name"]:
-                    self._timestamp_ntz_output_format = kv["value"]
-                elif "TIMESTAMP_LTZ_OUTPUT_FORMAT" in kv["name"]:
-                    self._timestamp_ltz_output_format = kv["value"]
-                elif "TIMESTAMP_TZ_OUTPUT_FORMAT" in kv["name"]:
-                    self._timestamp_tz_output_format = kv["value"]
-                elif "DATE_OUTPUT_FORMAT" in kv["name"]:
-                    self._date_output_format = kv["value"]
-                elif "TIME_OUTPUT_FORMAT" in kv["name"]:
-                    self._time_output_format = kv["value"]
-                elif "TIMEZONE" in kv["name"]:
-                    self._timezone = kv["value"]
-                elif "BINARY_OUTPUT_FORMAT" in kv["name"]:
-                    self._binary_output_format = kv["value"]
-            # Set session parameters for connection object
-            await self._connection._update_parameters(
-                {p["name"]: p["value"] for p in parameters}
+            kwargs["num_statements"]: int = kwargs.get("num_statements") * len(
+                seqparams
             )
 
-        self.query = query
-        self._sequence_counter = -1
-        return ret
+            await self.execute(query, params, _do_reset=False, **kwargs)
+
+        return self
+
+    async def execute_async(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        """Convenience function to execute a query without waiting for results (asynchronously).
+
+        This function takes the same arguments as execute, please refer to that function
+        for documentation. Please note that PUT and GET statements are not supported by this method.
+        """
+        kwargs["_exec_async"] = True
+        return await self.execute(*args, **kwargs)
+
+    async def describe(self, *args: Any, **kwargs: Any) -> list[ResultMetadata]:
+        """Obtain the schema of the result without executing the query.
+
+        This function takes the same arguments as execute, please refer to that function
+        for documentation.
+
+        Returns:
+            The schema of the result.
+        """
+        kwargs["_describe_only"] = kwargs["_is_internal"] = True
+        await self.execute(*args, **kwargs)
+
+        if self._description is None:
+            return None
+        return [meta._to_result_metadata_v1() for meta in self._description]
 
     async def fetchone(self) -> dict | tuple | None:
         """Fetches one row."""
         if self._prefetch_hook is not None:
             self._prefetch_hook()
-        # TODO: aio result set
         if self._result is None and self._result_set is not None:
-            self._result = iter(self._result_set)
+            self._result: ResultSetIterator = await self._result_set._create_iter()
             self._result_state = ResultState.VALID
-
         try:
-            # TODO: aio result set / asyncio generator
-            _next = next(self._result, None)
+            if self._result is None:
+                raise TypeError("'NoneType' object is not an iterator")
+            _next = await self._result.get_next()
             if isinstance(_next, Exception):
                 Error.errorhandler_wrapper_from_ready_exception(
                     self._connection,
@@ -438,12 +763,187 @@ class SnowflakeCursor(SnowflakeCursorSync):
             else:
                 return None
 
-    async def fetchall(self) -> list[tuple] | list[dict]:
-        """Fetches all of the results."""
+    async def fetchmany(self, size: int | None = None) -> list[tuple] | list[dict]:
+        """Fetches the number of specified rows."""
+        if size is None:
+            size = self.arraysize
+
+        if size < 0:
+            errorvalue = {
+                "msg": (
+                    "The number of rows is not zero or " "positive number: {}"
+                ).format(size),
+                "errno": ER_NOT_POSITIVE_SIZE,
+            }
+            Error.errorhandler_wrapper(
+                self.connection, self, ProgrammingError, errorvalue
+            )
         ret = []
-        while True:
+        while size > 0:
             row = await self.fetchone()
             if row is None:
                 break
             ret.append(row)
+            if size is not None:
+                size -= 1
+
         return ret
+
+    async def fetchall(self) -> list[tuple] | list[dict]:
+        """Fetches all of the results."""
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
+        if self._result is None and self._result_set is not None:
+            self._result: ResultSetIterator = await self._result_set._create_iter(
+                is_fetch_all=True
+            )
+            self._result_state = ResultState.VALID
+
+        if self._result is None:
+            if self._result_state == ResultState.DEFAULT:
+                raise TypeError("'NoneType' object is not an iterator")
+            else:
+                return []
+
+        return await self._result.fetch_all_data()
+
+    async def fetch_arrow_batches(self) -> AsyncIterator[Table]:
+        self.check_can_use_arrow_resultset()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        # self._log_telemetry_job_data(
+        #     TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
+        # )
+        return await self._result_set._fetch_arrow_batches()
+
+    @overload
+    async def fetch_arrow_all(
+        self, force_return_table: Literal[False]
+    ) -> Table | None: ...
+
+    @overload
+    async def fetch_arrow_all(self, force_return_table: Literal[True]) -> Table: ...
+
+    async def fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
+        """
+        Args:
+            force_return_table: Set to True so that when the query returns zero rows,
+                an empty pyarrow table will be returned with schema using the highest bit length for each column.
+                Default value is False in which case None is returned in case of zero rows.
+        """
+        self.check_can_use_arrow_resultset()
+
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        # self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
+        return await self._result_set._fetch_arrow_all(
+            force_return_table=force_return_table
+        )
+
+    async def fetch_pandas_batches(self, **kwargs: Any) -> AsyncIterator[DataFrame]:
+        """Fetches a single Arrow Table."""
+        self.check_can_use_pandas()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        # TODO: async telemetry
+        # self._log_telemetry_job_data(
+        #     TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.TRUE
+        # )
+        return await self._result_set._fetch_pandas_batches(**kwargs)
+
+    async def fetch_pandas_all(self, **kwargs: Any) -> DataFrame:
+        self.check_can_use_pandas()
+        if self._prefetch_hook is not None:
+            self._prefetch_hook()
+        if self._query_result_format != "arrow":
+            raise NotSupportedError
+        # # TODO: async telemetry
+        # self._log_telemetry_job_data(
+        #     TelemetryField.PANDAS_FETCH_ALL, TelemetryData.TRUE
+        # )
+        return await self._result_set._fetch_pandas_all(**kwargs)
+
+    async def nextset(self) -> SnowflakeCursor | None:
+        """
+        Fetches the next set of results if the previously executed query was multi-statement so that subsequent calls
+        to any of the fetch*() methods will return rows from the next query's set of results. Returns None if no more
+        query results are available.
+        """
+        if self._prefetch_hook is not None:
+            await self._prefetch_hook()
+        self.reset()
+        if self._multi_statement_resultIds:
+            await self.query_result(self._multi_statement_resultIds[0])
+            logger.info(
+                f"Retrieved results for query ID: {self._multi_statement_resultIds.popleft()}"
+            )
+            return self
+
+        return None
+
+    async def get_result_batches(self) -> list[ResultBatch] | None:
+        """Get the previously executed query's ``ResultBatch`` s if available.
+
+        If they are unavailable, in case nothing has been executed yet None will
+        be returned.
+
+        For a detailed description of ``ResultBatch`` s please see the docstring of:
+        ``snowflake.connector.result_batches.ResultBatch``
+        """
+        if self._result_set is None:
+            return None
+        # TODO: async telemetry SNOW-1572217
+        # self._log_telemetry_job_data(
+        #     TelemetryField.GET_PARTITIONS_USED, TelemetryData.TRUE
+        # )
+        return self._result_set.batches
+
+    async def get_results_from_sfqid(self, sfqid: str) -> None:
+        """Gets the results from previously ran query."""
+        raise NotImplementedError("Not implemented in async")
+
+    async def query_result(self, qid: str) -> SnowflakeCursor:
+        url = f"/queries/{qid}/result"
+        ret = await self._connection.rest.request(url=url, method="get")
+        self._sfqid = (
+            ret["data"]["queryId"]
+            if "data" in ret and "queryId" in ret["data"]
+            else None
+        )
+        self._sqlstate = (
+            ret["data"]["sqlState"]
+            if "data" in ret and "sqlState" in ret["data"]
+            else None
+        )
+        logger.debug("sfqid=%s", self._sfqid)
+
+        if ret.get("success"):
+            data = ret.get("data")
+            await self._init_result_and_meta(data)
+        else:
+            logger.info("failed")
+            logger.debug(ret)
+            err = ret["message"]
+            code = ret.get("code", -1)
+            if "data" in ret:
+                err += ret["data"].get("errorMessage", "")
+            errvalue = {
+                "msg": err,
+                "errno": int(code),
+                "sqlstate": self._sqlstate,
+                "sfqid": self._sfqid,
+            }
+            Error.errorhandler_wrapper(
+                self.connection, self, ProgrammingError, errvalue
+            )
+        return self
+
+
+class DictCursor(DictCursorSync, SnowflakeCursor):
+    pass
