@@ -1238,6 +1238,7 @@ class SnowflakeCursor:
             )
 
     def query_result(self, qid: str) -> SnowflakeCursor:
+        """Query the result of a previously executed query."""
         url = f"/queries/{qid}/result"
         ret = self._connection.rest.request(url=url, method="get")
         self._sfqid = (
@@ -1631,7 +1632,9 @@ class SnowflakeCursor:
         self.close()
 
     def get_results_from_sfqid(self, sfqid: str) -> None:
-        """Gets the results from previously ran query."""
+        """Gets the results from previously ran query. This methods differs from ``SnowflakeCursor.query_result``
+        in that it monitors the ``sfqid`` until it is no longer running, and then retrieves the results.
+        """
 
         def wait_until_ready() -> None:
             """Makes sure query has finished executing and once it has retrieves results."""
