@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Generator
 from unittest import mock
@@ -26,10 +27,14 @@ from ...lazy_var import LazyVar
 
 try:
     from snowflake.connector.options import pandas
-    from snowflake.connector.pandas_tools import write_pandas
+    from snowflake.connector.pandas_tools import (
+        _iceberg_config_statement_helper,
+        write_pandas,
+    )
 except ImportError:
     pandas = None
     write_pandas = None
+    _iceberg_config_statement_helper = None
 
 if TYPE_CHECKING:
     from snowflake.connector import SnowflakeConnection
@@ -975,3 +980,25 @@ def test_no_create_internal_object_privilege_in_target_schema(
         finally:
             cnx.execute_string(f"drop schema if exists {source_schema}")
             cnx.execute_string(f"drop schema if exists {target_schema}")
+
+
+def test__iceberg_config_statement_helper():
+    config = {
+        "EXTERNAL_VOLUME": "vol",
+        "CATALOG": "'SNOWFLAKE'",
+        "BASE_LOCATION": "/root",
+        "CATALOG_SYNC": "foo",
+        "STORAGE_SERIALIZATION_POLICY": "bar",
+    }
+    assert (
+        _iceberg_config_statement_helper(config)
+        == "EXTERNAL_VOLUME='vol' CATALOG='SNOWFLAKE' BASE_LOCATION='/root' CATALOG_SYNC='foo' STORAGE_SERIALIZATION_POLICY='bar'"
+    )
+
+    config["foo"] = True
+    config["bar"] = True
+    with pytest.raises(
+        ProgrammingError,
+        match=re.escape("Invalid iceberg configurations option(s) provided BAR, FOO"),
+    ):
+        _iceberg_config_statement_helper(config)
