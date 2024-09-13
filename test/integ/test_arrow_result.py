@@ -249,6 +249,7 @@ def verify_datatypes(
     structured_type_support,
     iceberg=False,
     pandas=False,
+    deserialize=False,
 ):
     table_name = f"arrow_datatype_test_verifaction_table_{random_string(5)}"
     with structured_type_wrapped_conn(conn_cnx, structured_type_support) as conn:
@@ -263,9 +264,9 @@ def verify_datatypes(
             conn.cursor().execute(f"insert into {table_name} {query}")
             cur = conn.cursor().execute(f"select * from {table_name}")
             if pandas:
-                pandas_verify(cur, examples, not structured_type_support)
+                pandas_verify(cur, examples, deserialize)
             else:
-                datatype_verify(cur, examples, not structured_type_support)
+                datatype_verify(cur, examples, deserialize)
         finally:
             conn.cursor().execute(f"drop table if exists {table_name}")
 
@@ -352,6 +353,7 @@ def test_datatypes(
         structured_type_support,
         iceberg,
         pandas,
+        not structured_type_support,
     )
 
 
@@ -397,6 +399,7 @@ def test_array(
         structured_type_support,
         iceberg,
         pandas,
+        not structured_type_support,
     )
 
 
@@ -495,6 +498,7 @@ def test_map(
             structured_type_support,
             iceberg,
             pandas,
+            not structured_type_support,
         )
 
 
