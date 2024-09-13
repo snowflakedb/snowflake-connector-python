@@ -353,7 +353,6 @@ def test_datatypes(
         structured_type_support,
         iceberg,
         pandas,
-        not structured_type_support,
     )
 
 
@@ -561,6 +560,7 @@ def test_object(
             structured_type_support,
             iceberg,
             pandas,
+            not structured_type_support,
         )
 
 
