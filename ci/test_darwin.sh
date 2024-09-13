@@ -20,9 +20,9 @@ PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws.py.gpg"
 gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters.py
 
 rm -rf venv
-python3.10 -m venv venv
+python3.12 -m venv venv
 . venv/bin/activate
-python3.10 -m pip install -U tox>=4
+python3.12 -m pip install -U tox>=4
 
 # Run tests
 cd $CONNECTOR_DIR
@@ -33,7 +33,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     # pandas not tested here because of macos issue: SNOW-1660226
     TEST_ENVLIST=$(python3 -c "print('fix_lint,' + ','.join('py${SHORT_VERSION}-' + e + '-ci' for e in ['unit','integ','sso']) + ',py${SHORT_VERSION}-coverage')")
     echo "[Info] Running tox for ${TEST_ENVLIST}"
-    python3.10 -m tox run -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
+    python3.12 -m tox run -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
 done
 
 deactivate
