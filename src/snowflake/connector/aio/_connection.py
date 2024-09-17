@@ -60,6 +60,7 @@ from ..time_util import get_time_millis
 from ..util_text import split_statements
 from ._cursor import SnowflakeCursor
 from ._network import SnowflakeRestful
+from ._time_util import HeartBeatTimer
 from .auth import Auth, AuthByDefault, AuthByPlugin
 
 logger = getLogger(__name__)
@@ -87,7 +88,19 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         # get the imported modules from sys.modules
         # self._log_telemetry_imported_packages() # TODO: async telemetry support
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
-        # atexit.register(self._close_at_exit) # TODO: async atexit support/test
+        atexit.register(self._close_at_exit)
+
+    def __enter__(self):
+        # async connection does not support sync context manager
+        raise TypeError(
+            "'SnowflakeConnection' object does not support the context manager protocol"
+        )
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # async connection does not support sync context manager
+        raise TypeError(
+            "'SnowflakeConnection' object does not support the context manager protocol"
+        )
 
     async def __aenter__(self) -> SnowflakeConnection:
         """Context manager."""
@@ -164,11 +177,10 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY
             ] = self._validate_client_session_keep_alive_heartbeat_frequency()
 
-        # TODO: client_prefetch_threads support
-        # if self.client_prefetch_threads:
-        #     self._session_parameters[PARAMETER_CLIENT_PREFETCH_THREADS] = (
-        #         self._validate_client_prefetch_threads()
-        #     )
+        if self.client_prefetch_threads:
+            self._session_parameters[PARAMETER_CLIENT_PREFETCH_THREADS] = (
+                self._validate_client_prefetch_threads()
+            )
 
         # Setup authenticator
         auth = Auth(self.rest)
@@ -222,10 +234,21 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             # This will be called after the heartbeat frequency has actually been set.
             # By this point it should have been decided if the heartbeat has to be enabled
             # and what would the heartbeat frequency be
-            # TODO: implement asyncio heartbeat/timer
-            raise NotImplementedError(
-                "asyncio client_session_keep_alive is not supported"
+            await self._add_heartbeat()
+
+    async def _add_heartbeat(self) -> None:
+        if not self._heartbeat_task:
+            self._heartbeat_task = HeartBeatTimer(
+                self.client_session_keep_alive_heartbeat_frequency, self._heartbeat_tick
             )
+        await self._heartbeat_task.start()
+        logger.debug("started heartbeat")
+
+    async def _heartbeat_tick(self) -> None:
+        """Execute a hearbeat if connection isn't closed yet."""
+        if not self.is_closed():
+            logger.debug("heartbeating!")
+            await self.rest._heartbeat()
 
     async def _all_async_queries_finished(self) -> bool:
         """Checks whether all async queries started by this Connection have finished executing."""
@@ -322,6 +345,13 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     continue
                 break
 
+    async def _cancel_heartbeat(self) -> None:
+        """Cancel a heartbeat thread."""
+        if self._heartbeat_task:
+            await self._heartbeat_task.stop()
+            self._heartbeat_task = None
+            logger.debug("stopped heartbeat")
+
     def _init_connection_parameters(
         self,
         connection_init_kwargs: dict,
@@ -353,7 +383,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         for name, (value, _) in DEFAULT_CONFIGURATION.items():
             setattr(self, f"_{name}", value)
 
-        self.heartbeat_thread = None
+        self._heartbeat_task = None
         is_kwargs_empty = not connection_init_kwargs
 
         if "application" not in connection_init_kwargs:
@@ -587,8 +617,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             # will hang if the application doesn't close the connection and
             # CLIENT_SESSION_KEEP_ALIVE is set, because the heartbeat runs on
             # a separate thread.
-            # TODO: async heartbeat support
-            # self._cancel_heartbeat()
+            self._cancel_heartbeat()
 
             # close telemetry first, since it needs rest to send remaining data
             logger.info("closed")
@@ -837,32 +866,16 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         """
         status, status_resp = await self._get_query_status(sf_qid)
         self._cache_query_status(sf_qid, status)
-        queries = status_resp["data"]["queries"]
         if self.is_an_error(status):
-            if sf_qid in self._async_sfqids:
-                self._async_sfqids.pop(sf_qid, None)
-            message = status_resp.get("message")
-            if message is None:
-                message = ""
-            code = queries[0].get("errorCode", -1)
-            sql_state = None
-            if "data" in status_resp:
-                message += (
-                    queries[0].get("errorMessage", "") if len(queries) > 0 else ""
-                )
-                sql_state = status_resp["data"].get("sqlState")
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": message,
-                    "errno": int(code),
-                    "sqlstate": sql_state,
-                    "sfqid": sf_qid,
-                },
-            )
+            self._process_error_query_status(sf_qid, status_resp)
         return status
+
+    @staticmethod
+    async def setup_ocsp_privatelink(app, hostname) -> None:
+        async with SnowflakeConnection.OCSP_ENV_LOCK:
+            ocsp_cache_server = f"http://ocsp.{hostname}/ocsp_response_cache.json"
+            os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"] = ocsp_cache_server
+            logger.debug("OCSP Cache Server is updated: %s", ocsp_cache_server)
 
     async def rollback(self) -> None:
         """Rolls back the current transaction."""
