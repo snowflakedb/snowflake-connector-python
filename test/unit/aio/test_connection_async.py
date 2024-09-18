@@ -13,7 +13,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from secrets import token_urlsafe
 from test.randomize import random_string
-from test.unit.mock_utils import mock_async_request_with_action, zero_backoff
+from test.unit.aio.mock_utils import mock_async_request_with_action
+from test.unit.mock_utils import zero_backoff
 from textwrap import dedent
 from unittest import mock
 from unittest.mock import patch
