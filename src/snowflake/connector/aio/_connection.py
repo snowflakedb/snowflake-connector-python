@@ -148,7 +148,9 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             )
 
         if ".privatelink.snowflakecomputing." in self.host:
-            SnowflakeConnection.setup_ocsp_privatelink(self.application, self.host)
+            await SnowflakeConnection.setup_ocsp_privatelink(
+                self.application, self.host
+            )
         else:
             if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
                 del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
@@ -215,7 +217,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             elif self._authenticator == DEFAULT_AUTHENTICATOR:
                 self.auth_class = AuthByDefault(
                     password=self._password,
-                    timeout=self._login_timeout,
+                    timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
             else:
@@ -433,7 +435,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
     def _close_at_exit(self):
         with suppress(Exception):
-            asyncio.get_event_loop().run_until_complete(self.close(retry=False))
+            asyncio.run(self.close(retry=False))
 
     async def _get_query_status(
         self, sf_qid: str
@@ -617,7 +619,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             # will hang if the application doesn't close the connection and
             # CLIENT_SESSION_KEEP_ALIVE is set, because the heartbeat runs on
             # a separate thread.
-            self._cancel_heartbeat()
+            await self._cancel_heartbeat()
 
             # close telemetry first, since it needs rest to send remaining data
             logger.info("closed")
@@ -629,7 +631,12 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 and not self._server_session_keep_alive
             ):
                 logger.info("No async queries seem to be running, deleting session")
-                await self.rest.delete_session(retry=retry)
+                try:
+                    await self.rest.delete_session(retry=retry)
+                except Exception as e:
+                    logger.debug(
+                        "Exception encountered in deleting session. ignoring...: %s", e
+                    )
             else:
                 logger.info(
                     "There are {} async queries still running, not deleting session".format(
