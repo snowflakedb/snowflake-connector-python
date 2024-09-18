@@ -199,6 +199,18 @@ class ResultBatch(ResultBatchSync):
             if connection is not None
             else exponential_backoff()()
         )
+
+        async def download_chunk(http_session):
+            response, content, encoding = None, None, None
+            logger.debug(
+                f"downloading result batch id: {self.id} with existing session {http_session}"
+            )
+            response = await http_session.get(**request_data)
+            if response.status == OK:
+                logger.debug(f"successfully downloaded result batch id: {self.id}")
+                content, encoding = await response.read(), response.get_encoding()
+            return response, content, encoding
+
         content, encoding = None, None
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:
@@ -215,27 +227,20 @@ class ResultBatch(ResultBatchSync):
                     }
                     # Try to reuse a connection if possible
                     if connection and connection._rest is not None:
+                        logger.debug(
+                            f"downloading result batch id: {self.id} with existing session {session}"
+                        )
                         async with connection._rest._use_requests_session() as session:
-                            logger.debug(
-                                f"downloading result batch id: {self.id} with existing session {session}"
-                            )
-                            response = await session.request("get", **request_data)
+                            response, content, encoding = await download_chunk(session)
                     else:
                         logger.debug(
                             f"downloading result batch id: {self.id} with new session"
                         )
                         async with aiohttp.ClientSession() as session:
-                            response = await session.get(**request_data)
-                            if response.status == OK:
-                                logger.debug(
-                                    f"successfully downloaded result batch id: {self.id}"
-                                )
-                                content, encoding = (
-                                    await response.read(),
-                                    response.get_encoding(),
-                                )
-                                break
+                            response, content, encoding = await download_chunk(session)
 
+                    if response.status == OK:
+                        break
                     # Raise error here to correctly go in to exception clause
                     if is_retryable_http_code(response.status):
                         # retryable server exceptions
