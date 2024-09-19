@@ -1661,7 +1661,7 @@ async def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
 
 @pytest.mark.parametrize("result_format", ("json", "arrow"))
 @pytest.mark.parametrize("cursor_type", (SnowflakeCursor, DictCursor))
-@pytest.mark.parametrize("fetch_method", ("__next__", "fetchone"))
+@pytest.mark.parametrize("fetch_method", ("__anext__", "fetchone"))
 async def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
     """Tests whether the year 10000 is out of range exception is raised as expected."""
     async with conn_cnx(
@@ -1673,7 +1673,7 @@ async def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_met
             await cur.execute(
                 "select * from VALUES (1, TO_TIMESTAMP('9999-01-01 00:00:00')), (2, TO_TIMESTAMP('10000-01-01 00:00:00'))"
             )
-            iterate_obj = cur if fetch_method == "fetchone" else iter(cur)
+            iterate_obj = cur if fetch_method == "fetchone" else aiter(cur)
             fetch_next_fn = getattr(iterate_obj, fetch_method)
             # first fetch doesn't raise error
             await fetch_next_fn()
@@ -1824,7 +1824,5 @@ async def test_decoding_utf8_for_json_result(conn_cnx):
     result_batch = JSONResultBatch(
         None, None, None, None, None, False, json_result_force_utf8_decoding=True
     )
-    mock_resp = mock.Mock()
-    mock_resp.content = "À".encode("latin1")
     with pytest.raises(Error):
-        await result_batch._load(mock_resp)
+        await result_batch._load("À".encode("latin1"), "latin1")

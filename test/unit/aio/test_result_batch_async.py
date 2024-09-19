@@ -74,11 +74,10 @@ pytestmark = pytest.mark.asyncio
 async def test_ok_response_download(mock_get):
     mock_get.side_effect = create_async_mock_response(200)
 
-    response = await result_batch._download()
+    content, encoding = await result_batch._download()
 
     # successful on first try
-    assert mock_get.call_count == 1
-    assert response.status == 200
+    assert mock_get.call_count == 1 and content == "success"
 
 
 @pytest.mark.skipolddriver
@@ -159,7 +158,7 @@ async def test_retries_until_success():
         mock_get.side_effect = mock_responses
 
         with mock.patch("asyncio.sleep", return_value=None):
-            res = await result_batch._download()
-            assert await res.read() == "success"
+            res, _ = await result_batch._download()
+            assert res == "success"
         # call `get` once for each error and one last time when it succeeds
         assert mock_get.call_count == len(error_codes) + 1
