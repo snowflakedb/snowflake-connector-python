@@ -12,6 +12,7 @@ from logging import getLogger
 from random import choice
 from string import hexdigits
 from typing import TYPE_CHECKING, Any, NamedTuple
+from urllib.parse import parse_qsl
 
 from .compat import quote
 from .constants import FileHeader, ResultStatus
@@ -95,12 +96,9 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             sas_token = self.credentials.creds["AZURE_SAS_TOKEN"]
             if sas_token and sas_token.startswith("?"):
                 sas_token = sas_token[1:]
-            if "?" in url:
-                _url = url + "&" + sas_token
-            else:
-                _url = url + "?" + sas_token
+            params = {k: v for k, v in parse_qsl(sas_token)}
             headers["Date"] = timestamp
-            rest_args = {"headers": headers}
+            rest_args = {"headers": headers, "params": params}
             if data:
                 rest_args["data"] = data
             return _url, rest_args
