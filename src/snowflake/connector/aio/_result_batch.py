@@ -281,7 +281,7 @@ class JSONResultBatch(ResultBatch, JSONResultBatchSync):
         # Load data to a intermediate form
         logger.debug(f"started loading result batch id: {self.id}")
         async with TimerContextManager() as load_metric:
-            downloaded_data = self._load(content, encoding)
+            downloaded_data = await self._load(content, encoding)
         logger.debug(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         # Process downloaded data
