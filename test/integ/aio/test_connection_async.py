@@ -267,6 +267,46 @@ async def test_keep_alive_heartbeat_frequency_min(db_parameters):
         await cnx.close()
 
 
+async def test_keep_alive_heartbeat_send(db_parameters):
+    config = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "account": db_parameters["account"],
+        "schema": db_parameters["schema"],
+        "database": db_parameters["database"],
+        "protocol": db_parameters["protocol"],
+        "timezone": "UTC",
+        "client_session_keep_alive": True,
+        "client_session_keep_alive_heartbeat_frequency": "1",
+    }
+    with mock.patch(
+        "snowflake.connector.aio._connection.SnowflakeConnection._validate_client_session_keep_alive_heartbeat_frequency",
+        return_value=900,
+    ), mock.patch(
+        "snowflake.connector.aio._connection.SnowflakeConnection.client_session_keep_alive_heartbeat_frequency",
+        new_callable=mock.PropertyMock,
+        return_value=1,
+    ), mock.patch(
+        "snowflake.connector.aio._connection.SnowflakeConnection._heartbeat_tick"
+    ) as mocked_heartbeat:
+        cnx = snowflake.connector.aio.SnowflakeConnection(**config)
+        try:
+            await cnx.connect()
+            # we manually call the heartbeat function once to verify heartbeat request works
+            assert "success" in (await cnx._rest._heartbeat())
+            assert cnx.client_session_keep_alive_heartbeat_frequency == 1
+            await asyncio.sleep(3)
+
+        finally:
+            await cnx.close()
+        # we verify the SnowflakeConnection._heartbeat_tick is called at least twice because we sleep for 3 seconds
+        # while the frequency is 1 second
+        assert mocked_heartbeat.called
+        assert mocked_heartbeat.call_count >= 2
+
+
 async def test_bad_db(db_parameters):
     """Attempts to use a bad DB."""
     cnx = snowflake.connector.aio.SnowflakeConnection(
