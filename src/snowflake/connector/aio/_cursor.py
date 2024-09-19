@@ -107,7 +107,6 @@ class SnowflakeCursor(SnowflakeCursorSync):
             await self.__cancel_query(query)
         except asyncio.CancelledError:
             logger.debug("cancelled timebomb in timebomb task")
-            pass
 
     async def __cancel_query(self, query) -> None:
         if self._sequence_counter >= 0 and not self.is_closed():
@@ -215,8 +214,8 @@ class SnowflakeCursor(SnowflakeCursorSync):
             try:
                 if self._timebomb is not None:
                     self._timebomb.cancel()
-                    logger.debug("cancelled timebomb in finally")
                     self._timebomb = None
+                    logger.debug("cancelled timebomb in finally")
                 asyncio.create_task(self.__cancel_query(query))
             finally:
                 if original_sigint:
@@ -252,7 +251,6 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 dataframe_ast=dataframe_ast,
             )
         finally:
-            pass
             try:
                 if original_sigint:
                     signal.signal(signal.SIGINT, original_sigint)
