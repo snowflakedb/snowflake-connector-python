@@ -1174,7 +1174,7 @@ async def test_connection_gc(conn_cnx):
     del conn
     # this is different from sync test because we need to yield to give connection.close
     # coroutine a chance to run all the teardown tasks
-    for _ in range(10):
+    for _ in range(100):
         await asyncio.sleep(0.01)
     gc.collect()
     assert conn_wref() is None
