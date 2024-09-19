@@ -10,7 +10,7 @@ import gzip
 import os
 import sys
 import time
-from logging import getLogger
+from logging import DEBUG, getLogger
 
 import pytest
 
@@ -37,8 +37,9 @@ pytestmark = pytest.mark.azure
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
-def test_put_get_with_azure(tmpdir, conn_cnx, from_path):
+def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
     """[azure] Puts and Gets a small text using Azure."""
+    caplog.set_level(DEBUG)
     # create a data file
     fname = str(tmpdir.join("test_put_get_with_azure_token.txt.gz"))
     original_contents = "123,test1\n456,test2\n"
@@ -84,6 +85,12 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path):
                 if file_stream:
                     file_stream.close()
                 csr.execute(f"drop table {table_name}")
+
+    for line in caplog.text.splitlines():
+        if "blob.core.windows.net" in line:
+            assert (
+                "sig=" not in line
+            ), "connectionpool logger is leaking sensitive information"
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:
