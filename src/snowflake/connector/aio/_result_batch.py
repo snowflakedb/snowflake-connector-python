@@ -227,16 +227,16 @@ class ResultBatch(ResultBatchSync):
                     }
                     # Try to reuse a connection if possible
                     if connection and connection._rest is not None:
-                        logger.debug(
-                            f"downloading result batch id: {self.id} with existing session {session}"
-                        )
                         async with connection._rest._use_requests_session() as session:
+                            logger.debug(
+                                f"downloading result batch id: {self.id} with existing session {session}"
+                            )
                             response, content, encoding = await download_chunk(session)
                     else:
-                        logger.debug(
-                            f"downloading result batch id: {self.id} with new session"
-                        )
                         async with aiohttp.ClientSession() as session:
+                            logger.debug(
+                                f"downloading result batch id: {self.id} with new session"
+                            )
                             response, content, encoding = await download_chunk(session)
 
                     if response.status == OK:
