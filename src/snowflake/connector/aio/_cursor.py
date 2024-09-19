@@ -70,6 +70,11 @@ class SnowflakeCursor(SnowflakeCursorSync):
     def __aiter__(self):
         return self
 
+    def __iter__(self):
+        raise TypeError(
+            "'snowflake.connector.aio.SnowflakeCursor' only supports async iteration."
+        )
+
     async def __anext__(self):
         while True:
             _next = await self.fetchone()

@@ -351,7 +351,7 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
         cloud-provider: [aws, azure, gcp]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -366,7 +366,7 @@ jobs:
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
       - name: Download wheel(s)
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.os.download_name }}_py${{ matrix.python-version }}
           path: dist
@@ -388,7 +388,7 @@ jobs:
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
         shell: bash
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: coverage_aio_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |

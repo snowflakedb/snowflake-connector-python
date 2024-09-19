@@ -191,7 +191,7 @@ class ResultBatch(ResultBatchSync):
 
     async def _download(
         self, connection: SnowflakeConnection | None = None, **kwargs
-    ) -> aiohttp.ClientResponse:
+    ) -> tuple[bytes, str]:
         """Downloads the data that the ``ResultBatch`` is pointing at."""
         sleep_timer = 1
         backoff = (
@@ -199,6 +199,19 @@ class ResultBatch(ResultBatchSync):
             if connection is not None
             else exponential_backoff()()
         )
+
+        async def download_chunk(http_session):
+            response, content, encoding = None, None, None
+            logger.debug(
+                f"downloading result batch id: {self.id} with existing session {http_session}"
+            )
+            response = await http_session.get(**request_data)
+            if response.status == OK:
+                logger.debug(f"successfully downloaded result batch id: {self.id}")
+                content, encoding = await response.read(), response.get_encoding()
+            return response, content, encoding
+
+        content, encoding = None, None
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:
                 # TODO: feature parity with download timeout setting, in sync it's set to 7s
@@ -218,20 +231,16 @@ class ResultBatch(ResultBatchSync):
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
-                            response = await session.request("get", **request_data)
+                            response, content, encoding = await download_chunk(session)
                     else:
-                        logger.debug(
-                            f"downloading result batch id: {self.id} with new session"
-                        )
                         async with aiohttp.ClientSession() as session:
-                            response = await session.get(**request_data)
+                            logger.debug(
+                                f"downloading result batch id: {self.id} with new session"
+                            )
+                            response, content, encoding = await download_chunk(session)
 
                     if response.status == OK:
-                        logger.debug(
-                            f"successfully downloaded result batch id: {self.id}"
-                        )
                         break
-
                     # Raise error here to correctly go in to exception clause
                     if is_retryable_http_code(response.status):
                         # retryable server exceptions
@@ -259,7 +268,7 @@ class ResultBatch(ResultBatchSync):
         self._metrics[DownloadMetrics.download.value] = (
             download_metric.get_timing_millis()
         )
-        return response
+        return content, encoding
 
 
 class JSONResultBatch(ResultBatch, JSONResultBatchSync):
@@ -268,11 +277,11 @@ class JSONResultBatch(ResultBatch, JSONResultBatchSync):
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         if self._local:
             return iter(self._data)
-        response = await self._download(connection=connection)
+        content, encoding = await self._download(connection=connection)
         # Load data to a intermediate form
         logger.debug(f"started loading result batch id: {self.id}")
         async with TimerContextManager() as load_metric:
-            downloaded_data = await self._load(response)
+            downloaded_data = await self._load(content, encoding)
         logger.debug(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         # Process downloaded data
@@ -281,7 +290,7 @@ class JSONResultBatch(ResultBatch, JSONResultBatchSync):
         self._metrics[DownloadMetrics.parse.value] = parse_metric.get_timing_millis()
         return iter(parsed_data)
 
-    async def _load(self, response: aiohttp.ClientResponse) -> list:
+    async def _load(self, content: bytes, encoding: str) -> list:
         """This function loads a compressed JSON file into memory.
 
         Returns:
@@ -292,7 +301,7 @@ class JSONResultBatch(ResultBatch, JSONResultBatchSync):
         # if users specify how to decode the data, we decode the bytes using the specified encoding
         if self._json_result_force_utf8_decoding:
             try:
-                read_data = str(await response.read(), "utf-8", errors="strict")
+                read_data = str(content, "utf-8", errors="strict")
             except Exception as exc:
                 err_msg = f"failed to decode json result content due to error {exc!r}"
                 logger.error(err_msg)
@@ -300,13 +309,13 @@ class JSONResultBatch(ResultBatch, JSONResultBatchSync):
         else:
             # note: SNOW-787480 response.apparent_encoding is unreliable, chardet.detect can be wrong which is used by
             # response.text to decode content, check issue: https://github.com/chardet/chardet/issues/148
-            read_data = await response.text()
+            read_data = content.decode(encoding, "strict")
         return json.loads("".join(["[", read_data, "]"]))
 
 
 class ArrowResultBatch(ResultBatch, ArrowResultBatchSync):
     async def _load(
-        self, response: aiohttp.ClientResponse, row_unit: IterUnit
+        self, content, row_unit: IterUnit
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` from a response.
 
@@ -314,7 +323,7 @@ class ArrowResultBatch(ResultBatch, ArrowResultBatchSync):
         mode that ``PyArrowIterator`` is in.
         """
         return _create_nanoarrow_iterator(
-            await response.read(),
+            content,
             self._context,
             self._use_dict_result,
             self._numpy,
@@ -334,14 +343,14 @@ class ArrowResultBatch(ResultBatch, ArrowResultBatchSync):
                 if connection and getattr(connection, "_debug_arrow_chunk", False):
                     logger.debug(f"arrow data can not be parsed: {self._data}")
                 raise
-        response = await self._download(connection=connection)
+        content, _ = await self._download(connection=connection)
         logger.debug(f"started loading result batch id: {self.id}")
         async with TimerContextManager() as load_metric:
             try:
-                loaded_data = await self._load(response, iter_unit)
+                loaded_data = await self._load(content, iter_unit)
             except Exception:
                 if connection and getattr(connection, "_debug_arrow_chunk", False):
-                    logger.debug(f"arrow data can not be parsed: {response}")
+                    logger.debug(f"arrow data can not be parsed: {content}")
                 raise
         logger.debug(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
