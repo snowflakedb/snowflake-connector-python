@@ -101,7 +101,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             rest_args = {"headers": headers, "params": params}
             if data:
                 rest_args["data"] = data
-            return _url, rest_args
+            return url, rest_args
 
         return self._send_request_with_retry(
             verb, generate_authenticated_url_and_rest_args, retry_id
