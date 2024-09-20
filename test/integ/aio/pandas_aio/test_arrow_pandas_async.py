@@ -1153,7 +1153,7 @@ async def test_resultbatches_pandas_functionality(conn_cnx):
     assert numpy.array_equal(expected_df, final_df)
 
 
-@pytest.mark.skipolddriver
+@pytest.mark.skip("SNOW-1617451 async telemetry support")
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas is missing. or no new telemetry defined - skipolddrive",
