@@ -31,6 +31,7 @@ from snowflake.connector.constants import IterUnit
 from snowflake.connector.options import pandas
 from snowflake.connector.result_set import ResultSet as ResultSetSync
 
+from .. import NotSupportedError
 from ..options import pyarrow as pa
 
 if TYPE_CHECKING:
@@ -155,6 +156,16 @@ class ResultSet(ResultSetSync):
             list[JSONResultBatch] | list[ArrowResultBatch], self.batches
         )
 
+    def _can_create_arrow_iter(self) -> None:
+        # For now we don't support mixed ResultSets, so assume first partition's type
+        #  represents them all
+        head_type = type(self.batches[0])
+        if head_type != ArrowResultBatch:
+            raise NotSupportedError(
+                f"Trying to use arrow fetching on {head_type} which "
+                f"is not ArrowResultChunk"
+            )
+
     async def _create_iter(
         self,
         **kwargs,
@@ -214,7 +225,7 @@ class ResultSet(ResultSetSync):
         if tables:
             return pa.concat_tables(tables)
         else:
-            return self.batches[0].to_arrow() if force_return_table else None
+            return await self.batches[0].to_arrow() if force_return_table else None
 
     async def _fetch_pandas_batches(self, **kwargs) -> AsyncIterator[DataFrame]:
         self._can_create_arrow_iter()
@@ -238,7 +249,7 @@ class ResultSet(ResultSetSync):
                 **concat_kwargs,
             )
         # Empty dataframe
-        return self.batches[0].to_pandas(**kwargs)
+        return await self.batches[0].to_pandas(**kwargs)
 
     async def _finish_iterating(self) -> None:
         await self._report_metrics()

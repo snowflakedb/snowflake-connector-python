@@ -136,7 +136,7 @@ class SessionPool(SessionPoolSync):
         """Closes all active and idle sessions in this session pool."""
         if self._active_sessions:
             logger.debug(f"Closing {len(self._active_sessions)} active sessions")
-        for s in itertools.chain(self._active_sessions, self._idle_sessions):
+        for s in itertools.chain(set(self._active_sessions), set(self._idle_sessions)):
             try:
                 await s.close()
             except Exception as e:
@@ -289,7 +289,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             token=header_token,
         )
         if ret.get("success") and ret.get("data", {}).get("sessionToken"):
-            logger.debug("success: %s", ret)
+            logger.debug("success: %s", SecretDetector.mask_secrets(str(ret)))
             await self.update_tokens(
                 ret["data"]["sessionToken"],
                 ret["data"].get("masterToken"),
