@@ -759,8 +759,6 @@ async def test_invalid_bind_data_type(conn_cnx):
             await cnx.cursor().execute("select 1 from dual where 1=%s", ([1, 2, 3],))
 
 
-# TODO: SNOW-1657469 for timeout
-@pytest.mark.skip
 async def test_timeout_query(conn_cnx):
     async with conn_cnx() as cnx:
         async with cnx.cursor() as c:

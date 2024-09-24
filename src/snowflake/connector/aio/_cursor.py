@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import re
+import signal
 import sys
 import uuid
 from logging import getLogger
@@ -66,6 +67,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
         # the following fixes type hint
         self._connection: SnowflakeConnection = connection
         self._lock_canceling = asyncio.Lock()
+        self._timebomb: asyncio.Task | None = None
 
     def __aiter__(self):
         return self
@@ -98,13 +100,19 @@ class SnowflakeCursor(SnowflakeCursorSync):
         """Context manager with commit or rollback."""
         await self.close()
 
+    async def _timebomb_task(self, timeout, query):
+        try:
+            logger.debug("started timebomb in %ss", timeout)
+            await asyncio.sleep(timeout)
+            await self.__cancel_query(query)
+        except asyncio.CancelledError:
+            logger.debug("cancelled timebomb in timebomb task")
+
     async def __cancel_query(self, query) -> None:
         if self._sequence_counter >= 0 and not self.is_closed():
             logger.debug("canceled. %s, request_id: %s", query, self._request_id)
             async with self._lock_canceling:
-                raise NotImplementedError(
-                    "Canceling a query is not supported in async."
-                )
+                await self._connection._cancel_query(query, self._request_id)
 
     async def _describe_internal(
         self, *args: Any, **kwargs: Any
@@ -187,44 +195,44 @@ class SnowflakeCursor(SnowflakeCursorSync):
             timeout if timeout and timeout > 0 else self._connection.network_timeout
         )
 
-        # TODO: asyncio timer bomb
-        # if real_timeout is not None:
-        #     self._timebomb = Timer(real_timeout, self.__cancel_query, [query])
-        #     self._timebomb.start()
-        #     logger.debug("started timebomb in %ss", real_timeout)
-        # else:
-        #     self._timebomb = None
-        #
-        # original_sigint = signal.getsignal(signal.SIGINT)
-        #
-        # def interrupt_handler(*_):  # pragma: no cover
-        #     try:
-        #         signal.signal(signal.SIGINT, exit_handler)
-        #     except (ValueError, TypeError):
-        #         # ignore failures
-        #         pass
-        #     try:
-        #         if self._timebomb is not None:
-        #             self._timebomb.cancel()
-        #             logger.debug("cancelled timebomb in finally")
-        #             self._timebomb = None
-        #         self.__cancel_query(query)
-        #     finally:
-        #         if original_sigint:
-        #             try:
-        #                 signal.signal(signal.SIGINT, original_sigint)
-        #             except (ValueError, TypeError):
-        #                 # ignore failures
-        #                 pass
-        #     raise KeyboardInterrupt
-        #
-        # try:
-        #     if not original_sigint == exit_handler:
-        #         signal.signal(signal.SIGINT, interrupt_handler)
-        # except ValueError:  # pragma: no cover
-        #     logger.debug(
-        #         "Failed to set SIGINT handler. " "Not in main thread. Ignored..."
-        #     )
+        if real_timeout is not None:
+            self._timebomb = asyncio.create_task(
+                self._timebomb_task(real_timeout, query)
+            )
+            logger.debug("started timebomb in %ss", real_timeout)
+        else:
+            self._timebomb = None
+
+        original_sigint = signal.getsignal(signal.SIGINT)
+
+        def interrupt_handler(*_):  # pragma: no cover
+            try:
+                signal.signal(signal.SIGINT, snowflake.connector.cursor.exit_handler)
+            except (ValueError, TypeError):
+                # ignore failures
+                pass
+            try:
+                if self._timebomb is not None:
+                    self._timebomb.cancel()
+                    self._timebomb = None
+                    logger.debug("cancelled timebomb in finally")
+                asyncio.create_task(self.__cancel_query(query))
+            finally:
+                if original_sigint:
+                    try:
+                        signal.signal(signal.SIGINT, original_sigint)
+                    except (ValueError, TypeError):
+                        # ignore failures
+                        pass
+            raise KeyboardInterrupt
+
+        try:
+            if not original_sigint == snowflake.connector.cursor.exit_handler:
+                signal.signal(signal.SIGINT, interrupt_handler)
+        except ValueError:  # pragma: no cover
+            logger.debug(
+                "Failed to set SIGINT handler. " "Not in main thread. Ignored..."
+            )
         ret: dict[str, Any] = {"data": {}}
         try:
             ret = await self._connection.cmd_query(
@@ -243,18 +251,17 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 dataframe_ast=dataframe_ast,
             )
         finally:
-            pass
-            # TODO: async timer bomb
-            # try:
-            #     if original_sigint:
-            #         signal.signal(signal.SIGINT, original_sigint)
-            # except (ValueError, TypeError):  # pragma: no cover
-            #     logger.debug(
-            #         "Failed to reset SIGINT handler. Not in main " "thread. Ignored..."
-            #     )
-            # if self._timebomb is not None:
-            #     self._timebomb.cancel()
-            #     logger.debug("cancelled timebomb in finally")
+            try:
+                if original_sigint:
+                    signal.signal(signal.SIGINT, original_sigint)
+            except (ValueError, TypeError):  # pragma: no cover
+                logger.debug(
+                    "Failed to reset SIGINT handler. Not in main " "thread. Ignored..."
+                )
+            if self._timebomb is not None:
+                self._timebomb.cancel()
+                self._timebomb = None
+                logger.debug("cancelled timebomb in finally")
 
         if "data" in ret and "parameters" in ret["data"]:
             parameters = ret["data"].get("parameters", list())
