@@ -13,13 +13,13 @@ import os
 import pickle
 import time
 from datetime import date, datetime, timezone
-from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
 
 import pytest
 import pytz
 
 import snowflake.connector
+import snowflake.connector.aio
 from snowflake.connector import (
     InterfaceError,
     NotSupportedError,
@@ -30,64 +30,31 @@ from snowflake.connector import (
     errors,
 )
 from snowflake.connector.aio import DictCursor, SnowflakeCursor
+from snowflake.connector.aio._result_batch import (
+    ArrowResultBatch,
+    JSONResultBatch,
+    ResultBatch,
+)
 from snowflake.connector.compat import IS_WINDOWS
-
-try:
-    from snowflake.connector.cursor import ResultMetadata
-except ImportError:
-
-    class ResultMetadata(NamedTuple):
-        name: str
-        type_code: int
-        display_size: int
-        internal_size: int
-        precision: int
-        scale: int
-        is_nullable: bool
-
-
-import snowflake.connector.aio
+from snowflake.connector.constants import (
+    FIELD_ID_TO_NAME,
+    PARAMETER_MULTI_STATEMENT_COUNT,
+    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
+    QueryStatus,
+)
+from snowflake.connector.cursor import ResultMetadata
 from snowflake.connector.description import CLIENT_VERSION
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
+    ER_NO_ARROW_RESULT,
+    ER_NO_PYARROW,
+    ER_NO_PYARROW_SNOWSQL,
     ER_NOT_POSITIVE_SIZE,
 )
 from snowflake.connector.errors import Error
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
-
-try:
-    from snowflake.connector.util_text import random_string
-except ImportError:
-    from ..randomize import random_string
-
-try:
-    from snowflake.connector.aio._result_batch import ArrowResultBatch, JSONResultBatch
-    from snowflake.connector.constants import (
-        FIELD_ID_TO_NAME,
-        PARAMETER_MULTI_STATEMENT_COUNT,
-        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
-    )
-    from snowflake.connector.errorcode import (
-        ER_NO_ARROW_RESULT,
-        ER_NO_PYARROW,
-        ER_NO_PYARROW_SNOWSQL,
-    )
-except ImportError:
-    PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = None
-    ER_NO_ARROW_RESULT = None
-    ER_NO_PYARROW = None
-    ER_NO_PYARROW_SNOWSQL = None
-    ArrowResultBatch = JSONResultBatch = None
-    FIELD_ID_TO_NAME = {}
-
-if TYPE_CHECKING:  # pragma: no cover
-    from snowflake.connector.result_batch import ResultBatch
-
-try:  # pragma: no cover
-    from snowflake.connector.constants import QueryStatus
-except ImportError:
-    QueryStatus = None
+from snowflake.connector.util_text import random_string
 
 
 @pytest.fixture
@@ -1826,3 +1793,24 @@ async def test_decoding_utf8_for_json_result(conn_cnx):
     )
     with pytest.raises(Error):
         await result_batch._load("À".encode("latin1"), "latin1")
+
+
+async def test_fetch_download_timeout_setting(conn_cnx):
+    with mock.patch.multiple(
+        "snowflake.connector.aio._result_batch",
+        DOWNLOAD_TIMEOUT=0.001,
+        MAX_DOWNLOAD_RETRY=2,
+    ):
+        sql = "SELECT seq4(), uniform(1, 10, RANDOM(12)) FROM TABLE(GENERATOR(ROWCOUNT => 100000)) v"
+        async with conn_cnx() as con, con.cursor() as cur:
+            with pytest.raises(asyncio.TimeoutError):
+                await (await cur.execute(sql)).fetchall()
+
+    with mock.patch.multiple(
+        "snowflake.connector.aio._result_batch",
+        DOWNLOAD_TIMEOUT=10,
+        MAX_DOWNLOAD_RETRY=1,
+    ):
+        sql = "SELECT seq4(), uniform(1, 10, RANDOM(12)) FROM TABLE(GENERATOR(ROWCOUNT => 100000)) v"
+        async with conn_cnx() as con, con.cursor() as cur:
+            assert len(await (await cur.execute(sql)).fetchall()) == 100000
