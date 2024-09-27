@@ -29,12 +29,7 @@ from snowflake.connector.network import (
     get_http_retryable_error,
     is_retryable_http_code,
 )
-from snowflake.connector.result_batch import (
-    MAX_DOWNLOAD_RETRY,
-    SSE_C_AES,
-    SSE_C_ALGORITHM,
-    SSE_C_KEY,
-)
+from snowflake.connector.result_batch import SSE_C_AES, SSE_C_ALGORITHM, SSE_C_KEY
 from snowflake.connector.result_batch import ArrowResultBatch as ArrowResultBatchSync
 from snowflake.connector.result_batch import DownloadMetrics
 from snowflake.connector.result_batch import JSONResultBatch as JSONResultBatchSync
@@ -52,8 +47,13 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
+# we redefine the DOWNLOAD_TIMEOUT and MAX_DOWNLOAD_RETRY for async version on purpose
+# because download in sync and async are different in nature and may require separate tuning
+# also be aware that currently _result_batch is a private module so these values are not exposed to users directly
+DOWNLOAD_TIMEOUT = None
+MAX_DOWNLOAD_RETRY = 10
 
-# TODO: consolidate this with the sync version
+
 def create_batches_from_response(
     cursor: SnowflakeCursor,
     _format: str,
@@ -212,19 +212,27 @@ class ResultBatch(ResultBatchSync):
             return response, content, encoding
 
         content, encoding = None, None
-        for retry in range(MAX_DOWNLOAD_RETRY):
+        for retry in range(max(MAX_DOWNLOAD_RETRY, 1)):
             try:
-                # TODO: feature parity with download timeout setting, in sync it's set to 7s
-                #  but in async we schedule multiple tasks at the same time so some tasks might
-                #  take longer than 7s to finish which is expected
+
                 async with TimerContextManager() as download_metric:
                     logger.debug(f"started downloading result batch id: {self.id}")
                     chunk_url = self._remote_chunk_info.url
                     request_data = {
                         "url": chunk_url,
                         "headers": self._chunk_headers,
-                        # "timeout": DOWNLOAD_TIMEOUT,
                     }
+                    # timeout setting for download is different from the sync version which has an
+                    # empirical value 7 seconds. It is difficult to measure this empirical value in async
+                    # as we maximize the network throughput by downloading multiple chunks at the same time compared
+                    # to the sync version that the overall throughput is constrained by the number of
+                    # prefetch threads -- in asyncio we see great download performance improvement.
+                    # if DOWNLOAD_TIMEOUT is not set, by default the aiohttp session timeout comes into effect
+                    # which originates from the connection config.
+                    if DOWNLOAD_TIMEOUT:
+                        request_data["timeout"] = aiohttp.ClientTimeout(
+                            total=DOWNLOAD_TIMEOUT
+                        )
                     # Try to reuse a connection if possible
                     if connection and connection._rest is not None:
                         async with connection._rest._use_requests_session() as session:
