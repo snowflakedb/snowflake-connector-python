@@ -106,7 +106,7 @@ async def test_async_error(conn_cnx, caplog):
             q_id = cur.sfqid
             with pytest.raises(ProgrammingError) as sync_error:
                 await cur.execute(sql)
-            while con.is_still_running(con.get_query_status(q_id)):
+            while con.is_still_running(await con.get_query_status(q_id)):
                 await asyncio.sleep(1)
             status = await con.get_query_status(q_id)
             assert status == QueryStatus.FAILED_WITH_ERROR
@@ -156,9 +156,9 @@ async def test_mix_sync_async(conn_cnx):
                 await cur.execute_async("select * from uselessTable")
                 sf_qid2 = cur.sfqid
                 # Wait until the 2 queries finish
-                while con.is_still_running(con.get_query_status(sf_qid1)):
+                while con.is_still_running(await con.get_query_status(sf_qid1)):
                     await asyncio.sleep(1)
-                while con.is_still_running(con.get_query_status(sf_qid2)):
+                while con.is_still_running(await con.get_query_status(sf_qid2)):
                     await asyncio.sleep(1)
                 await cur.execute("drop table uselessTable")
                 assert await cur.fetchall() == [("USELESSTABLE successfully dropped.",)]

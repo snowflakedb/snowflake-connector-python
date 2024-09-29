@@ -97,6 +97,18 @@ class SnowflakeCursor(SnowflakeCursorSync):
     async def __aenter__(self):
         return self
 
+    def __enter__(self):
+        # async cursor does not support sync context manager
+        raise TypeError(
+            "'SnowflakeCursor' object does not support the context manager protocol"
+        )
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # async cursor does not support sync context manager
+        raise TypeError(
+            "'SnowflakeCursor' object does not support the context manager protocol"
+        )
+
     def __del__(self):
         # do nothing in async, __del__ is unreliable
         pass

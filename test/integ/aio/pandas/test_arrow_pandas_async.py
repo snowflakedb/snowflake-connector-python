@@ -684,7 +684,7 @@ async def validate_pandas(
     print(f"new way (fetching {method}) took {end_time - start_time}s")
     if method == "batch":
         print(f"new way has # of batches : {total_batches}")
-    cursor_table.close()
+    await cursor_table.close()
     assert (
         total_rows == row_count
     ), f"there should be {row_count} rows, but {total_rows} rows"
@@ -1062,7 +1062,7 @@ async def test_execute_async_and_fetch_arrow_batches(conn_cnx):
     """Test fetching result of an asynchronous query as batches of arrow tables"""
 
     async with conn_cnx() as cnx:
-        with cnx.cursor() as cur:
+        async with cnx.cursor() as cur:
             await cur.execute("select 1/2")
             res_sync = await cur.fetch_arrow_batches()
 
