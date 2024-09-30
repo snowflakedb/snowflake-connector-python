@@ -381,7 +381,8 @@ class SnowflakeCursor(SnowflakeCursorSync):
     async def _log_telemetry_job_data(
         self, telemetry_field: TelemetryField, value: Any
     ) -> None:
-        raise NotImplementedError("Telemetry is not supported in async.")
+        # TODO: async telemetry SNOW-1572217
+        pass
 
     async def _preprocess_pyformat_query(
         self,
