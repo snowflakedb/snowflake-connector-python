@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import collections
+import logging
 import re
 import signal
 import sys
@@ -359,6 +360,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 self._total_rowcount += updated_rows
 
     async def _init_multi_statement_results(self, data: dict) -> None:
+        # TODO: async telemetry SNOW-1572217
         # self._log_telemetry_job_data(TelemetryField.MULTI_STATEMENT, TelemetryData.TRUE)
         self.multi_statement_savedIds = data["resultIds"].split(",")
         self._multi_statement_resultIds = collections.deque(
@@ -380,6 +382,43 @@ class SnowflakeCursor(SnowflakeCursorSync):
         self, telemetry_field: TelemetryField, value: Any
     ) -> None:
         raise NotImplementedError("Telemetry is not supported in async.")
+
+    async def _preprocess_pyformat_query(
+        self,
+        command: str,
+        params: Sequence[Any] | dict[Any, Any] | None = None,
+    ) -> str:
+        # pyformat/format paramstyle
+        # client side binding
+        processed_params = self._connection._process_params_pyformat(params, self)
+        # SNOW-513061 collect telemetry for empty sequence usage before we make the breaking change announcement
+        # TODO: async telemetry support
+        # if params is not None and len(params) == 0:
+        #     await self._log_telemetry_job_data(
+        #         TelemetryField.EMPTY_SEQ_INTERPOLATION,
+        #         (
+        #             TelemetryData.TRUE
+        #             if self.connection._interpolate_empty_sequences
+        #             else TelemetryData.FALSE
+        #         ),
+        #     )
+        if logger.getEffectiveLevel() <= logging.DEBUG:
+            logger.debug(
+                f"binding: [{self._format_query_for_log(command)}] "
+                f"with input=[{params}], "
+                f"processed=[{processed_params}]",
+            )
+        if (
+            self.connection._interpolate_empty_sequences
+            and processed_params is not None
+        ) or (
+            not self.connection._interpolate_empty_sequences
+            and len(processed_params) > 0
+        ):
+            query = command % processed_params
+        else:
+            query = command
+        return query
 
     async def abort_query(self, qid: str) -> bool:
         url = f"/queries/{qid}/abort-request"
@@ -497,7 +536,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
         }
 
         if self._connection.is_pyformat:
-            query = self._preprocess_pyformat_query(command, params)
+            query = await self._preprocess_pyformat_query(command, params)
         else:
             # qmark and numeric paramstyle
             query = command
@@ -733,7 +772,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 command = command + "; "
             if self._connection.is_pyformat:
                 processed_queries = [
-                    self._preprocess_pyformat_query(command, params)
+                    await self._preprocess_pyformat_query(command, params)
                     for params in seqparams
                 ]
                 query = "".join(processed_queries)
@@ -851,6 +890,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             await self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
+        # TODO: async telemetry SNOW-1572217
         # self._log_telemetry_job_data(
         #     TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
         # )
@@ -877,6 +917,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             await self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
+        # TODO: async telemetry SNOW-1572217
         # self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
         return await self._result_set._fetch_arrow_all(
             force_return_table=force_return_table
