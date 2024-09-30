@@ -31,7 +31,11 @@ from snowflake.connector.constants import IterUnit
 from snowflake.connector.options import pandas
 from snowflake.connector.result_set import ResultSet as ResultSetSync
 
+from .. import NotSupportedError
 from ..options import pyarrow as pa
+from ..result_batch import DownloadMetrics
+from ..telemetry import TelemetryField
+from ..time_util import get_time_millis
 
 if TYPE_CHECKING:
     from pandas import DataFrame
@@ -155,6 +159,16 @@ class ResultSet(ResultSetSync):
             list[JSONResultBatch] | list[ArrowResultBatch], self.batches
         )
 
+    def _can_create_arrow_iter(self) -> None:
+        # For now we don't support mixed ResultSets, so assume first partition's type
+        #  represents them all
+        head_type = type(self.batches[0])
+        if head_type != ArrowResultBatch:
+            raise NotSupportedError(
+                f"Trying to use arrow fetching on {head_type} which "
+                f"is not ArrowResultChunk"
+            )
+
     async def _create_iter(
         self,
         **kwargs,
@@ -214,7 +228,7 @@ class ResultSet(ResultSetSync):
         if tables:
             return pa.concat_tables(tables)
         else:
-            return self.batches[0].to_arrow() if force_return_table else None
+            return await self.batches[0].to_arrow() if force_return_table else None
 
     async def _fetch_pandas_batches(self, **kwargs) -> AsyncIterator[DataFrame]:
         self._can_create_arrow_iter()
@@ -238,7 +252,7 @@ class ResultSet(ResultSetSync):
                 **concat_kwargs,
             )
         # Empty dataframe
-        return self.batches[0].to_pandas(**kwargs)
+        return await self.batches[0].to_pandas(**kwargs)
 
     async def _finish_iterating(self) -> None:
         await self._report_metrics()
@@ -246,4 +260,26 @@ class ResultSet(ResultSetSync):
     async def _report_metrics(self) -> None:
         """Report metrics for the result set."""
         # TODO: SNOW-1572217 async telemetry
-        super()._report_metrics()
+        """Report all metrics totalled up.
+
+        This includes TIME_CONSUME_LAST_RESULT, TIME_DOWNLOADING_CHUNKS and
+        TIME_PARSING_CHUNKS in that order.
+        """
+        if self._cursor._first_chunk_time is not None:
+            time_consume_last_result = (
+                get_time_millis() - self._cursor._first_chunk_time
+            )
+            await self._cursor._log_telemetry_job_data(
+                TelemetryField.TIME_CONSUME_LAST_RESULT, time_consume_last_result
+            )
+        metrics = self._get_metrics()
+        if DownloadMetrics.download.value in metrics:
+            await self._cursor._log_telemetry_job_data(
+                TelemetryField.TIME_DOWNLOADING_CHUNKS,
+                metrics.get(DownloadMetrics.download.value),
+            )
+        if DownloadMetrics.parse.value in metrics:
+            await self._cursor._log_telemetry_job_data(
+                TelemetryField.TIME_PARSING_CHUNKS,
+                metrics.get(DownloadMetrics.parse.value),
+            )

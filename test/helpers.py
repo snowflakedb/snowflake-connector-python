@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import functools
 import math
@@ -42,6 +43,10 @@ try:
     from snowflake.connector.constants import QueryStatus
 except ImportError:
     QueryStatus = None
+try:
+    import snowflake.connector.aio
+except ImportError:
+    pass
 
 
 def create_mock_response(status_code: int) -> Mock:
@@ -115,6 +120,40 @@ def _wait_until_query_success(
         if status == QueryStatus.SUCCESS:
             break
         time.sleep(sleep_per_check)
+    else:
+        pytest.fail(
+            "We should have broke out of wait loop for query success."
+            f"Query ID: {sfqid}"
+            f"Final query status: {status}"
+        )
+
+
+async def _wait_while_query_running_async(
+    con: snowflake.connector.aio.SnowflakeConnection,
+    sfqid: str,
+    sleep_time: int,
+    dont_cache: bool = False,
+) -> None:
+    """
+    Checks if the provided still returns that it is still running, and if so,
+    sleeps for the specified time in a while loop.
+    """
+    query_status = con._get_query_status if dont_cache else con.get_query_status
+    while con.is_still_running(await query_status(sfqid)):
+        await asyncio.sleep(sleep_time)
+
+
+async def _wait_until_query_success_async(
+    con: snowflake.connector.aio.SnowflakeConnection,
+    sfqid: str,
+    num_checks: int,
+    sleep_per_check: int,
+) -> None:
+    for _ in range(num_checks):
+        status = await con.get_query_status(sfqid)
+        if status == QueryStatus.SUCCESS:
+            break
+        await asyncio.sleep(sleep_per_check)
     else:
         pytest.fail(
             "We should have broke out of wait loop for query success."

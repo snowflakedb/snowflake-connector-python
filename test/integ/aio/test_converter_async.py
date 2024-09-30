@@ -353,7 +353,7 @@ async def test_date_0001_9999(conn_cnx):
     async with conn_cnx(
         converter_class=SnowflakeConverterSnowSQL, support_negative_year=True
     ) as cnx:
-        cnx.cursor().execute(
+        await cnx.cursor().execute(
             """
 ALTER SESSION SET
     DATE_OUTPUT_FORMAT='YYYY-MM-DD'
@@ -388,7 +388,7 @@ async def test_five_or_more_digit_year_date_converter(conn_cnx):
     async with conn_cnx(
         converter_class=SnowflakeConverterSnowSQL, support_negative_year=True
     ) as cnx:
-        cnx.cursor().execute(
+        await cnx.cursor().execute(
             """
 ALTER SESSION SET
     DATE_OUTPUT_FORMAT='YYYY-MM-DD'
