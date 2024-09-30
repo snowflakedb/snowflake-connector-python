@@ -233,8 +233,8 @@ async def test_negative_custom_auth(auth_class):
 
 
 async def test_missing_default_connection(monkeypatch, tmp_path):
-    connections_file = tmp_path / "connections.toml"
-    config_file = tmp_path / "config.toml"
+    connections_file = tmp_path / "aio_connections.toml"
+    config_file = tmp_path / "aio_config.toml"
     with monkeypatch.context() as m:
         m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
         m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
@@ -252,8 +252,8 @@ async def test_missing_default_connection(monkeypatch, tmp_path):
 
 async def test_missing_default_connection_conf_file(monkeypatch, tmp_path):
     connection_name = random_string(5)
-    connections_file = tmp_path / "connections.toml"
-    config_file = tmp_path / "config.toml"
+    connections_file = tmp_path / "aio_connections.toml"
+    config_file = tmp_path / "aio_config.toml"
     config_file.write_text(
         dedent(
             f"""\
@@ -278,8 +278,8 @@ async def test_missing_default_connection_conf_file(monkeypatch, tmp_path):
 
 
 async def test_missing_default_connection_conn_file(monkeypatch, tmp_path):
-    connections_file = tmp_path / "connections.toml"
-    config_file = tmp_path / "config.toml"
+    connections_file = tmp_path / "aio_connections.toml"
+    config_file = tmp_path / "aio_config.toml"
     connections_file.write_text(
         dedent(
             """\
@@ -308,8 +308,8 @@ async def test_missing_default_connection_conn_file(monkeypatch, tmp_path):
 
 async def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
     connection_name = random_string(5)
-    connections_file = tmp_path / "connections.toml"
-    config_file = tmp_path / "config.toml"
+    connections_file = tmp_path / "aio_connections.toml"
+    config_file = tmp_path / "aio_config.toml"
     config_file.write_text(
         dedent(
             f"""\
@@ -381,7 +381,7 @@ async def test_handle_timeout(mockSessionRequest, next_action):
 
 @pytest.mark.skip("SNOW-1572226 authentication support")
 async def test_private_key_file_reading(tmp_path: Path):
-    key_file = tmp_path / "key.pem"
+    key_file = tmp_path / "aio_key.pem"
 
     private_key = rsa.generate_private_key(
         backend=default_backend(), public_exponent=65537, key_size=2048
@@ -422,7 +422,7 @@ async def test_private_key_file_reading(tmp_path: Path):
 
 @pytest.mark.skip("SNOW-1572226 authentication support")
 async def test_encrypted_private_key_file_reading(tmp_path: Path):
-    key_file = tmp_path / "key.pem"
+    key_file = tmp_path / "aio_key.pem"
     private_key_password = token_urlsafe(25)
     private_key = rsa.generate_private_key(
         backend=default_backend(), public_exponent=65537, key_size=2048
