@@ -265,10 +265,13 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         async def async_query_check_helper(
             sfq_id: str,
         ) -> bool:
-            nonlocal found_unfinished_query
-            return found_unfinished_query or self.is_still_running(
-                await self.get_query_status(sfq_id)
-            )
+            try:
+                nonlocal found_unfinished_query
+                return found_unfinished_query or self.is_still_running(
+                    await self.get_query_status(sfq_id)
+                )
+            except asyncio.CancelledError:
+                pass
 
         tasks = [
             asyncio.create_task(async_query_check_helper(sfqid)) for sfqid in queries
@@ -279,6 +282,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 break
         for task in tasks:
             task.cancel()
+        await asyncio.gather(*tasks)
         return not found_unfinished_query
 
     async def _authenticate(self, auth_instance: AuthByPlugin):
