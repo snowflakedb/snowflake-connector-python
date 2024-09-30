@@ -417,7 +417,7 @@ async def test_struct_time(conn, db_parameters):
             async for rec in c:
                 cnt += int(rec[0])
         finally:
-            c.close()
+            await c.close()
             os.environ["TZ"] = "UTC"
             if not IS_WINDOWS:
                 time.tzset()
@@ -510,7 +510,7 @@ async def test_insert_binary_select_with_bytearray(conn, db_parameters):
             assert count == 1, "wrong number of records were inserted"
             assert c.rowcount == 1, "wrong number of records were selected"
         finally:
-            c.close()
+            await c.close()
 
     cnx2 = snowflake.connector.aio.SnowflakeConnection(
         user=db_parameters["user"],

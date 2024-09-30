@@ -14,6 +14,7 @@ import os
 import platform
 import ssl
 import time
+from contextlib import asynccontextmanager
 from os import environ, path
 from unittest import mock
 
@@ -70,16 +71,18 @@ TARGET_HOSTS = [
 THIS_DIR = path.dirname(path.realpath(__file__))
 
 
+@asynccontextmanager
 async def _asyncio_connect(url, timeout=5):
     loop = asyncio.get_event_loop()
-    _, protocol = await loop.create_connection(
+    transport, protocol = await loop.create_connection(
         functools.partial(aiohttp.client_proto.ResponseHandler, loop),
         host=url,
         port=443,
         ssl=ssl.create_default_context(),
         ssl_handshake_timeout=timeout,
     )
-    return protocol
+    yield protocol
+    transport.close()
 
 
 @pytest.fixture(autouse=True)
@@ -123,8 +126,8 @@ async def test_ocsp():
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
     for url in TARGET_HOSTS:
-        connection = await _asyncio_connect(url, timeout=5)
-        assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
+        async with _asyncio_connect(url, timeout=5) as connection:
+            assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
 async def test_ocsp_wo_cache_server():
@@ -132,8 +135,8 @@ async def test_ocsp_wo_cache_server():
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP(use_ocsp_cache_server=False)
     for url in TARGET_HOSTS:
-        connection = await _asyncio_connect(url, timeout=5)
-        assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
+        async with _asyncio_connect(url, timeout=5) as connection:
+            assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
 async def test_ocsp_wo_cache_file():
@@ -151,8 +154,10 @@ async def test_ocsp_wo_cache_file():
     try:
         ocsp = SFOCSP()
         for url in TARGET_HOSTS:
-            connection = await _asyncio_connect(url, timeout=5)
-            assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
+            async with _asyncio_connect(url, timeout=5) as connection:
+                assert await ocsp.validate(
+                    url, connection
+                ), f"Failed to validate: {url}"
     finally:
         del environ["SF_OCSP_RESPONSE_CACHE_DIR"]
         OCSPCache.reset_cache_dir()
@@ -169,12 +174,11 @@ async def test_ocsp_fail_open_w_single_endpoint():
 
     ocsp = SFOCSP(use_ocsp_cache_server=False)
 
-    connection = await _asyncio_connect("snowflake.okta.com")
-
     try:
-        assert await ocsp.validate(
-            "snowflake.okta.com", connection
-        ), "Failed to validate: {}".format("snowflake.okta.com")
+        async with _asyncio_connect("snowflake.okta.com") as connection:
+            assert await ocsp.validate(
+                "snowflake.okta.com", connection
+            ), "Failed to validate: {}".format("snowflake.okta.com")
     finally:
         del environ["SF_OCSP_TEST_MODE"]
         del environ["SF_TEST_OCSP_URL"]
@@ -195,10 +199,10 @@ async def test_ocsp_fail_close_w_single_endpoint():
     OCSPCache.del_cache_file()
 
     ocsp = SFOCSP(use_ocsp_cache_server=False, use_fail_open=False)
-    connection = await _asyncio_connect("snowflake.okta.com")
 
     with pytest.raises(RevocationCheckError) as ex:
-        await ocsp.validate("snowflake.okta.com", connection)
+        async with _asyncio_connect("snowflake.okta.com") as connection:
+            await ocsp.validate("snowflake.okta.com", connection)
 
     try:
         assert (
@@ -219,11 +223,11 @@ async def test_ocsp_bad_validity():
     OCSPCache.del_cache_file()
 
     ocsp = SFOCSP(use_ocsp_cache_server=False)
-    connection = await _asyncio_connect("snowflake.okta.com")
+    async with _asyncio_connect("snowflake.okta.com") as connection:
 
-    assert await ocsp.validate(
-        "snowflake.okta.com", connection
-    ), "Connection should have passed with fail open"
+        assert await ocsp.validate(
+            "snowflake.okta.com", connection
+        ), "Connection should have passed with fail open"
     del environ["SF_OCSP_TEST_MODE"]
     del environ["SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY"]
 
@@ -233,10 +237,10 @@ async def test_ocsp_single_endpoint():
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
     ocsp.OCSP_CACHE_SERVER.NEW_DEFAULT_CACHE_SERVER_BASE_URL = "https://snowflake.preprod3.us-west-2-dev.external-zone.snowflakecomputing.com:8085/ocsp/"
-    connection = await _asyncio_connect("snowflake.okta.com")
-    assert await ocsp.validate(
-        "snowflake.okta.com", connection
-    ), "Failed to validate: {}".format("snowflake.okta.com")
+    async with _asyncio_connect("snowflake.okta.com") as connection:
+        assert await ocsp.validate(
+            "snowflake.okta.com", connection
+        ), "Failed to validate: {}".format("snowflake.okta.com")
 
     del environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"]
 
@@ -247,8 +251,8 @@ async def test_ocsp_by_post_method():
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP(use_post_method=True)
     for url in TARGET_HOSTS:
-        connection = await _asyncio_connect("snowflake.okta.com")
-        assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
+        async with _asyncio_connect("snowflake.okta.com") as connection:
+            assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
 async def test_ocsp_with_file_cache(tmpdir):
@@ -260,8 +264,8 @@ async def test_ocsp_with_file_cache(tmpdir):
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP(ocsp_response_cache_uri="file://" + cache_file_name)
     for url in TARGET_HOSTS:
-        connection = await _asyncio_connect("snowflake.okta.com")
-        assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
+        async with _asyncio_connect("snowflake.okta.com") as connection:
+            assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
 async def test_ocsp_with_bogus_cache_files(
@@ -298,10 +302,10 @@ async def test_ocsp_with_bogus_cache_files(
         SnowflakeOCSP.clear_cache()
         ocsp = SFOCSP()
         for hostname in target_hosts:
-            connection = await _asyncio_connect("snowflake.okta.com")
-            assert await ocsp.validate(
-                hostname, connection
-            ), f"Failed to validate: {hostname}"
+            async with _asyncio_connect("snowflake.okta.com") as connection:
+                assert await ocsp.validate(
+                    hostname, connection
+                ), f"Failed to validate: {hostname}"
 
 
 async def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_cache):
@@ -355,10 +359,10 @@ async def _store_cache_in_file(tmpdir, target_hosts=None):
         ocsp_response_cache_uri="file://" + filename, use_ocsp_cache_server=False
     )
     for hostname in target_hosts:
-        connection = await _asyncio_connect("snowflake.okta.com")
-        assert await ocsp.validate(
-            hostname, connection
-        ), f"Failed to validate: {hostname}"
+        async with _asyncio_connect("snowflake.okta.com") as connection:
+            assert await ocsp.validate(
+                hostname, connection
+            ), f"Failed to validate: {hostname}"
     assert path.exists(filename), "OCSP response cache file"
     return filename, target_hosts
 
@@ -368,8 +372,8 @@ async def test_ocsp_with_invalid_cache_file():
     SnowflakeOCSP.clear_cache()  # reset the memory cache
     ocsp = SFOCSP(ocsp_response_cache_uri="NEVER_EXISTS")
     for url in TARGET_HOSTS[0:1]:
-        connection = await _asyncio_connect(url)
-        assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
+        async with _asyncio_connect(url) as connection:
+            assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
 @mock.patch(
@@ -432,6 +436,6 @@ async def _validate_certs_using_ocsp(url, cache_file_name):
         except OSError:
             pass
 
-    connection = await _asyncio_connect(url)
-    ocsp = SFOCSP(ocsp_response_cache_uri="file://" + cache_file_name)
-    await ocsp.validate(url, connection)
+    async with _asyncio_connect(url) as connection:
+        ocsp = SFOCSP(ocsp_response_cache_uri="file://" + cache_file_name)
+        await ocsp.validate(url, connection)
