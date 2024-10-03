@@ -40,9 +40,10 @@ from snowflake.connector.cursor import (
     ASYNC_NO_DATA_MAX_RETRY,
     ASYNC_RETRY_PATTERN,
     DESC_TABLE_RE,
+    ResultMetadata,
+    ResultMetadataV2,
+    ResultState,
 )
-from snowflake.connector.cursor import DictCursor as DictCursorSync
-from snowflake.connector.cursor import ResultMetadata, ResultMetadataV2, ResultState
 from snowflake.connector.cursor import SnowflakeCursor as SnowflakeCursorSync
 from snowflake.connector.cursor import T
 from snowflake.connector.errorcode import (

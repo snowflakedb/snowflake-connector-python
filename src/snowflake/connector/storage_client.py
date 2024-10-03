@@ -363,6 +363,11 @@ class SnowflakeStorageClient(ABC):
                 fd.seek(self.chunk_size * chunk_id)
                 fd.write(data)
         except FileNotFoundError:
+            # we don't maintain dir structure when downloading, making it possible that we download
+            # same file twice, which cause race condition and operationalError in sync client because of multi-process
+            # design in sync client.
+            # while in async client, everything is actually sync, making same name file being deleted and
+            # cause file not found error
             # TODO: this is to align with sync file transfer
             raise OperationalError
 
