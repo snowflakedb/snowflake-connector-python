@@ -28,11 +28,7 @@ from ..file_transfer_agent import SnowflakeFileMeta
 from ..file_transfer_agent import (
     SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSync,
 )
-from ..file_transfer_agent import (
-    SnowflakeProgressPercentage,
-    StorageCredential,
-    _chunk_size_calculator,
-)
+from ..file_transfer_agent import SnowflakeProgressPercentage, _chunk_size_calculator
 from ..gcs_storage_client import SnowflakeGCSRestClient
 from ..local_storage_client import SnowflakeLocalStorageClient
 from ._s3_storage_client import SnowflakeS3RestClient
@@ -41,9 +37,6 @@ from ._storage_client import SnowflakeStorageClient
 if TYPE_CHECKING:  # pragma: no cover
     from ._cursor import SnowflakeCursor
 
-VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS]
-
-INJECT_WAIT_IN_PUT = 0
 
 logger = getLogger(__name__)
 
@@ -70,35 +63,24 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
     ) -> None:
-        self._cursor = cursor
-        self._command = command
-        self._ret = ret
-        self._put_callback = put_callback
-        self._put_azure_callback = (
-            put_azure_callback if put_azure_callback else put_callback
+        super().__init__(
+            cursor,
+            command,
+            ret,
+            put_callback,
+            put_azure_callback,
+            put_callback_output_stream,
+            get_callback,
+            get_azure_callback,
+            get_callback_output_stream,
+            show_progress_bar,
+            raise_put_get_error,
+            force_put_overwrite,
+            skip_upload_on_content_match,
+            multipart_threshold,
+            source_from_stream,
+            use_s3_regional_url,
         )
-        self._put_callback_output_stream = put_callback_output_stream
-        self._get_callback = get_callback
-        self._get_azure_callback = (
-            get_azure_callback if get_azure_callback else get_callback
-        )
-        self._get_callback_output_stream = get_callback_output_stream
-        # when we have not checked whether we should use accelerate, this boolean is None
-        # _use_accelerate_endpoint in SnowflakeFileTransferAgent could be passed to each SnowflakeS3RestClient
-        # so we could avoid check accelerate configuration for each S3 client created for each file meta.
-        self._use_accelerate_endpoint: bool | None = None
-        self._raise_put_get_error = raise_put_get_error
-        self._show_progress_bar = show_progress_bar
-        self._force_put_overwrite = force_put_overwrite
-        self._skip_upload_on_content_match = skip_upload_on_content_match
-        self._source_from_stream = source_from_stream
-        # The list of self-sufficient file metas that are sent to
-        # remote storage clients to get operated on.
-        self._file_metadata: list[SnowflakeFileMeta] = []
-        self._results: list[SnowflakeFileMeta] = []
-        self._multipart_threshold = multipart_threshold or 67108864  # Historical value
-        self._use_s3_regional_url = use_s3_regional_url
-        self._credentials: StorageCredential | None = None
 
     async def execute(self) -> None:
         self._parse_command()
@@ -158,8 +140,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
     async def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
         files = [self._create_file_transfer_client(m) for m in metas]
         is_upload = self._command_type == CMD_TYPE_UPLOAD
-        finish_upload_tasks = []
-        finish_download_tasks = []
+        finish_download_upload_tasks = []
 
         async def preprocess_done_cb(
             success: bool,
@@ -192,10 +173,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                     )
                     tasks.append(task)
                 await asyncio.gather(*tasks)
-                if is_upload:
-                    await asyncio.gather(*finish_upload_tasks)
-                else:
-                    await asyncio.gather(*finish_download_tasks)
+                await asyncio.gather(*finish_download_upload_tasks)
 
         def transfer_done_cb(
             task: asyncio.Task,
@@ -224,7 +202,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                     finish_upload_task = asyncio.create_task(
                         done_client.finish_upload()
                     )
-                    finish_upload_tasks.append(finish_upload_task)
+                    finish_download_upload_tasks.append(finish_upload_task)
                     done_client.delete_client_data()
                 else:
                     finish_download_task = asyncio.create_task(
@@ -235,6 +213,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                             task, dc
                         )
                     )
+                    finish_download_upload_tasks.append(finish_download_task)
 
         def postprocess_done_cb(
             task: asyncio.Task,

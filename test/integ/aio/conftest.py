@@ -79,7 +79,7 @@ def negative_conn_cnx() -> Callable[..., AsyncContextManager[SnowflakeConnection
 
 
 @pytest.fixture()
-def aio_connection(db_parameters):
+async def aio_connection(db_parameters):
     cnx = SnowflakeConnection(
         user=db_parameters["user"],
         password=db_parameters["password"],
@@ -93,4 +93,4 @@ def aio_connection(db_parameters):
         timezone="UTC",
     )
     yield cnx
-    cnx.close()
+    await cnx.close()

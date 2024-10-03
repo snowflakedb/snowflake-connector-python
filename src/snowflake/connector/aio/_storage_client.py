@@ -4,11 +4,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import time
 from abc import abstractmethod
 from logging import getLogger
+from math import ceil
 from typing import TYPE_CHECKING, Any, Callable
 
 import aiohttp
@@ -23,14 +25,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from ..file_transfer_agent import SnowflakeFileMeta, StorageCredential
 
 logger = getLogger(__name__)
-
-METHODS = {
-    "GET": requests.get,
-    "PUT": requests.put,
-    "POST": requests.post,
-    "HEAD": requests.head,
-    "DELETE": requests.delete,
-}
 
 
 class SnowflakeStorageClient(SnowflakeStorageClientSync):
@@ -113,25 +107,25 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
         if meta.upload_size < meta.multipart_threshold or not self.chunked_transfer:
             self.num_of_chunks = 1
         else:
-            # self.num_of_chunks = ceil(meta.upload_size / self.chunk_size)
-            # only needed in big file transfer
-            pass
+            # multi-chunk file transfer
+            self.num_of_chunks = ceil(meta.upload_size / self.chunk_size)
+
         logger.debug(f"number of chunks {self.num_of_chunks}")
         # clean up
         self.retry_count = {}
 
         for chunk_id in range(self.num_of_chunks):
             self.retry_count[chunk_id] = 0
-        # only used in big file transfer
-        # if self.chunked_transfer and self.num_of_chunks > 1:
-        #     await self._initiate_multipart_upload()
+        # multi-chunk file transfer
+        if self.chunked_transfer and self.num_of_chunks > 1:
+            await self._initiate_multipart_upload()
 
     async def finish_upload(self) -> None:
         meta = self.meta
         if self.successful_transfers == self.num_of_chunks and self.num_of_chunks != 0:
-            # only needed in big file transfer
-            # if self.num_of_chunks > 1:
-            #     await self._complete_multipart_upload()
+            # multi-chunk file transfer
+            if self.num_of_chunks > 1:
+                await self._complete_multipart_upload()
             meta.result_status = ResultStatus.UPLOADED
             meta.dst_file_size = meta.upload_size
             logger.debug(f"{meta.src_file_name} upload is completed.")
@@ -139,9 +133,9 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
             # TODO: add more error details to result/meta
             meta.dst_file_size = 0
             logger.debug(f"{meta.src_file_name} upload is aborted.")
-            # only needed in big file transfer
-            # if self.num_of_chunks > 1:
-            #     await self._abort_multipart_upload()
+            # multi-chunk file transfer
+            if self.num_of_chunks > 1:
+                await self._abort_multipart_upload()
             meta.result_status = ResultStatus.ERROR
 
     async def finish_download(self) -> None:
@@ -214,7 +208,7 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
                 else:
                     self.last_err_is_presigned_url = False
                     if response.status in self.TRANSIENT_HTTP_ERR:
-                        time.sleep(
+                        await asyncio.sleep(
                             min(
                                 # TODO should SLEEP_UNIT come from the parent
                                 #  SnowflakeConnection and be customizable by users?
@@ -258,12 +252,12 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
         self.num_of_chunks = 1
         if file_header and file_header.content_length:
             self.meta.src_file_size = file_header.content_length
-            # only needed in big file transfer
-            # if (
-            #     self.chunked_transfer
-            #     and self.meta.src_file_size > self.meta.multipart_threshold
-            # ):
-            #     self.num_of_chunks = ceil(file_header.content_length / self.chunk_size)
+            # multi-chunk file transfer
+            if (
+                self.chunked_transfer
+                and self.meta.src_file_size > self.meta.multipart_threshold
+            ):
+                self.num_of_chunks = ceil(file_header.content_length / self.chunk_size)
 
         # Preallocate encrypted file.
         with self.intermediate_dst_path.open("wb+") as fd:

@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from io import IOBase
@@ -21,6 +20,15 @@ from ..constants import (
     ResultStatus,
 )
 from ..encryption_util import EncryptionMetadata
+from ..s3_storage_client import (
+    AMZ_IV,
+    AMZ_KEY,
+    AMZ_MATDESC,
+    EXPIRED_TOKEN,
+    META_PREFIX,
+    SFC_DIGEST,
+    UNSIGNED_PAYLOAD,
+)
 from ..s3_storage_client import SnowflakeS3RestClient as SnowflakeS3RestClientSync
 from ._storage_client import SnowflakeStorageClient as SnowflakeStorageClientAsync
 
@@ -28,21 +36,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from ._file_transfer_agent import SnowflakeFileMeta, StorageCredential
 
 logger = getLogger(__name__)
-
-META_PREFIX = "x-amz-meta-"
-SFC_DIGEST = "sfc-digest"
-
-AMZ_MATDESC = "x-amz-matdesc"
-AMZ_KEY = "x-amz-key"
-AMZ_IV = "x-amz-iv"
-
-ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
-
-EXPIRED_TOKEN = "ExpiredToken"
-ADDRESSING_STYLE = "virtual"  # explicit force to use virtual addressing style
-UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD"
-
-RE_MULTIPLE_SPACES = re.compile(r" +")
 
 
 class S3Location(NamedTuple):
@@ -94,7 +87,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
             )
         # self.transfer_accelerate_config(use_accelerate_endpoint)
         self.transfer_accelerate_config(False)
-        # TODO: fix accelerate logic
+        # TODO: fix accelerate logic SNOW-1628850
 
     async def _send_request_with_authentication_and_retry(
         self,
@@ -228,29 +221,29 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
         else:
             response.raise_for_status()
 
-    # only needed in big file transfer
-    # async def _initiate_multipart_upload(self) -> None:
-    #     query_parts = (("uploads", ""),)
-    #     path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
-    #     query_string = self._construct_query_string(query_parts)
-    #     url = self.endpoint + f"/{path}?{query_string}"
-    #     s3_metadata = self._prepare_file_metadata()
-    #     # initiate multipart upload
-    #     retry_id = "Initiate"
-    #     self.retry_count[retry_id] = 0
-    #     response = await self._send_request_with_authentication_and_retry(
-    #         url=url,
-    #         verb="POST",
-    #         retry_id=retry_id,
-    #         x_amz_headers=s3_metadata,
-    #         headers={HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM},
-    #         query_parts=dict(query_parts),
-    #     )
-    #     if response.status == 200:
-    #         self.upload_id = ET.fromstring(await response.read())[2].text
-    #         self.etags = [None] * self.num_of_chunks
-    #     else:
-    #         response.raise_for_status()
+    # for multi-chunk file transfer
+    async def _initiate_multipart_upload(self) -> None:
+        query_parts = (("uploads", ""),)
+        path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))
+        query_string = self._construct_query_string(query_parts)
+        url = self.endpoint + f"/{path}?{query_string}"
+        s3_metadata = self._prepare_file_metadata()
+        # initiate multipart upload
+        retry_id = "Initiate"
+        self.retry_count[retry_id] = 0
+        response = await self._send_request_with_authentication_and_retry(
+            url=url,
+            verb="POST",
+            retry_id=retry_id,
+            x_amz_headers=s3_metadata,
+            headers={HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM},
+            query_parts=dict(query_parts),
+        )
+        if response.status == 200:
+            self.upload_id = ET.fromstring(await response.read())[2].text
+            self.etags = [None] * self.num_of_chunks
+        else:
+            response.raise_for_status()
 
     async def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
         path = quote(self.s3location.path + self.meta.dst_file_name.lstrip("/"))

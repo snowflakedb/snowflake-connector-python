@@ -38,7 +38,6 @@ CLOUD = os.getenv("cloud_provider", "dev")
 
 
 @pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
-@pytest.mark.skipolddriver
 async def test_utf8_filename(tmp_path, aio_connection):
     test_file = tmp_path / "utf卡豆.csv"
     test_file.write_text("1,2,3\n")
@@ -56,7 +55,6 @@ async def test_utf8_filename(tmp_path, aio_connection):
 
 
 @pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
-@pytest.mark.skipolddriver
 async def test_put_threshold(tmp_path, aio_connection, is_public_test):
     if is_public_test:
         pytest.xfail(
@@ -83,7 +81,6 @@ async def test_put_threshold(tmp_path, aio_connection, is_public_test):
 @pytest.mark.xfail(reason="multipart transfer is not merged yet")
 # @pytest.mark.aws
 # @pytest.mark.azure
-@pytest.mark.skipolddriver
 @pytest.mark.parametrize("use_stream", [False, True])
 async def test_multipart_put(aio_connection, tmp_path, use_stream):
     """This test does a multipart upload of a smaller file and then downloads it."""
@@ -126,7 +123,6 @@ async def test_multipart_put(aio_connection, tmp_path, use_stream):
 
 
 @pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
-@pytest.mark.skipolddriver
 async def test_put_special_file_name(tmp_path, aio_connection):
     test_file = tmp_path / "data~%23.csv"
     test_file.write_text("1,2,3\n")
@@ -145,7 +141,6 @@ async def test_put_special_file_name(tmp_path, aio_connection):
 
 
 @pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
-@pytest.mark.skipolddriver
 async def test_get_empty_file(tmp_path, aio_connection):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
@@ -164,7 +159,6 @@ async def test_get_empty_file(tmp_path, aio_connection):
 
 
 @pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
-@pytest.mark.skipolddriver
 async def test_get_file_permission(tmp_path, aio_connection, caplog):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
@@ -190,7 +184,6 @@ async def test_get_file_permission(tmp_path, aio_connection, caplog):
 
 
 @pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
-@pytest.mark.skipolddriver
 async def test_get_multiple_files_with_same_name(tmp_path, aio_connection, caplog):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")

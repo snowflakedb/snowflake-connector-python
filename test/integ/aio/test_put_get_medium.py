@@ -5,11 +5,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime
 import gzip
 import os
 import sys
-import time
 from logging import getLogger
 from typing import IO, TYPE_CHECKING
 
@@ -776,7 +776,7 @@ async def test_put_get_large_files_s3(tmpdir, aio_connection, db_parameters):
             all_recs = await run_test(aio_connection, "LIST @~/{dir}")
             if len(all_recs) == number_of_files:
                 break
-            time.sleep(1)
+            await asyncio.sleep(1)
         else:
             pytest.fail(
                 "cannot list all files. Potentially "
