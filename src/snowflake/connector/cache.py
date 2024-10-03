@@ -388,6 +388,7 @@ class SFDictFileCache(SFDictCache):
         file_path: str | dict[str, str],
         entry_lifetime: int = constants.DAY_IN_SECONDS,
         file_timeout: int = 0,
+        load_if_file_exists: bool = True,
     ) -> None:
         """Inits an SFDictFileCache with path, lifetime.
 
@@ -445,7 +446,7 @@ class SFDictFileCache(SFDictCache):
         self._file_lock_path = f"{self.file_path}.lock"
         self._file_lock = FileLock(self._file_lock_path, timeout=self.file_timeout)
         self.last_loaded: datetime.datetime | None = None
-        if os.path.exists(self.file_path):
+        if os.path.exists(self.file_path) and load_if_file_exists:
             with self._lock:
                 self._load()
         # indicate whether the cache is modified or not, this variable is for
@@ -498,7 +499,7 @@ class SFDictFileCache(SFDictCache):
         """Load cache from disk if possible, returns whether it was able to load."""
         try:
             with open(self.file_path, "rb") as r_file:
-                other: SFDictFileCache = pickle.load(r_file)
+                other: SFDictFileCache = self._deserialize(r_file)
             # Since we want to know whether we are dirty after loading
             #  we have to know whether the file could learn anything from self
             #  so instead of calling self.update we call other.update and swap
@@ -528,6 +529,13 @@ class SFDictFileCache(SFDictCache):
         """
         with self._lock:
             return self._load()
+
+    def _serialize(self):
+        return pickle.dumps(self)
+
+    @classmethod
+    def _deserialize(cls, r_file):
+        return pickle.load(r_file)
 
     def _save(self, load_first: bool = True, force_flush: bool = False) -> bool:
         """Save cache to disk if possible, returns whether it was able to save.
@@ -559,7 +567,7 @@ class SFDictFileCache(SFDictCache):
                     # python program.
                     # thus we fall back to the approach using the normal open() method to open a file and write.
                     with open(tmp_file, "wb") as w_file:
-                        w_file.write(pickle.dumps(self))
+                        w_file.write(self._serialize())
                     # We write to a tmp file and then move it to have atomic write
                     os.replace(tmp_file_path, self.file_path)
                     self.last_loaded = datetime.datetime.fromtimestamp(
