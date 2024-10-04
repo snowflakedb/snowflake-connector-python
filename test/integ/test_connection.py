@@ -555,7 +555,7 @@ def test_eu_connection(tmpdir):
     import os
 
     os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED"] = "true"
-    with pytest.raises((OperationalError, InterfaceError)):
+    with pytest.raises(InterfaceError):
         # must reach Snowflake
         snowflake.connector.connect(
             account="testaccount1234",
