@@ -32,7 +32,11 @@ from ...errorcode import (
     ER_NO_HOSTNAME_FOUND,
     ER_UNABLE_TO_OPEN_BROWSER,
 )
-from ...network import CONTENT_TYPE_APPLICATION_JSON, PYTHON_CONNECTOR_USER_AGENT
+from ...network import (
+    CONTENT_TYPE_APPLICATION_JSON,
+    DEFAULT_SOCKET_CONNECT_TIMEOUT,
+    PYTHON_CONNECTOR_USER_AGENT,
+)
 from ...url_util import is_valid_url
 from ._by_plugin import AuthByPlugin
 
@@ -191,11 +195,6 @@ class AuthByWebBrowser(AuthByPlugin, AuthByWebBrowserSync):
                 socket_client = None
                 max_attempts = 15
 
-                msg_dont_wait = (
-                    os.getenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "false").lower()
-                    == "true"
-                )
-
                 # when running in a containerized environment, socket_client.recv ocassionally returns an empty byte array
                 #   an immediate successive call to socket_client.recv gets the actual data
                 while len(raw_data) == 0 and attempts < max_attempts:
@@ -211,29 +210,25 @@ class AuthByWebBrowser(AuthByPlugin, AuthByWebBrowserSync):
                         )
 
                         try:
-                            if msg_dont_wait:
-                                # WSL containerized environment sometimes causes socket_client.recv to hang indefinetly
-                                #   To avoid this, passing the socket.MSG_DONTWAIT flag which raises BlockingIOError if
-                                #   operation would block
-                                logger.debug(
-                                    "Calling socket_client.recv with in NONBLOCK due to SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT env var"
-                                )
-                                # Async delta: async version of socket.recv does not take flags
-                                # according to linux: https://man7.org/linux/man-pages/man2/recvmsg.2.html
-                                # flag MSG_DONTWAIT achieves the same effect as O_NONBLOCK but it's a per-call flag
-                                # however here for each call we accept a new socket, so they are effectively the same.
-                                socket_client.setblocking(False)
-                                raw_data = await self._event_loop.sock_recv(
-                                    socket_client, BUF_SIZE
-                                )
-                            else:
-                                raw_data = await self._event_loop.sock_recv(
-                                    socket_client, BUF_SIZE
-                                )
-
-                        except BlockingIOError:
+                            # Async delta: async version of sock_recv does not take flags
+                            # on one hand, sock must be a non-blocking socket in async according to python docs:
+                            # https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.sock_recv
+                            # on the other hand according to linux: https://man7.org/linux/man-pages/man2/recvmsg.2.html
+                            # sync flag MSG_DONTWAIT achieves the same effect as O_NONBLOCK, but it's a per-call flag
+                            # however here for each call we accept a new socket, so they are effectively the same.
+                            #  https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.sock_recv
+                            socket_client.setblocking(False)
+                            raw_data = await asyncio.wait_for(
+                                self._event_loop.sock_recv(socket_client, BUF_SIZE),
+                                timeout=(
+                                    DEFAULT_SOCKET_CONNECT_TIMEOUT
+                                    if conn.socket_timeout is None
+                                    else conn.socket_timeout
+                                ),
+                            )
+                        except asyncio.TimeoutError:
                             logger.debug(
-                                "BlockingIOError raised from socket.recv while attempting to retrieve callback token request"
+                                "sock_recv timed out while attempting to retrieve callback token request"
                             )
                             if attempts < max_attempts:
                                 sleep_time = 0.25
