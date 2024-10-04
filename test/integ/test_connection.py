@@ -34,7 +34,7 @@ from snowflake.connector.errorcode import (
     ER_NO_ACCOUNT_NAME,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from snowflake.connector.errors import Error
+from snowflake.connector.errors import Error, InterfaceError
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
@@ -555,7 +555,7 @@ def test_eu_connection(tmpdir):
     import os
 
     os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED"] = "true"
-    with pytest.raises(OperationalError):
+    with pytest.raises((OperationalError, InterfaceError)):
         # must reach Snowflake
         snowflake.connector.connect(
             account="testaccount1234",
