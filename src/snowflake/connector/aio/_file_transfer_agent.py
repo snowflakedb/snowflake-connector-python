@@ -167,8 +167,8 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                         else asyncio.create_task(done_client.download_chunk(_chunk_id))
                     )
                     task.add_done_callback(
-                        lambda t, ta=task, dc=done_client, _chunk_id=_chunk_id: transfer_done_cb(
-                            ta, dc, _chunk_id
+                        lambda t, dc=done_client, _chunk_id=_chunk_id: transfer_done_cb(
+                            t, dc, _chunk_id
                         )
                     )
                     tasks.append(task)
@@ -209,9 +209,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                         done_client.finish_download()
                     )
                     finish_download_task.add_done_callback(
-                        lambda t, task=finish_download_task, dc=done_client: postprocess_done_cb(
-                            task, dc
-                        )
+                        lambda t, dc=done_client: postprocess_done_cb(t, dc)
                     )
                     finish_download_upload_tasks.append(finish_download_task)
 
@@ -231,6 +229,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
         task_of_files = []
         for file_client in files:
             try:
+                # TODO: https://snowflakecomputing.atlassian.net/browse/SNOW-1708819
                 res = (
                     await file_client.prepare_upload()
                     if is_upload

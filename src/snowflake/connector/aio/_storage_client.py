@@ -7,17 +7,17 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
-import time
 from abc import abstractmethod
 from logging import getLogger
 from math import ceil
 from typing import TYPE_CHECKING, Any, Callable
 
 import aiohttp
+import OpenSSL
 
 from ..constants import FileHeader, ResultStatus
 from ..encryption_util import SnowflakeEncryptionUtil
-from ..errors import RequestExceedMaxRetryError
+from ..errors import OperationalError, RequestExceedMaxRetryError
 from ..storage_client import SnowflakeStorageClient as SnowflakeStorageClientSync
 from ..vendored import requests
 
@@ -28,6 +28,8 @@ logger = getLogger(__name__)
 
 
 class SnowflakeStorageClient(SnowflakeStorageClientSync):
+    TRANSIENT_ERRORS = (OpenSSL.SSL.SysCallError, asyncio.TimeoutError, ConnectionError)
+
     def __init__(
         self,
         meta: SnowflakeFileMeta,
@@ -223,7 +225,7 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
                         return response
             except self.TRANSIENT_ERRORS as e:
                 self.last_err_is_presigned_url = False
-                time.sleep(
+                await asyncio.sleep(
                     min(
                         (2 ** self.retry_count[retry_id]) * self.SLEEP_UNIT,
                         self.SLEEP_MAX,
@@ -282,6 +284,22 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
         logger.debug(f"Uploading chunk {chunk_id} of file {self.data_file}")
         await self._upload_chunk(chunk_id, _data)
         logger.debug(f"Successfully uploaded chunk {chunk_id} of file {self.data_file}")
+
+    def write_downloaded_chunk(self, chunk_id: int, data: bytes) -> None:
+        """Writes given data to the temp location starting at chunk_id * chunk_size."""
+        # TODO: should we use chunking and write content in smaller chunks?
+        try:
+            with self.intermediate_dst_path.open("rb+") as fd:
+                fd.seek(self.chunk_size * chunk_id)
+                fd.write(data)
+        except FileNotFoundError:
+            # we don't maintain dir structure when downloading, making it possible that we download
+            # same file twice, which cause race condition and operationalError in sync client because of multi-process
+            # design in sync client.
+            # while in async client, everything is actually sync, making same name file being deleted and
+            # cause file not found error
+            # TODO: this is to align with sync file transfer
+            raise OperationalError
 
     @abstractmethod
     async def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:

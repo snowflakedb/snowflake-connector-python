@@ -8,7 +8,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from io import IOBase
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
@@ -28,6 +28,7 @@ from ..s3_storage_client import (
     META_PREFIX,
     SFC_DIGEST,
     UNSIGNED_PAYLOAD,
+    S3Location,
 )
 from ..s3_storage_client import SnowflakeS3RestClient as SnowflakeS3RestClientSync
 from ._storage_client import SnowflakeStorageClient as SnowflakeStorageClientAsync
@@ -36,11 +37,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from ._file_transfer_agent import SnowflakeFileMeta, StorageCredential
 
 logger = getLogger(__name__)
-
-
-class S3Location(NamedTuple):
-    bucket_name: str
-    path: str
 
 
 class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSync):
@@ -167,9 +163,8 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
             if payload:
                 rest_args["data"] = payload
 
-            # add customized hook: to remove content-encoding from response.
-            # if ignore_content_encoding:
-            #     rest_args["hooks"] = {"response": remove_content_encoding}
+            # ignore_content_encoding is removed because it
+            # does not apply to asyncio
 
             return url, rest_args
 
@@ -370,7 +365,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
             url=url, verb="GET", retry_id=retry_id, query_parts=dict(query_parts)
         )
         if response.status == 200:
-            config = ET.fromstring(response.text)
+            config = ET.fromstring(await response.text())
             namespace = config.tag[: config.tag.index("}") + 1]
             statusTag = f"{namespace}Status"
             found = config.find(statusTag)
@@ -391,7 +386,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
         """
         if response.status != 400:
             return False
-        message = response.text
+        message = await response.text()
         if not message:
             return False
         err = ET.fromstring(await response.read())
