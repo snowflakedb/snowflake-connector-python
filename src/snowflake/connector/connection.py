@@ -314,6 +314,29 @@ class TypeAndBinding(NamedTuple):
     binding: str | None
 
 
+active_connections: list[SnowflakeConnection] = []
+
+
+# SNOW-1669128 previously, the close_at_exit function for the SnowflakeConnection object
+# was registered with the `atexit` module during initialization of a SnowflakeConnection object.
+# This caused the Snowpark Session object's atexit function to be registered before the
+# SnowflakeConnection's object when the Session was made without an existing SnowflakeConnection
+# object, because the SnowflakeConnection object's atexit was only registered after it was initialized
+# whereas the Snowpark Session object's atexit was registered when the file was imported. During the
+# atexit for the Snowpark Session, it attempts to send telemetry regarding cleanup operations, but since
+# it's connection is already closed, it fails to send the telemetry. Moving the registration of the atexit
+# function here means that it will happen when the SnowflakeConnection object is imported - and so the
+# Snowpark Session's atexit function will be registered after, and the order will be correct.
+def _close_connection_at_exit():
+    with suppress(Exception):
+        for connection in active_connections:
+            connection.close(retry=False)
+
+
+# check SNOW-1218851 for long term improvement plan to refactor ocsp code
+atexit.register(_close_connection_at_exit)
+
+
 class SnowflakeConnection:
     """Implementation of the connection object for the Snowflake Database.
 
@@ -456,11 +479,10 @@ class SnowflakeConnection:
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
         self.expired = False
+        active_connections.append(self)
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
-        # check SNOW-1218851 for long term improvement plan to refactor ocsp code
-        atexit.register(self._close_at_exit)
 
     @property
     def insecure_mode(self) -> bool:
@@ -772,8 +794,7 @@ class SnowflakeConnection:
 
     def close(self, retry: bool = True) -> None:
         """Closes the connection."""
-        # unregister to dereference connection object as it's already closed after the execution
-        atexit.unregister(self._close_at_exit)
+        active_connections.remove(self)
         try:
             if not self.rest:
                 logger.debug("Rest object has been destroyed, cannot close session")
@@ -1812,10 +1833,6 @@ class SnowflakeConnection:
                 sf_qid, None
             )  # Prevent KeyError when multiple threads try to remove the same query id
             self._done_async_sfqids[sf_qid] = None
-
-    def _close_at_exit(self):
-        with suppress(Exception):
-            self.close(retry=False)
 
     def _process_error_query_status(
         self,
