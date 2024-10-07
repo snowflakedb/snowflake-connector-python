@@ -407,6 +407,77 @@ def test_write_pandas_table_type(
             cnx.execute_string(drop_sql)
 
 
+@pytest.mark.parametrize("copy_grants", [True, False, None])
+def test_write_pandas_copy_grants(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    copy_grants: bool | None,
+):
+    with conn_cnx() as cnx:
+        table_name = random_string(5, "test_write_pandas_copy_grants_")
+        drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+        try:
+            success, _, _, _ = write_pandas(
+                cnx,
+                sf_connector_version_df.get(),
+                table_name,
+                auto_create_table=True,
+                overwrite=True,
+                quote_identifiers=False,
+            )
+            assert success
+
+            # Get the default number of grants on new tables in the schema
+            count_default_grants = (
+                cnx.cursor(DictCursor)
+                .execute(f"show grants on table {table_name}")
+                .rowcount
+            )
+
+            # Add dummy grants on the table
+            (
+                cnx.cursor(DictCursor)
+                .execute(f"grant references on table {table_name} to role {cnx.role}")
+            )
+            (
+                cnx.cursor(DictCursor)
+                .execute(f"grant references on table {table_name} to role SYSADMIN")
+            )
+            count_current_grants = (
+                cnx.cursor(DictCursor)
+                .execute(f"show grants on table {table_name}")
+                .rowcount
+            )
+
+            # Sanity check, grants count should have increased
+            assert count_current_grants > count_default_grants
+
+            # Re-create the table
+            success, _, _, _ = write_pandas(
+                cnx,
+                sf_connector_version_df.get(),
+                table_name,
+                auto_create_table=True,
+                overwrite=True,
+                quote_identifiers=False,
+                copy_grants=copy_grants,
+            )
+            assert success
+
+            count_current_grants = (
+                cnx.cursor(DictCursor)
+                .execute(f"show grants on table {table_name}")
+                .rowcount
+            )
+            if copy_grants:
+                # Grants count should be more than default, because the added ones were copied
+                assert count_current_grants > count_default_grants
+            else:
+                # Grants should match the default for tables in the schema
+                assert count_current_grants == count_default_grants
+        finally:
+            cnx.execute_string(drop_sql)
+
+
 def test_write_pandas_create_temp_table_deprecation_warning(
     conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
 ):
