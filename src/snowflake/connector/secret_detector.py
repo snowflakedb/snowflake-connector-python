@@ -33,7 +33,7 @@ class SecretDetector(logging.Formatter):
         flags=re.IGNORECASE,
     )
     PRIVATE_KEY_PATTERN = re.compile(
-        r"-----BEGIN PRIVATE KEY-----\\n([a-z0-9/+=\\n]{32,})\\n-----END PRIVATE KEY-----",
+        r"-----BEGIN [A-Z ]+PRIVATE KEY-----\\n([a-z0-9/+=\\n]{32,})\\n-----END [A-Z ]+PRIVATE KEY-----",
         flags=re.MULTILINE | re.IGNORECASE,
     )
     PRIVATE_KEY_DATA_PATTERN = re.compile(
