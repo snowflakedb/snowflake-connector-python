@@ -19,7 +19,6 @@ from ..constants import FileHeader, ResultStatus
 from ..encryption_util import SnowflakeEncryptionUtil
 from ..errors import OperationalError, RequestExceedMaxRetryError
 from ..storage_client import SnowflakeStorageClient as SnowflakeStorageClientSync
-from ..vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -322,5 +321,5 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
         return
 
     @abstractmethod
-    async def _has_expired_token(self, response: requests.Response) -> bool:
+    async def _has_expired_token(self, response: aiohttp.ClientResponse) -> bool:
         pass
