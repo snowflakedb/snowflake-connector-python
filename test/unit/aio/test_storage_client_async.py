@@ -7,9 +7,9 @@ from unittest.mock import MagicMock
 try:
     from snowflake.connector.aio import SnowflakeConnection
     from snowflake.connector.aio._file_transfer_agent import SnowflakeFileMeta
+    from snowflake.connector.aio._s3_storage_client import SnowflakeS3RestClient
     from snowflake.connector.constants import ResultStatus
     from snowflake.connector.file_transfer_agent import StorageCredential
-    from snowflake.connector.s3_storage_client import SnowflakeS3RestClient
 except ImportError:
     # Compatibility for olddriver tests
     from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED  # NOQA
@@ -25,7 +25,7 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 megabyte = 1024 * 1024
 
 
-def test_status_when_num_of_chunks_is_zero():
+async def test_status_when_num_of_chunks_is_zero():
     meta_info = {
         "name": "data1.txt.gz",
         "stage_location_type": "S3",
@@ -57,5 +57,5 @@ def test_status_when_num_of_chunks_is_zero():
     )
     rest_client.successful_transfers = 0
     rest_client.num_of_chunks = 0
-    rest_client.finish_upload()
+    await rest_client.finish_upload()
     assert meta.result_status == ResultStatus.ERROR
