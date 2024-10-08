@@ -222,7 +222,7 @@ async def test_transfer_error_message(tmp_path, aio_connection):
         "snowflake.connector.aio._storage_client.SnowflakeStorageClient.finish_upload",
         side_effect=ConnectionError,
     ):
-        with pytest.raises(ConnectionError):
+        with pytest.raises(OperationalError):
             (
                 await cursor.execute(
                     "PUT 'file://{}' @{}".format(

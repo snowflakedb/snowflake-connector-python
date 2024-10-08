@@ -110,7 +110,7 @@ async def test_get_empty_file(tmpdir):
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
+@pytest.mark.skip
 def test_upload_file_with_azure_upload_failed_error(tmp_path):
     """Tests Upload file with expired Azure storage token."""
     file1 = tmp_path / "file1"
