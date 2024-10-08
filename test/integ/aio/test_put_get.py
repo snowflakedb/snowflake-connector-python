@@ -208,3 +208,25 @@ async def test_get_multiple_files_with_same_name(tmp_path, aio_connection, caplo
             # This is expected flakiness
             pass
     assert "Downloading multiple files with the same name" in caplog.text
+
+
+@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
+async def test_transfer_error_message(tmp_path, aio_connection):
+    test_file = tmp_path / "data.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_utf8_filename_")
+    await aio_connection.connect()
+    cursor = aio_connection.cursor()
+    await cursor.execute(f"create temporary stage {stage_name}")
+    with mock.patch(
+        "snowflake.connector.aio._storage_client.SnowflakeStorageClient.finish_upload",
+        side_effect=ConnectionError,
+    ):
+        with pytest.raises(ConnectionError):
+            (
+                await cursor.execute(
+                    "PUT 'file://{}' @{}".format(
+                        str(test_file).replace("\\", "/"), stage_name
+                    )
+                )
+            ).fetchall()
