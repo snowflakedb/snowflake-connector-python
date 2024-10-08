@@ -70,6 +70,7 @@ def _init_socket(recv_side_effect_func):
     mock_socket_instance.getsockname.return_value = [None, CLIENT_PORT]
 
     mock_socket_client = MagicMock()
+    mock_socket_client.fileno = lambda: 1
 
     mock_socket_client.recv.side_effect = recv_side_effect_func
     mock_socket_instance.accept.return_value = (mock_socket_client, None)
