@@ -569,20 +569,25 @@ async def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
     # Mock select.select to return socket client
     with mock.patch(
         "select.select", return_value=([mock_socket_pkg.return_value], [], [])
-    ), mock.patch("time.sleep") as sleep:
+    ), mock.patch("asyncio.sleep") as sleep:
         auth = AuthByWebBrowser(
             application=APPLICATION,
             webbrowser_pkg=mock_webbrowser,
             socket_pkg=mock_socket_pkg,
         )
-        await auth.prepare(
-            conn=rest._connection,
-            authenticator=AUTHENTICATOR,
-            service_name=SERVICE_NAME,
-            account=ACCOUNT,
-            user=USER,
-            password=PASSWORD,
-        )
+        with mock.patch.object(
+            auth._event_loop,
+            "sock_accept",
+            side_effect=_mock_event_loop_sock_accept(),
+        ):
+            await auth.prepare(
+                conn=rest._connection,
+                authenticator=AUTHENTICATOR,
+                service_name=SERVICE_NAME,
+                account=ACCOUNT,
+                user=USER,
+                password=PASSWORD,
+            )
         assert rest._connection.errorhandler.called  # an error
         assert auth.assertion_content is None
         assert sleep.call_count == 0
@@ -679,7 +684,13 @@ async def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attem
         )
         with mock.patch.object(
             auth._event_loop, "sock_recv", new=sock_recv_timeout
-        ), mock.patch.object(auth._event_loop, "sock_sendall", return_value=None):
+        ), mock.patch.object(
+            auth._event_loop, "sock_sendall", return_value=None
+        ), mock.patch.object(
+            auth._event_loop,
+            "sock_accept",
+            side_effect=_mock_event_loop_sock_accept(),
+        ):
             await auth.prepare(
                 conn=rest._connection,
                 authenticator=AUTHENTICATOR,
