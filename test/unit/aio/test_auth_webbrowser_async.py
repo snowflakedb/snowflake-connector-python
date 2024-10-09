@@ -557,9 +557,15 @@ async def test_auth_webbrowser_socket_recv_retries_up_to_15_times_on_empty_bytea
 
 async def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
     """Authentication by WebBrowser stops trying after 15 consective socket.recv emty bytearray returns."""
+    ref_token = "MOCK_TOKEN"
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
+    recv_func = recv_setup(
+        # 15th return is empty byte array, so successful_web_callback will never be fetched from recv
+        ([bytearray()] * 15)
+        + [successful_web_callback(ref_token)]
+    )
     mock_socket_pkg = _init_socket()
 
     # mock webbrowser
@@ -579,6 +585,10 @@ async def test_auth_webbrowser_socket_recv_loop_fails_after_15_attempts():
             auth._event_loop,
             "sock_accept",
             side_effect=_mock_event_loop_sock_accept(),
+        ), mock.patch.object(
+            auth._event_loop,
+            "sock_recv",
+            side_effect=_mock_event_loop_sock_recv(recv_func),
         ):
             await auth.prepare(
                 conn=rest._connection,
