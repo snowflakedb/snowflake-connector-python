@@ -1,35 +1,41 @@
+#!/usr/bin/env python
 #
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
-
 from __future__ import annotations
 
 from logging import getLogger
 from typing import Any
 
-from ...auth.default import AuthByDefault as AuthByDefaultSync
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+
+from ...auth.keypair import AuthByKeyPair as AuthByKeyPairSync
 from ._by_plugin import AuthByPlugin
 
 logger = getLogger(__name__)
 
 
-class AuthByDefault(AuthByPlugin, AuthByDefaultSync):
-    def __init__(self, password: str, **kwargs) -> None:
-        """Initializes an instance with a password."""
-        AuthByDefaultSync.__init__(self, password, **kwargs)
+class AuthByKeyPair(AuthByPlugin, AuthByKeyPairSync):
+    def __init__(
+        self,
+        private_key: bytes | RSAPrivateKey,
+        lifetime_in_seconds: int = AuthByKeyPairSync.LIFETIME,
+        **kwargs,
+    ) -> None:
+        AuthByKeyPairSync.__init__(self, private_key, lifetime_in_seconds, **kwargs)
 
     async def reset_secrets(self) -> None:
-        self._password = None
+        AuthByKeyPairSync.reset_secrets(self)
 
     async def prepare(self, **kwargs: Any) -> None:
-        AuthByDefaultSync.prepare(self, **kwargs)
+        AuthByKeyPairSync.prepare(self, **kwargs)
 
     async def reauthenticate(self, **kwargs: Any) -> dict[str, bool]:
-        return AuthByDefaultSync.reauthenticate(self, **kwargs)
+        return AuthByKeyPairSync.reauthenticate(self, **kwargs)
 
     async def update_body(self, body: dict[Any, Any]) -> None:
-        """Sets the password if available."""
-        AuthByDefaultSync.update_body(self, body)
+        """Sets the private key if available."""
+        AuthByKeyPairSync.update_body(self, body)
 
     async def handle_timeout(
         self,

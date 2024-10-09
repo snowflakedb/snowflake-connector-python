@@ -4,14 +4,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import logging
 import uuid
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable
 
 from ...auth import Auth as AuthSync
-from ...auth._auth import ID_TOKEN, delete_temporary_credential
+from ...auth._auth import ID_TOKEN, MFA_TOKEN, delete_temporary_credential
 from ...compat import urlencode
 from ...constants import (
     HTTP_HEADER_ACCEPT,
@@ -62,9 +64,10 @@ class Auth(AuthSync):
         timeout: int | None = None,
     ) -> dict[str, str | int | bool]:
         if mfa_callback or password_callback:
-            # TODO: what's the usage of callback here and whether callback should be async?
+            # check SNOW-1707210 for mfa_callback and password_callback support
             raise NotImplementedError(
-                "mfa_callback or password_callback not supported for asyncio"
+                "mfa_callback or password_callback is not supported in asyncio connector, please open a feature"
+                " request issue in github: https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose"
             )
         logger.debug("authenticate")
 
@@ -148,7 +151,6 @@ class Auth(AuthSync):
                 json.dumps(body),
                 socket_timeout=auth_instance._socket_timeout,
             )
-        # TODO: encapsulate error handling logic to be shared between sync and async
         except ForbiddenError as err:
             # HTTP 403
             raise err.__class__(
@@ -181,7 +183,65 @@ class Auth(AuthSync):
             "EXT_AUTHN_DUO_ALL",
             "EXT_AUTHN_DUO_PUSH_N_PASSCODE",
         ):
-            raise NotImplementedError("asyncio MFA not supported")
+            body["inFlightCtx"] = ret["data"].get("inFlightCtx")
+            body["data"]["EXT_AUTHN_DUO_METHOD"] = "push"
+            self.ret = {"message": "Timeout", "data": {}}
+
+            async def post_request_wrapper(self, url, headers, body) -> None:
+                # get the MFA response
+                self.ret = await self._rest._post_request(
+                    url,
+                    headers,
+                    body,
+                    socket_timeout=auth_instance._socket_timeout,
+                )
+
+            # send new request to wait until MFA is approved
+            try:
+                await asyncio.wait_for(
+                    post_request_wrapper(self, url, headers, json.dumps(body)),
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.debug("get the MFA response timed out")
+
+            ret = self.ret
+            if (
+                ret
+                and ret["data"]
+                and ret["data"].get("nextAction") == "EXT_AUTHN_SUCCESS"
+            ):
+                body = copy.deepcopy(body_template)
+                body["inFlightCtx"] = ret["data"].get("inFlightCtx")
+                # final request to get tokens
+                ret = await self._rest._post_request(
+                    url,
+                    headers,
+                    json.dumps(body),
+                    socket_timeout=auth_instance._socket_timeout,
+                )
+            elif not ret or not ret["data"] or not ret["data"].get("token"):
+                # not token is returned.
+                Error.errorhandler_wrapper(
+                    self._rest._connection,
+                    None,
+                    DatabaseError,
+                    {
+                        "msg": (
+                            "Failed to connect to DB. MFA "
+                            "authentication failed: {"
+                            "host}:{port}. {message}"
+                        ).format(
+                            host=self._rest._host,
+                            port=self._rest._port,
+                            message=ret["message"],
+                        ),
+                        "errno": ER_FAILED_TO_CONNECT_TO_DB,
+                        "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                    },
+                )
+                return session_parameters  # required for unit test
+
         elif ret["data"] and ret["data"].get("nextAction") == "PWD_CHANGE":
             if callable(password_callback):
                 body = copy.deepcopy(body_template)
@@ -216,23 +276,20 @@ class Auth(AuthSync):
                         sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     )
                 )
-            # TODO: error handling for AuthByKeyPairAsync and AuthByUsrPwdMfaAsync
-            # from . import AuthByKeyPair
-            #
-            # if isinstance(auth_instance, AuthByKeyPair):
-            #     logger.debug(
-            #         "JWT Token authentication failed. "
-            #         "Token expires at: %s. "
-            #         "Current Time: %s",
-            #         str(auth_instance._jwt_token_exp),
-            #         str(datetime.now(timezone.utc).replace(tzinfo=None)),
-            #     )
-            # from . import AuthByUsrPwdMfa
-            #
-            # if isinstance(auth_instance, AuthByUsrPwdMfa):
-            #     delete_temporary_credential(self._rest._host, user, MFA_TOKEN)
-            # TODO: can errorhandler of a connection be async? should we support both sync and async
-            #  users could perform async ops in the error handling
+            from . import AuthByKeyPair
+
+            if isinstance(auth_instance, AuthByKeyPair):
+                logger.debug(
+                    "JWT Token authentication failed. "
+                    "Token expires at: %s. "
+                    "Current Time: %s",
+                    str(auth_instance._jwt_token_exp),
+                    str(datetime.now(timezone.utc).replace(tzinfo=None)),
+                )
+            from . import AuthByUsrPwdMfa
+
+            if isinstance(auth_instance, AuthByUsrPwdMfa):
+                delete_temporary_credential(self._rest._host, user, MFA_TOKEN)
             Error.errorhandler_wrapper(
                 self._rest._connection,
                 None,

@@ -26,20 +26,17 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector.aio
 from snowflake.connector.aio._network import SnowflakeRestful
-from snowflake.connector.aio.auth import AuthByDefault
+from snowflake.connector.aio.auth import (
+    AuthByDefault,
+    AuthByOAuth,
+    AuthByOkta,
+    AuthByUsrPwdMfa,
+    AuthByWebBrowser,
+)
 from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
 from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
 from snowflake.connector.errors import Error, OperationalError, ProgrammingError
-
-# TODO: SNOW-1572226 authentication support
-# from snowflake.connector.aio.auth import (
-#     AuthByDefault,
-#     AuthByOAuth,
-#     AuthByOkta,
-#     AuthByWebBrowser,
-#     AuthByUsrPwdMfa,
-# )
 
 
 def fake_connector(**kwargs) -> snowflake.connector.aio.SnowflakeConnection:
@@ -144,7 +141,6 @@ async def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
     await con.close()
 
 
-@pytest.mark.skipolddriver
 def test_is_still_running():
     """Checks that is_still_running returns expected results."""
     statuses = [
@@ -169,7 +165,6 @@ def test_is_still_running():
         )
 
 
-@pytest.mark.skipolddriver
 async def test_partner_env_var(mock_post_requests):
     PARTNER_NAME = "Amanda"
 
@@ -182,7 +177,6 @@ async def test_partner_env_var(mock_post_requests):
     )
 
 
-@pytest.mark.skipolddriver
 async def test_imported_module(mock_post_requests):
     with patch.dict(sys.modules, {"streamlit": "foo"}):
         async with fake_db_conn() as conn:
@@ -193,7 +187,6 @@ async def test_imported_module(mock_post_requests):
     )
 
 
-@pytest.mark.skip("SNOW-1572226 authentication support")
 @pytest.mark.parametrize(
     "auth_class",
     (
@@ -201,22 +194,22 @@ async def test_imported_module(mock_post_requests):
             type("auth_class", (AuthByDefault,), {})("my_secret_password"),
             id="AuthByDefault",
         ),
-        # pytest.param(
-        #     type("auth_class", (AuthByOAuth,), {})("my_token"),
-        #     id="AuthByOAuth",
-        # ),
-        # pytest.param(
-        #     type("auth_class", (AuthByOkta,), {})("Python connector"),
-        #     id="AuthByOkta",
-        # ),
-        # pytest.param(
-        #     type("auth_class", (AuthByUsrPwdMfa,), {})("password", "mfa_token"),
-        #     id="AuthByUsrPwdMfa",
-        # ),
-        # pytest.param(
-        #     type("auth_class", (AuthByWebBrowser,), {})(None, None),
-        #     id="AuthByWebBrowser",
-        # ),
+        pytest.param(
+            type("auth_class", (AuthByOAuth,), {})("my_token"),
+            id="AuthByOAuth",
+        ),
+        pytest.param(
+            type("auth_class", (AuthByOkta,), {})("Python connector"),
+            id="AuthByOkta",
+        ),
+        pytest.param(
+            type("auth_class", (AuthByUsrPwdMfa,), {})("password", "mfa_token"),
+            id="AuthByUsrPwdMfa",
+        ),
+        pytest.param(
+            type("auth_class", (AuthByWebBrowser,), {})(None, None),
+            id="AuthByWebBrowser",
+        ),
     ),
 )
 async def test_negative_custom_auth(auth_class):
@@ -379,7 +372,6 @@ async def test_handle_timeout(mockSessionRequest, next_action):
     assert 1 < mockSessionRequest.call_count < 4
 
 
-@pytest.mark.skip("SNOW-1572226 authentication support")
 async def test_private_key_file_reading(tmp_path: Path):
     key_file = tmp_path / "aio_key.pem"
 
@@ -420,7 +412,6 @@ async def test_private_key_file_reading(tmp_path: Path):
     assert m.call_args_list[0].kwargs["private_key"] == pkb
 
 
-@pytest.mark.skip("SNOW-1572226 authentication support")
 async def test_encrypted_private_key_file_reading(tmp_path: Path):
     key_file = tmp_path / "aio_key.pem"
     private_key_password = token_urlsafe(25)
@@ -447,7 +438,7 @@ async def test_encrypted_private_key_file_reading(tmp_path: Path):
     exc_msg = "stop execution"
 
     with mock.patch(
-        "snowflake.connector.aio.auth.keypair.AuthByKeyPair.__init__",
+        "snowflake.connector.aio.auth.AuthByKeyPair.__init__",
         side_effect=Exception(exc_msg),
     ) as m:
         with pytest.raises(
@@ -503,7 +494,6 @@ async def test_expired_detection():
     assert conn.expired
 
 
-@pytest.mark.skipolddriver
 async def test_disable_saml_url_check_config():
     with mock.patch(
         "snowflake.connector.aio._network.SnowflakeRestful._post_request",

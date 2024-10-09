@@ -27,18 +27,20 @@ from snowflake.connector import (
 )
 
 from .._query_context_cache import QueryContextCache
-from ..auth import AuthByIdToken
-from ..compat import quote, urlencode
+from ..compat import IS_LINUX, quote, urlencode
 from ..config_manager import CONFIG_MANAGER, _get_default_connection_params
 from ..connection import DEFAULT_CONFIGURATION
 from ..connection import SnowflakeConnection as SnowflakeConnectionSync
+from ..connection import _get_private_bytes_from_file
 from ..connection_diagnostic import ConnectionDiagnostic
 from ..constants import (
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
+    PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE,
     PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY,
+    PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL,
     PARAMETER_CLIENT_TELEMETRY_ENABLED,
     PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS,
     PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1,
@@ -53,7 +55,15 @@ from ..errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_VALUE,
 )
-from ..network import DEFAULT_AUTHENTICATOR, REQUEST_ID, ReauthenticationRequest
+from ..network import (
+    DEFAULT_AUTHENTICATOR,
+    EXTERNAL_BROWSER_AUTHENTICATOR,
+    KEY_PAIR_AUTHENTICATOR,
+    OAUTH_AUTHENTICATOR,
+    REQUEST_ID,
+    USR_PWD_MFA_AUTHENTICATOR,
+    ReauthenticationRequest,
+)
 from ..sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from ..telemetry import TelemetryData, TelemetryField
 from ..time_util import get_time_millis
@@ -61,7 +71,18 @@ from ..util_text import split_statements
 from ._cursor import SnowflakeCursor
 from ._network import SnowflakeRestful
 from ._time_util import HeartBeatTimer
-from .auth import Auth, AuthByDefault, AuthByPlugin
+from .auth import (
+    FIRST_PARTY_AUTHENTICATORS,
+    Auth,
+    AuthByDefault,
+    AuthByIdToken,
+    AuthByKeyPair,
+    AuthByOAuth,
+    AuthByOkta,
+    AuthByPlugin,
+    AuthByUsrPwdMfa,
+    AuthByWebBrowser,
+)
 
 logger = getLogger(__name__)
 
@@ -196,7 +217,6 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             heartbeat_ret = await auth._rest._heartbeat()
             logger.debug(heartbeat_ret)
             if not heartbeat_ret or not heartbeat_ret.get("success"):
-                # TODO: errorhandler could be async?
                 Error.errorhandler_wrapper(
                     self,
                     None,
@@ -211,20 +231,94 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
         else:
             if self.auth_class is not None:
-                raise NotImplementedError(
-                    "asyncio support for auth_class is not supported"
-                )
+                if type(
+                    self.auth_class
+                ) not in FIRST_PARTY_AUTHENTICATORS and not issubclass(
+                    type(self.auth_class), AuthByKeyPair
+                ):
+                    raise TypeError("auth_class must be a child class of AuthByKeyPair")
+                self.auth_class = self.auth_class
             elif self._authenticator == DEFAULT_AUTHENTICATOR:
                 self.auth_class = AuthByDefault(
                     password=self._password,
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
-            else:
-                raise NotImplementedError(
-                    f"asyncio support for authenticator is not supported {self._authenticator}"
+            elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+                self._session_parameters[
+                    PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL
+                ] = (self._client_store_temporary_credential if IS_LINUX else True)
+                auth.read_temporary_credentials(
+                    self.host,
+                    self.user,
+                    self._session_parameters,
                 )
-            # TODO: asyncio support for other authenticators
+                # Depending on whether self._rest.id_token is available we do different
+                #  auth_instance
+                if self._rest.id_token is None:
+                    self.auth_class = AuthByWebBrowser(
+                        application=self.application,
+                        protocol=self._protocol,
+                        host=self.host,
+                        port=self.port,
+                        timeout=self.login_timeout,
+                        backoff_generator=self._backoff_generator,
+                    )
+                else:
+                    self.auth_class = AuthByIdToken(
+                        id_token=self._rest.id_token,
+                        application=self.application,
+                        protocol=self._protocol,
+                        host=self.host,
+                        port=self.port,
+                        timeout=self.login_timeout,
+                        backoff_generator=self._backoff_generator,
+                    )
+
+            elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
+                private_key = self._private_key
+
+                if self._private_key_file:
+                    private_key = _get_private_bytes_from_file(
+                        self._private_key_file,
+                        self._private_key_file_pwd,
+                    )
+
+                self.auth_class = AuthByKeyPair(
+                    private_key=private_key,
+                    timeout=self.login_timeout,
+                    backoff_generator=self._backoff_generator,
+                )
+            elif self._authenticator == OAUTH_AUTHENTICATOR:
+                self.auth_class = AuthByOAuth(
+                    oauth_token=self._token,
+                    timeout=self.login_timeout,
+                    backoff_generator=self._backoff_generator,
+                )
+            elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+                self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
+                    self._client_request_mfa_token if IS_LINUX else True
+                )
+                if self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN]:
+                    auth.read_temporary_credentials(
+                        self.host,
+                        self.user,
+                        self._session_parameters,
+                    )
+                self.auth_class = AuthByUsrPwdMfa(
+                    password=self._password,
+                    mfa_token=self.rest.mfa_token,
+                    timeout=self.login_timeout,
+                    backoff_generator=self._backoff_generator,
+                )
+            else:
+                # okta URL, e.g., https://<account>.okta.com/
+                self.auth_class = AuthByOkta(
+                    application=self.application,
+                    timeout=self.login_timeout,
+                    backoff_generator=self._backoff_generator,
+                )
+
             await self.authenticate_with_retry(self.auth_class)
 
             self._password = None  # ensure password won't persist
