@@ -80,6 +80,19 @@ def _init_socket(recv_side_effect_func):
     return Mock(return_value=mock_socket_instance)
 
 
+def _mock_event_loop_sock_accept(recv_side_effect_func):
+    async def mock_accept(*_):
+        mock_socket_client = MagicMock()
+
+        mock_socket_client.recv.side_effect = recv_side_effect_func
+        # in asyncio sendall uses socket.send, return 1 indicates success for sending 1 byte
+        # this will keep being called until all bytes are sent
+        mock_socket_client.send.side_effect = lambda *args: 1
+        return mock_socket_client, None
+
+    return mock_accept
+
+
 class UnexpectedRecvArgs(Exception):
     pass
 
@@ -130,9 +143,8 @@ async def test_auth_webbrowser_get(_, disable_console_login):
     )
 
     # mock socket
-    mock_socket_pkg = _init_socket(
-        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
-    )
+    recv_func = recv_setup([successful_web_callback(ref_token)])
+    mock_socket_pkg = _init_socket(recv_side_effect_func=recv_func)
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -147,14 +159,19 @@ async def test_auth_webbrowser_get(_, disable_console_login):
             webbrowser_pkg=mock_webbrowser,
             socket_pkg=mock_socket_pkg,
         )
-        await auth.prepare(
-            conn=rest._connection,
-            authenticator=AUTHENTICATOR,
-            service_name=SERVICE_NAME,
-            account=ACCOUNT,
-            user=USER,
-            password=PASSWORD,
-        )
+        with mock.patch.object(
+            auth._event_loop,
+            "sock_accept",
+            side_effect=_mock_event_loop_sock_accept(recv_func),
+        ), mock.patch.object(auth._event_loop, "sock_sendall", return_value=None):
+            await auth.prepare(
+                conn=rest._connection,
+                authenticator=AUTHENTICATOR,
+                service_name=SERVICE_NAME,
+                account=ACCOUNT,
+                user=USER,
+                password=PASSWORD,
+            )
         assert not rest._connection.errorhandler.called  # no error
         assert auth.assertion_content == ref_token
         body = {"data": {}}
@@ -180,23 +197,22 @@ async def test_auth_webbrowser_post(_, disable_console_login):
     )
 
     # mock socket
-    mock_socket_pkg = _init_socket(
-        recv_side_effect_func=recv_setup(
-            [
-                (
-                    "\r\n".join(
-                        [
-                            "POST / HTTP/1.1",
-                            "User-Agent: snowflake-agent",
-                            f"Host: localhost:{CLIENT_PORT}",
-                            "",
-                            f"token={ref_token}&confirm=true",
-                        ]
-                    )
-                ).encode("utf-8")
-            ]
-        )
+    recv_func = recv_setup(
+        [
+            (
+                "\r\n".join(
+                    [
+                        "POST / HTTP/1.1",
+                        "User-Agent: snowflake-agent",
+                        f"Host: localhost:{CLIENT_PORT}",
+                        "",
+                        f"token={ref_token}&confirm=true",
+                    ]
+                )
+            ).encode("utf-8")
+        ]
     )
+    mock_socket_pkg = _init_socket(recv_side_effect_func=recv_func)
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -211,14 +227,19 @@ async def test_auth_webbrowser_post(_, disable_console_login):
             webbrowser_pkg=mock_webbrowser,
             socket_pkg=mock_socket_pkg,
         )
-        await auth.prepare(
-            conn=rest._connection,
-            authenticator=AUTHENTICATOR,
-            service_name=SERVICE_NAME,
-            account=ACCOUNT,
-            user=USER,
-            password=PASSWORD,
-        )
+        with mock.patch.object(
+            auth._event_loop,
+            "sock_accept",
+            side_effect=_mock_event_loop_sock_accept(recv_func),
+        ), mock.patch.object(auth._event_loop, "sock_sendall", return_value=None):
+            await auth.prepare(
+                conn=rest._connection,
+                authenticator=AUTHENTICATOR,
+                service_name=SERVICE_NAME,
+                account=ACCOUNT,
+                user=USER,
+                password=PASSWORD,
+            )
         assert not rest._connection.errorhandler.called  # no error
         assert auth.assertion_content == ref_token
         body = {"data": {}}
@@ -254,9 +275,8 @@ async def test_auth_webbrowser_fail_webbrowser(
     ref_token = "MOCK_TOKEN"
 
     # mock socket
-    mock_socket_pkg = _init_socket(
-        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
-    )
+    recv_func = recv_setup([successful_web_callback(ref_token)])
+    mock_socket_pkg = _init_socket(recv_side_effect_func=recv_func)
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -267,7 +287,11 @@ async def test_auth_webbrowser_fail_webbrowser(
         webbrowser_pkg=mock_webbrowser,
         socket_pkg=mock_socket_pkg,
     )
-    with patch("builtins.input", return_value=input_text):
+    with patch("builtins.input", return_value=input_text), patch.object(
+        auth._event_loop,
+        "sock_accept",
+        side_effect=_mock_event_loop_sock_accept(recv_func),
+    ), mock.patch.object(auth._event_loop, "sock_sendall", return_value=None):
         await auth.prepare(
             conn=rest._connection,
             authenticator=AUTHENTICATOR,
@@ -307,11 +331,10 @@ async def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
     )
 
     # mock socket
-    mock_socket_pkg = _init_socket(
-        recv_side_effect_func=recv_setup(
-            [("\r\n".join(["GARBAGE", "User-Agent: snowflake-agent"])).encode("utf-8")]
-        )
+    recv_func = recv_setup(
+        [("\r\n".join(["GARBAGE", "User-Agent: snowflake-agent"])).encode("utf-8")]
     )
+    mock_socket_pkg = _init_socket(recv_side_effect_func=recv_func)
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -327,14 +350,19 @@ async def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
             webbrowser_pkg=mock_webbrowser,
             socket_pkg=mock_socket_pkg,
         )
-        await auth.prepare(
-            conn=rest._connection,
-            authenticator=AUTHENTICATOR,
-            service_name=SERVICE_NAME,
-            account=ACCOUNT,
-            user=USER,
-            password=PASSWORD,
-        )
+        with mock.patch.object(
+            auth._event_loop,
+            "sock_accept",
+            side_effect=_mock_event_loop_sock_accept(recv_func),
+        ), mock.patch.object(auth._event_loop, "sock_sendall", return_value=None):
+            await auth.prepare(
+                conn=rest._connection,
+                authenticator=AUTHENTICATOR,
+                service_name=SERVICE_NAME,
+                account=ACCOUNT,
+                user=USER,
+                password=PASSWORD,
+            )
         captured = capsys.readouterr()
         assert captured.out == (
             "Initiating login request with your identity provider. A browser window "
@@ -463,13 +491,12 @@ async def test_auth_webbrowser_socket_recv_retries_up_to_15_times_on_empty_bytea
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY, disable_console_login=True)
 
     # mock socket
-    mock_socket_pkg = _init_socket(
-        recv_side_effect_func=recv_setup(
-            # 14th return is empty byte array, but 15th call will return successful_web_callback
-            ([bytearray()] * 14)
-            + [successful_web_callback(ref_token)]
-        )
+    recv_func = recv_setup(
+        # 14th return is empty byte array, but 15th call will return successful_web_callback
+        ([bytearray()] * 14)
+        + [successful_web_callback(ref_token)]
     )
+    mock_socket_pkg = _init_socket(recv_side_effect_func=recv_func)
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -484,14 +511,19 @@ async def test_auth_webbrowser_socket_recv_retries_up_to_15_times_on_empty_bytea
             webbrowser_pkg=mock_webbrowser,
             socket_pkg=mock_socket_pkg,
         )
-        await auth.prepare(
-            conn=rest._connection,
-            authenticator=AUTHENTICATOR,
-            service_name=SERVICE_NAME,
-            account=ACCOUNT,
-            user=USER,
-            password=PASSWORD,
-        )
+        with patch.object(
+            auth._event_loop,
+            "sock_accept",
+            side_effect=_mock_event_loop_sock_accept(recv_func),
+        ), mock.patch.object(auth._event_loop, "sock_sendall", return_value=None):
+            await auth.prepare(
+                conn=rest._connection,
+                authenticator=AUTHENTICATOR,
+                service_name=SERVICE_NAME,
+                account=ACCOUNT,
+                user=USER,
+                password=PASSWORD,
+            )
         assert not rest._connection.errorhandler.called  # no error
         assert auth.assertion_content == ref_token
         body = {"data": {}}
@@ -574,7 +606,15 @@ async def test_auth_webbrowser_socket_recv_does_not_block_with_env_var(monkeypat
             socket_pkg=mock_socket_pkg,
         )
 
-        with mock.patch.object(auth._event_loop, "sock_recv", new=sock_recv_timeout):
+        with mock.patch.object(
+            auth._event_loop, "sock_recv", new=sock_recv_timeout
+        ), mock.patch.object(
+            auth._event_loop,
+            "sock_accept",
+            side_effect=_mock_event_loop_sock_accept(None),
+        ), mock.patch.object(
+            auth._event_loop, "sock_sendall", return_value=None
+        ):
             await auth.prepare(
                 conn=rest._connection,
                 authenticator=AUTHENTICATOR,
@@ -627,7 +667,9 @@ async def test_auth_webbrowser_socket_recv_blocking_stops_retries_after_15_attem
             webbrowser_pkg=mock_webbrowser,
             socket_pkg=mock_socket_pkg,
         )
-        with mock.patch.object(auth._event_loop, "sock_recv", new=sock_recv_timeout):
+        with mock.patch.object(
+            auth._event_loop, "sock_recv", new=sock_recv_timeout
+        ), mock.patch.object(auth._event_loop, "sock_sendall", return_value=None):
             await auth.prepare(
                 conn=rest._connection,
                 authenticator=AUTHENTICATOR,
@@ -652,9 +694,8 @@ async def test_auth_webbrowser_socket_reuseport_with_env_flag(monkeypatch):
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
-    mock_socket_pkg = _init_socket(
-        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
-    )
+    recv_func = recv_setup([successful_web_callback(ref_token)])
+    mock_socket_pkg = _init_socket(recv_side_effect_func=recv_func)
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -671,14 +712,19 @@ async def test_auth_webbrowser_socket_reuseport_with_env_flag(monkeypatch):
             webbrowser_pkg=mock_webbrowser,
             socket_pkg=mock_socket_pkg,
         )
-        await auth.prepare(
-            conn=rest._connection,
-            authenticator=AUTHENTICATOR,
-            service_name=SERVICE_NAME,
-            account=ACCOUNT,
-            user=USER,
-            password=PASSWORD,
-        )
+        with mock.patch.object(
+            auth._event_loop,
+            "sock_accept",
+            side_effect=_mock_event_loop_sock_accept(recv_func),
+        ), mock.patch.object(auth._event_loop, "sock_sendall", return_value=None):
+            await auth.prepare(
+                conn=rest._connection,
+                authenticator=AUTHENTICATOR,
+                service_name=SERVICE_NAME,
+                account=ACCOUNT,
+                user=USER,
+                password=PASSWORD,
+            )
         assert mock_socket_pkg.return_value.setsockopt.call_count == 1
         assert mock_socket_pkg.return_value.setsockopt.call_args.args == (
             socket.SOL_SOCKET,
@@ -698,6 +744,7 @@ async def test_auth_webbrowser_socket_reuseport_option_not_set_with_false_flag(
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
+    recv_func = recv_setup([successful_web_callback(ref_token)])
     mock_socket_pkg = _init_socket(
         recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
     )
@@ -717,14 +764,19 @@ async def test_auth_webbrowser_socket_reuseport_option_not_set_with_false_flag(
             webbrowser_pkg=mock_webbrowser,
             socket_pkg=mock_socket_pkg,
         )
-        await auth.prepare(
-            conn=rest._connection,
-            authenticator=AUTHENTICATOR,
-            service_name=SERVICE_NAME,
-            account=ACCOUNT,
-            user=USER,
-            password=PASSWORD,
-        )
+        with mock.patch.object(
+            auth._event_loop,
+            "sock_accept",
+            side_effect=_mock_event_loop_sock_accept(recv_func),
+        ), mock.patch.object(auth._event_loop, "sock_sendall", return_value=None):
+            await auth.prepare(
+                conn=rest._connection,
+                authenticator=AUTHENTICATOR,
+                service_name=SERVICE_NAME,
+                account=ACCOUNT,
+                user=USER,
+                password=PASSWORD,
+            )
         assert mock_socket_pkg.return_value.setsockopt.call_count == 0
 
         assert not rest._connection.errorhandler.called  # no error
@@ -739,9 +791,8 @@ async def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY)
 
     # mock socket
-    mock_socket_pkg = _init_socket(
-        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
-    )
+    recv_func = recv_setup([successful_web_callback(ref_token)])
+    mock_socket_pkg = _init_socket(recv_side_effect_func=recv_func)
 
     # mock webbrowser
     mock_webbrowser = MagicMock()
@@ -756,14 +807,19 @@ async def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(
             webbrowser_pkg=mock_webbrowser,
             socket_pkg=mock_socket_pkg,
         )
-        await auth.prepare(
-            conn=rest._connection,
-            authenticator=AUTHENTICATOR,
-            service_name=SERVICE_NAME,
-            account=ACCOUNT,
-            user=USER,
-            password=PASSWORD,
-        )
+        with mock.patch.object(
+            auth._event_loop,
+            "sock_accept",
+            side_effect=_mock_event_loop_sock_accept(recv_func),
+        ), mock.patch.object(auth._event_loop, "sock_sendall", return_value=None):
+            await auth.prepare(
+                conn=rest._connection,
+                authenticator=AUTHENTICATOR,
+                service_name=SERVICE_NAME,
+                account=ACCOUNT,
+                user=USER,
+                password=PASSWORD,
+            )
         assert mock_socket_pkg.return_value.setsockopt.call_count == 0
 
         assert not rest._connection.errorhandler.called  # no error
