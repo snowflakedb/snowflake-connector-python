@@ -76,3 +76,21 @@ async def conn_testaccount() -> SnowflakeConnection:
 def negative_conn_cnx() -> Callable[..., AsyncContextManager[SnowflakeConnection]]:
     """Use this if an incident is expected and we don't want GS to create a dump file about the incident."""
     return negative_db
+
+
+@pytest.fixture()
+async def aio_connection(db_parameters):
+    cnx = SnowflakeConnection(
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        database=db_parameters["database"],
+        schema=db_parameters["schema"],
+        warehouse=db_parameters["warehouse"],
+        protocol=db_parameters["protocol"],
+        timezone="UTC",
+    )
+    yield cnx
+    await cnx.close()
