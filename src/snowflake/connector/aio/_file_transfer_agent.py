@@ -118,6 +118,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 # multichunk threshold
                 m.multipart_threshold = self._multipart_threshold
 
+        # TODO: https://snowflakecomputing.atlassian.net/browse/SNOW-1625364
         logger.debug(f"parallel=[{self._parallel}]")
         if self._raise_put_get_error and not self._file_metadata:
             Error.errorhandler_wrapper(

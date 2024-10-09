@@ -900,7 +900,6 @@ class SnowflakeFileTransferAgent:
 
         self._src_locations = response["src_locations"]
 
-        # TODO: https://snowflakecomputing.atlassian.net/browse/SNOW-1625364
         self._parallel = response.get("parallel", 1)
         self._overwrite = self._force_put_overwrite or response.get("overwrite", False)
         self._stage_location_type = response["stageInfo"]["locationType"].upper()
