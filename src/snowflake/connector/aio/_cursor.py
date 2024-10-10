@@ -615,7 +615,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             )
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
-                from ..file_transfer_agent import SnowflakeFileTransferAgent
+                from ._file_transfer_agent import SnowflakeFileTransferAgent
 
                 # Decide whether to use the old, or new code path
                 sf_file_transfer_agent = SnowflakeFileTransferAgent(
@@ -637,7 +637,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
                     multipart_threshold=data.get("threshold"),
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
                 )
-                sf_file_transfer_agent.execute()
+                await sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
                 self._total_rowcount = len(data["rowset"]) if "rowset" in data else -1
 
