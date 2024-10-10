@@ -602,7 +602,10 @@ def test_stage_location_building(
             )
             assert m_execute.called and any(
                 map(
-                    lambda e: "CREATE TEMP STAGE" in str(e[0]),
+                    lambda e: (
+                        "CREATE TEMP STAGE" in str(e[0])
+                        or "CREATE SCOPED TEMPORARY STAGE" in str(e[0])
+                    ),
                     m_execute.call_args_list,
                 )
             )
@@ -660,7 +663,10 @@ def test_file_format_location_building(
             )
             assert m_execute.called and any(
                 map(
-                    lambda e: "CREATE TEMP FILE FORMAT" in str(e[0]),
+                    lambda e: (
+                        "CREATE TEMP FILE FORMAT" in str(e[0])
+                        or "CREATE SCOPED TEMPORARY FILE FORMAT" in str(e[0])
+                    ),
                     m_execute.call_args_list,
                 )
             )
