@@ -167,7 +167,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
                 gcs_headers["Authorization"] = f"Bearer {access_token}"
             else:
                 download_url = self.presigned_url
-            rest_args = {"headers": gcs_headers, "stream": True}
+            rest_args = {"headers": gcs_headers}
             return download_url, rest_args
 
         response = await self._send_request_with_retry(
