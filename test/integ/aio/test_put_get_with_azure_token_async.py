@@ -31,7 +31,7 @@ from test.integ_helpers import put_async
 logger = getLogger(__name__)
 
 # Mark every test in this module as an azure and a putget test
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.asyncio, pytest.mark.azure]
 
 
 @pytest.mark.parametrize(

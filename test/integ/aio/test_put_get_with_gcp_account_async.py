@@ -44,7 +44,7 @@ except ImportError:  # pragma: no cover
 logger = getLogger(__name__)
 
 # Mark every test in this module as a gcp test
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.asyncio, pytest.mark.gcp]
 
 
 @pytest.mark.parametrize("enable_gcs_downscoped", [True])

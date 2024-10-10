@@ -32,7 +32,7 @@ except ImportError:
 from test.integ_helpers import put_async
 
 # Mark every test in this module as an aws test
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.asyncio, pytest.mark.aws]
 
 
 @pytest.mark.parametrize(
