@@ -6,10 +6,10 @@
 from __future__ import annotations
 
 from ...auth.usrpwdmfa import AuthByUsrPwdMfa as AuthByUsrPwdMfaSync
-from ._by_plugin import AuthByPlugin
+from ._by_plugin import AuthByPlugin as AuthByPluginAsync
 
 
-class AuthByUsrPwdMfa(AuthByPlugin, AuthByUsrPwdMfaSync):
+class AuthByUsrPwdMfa(AuthByPluginAsync, AuthByUsrPwdMfaSync):
     def __init__(
         self,
         password: str,

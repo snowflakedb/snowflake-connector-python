@@ -10,12 +10,12 @@ from typing import Any
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from ...auth.keypair import AuthByKeyPair as AuthByKeyPairSync
-from ._by_plugin import AuthByPlugin
+from ._by_plugin import AuthByPlugin as AuthByPluginAsync
 
 logger = getLogger(__name__)
 
 
-class AuthByKeyPair(AuthByPlugin, AuthByKeyPairSync):
+class AuthByKeyPair(AuthByPluginAsync, AuthByKeyPairSync):
     def __init__(
         self,
         private_key: bytes | RSAPrivateKey,
@@ -48,7 +48,7 @@ class AuthByKeyPair(AuthByPlugin, AuthByKeyPairSync):
         **kwargs: Any,
     ) -> None:
         logger.debug("Invoking base timeout handler")
-        await AuthByPlugin.handle_timeout(
+        await AuthByPluginAsync.handle_timeout(
             self,
             authenticator=authenticator,
             service_name=service_name,

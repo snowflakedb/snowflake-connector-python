@@ -8,10 +8,10 @@ from __future__ import annotations
 from typing import Any
 
 from ...auth.oauth import AuthByOAuth as AuthByOAuthSync
-from ._by_plugin import AuthByPlugin
+from ._by_plugin import AuthByPlugin as AuthByPluginAsync
 
 
-class AuthByOAuth(AuthByPlugin, AuthByOAuthSync):
+class AuthByOAuth(AuthByPluginAsync, AuthByOAuthSync):
     def __init__(self, oauth_token: str, **kwargs) -> None:
         """Initializes an instance with an OAuth Token."""
         AuthByOAuthSync.__init__(self, oauth_token, **kwargs)

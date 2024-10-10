@@ -26,7 +26,7 @@ from ...errorcode import ER_IDP_CONNECTION_ERROR
 from ...errors import RefreshTokenError
 from ...network import CONTENT_TYPE_APPLICATION_JSON, PYTHON_CONNECTOR_USER_AGENT
 from ...sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
-from ._by_plugin import AuthByPlugin
+from ._by_plugin import AuthByPlugin as AuthByPluginAsync
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class AuthByOkta(AuthByPlugin, AuthByOktaSync):
+class AuthByOkta(AuthByPluginAsync, AuthByOktaSync):
     def __init__(self, application: str, **kwargs) -> None:
         AuthByOktaSync.__init__(self, application, **kwargs)
 

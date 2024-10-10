@@ -7,14 +7,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from ...auth.idtoken import AuthByIdToken as AuthByIdTokenSync
-from ._by_plugin import AuthByPlugin
+from ._by_plugin import AuthByPlugin as AuthByPluginAsync
 from ._webbrowser import AuthByWebBrowser
 
 if TYPE_CHECKING:
     from .._connection import SnowflakeConnection
 
 
-class AuthByIdToken(AuthByPlugin, AuthByIdTokenSync):
+class AuthByIdToken(AuthByPluginAsync, AuthByIdTokenSync):
     def __init__(
         self,
         id_token: str,

@@ -38,7 +38,7 @@ from ...network import (
     PYTHON_CONNECTOR_USER_AGENT,
 )
 from ...url_util import is_valid_url
-from ._by_plugin import AuthByPlugin
+from ._by_plugin import AuthByPlugin as AuthByPluginAsync
 
 if TYPE_CHECKING:
     from .._connection import SnowflakeConnection
@@ -46,7 +46,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class AuthByWebBrowser(AuthByPlugin, AuthByWebBrowserSync):
+class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
     def __init__(
         self,
         application: str,
