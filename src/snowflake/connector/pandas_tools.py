@@ -6,9 +6,12 @@ from __future__ import annotations
 
 import collections.abc
 import os
+import string
 import warnings
+from enum import Enum
 from functools import partial
 from logging import getLogger
+from random import choice
 from tempfile import TemporaryDirectory
 from typing import (
     TYPE_CHECKING,
@@ -39,6 +42,41 @@ if TYPE_CHECKING:  # pragma: no cover
 T = TypeVar("T", bound=collections.abc.Sequence)
 
 logger = getLogger(__name__)
+
+TEMP_OBJECT_NAME_PREFIX = "SNOWPARK_TEMP_"
+ALPHANUMERIC = string.digits + string.ascii_lowercase
+TEMPORARY_STRING = "TEMPORARY"
+SCOPED_TEMPORARY_STRING = "SCOPED TEMPORARY"
+_PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING = (
+    "PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS"
+)
+
+
+class TempObjectType(Enum):
+    TABLE = "TABLE"
+    VIEW = "VIEW"
+    STAGE = "STAGE"
+    FUNCTION = "FUNCTION"
+    FILE_FORMAT = "FILE_FORMAT"
+    QUERY_TAG = "QUERY_TAG"
+    COLUMN = "COLUMN"
+    PROCEDURE = "PROCEDURE"
+    TABLE_FUNCTION = "TABLE_FUNCTION"
+    DYNAMIC_TABLE = "DYNAMIC_TABLE"
+    AGGREGATE_FUNCTION = "AGGREGATE_FUNCTION"
+    CTE = "CTE"
+
+
+def generate_random_alphanumeric(length: int = 10) -> str:
+    return "".join(choice(ALPHANUMERIC) for _ in range(length))
+
+
+def random_name_for_temp_object(object_type: TempObjectType) -> str:
+    return f"{TEMP_OBJECT_NAME_PREFIX}{object_type.value}_{generate_random_alphanumeric().upper()}"
+
+
+def get_temp_type_for_object(use_scoped_temp_objects: bool) -> str:
+    return SCOPED_TEMPORARY_STRING if use_scoped_temp_objects else TEMPORARY_STRING
 
 
 def chunk_helper(
@@ -77,8 +115,9 @@ def _do_create_temp_stage(
     compression: str,
     auto_create_table: bool,
     overwrite: bool,
+    use_scoped_temp_object: bool,
 ) -> None:
-    create_stage_sql = f"CREATE TEMP STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ {stage_location} FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''})"
+    create_stage_sql = f"CREATE {get_temp_type_for_object(use_scoped_temp_object)} STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ {stage_location} FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''})"
     logger.debug(f"creating stage with '{create_stage_sql}'")
     cursor.execute(create_stage_sql, _is_internal=True).fetchall()
 
@@ -91,17 +130,31 @@ def _create_temp_stage(
     compression: str,
     auto_create_table: bool,
     overwrite: bool,
+    use_scoped_temp_object: bool = True,
 ) -> str:
-    stage_name = random_string()
+    stage_name = random_name_for_temp_object(TempObjectType.STAGE)
     stage_location = build_location_helper(
         database=database,
         schema=schema,
         name=stage_name,
         quote_identifiers=quote_identifiers,
     )
+    _use_scoped_temp_object = (
+        use_scoped_temp_object
+        and cursor.connection._session_parameters.get(
+            _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, True
+        )
+        if cursor.connection._session_parameters
+        else True
+    )
     try:
         _do_create_temp_stage(
-            cursor, stage_location, compression, auto_create_table, overwrite
+            cursor,
+            stage_location,
+            compression,
+            auto_create_table,
+            overwrite,
+            _use_scoped_temp_object,
         )
     except ProgrammingError as e:
         # User may not have the privilege to create stage on the target schema, so fall back to use current schema as
@@ -111,7 +164,12 @@ def _create_temp_stage(
         )
         stage_location = stage_name
         _do_create_temp_stage(
-            cursor, stage_location, compression, auto_create_table, overwrite
+            cursor,
+            stage_location,
+            compression,
+            auto_create_table,
+            overwrite,
+            _use_scoped_temp_object,
         )
 
     return stage_location
@@ -122,9 +180,10 @@ def _do_create_temp_file_format(
     file_format_location: str,
     compression: str,
     sql_use_logical_type: str,
+    use_scoped_temp_object: bool,
 ) -> None:
     file_format_sql = (
-        f"CREATE TEMP FILE FORMAT {file_format_location} "
+        f"CREATE {get_temp_type_for_object(use_scoped_temp_object)} FILE FORMAT {file_format_location} "
         f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         f"TYPE=PARQUET COMPRESSION={compression}{sql_use_logical_type}"
     )
@@ -139,17 +198,30 @@ def _create_temp_file_format(
     quote_identifiers: bool,
     compression: str,
     sql_use_logical_type: str,
+    use_scoped_temp_object: bool = True,
 ) -> str:
-    file_format_name = random_string()
+    file_format_name = random_name_for_temp_object(TempObjectType.FILE_FORMAT)
     file_format_location = build_location_helper(
         database=database,
         schema=schema,
         name=file_format_name,
         quote_identifiers=quote_identifiers,
     )
+    _use_scoped_temp_object = (
+        use_scoped_temp_object
+        and cursor.connection._session_parameters.get(
+            _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, True
+        )
+        if cursor.connection._session_parameters
+        else True
+    )
     try:
         _do_create_temp_file_format(
-            cursor, file_format_location, compression, sql_use_logical_type
+            cursor,
+            file_format_location,
+            compression,
+            sql_use_logical_type,
+            _use_scoped_temp_object,
         )
     except ProgrammingError as e:
         # User may not have the privilege to create file format on the target schema, so fall back to use current schema
@@ -159,7 +231,11 @@ def _create_temp_file_format(
         )
         file_format_location = file_format_name
         _do_create_temp_file_format(
-            cursor, file_format_location, compression, sql_use_logical_type
+            cursor,
+            file_format_location,
+            compression,
+            sql_use_logical_type,
+            _use_scoped_temp_object,
         )
 
     return file_format_location
