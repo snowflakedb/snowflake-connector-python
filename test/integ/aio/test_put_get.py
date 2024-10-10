@@ -37,7 +37,6 @@ pytestmark = pytest.mark.asyncio
 CLOUD = os.getenv("cloud_provider", "dev")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 async def test_utf8_filename(tmp_path, aio_connection):
     test_file = tmp_path / "utf卡豆.csv"
     test_file.write_text("1,2,3\n")
@@ -54,7 +53,6 @@ async def test_utf8_filename(tmp_path, aio_connection):
     assert await cursor.fetchone() == ("1", "2", "3")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 async def test_put_threshold(tmp_path, aio_connection, is_public_test):
     if is_public_test:
         pytest.xfail(
@@ -122,7 +120,6 @@ async def test_multipart_put(aio_connection, tmp_path, use_stream):
     assert filecmp.cmp(upload_file, downloaded_file)
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 async def test_put_special_file_name(tmp_path, aio_connection):
     test_file = tmp_path / "data~%23.csv"
     test_file.write_text("1,2,3\n")
@@ -140,7 +137,6 @@ async def test_put_special_file_name(tmp_path, aio_connection):
     assert await cursor.fetchone() == ("1", "2", "3")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 async def test_get_empty_file(tmp_path, aio_connection):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
@@ -158,7 +154,6 @@ async def test_get_empty_file(tmp_path, aio_connection):
     assert not empty_file.exists()
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 async def test_get_file_permission(tmp_path, aio_connection, caplog):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
@@ -183,7 +178,6 @@ async def test_get_file_permission(tmp_path, aio_connection, caplog):
     assert oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 async def test_get_multiple_files_with_same_name(tmp_path, aio_connection, caplog):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
@@ -210,7 +204,6 @@ async def test_get_multiple_files_with_same_name(tmp_path, aio_connection, caplo
     assert "Downloading multiple files with the same name" in caplog.text
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 async def test_transfer_error_message(tmp_path, aio_connection):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")

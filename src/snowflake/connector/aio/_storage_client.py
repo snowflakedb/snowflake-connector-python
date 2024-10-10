@@ -181,7 +181,7 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
     async def _send_request_with_retry(
         self,
         verb: str,
-        get_request_args: Callable[[], tuple[str, dict[str, bytes]]],
+        get_request_args: Callable[[], tuple[str, dict[str, Any]]],
         retry_id: int,
     ) -> aiohttp.ClientResponse:
         url = ""
@@ -204,8 +204,8 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
                         verb, url, **rest_kwargs
                     )
 
-                if self._has_expired_presigned_url(response):
-                    self._update_presigned_url()
+                if await self._has_expired_presigned_url(response):
+                    await self._update_presigned_url()
                 else:
                     self.last_err_is_presigned_url = False
                     if response.status in self.TRANSIENT_HTTP_ERR:
@@ -291,6 +291,16 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
     @abstractmethod
     async def download_chunk(self, chunk_id: int) -> None:
         pass
+
+    # Override in GCS
+    async def _has_expired_presigned_url(
+        self, response: aiohttp.ClientResponse
+    ) -> bool:
+        return False
+
+    # Override in GCS
+    async def _update_presigned_url(self) -> None:
+        return
 
     # Override in S3
     async def _initiate_multipart_upload(self) -> None:

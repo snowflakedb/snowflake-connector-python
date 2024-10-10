@@ -75,7 +75,6 @@ async def test_put_error(tmpdir):
     chmod(file1, 0o700)
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 async def test_get_empty_file(tmpdir):
     """Tests for error message when retrieving missing file."""
     tmp_dir = str(tmpdir.mkdir("getfiledir"))
@@ -110,8 +109,7 @@ async def test_get_empty_file(tmpdir):
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.skip
-def test_upload_file_with_azure_upload_failed_error(tmp_path):
+async def test_upload_file_with_azure_upload_failed_error(tmp_path):
     """Tests Upload file with expired Azure storage token."""
     file1 = tmp_path / "file1"
     with file1.open("w") as f:
@@ -141,13 +139,13 @@ def test_upload_file_with_azure_upload_failed_error(tmp_path):
     )
     exc = Exception("Stop executing")
     with mock.patch(
-        "snowflake.connector.azure_storage_client.SnowflakeAzureRestClient._has_expired_token",
+        "snowflake.connector.aio._azure_storage_client.SnowflakeAzureRestClient._has_expired_token",
         return_value=True,
     ):
         with mock.patch(
             "snowflake.connector.file_transfer_agent.StorageCredential.update",
             side_effect=exc,
         ) as mock_update:
-            rest_client.execute()
+            await rest_client.execute()
             assert mock_update.called
             assert rest_client._results[0].error_details is exc
