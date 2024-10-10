@@ -23,8 +23,7 @@ from ..encryption_util import EncryptionMetadata
 from ._storage_client import SnowflakeStorageClient as SnowflakeStorageClientAsync
 
 if TYPE_CHECKING:  # pragma: no cover
-    from ..file_transfer_agent import StorageCredential
-    from ._file_transfer_agent import SnowflakeFileMeta
+    from ..file_transfer_agent import SnowflakeFileMeta, StorageCredential
 
 logger = getLogger(__name__)
 
@@ -53,15 +52,6 @@ class SnowflakeAzureRestClient(
             chunk_size=chunk_size,
             credentials=credentials,
         )
-        end_point: str = stage_info["endPoint"]
-        if end_point.startswith("blob."):
-            end_point = end_point[len("blob.") :]
-        self.endpoint = end_point
-        self.storage_account: str = stage_info["storageAccount"]
-        self.azure_location = self.extract_container_name_and_path(
-            stage_info["location"]
-        )
-        self.block_ids: list[str] = []
 
     async def _has_expired_token(self, response: aiohttp.ClientResponse) -> bool:
         return response.status == 403 and any(

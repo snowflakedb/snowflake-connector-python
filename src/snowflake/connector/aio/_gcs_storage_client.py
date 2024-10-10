@@ -18,9 +18,8 @@ from ..gcs_storage_client import SnowflakeGCSRestClient as SnowflakeGCSRestClien
 from ._storage_client import SnowflakeStorageClient as SnowflakeStorageClientAsync
 
 if TYPE_CHECKING:  # pragma: no cover
-    from ..file_transfer_agent import StorageCredential
+    from ..file_transfer_agent import SnowflakeFileMeta, StorageCredential
     from ._connection import SnowflakeConnection
-    from ._file_transfer_agent import SnowflakeFileMeta
 
 logger = getLogger(__name__)
 

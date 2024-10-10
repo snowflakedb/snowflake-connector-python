@@ -50,10 +50,6 @@ async def test_put_get_with_gcp(
     from_path,
 ):
     """[gcp] Puts and Gets a small text using gcp."""
-    if enable_gcs_downscoped and is_public_test:
-        pytest.xfail(
-            "Server need to update with merged change. Expected release version: 4.41.0"
-        )
     # create a data file
     fname = str(tmpdir.join("test_put_get_with_gcp_token.txt.gz"))
     original_contents = "123,test1\n456,test2\n"
@@ -116,10 +112,6 @@ async def test_put_copy_many_files_gcp(
     enable_gcs_downscoped,
 ):
     """[gcp] Puts and Copies many files."""
-    if enable_gcs_downscoped and is_public_test:
-        pytest.xfail(
-            "Server need to update with merged change. Expected release version: 4.41.0"
-        )
     # generates N files
     number_of_files = 10
     number_of_lines = 1000
@@ -181,10 +173,6 @@ async def test_put_copy_duplicated_files_gcp(
     enable_gcs_downscoped,
 ):
     """[gcp] Puts and Copies duplicated files."""
-    if enable_gcs_downscoped and is_public_test:
-        pytest.xfail(
-            "Server need to update with merged change. Expected release version: 4.41.0"
-        )
     # generates N files
     number_of_files = 5
     number_of_lines = 100
@@ -275,10 +263,6 @@ async def test_put_get_large_files_gcp(
     enable_gcs_downscoped,
 ):
     """[gcp] Puts and Gets Large files."""
-    if enable_gcs_downscoped and is_public_test:
-        pytest.xfail(
-            "Server need to update with merged change. Expected release version: 4.41.0"
-        )
     number_of_files = 3
     number_of_lines = 200000
     tmp_dir = generate_k_lines_of_n_files(
@@ -358,10 +342,6 @@ async def test_auto_compress_off_gcp(
     enable_gcs_downscoped,
 ):
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
-    if enable_gcs_downscoped and is_public_test:
-        pytest.xfail(
-            "Server need to update with merged change. Expected release version: 4.41.0"
-        )
     fname = str(
         os.path.join(
             os.path.dirname(os.path.realpath(__file__)), "../data", "example.json"
@@ -396,10 +376,6 @@ async def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscope
     error_code,
     is_public_test,
 ):
-    if is_public_test:
-        pytest.xfail(
-            "Server need to update with merged change. Expected release version: 4.41.0"
-        )
     fname = str(tmpdir.join("test_put_get_with_gcp_token.txt.gz"))
     original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, "wb") as f:
@@ -512,10 +488,6 @@ async def test_put_overwrite_with_downscope(
     from_path,
 ):
     """Tests whether _force_put_overwrite and overwrite=true works as intended."""
-    if is_public_test:
-        pytest.xfail(
-            "Server need to update with merged change. Expected release version: 4.41.0"
-        )
 
     await aio_connection.connect()
     csr = aio_connection.cursor()
