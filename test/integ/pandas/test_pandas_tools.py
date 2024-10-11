@@ -971,6 +971,7 @@ def test_no_create_internal_object_privilege_in_target_schema(
                         schema=target_schema,
                         auto_create_table=True,
                         quote_identifiers=False,
+                        use_scoped_temp_object=False,
                     )
 
             assert "Fall back to use current schema" in caplog.text

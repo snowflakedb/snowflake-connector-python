@@ -45,7 +45,7 @@ logger = getLogger(__name__)
 
 TEMP_OBJECT_NAME_PREFIX = "SNOWPARK_TEMP_"
 ALPHANUMERIC = string.digits + string.ascii_lowercase
-TEMPORARY_STRING = "TEMPORARY"
+TEMPORARY_STRING = "TEMP"
 SCOPED_TEMPORARY_STRING = "SCOPED TEMPORARY"
 _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING = (
     "PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS"
@@ -132,20 +132,13 @@ def _create_temp_stage(
     overwrite: bool,
     use_scoped_temp_object: bool = True,
 ) -> str:
-    stage_name = random_name_for_temp_object(TempObjectType.STAGE)
+    # stage_name = random_name_for_temp_object(TempObjectType.STAGE)
+    stage_name = random_string()
     stage_location = build_location_helper(
         database=database,
         schema=schema,
         name=stage_name,
         quote_identifiers=quote_identifiers,
-    )
-    _use_scoped_temp_object = (
-        use_scoped_temp_object
-        and cursor.connection._session_parameters.get(
-            _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, True
-        )
-        if cursor.connection._session_parameters
-        else True
     )
     try:
         _do_create_temp_stage(
@@ -154,7 +147,7 @@ def _create_temp_stage(
             compression,
             auto_create_table,
             overwrite,
-            _use_scoped_temp_object,
+            use_scoped_temp_object,
         )
     except ProgrammingError as e:
         # User may not have the privilege to create stage on the target schema, so fall back to use current schema as
@@ -169,7 +162,7 @@ def _create_temp_stage(
             compression,
             auto_create_table,
             overwrite,
-            _use_scoped_temp_object,
+            use_scoped_temp_object,
         )
 
     return stage_location
@@ -207,21 +200,13 @@ def _create_temp_file_format(
         name=file_format_name,
         quote_identifiers=quote_identifiers,
     )
-    _use_scoped_temp_object = (
-        use_scoped_temp_object
-        and cursor.connection._session_parameters.get(
-            _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, True
-        )
-        if cursor.connection._session_parameters
-        else True
-    )
     try:
         _do_create_temp_file_format(
             cursor,
             file_format_location,
             compression,
             sql_use_logical_type,
-            _use_scoped_temp_object,
+            use_scoped_temp_object,
         )
     except ProgrammingError as e:
         # User may not have the privilege to create file format on the target schema, so fall back to use current schema
@@ -235,7 +220,7 @@ def _create_temp_file_format(
             file_format_location,
             compression,
             sql_use_logical_type,
-            _use_scoped_temp_object,
+            use_scoped_temp_object,
         )
 
     return file_format_location
@@ -257,6 +242,7 @@ def write_pandas(
     overwrite: bool = False,
     table_type: Literal["", "temp", "temporary", "transient"] = "",
     use_logical_type: bool | None = None,
+    use_scoped_temp_object: bool = True,
     **kwargs: Any,
 ) -> tuple[
     bool,
@@ -339,6 +325,15 @@ def write_pandas(
             f"Invalid compression '{compression}', only acceptable values are: {compression_map.keys()}"
         )
 
+    _use_scoped_temp_object = (
+        use_scoped_temp_object
+        and conn.cursor().connection._session_parameters.get(
+            _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, True
+        )
+        if conn.cursor().connection._session_parameters
+        else True
+    )
+
     if create_temp_table:
         warnings.warn(
             "create_temp_table is deprecated, we still respect this parameter when it is True but "
@@ -400,6 +395,7 @@ def write_pandas(
         compression,
         auto_create_table,
         overwrite,
+        _use_scoped_temp_object,
     )
 
     with TemporaryDirectory() as tmp_folder:
@@ -446,6 +442,7 @@ def write_pandas(
             quote_identifiers,
             compression_map[compression],
             sql_use_logical_type,
+            _use_scoped_temp_object,
         )
         infer_schema_sql = f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>'@{stage_location}', file_format=>'{file_format_location}'))"
         logger.debug(f"inferring schema with '{infer_schema_sql}'")
