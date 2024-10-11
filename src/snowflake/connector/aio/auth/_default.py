@@ -4,13 +4,20 @@
 
 from __future__ import annotations
 
+from logging import getLogger
 from typing import Any
 
 from ...auth.default import AuthByDefault as AuthByDefaultSync
-from ._by_plugin import AuthByPlugin
+from ._by_plugin import AuthByPlugin as AuthByPluginAsync
+
+logger = getLogger(__name__)
 
 
-class AuthByDefault(AuthByPlugin, AuthByDefaultSync):
+class AuthByDefault(AuthByPluginAsync, AuthByDefaultSync):
+    def __init__(self, password: str, **kwargs) -> None:
+        """Initializes an instance with a password."""
+        AuthByDefaultSync.__init__(self, password, **kwargs)
+
     async def reset_secrets(self) -> None:
         self._password = None
 
