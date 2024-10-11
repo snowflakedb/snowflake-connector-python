@@ -6,12 +6,9 @@ from __future__ import annotations
 
 import collections.abc
 import os
-import string
 import warnings
-from enum import Enum
 from functools import partial
 from logging import getLogger
-from random import choice
 from tempfile import TemporaryDirectory
 from typing import (
     TYPE_CHECKING,
@@ -30,6 +27,12 @@ from snowflake.connector.telemetry import TelemetryData, TelemetryField
 from snowflake.connector.util_text import random_string
 
 from .cursor import SnowflakeCursor
+from .utils import (
+    _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING,
+    TempObjectType,
+    get_temp_type_for_object,
+    random_name_for_temp_object,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
@@ -42,41 +45,6 @@ if TYPE_CHECKING:  # pragma: no cover
 T = TypeVar("T", bound=collections.abc.Sequence)
 
 logger = getLogger(__name__)
-
-TEMP_OBJECT_NAME_PREFIX = "SNOWPARK_TEMP_"
-ALPHANUMERIC = string.digits + string.ascii_lowercase
-TEMPORARY_STRING = "TEMP"
-SCOPED_TEMPORARY_STRING = "SCOPED TEMPORARY"
-_PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING = (
-    "PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS"
-)
-
-
-class TempObjectType(Enum):
-    TABLE = "TABLE"
-    VIEW = "VIEW"
-    STAGE = "STAGE"
-    FUNCTION = "FUNCTION"
-    FILE_FORMAT = "FILE_FORMAT"
-    QUERY_TAG = "QUERY_TAG"
-    COLUMN = "COLUMN"
-    PROCEDURE = "PROCEDURE"
-    TABLE_FUNCTION = "TABLE_FUNCTION"
-    DYNAMIC_TABLE = "DYNAMIC_TABLE"
-    AGGREGATE_FUNCTION = "AGGREGATE_FUNCTION"
-    CTE = "CTE"
-
-
-def generate_random_alphanumeric(length: int = 10) -> str:
-    return "".join(choice(ALPHANUMERIC) for _ in range(length))
-
-
-def random_name_for_temp_object(object_type: TempObjectType) -> str:
-    return f"{TEMP_OBJECT_NAME_PREFIX}{object_type.value}_{generate_random_alphanumeric().upper()}"
-
-
-def get_temp_type_for_object(use_scoped_temp_objects: bool) -> str:
-    return SCOPED_TEMPORARY_STRING if use_scoped_temp_objects else TEMPORARY_STRING
 
 
 def chunk_helper(

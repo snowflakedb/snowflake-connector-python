@@ -11,7 +11,7 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 from .errors import BindUploadError, Error
-from .pandas_tools import (
+from .utils import (
     _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING,
     TempObjectType,
     get_temp_type_for_object,
