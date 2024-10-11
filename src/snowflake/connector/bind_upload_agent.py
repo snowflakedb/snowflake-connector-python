@@ -11,6 +11,12 @@ from logging import getLogger
 from typing import TYPE_CHECKING
 
 from .errors import BindUploadError, Error
+from .pandas_tools import (
+    _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING,
+    TempObjectType,
+    get_temp_type_for_object,
+    random_name_for_temp_object,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from .cursor import SnowflakeCursor
@@ -19,17 +25,13 @@ logger = getLogger(__name__)
 
 
 class BindUploadAgent:
-    _STAGE_NAME = "SYSTEMBIND"
-    _CREATE_STAGE_STMT = (
-        f"create or replace temporary stage {_STAGE_NAME} "
-        "file_format=(type=csv field_optionally_enclosed_by='\"')"
-    )
 
     def __init__(
         self,
         cursor: SnowflakeCursor,
         rows: list[bytes],
         stream_buffer_size: int = 1024 * 1024 * 10,
+        use_scoped_temp_object: bool = True,
     ) -> None:
         """Construct an agent that uploads binding parameters as CSV files to a temporary stage.
 
@@ -39,12 +41,25 @@ class BindUploadAgent:
             stream_buffer_size: Size of each file, default to 10MB.
         """
         self.cursor = cursor
+        self._stage_name = random_name_for_temp_object(TempObjectType.STAGE)
         self.rows = rows
         self._stream_buffer_size = stream_buffer_size
-        self.stage_path = f"@{self._STAGE_NAME}/{uuid.uuid4().hex}"
+        self.stage_path = f"@{self._stage_name}/{uuid.uuid4().hex}"
+        self.use_scoped_temp_object = (
+            use_scoped_temp_object
+            and cursor.connection._session_parameters.get(
+                _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, True
+            )
+            if cursor.connection._session_parameters
+            else True
+        )
 
     def _create_stage(self) -> None:
-        self.cursor.execute(self._CREATE_STAGE_STMT)
+        create_stage_sql = (
+            f"create or replace {get_temp_type_for_object(self.use_scoped_temp_object)} stage {self._stage_name} "
+            "file_format=(type=csv field_optionally_enclosed_by='\"')"
+        )
+        self.cursor.execute(create_stage_sql)
 
     def upload(self) -> None:
         try:
