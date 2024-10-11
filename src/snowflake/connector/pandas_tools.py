@@ -100,8 +100,7 @@ def _create_temp_stage(
     overwrite: bool,
     use_scoped_temp_object: bool = True,
 ) -> str:
-    # stage_name = random_name_for_temp_object(TempObjectType.STAGE)
-    stage_name = random_string()
+    stage_name = random_name_for_temp_object(TempObjectType.STAGE)
     stage_location = build_location_helper(
         database=database,
         schema=schema,
