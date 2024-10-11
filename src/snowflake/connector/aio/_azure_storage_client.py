@@ -45,7 +45,7 @@ class SnowflakeAzureRestClient(
         stage_info: dict[str, Any],
         use_s3_regional_url: bool = False,
     ) -> None:
-        SnowflakeStorageClientAsync.__init__(
+        SnowflakeAzureRestClientSync.__init__(
             self,
             meta=meta,
             stage_info=stage_info,
