@@ -344,7 +344,7 @@ async def test_auto_compress_off_gcp(
     """[gcp] Puts and Gets a small text using gcp with no auto compression."""
     fname = str(
         os.path.join(
-            os.path.dirname(os.path.realpath(__file__)), "../data", "example.json"
+            os.path.dirname(os.path.realpath(__file__)), "../../data", "example.json"
         )
     )
     stage_name = random_string(5, "teststage_")
