@@ -26,13 +26,13 @@ from snowflake.connector.options import pandas
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
 from snowflake.connector.util_text import random_string
 
-from .cursor import SnowflakeCursor
-from .utils import (
+from ._utils import (
     _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING,
     TempObjectType,
     get_temp_type_for_object,
     random_name_for_temp_object,
 )
+from .cursor import SnowflakeCursor
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
@@ -209,7 +209,6 @@ def write_pandas(
     overwrite: bool = False,
     table_type: Literal["", "temp", "temporary", "transient"] = "",
     use_logical_type: bool | None = None,
-    use_scoped_temp_object: bool = True,
     **kwargs: Any,
 ) -> tuple[
     bool,
@@ -293,8 +292,7 @@ def write_pandas(
         )
 
     _use_scoped_temp_object = (
-        use_scoped_temp_object
-        and conn.cursor().connection._session_parameters.get(
+        conn.cursor().connection._session_parameters.get(
             _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, True
         )
         if conn.cursor().connection._session_parameters

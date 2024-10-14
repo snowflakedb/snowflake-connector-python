@@ -10,13 +10,13 @@ from io import BytesIO
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-from .errors import BindUploadError, Error
-from .utils import (
+from ._utils import (
     _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING,
     TempObjectType,
     get_temp_type_for_object,
     random_name_for_temp_object,
 )
+from .errors import BindUploadError, Error
 
 if TYPE_CHECKING:  # pragma: no cover
     from .cursor import SnowflakeCursor
@@ -31,7 +31,6 @@ class BindUploadAgent:
         cursor: SnowflakeCursor,
         rows: list[bytes],
         stream_buffer_size: int = 1024 * 1024 * 10,
-        use_scoped_temp_object: bool = True,
     ) -> None:
         """Construct an agent that uploads binding parameters as CSV files to a temporary stage.
 
@@ -45,9 +44,8 @@ class BindUploadAgent:
         self.rows = rows
         self._stream_buffer_size = stream_buffer_size
         self.stage_path = f"@{self._stage_name}/{uuid.uuid4().hex}"
-        self.use_scoped_temp_object = (
-            use_scoped_temp_object
-            and cursor.connection._session_parameters.get(
+        self._use_scoped_temp_object = (
+            cursor.connection._session_parameters.get(
                 _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, True
             )
             if cursor.connection._session_parameters
@@ -56,7 +54,7 @@ class BindUploadAgent:
 
     def _create_stage(self) -> None:
         create_stage_sql = (
-            f"create or replace {get_temp_type_for_object(self.use_scoped_temp_object)} stage {self._stage_name} "
+            f"create or replace {get_temp_type_for_object(self._use_scoped_temp_object)} stage {self._stage_name} "
             "file_format=(type=csv field_optionally_enclosed_by='\"')"
         )
         self.cursor.execute(create_stage_sql)

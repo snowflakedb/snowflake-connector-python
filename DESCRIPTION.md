@@ -7,8 +7,6 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.13.0(TBD)
-  - Improved `write_pandas` and `BindUploadAgent.upload` to create scoped temporary object instead of temporary object.
 
 - v3.12.2(September 11,2024)
   - Improved error handling for asynchronous queries, providing more detailed and informative error messages when an async query fails.
