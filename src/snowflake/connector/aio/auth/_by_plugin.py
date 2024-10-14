@@ -7,17 +7,28 @@ from __future__ import annotations
 import asyncio
 import logging
 from abc import abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any, Iterator
 
-from ... import DatabaseError, Error, OperationalError, SnowflakeConnection
+from ... import DatabaseError, Error, OperationalError
 from ...auth import AuthByPlugin as AuthByPluginSync
 from ...errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from ...sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+
+if TYPE_CHECKING:
+    from .. import SnowflakeConnection
 
 logger = logging.getLogger(__name__)
 
 
 class AuthByPlugin(AuthByPluginSync):
+    def __init__(
+        self,
+        timeout: int | None = None,
+        backoff_generator: Iterator | None = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(timeout, backoff_generator, **kwargs)
+
     @abstractmethod
     async def prepare(
         self,
