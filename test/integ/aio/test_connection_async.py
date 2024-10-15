@@ -44,8 +44,7 @@ try:  # pragma: no cover
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
-# TODO: SNOW-1572226 authentication for AuthByOkta
-from snowflake.connector.aio.auth import AuthByPlugin
+from snowflake.connector.aio.auth import AuthByOkta, AuthByPlugin
 
 try:
     from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
@@ -803,16 +802,15 @@ class ExecPrivatelinkAsyncTask:
             self.bucket.put("Success")
 
 
-@pytest.mark.skip("SNOW-1572226 async authentication support")
 async def test_okta_url(conn_cnx):
     orig_authenticator = "https://someaccount.okta.com/snowflake/oO56fExYCGnfV83/2345"
 
-    def mock_auth(self, auth_instance):
+    async def mock_auth(self, auth_instance):
         assert isinstance(auth_instance, AuthByOkta)
         assert self._authenticator == orig_authenticator
 
     with mock.patch(
-        "snowflake.connector.connection.SnowflakeConnection._authenticate",
+        "snowflake.connector.aio.SnowflakeConnection._authenticate",
         mock_auth,
     ):
         async with conn_cnx(
