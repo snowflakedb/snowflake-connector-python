@@ -382,17 +382,16 @@ async def test_put_overwrite_with_downscope(
         f.write("test1,test2")
         f.write("test3,test4")
 
-    await csr.execute("RM @~/test_put_overwrite")
+    await csr.execute("RM @~/test_put_overwrite_async")
     try:
         file_stream = None if from_path else open(test_data, "rb")
         await csr.execute("ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE")
         await put_async(
             csr,
             test_data,
-            "~/test_put_overwrite",
+            "~/test_put_overwrite_async",
             from_path,
             file_stream=file_stream,
-            sql_options="OVERWRITE = TRUE",
         )
         data = await csr.fetchall()
         assert data[0][6] == "UPLOADED"
@@ -400,7 +399,7 @@ async def test_put_overwrite_with_downscope(
         await put_async(
             csr,
             test_data,
-            "~/test_put_overwrite",
+            "~/test_put_overwrite_async",
             from_path,
             file_stream=file_stream,
         )
@@ -410,7 +409,7 @@ async def test_put_overwrite_with_downscope(
         await put_async(
             csr,
             test_data,
-            "~/test_put_overwrite",
+            "~/test_put_overwrite_async",
             from_path,
             sql_options="OVERWRITE = TRUE",
             file_stream=file_stream,
@@ -418,10 +417,10 @@ async def test_put_overwrite_with_downscope(
         data = await csr.fetchall()
         assert data[0][6] == "UPLOADED"
 
-        ret = await (await csr.execute("LS @~/test_put_overwrite")).fetchone()
-        assert "test_put_overwrite/data.txt" in ret[0]
+        ret = await (await csr.execute("LS @~/test_put_overwrite_async")).fetchone()
+        assert "test_put_overwrite_async/data.txt" in ret[0]
         assert "data.txt.gz" in ret[0]
     finally:
         if file_stream:
             file_stream.close()
-        await csr.execute("RM @~/test_put_overwrite")
+        await csr.execute("RM @~/test_put_overwrite_async")
