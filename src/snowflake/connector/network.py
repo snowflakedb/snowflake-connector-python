@@ -1086,7 +1086,6 @@ class SnowflakeRestful:
                     if is_raw_text:
                         ret = raw_ret.text
                     elif is_raw_binary:
-                        raise NotImplementedError("Testing")
                         ret = binary_data_handler.to_iterator(
                             raw_ret.raw, download_end_time - download_start_time
                         )

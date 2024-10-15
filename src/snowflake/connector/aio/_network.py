@@ -709,11 +709,6 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             else:
                 input_data = data
 
-            # download_start_time = get_time_millis()
-            # socket timeout is constant. You should be able to receive
-            # the response within the time. If not, ConnectReadTimeout or
-            # ReadTimeout is raised.
-
             # TODO: aiohttp auth parameter works differently than requests.session.request
             #  we can check if there's other aiohttp built-in mechanism to update this
             if HEADER_AUTHORIZATION_KEY in headers:
@@ -723,10 +718,12 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                     token=token
                 )
 
+            # socket timeout is constant. You should be able to receive
+            # the response within the time. If not, asyncio.TimeoutError is raised.
+
             # delta compared to sync:
             #  - in sync, we specify "verify" to True; in aiohttp,
             #  the counter parameter is "ssl" and it already defaults to True
-            # - TODO: stream
             raw_ret = await session.request(
                 method=method,
                 url=full_url,
@@ -735,22 +732,18 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 timeout=aiohttp.ClientTimeout(socket_timeout),
                 proxy_headers=self._get_proxy_headers(full_url),
             )
-
-            # download_end_time = get_time_millis()
-
             try:
                 if raw_ret.status == OK:
                     logger.debug("SUCCESS")
                     if is_raw_text:
                         ret = await raw_ret.text()
                     elif is_raw_binary:
+                        # check SNOW-1738595 for is_raw_binary support
                         raise NotImplementedError(
-                            "Binary data handling is not implemented"
+                            "reading raw binary data is not supported in asyncio connector,"
+                            " please open a feature request issue in"
+                            " github: https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose"
                         )
-                        # content = await raw_ret.read()
-                        # ret = binary_data_handler.to_iterator(
-                        #     content, download_end_time - download_start_time
-                        # )
                     else:
                         ret = await raw_ret.json()
                     return ret
