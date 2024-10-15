@@ -522,10 +522,10 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
     error_code,
     is_public_test,
 ):
-    if is_public_test:
-        pytest.xfail(
-            "Server need to update with merged change. Expected release version: 4.41.0"
-        )
+    # if is_public_test:
+    #     pytest.xfail(
+    #         "Server need to update with merged change. Expected release version: 4.41.0"
+    #     )
     fname = str(tmpdir.join("test_put_get_with_gcp_token.txt.gz"))
     original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, "wb") as f:

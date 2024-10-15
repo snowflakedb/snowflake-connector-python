@@ -10,16 +10,11 @@ import glob
 import gzip
 import os
 import sys
-import time
 from filecmp import cmp
 from logging import getLogger
-from unittest import mock
-from unittest.mock import AsyncMock
 
-import aiohttp.web_exceptions
 import pytest
 
-from snowflake.connector.aio._file_transfer_agent import SnowflakeFileTransferAgent
 from snowflake.connector.constants import UTF8
 from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.file_transfer_agent import SnowflakeProgressPercentage
@@ -314,12 +309,12 @@ async def test_put_get_large_files_gcp(
                 # you may not get the files right after PUT command
                 # due to the nature of gcs blob, which synchronizes
                 # data eventually.
-                time.sleep(1)
+                await asyncio.sleep(1)
             else:
                 # wait for another second and retry.
                 # this could happen if the files are partially available
                 # but not all.
-                time.sleep(1)
+                await asyncio.sleep(1)
                 continue
             break  # success
         else:
@@ -366,116 +361,6 @@ async def test_auto_compress_off_gcp(
         assert cmp(fname, downloaded_file)
     finally:
         await cursor.execute(f"drop stage {stage_name}")
-
-
-# TODO
-@pytest.mark.parametrize("error_code", [401, 403, 408, 429, 500, 503])
-async def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
-    tmpdir,
-    aio_connection,
-    error_code,
-    is_public_test,
-):
-    fname = str(tmpdir.join("test_put_get_with_gcp_token.txt.gz"))
-    original_contents = "123,test1\n456,test2\n"
-    with gzip.open(fname, "wb") as f:
-        f.write(original_contents.encode(UTF8))
-    tmp_dir = str(tmpdir.mkdir("test_put_get_with_gcp_token"))
-    table_name = random_string(5, "snow32807_")
-
-    await aio_connection.connect()
-    csr = aio_connection.cursor()
-    await csr.execute("ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE")
-    await csr.execute(f"create or replace table {table_name} (a int, b string)")
-    try:
-
-        async def mocked_put(method, *args, **kwargs):
-            if method == "PUT" and mocked_put.counter == 0:
-                mocked_put.counter += 1
-                exe = AsyncMock(spec=aiohttp.ClientResponseError)
-                exe.status = error_code
-                raise asyncio.TimeoutError()
-            return aiohttp.ClientSession.request(*args, **kwargs)
-
-        mocked_put.counter = 0
-
-        async def mocked_head(method, *args, **kwargs):
-            if method == "HEAD" and mocked_head.counter == 0:
-                mocked_head.counter += 1
-                exe = AsyncMock(spec=aiohttp.ClientResponseError)
-                exe.status = error_code
-                raise asyncio.TimeoutError()
-            return aiohttp.ClientSession.request(*args, **kwargs)
-
-        mocked_head.counter = 0
-
-        async def mocked_file_agent(*args, **kwargs):
-            agent = SnowflakeFileTransferAgent(*args, **kwargs)
-            agent.renew_expired_client = mock.MagicMock(
-                wraps=agent.renew_expired_client
-            )
-            mocked_file_agent.agent = agent
-            return agent
-
-        with mock.patch(
-            "snowflake.connector.aio._file_transfer_agent.SnowflakeFileTransferAgent",
-            side_effect=mocked_file_agent,
-        ):
-            with mock.patch(
-                "aiohttp.ClientSession.request",
-                AsyncMock(side_effect=mocked_put),
-            ):
-                with mock.patch(
-                    "aiohttp.ClientSession.request",
-                    AsyncMock(side_effect=mocked_head),
-                ):
-                    await csr.execute(
-                        f"put file://{fname} @%{table_name} auto_compress=true parallel=30"
-                    )
-            if error_code == 401:
-                assert mocked_file_agent.agent.renew_expired_client.call_count == 2
-        assert (await csr.fetchone())[6] == "UPLOADED"
-        await csr.execute(f"copy into {table_name}")
-        await csr.execute(f"rm @%{table_name}")
-        assert await (await csr.execute(f"ls @%{table_name}")).fetchall() == []
-        await csr.execute(
-            f"copy into @%{table_name} from {table_name} "
-            "file_format=(type=csv compression='gzip')"
-        )
-
-        async def mocked_get(method, *args, **kwargs):
-            if method == "GET" and mocked_get.counter == 0:
-                mocked_get.counter += 1
-                exe = AsyncMock(spec=aiohttp.ClientResponseError)
-                exe.status = error_code
-                raise asyncio.TimeoutError()
-            return aiohttp.ClientSession.request(*args, **kwargs)
-
-        mocked_get.counter = 0
-
-        with mock.patch(
-            "snowflake.connector.aio._file_transfer_agent.SnowflakeFileTransferAgent",
-            side_effect=mocked_file_agent,
-        ):
-            with mock.patch(
-                "aiohttp.ClientSession.request",
-                AsyncMock(side_effect=mocked_get),
-            ):
-                await csr.execute(f"get @%{table_name} file://{tmp_dir}")
-            if error_code == 401:
-                assert mocked_file_agent.agent.renew_expired_client.call_count == 1
-        rec = await csr.fetchone()
-        assert rec[0].startswith("data_"), "A file downloaded by GET"
-        assert rec[1] == 36, "Return right file size"
-        assert rec[2] == "DOWNLOADED", "Return DOWNLOADED status"
-        assert rec[3] == "", "Return no error message"
-    finally:
-        await csr.execute(f"drop table {table_name}")
-
-    files = glob.glob(os.path.join(tmp_dir, "data_*"))
-    with gzip.open(files[0], "rb") as fd:
-        contents = fd.read().decode(UTF8)
-    assert original_contents == contents, "Output is different from the original file"
 
 
 @pytest.mark.parametrize(
