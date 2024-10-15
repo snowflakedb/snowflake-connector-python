@@ -392,6 +392,7 @@ async def test_put_overwrite_with_downscope(
             "~/test_put_overwrite",
             from_path,
             file_stream=file_stream,
+            sql_options="OVERWRITE = TRUE",
         )
         data = await csr.fetchall()
         assert data[0][6] == "UPLOADED"
