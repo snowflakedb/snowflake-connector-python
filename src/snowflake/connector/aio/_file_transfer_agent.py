@@ -10,7 +10,6 @@ import sys
 from logging import getLogger
 from typing import IO, TYPE_CHECKING, Any
 
-from ..azure_storage_client import SnowflakeAzureRestClient
 from ..constants import (
     AZURE_CHUNK_SIZE,
     AZURE_FS,
@@ -29,8 +28,9 @@ from ..file_transfer_agent import (
     SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSync,
 )
 from ..file_transfer_agent import SnowflakeProgressPercentage, _chunk_size_calculator
-from ..gcs_storage_client import SnowflakeGCSRestClient
 from ..local_storage_client import SnowflakeLocalStorageClient
+from ._azure_storage_client import SnowflakeAzureRestClient
+from ._gcs_storage_client import SnowflakeGCSRestClient
 from ._s3_storage_client import SnowflakeS3RestClient
 from ._storage_client import SnowflakeStorageClient
 
@@ -92,7 +92,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
         for m in self._file_metadata:
             m.sfagent = self
 
-        self._transfer_accelerate_config()
+        await self._transfer_accelerate_config()
 
         if self._command_type == CMD_TYPE_DOWNLOAD:
             if not os.path.isdir(self._local_location):
@@ -139,7 +139,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
             result.result_status = result.result_status.value
 
     async def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
-        files = [self._create_file_transfer_client(m) for m in metas]
+        files = [await self._create_file_transfer_client(m) for m in metas]
         is_upload = self._command_type == CMD_TYPE_UPLOAD
         finish_download_upload_tasks = []
 
@@ -258,7 +258,12 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
 
         self._results = metas
 
-    def _create_file_transfer_client(
+    async def _transfer_accelerate_config(self) -> None:
+        if self._stage_location_type == S3_FS and self._file_metadata:
+            client = await self._create_file_transfer_client(self._file_metadata[0])
+            self._use_accelerate_endpoint = client.transfer_accelerate_config()
+
+    async def _create_file_transfer_client(
         self, meta: SnowflakeFileMeta
     ) -> SnowflakeStorageClient:
         if self._stage_location_type == LOCAL_FS:
@@ -276,7 +281,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 use_s3_regional_url=self._use_s3_regional_url,
             )
         elif self._stage_location_type == S3_FS:
-            return SnowflakeS3RestClient(
+            client = SnowflakeS3RestClient(
                 meta=meta,
                 credentials=self._credentials,
                 stage_info=self._stage_info,
@@ -284,8 +289,9 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 use_accelerate_endpoint=self._use_accelerate_endpoint,
                 use_s3_regional_url=self._use_s3_regional_url,
             )
+            return client
         elif self._stage_location_type == GCS_FS:
-            return SnowflakeGCSRestClient(
+            client = SnowflakeGCSRestClient(
                 meta,
                 self._credentials,
                 self._stage_info,
@@ -293,4 +299,12 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 self._command,
                 use_s3_regional_url=self._use_s3_regional_url,
             )
+            if client.security_token:
+                logger.debug(f"len(GCS_ACCESS_TOKEN): {len(client.security_token)}")
+            else:
+                logger.debug(
+                    "No access token received from GS, requesting presigned url"
+                )
+                await client._update_presigned_url()
+            return client
         raise Exception(f"{self._stage_location_type} is an unknown stage type")

@@ -76,7 +76,6 @@ async def run_dict_result(cnx, db_parameters, sql):
     return await res.fetchall()
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
@@ -135,7 +134,6 @@ ratio number(5,2))
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
@@ -168,7 +166,6 @@ async def test_put_copy_compressed(aio_connection, db_parameters, from_path, fil
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
@@ -202,7 +199,6 @@ async def test_put_copy_bz2_compressed(
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
@@ -239,7 +235,6 @@ async def test_put_copy_brotli_compressed(
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
@@ -275,7 +270,6 @@ async def test_put_copy_zstd_compressed(
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
@@ -317,7 +311,6 @@ stage_file_format=(type='parquet')
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
@@ -355,7 +348,6 @@ create or replace table {name} (value variant) stage_file_format=(type='orc')
     await run(aio_connection, db_parameters, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
@@ -445,7 +437,6 @@ max_file_size=10000000
     await run_test(aio_connection, "drop table if exists {name}")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.flaky(reruns=3)
 async def test_put_copy_many_files(tmpdir, aio_connection, db_parameters):
     """Puts and Copies many_files."""
@@ -491,7 +482,6 @@ ratio number(6,2))
     )
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.aws
 async def test_put_copy_many_files_s3(tmpdir, aio_connection, db_parameters):
     """[s3] Puts and Copies many files."""
@@ -541,7 +531,6 @@ ratio number(6,2))
         )
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.aws
 @pytest.mark.azure
 @pytest.mark.flaky(reruns=3)
@@ -632,7 +621,6 @@ ratio number(6,2))
         )
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.skipolddriver
 @pytest.mark.aws
 @pytest.mark.azure
@@ -731,7 +719,6 @@ def _generate_huge_value_json(tmpdir, n=1, value_size=1):
     return fname
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.aws
 async def test_put_get_large_files_s3(tmpdir, aio_connection, db_parameters):
     """[s3] Puts and Gets Large files."""
@@ -789,7 +776,6 @@ async def test_put_get_large_files_s3(tmpdir, aio_connection, db_parameters):
         await run_test(aio_connection, "RM @~/{dir}")
 
 
-@pytest.mark.skipif(CLOUD not in ["aws", "dev"], reason="only test in aws now")
 @pytest.mark.aws
 @pytest.mark.azure
 @pytest.mark.parametrize(

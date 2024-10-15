@@ -34,7 +34,7 @@ from ..s3_storage_client import SnowflakeS3RestClient as SnowflakeS3RestClientSy
 from ._storage_client import SnowflakeStorageClient as SnowflakeStorageClientAsync
 
 if TYPE_CHECKING:  # pragma: no cover
-    from ._file_transfer_agent import SnowflakeFileMeta, StorageCredential
+    from ..file_transfer_agent import SnowflakeFileMeta, StorageCredential
 
 logger = getLogger(__name__)
 
