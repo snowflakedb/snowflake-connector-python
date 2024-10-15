@@ -39,18 +39,22 @@ class BindUploadAgent:
             rows: Rows of binding parameters in CSV format.
             stream_buffer_size: Size of each file, default to 10MB.
         """
+        self._use_scoped_temp_object = (
+            cursor.connection._session_parameters.get(
+                _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, False
+            )
+            if cursor.connection._session_parameters
+            else False
+        )
         self.cursor = cursor
-        self._stage_name = random_name_for_temp_object(TempObjectType.STAGE)
+        self._stage_name = (
+            random_name_for_temp_object(TempObjectType.STAGE)
+            if self._use_scoped_temp_object
+            else "SYSTEMBIND"
+        )
         self.rows = rows
         self._stream_buffer_size = stream_buffer_size
         self.stage_path = f"@{self._stage_name}/{uuid.uuid4().hex}"
-        self._use_scoped_temp_object = (
-            cursor.connection._session_parameters.get(
-                _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, True
-            )
-            if cursor.connection._session_parameters
-            else True
-        )
 
     def _create_stage(self) -> None:
         create_stage_sql = (

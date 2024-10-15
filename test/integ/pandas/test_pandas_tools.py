@@ -602,7 +602,7 @@ def test_stage_location_building(
             )
             assert m_execute.called and any(
                 map(
-                    lambda e: ("CREATE SCOPED TEMPORARY STAGE" in str(e[0])),
+                    lambda e: ("CREATE TEMP STAGE" in str(e[0])),
                     m_execute.call_args_list,
                 )
             )
@@ -619,7 +619,7 @@ def test_stage_location_building(
         (None, None, False, ""),
     ],
 )
-def test_not_use_scoped_object(
+def test_use_scoped_object(
     conn_cnx,
     database: str | None,
     schema: str | None,
@@ -643,7 +643,7 @@ def test_not_use_scoped_object(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
         ) as m_execute:
-            cnx._update_parameters({"PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS": False})
+            cnx._update_parameters({"PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS": True})
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
                 sf_connector_version_df.get(),
@@ -654,7 +654,7 @@ def test_not_use_scoped_object(
             )
             assert m_execute.called and any(
                 map(
-                    lambda e: ("CREATE TEMP STAGE" in str(e[0])),
+                    lambda e: ("CREATE SCOPED TEMPORARY STAGE" in str(e[0])),
                     m_execute.call_args_list,
                 )
             )
@@ -712,7 +712,7 @@ def test_file_format_location_building(
             )
             assert m_execute.called and any(
                 map(
-                    lambda e: ("CREATE SCOPED TEMPORARY FILE FORMAT" in str(e[0])),
+                    lambda e: ("CREATE TEMP FILE FORMAT" in str(e[0])),
                     m_execute.call_args_list,
                 )
             )
@@ -1008,9 +1008,6 @@ def test_no_create_internal_object_privilege_in_target_schema(
                 "snowflake.connector.cursor.SnowflakeCursor.execute",
                 side_effect=mock_execute,
             ):
-                cnx._update_parameters(
-                    {"PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS": False}
-                )
                 with caplog.at_level("DEBUG"):
                     success, num_of_chunks, _, _ = write_pandas(
                         cnx,
