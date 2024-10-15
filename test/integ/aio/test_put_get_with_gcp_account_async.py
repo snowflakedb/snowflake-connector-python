@@ -378,18 +378,19 @@ async def test_put_overwrite_with_downscope(
     csr = aio_connection.cursor()
     tmp_dir = str(tmpdir.mkdir("data"))
     test_data = os.path.join(tmp_dir, "data.txt")
+    stage_dir = f"test_put_overwrite_async_{random_string()}"
     with open(test_data, "w") as f:
         f.write("test1,test2")
         f.write("test3,test4")
 
-    await csr.execute("RM @~/test_put_overwrite_async")
+    await csr.execute(f"RM @~/{stage_dir}")
     try:
         file_stream = None if from_path else open(test_data, "rb")
         await csr.execute("ALTER SESSION SET GCS_USE_DOWNSCOPED_CREDENTIAL = TRUE")
         await put_async(
             csr,
             test_data,
-            "~/test_put_overwrite_async",
+            f"~/{stage_dir}",
             from_path,
             file_stream=file_stream,
         )
@@ -399,7 +400,7 @@ async def test_put_overwrite_with_downscope(
         await put_async(
             csr,
             test_data,
-            "~/test_put_overwrite_async",
+            f"~/{stage_dir}",
             from_path,
             file_stream=file_stream,
         )
@@ -409,7 +410,7 @@ async def test_put_overwrite_with_downscope(
         await put_async(
             csr,
             test_data,
-            "~/test_put_overwrite_async",
+            f"~/{stage_dir}",
             from_path,
             sql_options="OVERWRITE = TRUE",
             file_stream=file_stream,
@@ -417,10 +418,10 @@ async def test_put_overwrite_with_downscope(
         data = await csr.fetchall()
         assert data[0][6] == "UPLOADED"
 
-        ret = await (await csr.execute("LS @~/test_put_overwrite_async")).fetchone()
-        assert "test_put_overwrite_async/data.txt" in ret[0]
+        ret = await (await csr.execute(f"LS @~/{stage_dir}")).fetchone()
+        assert f"{stage_dir}/data.txt" in ret[0]
         assert "data.txt.gz" in ret[0]
     finally:
         if file_stream:
             file_stream.close()
-        await csr.execute("RM @~/test_put_overwrite_async")
+        await csr.execute(f"RM @~/{stage_dir}")
