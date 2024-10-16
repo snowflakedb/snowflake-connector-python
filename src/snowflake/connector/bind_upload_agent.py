@@ -23,7 +23,6 @@ logger = getLogger(__name__)
 
 
 class BindUploadAgent:
-    _STAGE_NAME = "SNOWPARK_TEMP_STAGE_BIND"
 
     def __init__(
         self,
@@ -44,6 +43,9 @@ class BindUploadAgent:
             )
             if cursor.connection._session_parameters
             else False
+        )
+        self._STAGE_NAME = (
+            "SNOWPARK_TEMP_STAGE_BIND" if self._use_scoped_temp_object else "SYSTEMBIND"
         )
         self.cursor = cursor
         self.rows = rows
