@@ -81,9 +81,6 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
             self.endpoint = (
                 f"https://{self.s3location.bucket_name}." + stage_info["endPoint"]
             )
-        # self.transfer_accelerate_config(use_accelerate_endpoint)
-        self.transfer_accelerate_config(False)
-        # TODO: fix accelerate logic SNOW-1628850
 
     async def _send_request_with_authentication_and_retry(
         self,
@@ -375,6 +372,41 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
             logger.debug(f"use_accelerate_endpoint: {use_accelerate_endpoint}")
             return use_accelerate_endpoint
         return False
+
+    async def transfer_accelerate_config(
+        self, use_accelerate_endpoint: bool | None = None
+    ) -> bool:
+        # accelerate cannot be used in China and us government
+        if self.region_name and self.region_name.startswith("cn-"):
+            self.endpoint = (
+                f"https://{self.s3location.bucket_name}."
+                f"s3.{self.region_name}.amazonaws.com.cn"
+            )
+            return False
+        # if self.endpoint has been set, e.g. by metadata, no more config is needed.
+        if self.endpoint is not None:
+            return self.endpoint.find("s3-accelerate.amazonaws.com") >= 0
+        if self.use_s3_regional_url:
+            self.endpoint = (
+                f"https://{self.s3location.bucket_name}."
+                f"s3.{self.region_name}.amazonaws.com"
+            )
+            return False
+        else:
+            if use_accelerate_endpoint is None:
+                use_accelerate_endpoint = await self._get_bucket_accelerate_config(
+                    self.s3location.bucket_name
+                )
+
+            if use_accelerate_endpoint:
+                self.endpoint = (
+                    f"https://{self.s3location.bucket_name}.s3-accelerate.amazonaws.com"
+                )
+            else:
+                self.endpoint = (
+                    f"https://{self.s3location.bucket_name}.s3.amazonaws.com"
+                )
+            return use_accelerate_endpoint
 
     async def _has_expired_token(self, response: aiohttp.ClientResponse) -> bool:
         """Extract error code and error message from the S3's error response.

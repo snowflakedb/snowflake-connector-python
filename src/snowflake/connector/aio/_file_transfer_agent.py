@@ -289,6 +289,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 use_accelerate_endpoint=self._use_accelerate_endpoint,
                 use_s3_regional_url=self._use_s3_regional_url,
             )
+            await client.transfer_accelerate_config(self._use_accelerate_endpoint)
             return client
         elif self._stage_location_type == GCS_FS:
             client = SnowflakeGCSRestClient(

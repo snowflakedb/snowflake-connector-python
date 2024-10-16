@@ -466,7 +466,7 @@ async def test_accelerate_in_china_endpoint():
         },
         8 * megabyte,
     )
-    assert not rest_client.transfer_accelerate_config()
+    assert not await rest_client.transfer_accelerate_config()
 
     rest_client = SnowflakeS3RestClient(
         meta,
@@ -484,4 +484,4 @@ async def test_accelerate_in_china_endpoint():
         },
         8 * megabyte,
     )
-    assert not rest_client.transfer_accelerate_config()
+    assert not await rest_client.transfer_accelerate_config()
