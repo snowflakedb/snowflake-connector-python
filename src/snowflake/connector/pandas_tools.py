@@ -300,10 +300,10 @@ def write_pandas(
         )
 
     _use_scoped_temp_object = (
-        conn.cursor().connection._session_parameters.get(
+        conn._session_parameters.get(
             _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, False
         )
-        if conn.cursor().connection._session_parameters
+        if conn._session_parameters
         else False
     )
 
