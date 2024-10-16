@@ -12,9 +12,7 @@ from typing import TYPE_CHECKING
 
 from ._utils import (
     _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING,
-    TempObjectType,
     get_temp_type_for_object,
-    random_name_for_temp_object,
 )
 from .errors import BindUploadError, Error
 
@@ -25,6 +23,7 @@ logger = getLogger(__name__)
 
 
 class BindUploadAgent:
+    _STAGE_NAME = "SNOWPARK_TEMP_STAGE_BIND"
 
     def __init__(
         self,
@@ -47,18 +46,13 @@ class BindUploadAgent:
             else False
         )
         self.cursor = cursor
-        self._stage_name = (
-            random_name_for_temp_object(TempObjectType.STAGE)
-            if self._use_scoped_temp_object
-            else "SYSTEMBIND"
-        )
         self.rows = rows
         self._stream_buffer_size = stream_buffer_size
-        self.stage_path = f"@{self._stage_name}/{uuid.uuid4().hex}"
+        self.stage_path = f"@{self._STAGE_NAME}/{uuid.uuid4().hex}"
 
     def _create_stage(self) -> None:
         create_stage_sql = (
-            f"create or replace {get_temp_type_for_object(self._use_scoped_temp_object)} stage {self._stage_name} "
+            f"create or replace {get_temp_type_for_object(self._use_scoped_temp_object)} stage {self._STAGE_NAME} "
             "file_format=(type=csv field_optionally_enclosed_by='\"')"
         )
         self.cursor.execute(create_stage_sql)
