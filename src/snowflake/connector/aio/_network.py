@@ -651,22 +651,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
 
             reason = getattr(cause, "errno", 0)
             retry_ctx.retry_reason = reason
-
-            if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
-                # connection is reset by the server, the underlying connection is broken and can not be reused
-                # we need a new urllib3 http(s) connection in this case.
-                # We need to first close the old one so that urllib3 pool manager can create a new connection
-                # for new requests
-                try:
-                    logger.debug(
-                        "shutting down requests session adapter due to connection aborted"
-                    )
-                    session.get_adapter(full_url).close()
-                except Exception as close_adapter_exc:
-                    logger.debug(
-                        "Ignored error caused by closing https connection failure: %s",
-                        close_adapter_exc,
-                    )
+            # notes: in sync implementation we check ECONNRESET in error message and close low level urllib session
+            #  we do not have the logic here because aiohttp handles low level connection close-reopen for us
             return None  # retry
         except Exception as e:
             if not no_retry:
