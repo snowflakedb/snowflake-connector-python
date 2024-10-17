@@ -180,6 +180,7 @@ def test_request_exec():
         "headers": {},
         "data": '{"code": 12345}',
         "token": None,
+        "params": None,
     }
 
     login_parameters = {
