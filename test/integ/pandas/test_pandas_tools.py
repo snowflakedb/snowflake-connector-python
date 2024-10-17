@@ -602,7 +602,59 @@ def test_stage_location_building(
             )
             assert m_execute.called and any(
                 map(
-                    lambda e: "CREATE TEMP STAGE" in str(e[0]),
+                    lambda e: ("CREATE TEMP STAGE" in str(e[0])),
+                    m_execute.call_args_list,
+                )
+            )
+
+
+@pytest.mark.parametrize(
+    "database,schema,quote_identifiers,expected_db_schema",
+    [
+        ("database", "schema", True, '"database"."schema"'),
+        ("database", "schema", False, "database.schema"),
+        (None, "schema", True, '"schema"'),
+        (None, "schema", False, "schema"),
+        (None, None, True, ""),
+        (None, None, False, ""),
+    ],
+)
+def test_use_scoped_object(
+    conn_cnx,
+    database: str | None,
+    schema: str | None,
+    quote_identifiers: bool,
+    expected_db_schema: str,
+):
+    """This tests that write_pandas constructs stage location correctly with database and schema."""
+    from snowflake.connector.cursor import SnowflakeCursor
+
+    with conn_cnx() as cnx:
+
+        def mocked_execute(*args, **kwargs):
+            if len(args) >= 1 and args[0].startswith("create temporary stage"):
+                db_schema = ".".join(args[0].split(" ")[-1].split(".")[:-1])
+                assert db_schema == expected_db_schema
+            cur = SnowflakeCursor(cnx)
+            cur._result = iter([])
+            return cur
+
+        with mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor.execute",
+            side_effect=mocked_execute,
+        ) as m_execute:
+            cnx._update_parameters({"PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS": True})
+            success, nchunks, nrows, _ = write_pandas(
+                cnx,
+                sf_connector_version_df.get(),
+                "table",
+                database=database,
+                schema=schema,
+                quote_identifiers=quote_identifiers,
+            )
+            assert m_execute.called and any(
+                map(
+                    lambda e: ("CREATE SCOPED TEMPORARY STAGE" in str(e[0])),
                     m_execute.call_args_list,
                 )
             )
@@ -660,7 +712,7 @@ def test_file_format_location_building(
             )
             assert m_execute.called and any(
                 map(
-                    lambda e: "CREATE TEMP FILE FORMAT" in str(e[0]),
+                    lambda e: ("CREATE TEMP FILE FORMAT" in str(e[0])),
                     m_execute.call_args_list,
                 )
             )
