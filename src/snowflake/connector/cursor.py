@@ -16,7 +16,7 @@ import uuid
 import warnings
 from enum import Enum
 from logging import getLogger
-from threading import Lock, Timer
+from threading import Lock
 from types import TracebackType
 from typing import (
     IO,
@@ -39,6 +39,7 @@ from snowflake.connector.result_set import ResultSet
 
 from . import compat
 from ._sql_util import get_file_transfer_type
+from ._utils import _TrackedQueryCancellationTimer
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .constants import (
     FIELD_NAME_TO_ID,
@@ -392,7 +393,9 @@ class SnowflakeCursor:
         self.messages: list[
             tuple[type[Error] | type[Exception], dict[str, str | bool]]
         ] = []
-        self._timebomb: Timer | None = None  # must be here for abort_exit method
+        self._timebomb: _TrackedQueryCancellationTimer | None = (
+            None  # must be here for abort_exit method
+        )
         self._description: list[ResultMetadataV2] | None = None
         self._sfqid: str | None = None
         self._sqlstate = None
@@ -654,7 +657,9 @@ class SnowflakeCursor:
         )
 
         if real_timeout is not None:
-            self._timebomb = Timer(real_timeout, self.__cancel_query, [query])
+            self._timebomb = _TrackedQueryCancellationTimer(
+                real_timeout, self.__cancel_query, [query]
+            )
             self._timebomb.start()
             logger.debug("started timebomb in %ss", real_timeout)
         else:
@@ -1071,6 +1076,11 @@ class SnowflakeCursor:
             logger.debug(ret)
             err = ret["message"]
             code = ret.get("code", -1)
+            if self._timebomb.executed:
+                err = (
+                    f"SQL execution was cancelled by the client due to a timeout. "
+                    f"Error message received from the server: {err}"
+                )
             if "data" in ret:
                 err += ret["data"].get("errorMessage", "")
             errvalue = {
