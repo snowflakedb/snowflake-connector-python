@@ -21,6 +21,7 @@ import pytest
 from snowflake.connector.compat import OK
 
 if TYPE_CHECKING:
+    import snowflake.connector.aio
     import snowflake.connector.connection
 
 try:
