@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from typing import TYPE_CHECKING
 
 import aiohttp
@@ -27,15 +28,19 @@ log = logging.getLogger(__name__)
 
 class SnowflakeSSLConnector(aiohttp.TCPConnector):
     def __init__(self, *args, **kwargs):
-        import sys
-
-        if sys.version_info <= (3, 9):
-            raise RuntimeError(
-                "The asyncio support for Snowflake Python Connector is only supported on Python 3.10 or greater."
-            )
         self._snowflake_ocsp_mode = kwargs.pop(
             "snowflake_ocsp_mode", OCSPMode.FAIL_OPEN
         )
+        if self._snowflake_ocsp_mode == OCSPMode.FAIL_OPEN and sys.version_info < (
+            3,
+            10,
+        ):
+            raise RuntimeError(
+                "OCSP validation for Async Snowflake Connector requires Python 3.10+. "
+                "To use Python 3.9 or lower, set `insecure_mode=True` in the"
+                " connection creation to skip OCSP validation."
+            )
+
         super().__init__(*args, **kwargs)
 
     async def connect(
