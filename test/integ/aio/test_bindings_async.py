@@ -20,11 +20,7 @@ import pytz
 
 from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ForbiddenError, ProgrammingError
-
-try:
-    from snowflake.connector.util_text import random_string
-except ImportError:
-    from ..randomize import random_string
+from snowflake.connector.util_text import random_string
 
 tempfile.gettempdir()
 
@@ -130,16 +126,17 @@ insert into {name} values(
         ',an\\\\escaped"line\n',
     )
     try:
-        async with conn_cnx(paramstyle="qmark", timezone=PST_TZ) as cnx:
-            csr = cnx.cursor()
+        async with conn_cnx(
+            paramstyle="qmark", timezone=PST_TZ
+        ) as cnx, cnx.cursor() as c:
             if bulk_array_optimization:
                 cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
-                await csr.executemany(INSERT.format(name=db_parameters["name"]), [data])
+                await c.executemany(INSERT.format(name=db_parameters["name"]), [data])
             else:
-                await csr.execute(INSERT.format(name=db_parameters["name"]), data)
+                await c.execute(INSERT.format(name=db_parameters["name"]), data)
 
             ret = await (
-                await cnx.cursor().execute(
+                await c.execute(
                     """
 select * from {name} where c1=? and c2=?
 """.format(
@@ -215,8 +212,8 @@ drop table if exists {name}
 async def test_pendulum_binding(conn_cnx, db_parameters):
     pendulum_test = pendulum.now()
     try:
-        async with conn_cnx() as cnx:
-            await cnx.cursor().execute(
+        async with conn_cnx() as cnx, cnx.cursor() as c:
+            await c.execute(
                 """
     create or replace table {name} (
         c1 timestamp
@@ -225,7 +222,6 @@ async def test_pendulum_binding(conn_cnx, db_parameters):
                     name=db_parameters["name"]
                 )
             )
-            c = cnx.cursor()
             fmt = "insert into {name}(c1) values(%(v1)s)".format(
                 name=db_parameters["name"]
             )
@@ -233,7 +229,7 @@ async def test_pendulum_binding(conn_cnx, db_parameters):
             assert (
                 len(
                     await (
-                        await cnx.cursor().execute(
+                        await c.execute(
                             "select count(*) from {name}".format(
                                 name=db_parameters["name"]
                             )
@@ -242,16 +238,15 @@ async def test_pendulum_binding(conn_cnx, db_parameters):
                 )
                 == 1
             )
-        async with conn_cnx(paramstyle="qmark") as cnx:
-            await cnx.cursor().execute(
+        async with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as c:
+            await c.execute(
                 """
             create or replace table {name} (c1 timestamp, c2 timestamp)
     """.format(
                     name=db_parameters["name"]
                 )
             )
-        async with conn_cnx(paramstyle="qmark") as cnx:
-            await cnx.cursor().execute(
+            await c.execute(
                 """
             insert into {name} values(?, ?)
             """.format(
@@ -260,7 +255,7 @@ async def test_pendulum_binding(conn_cnx, db_parameters):
                 (pendulum_test, pendulum_test),
             )
             ret = await (
-                await cnx.cursor().execute(
+                await c.execute(
                     """
             select * from {name}
             """.format(
@@ -294,8 +289,8 @@ create or replace table {name} (c1 integer, c2 string)
         )
 
     try:
-        async with conn_cnx(paramstyle="numeric") as cnx:
-            await cnx.cursor().execute(
+        async with conn_cnx(paramstyle="numeric") as cnx, cnx.cursor() as c:
+            await c.execute(
                 """
 insert into {name}(c1, c2) values(:2, :1)
             """.format(
@@ -303,7 +298,7 @@ insert into {name}(c1, c2) values(:2, :1)
                 ),
                 ("str1", 123),
             )
-            await cnx.cursor().execute(
+            await c.execute(
                 """
 insert into {name}(c1, c2) values(:2, :1)
             """.format(
@@ -313,7 +308,7 @@ insert into {name}(c1, c2) values(:2, :1)
             )
             # numeric and qmark can be used in the same session
             rec = await (
-                await cnx.cursor().execute(
+                await c.execute(
                     """
 select * from {name} where c1=?
 """.format(
@@ -354,9 +349,11 @@ create or replace table {name} (
         )
 
     try:
-        async with conn_cnx(paramstyle="numeric", timezone=PST_TZ) as cnx:
+        async with conn_cnx(
+            paramstyle="numeric", timezone=PST_TZ
+        ) as cnx, cnx.cursor() as c:
             current_localtime = datetime.now()
-            await cnx.cursor().execute(
+            await c.execute(
                 """
 insert into {name}(c1, c2) values(:1, :2)
             """.format(
@@ -365,7 +362,7 @@ insert into {name}(c1, c2) values(:1, :2)
                 (123, ("TIMESTAMP_LTZ", current_localtime)),
             )
             rec = await (
-                await cnx.cursor().execute(
+                await c.execute(
                     """
 select * from {name} where c1=?
             """.format(
@@ -534,9 +531,8 @@ create or replace table {name} (
             )
         )
     try:
-        async with conn_cnx(paramstyle="qmark") as cnx:
+        async with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as c:
             # short list
-            c = cnx.cursor()
             fmt = "insert into {name}(c1,c2) values(?,?)".format(
                 name=db_parameters["name"]
             )
@@ -564,7 +560,7 @@ create or replace table {name} (
             assert c.rowcount == 2
 
             fmt = "select * from {name} where c1=?".format(name=db_parameters["name"])
-            rec = await (await cnx.cursor().execute(fmt, (1,))).fetchall()
+            rec = await (await c.execute(fmt, (1,))).fetchall()
             assert rec[0][0] == 1
             assert rec[0][1] == "test5"
 
@@ -582,23 +578,22 @@ drop table if exists {name}
 async def test_binding_identifier(conn_cnx, db_parameters):
     """Binding a table name."""
     try:
-        async with conn_cnx(paramstyle="qmark") as cnx:
+        async with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as c:
             data = "test"
-            await cnx.cursor().execute(
+            await c.execute(
                 """
 create or replace table identifier(?) (c1 string)
 """,
                 (db_parameters["name"],),
             )
-        async with conn_cnx(paramstyle="qmark") as cnx:
-            await cnx.cursor().execute(
+            await c.execute(
                 """
 insert into identifier(?) values(?)
 """,
                 (db_parameters["name"], data),
             )
             ret = await (
-                await cnx.cursor().execute(
+                await c.execute(
                     """
 select * from identifier(?)
 """,
