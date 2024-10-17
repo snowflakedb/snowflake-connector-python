@@ -578,7 +578,6 @@ async def test_invalid_account_timeout():
             pass
 
 
-@pytest.mark.skip("SNOW-1572304 proxy support")
 @pytest.mark.timeout(15)
 async def test_invalid_proxy(db_parameters):
     with pytest.raises(OperationalError):
