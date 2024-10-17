@@ -105,7 +105,7 @@ async def test_upload_file_with_s3_upload_failed_error(tmp_path):
     )
     exc = Exception("Stop executing")
 
-    def mock_transfer_accelerate_config(
+    async def mock_transfer_accelerate_config(
         self: SnowflakeS3RestClient,
         use_accelerate_endpoint: bool | None = None,
     ) -> bool:
@@ -117,7 +117,7 @@ async def test_upload_file_with_s3_upload_failed_error(tmp_path):
         return_value=True,
     ):
         with mock.patch(
-            "snowflake.connector.s3_storage_client.SnowflakeS3RestClient.transfer_accelerate_config",
+            "snowflake.connector.aio._s3_storage_client.SnowflakeS3RestClient.transfer_accelerate_config",
             mock_transfer_accelerate_config,
         ):
             with mock.patch(
@@ -160,6 +160,7 @@ async def test_get_header_expiry_error():
         },
         8 * megabyte,
     )
+    await rest_client.transfer_accelerate_config(None)
 
     with mock.patch(
         "snowflake.connector.aio._s3_storage_client.SnowflakeS3RestClient._has_expired_token",
@@ -241,6 +242,7 @@ async def test_upload_expiry_error():
         },
         8 * megabyte,
     )
+    await rest_client.transfer_accelerate_config(None)
 
     with mock.patch(
         "snowflake.connector.aio._s3_storage_client.SnowflakeS3RestClient._has_expired_token",
@@ -332,6 +334,7 @@ async def test_download_expiry_error():
         },
         8 * megabyte,
     )
+    await rest_client.transfer_accelerate_config(None)
 
     with mock.patch(
         "snowflake.connector.aio._s3_storage_client.SnowflakeS3RestClient._has_expired_token",
@@ -373,12 +376,23 @@ async def test_download_unknown_error(caplog):
         message="No, just chuck testing...",
         headers={},
     )
+
+    async def mock_transfer_accelerate_config(
+        self: SnowflakeS3RestClient,
+        use_accelerate_endpoint: bool | None = None,
+    ) -> bool:
+        self.endpoint = f"https://{self.s3location.bucket_name}.s3.awsamazon.com"
+        return False
+
     with mock.patch(
         "snowflake.connector.aio._s3_storage_client.SnowflakeS3RestClient._send_request_with_authentication_and_retry",
         side_effect=error,
     ), mock.patch(
         "snowflake.connector.aio._file_transfer_agent.SnowflakeFileTransferAgent._transfer_accelerate_config",
         side_effect=None,
+    ), mock.patch(
+        "snowflake.connector.aio._s3_storage_client.SnowflakeS3RestClient.transfer_accelerate_config",
+        mock_transfer_accelerate_config,
     ):
         await agent.execute()
     assert agent._file_metadata[0].error_details.status == 400
@@ -422,6 +436,7 @@ async def test_download_retry_exceeded_error():
         },
         8 * megabyte,
     )
+    await rest_client.transfer_accelerate_config()
     rest_client.SLEEP_UNIT = 0
 
     with mock.patch(
