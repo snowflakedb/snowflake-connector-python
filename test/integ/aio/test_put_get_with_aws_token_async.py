@@ -118,6 +118,7 @@ async def test_put_with_invalid_token(tmpdir, aio_connection):
         )
 
         client = SnowflakeS3RestClient(meta, creds, stage_info, 8388608)
+        await client.transfer_accelerate_config(None)
         await client.get_file_header(meta.name)  # positive case
 
         # negative case, no aws token
