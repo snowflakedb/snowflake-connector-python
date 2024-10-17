@@ -112,6 +112,18 @@ KEYRING_DRIVER_NAME = "SNOWFLAKE-PYTHON-DRIVER"
 ID_TOKEN = "ID_TOKEN"
 MFA_TOKEN = "MFATOKEN"
 
+AUTHENTICATION_REQUEST_KEY_WHITELIST = {
+    "ACCOUNT_NAME",
+    "AUTHENTICATOR",
+    "CLIENT_APP_ID",
+    "CLIENT_APP_VERSION",
+    "CLIENT_ENVIRONMENT",
+    "EXT_AUTHN_DUO_METHOD",
+    "LOGIN_NAME",
+    "SESSION_PARAMETERS",
+    "SVN_REVISION",
+}
+
 
 class Auth:
     """Snowflake Authenticator."""
@@ -205,7 +217,6 @@ class Auth:
 
         body = copy.deepcopy(body_template)
         # updating request body
-        logger.debug("assertion content: %s", auth_instance.assertion_content)
         auth_instance.update_body(body)
 
         logger.debug(
@@ -243,7 +254,10 @@ class Auth:
 
         logger.debug(
             "body['data']: %s",
-            {k: v for (k, v) in body["data"].items() if k != "PASSWORD"},
+            {
+                k: v if k in AUTHENTICATION_REQUEST_KEY_WHITELIST else "******"
+                for (k, v) in body["data"].items()
+            },
         )
 
         try:
