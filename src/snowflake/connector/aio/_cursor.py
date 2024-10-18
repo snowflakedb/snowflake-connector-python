@@ -27,6 +27,7 @@ from snowflake.connector import (
     ProgrammingError,
 )
 from snowflake.connector._sql_util import get_file_transfer_type
+from snowflake.connector.aio._build_upload_agent import BindUploadAgent
 from snowflake.connector.aio._result_batch import (
     ResultBatch,
     create_batches_from_response,
@@ -746,9 +747,10 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 ):
                     # bind stage optimization
                     try:
-                        raise NotImplementedError(
-                            "Bind stage is not supported yet in async."
-                        )
+                        rows = self.connection._write_params_to_byte_rows(seqparams)
+                        bind_uploader = BindUploadAgent(self, rows)
+                        await bind_uploader.upload()
+                        bind_stage = bind_uploader.stage_path
                     except BindUploadError:
                         logger.debug(
                             "Failed to upload binds to stage, sending binds to "
