@@ -1137,6 +1137,8 @@ class SnowflakeRestful:
         except SSLError as se:
             msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
             logger.debug(msg)
+            # the following code is for backward compatibility with old versions of python connector which calls
+            # self._handle_unknown_error to process SSLError
             Error.errorhandler_wrapper(
                 self._connection,
                 None,
