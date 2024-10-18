@@ -1076,7 +1076,7 @@ class SnowflakeCursor:
             logger.debug(ret)
             err = ret["message"]
             code = ret.get("code", -1)
-            if self._timebomb.executed:
+            if self._timebomb and self._timebomb.executed:
                 err = (
                     f"SQL execution was cancelled by the client due to a timeout. "
                     f"Error message received from the server: {err}"
