@@ -25,7 +25,6 @@ import snowflake.connector
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
 from snowflake.connector.errors import Error, OperationalError, ProgrammingError
 from snowflake.connector.network import SnowflakeRestful
-from snowflake.connector.vendored.requests.exceptions import SSLError
 
 from ..randomize import random_string
 from .mock_utils import mock_request_with_action, zero_backoff
@@ -554,7 +553,10 @@ def test_request_guid():
     )
 
 
+@pytest.mark.skipolddriver
 def test_ssl_error_hint(caplog):
+    from snowflake.connector.vendored.requests.exceptions import SSLError
+
     with mock.patch(
         "snowflake.connector.vendored.requests.sessions.Session.request",
         side_effect=SSLError("SSL error"),
