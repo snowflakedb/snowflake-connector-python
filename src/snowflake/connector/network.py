@@ -46,6 +46,7 @@ from .compat import (
     urlparse,
 )
 from .constants import (
+    _CONNECTIVITY_ERR_MSG,
     _SNOWFLAKE_HOST_SUFFIX_REGEX,
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
@@ -1134,8 +1135,17 @@ class SnowflakeRestful:
             finally:
                 raw_ret.close()  # ensure response is closed
         except SSLError as se:
-            logger.debug("Hit non-retryable SSL error, %s", str(se))
-
+            msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
+            logger.debug(msg)
+            Error.errorhandler_wrapper(
+                self._connection,
+                None,
+                OperationalError,
+                {
+                    "msg": msg,
+                    "errno": ER_FAILED_TO_REQUEST,
+                },
+            )
         except (
             BadStatusLine,
             ConnectionError,

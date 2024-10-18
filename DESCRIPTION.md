@@ -8,6 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.12.3(TBD)
+  - Improved the error message for SSL-related issues to provide clearer guidance when an SSL error occurs.
+
 - v3.12.2(September 11,2024)
   - Improved error handling for asynchronous queries, providing more detailed and informative error messages when an async query fails.
   - Improved inference of top-level domains for accounts specifying a region in China, now defaulting to snowflakecomputing.cn.
