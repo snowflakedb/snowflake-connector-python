@@ -451,6 +451,7 @@ class SnowflakeRestful:
         method: str = "post",
         client: str = "sfsql",
         timeout: int | None = None,
+        params: dict | None = None,
         _no_results: bool = False,
         _include_retry_params: bool = False,
         _no_retry: bool = False,
@@ -493,6 +494,7 @@ class SnowflakeRestful:
                 headers,
                 json.dumps(body),
                 token=self.token,
+                params=params,
                 _no_results=_no_results,
                 timeout=timeout,
                 _include_retry_params=_include_retry_params,
@@ -503,6 +505,7 @@ class SnowflakeRestful:
                 url,
                 headers,
                 token=self.token,
+                params=params,
                 timeout=timeout,
             )
 
@@ -678,6 +681,7 @@ class SnowflakeRestful:
         url: str,
         headers: dict[str, str],
         token: str = None,
+        params: dict | None = None,
         timeout: int | None = None,
         is_fetch_query_status: bool = False,
     ) -> dict[str, Any]:
@@ -693,6 +697,7 @@ class SnowflakeRestful:
             headers,
             timeout=timeout,
             token=token,
+            params=params,
             is_fetch_query_status=is_fetch_query_status,
         )
         if ret.get("code") == SESSION_EXPIRED_GS_CODE:
@@ -712,6 +717,7 @@ class SnowflakeRestful:
                     url,
                     headers,
                     token=self.token,
+                    params=params,
                     is_fetch_query_status=is_fetch_query_status,
                 )
 
@@ -723,6 +729,7 @@ class SnowflakeRestful:
         headers,
         body,
         token=None,
+        params: dict | None = None,
         timeout: int | None = None,
         socket_timeout: int | None = None,
         _no_results: bool = False,
@@ -743,6 +750,7 @@ class SnowflakeRestful:
             data=body,
             timeout=timeout,
             token=token,
+            params=params,
             no_retry=no_retry,
             _include_retry_params=_include_retry_params,
             socket_timeout=socket_timeout,
@@ -769,7 +777,7 @@ class SnowflakeRestful:
             )
             if ret.get("success"):
                 return self._post_request(
-                    url, headers, body, token=self.token, timeout=timeout
+                    url, headers, body, token=self.token, params=params, timeout=timeout
                 )
 
         if isinstance(ret.get("data"), dict) and ret["data"].get("queryId"):
@@ -789,6 +797,7 @@ class SnowflakeRestful:
                 result_url,
                 headers,
                 token=self.token,
+                params=params,
                 timeout=timeout,
                 is_fetch_query_status=bool(
                     re.match(r"^/queries/.+/result$", result_url)
@@ -880,6 +889,7 @@ class SnowflakeRestful:
         retry_ctx,
         no_retry: bool = False,
         token=NO_TOKEN,
+        params: dict | None = None,
         **kwargs,
     ):
         conn = self._connection
@@ -908,6 +918,7 @@ class SnowflakeRestful:
                 headers=headers,
                 data=data,
                 token=token,
+                params=params,
                 raise_raw_http_failure=raise_raw_http_failure,
                 **kwargs,
             )
@@ -1041,6 +1052,7 @@ class SnowflakeRestful:
         headers,
         data,
         token,
+        params,
         catch_okta_unauthorized_error: bool = False,
         is_raw_text: bool = False,
         is_raw_binary: bool = False,
@@ -1077,6 +1089,7 @@ class SnowflakeRestful:
                 verify=True,
                 stream=is_raw_binary,
                 auth=SnowflakeAuth(token),
+                params=params,
             )
             download_end_time = get_time_millis()
 
