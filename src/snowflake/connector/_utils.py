@@ -7,6 +7,7 @@ from __future__ import annotations
 import string
 from enum import Enum
 from random import choice
+from threading import Timer
 
 
 class TempObjectType(Enum):
@@ -43,3 +44,13 @@ def random_name_for_temp_object(object_type: TempObjectType) -> str:
 
 def get_temp_type_for_object(use_scoped_temp_objects: bool) -> str:
     return SCOPED_TEMPORARY_STRING if use_scoped_temp_objects else TEMPORARY_STRING
+
+
+class _TrackedQueryCancellationTimer(Timer):
+    def __init__(self, interval, function, args=None, kwargs=None):
+        super().__init__(interval, function, args, kwargs)
+        self.executed = False
+
+    def run(self):
+        super().run()
+        self.executed = True

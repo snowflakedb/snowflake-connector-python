@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.12.3(TBD)
   - Improved the error message for SSL-related issues to provide clearer guidance when an SSL error occurs.
+  - Improved error message for SQL execution cancellations caused by timeout.
 
 - v3.12.2(September 11,2024)
   - Improved error handling for asynchronous queries, providing more detailed and informative error messages when an async query fails.
