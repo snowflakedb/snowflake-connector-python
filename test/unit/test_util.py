@@ -3,7 +3,10 @@
 #
 import pytest
 
-from snowflake.connector._utils import _TrackedQueryCancellationTimer
+try:
+    from snowflake.connector._utils import _TrackedQueryCancellationTimer
+except ImportError:
+    pass
 
 pytestmark = pytest.mark.skipolddriver
 
