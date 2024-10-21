@@ -36,9 +36,9 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             10,
         ):
             raise RuntimeError(
-                "OCSP validation for Async Snowflake Connector requires Python 3.10+. "
-                "To use Python 3.9 or lower, set `insecure_mode=True` in the"
-                " connection creation to skip OCSP validation."
+                "Async Snowflake Python Connector requires Python 3.10+ for OCSP validation related features. "
+                "Please open a feature request issue in github if your want to use Python 3.9 or lower: "
+                "https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose."
             )
 
         super().__init__(*args, **kwargs)

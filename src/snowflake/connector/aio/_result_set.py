@@ -18,6 +18,7 @@ from typing import (
     Deque,
     Iterator,
     Literal,
+    Union,
     cast,
     overload,
 )
@@ -156,7 +157,7 @@ class ResultSet(ResultSetSync):
     ) -> None:
         super().__init__(cursor, result_chunks, prefetch_thread_num)
         self.batches = cast(
-            list[JSONResultBatch] | list[ArrowResultBatch], self.batches
+            Union[list[JSONResultBatch], list[ArrowResultBatch]], self.batches
         )
 
     def _can_create_arrow_iter(self) -> None:
