@@ -15,6 +15,7 @@ import uuid
 from typing import TYPE_CHECKING, Any
 
 import OpenSSL.SSL
+from urllib3.util.url import parse_url
 
 from ..compat import (
     FORBIDDEN,
@@ -80,7 +81,7 @@ from ..sqlstate import (
     SQLSTATE_CONNECTION_REJECTED,
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
 )
-from ..time_util import TimeoutBackoffCtx, get_time_millis
+from ..time_util import TimeoutBackoffCtx
 from ._ssl_connector import SnowflakeSSLConnector
 
 if TYPE_CHECKING:
@@ -162,6 +163,10 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         self._ocsp_mode = (
             self._connection._ocsp_mode() if self._connection else OCSPMode.FAIL_OPEN
         )
+        if self._connection.proxy_host:
+            self._get_proxy_headers = lambda url: {"Host": parse_url(url).hostname}
+        else:
+            self._get_proxy_headers = lambda _: None
 
     async def close(self) -> None:
         if hasattr(self, "_token"):
@@ -651,22 +656,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
 
             reason = getattr(cause, "errno", 0)
             retry_ctx.retry_reason = reason
-
-            if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
-                # connection is reset by the server, the underlying connection is broken and can not be reused
-                # we need a new urllib3 http(s) connection in this case.
-                # We need to first close the old one so that urllib3 pool manager can create a new connection
-                # for new requests
-                try:
-                    logger.debug(
-                        "shutting down requests session adapter due to connection aborted"
-                    )
-                    session.get_adapter(full_url).close()
-                except Exception as close_adapter_exc:
-                    logger.debug(
-                        "Ignored error caused by closing https connection failure: %s",
-                        close_adapter_exc,
-                    )
+            # notes: in sync implementation we check ECONNRESET in error message and close low level urllib session
+            #  we do not have the logic here because aiohttp handles low level connection close-reopen for us
             return None  # retry
         except Exception as e:
             if not no_retry:
@@ -704,11 +695,6 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             else:
                 input_data = data
 
-            download_start_time = get_time_millis()
-            # socket timeout is constant. You should be able to receive
-            # the response within the time. If not, ConnectReadTimeout or
-            # ReadTimeout is raised.
-
             # TODO: aiohttp auth parameter works differently than requests.session.request
             #  we can check if there's other aiohttp built-in mechanism to update this
             if HEADER_AUTHORIZATION_KEY in headers:
@@ -718,26 +704,31 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                     token=token
                 )
 
-            # TODO: sync feature parity, parameters verify/stream in sync version
+            # socket timeout is constant. You should be able to receive
+            # the response within the time. If not, asyncio.TimeoutError is raised.
+
+            # delta compared to sync:
+            #  - in sync, we specify "verify" to True; in aiohttp,
+            #  the counter parameter is "ssl" and it already defaults to True
             raw_ret = await session.request(
                 method=method,
                 url=full_url,
                 headers=headers,
                 data=input_data,
                 timeout=aiohttp.ClientTimeout(socket_timeout),
+                proxy_headers=self._get_proxy_headers(full_url),
             )
-
-            download_end_time = get_time_millis()
-
             try:
                 if raw_ret.status == OK:
                     logger.debug("SUCCESS")
                     if is_raw_text:
                         ret = await raw_ret.text()
                     elif is_raw_binary:
-                        content = await raw_ret.read()
-                        ret = binary_data_handler.to_iterator(
-                            content, download_end_time - download_start_time
+                        # check SNOW-1738595 for is_raw_binary support
+                        raise NotImplementedError(
+                            "reading raw binary data is not supported in asyncio connector,"
+                            " please open a feature request issue in"
+                            " github: https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose"
                         )
                     else:
                         ret = await raw_ret.json()
@@ -818,12 +809,9 @@ class SnowflakeRestful(SnowflakeRestfulSync):
 
     def make_requests_session(self) -> aiohttp.ClientSession:
         s = aiohttp.ClientSession(
-            connector=SnowflakeSSLConnector(snowflake_ocsp_mode=self._ocsp_mode)
+            connector=SnowflakeSSLConnector(snowflake_ocsp_mode=self._ocsp_mode),
+            trust_env=True,  # this is for proxy support, proxy.set_proxy will set envs and trust_env allows reading env
         )
-        # TODO: sync feature parity, proxy support
-        # s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        # s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        # s._reuse_count = itertools.count()
         return s
 
     @contextlib.asynccontextmanager
