@@ -25,8 +25,6 @@ CONNECTION_PARAMETERS = {
     "role": "test",
 }
 
-raise ValueError("Test CI")
-
 
 async def main():
     try:
