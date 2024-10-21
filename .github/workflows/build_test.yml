@@ -397,7 +397,6 @@ jobs:
 
   test-unsupporeted-aio:
     name: Test unsupported asyncio ${{ matrix.os.download_name }}-${{ matrix.python-version }}
-    needs: build
     runs-on: ${{ matrix.os.image_name }}
     strategy:
       fail-fast: false
