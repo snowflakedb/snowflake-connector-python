@@ -59,16 +59,19 @@ from ..network import (
     HEADER_AUTHORIZATION_KEY,
     HEADER_SNOWFLAKE_TOKEN,
     ID_TOKEN_EXPIRED_GS_CODE,
+    IMPLEMENTATION,
     MASTER_TOKEN_EXPIRED_GS_CODE,
     MASTER_TOKEN_INVALD_GS_CODE,
     MASTER_TOKEN_NOTFOUND_GS_CODE,
     NO_TOKEN,
-    PYTHON_CONNECTOR_USER_AGENT,
+    PLATFORM,
+    PYTHON_VERSION,
     QUERY_IN_PROGRESS_ASYNC_CODE,
     QUERY_IN_PROGRESS_CODE,
     REQUEST_ID,
     REQUEST_TYPE_RENEW,
     SESSION_EXPIRED_GS_CODE,
+    SNOWFLAKE_CONNECTOR_VERSION,
     ReauthenticationRequest,
     RetryRequest,
 )
@@ -82,12 +85,15 @@ from ..sqlstate import (
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
 )
 from ..time_util import TimeoutBackoffCtx
+from ._description import CLIENT_NAME
 from ._ssl_connector import SnowflakeSSLConnector
 
 if TYPE_CHECKING:
     from snowflake.connector.aio import SnowflakeConnection
 
 logger = logging.getLogger(__name__)
+
+PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
 
 try:
     import aiohttp

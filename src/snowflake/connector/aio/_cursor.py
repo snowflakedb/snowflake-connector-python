@@ -33,6 +33,7 @@ from snowflake.connector.aio._result_batch import (
     create_batches_from_response,
 )
 from snowflake.connector.aio._result_set import ResultSet, ResultSetIterator
+from snowflake.connector.aio._telemetry import TelemetryData
 from snowflake.connector.constants import (
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     QueryStatus,
@@ -361,8 +362,9 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 self._total_rowcount += updated_rows
 
     async def _init_multi_statement_results(self, data: dict) -> None:
-        # TODO: async telemetry SNOW-1572217
-        # self._log_telemetry_job_data(TelemetryField.MULTI_STATEMENT, TelemetryData.TRUE)
+        await self._log_telemetry_job_data(
+            TelemetryField.MULTI_STATEMENT, TelemetryData.TRUE
+        )
         self.multi_statement_savedIds = data["resultIds"].split(",")
         self._multi_statement_resultIds = collections.deque(
             self.multi_statement_savedIds
@@ -382,8 +384,24 @@ class SnowflakeCursor(SnowflakeCursorSync):
     async def _log_telemetry_job_data(
         self, telemetry_field: TelemetryField, value: Any
     ) -> None:
-        # TODO: async telemetry SNOW-1572217
-        pass
+        ts = get_time_millis()
+        try:
+            await self._connection._log_telemetry(
+                TelemetryData.from_telemetry_data_dict(
+                    from_dict={
+                        TelemetryField.KEY_TYPE.value: telemetry_field.value,
+                        TelemetryField.KEY_SFQID.value: self._sfqid,
+                        TelemetryField.KEY_VALUE.value: value,
+                    },
+                    timestamp=ts,
+                    connection=self._connection,
+                )
+            )
+        except AttributeError:
+            logger.warning(
+                "Cursor failed to log to telemetry. Connection object may be None.",
+                exc_info=True,
+            )
 
     async def _preprocess_pyformat_query(
         self,
@@ -394,16 +412,15 @@ class SnowflakeCursor(SnowflakeCursorSync):
         # client side binding
         processed_params = self._connection._process_params_pyformat(params, self)
         # SNOW-513061 collect telemetry for empty sequence usage before we make the breaking change announcement
-        # TODO: async telemetry support
-        # if params is not None and len(params) == 0:
-        #     await self._log_telemetry_job_data(
-        #         TelemetryField.EMPTY_SEQ_INTERPOLATION,
-        #         (
-        #             TelemetryData.TRUE
-        #             if self.connection._interpolate_empty_sequences
-        #             else TelemetryData.FALSE
-        #         ),
-        #     )
+        if params is not None and len(params) == 0:
+            await self._log_telemetry_job_data(
+                TelemetryField.EMPTY_SEQ_INTERPOLATION,
+                (
+                    TelemetryData.TRUE
+                    if self.connection._interpolate_empty_sequences
+                    else TelemetryData.FALSE
+                ),
+            )
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.debug(
                 f"binding: [{self._format_query_for_log(command)}] "
@@ -585,14 +602,13 @@ class SnowflakeCursor(SnowflakeCursorSync):
         self._first_chunk_time = get_time_millis()
 
         # if server gives a send time, log the time it took to arrive
-        # TODO: telemetry support in asyncio
-        # if "data" in ret and "sendResultTime" in ret["data"]:
-        #     time_consume_first_result = (
-        #         self._first_chunk_time - ret["data"]["sendResultTime"]
-        #     )
-        #     self._log_telemetry_job_data(
-        #         TelemetryField.TIME_CONSUME_FIRST_RESULT, time_consume_first_result
-        #     )
+        if "data" in ret and "sendResultTime" in ret["data"]:
+            time_consume_first_result = (
+                self._first_chunk_time - ret["data"]["sendResultTime"]
+            )
+            await self._log_telemetry_job_data(
+                TelemetryField.TIME_CONSUME_FIRST_RESULT, time_consume_first_result
+            )
 
         if ret["success"]:
             logger.debug("SUCCESS")
@@ -893,10 +909,9 @@ class SnowflakeCursor(SnowflakeCursorSync):
             await self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
-        # TODO: async telemetry SNOW-1572217
-        # self._log_telemetry_job_data(
-        #     TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
-        # )
+        await self._log_telemetry_job_data(
+            TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
+        )
         return await self._result_set._fetch_arrow_batches()
 
     @overload
@@ -920,8 +935,9 @@ class SnowflakeCursor(SnowflakeCursorSync):
             await self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
-        # TODO: async telemetry SNOW-1572217
-        # self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
+        await self._log_telemetry_job_data(
+            TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE
+        )
         return await self._result_set._fetch_arrow_all(
             force_return_table=force_return_table
         )
@@ -933,10 +949,9 @@ class SnowflakeCursor(SnowflakeCursorSync):
             await self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
-        # TODO: async telemetry
-        # self._log_telemetry_job_data(
-        #     TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.TRUE
-        # )
+        await self._log_telemetry_job_data(
+            TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.TRUE
+        )
         return await self._result_set._fetch_pandas_batches(**kwargs)
 
     async def fetch_pandas_all(self, **kwargs: Any) -> DataFrame:
@@ -946,9 +961,9 @@ class SnowflakeCursor(SnowflakeCursorSync):
         if self._query_result_format != "arrow":
             raise NotSupportedError
         # # TODO: async telemetry
-        # self._log_telemetry_job_data(
-        #     TelemetryField.PANDAS_FETCH_ALL, TelemetryData.TRUE
-        # )
+        await self._log_telemetry_job_data(
+            TelemetryField.PANDAS_FETCH_ALL, TelemetryData.TRUE
+        )
         return await self._result_set._fetch_pandas_all(**kwargs)
 
     async def nextset(self) -> SnowflakeCursor | None:
@@ -981,9 +996,9 @@ class SnowflakeCursor(SnowflakeCursorSync):
         if self._result_set is None:
             return None
         # TODO: async telemetry SNOW-1572217
-        # self._log_telemetry_job_data(
-        #     TelemetryField.GET_PARTITIONS_USED, TelemetryData.TRUE
-        # )
+        await self._log_telemetry_job_data(
+            TelemetryField.GET_PARTITIONS_USED, TelemetryData.TRUE
+        )
         return self._result_set.batches
 
     async def get_results_from_sfqid(self, sfqid: str) -> None:

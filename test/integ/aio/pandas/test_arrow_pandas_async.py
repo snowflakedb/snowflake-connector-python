@@ -1153,7 +1153,6 @@ async def test_resultbatches_pandas_functionality(conn_cnx):
     assert numpy.array_equal(expected_df, final_df)
 
 
-@pytest.mark.skip("SNOW-1617451 async telemetry support")
 @pytest.mark.skipif(
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas is missing. or no new telemetry defined - skipolddrive",
@@ -1166,13 +1165,13 @@ async def test_resultbatches_pandas_functionality(conn_cnx):
     ],
 )
 async def test_pandas_telemetry(
-    conn_cnx, capture_sf_telemetry, fetch_method, expected_telemetry_type
+    conn_cnx, capture_sf_telemetry_async, fetch_method, expected_telemetry_type
 ):
     cases = ["NULL", 0.11, -0.11, "NULL", 1.27, -1.28, "NULL"]
     table = "test_telemetry"
     column = "(a number(5,2))"
     values = ",".join([f"({i}, {c})" for i, c in enumerate(cases)])
-    async with conn_cnx() as conn, capture_sf_telemetry.patch_connection(
+    async with conn_cnx() as conn, capture_sf_telemetry_async.patch_connection(
         conn, False
     ) as telemetry_test:
         await init(conn, table, column, values)
