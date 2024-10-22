@@ -1,8 +1,14 @@
 #
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
+import pytest
 
-from snowflake.connector._utils import _TrackedQueryCancellationTimer
+try:
+    from snowflake.connector._utils import _TrackedQueryCancellationTimer
+except ImportError:
+    pass
+
+pytestmark = pytest.mark.skipolddriver
 
 
 def test_timer():
