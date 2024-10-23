@@ -22,7 +22,12 @@ except ImportError:
 
     IS_MACOS = platform.system() == "Darwin"
 
-from snowflake.connector.auth._auth import delete_temporary_credential
+try:
+    import keyring  # noqa
+
+    from snowflake.connector.auth._auth import delete_temporary_credential
+except ImportError:
+    delete_temporary_credential = None
 
 MFA_TOKEN = "MFATOKEN"
 
