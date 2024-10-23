@@ -8,7 +8,7 @@ import abc
 import asyncio
 import json
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, AsyncIterator, Iterator, Sequence
+from typing import TYPE_CHECKING, Any, Iterator, Sequence
 
 import aiohttp
 
@@ -168,16 +168,21 @@ def create_batches_from_response(
 
 
 class ResultBatch(ResultBatchSync):
-    pass
+    def __iter__(self):
+        raise TypeError(
+            f"Async '{type(self).__name__}' does not support '__iter__', "
+            f"please call the `create_iter` coroutine method on the '{type(self).__name__}' object"
+            " to explicitly create an iterator."
+        )
 
     @abc.abstractmethod
     async def create_iter(
         self, **kwargs
     ) -> (
-        AsyncIterator[dict | Exception]
-        | AsyncIterator[tuple | Exception]
-        | AsyncIterator[Table]
-        | AsyncIterator[DataFrame]
+        Iterator[dict | Exception]
+        | Iterator[tuple | Exception]
+        | Iterator[Table]
+        | Iterator[DataFrame]
     ):
         """Downloads the data from blob storage that this ResultChunk points at.
 
