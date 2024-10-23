@@ -646,15 +646,27 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
     @property
     def client_prefetch_threads(self) -> int:
-        # TODO: use client_prefetch_threads as numbers for coroutines? how to communicate to users
-        logger.warning("asyncio does not support client_prefetch_threads")
         return self._client_prefetch_threads
 
     @client_prefetch_threads.setter
     def client_prefetch_threads(self, value) -> None:
-        # TODO: use client_prefetch_threads as numbers for coroutines? how to communicate to users
-        logger.warning("asyncio does not support client_prefetch_threads")
         self._client_prefetch_threads = value
+
+    @property
+    def errorhandler(self) -> None:
+        raise NotImplementedError(
+            "Async Snowflake Python Connector does not support errorhandler. "
+            "Please open a feature request issue in github if your want this feature: "
+            "https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose."
+        )
+
+    @errorhandler.setter
+    def errorhandler(self, value) -> None:
+        raise NotImplementedError(
+            "Async Snowflake Python Connector does not support errorhandler. "
+            "Please open a feature request issue in github if your want this feature: "
+            "https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose."
+        )
 
     @property
     def rest(self) -> SnowflakeRestful | None:
