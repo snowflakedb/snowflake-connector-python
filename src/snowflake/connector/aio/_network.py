@@ -17,15 +17,7 @@ from typing import TYPE_CHECKING, Any
 import OpenSSL.SSL
 from urllib3.util.url import parse_url
 
-from ..compat import (
-    FORBIDDEN,
-    OK,
-    UNAUTHORIZED,
-    BadStatusLine,
-    IncompleteRead,
-    urlencode,
-    urlparse,
-)
+from ..compat import FORBIDDEN, OK, UNAUTHORIZED, urlencode, urlparse
 from ..constants import (
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
@@ -769,18 +761,13 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                     return None  # required for tests
             finally:
                 raw_ret.close()  # ensure response is closed
-        except aiohttp.ClientSSLError as se:
+        except (aiohttp.ClientSSLError, aiohttp.ClientConnectorSSLError) as se:
             logger.debug("Hit non-retryable SSL error, %s", str(se))
 
-        # TODO: sync feature parity, aiohttp network error handling
         except (
-            BadStatusLine,
-            ConnectionError,
             aiohttp.ClientConnectionError,
-            aiohttp.ClientPayloadError,
-            aiohttp.ClientResponseError,
+            aiohttp.ClientConnectorError,
             asyncio.TimeoutError,
-            IncompleteRead,
             OpenSSL.SSL.SysCallError,
             KeyError,  # SNOW-39175: asn1crypto.keys.PublicKeyInfo
             ValueError,
@@ -805,7 +792,13 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 )
                 raise RetryRequest(err)
         except Exception as err:
-            raise err
+            raise OperationalError(
+                msg=f"Unexpected error occurred during request execution: {err}"
+                "Please check the stack trace for more information and retry the operation."
+                "If you think this is a bug, please collect the error information and open a bug report in github: "
+                "https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose.",
+                errno=ER_FAILED_TO_REQUEST,
+            ) from err
 
     def make_requests_session(self) -> aiohttp.ClientSession:
         s = aiohttp.ClientSession(
