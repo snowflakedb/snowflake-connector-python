@@ -1059,6 +1059,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
         self._prefetch_hook = wait_until_ready
 
     async def query_result(self, qid: str) -> SnowflakeCursor:
+        """Query the result of a previously executed query."""
         url = f"/queries/{qid}/result"
         ret = await self._connection.rest.request(url=url, method="get")
         self._sfqid = (
