@@ -65,12 +65,13 @@ from ..network import (
     ReauthenticationRequest,
 )
 from ..sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
+from ..telemetry import TelemetryField
 from ..time_util import get_time_millis
 from ..util_text import split_statements
 from ._cursor import SnowflakeCursor
 from ._description import CLIENT_NAME
 from ._network import SnowflakeRestful
-from ._telemetry import TelemetryClient, TelemetryData, TelemetryField
+from ._telemetry import TelemetryClient, TelemetryData
 from ._time_util import HeartBeatTimer
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
