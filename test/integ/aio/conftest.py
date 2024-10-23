@@ -56,7 +56,7 @@ class TelemetryCaptureFixtureAsync:
             con._telemetry = original_telemetry
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def capture_sf_telemetry_async() -> TelemetryCaptureFixtureAsync:
     return TelemetryCaptureFixtureAsync()
 

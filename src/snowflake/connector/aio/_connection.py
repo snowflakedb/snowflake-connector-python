@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import copy
 import logging
 import os
 import pathlib
@@ -29,7 +30,7 @@ from snowflake.connector import (
 from .._query_context_cache import QueryContextCache
 from ..compat import IS_LINUX, quote, urlencode
 from ..config_manager import CONFIG_MANAGER, _get_default_connection_params
-from ..connection import DEFAULT_CONFIGURATION
+from ..connection import DEFAULT_CONFIGURATION as DEFAULT_CONFIGURATION_SYNC
 from ..connection import SnowflakeConnection as SnowflakeConnectionSync
 from ..connection import _get_private_bytes_from_file
 from ..connection_diagnostic import ConnectionDiagnostic
@@ -87,6 +88,9 @@ from .auth import (
 )
 
 logger = getLogger(__name__)
+
+# deep copy to avoid pollute sync config
+DEFAULT_CONFIGURATION = copy.deepcopy(DEFAULT_CONFIGURATION_SYNC)
 DEFAULT_CONFIGURATION["application"] = (CLIENT_NAME, (type(None), str))
 
 
