@@ -24,12 +24,11 @@ from snowflake.connector import (
     InterfaceError,
     NotSupportedError,
     ProgrammingError,
-    connection,
     constants,
     errorcode,
     errors,
 )
-from snowflake.connector.aio import DictCursor, SnowflakeCursor
+from snowflake.connector.aio import DictCursor, SnowflakeCursor, _connection
 from snowflake.connector.aio._result_batch import (
     ArrowResultBatch,
     JSONResultBatch,
@@ -1703,7 +1702,7 @@ async def test_multi_statement_failure(conn_cnx):
     error when a multi-statement is submitted, regardless of the MULTI_STATEMENT_COUNT parameter.
     """
     try:
-        connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
+        _connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
             "2.8.1",
             (type(None), str),
         )
@@ -1718,7 +1717,7 @@ async def test_multi_statement_failure(conn_cnx):
                     )
                     await cur.execute("select 1; select 2; select 3;")
     finally:
-        connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
+        _connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
             CLIENT_VERSION,
             (type(None), str),
         )

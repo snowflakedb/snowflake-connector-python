@@ -9,8 +9,9 @@ from typing import AsyncContextManager, Callable, Generator
 import pytest
 
 from snowflake.connector.aio import SnowflakeConnection
-from snowflake.connector.aio._telemetry import TelemetryClient, TelemetryData
+from snowflake.connector.aio._telemetry import TelemetryClient
 from snowflake.connector.connection import DefaultConverterClass
+from snowflake.connector.telemetry import TelemetryData
 
 
 class TelemetryCaptureHandlerAsync(TelemetryClient):

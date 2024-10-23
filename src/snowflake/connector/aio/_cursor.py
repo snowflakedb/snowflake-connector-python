@@ -33,7 +33,6 @@ from snowflake.connector.aio._result_batch import (
     create_batches_from_response,
 )
 from snowflake.connector.aio._result_set import ResultSet, ResultSetIterator
-from snowflake.connector.aio._telemetry import TelemetryData
 from snowflake.connector.constants import (
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     QueryStatus,
@@ -56,7 +55,7 @@ from snowflake.connector.errorcode import (
 )
 from snowflake.connector.errors import BindUploadError, DatabaseError
 from snowflake.connector.file_transfer_agent import SnowflakeProgressPercentage
-from snowflake.connector.telemetry import TelemetryField
+from snowflake.connector.telemetry import TelemetryData, TelemetryField
 from snowflake.connector.time_util import get_time_millis
 
 if TYPE_CHECKING:

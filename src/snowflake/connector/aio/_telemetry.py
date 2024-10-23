@@ -10,45 +10,12 @@ from typing import TYPE_CHECKING
 
 from ..secret_detector import SecretDetector
 from ..telemetry import TelemetryClient as TelemetryClientSync
-from ..telemetry import TelemetryData as TelemetryDataSync
-from ..telemetry import generate_telemetry_data_dict
 from ..test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
 
 if TYPE_CHECKING:
-    from ._connection import SnowflakeConnection
     from ._network import SnowflakeRestful
 
 logger = logging.getLogger(__name__)
-
-
-class TelemetryData(TelemetryDataSync):
-    """An instance of telemetry data which can be sent to the server."""
-
-    def __init__(self, message, timestamp) -> None:
-        super().__init__(message, timestamp)
-
-    @classmethod
-    def from_telemetry_data_dict(
-        cls,
-        from_dict: dict,
-        timestamp: int,
-        connection: SnowflakeConnection | None = None,
-        is_oob_telemetry: bool = False,
-    ):
-        """
-        Generate telemetry data with driver info from given dict and timestamp.
-        It takes an optional connection object to read data from.
-        It also takes a boolean is_oob_telemetry to indicate whether it's for out-of-band telemetry, as
-        naming of keys for driver and version is different from the ones of in-band telemetry.
-        """
-        return cls(
-            generate_telemetry_data_dict(
-                from_dict=(from_dict or {}),
-                connection=connection,
-                is_oob_telemetry=is_oob_telemetry,
-            ),
-            timestamp,
-        )
 
 
 class TelemetryClient(TelemetryClientSync):
