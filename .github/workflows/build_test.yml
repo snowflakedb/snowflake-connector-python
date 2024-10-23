@@ -395,6 +395,36 @@ jobs:
             .tox/.coverage
             .tox/coverage.xml
 
+  test-unsupporeted-aio:
+    name: Test unsupported asyncio ${{ matrix.os.download_name }}-${{ matrix.python-version }}
+    runs-on: ${{ matrix.os.image_name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - image_name: ubuntu-latest
+            download_name: manylinux_x86_64
+        python-version: [ "3.8", "3.9" ]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Display Python version
+        run: python -c "import sys; print(sys.version)"
+      - name: Upgrade setuptools, pip and wheel
+        run: python -m pip install -U setuptools pip wheel
+      - name: Install tox
+        run: python -m pip install tox>=4
+      - name: Run tests
+        run: python -m tox run -e aio-unsupported-python
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          TOX_PARALLEL_NO_SPINNER: 1
+        shell: bash
+
   combine-coverage:
     if: ${{ success() || failure() }}
     name: Combine coverage
