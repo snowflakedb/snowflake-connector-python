@@ -1475,6 +1475,9 @@ async def test_resultbatch(
     post_pickle_partitions: list[ResultBatch] = pickle.loads(pickle_str)
     total_rows = 0
     # Make sure the batches can be iterated over individually
+    async for it in post_pickle_partitions:
+        print(it)
+
     for i, partition in enumerate(post_pickle_partitions):
         # Tests whether the getter functions are working
         if i == 0:
