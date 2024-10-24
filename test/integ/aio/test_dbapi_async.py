@@ -44,9 +44,8 @@ async def conn_local(request, conn_cnx):
     async def fin():
         await drop_dbapi_tables(conn_cnx)
 
-    request.addfinalizer(fin)
-
-    return conn_cnx
+    yield conn_cnx
+    await fin()
 
 
 async def _paraminsert(cur):
