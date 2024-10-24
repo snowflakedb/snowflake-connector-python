@@ -11,6 +11,7 @@ import gzip
 import itertools
 import json
 import logging
+import re
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -164,7 +165,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         self._ocsp_mode = (
             self._connection._ocsp_mode() if self._connection else OCSPMode.FAIL_OPEN
         )
-        if self._connection.proxy_host:
+        if self._connection and self._connection.proxy_host:
             self._get_proxy_headers = lambda url: {"Host": parse_url(url).hostname}
         else:
             self._get_proxy_headers = lambda _: None
@@ -417,6 +418,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         headers: dict[str, str],
         token: str = None,
         timeout: int | None = None,
+        is_fetch_query_status: bool = False,
     ) -> dict[str, Any]:
         if "Content-Encoding" in headers:
             del headers["Content-Encoding"]
@@ -430,6 +432,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             headers,
             timeout=timeout,
             token=token,
+            is_fetch_query_status=is_fetch_query_status,
         )
         if ret.get("code") == SESSION_EXPIRED_GS_CODE:
             try:
@@ -444,7 +447,12 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 )
             )
             if ret.get("success"):
-                return await self._get_request(url, headers, token=self.token)
+                return await self._get_request(
+                    url,
+                    headers,
+                    token=self.token,
+                    is_fetch_query_status=is_fetch_query_status,
+                )
 
         return ret
 
@@ -518,7 +526,13 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             result_url = ret["data"]["getResultUrl"]
             logger.debug("ping pong starting...")
             ret = await self._get_request(
-                result_url, headers, token=self.token, timeout=timeout
+                result_url,
+                headers,
+                token=self.token,
+                timeout=timeout,
+                is_fetch_query_status=bool(
+                    re.match(r"^/queries/.+/result$", result_url)
+                ),
             )
             logger.debug("ret[code] = %s", ret.get("code", "N/A"))
             logger.debug("ping pong done")
@@ -604,6 +618,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
 
         full_url = retry_ctx.add_retry_params(full_url)
         full_url = SnowflakeRestful.add_request_guid(full_url)
+        is_fetch_query_status = kwargs.pop("is_fetch_query_status", False)
         try:
             return_object = await self._request_exec(
                 session=session,
@@ -616,6 +631,13 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             )
             if return_object is not None:
                 return return_object
+            if is_fetch_query_status:
+                err_msg = (
+                    "fetch query status failed and http request returned None, this"
+                    " is usually caused by transient network failures, retrying..."
+                )
+                logger.info(err_msg)
+                raise RetryRequest(err_msg)
             self._handle_unknown_error(method, full_url, headers, data, conn)
             return {}
         except RetryRequest as e:
