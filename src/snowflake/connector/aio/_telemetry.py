@@ -6,10 +6,12 @@
 from __future__ import annotations
 
 import logging
+from asyncio import Lock
 from typing import TYPE_CHECKING
 
 from ..secret_detector import SecretDetector
 from ..telemetry import TelemetryClient as TelemetryClientSync
+from ..telemetry import TelemetryData
 from ..test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
 
 if TYPE_CHECKING:
@@ -23,6 +25,7 @@ class TelemetryClient(TelemetryClientSync):
 
     def __init__(self, rest: SnowflakeRestful, flush_size=None) -> None:
         super().__init__(rest, flush_size)
+        self._lock = Lock()
 
     async def add_log_to_batch(self, telemetry_data: TelemetryData) -> None:
         if self.is_closed:
@@ -31,7 +34,7 @@ class TelemetryClient(TelemetryClientSync):
             logger.debug("TelemetryClient disabled. Ignoring log.")
             return
 
-        with self._lock:
+        async with self._lock:
             self._log_batch.append(telemetry_data)
 
         if len(self._log_batch) >= self._flush_size:
@@ -44,7 +47,7 @@ class TelemetryClient(TelemetryClientSync):
             logger.debug("TelemetryClient disabled. Not sending logs.")
             return
 
-        with self._lock:
+        async with self._lock:
             to_send = self._log_batch
             self._log_batch = []
 
