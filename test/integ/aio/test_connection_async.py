@@ -571,7 +571,7 @@ async def test_drop_create_user(conn_cnx, db_parameters):
 @pytest.mark.timeout(15)
 @pytest.mark.skipolddriver
 async def test_invalid_account_timeout():
-    with pytest.raises(OperationalError):
+    with pytest.raises(InterfaceError):
         async with snowflake.connector.aio.SnowflakeConnection(
             account="bogus", user="test", password="test", login_timeout=5
         ):
@@ -637,7 +637,7 @@ async def test_us_west_connection(tmpdir):
     Notes:
         Region is deprecated.
     """
-    with pytest.raises(OperationalError):
+    with pytest.raises(InterfaceError):
         # must reach Snowflake
         async with snowflake.connector.aio.SnowflakeConnection(
             account="testaccount1234",

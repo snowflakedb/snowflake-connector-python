@@ -160,8 +160,8 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
             if payload:
                 rest_args["data"] = payload
 
-            # ignore_content_encoding is removed because it
-            # does not apply to asyncio
+            if ignore_content_encoding:
+                rest_args["auto_decompress"] = False
 
             return url, rest_args
 

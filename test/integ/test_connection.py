@@ -516,7 +516,7 @@ def test_drop_create_user(conn_cnx, db_parameters):
 @pytest.mark.timeout(15)
 @pytest.mark.skipolddriver
 def test_invalid_account_timeout():
-    with pytest.raises(OperationalError):
+    with pytest.raises(InterfaceError):
         snowflake.connector.connect(
             account="bogus", user="test", password="test", login_timeout=5
         )
@@ -579,7 +579,7 @@ def test_us_west_connection(tmpdir):
     Notes:
         Region is deprecated.
     """
-    with pytest.raises(OperationalError):
+    with pytest.raises(InterfaceError):
         # must reach Snowflake
         snowflake.connector.connect(
             account="testaccount1234",

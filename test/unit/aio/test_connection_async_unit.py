@@ -36,7 +36,12 @@ from snowflake.connector.aio.auth import (
 from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
 from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
-from snowflake.connector.errors import Error, OperationalError, ProgrammingError
+from snowflake.connector.errors import (
+    Error,
+    InterfaceError,
+    OperationalError,
+    ProgrammingError,
+)
 
 
 def fake_connector(**kwargs) -> snowflake.connector.aio.SnowflakeConnection:
@@ -346,7 +351,7 @@ async def test_invalid_backoff_policy():
         # passing a non-generator function should not work
         _ = await fake_connector(backoff_policy=lambda: None).connect()
 
-    with pytest.raises(OperationalError):
+    with pytest.raises(InterfaceError):
         # passing a generator function should make it pass config and error during connection
         _ = await fake_connector(backoff_policy=zero_backoff).connect()
 
