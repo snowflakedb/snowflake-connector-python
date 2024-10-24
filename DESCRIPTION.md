@@ -8,6 +8,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.13.0a1(TBD)
+  - Version 3.13.0a1 introduces our initial support for asyncio in the snowflake-connector-python library.
+  The new asyncio functionality is available in the `snowflake.connector.aio` submodule.
+  Please note that this feature is in its alpha stage, and breaking changes may occur as development continues.
+
 - v3.12.2(September 11,2024)
   - Improved error handling for asynchronous queries, providing more detailed and informative error messages when an async query fails.
   - Improved inference of top-level domains for accounts specifying a region in China, now defaulting to snowflakecomputing.cn.
