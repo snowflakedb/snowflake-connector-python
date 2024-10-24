@@ -8,7 +8,7 @@ import json
 import os
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
-from logging import getLogger
+from logging import Filter, getLogger
 from random import choice
 from string import hexdigits
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -37,6 +37,22 @@ TOKEN_EXPIRATION_ERR_MESSAGE = (
 SFCDIGEST = "x-ms-meta-sfcdigest"
 ENCRYPTION_DATA = "x-ms-meta-encryptiondata"
 MATDESC = "x-ms-meta-matdesc"
+
+
+class AzureCredentialFilter(Filter):
+    LEAKY_FMT = '%s://%s:%s "%s %s %s" %s %s'
+
+    def filter(self, record):
+        if record.msg == AzureCredentialFilter.LEAKY_FMT and len(record.args) == 8:
+            record.args = (
+                record.args[:4] + (record.args[4].split("?")[0],) + record.args[5:]
+            )
+        return True
+
+
+getLogger("snowflake.connector.vendored.urllib3.connectionpool").addFilter(
+    AzureCredentialFilter()
+)
 
 
 class SnowflakeAzureRestClient(SnowflakeStorageClient):

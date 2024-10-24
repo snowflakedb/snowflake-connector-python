@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import glob
 import gzip
+import logging
 import os
 import sys
 import time
@@ -37,9 +38,10 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.azure]
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
-async def test_put_get_with_azure(tmpdir, aio_connection, from_path):
+async def test_put_get_with_azure(tmpdir, aio_connection, from_path, caplog):
     """[azure] Puts and Gets a small text using Azure."""
     # create a data file
+    caplog.set_level(logging.DEBUG)
     fname = str(tmpdir.join("test_put_get_with_azure_token.txt.gz"))
     original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, "wb") as f:
@@ -86,6 +88,11 @@ async def test_put_get_with_azure(tmpdir, aio_connection, from_path):
             file_stream.close()
         await csr.execute(f"drop table {table_name}")
 
+    for line in caplog.text.splitlines():
+        if "blob.core.windows.net" in line:
+            assert (
+                "sig=" not in line
+            ), "connectionpool logger is leaking sensitive information"
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:
         contents = fd.read().decode(UTF8)

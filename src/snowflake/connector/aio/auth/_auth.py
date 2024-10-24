@@ -13,7 +13,12 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable
 
 from ...auth import Auth as AuthSync
-from ...auth._auth import ID_TOKEN, MFA_TOKEN, delete_temporary_credential
+from ...auth._auth import (
+    AUTHENTICATION_REQUEST_KEY_WHITELIST,
+    ID_TOKEN,
+    MFA_TOKEN,
+    delete_temporary_credential,
+)
 from ...compat import urlencode
 from ...constants import (
     HTTP_HEADER_ACCEPT,
@@ -103,7 +108,6 @@ class Auth(AuthSync):
 
         body = copy.deepcopy(body_template)
         # updating request body
-        logger.debug("assertion content: %s", auth_instance.assertion_content)
         await auth_instance.update_body(body)
 
         logger.debug(
@@ -141,7 +145,10 @@ class Auth(AuthSync):
 
         logger.debug(
             "body['data']: %s",
-            {k: v for (k, v) in body["data"].items() if k != "PASSWORD"},
+            {
+                k: v if k in AUTHENTICATION_REQUEST_KEY_WHITELIST else "******"
+                for (k, v) in body["data"].items()
+            },
         )
 
         try:

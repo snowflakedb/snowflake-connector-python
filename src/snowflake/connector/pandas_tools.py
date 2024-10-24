@@ -26,6 +26,12 @@ from snowflake.connector.options import pandas
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
 from snowflake.connector.util_text import random_string
 
+from ._utils import (
+    _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING,
+    TempObjectType,
+    get_temp_type_for_object,
+    random_name_for_temp_object,
+)
 from .cursor import SnowflakeCursor
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -77,8 +83,9 @@ def _do_create_temp_stage(
     compression: str,
     auto_create_table: bool,
     overwrite: bool,
+    use_scoped_temp_object: bool,
 ) -> None:
-    create_stage_sql = f"CREATE TEMP STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ {stage_location} FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''})"
+    create_stage_sql = f"CREATE {get_temp_type_for_object(use_scoped_temp_object)} STAGE /* Python:snowflake.connector.pandas_tools.write_pandas() */ {stage_location} FILE_FORMAT=(TYPE=PARQUET COMPRESSION={compression}{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''})"
     logger.debug(f"creating stage with '{create_stage_sql}'")
     cursor.execute(create_stage_sql, _is_internal=True).fetchall()
 
@@ -91,8 +98,13 @@ def _create_temp_stage(
     compression: str,
     auto_create_table: bool,
     overwrite: bool,
+    use_scoped_temp_object: bool = False,
 ) -> str:
-    stage_name = random_string()
+    stage_name = (
+        random_name_for_temp_object(TempObjectType.STAGE)
+        if use_scoped_temp_object
+        else random_string()
+    )
     stage_location = build_location_helper(
         database=database,
         schema=schema,
@@ -101,7 +113,12 @@ def _create_temp_stage(
     )
     try:
         _do_create_temp_stage(
-            cursor, stage_location, compression, auto_create_table, overwrite
+            cursor,
+            stage_location,
+            compression,
+            auto_create_table,
+            overwrite,
+            use_scoped_temp_object,
         )
     except ProgrammingError as e:
         # User may not have the privilege to create stage on the target schema, so fall back to use current schema as
@@ -111,7 +128,12 @@ def _create_temp_stage(
         )
         stage_location = stage_name
         _do_create_temp_stage(
-            cursor, stage_location, compression, auto_create_table, overwrite
+            cursor,
+            stage_location,
+            compression,
+            auto_create_table,
+            overwrite,
+            use_scoped_temp_object,
         )
 
     return stage_location
@@ -122,9 +144,10 @@ def _do_create_temp_file_format(
     file_format_location: str,
     compression: str,
     sql_use_logical_type: str,
+    use_scoped_temp_object: bool,
 ) -> None:
     file_format_sql = (
-        f"CREATE TEMP FILE FORMAT {file_format_location} "
+        f"CREATE {get_temp_type_for_object(use_scoped_temp_object)} FILE FORMAT {file_format_location} "
         f"/* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         f"TYPE=PARQUET COMPRESSION={compression}{sql_use_logical_type}"
     )
@@ -139,8 +162,13 @@ def _create_temp_file_format(
     quote_identifiers: bool,
     compression: str,
     sql_use_logical_type: str,
+    use_scoped_temp_object: bool = False,
 ) -> str:
-    file_format_name = random_string()
+    file_format_name = (
+        random_name_for_temp_object(TempObjectType.FILE_FORMAT)
+        if use_scoped_temp_object
+        else random_string()
+    )
     file_format_location = build_location_helper(
         database=database,
         schema=schema,
@@ -149,7 +177,11 @@ def _create_temp_file_format(
     )
     try:
         _do_create_temp_file_format(
-            cursor, file_format_location, compression, sql_use_logical_type
+            cursor,
+            file_format_location,
+            compression,
+            sql_use_logical_type,
+            use_scoped_temp_object,
         )
     except ProgrammingError as e:
         # User may not have the privilege to create file format on the target schema, so fall back to use current schema
@@ -159,7 +191,11 @@ def _create_temp_file_format(
         )
         file_format_location = file_format_name
         _do_create_temp_file_format(
-            cursor, file_format_location, compression, sql_use_logical_type
+            cursor,
+            file_format_location,
+            compression,
+            sql_use_logical_type,
+            use_scoped_temp_object,
         )
 
     return file_format_location
@@ -263,6 +299,14 @@ def write_pandas(
             f"Invalid compression '{compression}', only acceptable values are: {compression_map.keys()}"
         )
 
+    _use_scoped_temp_object = (
+        conn._session_parameters.get(
+            _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, False
+        )
+        if conn._session_parameters
+        else False
+    )
+
     if create_temp_table:
         warnings.warn(
             "create_temp_table is deprecated, we still respect this parameter when it is True but "
@@ -324,6 +368,7 @@ def write_pandas(
         compression,
         auto_create_table,
         overwrite,
+        _use_scoped_temp_object,
     )
 
     with TemporaryDirectory() as tmp_folder:
@@ -370,6 +415,7 @@ def write_pandas(
             quote_identifiers,
             compression_map[compression],
             sql_use_logical_type,
+            _use_scoped_temp_object,
         )
         infer_schema_sql = f"SELECT COLUMN_NAME, TYPE FROM table(infer_schema(location=>'@{stage_location}', file_format=>'{file_format_location}'))"
         logger.debug(f"inferring schema with '{infer_schema_sql}'")

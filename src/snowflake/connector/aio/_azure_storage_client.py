@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
+from ..azure_storage_client import AzureCredentialFilter
 from ..azure_storage_client import (
     SnowflakeAzureRestClient as SnowflakeAzureRestClientSync,
 )
@@ -25,13 +26,15 @@ from ._storage_client import SnowflakeStorageClient as SnowflakeStorageClientAsy
 if TYPE_CHECKING:  # pragma: no cover
     from ..file_transfer_agent import SnowflakeFileMeta, StorageCredential
 
-logger = getLogger(__name__)
-
 from ..azure_storage_client import (
     ENCRYPTION_DATA,
     MATDESC,
     TOKEN_EXPIRATION_ERR_MESSAGE,
 )
+
+logger = getLogger(__name__)
+
+getLogger("aiohttp").addFilter(AzureCredentialFilter())
 
 
 class SnowflakeAzureRestClient(

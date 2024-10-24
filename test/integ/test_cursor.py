@@ -767,7 +767,11 @@ def test_timeout_query(conn_cnx):
                     "select seq8() as c1 from table(generator(timeLimit => 60))",
                     timeout=5,
                 )
-            assert err.value.errno == 604, "Invalid error code"
+            assert err.value.errno == 604, (
+                "Invalid error code"
+                and "SQL execution was cancelled by the client due to a timeout"
+                in err.value.msg
+            )
 
 
 def test_executemany(conn, db_parameters):

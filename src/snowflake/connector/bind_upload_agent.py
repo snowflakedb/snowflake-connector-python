@@ -10,6 +10,10 @@ from io import BytesIO
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+from ._utils import (
+    _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING,
+    get_temp_type_for_object,
+)
 from .errors import BindUploadError, Error
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -19,11 +23,6 @@ logger = getLogger(__name__)
 
 
 class BindUploadAgent:
-    _STAGE_NAME = "SYSTEMBIND"
-    _CREATE_STAGE_STMT = (
-        f"create or replace temporary stage {_STAGE_NAME} "
-        "file_format=(type=csv field_optionally_enclosed_by='\"')"
-    )
 
     def __init__(
         self,
@@ -38,13 +37,27 @@ class BindUploadAgent:
             rows: Rows of binding parameters in CSV format.
             stream_buffer_size: Size of each file, default to 10MB.
         """
+        self._use_scoped_temp_object = (
+            cursor.connection._session_parameters.get(
+                _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, False
+            )
+            if cursor.connection._session_parameters
+            else False
+        )
+        self._STAGE_NAME = (
+            "SNOWPARK_TEMP_STAGE_BIND" if self._use_scoped_temp_object else "SYSTEMBIND"
+        )
         self.cursor = cursor
         self.rows = rows
         self._stream_buffer_size = stream_buffer_size
         self.stage_path = f"@{self._STAGE_NAME}/{uuid.uuid4().hex}"
 
     def _create_stage(self) -> None:
-        self.cursor.execute(self._CREATE_STAGE_STMT)
+        create_stage_sql = (
+            f"create or replace {get_temp_type_for_object(self._use_scoped_temp_object)} stage {self._STAGE_NAME} "
+            "file_format=(type=csv field_optionally_enclosed_by='\"')"
+        )
+        self.cursor.execute(create_stage_sql)
 
     def upload(self) -> None:
         try:

@@ -92,8 +92,6 @@ DROP TABLE IF EXISTS {name}
                 )
             )
 
-    request.addfinalizer(fin)
-
     try:
         async with snowflake.connector.aio.SnowflakeConnection(**db_config) as cnx:
             await cnx.autocommit(False)
@@ -159,3 +157,5 @@ SELECT SUM(cc1) FROM {name}
                 )
             ).fetchone()
             assert ret[0] == 6
+    yield
+    await fin()

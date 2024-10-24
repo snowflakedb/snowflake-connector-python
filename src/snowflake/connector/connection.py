@@ -52,6 +52,7 @@ from .compat import IS_LINUX, IS_WINDOWS, quote, urlencode
 from .config_manager import CONFIG_MANAGER, _get_default_connection_params
 from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
+    _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
@@ -1455,6 +1456,8 @@ class SnowflakeConnection:
                     )
                 except OperationalError as auth_op:
                     if auth_op.errno == ER_FAILED_TO_CONNECT_TO_DB:
+                        if _CONNECTIVITY_ERR_MSG in e.msg:
+                            auth_op.msg += f"\n{_CONNECTIVITY_ERR_MSG}"
                         raise auth_op from e
                     logger.debug("Continuing authenticator specific timeout handling")
                     continue
