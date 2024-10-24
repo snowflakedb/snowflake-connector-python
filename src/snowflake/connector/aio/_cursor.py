@@ -286,6 +286,10 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 )
             if self._timebomb is not None:
                 self._timebomb.cancel()
+                try:
+                    await self._timebomb
+                except asyncio.CancelledError:
+                    pass
                 logger.debug("cancelled timebomb in finally")
 
         if "data" in ret and "parameters" in ret["data"]:
