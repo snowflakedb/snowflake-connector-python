@@ -676,7 +676,7 @@ async def validate_pandas(
         df_new = await cursor_table.fetch_pandas_all()
         total_rows = df_new.shape[0]
     else:
-        for df_new in await cursor_table.fetch_pandas_batches():
+        async for df_new in await cursor_table.fetch_pandas_batches():
             total_rows += df_new.shape[0]
             total_batches += 1
     end_time = time.time()
