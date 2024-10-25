@@ -87,8 +87,8 @@ async def ingest_data(request, conn_cnx, db_parameters):
                 "drop table if exists {name}".format(name=db_parameters["name"])
             )
 
-    request.addfinalizer(fin)
-    return first_val, last_val
+    yield first_val, last_val
+    await fin()
 
 
 @pytest.mark.aws

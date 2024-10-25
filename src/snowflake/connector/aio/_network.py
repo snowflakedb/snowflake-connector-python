@@ -28,6 +28,7 @@ from ..compat import (
     urlparse,
 )
 from ..constants import (
+    _CONNECTIVITY_ERR_MSG,
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
@@ -798,8 +799,19 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             finally:
                 raw_ret.close()  # ensure response is closed
         except aiohttp.ClientSSLError as se:
-            logger.debug("Hit non-retryable SSL error, %s", str(se))
-
+            msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
+            logger.debug(msg)
+            # the following code is for backward compatibility with old versions of python connector which calls
+            # self._handle_unknown_error to process SSLError
+            Error.errorhandler_wrapper(
+                self._connection,
+                None,
+                OperationalError,
+                {
+                    "msg": msg,
+                    "errno": ER_FAILED_TO_REQUEST,
+                },
+            )
         # TODO: sync feature parity, aiohttp network error handling
         except (
             BadStatusLine,

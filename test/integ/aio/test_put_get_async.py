@@ -44,7 +44,7 @@ async def test_utf8_filename(tmp_path, aio_connection):
     await aio_connection.connect()
     cursor = aio_connection.cursor()
     await cursor.execute(f"create temporary stage {stage_name}")
-    (
+    await (
         await cursor.execute(
             "PUT 'file://{}' @{}".format(str(test_file).replace("\\", "/"), stage_name)
         )
@@ -128,7 +128,7 @@ async def test_put_special_file_name(tmp_path, aio_connection):
     cursor = aio_connection.cursor()
     await cursor.execute(f"create temporary stage {stage_name}")
     filename_in_put = str(test_file).replace("\\", "/")
-    (
+    await (
         await cursor.execute(
             f"PUT 'file://{filename_in_put}' @{stage_name}",
         )
