@@ -1728,13 +1728,38 @@ class SnowflakeCursor:
 
 class DictCursor(SnowflakeCursor):
     """Cursor returning results in a dictionary."""
-
     def __init__(self, connection) -> None:
         super().__init__(
             connection,
             use_dict_result=True,
         )
 
+    def fetchone(self) -> dict | None:
+        return super().fetchone()
+    
+    def fetchmany(self, size: int | None = None) -> list[dict]:
+        return super().fetchmany()
+    
+    def fetchall(self) -> list[dict]:
+        return super().fetchall()
+
+class TupleCursor(SnowflakeCursor):
+    """Cursor returning results in a dictionary."""
+
+    def __init__(self, connection) -> None:
+        super().__init__(
+            connection,
+            use_dict_result=False,
+        )
+
+    def fetchone(self) -> tuple | None:
+        return super().fetchone()
+    
+    def fetchmany(self, size: int | None = None) -> list[tuple]:
+        return super().fetchmany()
+    
+    def fetchall(self) -> list[tuple]:
+        return super().fetchall()
 
 def __getattr__(name):
     if name == "NanoarrowUsage":
