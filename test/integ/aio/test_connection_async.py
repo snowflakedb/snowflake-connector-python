@@ -25,8 +25,8 @@ import pytest
 import snowflake.connector.aio
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
 from snowflake.connector.aio import SnowflakeConnection
+from snowflake.connector.aio._description import CLIENT_NAME
 from snowflake.connector.connection import DEFAULT_CLIENT_PREFETCH_THREADS
-from snowflake.connector.description import CLIENT_NAME
 from snowflake.connector.errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
@@ -1254,9 +1254,8 @@ async def test_ocsp_cache_working(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.skip("SNOW-1617451 async telemetry support")
 async def test_imported_packages_telemetry(
-    conn_cnx, capture_sf_telemetry, db_parameters
+    conn_cnx, capture_sf_telemetry_async, db_parameters
 ):
     # these imports are not used but for testing
     import html.parser  # noqa: F401
@@ -1281,7 +1280,7 @@ async def test_imported_packages_telemetry(
         "math",
     ]
 
-    async with conn_cnx() as conn, capture_sf_telemetry.patch_connection(
+    async with conn_cnx() as conn, capture_sf_telemetry_async.patch_connection(
         conn, False
     ) as telemetry_test:
         await conn._log_telemetry_imported_packages()
@@ -1312,7 +1311,9 @@ async def test_imported_packages_telemetry(
     }
     async with snowflake.connector.aio.SnowflakeConnection(
         **config
-    ) as conn, capture_sf_telemetry.patch_connection(conn, False) as telemetry_test:
+    ) as conn, capture_sf_telemetry_async.patch_connection(
+        conn, False
+    ) as telemetry_test:
         await conn._log_telemetry_imported_packages()
         assert len(telemetry_test.records) > 0
         assert any(
@@ -1328,7 +1329,9 @@ async def test_imported_packages_telemetry(
     config["log_imported_packages_in_telemetry"] = False
     async with snowflake.connector.aio.SnowflakeConnection(
         **config
-    ) as conn, capture_sf_telemetry.patch_connection(conn, False) as telemetry_test:
+    ) as conn, capture_sf_telemetry_async.patch_connection(
+        conn, False
+    ) as telemetry_test:
         await conn._log_telemetry_imported_packages()
         assert len(telemetry_test.records) == 0
 
@@ -1513,7 +1516,9 @@ async def test_mock_non_existing_server(conn_cnx, caplog):
         )
 
 
-@pytest.mark.skip("SNOW-1617451 async telemetry support")
+@pytest.mark.skip(
+    "SNOW-1759084 await anext(self._generator, None) does not execute code after yield"
+)
 async def test_disable_telemetry(conn_cnx, caplog):
     # default behavior, closing connection, it will send telemetry
     with caplog.at_level(logging.DEBUG):
