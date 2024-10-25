@@ -827,6 +827,12 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             RuntimeError,
             AttributeError,  # json decoding error
         ) as err:
+            if "Event loop is closed" in str(err):
+                logger.warning(
+                    f"Snowflake connection is never closed, which is causing {err}"
+                    "please use SnowflakeConnection.close() to close connection and save resources"
+                )
+                return {}
             if is_login_request(full_url):
                 logger.debug(
                     "Hit a timeout error while logging in. Will be handled by "
