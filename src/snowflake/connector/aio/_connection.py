@@ -654,6 +654,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
     @property
     def errorhandler(self) -> None:
+        # check SNOW-1763103
         raise NotImplementedError(
             "Async Snowflake Python Connector does not support errorhandler. "
             "Please open a feature request issue in github if your want this feature: "
@@ -662,6 +663,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
     @errorhandler.setter
     def errorhandler(self, value) -> None:
+        # check SNOW-1763103
         raise NotImplementedError(
             "Async Snowflake Python Connector does not support errorhandler. "
             "Please open a feature request issue in github if your want this feature: "

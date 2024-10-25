@@ -801,6 +801,24 @@ class SnowflakeCursor(SnowflakeCursorSync):
         kwargs["_exec_async"] = True
         return await self.execute(*args, **kwargs)
 
+    @property
+    def errorhandler(self):
+        # check SNOW-1763103
+        raise NotImplementedError(
+            "Async Snowflake Python Connector does not support errorhandler. "
+            "Please open a feature request issue in github if your want this feature: "
+            "https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose."
+        )
+
+    @errorhandler.setter
+    def errorhandler(self, value):
+        # check SNOW-1763103
+        raise NotImplementedError(
+            "Async Snowflake Python Connector does not support errorhandler. "
+            "Please open a feature request issue in github if your want this feature: "
+            "https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose."
+        )
+
     async def describe(self, *args: Any, **kwargs: Any) -> list[ResultMetadata]:
         """Obtain the schema of the result without executing the query.
 

@@ -767,6 +767,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         except (
             aiohttp.ClientConnectionError,
             aiohttp.ClientConnectorError,
+            aiohttp.ConnectionTimeoutError,
             asyncio.TimeoutError,
             OpenSSL.SSL.SysCallError,
             KeyError,  # SNOW-39175: asn1crypto.keys.PublicKeyInfo
@@ -792,6 +793,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 )
                 raise RetryRequest(err)
         except Exception as err:
+            if isinstance(err, (Error, RetryRequest, ReauthenticationRequest)):
+                raise err
             raise OperationalError(
                 msg=f"Unexpected error occurred during request execution: {err}"
                 "Please check the stack trace for more information and retry the operation."
