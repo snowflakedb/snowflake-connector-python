@@ -9,7 +9,57 @@ from typing import AsyncContextManager, Callable, Generator
 import pytest
 
 from snowflake.connector.aio import SnowflakeConnection
+from snowflake.connector.aio._telemetry import TelemetryClient
 from snowflake.connector.connection import DefaultConverterClass
+from snowflake.connector.telemetry import TelemetryData
+
+
+class TelemetryCaptureHandlerAsync(TelemetryClient):
+    def __init__(
+        self,
+        real_telemetry: TelemetryClient,
+        propagate: bool = True,
+    ):
+        super().__init__(real_telemetry._rest)
+        self.records: list[TelemetryData] = []
+        self._real_telemetry = real_telemetry
+        self._propagate = propagate
+
+    async def add_log_to_batch(self, telemetry_data):
+        self.records.append(telemetry_data)
+        if self._propagate:
+            await super().add_log_to_batch(telemetry_data)
+
+    async def send_batch(self):
+        self.records = []
+        if self._propagate:
+            await super().send_batch()
+
+
+class TelemetryCaptureFixtureAsync:
+    """Provides a way to capture Snowflake telemetry messages."""
+
+    @asynccontextmanager
+    async def patch_connection(
+        self,
+        con: SnowflakeConnection,
+        propagate: bool = True,
+    ) -> Generator[TelemetryCaptureHandlerAsync, None, None]:
+        original_telemetry = con._telemetry
+        new_telemetry = TelemetryCaptureHandlerAsync(
+            original_telemetry,
+            propagate,
+        )
+        con._telemetry = new_telemetry
+        try:
+            yield new_telemetry
+        finally:
+            con._telemetry = original_telemetry
+
+
+@pytest.fixture(scope="session")
+def capture_sf_telemetry_async() -> TelemetryCaptureFixtureAsync:
+    return TelemetryCaptureFixtureAsync()
 
 
 async def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
