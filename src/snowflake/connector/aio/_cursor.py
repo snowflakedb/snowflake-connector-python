@@ -129,8 +129,10 @@ class SnowflakeCursor(SnowflakeCursorSync):
             logger.debug("started timebomb in %ss", timeout)
             await asyncio.sleep(timeout)
             await self.__cancel_query(query)
+            return True
         except asyncio.CancelledError:
             logger.debug("cancelled timebomb in timebomb task")
+            return False
 
     async def __cancel_query(self, query) -> None:
         if self._sequence_counter >= 0 and not self.is_closed():
@@ -284,7 +286,10 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 )
             if self._timebomb is not None:
                 self._timebomb.cancel()
-                self._timebomb = None
+                try:
+                    await self._timebomb
+                except asyncio.CancelledError:
+                    pass
                 logger.debug("cancelled timebomb in finally")
 
         if "data" in ret and "parameters" in ret["data"]:
@@ -674,6 +679,11 @@ class SnowflakeCursor(SnowflakeCursorSync):
             logger.debug(ret)
             err = ret["message"]
             code = ret.get("code", -1)
+            if self._timebomb and self._timebomb.result():
+                err = (
+                    f"SQL execution was cancelled by the client due to a timeout. "
+                    f"Error message received from the server: {err}"
+                )
             if "data" in ret:
                 err += ret["data"].get("errorMessage", "")
             errvalue = {
@@ -1067,6 +1077,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
         self._prefetch_hook = wait_until_ready
 
     async def query_result(self, qid: str) -> SnowflakeCursor:
+        """Query the result of a previously executed query."""
         url = f"/queries/{qid}/result"
         ret = await self._connection.rest.request(url=url, method="get")
         self._sfqid = (

@@ -10,6 +10,7 @@ from logging import getLogger
 from typing import TYPE_CHECKING, cast
 
 from snowflake.connector import Error
+from snowflake.connector._utils import get_temp_type_for_object
 from snowflake.connector.bind_upload_agent import BindUploadAgent as BindUploadAgentSync
 from snowflake.connector.errors import BindUploadError
 
@@ -30,7 +31,11 @@ class BindUploadAgent(BindUploadAgentSync):
         self.cursor = cast("SnowflakeCursor", cursor)
 
     async def _create_stage(self) -> None:
-        await self.cursor.execute(self._CREATE_STAGE_STMT)
+        create_stage_sql = (
+            f"create or replace {get_temp_type_for_object(self._use_scoped_temp_object)} stage {self._STAGE_NAME} "
+            "file_format=(type=csv field_optionally_enclosed_by='\"')"
+        )
+        await self.cursor.execute(create_stage_sql)
 
     async def upload(self) -> None:
         try:

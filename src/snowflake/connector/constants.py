@@ -428,3 +428,9 @@ ENV_VAR_TEST_MODE = "SNOWFLAKE_TEST_MODE"
 
 
 _DOMAIN_NAME_MAP = {_DEFAULT_HOSTNAME_TLD: "GLOBAL", _CHINA_HOSTNAME_TLD: "CHINA"}
+
+_CONNECTIVITY_ERR_MSG = (
+    "Verify that the hostnames and port numbers in SYSTEM$ALLOWLIST are added to your firewall's allowed list."
+    "\nTo further troubleshoot your connection you may reference the following article: "
+    "https://docs.snowflake.com/en/user-guide/client-connectivity-troubleshooting/overview."
+)
