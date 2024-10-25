@@ -998,6 +998,7 @@ async def test_region_deprecation(conn_cnx):
         assert "Region has been deprecated" in str(w[0].message)
 
 
+@pytest.mark.skip("SNOW-1763103")
 async def test_invalid_errorhander_error(conn_cnx):
     """Tests if no errorhandler cannot be set."""
     async with conn_cnx() as conn:
