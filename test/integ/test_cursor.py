@@ -1027,14 +1027,12 @@ def test_real_decimal(conn, db_parameters):
             assert rec["RATIO"] == decimal.Decimal("23.4"), "the decimal value"
 
 
-@pytest.mark.skip("SNOW-1763103")
 def test_none_errorhandler(conn_testaccount):
     c = conn_testaccount.cursor()
     with pytest.raises(errors.ProgrammingError):
         c.errorhandler = None
 
 
-@pytest.mark.skip("SNOW-1763103")
 def test_nope_errorhandler(conn_testaccount):
     def user_errorhandler(connection, cursor, errorclass, errorvalue):
         pass
