@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import stat
 import sys
@@ -19,6 +20,7 @@ from textwrap import dedent
 from unittest import mock
 from unittest.mock import patch
 
+import aiohttp
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -35,7 +37,11 @@ from snowflake.connector.aio.auth import (
 )
 from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
-from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
+from snowflake.connector.constants import (
+    _CONNECTIVITY_ERR_MSG,
+    ENV_VAR_PARTNER,
+    QueryStatus,
+)
 from snowflake.connector.errors import (
     Error,
     InterfaceError,
@@ -532,3 +538,16 @@ def test_request_guid():
         and SnowflakeRestful.add_request_guid("https://test.abc.cn?a=b")
         == "https://test.abc.cn?a=b"
     )
+
+
+async def test_ssl_error_hint(caplog):
+    with mock.patch(
+        "aiohttp.ClientSession.request",
+        side_effect=aiohttp.ClientSSLError(mock.Mock(), OSError("SSL error")),
+    ), caplog.at_level(logging.DEBUG):
+        with pytest.raises(OperationalError) as exc:
+            await fake_connector().connect()
+    assert _CONNECTIVITY_ERR_MSG in exc.value.msg and isinstance(
+        exc.value, OperationalError
+    )
+    assert "SSL error" in caplog.text and _CONNECTIVITY_ERR_MSG in caplog.text

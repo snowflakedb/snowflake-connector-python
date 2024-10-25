@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import stat
 import sys
@@ -22,7 +23,12 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
-from snowflake.connector.errors import Error, OperationalError, ProgrammingError
+from snowflake.connector.errors import (
+    Error,
+    InterfaceError,
+    OperationalError,
+    ProgrammingError,
+)
 from snowflake.connector.network import SnowflakeRestful
 
 from ..randomize import random_string
@@ -41,7 +47,11 @@ except ImportError:
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByUsrPwdMfa
     from snowflake.connector.config_manager import CONFIG_MANAGER
-    from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
+    from snowflake.connector.constants import (
+        _CONNECTIVITY_ERR_MSG,
+        ENV_VAR_PARTNER,
+        QueryStatus,
+    )
 except ImportError:
     ENV_VAR_PARTNER = "SF_PARTNER"
     QueryStatus = CONFIG_MANAGER = None
@@ -340,7 +350,7 @@ def test_invalid_backoff_policy():
         # passing a non-generator function should not work
         _ = fake_connector(backoff_policy=lambda: None)
 
-    with pytest.raises(OperationalError):
+    with pytest.raises(InterfaceError):
         # passing a generator function should make it pass config and error during connection
         _ = fake_connector(backoff_policy=zero_backoff)
 
@@ -546,3 +556,19 @@ def test_request_guid():
         and SnowflakeRestful.add_request_guid("https://test.abc.cn?a=b")
         == "https://test.abc.cn?a=b"
     )
+
+
+@pytest.mark.skipolddriver
+def test_ssl_error_hint(caplog):
+    from snowflake.connector.vendored.requests.exceptions import SSLError
+
+    with mock.patch(
+        "snowflake.connector.vendored.requests.sessions.Session.request",
+        side_effect=SSLError("SSL error"),
+    ), caplog.at_level(logging.DEBUG):
+        with pytest.raises(OperationalError) as exc:
+            fake_connector()
+    assert _CONNECTIVITY_ERR_MSG in exc.value.msg and isinstance(
+        exc.value, OperationalError
+    )
+    assert "SSL error" in caplog.text and _CONNECTIVITY_ERR_MSG in caplog.text

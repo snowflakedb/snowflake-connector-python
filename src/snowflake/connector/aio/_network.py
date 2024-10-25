@@ -11,6 +11,7 @@ import gzip
 import itertools
 import json
 import logging
+import re
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +20,7 @@ from urllib3.util.url import parse_url
 
 from ..compat import FORBIDDEN, OK, UNAUTHORIZED, urlencode, urlparse
 from ..constants import (
+    _CONNECTIVITY_ERR_MSG,
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
@@ -51,16 +53,19 @@ from ..network import (
     HEADER_AUTHORIZATION_KEY,
     HEADER_SNOWFLAKE_TOKEN,
     ID_TOKEN_EXPIRED_GS_CODE,
+    IMPLEMENTATION,
     MASTER_TOKEN_EXPIRED_GS_CODE,
     MASTER_TOKEN_INVALD_GS_CODE,
     MASTER_TOKEN_NOTFOUND_GS_CODE,
     NO_TOKEN,
-    PYTHON_CONNECTOR_USER_AGENT,
+    PLATFORM,
+    PYTHON_VERSION,
     QUERY_IN_PROGRESS_ASYNC_CODE,
     QUERY_IN_PROGRESS_CODE,
     REQUEST_ID,
     REQUEST_TYPE_RENEW,
     SESSION_EXPIRED_GS_CODE,
+    SNOWFLAKE_CONNECTOR_VERSION,
     ReauthenticationRequest,
     RetryRequest,
 )
@@ -74,12 +79,15 @@ from ..sqlstate import (
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
 )
 from ..time_util import TimeoutBackoffCtx
+from ._description import CLIENT_NAME
 from ._ssl_connector import SnowflakeSSLConnector
 
 if TYPE_CHECKING:
     from snowflake.connector.aio import SnowflakeConnection
 
 logger = logging.getLogger(__name__)
+
+PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
 
 try:
     import aiohttp
@@ -155,7 +163,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         self._ocsp_mode = (
             self._connection._ocsp_mode() if self._connection else OCSPMode.FAIL_OPEN
         )
-        if self._connection.proxy_host:
+        if self._connection and self._connection.proxy_host:
             self._get_proxy_headers = lambda url: {"Host": parse_url(url).hostname}
         else:
             self._get_proxy_headers = lambda _: None
@@ -408,6 +416,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         headers: dict[str, str],
         token: str = None,
         timeout: int | None = None,
+        is_fetch_query_status: bool = False,
     ) -> dict[str, Any]:
         if "Content-Encoding" in headers:
             del headers["Content-Encoding"]
@@ -421,6 +430,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             headers,
             timeout=timeout,
             token=token,
+            is_fetch_query_status=is_fetch_query_status,
         )
         if ret.get("code") == SESSION_EXPIRED_GS_CODE:
             try:
@@ -435,7 +445,12 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 )
             )
             if ret.get("success"):
-                return await self._get_request(url, headers, token=self.token)
+                return await self._get_request(
+                    url,
+                    headers,
+                    token=self.token,
+                    is_fetch_query_status=is_fetch_query_status,
+                )
 
         return ret
 
@@ -509,7 +524,13 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             result_url = ret["data"]["getResultUrl"]
             logger.debug("ping pong starting...")
             ret = await self._get_request(
-                result_url, headers, token=self.token, timeout=timeout
+                result_url,
+                headers,
+                token=self.token,
+                timeout=timeout,
+                is_fetch_query_status=bool(
+                    re.match(r"^/queries/.+/result$", result_url)
+                ),
             )
             logger.debug("ret[code] = %s", ret.get("code", "N/A"))
             logger.debug("ping pong done")
@@ -595,6 +616,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
 
         full_url = retry_ctx.add_retry_params(full_url)
         full_url = SnowflakeRestful.add_request_guid(full_url)
+        is_fetch_query_status = kwargs.pop("is_fetch_query_status", False)
         try:
             return_object = await self._request_exec(
                 session=session,
@@ -607,6 +629,13 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             )
             if return_object is not None:
                 return return_object
+            if is_fetch_query_status:
+                err_msg = (
+                    "fetch query status failed and http request returned None, this"
+                    " is usually caused by transient network failures, retrying..."
+                )
+                logger.info(err_msg)
+                raise RetryRequest(err_msg)
             self._handle_unknown_error(method, full_url, headers, data, conn)
             return {}
         except RetryRequest as e:
@@ -762,8 +791,19 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             finally:
                 raw_ret.close()  # ensure response is closed
         except (aiohttp.ClientSSLError, aiohttp.ClientConnectorSSLError) as se:
-            logger.debug("Hit non-retryable SSL error, %s", str(se))
-
+            msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
+            logger.debug(msg)
+            # the following code is for backward compatibility with old versions of python connector which calls
+            # self._handle_unknown_error to process SSLError
+            Error.errorhandler_wrapper(
+                self._connection,
+                None,
+                OperationalError,
+                {
+                    "msg": msg,
+                    "errno": ER_FAILED_TO_REQUEST,
+                },
+            )
         except (
             aiohttp.ClientConnectionError,
             aiohttp.ClientConnectorError,

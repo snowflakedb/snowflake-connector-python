@@ -24,12 +24,11 @@ from snowflake.connector import (
     InterfaceError,
     NotSupportedError,
     ProgrammingError,
-    connection,
     constants,
     errorcode,
     errors,
 )
-from snowflake.connector.aio import DictCursor, SnowflakeCursor
+from snowflake.connector.aio import DictCursor, SnowflakeCursor, _connection
 from snowflake.connector.aio._result_batch import (
     ArrowResultBatch,
     JSONResultBatch,
@@ -729,7 +728,11 @@ async def test_timeout_query(conn_cnx):
                     "select seq8() as c1 from table(generator(timeLimit => 60))",
                     timeout=5,
                 )
-            assert err.value.errno == 604, "Invalid error code"
+            assert err.value.errno == 604, (
+                "Invalid error code"
+                and "SQL execution was cancelled by the client due to a timeout"
+                in err.value.msg
+            )
 
 
 async def test_executemany(conn, db_parameters):
@@ -1411,7 +1414,6 @@ async def test_scroll(conn_cnx):
                 assert nse.errno == SQLSTATE_FEATURE_NOT_SUPPORTED
 
 
-@pytest.mark.xfail(reason="SNOW-1572217 async telemetry support")
 async def test__log_telemetry_job_data(conn_cnx, caplog):
     """Tests whether we handle missing connection object correctly while logging a telemetry event."""
     async with conn_cnx() as con:
@@ -1422,13 +1424,15 @@ async def test__log_telemetry_job_data(conn_cnx, caplog):
                     TelemetryField.ARROW_FETCH_ALL, True
                 )  # dummy value
     assert (
-        "snowflake.connector.cursor",
+        "snowflake.connector.aio._cursor",
         logging.WARNING,
         "Cursor failed to log to telemetry. Connection object may be None.",
     ) in caplog.record_tuples
 
 
-@pytest.mark.skip(reason="SNOW-1572217 async telemetry support")
+@pytest.mark.skip(
+    reason="SNOW-1759076 Async for support in Cursor.get_result_batches()"
+)
 @pytest.mark.parametrize(
     "result_format,expected_chunk_type",
     (
@@ -1475,6 +1479,9 @@ async def test_resultbatch(
     post_pickle_partitions: list[ResultBatch] = pickle.loads(pickle_str)
     total_rows = 0
     # Make sure the batches can be iterated over individually
+    async for it in post_pickle_partitions:
+        print(it)
+
     for i, partition in enumerate(post_pickle_partitions):
         # Tests whether the getter functions are working
         if i == 0:
@@ -1576,15 +1583,16 @@ async def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format)
             ]
 
 
-@pytest.mark.skip("TODO: async telemetry SNOW-1572217")
-async def test_optional_telemetry(conn_cnx, capture_sf_telemetry):
+async def test_optional_telemetry(conn_cnx, capture_sf_telemetry_async):
     """Make sure that we do not fail when _first_chunk_time is not present in cursor."""
-    with conn_cnx() as con:
-        with con.cursor() as cur:
-            with capture_sf_telemetry.patch_connection(con, False) as telemetry:
-                cur.execute("select 1;")
+    async with conn_cnx() as con:
+        async with con.cursor() as cur:
+            async with capture_sf_telemetry_async.patch_connection(
+                con, False
+            ) as telemetry:
+                await cur.execute("select 1;")
                 cur._first_chunk_time = None
-                assert cur.fetchall() == [
+                assert await cur.fetchall() == [
                     (1,),
                 ]
             assert not any(
@@ -1701,7 +1709,7 @@ async def test_multi_statement_failure(conn_cnx):
     error when a multi-statement is submitted, regardless of the MULTI_STATEMENT_COUNT parameter.
     """
     try:
-        connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
+        _connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
             "2.8.1",
             (type(None), str),
         )
@@ -1716,7 +1724,7 @@ async def test_multi_statement_failure(conn_cnx):
                     )
                     await cur.execute("select 1; select 2; select 3;")
     finally:
-        connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
+        _connection.DEFAULT_CONFIGURATION["internal_application_version"] = (
             CLIENT_VERSION,
             (type(None), str),
         )

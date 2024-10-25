@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import copy
 import logging
 import os
 import pathlib
@@ -29,11 +30,12 @@ from snowflake.connector import (
 from .._query_context_cache import QueryContextCache
 from ..compat import IS_LINUX, quote, urlencode
 from ..config_manager import CONFIG_MANAGER, _get_default_connection_params
-from ..connection import DEFAULT_CONFIGURATION
+from ..connection import DEFAULT_CONFIGURATION as DEFAULT_CONFIGURATION_SYNC
 from ..connection import SnowflakeConnection as SnowflakeConnectionSync
 from ..connection import _get_private_bytes_from_file
 from ..connection_diagnostic import ConnectionDiagnostic
 from ..constants import (
+    _CONNECTIVITY_ERR_MSG,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -69,7 +71,9 @@ from ..telemetry import TelemetryData, TelemetryField
 from ..time_util import get_time_millis
 from ..util_text import split_statements
 from ._cursor import SnowflakeCursor
+from ._description import CLIENT_NAME
 from ._network import SnowflakeRestful
+from ._telemetry import TelemetryClient
 from ._time_util import HeartBeatTimer
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
@@ -85,6 +89,10 @@ from .auth import (
 )
 
 logger = getLogger(__name__)
+
+# deep copy to avoid pollute sync config
+DEFAULT_CONFIGURATION = copy.deepcopy(DEFAULT_CONFIGURATION_SYNC)
+DEFAULT_CONFIGURATION["application"] = (CLIENT_NAME, (type(None), str))
 
 
 class SnowflakeConnection(SnowflakeConnectionSync):
@@ -103,11 +111,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             kwargs, connection_name, connections_file_path
         )
         self._connected = False
-        # TODO: async telemetry support
-        self._telemetry = None
         self.expired = False
-        # get the imported modules from sys.modules
-        # self._log_telemetry_imported_packages() # TODO: async telemetry support
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
@@ -440,6 +444,8 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     )
                 except OperationalError as auth_op:
                     if auth_op.errno == ER_FAILED_TO_CONNECT_TO_DB:
+                        if _CONNECTIVITY_ERR_MSG in e.msg:
+                            auth_op.msg += f"\n{_CONNECTIVITY_ERR_MSG}"
                         raise auth_op from e
                     logger.debug("Continuing authenticator specific timeout handling")
                     continue
@@ -569,7 +575,8 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         return status_ret, status_resp
 
     async def _log_telemetry(self, telemetry_data) -> None:
-        raise NotImplementedError("asyncio telemetry is not supported")
+        if self.telemetry_enabled:
+            await self._telemetry.try_add_log_to_batch(telemetry_data)
 
     async def _log_telemetry_imported_packages(self) -> None:
         if self._log_imported_packages_in_telemetry:
@@ -736,8 +743,9 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             # close telemetry first, since it needs rest to send remaining data
             logger.info("closed")
 
-            # TODO: async telemetry support
-            # self._telemetry.close(send_on_close=bool(retry and self.telemetry_enabled))
+            await self._telemetry.close(
+                send_on_close=bool(retry and self.telemetry_enabled)
+            )
             if (
                 await self._all_async_queries_finished()
                 and not self._server_session_keep_alive
@@ -903,6 +911,8 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     raise Exception(str(exceptions_dict))
         else:
             await self.__open_connection()
+        self._telemetry = TelemetryClient(self._rest)
+        await self._log_telemetry_imported_packages()
 
     def cursor(
         self, cursor_class: type[SnowflakeCursor] = SnowflakeCursor
