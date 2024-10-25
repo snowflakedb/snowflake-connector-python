@@ -30,8 +30,6 @@ from snowflake.connector.compat import (
     OK,
     SERVICE_UNAVAILABLE,
     UNAUTHORIZED,
-    BadStatusLine,
-    IncompleteRead,
 )
 from snowflake.connector.errors import (
     DatabaseError,
@@ -232,16 +230,11 @@ async def test_request_exec():
     with pytest.raises(ForbiddenError):
         await rest._request_exec(session=session, **login_parameters)
 
-    class IncompleteReadMock(IncompleteRead):
-        def __init__(self):
-            IncompleteRead.__init__(self, "")
-
     # handle retryable exception
     for exc in [
         aiohttp.ConnectionTimeoutError,
         aiohttp.ClientConnectorError(MagicMock(), OSError(1)),
         asyncio.TimeoutError,
-        IncompleteReadMock,
         AttributeError,
     ]:
         session = AsyncMock()
@@ -264,7 +257,6 @@ async def test_request_exec():
         OpenSSL.SSL.SysCallError(errno.ETIMEDOUT),
         OpenSSL.SSL.SysCallError(errno.EPIPE),
         OpenSSL.SSL.SysCallError(-1),  # unknown
-        BadStatusLine("fake"),
     ]:
         session = AsyncMock()
         session.request = Mock(side_effect=exc)

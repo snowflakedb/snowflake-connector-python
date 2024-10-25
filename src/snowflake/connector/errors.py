@@ -336,10 +336,18 @@ class Error(BASE_EXCEPTION_CLASS):
             connection.messages.append((error_class, error_value))
         if cursor is not None:
             cursor.messages.append((error_class, error_value))
-            cursor.errorhandler(connection, cursor, error_class, error_value)
+            try:
+                cursor.errorhandler(connection, cursor, error_class, error_value)
+            except NotImplementedError:
+                # for async compatibility, check SNOW-1763096 and SNOW-1763103
+                cursor._errorhandler(connection, cursor, error_class, error_value)
             return True
         elif connection is not None:
-            connection.errorhandler(connection, cursor, error_class, error_value)
+            try:
+                connection.errorhandler(connection, cursor, error_class, error_value)
+            except NotImplementedError:
+                # for async compatibility, check SNOW-1763096 and SNOW-1763103
+                connection._errorhandler(connection, cursor, error_class, error_value)
             return True
         return False
 
