@@ -832,7 +832,6 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                     f"Snowflake connection is never closed, which is causing {err}"
                     "please use SnowflakeConnection.close() to close connection and save resources"
                 )
-                return {}
             if is_login_request(full_url):
                 logger.debug(
                     "Hit a timeout error while logging in. Will be handled by "
