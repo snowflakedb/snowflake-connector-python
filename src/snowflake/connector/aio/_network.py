@@ -467,12 +467,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         _include_retry_params: bool = False,
     ) -> dict[str, Any]:
         full_url = f"{self.server_url}{url}"
-        # TODO: sync feature parity, probe connection
-        # if self._connection._probe_connection:
-        #     from pprint import pprint
-        #
-        #     ret = probe_connection(full_url)
-        #     pprint(ret)
+        if self._connection._probe_connection:
+            raise NotImplementedError("probe_connection is not supported in asyncio")
 
         ret = await self.fetch(
             "post",
@@ -716,8 +712,6 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             else:
                 input_data = data
 
-            # TODO: aiohttp auth parameter works differently than requests.session.request
-            #  we can check if there's other aiohttp built-in mechanism to update this
             if HEADER_AUTHORIZATION_KEY in headers:
                 del headers[HEADER_AUTHORIZATION_KEY]
             if token != NO_TOKEN:
@@ -745,7 +739,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                     if is_raw_text:
                         ret = await raw_ret.text()
                     elif is_raw_binary:
-                        # check SNOW-1738595 for is_raw_binary support
+                        # TODO: SNOW-1738595 on is_raw_binary support
                         raise NotImplementedError(
                             "reading raw binary data is not supported in asyncio connector,"
                             " please open a feature request issue in"
