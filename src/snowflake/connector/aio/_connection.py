@@ -871,7 +871,9 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             self.__config(**self._conn_parameters)
 
         if self.enable_connection_diag:
-            raise NotImplementedError("Connection diagnostic is not supported in async")
+            raise NotImplementedError(
+                "Connection diagnostic is not supported in asyncio"
+            )
         else:
             await self.__open_connection()
         self._telemetry = TelemetryClient(self._rest)

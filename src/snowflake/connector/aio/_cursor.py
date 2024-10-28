@@ -828,7 +828,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
 
     @property
     def errorhandler(self):
-        # TODO: SNOW-1763103 on async error handler
+        # TODO: SNOW-1763103 for async error handler
         raise NotImplementedError(
             "Async Snowflake Python Connector does not support errorhandler. "
             "Please open a feature request issue in github if your want this feature: "
@@ -837,7 +837,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
 
     @errorhandler.setter
     def errorhandler(self, value):
-        # TODO: SNOW-1763103 on async error handler
+        # TODO: SNOW-1763103 for async error handler
         raise NotImplementedError(
             "Async Snowflake Python Connector does not support errorhandler. "
             "Please open a feature request issue in github if your want this feature: "

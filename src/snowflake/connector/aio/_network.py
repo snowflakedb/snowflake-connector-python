@@ -468,6 +468,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
     ) -> dict[str, Any]:
         full_url = f"{self.server_url}{url}"
         if self._connection._probe_connection:
+            # TODO: SNOW-1572318 for probe connection
             raise NotImplementedError("probe_connection is not supported in asyncio")
 
         ret = await self.fetch(
@@ -739,7 +740,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                     if is_raw_text:
                         ret = await raw_ret.text()
                     elif is_raw_binary:
-                        # TODO: SNOW-1738595 on is_raw_binary support
+                        # TODO: SNOW-1738595 for is_raw_binary support
                         raise NotImplementedError(
                             "reading raw binary data is not supported in asyncio connector,"
                             " please open a feature request issue in"
