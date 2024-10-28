@@ -118,7 +118,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 # multichunk threshold
                 m.multipart_threshold = self._multipart_threshold
 
-        # TODO: https://snowflakecomputing.atlassian.net/browse/SNOW-1625364
+        # TODO: SNOW-1625364 on renaming client_prefetch_threads in asyncio
         logger.debug(f"parallel=[{self._parallel}]")
         if self._raise_put_get_error and not self._file_metadata:
             Error.errorhandler_wrapper(
@@ -238,7 +238,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
         task_of_files = []
         for file_client in files:
             try:
-                # TODO: https://snowflakecomputing.atlassian.net/browse/SNOW-1708819
+                # TODO: SNOW-1708819 on code refactoring
                 res = (
                     await file_client.prepare_upload()
                     if is_upload
