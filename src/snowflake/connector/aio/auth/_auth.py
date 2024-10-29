@@ -69,7 +69,7 @@ class Auth(AuthSync):
         timeout: int | None = None,
     ) -> dict[str, str | int | bool]:
         if mfa_callback or password_callback:
-            # check SNOW-1707210 for mfa_callback and password_callback support
+            # TODO: SNOW-1707210 for mfa_callback and password_callback support
             raise NotImplementedError(
                 "mfa_callback or password_callback is not supported in asyncio connector, please open a feature"
                 " request issue in github: https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose"

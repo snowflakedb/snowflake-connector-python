@@ -14,6 +14,7 @@ from snowflake.connector import errors
 from snowflake.connector.telemetry import TelemetryField
 
 
+@pytest.mark.skip("SNOW-1770153 for error as attribute on connection")
 async def test_error_classes(conn_cnx):
     """Error classes in Connector module, object."""
     # class

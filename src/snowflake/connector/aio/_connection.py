@@ -10,7 +10,6 @@ import logging
 import os
 import pathlib
 import sys
-import traceback
 import uuid
 from contextlib import suppress
 from io import StringIO
@@ -33,7 +32,6 @@ from ..config_manager import CONFIG_MANAGER, _get_default_connection_params
 from ..connection import DEFAULT_CONFIGURATION as DEFAULT_CONFIGURATION_SYNC
 from ..connection import SnowflakeConnection as SnowflakeConnectionSync
 from ..connection import _get_private_bytes_from_file
-from ..connection_diagnostic import ConnectionDiagnostic
 from ..constants import (
     _CONNECTIVITY_ERR_MSG,
     ENV_VAR_PARTNER,
@@ -519,7 +517,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         elif is_kwargs_empty:
             # connection_name is None and kwargs was empty when called
             ret_kwargs = _get_default_connection_params()
-        self.__set_error_attributes()  # TODO: error attributes async?
+        # TODO: SNOW-1770153 on self.__set_error_attributes()
         return ret_kwargs
 
     async def _cancel_query(
@@ -873,42 +871,9 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             self.__config(**self._conn_parameters)
 
         if self.enable_connection_diag:
-            exceptions_dict = {}
-            # TODO: we can make ConnectionDiagnostic async, do we need?
-            connection_diag = ConnectionDiagnostic(
-                account=self.account,
-                host=self.host,
-                connection_diag_log_path=self.connection_diag_log_path,
-                connection_diag_allowlist_path=(
-                    self.connection_diag_allowlist_path
-                    if self.connection_diag_allowlist_path is not None
-                    else self.connection_diag_whitelist_path
-                ),
-                proxy_host=self.proxy_host,
-                proxy_port=self.proxy_port,
-                proxy_user=self.proxy_user,
-                proxy_password=self.proxy_password,
+            raise NotImplementedError(
+                "Connection diagnostic is not supported in asyncio"
             )
-            try:
-                connection_diag.run_test()
-                await self.__open_connection()
-                connection_diag.cursor = self.cursor()
-            except Exception:
-                exceptions_dict["connection_test"] = traceback.format_exc()
-                logger.warning(
-                    f"""Exception during connection test:\n{exceptions_dict["connection_test"]} """
-                )
-            try:
-                connection_diag.run_post_test()
-            except Exception:
-                exceptions_dict["post_test"] = traceback.format_exc()
-                logger.warning(
-                    f"""Exception during post connection test:\n{exceptions_dict["post_test"]} """
-                )
-            finally:
-                connection_diag.generate_report()
-                if exceptions_dict:
-                    raise Exception(str(exceptions_dict))
         else:
             await self.__open_connection()
         self._telemetry = TelemetryClient(self._rest)
@@ -924,7 +889,10 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 None,
                 DatabaseError,
                 {
-                    "msg": "Connection is closed",
+                    "msg": "Connection is closed.\nPlease establish the connection first by "
+                    "explicitly calling `await SnowflakeConnection.connect()` or "
+                    "using an async context manager: `async with SnowflakeConnection() as conn`. "
+                    "\nEnsure the connection is open before attempting any operations.",
                     "errno": ER_CONNECTION_IS_CLOSED,
                     "sqlstate": SQLSTATE_CONNECTION_NOT_EXISTS,
                 },
