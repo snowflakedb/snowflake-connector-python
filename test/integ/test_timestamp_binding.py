@@ -5,6 +5,8 @@
 from datetime import datetime
 from typing import List
 
+import pytest
+
 from snowflake.connector.cursor import SnowflakeCursor
 
 from ..randomize import random_string
@@ -18,12 +20,11 @@ def create_or_replace_table(cur: SnowflakeCursor, table_name: str, columns: List
 def insert_multiple_records(
     cur: SnowflakeCursor,
     table_name: str,
-    column_names: List[str],
-    ts: datetime,
+    ts: str,
     row_count: int,
     should_bind: bool,
 ):
-    sql = f"INSERT INTO {table_name} ({','.join(column_names)}) values (?)"
+    sql = f"INSERT INTO {table_name} values (?)"
     dates = [[ts] for _ in range(row_count)]
     cur.executemany(sql, dates)
     is_bind_sql_scoped = "SHOW stages like 'SNOWPARK_TEMP_STAGE_BIND'"
@@ -36,8 +37,27 @@ def insert_multiple_records(
         assert len(res1) == 0 and len(res2) == 0
 
 
-def test_timestamp_bindings(conn):
+@pytest.mark.parametrize(
+    "timestamp_type, timestamp_precision",
+    [
+        ("TIMESTAMPTZ", 6),
+    ],
+)
+def test_timestamp_bindings(
+    conn_cnx, timestamp_type, timestamp_precision, db_parameters
+):
+    timestamp = "2023-03-15 13:17:29.207 +05:00"
+    column_name = f"ts {timestamp_type}({timestamp_precision})"
     table_name = f"TEST_TIMESTAMP_BINDING_{random_string(10)}"
-    print(table_name)
-    # with conn.cursor() as cur:
-    #     create_or_replace_table(cur, table_name, ["TIMESTAMP"])
+    binding_threshold = 65280
+
+    with conn_cnx(paramstyle="qmark") as cnx:
+        with cnx.cursor() as cur:
+            create_or_replace_table(cur, table_name, [column_name])
+            insert_multiple_records(
+                cur, table_name, timestamp, binding_threshold + 1, True
+            )
+            res = cur.execute(f"select ts from {table_name}").fetchall()
+            expected = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f %z")
+            for r in res:
+                assert r[0] == expected
