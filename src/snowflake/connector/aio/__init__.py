@@ -12,3 +12,8 @@ __all__ = [
     SnowflakeCursor,
     DictCursor,
 ]
+
+async def connect(**kwargs) -> SnowflakeConnection:
+    conn = SnowflakeConnection(**kwargs)
+    await conn.connect()
+    return conn

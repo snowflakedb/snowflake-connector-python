@@ -984,14 +984,14 @@ async def test_real_decimal(conn, db_parameters):
             assert rec["RATIO"] == decimal.Decimal("23.4"), "the decimal value"
 
 
-@pytest.mark.skip("SNOW-1763103")
+@pytest.mark.skip("SNOW-1763103 error handler async")
 async def test_none_errorhandler(conn_testaccount):
     c = conn_testaccount.cursor()
     with pytest.raises(errors.ProgrammingError):
         c.errorhandler = None
 
 
-@pytest.mark.skip("SNOW-1763103")
+@pytest.mark.skip("SNOW-1763103 error handler async")
 async def test_nope_errorhandler(conn_testaccount):
     def user_errorhandler(connection, cursor, errorclass, errorvalue):
         pass
@@ -1432,9 +1432,6 @@ async def test__log_telemetry_job_data(conn_cnx, caplog):
     ) in caplog.record_tuples
 
 
-@pytest.mark.skip(
-    reason="SNOW-1759076 Async for support in Cursor.get_result_batches()"
-)
 @pytest.mark.parametrize(
     "result_format,expected_chunk_type",
     (
@@ -1446,7 +1443,7 @@ async def test_resultbatch(
     conn_cnx,
     result_format,
     expected_chunk_type,
-    capture_sf_telemetry,
+    capture_sf_telemetry_async,
 ):
     """This test checks the following things:
     1. After executing a query can we pickle the result batches
@@ -1461,13 +1458,13 @@ async def test_resultbatch(
             "python_connector_query_result_format": result_format,
         }
     ) as con:
-        with capture_sf_telemetry.patch_connection(con) as telemetry_data:
-            with con.cursor() as cur:
-                cur.execute(
+        async with capture_sf_telemetry_async.patch_connection(con) as telemetry_data:
+            async with con.cursor() as cur:
+                await cur.execute(
                     f"select seq4() from table(generator(rowcount => {rowcount}));"
                 )
                 assert cur._result_set.total_row_index() == rowcount
-                pre_pickle_partitions = cur.get_result_batches()
+                pre_pickle_partitions = await cur.get_result_batches()
                 assert len(pre_pickle_partitions) > 1
                 assert pre_pickle_partitions is not None
                 assert all(
@@ -1481,7 +1478,7 @@ async def test_resultbatch(
     post_pickle_partitions: list[ResultBatch] = pickle.loads(pickle_str)
     total_rows = 0
     # Make sure the batches can be iterated over individually
-    async for it in post_pickle_partitions:
+    for it in post_pickle_partitions:
         print(it)
 
     for i, partition in enumerate(post_pickle_partitions):
@@ -1492,7 +1489,8 @@ async def test_resultbatch(
         else:
             assert partition.compressed_size is not None
             assert partition.uncompressed_size is not None
-        for row in partition:
+        # TODO: SNOW-1759076 Async for support in Cursor.get_result_batches()
+        for row in await partition.create_iter():
             col1 = row[0]
             assert col1 == total_rows
             total_rows += 1
@@ -1500,7 +1498,8 @@ async def test_resultbatch(
     total_rows = 0
     # Make sure the batches can be iterated over again
     for partition in post_pickle_partitions:
-        for row in partition:
+        # TODO: SNOW-1759076 Async for support in Cursor.get_result_batches()
+        for row in await partition.create_iter():
             col1 = row[0]
             assert col1 == total_rows
             total_rows += 1
