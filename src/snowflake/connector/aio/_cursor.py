@@ -828,7 +828,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
 
     @property
     def errorhandler(self):
-        # check SNOW-1763103
+        # TODO: SNOW-1763103 for async error handler
         raise NotImplementedError(
             "Async Snowflake Python Connector does not support errorhandler. "
             "Please open a feature request issue in github if your want this feature: "
@@ -837,7 +837,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
 
     @errorhandler.setter
     def errorhandler(self, value):
-        # check SNOW-1763103
+        # TODO: SNOW-1763103 for async error handler
         raise NotImplementedError(
             "Async Snowflake Python Connector does not support errorhandler. "
             "Please open a feature request issue in github if your want this feature: "
@@ -987,7 +987,6 @@ class SnowflakeCursor(SnowflakeCursorSync):
             await self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
-        # # TODO: async telemetry
         await self._log_telemetry_job_data(
             TelemetryField.PANDAS_FETCH_ALL, TelemetryData.TRUE
         )
@@ -1022,7 +1021,6 @@ class SnowflakeCursor(SnowflakeCursorSync):
         """
         if self._result_set is None:
             return None
-        # TODO: async telemetry SNOW-1572217
         await self._log_telemetry_job_data(
             TelemetryField.GET_PARTITIONS_USED, TelemetryData.TRUE
         )

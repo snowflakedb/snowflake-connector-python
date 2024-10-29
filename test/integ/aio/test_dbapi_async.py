@@ -115,6 +115,7 @@ async def test_exceptions():
     assert issubclass(errors.NotSupportedError, errors.Error)
 
 
+@pytest.mark.skip("SNOW-1770153 for error as attribute on connection")
 async def test_exceptions_as_connection_attributes(conn_cnx):
     async with conn_cnx() as con:
         try:
