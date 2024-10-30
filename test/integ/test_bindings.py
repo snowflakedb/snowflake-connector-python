@@ -668,6 +668,7 @@ def insert_multiple_records(
             "2023-03-15 13:17:29.207 +05:00",
             "%Y-%m-%d %H:%M:%S.%f %z",
         ),
+        ("TIMESTAMPNTZ", 6, "2023-03-15 13:17:29.207", "%Y-%m-%d %H:%M:%S.%f"),
     ],
 )
 def test_timestamp_bindings(
