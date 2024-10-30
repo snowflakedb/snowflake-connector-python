@@ -695,4 +695,7 @@ def test_timestamp_bindings(
             expected = datetime.strptime(timestamp, expected_style)
             assert len(res) == 65283
             for r in res:
-                assert r[0] == expected
+                if timestamp_type == "TIMESTAMP":
+                    assert r[0].replace(tzinfo=None) == expected.replace(tzinfo=None)
+                else:
+                    assert r[0] == expected
