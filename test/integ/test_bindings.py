@@ -692,5 +692,6 @@ def test_timestamp_bindings(
             )
             res = cur.execute(f"select ts from {table_name}").fetchall()
             expected = datetime.strptime(timestamp, expected_style)
+            assert len(res) == 65283
             for r in res:
                 assert r[0] == expected
