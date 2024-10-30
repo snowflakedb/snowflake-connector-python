@@ -81,3 +81,8 @@ conn = snowflake.connector.connect(
 )
 conn.telemetry_enabled = False
 ```
+
+
+## NOTE
+
+This library currently does not support GCP regional endpoints.  Please ensure that any workloads using through this library do not require support for regional endpoints on GCP.  If you have questions about this, please contact [Snowflake Support](https://community.snowflake.com/s/article/How-To-Submit-a-Support-Case-in-Snowflake-Lodge).
