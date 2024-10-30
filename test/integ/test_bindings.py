@@ -644,6 +644,7 @@ def insert_multiple_records(
         assert len(res1) == 0 and len(res2) == 0
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "timestamp_type, timestamp_precision, timestamp, expected_style",
     [
