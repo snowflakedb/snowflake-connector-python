@@ -23,9 +23,12 @@ This script is used for end-to-end performance test for asyncio python connector
 """
 
 import argparse
+import asyncio
+import csv
+import os.path
 
 import util as stress_util
-from util import task_execution_decorator
+from util import task_decorator
 
 from parameters import CONNECTION_PARAMETERS
 from snowflake.connector.aio import SnowflakeConnection
@@ -86,6 +89,68 @@ INSERT INTO {test_table_name} SELECT
         )
 
 
+async def prepare_file(cursor, stage_location):
+    data = {
+        "C1": 123456,
+        "C2": "SEVMUA==",
+        "C3": True,
+        "C4": "a",
+        "C5": "b",
+        "C6": "2023-07-18",
+        "C7": "2023-07-18 12:51:00",
+        "C8": 984.28,
+        "C9": 268.35,
+        "C10": 123.456,
+        "C11": 738.132,
+        "C12": 6789,
+        "C13": 23456,
+        "C14": 12583,
+        "C15": 513.431,
+        "C16": 10,
+        "C17": 9,
+        "C18": "abc456",
+        "C19": "def123",
+        "C20": "12:34:56",
+        "C21": "2021-01-01 00:00:00 +0000",
+        "C22": "2021-01-01 00:00:00 +0000",
+        "C23": "2021-01-01 00:00:00 +0000",
+        "C24": "2021-01-01 00:00:00 +0000",
+        "C25": 1,
+        "C26": "SEVMUA==",
+        "C27": "vxlmls!21321#@!#!",
+    }
+    if not os.path.exists("../stress_test_data/single_chunk_file_1.csv"):
+        with open("../stress_test_data/single_chunk_file_1.csv", "w") as f:
+            writer = csv.writer(f)
+            writer.writerow(data.keys())
+            writer.writerow(data.values())
+    if not os.path.exists("../stress_test_data/single_chunk_file_2.csv"):
+        with open("../stress_test_data/single_chunk_file_2.csv", "w") as f:
+            writer = csv.writer(f)
+            writer.writerow(data.keys())
+            writer.writerow(data.values())
+    if not os.path.exists("../stress_test_data/multiple_chunks_file_1.csv"):
+        with open("../stress_test_data/multiple_chunks_file_1.csv", "w") as f:
+            writer = csv.writer(f)
+            writer.writerow(data.keys())
+            for _ in range(3000000):
+                writer.writerow(data.values())
+    if not os.path.exists("../stress_test_data/multiple_chunks_file_2.csv"):
+        with open("../stress_test_data/multiple_chunks_file_2.csv", "w") as f:
+            writer = csv.writer(f)
+            writer.writerow(data.keys())
+            for _ in range(3000000):
+                writer.writerow(data.values())
+    res = await cursor.execute(
+        f"PUT file://../stress_test_data/multiple_chunks_file_* {stage_location} OVERWRITE = TRUE"
+    )
+    print(f"test file uploaded to {stage_location}", await res.fetchall())
+    await cursor.execute(
+        f"PUT file://../stress_test_data/single_chunk_file_* {stage_location} OVERWRITE = TRUE"
+    )
+    print(f"test file uploaded to {stage_location}", await res.fetchall())
+
+
 async def task_fetch_one_row(cursor, table_name, row_count_limit=50000):
     ret = await (
         await cursor.execute(f"select * from {table_name} limit {row_count_limit}")
@@ -109,13 +174,29 @@ async def task_fetch_arrow_batches(cursor, table_name, row_count_limit=50000):
         pass
 
 
-async def get_file(cursor, source_file, dest_file):
-    res = await cursor.execute(f"PUT {source_file} {dest_file} OVERWRITE = TRUE")
+async def put_file(cursor, stage_location, is_multiple, is_multi_chunk_file):
+    file_name = "multiple_chunks_file_" if is_multi_chunk_file else "single_chunk_file_"
+    source_file = (
+        f"file://../stress_test_data/{file_name}*"
+        if is_multiple
+        else f"file://../stress_test_data/{file_name}1.csv"
+    )
+    sql = f"PUT {source_file} {stage_location} OVERWRITE = TRUE"
+    res = await cursor.execute(sql)
     print(await res.fetchall())
 
 
-async def put_file(cursor, source_file, dest_file):
-    res = await cursor.execute(f"GET {source_file} {dest_file}")
+async def get_file(cursor, stage_location, is_multiple, is_multi_chunk_file):
+    file_name = "multiple_chunks_file_" if is_multi_chunk_file else "single_chunk_file_"
+    stage_file = (
+        f"{stage_location}" if is_multiple else f"{stage_location}{file_name}1.csv"
+    )
+    sql = (
+        f"GET {stage_file} file://../stress_test_data/ PATTERN = '.*{file_name}.*'"
+        if is_multiple
+        else f"GET {stage_file} file://../stress_test_data/"
+    )
+    res = await cursor.execute(sql)
     print(await res.fetchall())
 
 
@@ -137,16 +218,37 @@ async def async_wrapper(args):
     await conn.connect()
     cursor = conn.cursor()
 
-    test_table_name = args.test_table_name
+    # prepare file
+    await prepare_file(cursor, args.stage_location)
+    await prepare_data(cursor, args.row_count, args.test_table_name)
+
     perf_record_file = "stress_perf_record"
     memory_record_file = "stress_memory_record"
     with open(perf_record_file, "w") as perf_file, open(
         memory_record_file, "w"
     ) as memory_file:
-        task = task_execution_decorator(
-            task_fetch_arrow_batches, perf_file, memory_file
-        )
-        execute_task(task, cursor, test_table_name, args.iteration_cnt)
+        with task_decorator(perf_file, memory_file):
+            for _ in range(args.iteration_cnt):
+                if args.test_function == "FETCH_ONE_ROW":
+                    await task_fetch_one_row(cursor, args.test_table_name)
+                if args.test_function == "FETCH_ROWS":
+                    await task_fetch_rows(cursor, args.test_table_name)
+                if args.test_function == "FETCH_ARROW_BATCHES":
+                    await task_fetch_arrow_batches(cursor, args.test_table_name)
+                if args.test_function == "GET_FILE":
+                    await get_file(
+                        cursor,
+                        args.stage_location,
+                        args.is_multiple_file,
+                        args.is_multiple_chunks_file,
+                    )
+                if args.test_function == "PUT_FILE":
+                    await put_file(
+                        cursor,
+                        args.stage_location,
+                        args.is_multiple_file,
+                        args.is_multiple_chunks_file,
+                    )
 
     if can_draw:
         with open(perf_record_file) as perf_file, open(
@@ -190,4 +292,31 @@ if __name__ == "__main__":
         default="ARROW_TEST_TABLE",
         help="an existing test table that has data prepared, by default the it looks for 'ARROW_TEST_TABLE'",
     )
+    parser.add_argument(
+        "--test_function",
+        type=str,
+        default="FETCH_ONE_ROW",
+        help="function to test, by default it is 'FETCH_ONE_ROW', it can also be 'FETCH_ROWS', 'FETCH_ARROW_BATCHES', 'GET_FILE', 'PUT_FILE'",
+    )
+    parser.add_argument(
+        "--stage_location",
+        type=str,
+        default="",
+        help="stage location used to store files",
+        required=True,
+    )
+    parser.add_argument(
+        "--is_multiple_file",
+        type=str,
+        default=True,
+        help="transfer multiple file in get or put",
+    )
+    parser.add_argument(
+        "--is_multiple_chunks_file",
+        type=str,
+        default=True,
+        help="transfer multiple chunks file in get or put",
+    )
     args = parser.parse_args()
+
+    asyncio.run(async_wrapper(args))
