@@ -266,11 +266,12 @@ async def prepare_file(cursor, stage_location):
 
 
 async def task_fetch_one_row(cursor, table_name, row_count_limit=50000):
-    ret = await (
-        await cursor.execute(f"select * from {table_name} limit {row_count_limit}")
-    ).fetchone()
-    print("task_fetch_one_row done, result: ", ret)
-    assert ret == expected_row
+    res = await cursor.execute(f"select * from {table_name} limit {row_count_limit}")
+
+    for _ in range(row_count_limit):
+        ret = await res.fetchone()
+        print("task_fetch_one_row done, result: ", ret)
+        assert ret == expected_row
 
 
 async def task_fetch_rows(cursor, table_name, row_count_limit=50000):
@@ -326,11 +327,6 @@ async def get_file(cursor, stage_location, is_multiple, is_multi_chunk_file):
         for chunk in iter(lambda: f.read(4096), b""):
             hash_original.update(chunk)
     assert hash_downloaded.hexdigest() == hash_original.hexdigest()
-
-
-def execute_task(task, cursor, table_name, iteration_cnt):
-    for _ in range(iteration_cnt):
-        task(cursor, table_name)
 
 
 async def async_wrapper(args):
