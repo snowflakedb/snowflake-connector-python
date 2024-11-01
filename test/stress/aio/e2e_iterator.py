@@ -25,8 +25,16 @@ This script is used for end-to-end performance test for asyncio python connector
 import argparse
 import asyncio
 import csv
+import datetime
+import gzip
+import hashlib
 import os.path
+import random
+import secrets
+import string
+from decimal import Decimal
 
+import pytz
 import util as stress_util
 from util import task_decorator
 
@@ -40,6 +48,38 @@ try:
 except ImportError:
     print("graphs can not be drawn as matplotlib is not installed.")
     can_draw = False
+
+expected_row = (
+    123456,
+    bytearray(b"HELP"),
+    True,
+    "a",
+    "b",
+    datetime.date(2023, 7, 18),
+    datetime.datetime(2023, 7, 18, 12, 51),
+    Decimal("984.280"),
+    Decimal("268.350"),
+    123.456,
+    738.132,
+    6789,
+    23456,
+    12583,
+    513.431,
+    10,
+    9,
+    "abc456",
+    "def123",
+    datetime.time(12, 34, 56),
+    datetime.datetime(2021, 1, 1, 0, 0),
+    datetime.datetime(2021, 1, 1, 0, 0, tzinfo=pytz.UTC),
+    datetime.datetime.strptime(
+        "2021-01-01 00:00:00 +0000", "%Y-%m-%d %H:%M:%S %z"
+    ).astimezone(pytz.timezone("America/Los_Angeles")),
+    datetime.datetime(2021, 1, 1, 0, 0),
+    1,
+    bytearray(b"HELP"),  # VARBINARY
+    "vxlmls!21321#@!#!",  # VARCHAR
+)
 
 
 async def prepare_data(cursor, row_count=100, test_table_name="TEMP_ARROW_TEST_TABLE"):
@@ -89,58 +129,67 @@ INSERT INTO {test_table_name} SELECT
         )
 
 
-async def prepare_file(cursor, stage_location):
-    data = {
-        "C1": 123456,
-        "C2": "SEVMUA==",
-        "C3": True,
-        "C4": "a",
-        "C5": "b",
-        "C6": "2023-07-18",
-        "C7": "2023-07-18 12:51:00",
-        "C8": 984.28,
-        "C9": 268.35,
-        "C10": 123.456,
-        "C11": 738.132,
-        "C12": 6789,
-        "C13": 23456,
-        "C14": 12583,
-        "C15": 513.431,
-        "C16": 10,
-        "C17": 9,
-        "C18": "abc456",
-        "C19": "def123",
-        "C20": "12:34:56",
-        "C21": "2021-01-01 00:00:00 +0000",
-        "C22": "2021-01-01 00:00:00 +0000",
-        "C23": "2021-01-01 00:00:00 +0000",
-        "C24": "2021-01-01 00:00:00 +0000",
-        "C25": 1,
-        "C26": "SEVMUA==",
-        "C27": "vxlmls!21321#@!#!",
+def data_generator():
+    return {
+        "C1": random.randint(-1_000_000, 1_000_000),
+        "C2": secrets.token_bytes(4),
+        "C3": random.choice([True, False]),
+        "C4": random.choice(string.ascii_letters),
+        "C5": random.choice(string.ascii_letters),
+        "C6": datetime.date.today().isoformat(),
+        "C7": datetime.datetime.now().isoformat(),
+        "C8": round(random.uniform(-1_000, 1_000), 3),
+        "C9": round(random.uniform(-1_000, 1_000), 3),
+        "C10": random.uniform(-1_000, 1_000),
+        "C11": random.uniform(-1_000, 1_000),
+        "C12": random.randint(-1_000_000, 1_000_000),
+        "C13": random.randint(-1_000_000, 1_000_000),
+        "C14": random.randint(-1_000_000, 1_000_000),
+        "C15": random.uniform(-1_000, 1_000),
+        "C16": random.randint(-128, 127),
+        "C17": random.randint(-32_768, 32_767),
+        "C18": "".join(random.choices(string.ascii_letters + string.digits, k=8)),
+        "C19": "".join(random.choices(string.ascii_letters + string.digits, k=10)),
+        "C20": datetime.datetime.now().time().isoformat(),
+        "C21": datetime.datetime.now().isoformat() + " +00:00",
+        "C22": datetime.datetime.now().isoformat() + " +00:00",
+        "C23": datetime.datetime.now().isoformat() + " +00:00",
+        "C24": datetime.datetime.now().isoformat() + " +00:00",
+        "C25": random.randint(0, 255),
+        "C26": secrets.token_bytes(4),
+        "C27": "".join(
+            random.choices(string.ascii_letters + string.digits, k=12)
+        ),  # VARCHAR
     }
+
+
+async def prepare_file(cursor, stage_location):
     if not os.path.exists("../stress_test_data/single_chunk_file_1.csv"):
         with open("../stress_test_data/single_chunk_file_1.csv", "w") as f:
+            d = data_generator()
             writer = csv.writer(f)
-            writer.writerow(data.keys())
-            writer.writerow(data.values())
+            writer.writerow(d.keys())
+            writer.writerow(d.values())
     if not os.path.exists("../stress_test_data/single_chunk_file_2.csv"):
         with open("../stress_test_data/single_chunk_file_2.csv", "w") as f:
+            d = data_generator()
             writer = csv.writer(f)
-            writer.writerow(data.keys())
-            writer.writerow(data.values())
+            writer.writerow(d.keys())
+            writer.writerow(d.values())
     if not os.path.exists("../stress_test_data/multiple_chunks_file_1.csv"):
         with open("../stress_test_data/multiple_chunks_file_1.csv", "w") as f:
             writer = csv.writer(f)
-            writer.writerow(data.keys())
-            for _ in range(3000000):
-                writer.writerow(data.values())
+            d = data_generator()
+            writer.writerow(d.keys())
+            for _ in range(2000000):
+                writer.writerow(data_generator().values())
     if not os.path.exists("../stress_test_data/multiple_chunks_file_2.csv"):
         with open("../stress_test_data/multiple_chunks_file_2.csv", "w") as f:
             writer = csv.writer(f)
-            writer.writerow(data.keys())
-            for _ in range(3000000):
-                writer.writerow(data.values())
+            d = data_generator()
+            writer.writerow(d.keys())
+            for _ in range(2000000):
+                writer.writerow(data_generator().values())
     res = await cursor.execute(
         f"PUT file://../stress_test_data/multiple_chunks_file_* {stage_location} OVERWRITE = TRUE"
     )
@@ -155,23 +204,23 @@ async def task_fetch_one_row(cursor, table_name, row_count_limit=50000):
     ret = await (
         await cursor.execute(f"select * from {table_name} limit {row_count_limit}")
     ).fetchone()
-    print(ret)
+    print("task_fetch_one_row done, result: ", ret)
+    assert ret == expected_row
 
 
 async def task_fetch_rows(cursor, table_name, row_count_limit=50000):
     ret = await (
         await cursor.execute(f"select * from {table_name} limit {row_count_limit}")
     ).fetchall()
-    for _ in ret:
-        pass
+    print("task_fetch_rows done, result: ", ret)
+    assert ret[0] == expected_row
 
 
 async def task_fetch_arrow_batches(cursor, table_name, row_count_limit=50000):
     ret = await (
         await cursor.execute(f"select * from {table_name} limit {row_count_limit}")
     ).fetch_arrow_batches()
-    for _ in ret:
-        pass
+    print("fetch_arrow_batches done, result: ", ret)
 
 
 async def put_file(cursor, stage_location, is_multiple, is_multi_chunk_file):
@@ -183,7 +232,7 @@ async def put_file(cursor, stage_location, is_multiple, is_multi_chunk_file):
     )
     sql = f"PUT {source_file} {stage_location} OVERWRITE = TRUE"
     res = await cursor.execute(sql)
-    print(await res.fetchall())
+    print("put_file done, result: ", await res.fetchall())
 
 
 async def get_file(cursor, stage_location, is_multiple, is_multi_chunk_file):
@@ -197,7 +246,16 @@ async def get_file(cursor, stage_location, is_multiple, is_multi_chunk_file):
         else f"GET {stage_file} file://../stress_test_data/"
     )
     res = await cursor.execute(sql)
-    print(await res.fetchall())
+    print("get_file done, result: ", await res.fetchall())
+    hash_downloaded = hashlib.md5()
+    hash_original = hashlib.md5()
+    with gzip.open(f"../stress_test_data/{file_name}1.csv.gz", "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_downloaded.update(chunk)
+    with open(f"../stress_test_data/{file_name}1.csv", "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_original.update(chunk)
+    assert hash_downloaded.hexdigest() == hash_original.hexdigest()
 
 
 def execute_task(task, cursor, table_name, iteration_cnt):
@@ -219,7 +277,7 @@ async def async_wrapper(args):
     cursor = conn.cursor()
 
     # prepare file
-    await prepare_file(cursor, args.stage_location)
+    # await prepare_file(cursor, args.stage_location)
     await prepare_data(cursor, args.row_count, args.test_table_name)
 
     perf_record_file = "stress_perf_record"
@@ -295,14 +353,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--test_function",
         type=str,
-        default="FETCH_ONE_ROW",
+        default="FETCH_ARROW_BATCHES",
         help="function to test, by default it is 'FETCH_ONE_ROW', it can also be 'FETCH_ROWS', 'FETCH_ARROW_BATCHES', 'GET_FILE', 'PUT_FILE'",
     )
     parser.add_argument(
         "--stage_location",
         type=str,
         default="",
-        help="stage location used to store files",
+        help="stage location used to store files, example: '@test_stage/'",
         required=True,
     )
     parser.add_argument(
