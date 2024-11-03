@@ -84,6 +84,9 @@ def _import_or_missing_pandas_option() -> (
         if "ARROW_DEFAULT_MEMORY_POOL" not in os.environ:
             os.environ["ARROW_DEFAULT_MEMORY_POOL"] = "system"
 
+        if os.environ.get("SNOWFLAKE_SKIP_DEPENDENCY_CHECK"):
+            return pandas, pyarrow, True
+
         # Check whether we have the currently supported pyarrow installed
         installed_packages = {
             package.metadata["Name"]: package for package in distributions()
