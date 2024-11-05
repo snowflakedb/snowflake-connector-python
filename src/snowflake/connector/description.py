@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import platform
+import re
 import sys
 
 from .version import VERSION
@@ -20,4 +21,9 @@ IMPLEMENTATION = platform.python_implementation()
 COMPILER = platform.python_compiler()
 
 CLIENT_NAME = "PythonConnector"  # don't change!
-CLIENT_VERSION = ".".join([str(v) for v in VERSION[:3]])
+# This is a short-term workaround for the backend to enable client side features for preview version, e.g. 3.x.xa1
+CLIENT_VERSION = (
+    ".".join([str(v) for v in VERSION[:3]])
+    if str(VERSION[2]).isdigit()
+    else f"{str(VERSION[0])}.{str(VERSION[1])}.{re.split('[ab]', str(VERSION[2]))[0]}"
+)
