@@ -239,8 +239,20 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             part.text = block_id
             root.append(part)
         # SNOW-1778088: We need to calculate the MD5 sum of this file for Azure Blob storage
-        with open(self.meta.real_src_file_name, "br") as f:
-            file_content = f.read()
+        new_stream = not bool(self.meta.src_stream or self.meta.intermediate_stream)
+        fd = (
+            self.meta.src_stream
+            or self.meta.intermediate_stream
+            or open(self.meta.real_src_file_name, "rb")
+        )
+        try:
+            if not new_stream:
+                # Reset position in file
+                fd.seek(0)
+            file_content = fd.read()
+        finally:
+            if new_stream:
+                fd.close()
         headers = {
             "x-ms-blob-content-encoding": "utf-8",
             "x-ms-blob-content-md5": base64.b64encode(get_md5(file_content)).decode(
