@@ -149,7 +149,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
                 )
             )
             return FileHeader(
-                digest=r.headers.get("x-ms-meta-sfcdigest"),
+                digest=r.headers.get(SFCDIGEST),
                 content_length=int(r.headers.get("Content-Length")),
                 encryption_metadata=encryption_metadata,
             )
