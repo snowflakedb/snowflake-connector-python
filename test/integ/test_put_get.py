@@ -802,6 +802,7 @@ def test_put_md5(tmp_path, conn_cnx):
     small_folder.mkdir()
     big_folder.mkdir()
     generate_k_lines_of_n_files(3, 1, tmp_dir=str(small_folder))
+    # This generate an about 342M file, we want the file big enough to trigger a multipart upload
     generate_k_lines_of_n_files(3_000_000, 1, tmp_dir=str(big_folder))
 
     small_test_file = small_folder / "file0"
