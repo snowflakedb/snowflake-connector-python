@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
 import os
 import xml.etree.ElementTree as ET
@@ -19,6 +18,7 @@ from .compat import quote
 from .constants import FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 from .storage_client import SnowflakeStorageClient
+from .util_text import get_md5
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -239,12 +239,13 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             part.text = block_id
             root.append(part)
         # SNOW-1778088: We need to calculate the MD5 sum of this file for Azure Blob storage
-        md5 = hashlib.md5()
         with open(self.meta.real_src_file_name, "br") as f:
-            md5.update(f.read())
+            file_content = f.read()
         headers = {
             "x-ms-blob-content-encoding": "utf-8",
-            "x-ms-blob-content-md5": base64.b64encode(md5.digest()).decode("utf-8"),
+            "x-ms-blob-content-md5": base64.b64encode(get_md5(file_content)).decode(
+                "utf-8"
+            ),
         }
         azure_metadata = self._prepare_file_metadata()
         headers.update(azure_metadata)
