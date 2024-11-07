@@ -8,6 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.12.4(TBD)
+  - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
+
 - v3.12.3(October 25,2024)
   - Improved the error message for SSL-related issues to provide clearer guidance when an SSL error occurs.
   - Improved error message for SQL execution cancellations caused by timeout.
