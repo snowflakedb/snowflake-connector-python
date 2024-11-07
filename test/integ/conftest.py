@@ -17,10 +17,14 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector.compat import IS_WINDOWS
-from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.connection import DefaultConverterClass
 
 from .. import running_on_public_ci
+
+try:
+    from snowflake.connector.config_manager import CONFIG_MANAGER
+except ImportError:
+    CONFIG_MANAGER = None
 
 try:
     from ..parameters import CONNECTION_PARAMETERS
@@ -118,14 +122,23 @@ def get_db_parameters(connection_name: str = "default") -> dict[str, Any]:
     os.environ["TZ"] = "UTC"
     if not IS_WINDOWS:
         time.tzset()
-    cm_connection_name = (
-        CONFIG_MANAGER["default_connection_name"]
-        if connection_name == "default"
-        else connection_name
-    )
-    if cm_connection_name in CONFIG_MANAGER["connections"]:
+    if (
+        CONFIG_MANAGER is not None
+        and (
+            CONFIG_MANAGER["default_connection_name"]
+            if connection_name == "default"
+            else connection_name
+        )
+        in CONFIG_MANAGER["connections"]
+    ):
         # If config_manager knows of this connection then use it
-        ret = CONFIG_MANAGER["connections"][cm_connection_name].value.value
+        ret = CONFIG_MANAGER["connections"][
+            (
+                CONFIG_MANAGER["default_connection_name"]
+                if connection_name == "default"
+                else connection_name
+            )
+        ].value.value
     else:
         connections = {
             "default": CONNECTION_PARAMETERS,
