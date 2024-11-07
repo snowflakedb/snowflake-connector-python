@@ -1133,7 +1133,7 @@ def test_client_prefetch_threads_setting(conn_cnx):
 
 @pytest.mark.external
 def test_client_failover_connection_url(conn_cnx):
-    with conn_cnx("client_failover") as conn:
+    with conn_cnx("failover") as conn:
         with conn.cursor() as cur:
             assert cur.execute("select 1;").fetchall() == [
                 (1,),

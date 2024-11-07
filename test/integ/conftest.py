@@ -17,10 +17,16 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector.compat import IS_WINDOWS
+from snowflake.connector.config_manager import CONFIG_MANAGER
 from snowflake.connector.connection import DefaultConverterClass
 
 from .. import running_on_public_ci
-from ..parameters import CONNECTION_PARAMETERS
+
+try:
+    from ..parameters import CONNECTION_PARAMETERS
+except ImportError:
+    CONNECTION_PARAMETERS: dict[str, Any] = {}  # type: ignore
+
 
 try:
     from ..parameters import CLIENT_FAILOVER_PARAMETERS  # type: ignore
@@ -34,9 +40,11 @@ if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
 RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
 TEST_USING_VENDORED_ARROW = os.getenv("TEST_USING_VENDORED_ARROW") == "true"
 
-if not isinstance(CONNECTION_PARAMETERS["host"], str):
+if CONNECTION_PARAMETERS and not isinstance(CONNECTION_PARAMETERS.get("host"), str):
     raise Exception("default host is not a string in parameters.py")
-RUNNING_AGAINST_LOCAL_SNOWFLAKE = CONNECTION_PARAMETERS["host"].endswith("local")
+RUNNING_AGAINST_LOCAL_SNOWFLAKE = CONNECTION_PARAMETERS.get("host", "").endswith(
+    "local"
+)
 
 try:
     from ..parameters import CONNECTION_PARAMETERS_ADMIN  # type: ignore
@@ -110,30 +118,38 @@ def get_db_parameters(connection_name: str = "default") -> dict[str, Any]:
     os.environ["TZ"] = "UTC"
     if not IS_WINDOWS:
         time.tzset()
+    cm_connection_name = (
+        CONFIG_MANAGER["default_connection_name"]
+        if connection_name == "default"
+        else connection_name
+    )
+    if cm_connection_name in CONFIG_MANAGER["connections"]:
+        # If config_manager knows of this connection then use it
+        ret = CONFIG_MANAGER["connections"][cm_connection_name].value.value
+    else:
+        connections = {
+            "default": CONNECTION_PARAMETERS,
+            "failover": CLIENT_FAILOVER_PARAMETERS,
+            "admin": CONNECTION_PARAMETERS_ADMIN,
+        }
 
-    connections = {
-        "default": CONNECTION_PARAMETERS,
-        "client_failover": CLIENT_FAILOVER_PARAMETERS,
-        "admin": CONNECTION_PARAMETERS_ADMIN,
-    }
+        chosen_connection = connections[connection_name]
+        if "account" not in chosen_connection:
+            pytest.skip(f"{connection_name} connection is unavailable in parameters.py")
 
-    chosen_connection = connections[connection_name]
-    if "account" not in chosen_connection:
-        pytest.skip(f"{connection_name} connection is unavailable in parameters.py")
+        # testaccount connection info
+        ret = {**DEFAULT_PARAMETERS, **chosen_connection}
 
-    # testaccount connection info
-    ret = {**DEFAULT_PARAMETERS, **chosen_connection}
+        # snowflake admin account. Not available in GH actions
+        for k, v in CONNECTION_PARAMETERS_ADMIN.items():
+            ret["sf_" + k] = v
 
-    # snowflake admin account. Not available in GH actions
-    for k, v in CONNECTION_PARAMETERS_ADMIN.items():
-        ret["sf_" + k] = v
+        if "host" in ret and ret["host"] == DEFAULT_PARAMETERS["host"]:
+            ret["host"] = ret["account"] + ".snowflakecomputing.com"
 
-    if "host" in ret and ret["host"] == DEFAULT_PARAMETERS["host"]:
-        ret["host"] = ret["account"] + ".snowflakecomputing.com"
-
-    if "account" in ret and ret["account"] == DEFAULT_PARAMETERS["account"]:
-        print_help()
-        sys.exit(2)
+        if "account" in ret and ret["account"] == DEFAULT_PARAMETERS["account"]:
+            print_help()
+            sys.exit(2)
 
     # a unique table name
     ret["name"] = "python_tests_" + str(uuid.uuid4()).replace("-", "_")
@@ -170,13 +186,7 @@ def init_test_schema(db_parameters) -> Generator[None, None, None]:
     """
     ret = db_parameters
     with snowflake.connector.connect(
-        user=ret["user"],
-        password=ret["password"],
-        host=ret["host"],
-        port=ret["port"],
-        database=ret["database"],
-        account=ret["account"],
-        protocol=ret["protocol"],
+        **ret,
     ) as con:
         con.cursor().execute(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}")
         yield
