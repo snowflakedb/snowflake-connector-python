@@ -152,7 +152,6 @@ def get_db_parameters(connection_name: str = "default") -> dict[str, Any]:
 
         # testaccount connection info
         ret = {**DEFAULT_PARAMETERS, **chosen_connection}
-
         # snowflake admin account. Not available in GH actions
         for k, v in CONNECTION_PARAMETERS_ADMIN.items():
             ret["sf_" + k] = v

@@ -5,14 +5,14 @@
 
 from __future__ import annotations
 
-import snowflake.connector
+import uuid
 
 
 def exe0(cnx, sql):
     return cnx.cursor().execute(sql)
 
 
-def _run_autocommit_off(cnx, db_parameters):
+def _run_autocommit_off(cnx, name):
     """Runs autocommit off test.
 
     Args:
@@ -21,7 +21,7 @@ def _run_autocommit_off(cnx, db_parameters):
     """
 
     def exe(cnx, sql):
-        return cnx.cursor().execute(sql.format(name=db_parameters["name"]))
+        return cnx.cursor().execute(sql.format(name=name))
 
     exe(
         cnx,
@@ -89,7 +89,7 @@ SELECT COUNT(*) FROM {name} WHERE NOT c1
     assert res[0] == 2
 
 
-def _run_autocommit_on(cnx, db_parameters):
+def _run_autocommit_on(cnx, name):
     """Run autocommit on test.
 
     Args:
@@ -98,7 +98,7 @@ def _run_autocommit_on(cnx, db_parameters):
     """
 
     def exe(cnx, sql):
-        return cnx.cursor().execute(sql.format(name=db_parameters["name"]))
+        return cnx.cursor().execute(sql.format(name=name))
 
     exe(
         cnx,
@@ -116,7 +116,7 @@ SELECT COUNT(*) FROM {name} WHERE NOT c1
     assert res[0] == 4
 
 
-def test_autocommit_attribute(conn_cnx, db_parameters):
+def test_autocommit_attribute(conn_cnx):
     """Tests autocommit attribute.
 
     Args:
@@ -124,8 +124,10 @@ def test_autocommit_attribute(conn_cnx, db_parameters):
         db_parameters: Database parameters.
     """
 
+    name = "python_tests_" + str(uuid.uuid4()).replace("-", "_")
+
     def exe(cnx, sql):
-        return cnx.cursor().execute(sql.format(name=db_parameters["name"]))
+        return cnx.cursor().execute(sql.format(name=name))
 
     with conn_cnx() as cnx:
         exe(
@@ -136,9 +138,9 @@ CREATE TABLE {name} (c1 boolean)
         )
         try:
             cnx.autocommit(False)
-            _run_autocommit_off(cnx, db_parameters)
+            _run_autocommit_off(cnx, name)
             cnx.autocommit(True)
-            _run_autocommit_on(cnx, db_parameters)
+            _run_autocommit_on(cnx, name)
         finally:
             exe(
                 cnx,
@@ -148,25 +150,18 @@ DROP TABLE IF EXISTS {name}
             )
 
 
-def test_autocommit_parameters(db_parameters):
+def test_autocommit_parameters(conn_cnx):
     """Tests autocommit parameter.
 
     Args:
         db_parameters: Database parameters.
     """
+    name = "python_tests_" + str(uuid.uuid4()).replace("-", "_")
 
     def exe(cnx, sql):
-        return cnx.cursor().execute(sql.format(name=db_parameters["name"]))
+        return cnx.cursor().execute(sql.format(name=name))
 
-    with snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        schema=db_parameters["schema"],
-        database=db_parameters["database"],
+    with conn_cnx(
         autocommit=False,
     ) as cnx:
         exe(
@@ -175,20 +170,12 @@ def test_autocommit_parameters(db_parameters):
 CREATE TABLE {name} (c1 boolean)
 """,
         )
-        _run_autocommit_off(cnx, db_parameters)
+        _run_autocommit_off(cnx, name)
 
-    with snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        schema=db_parameters["schema"],
-        database=db_parameters["database"],
+    with conn_cnx(
         autocommit=True,
     ) as cnx:
-        _run_autocommit_on(cnx, db_parameters)
+        _run_autocommit_on(cnx, name)
         exe(
             cnx,
             """
