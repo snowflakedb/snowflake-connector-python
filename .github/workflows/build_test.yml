@@ -143,6 +143,7 @@ jobs:
           mkdir -p ~/.snowflake
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/connections/connections_${{ matrix.cloud-provider }}.toml.gpg > ~/.snowflake/connections.toml
+          chmod 0600 "/home/runner/.snowflake/connections.toml" || true
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
         with:

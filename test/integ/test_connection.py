@@ -22,6 +22,7 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
+from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.connection import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
     SnowflakeConnection,
@@ -747,7 +748,8 @@ def test_invalid_connection_parameters_turned_off(conn_cnx):
         ) as conn:
             assert conn._autocommit == "True"
             assert conn._applucation == "this is a typo or my own variable"
-            assert len(w) == 0
+            # TODO: Windows tests will emit a warning about connections file privileges
+            assert len(w) == (1 if IS_WINDOWS else 0)
 
 
 def test_invalid_connection_parameters_only_warns(conn_cnx):
