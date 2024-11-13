@@ -67,7 +67,7 @@ def decompress_raw_data_by_zcat(raw_data_fd: IO, add_bracket: bool = True) -> by
 
 def decompress_raw_data_to_unicode_stream(
     raw_data_fd: IO,
-) -> Generator[str, None, None]:
+) -> Generator[str]:
     """Decompresses a raw data in file like object and yields a Unicode string.
 
     Args:
