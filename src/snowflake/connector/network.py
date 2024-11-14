@@ -484,7 +484,9 @@ class SnowflakeRestful:
             # SNOW-1763555: inject OpenTelemetry headers if available specifically in WC3 format
             #  into our request headers in case tracing is enabled. This should make sure that
             #  our requests are accounted for properly if OpenTelemetry is used by users.
-            from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
+            from opentelemetry.trace.propagation.tracecontext import (
+                TraceContextTextMapPropagator,
+            )
 
             TraceContextTextMapPropagator().inject(headers)
         except Exception:
