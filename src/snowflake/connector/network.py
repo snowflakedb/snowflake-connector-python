@@ -487,8 +487,11 @@ class SnowflakeRestful:
             from opentelemetry.propagate import TraceContextTextMapPropagator
 
             TraceContextTextMapPropagator().inject(headers)
-        except ModuleNotFoundError as e:
-            logger.debug(f"Opentelemtry otel injection failed because of: {e}")
+        except Exception:
+            logger.debug(
+                "Opentelemtry otel injection failed",
+                exc_info=True,
+            )
         if self._connection.service_name:
             headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
         if method == "post":
