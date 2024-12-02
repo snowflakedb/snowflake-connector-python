@@ -54,11 +54,11 @@ def _resolve_platform_dirs() -> PlatformDirsProto:
                 suffix="_snowflake", ignore_cleanup_errors=True
             )
             warn(
-                f"Received permission error while checking if SNOWFLAKE_HOME exists. Continue with temporary direcoty `{tmp_dir}`.\n"
+                f"Received permission error while checking if SNOWFLAKE_HOME exists. Continue with temporary direcoty `{tmp_dir.name}`.\n"
                 f"Original Error: {pe}"
             )
             return SFPlatformDirs(
-                str(tmp_dir),
+                str(tmp_dir.name),
                 **platformdir_kwargs,
             )
         else:
