@@ -49,20 +49,17 @@ def _resolve_platform_dirs() -> PlatformDirsProto:
             # https://platformdirs.readthedocs.io/
             return PlatformDirs(**platformdir_kwargs)
     except PermissionError as pe:
-        if os.environ.get("SNOWFLAKE_HOME") is None:
-            tmp_dir = TemporaryDirectory(
-                suffix="_snowflake", ignore_cleanup_errors=True
-            )
-            warn(
-                f"Received permission error while checking if SNOWFLAKE_HOME exists. Continue with temporary direcoty `{tmp_dir.name}`.\n"
-                f"Original Error: {pe}"
-            )
-            return SFPlatformDirs(
-                str(tmp_dir.name),
-                **platformdir_kwargs,
-            )
-        else:
-            raise pe
+        tmp_dir = TemporaryDirectory(
+            suffix="_snowflake", ignore_cleanup_errors=True
+        )
+        warn(
+            f"Received permission error while checking if {snowflake_home} exists. Continue with temporary direcoty `{tmp_dir.name}`.\n"
+            f"Original Error: {pe}"
+        )
+        return SFPlatformDirs(
+            str(tmp_dir.name),
+            **platformdir_kwargs,
+        )
 
 
 class SFPlatformDirs:
