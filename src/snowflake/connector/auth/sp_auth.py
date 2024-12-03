@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
-#
 # Copyright (c) 2012-2024 Snowflake Computing Inc. All rights reserved.
 #
 
@@ -20,6 +16,9 @@ class AuthByStoredProcConnection(AuthByPlugin):
     It is a dummy auth that requires no extra connection establishment.
     """
 
+    def __init__(self):
+        pass
+
     @property
     def type_(self) -> AuthType:
         return AuthType.STORED_PROC
@@ -27,10 +26,6 @@ class AuthByStoredProcConnection(AuthByPlugin):
     @property
     def assertion_content(self) -> str:
         """Returns the token."""
-        return self._oauth_token
-
-    def __init__(self, oauth_token: str, **kwargs) -> None:
-        """Initializes an instance with an OAuth Token."""
         pass
 
     def reset_secrets(self) -> None:

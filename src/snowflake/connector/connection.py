@@ -1167,7 +1167,7 @@ class SnowflakeConnection:
             setattr(self, "_" + name, value)
 
         if self._is_stored_proc:
-            self._auth_class = AuthByStoredProcConnection
+            self._auth_class = AuthByStoredProcConnection()
 
         if self._numpy:
             try:
