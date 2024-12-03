@@ -8,12 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.12.4(TBD)
-
-- v3.12.4(December 06,2024)
-
-   -N/A
-
+- v3.12.4(December 3,2024)
   - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
   - Fixed a bug where OpenTelemetry header injection would sometimes cause Exceptions to be thrown.
   - Fixed a bug where OCSP checks would throw TypeError and make mainly GCP blob storage unreachable.
