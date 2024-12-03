@@ -23,7 +23,6 @@ from functools import partial
 from io import StringIO
 from logging import getLogger
 from threading import Lock
-from time import strptime
 from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
 from uuid import UUID
@@ -311,9 +310,6 @@ APPLICATION_RE = re.compile(r"[\w\d_]+")
 # adding the exception class to Connection class
 for m in [method for method in dir(errors) if callable(getattr(errors, method))]:
     setattr(sys.modules[__name__], m, getattr(errors, m))
-
-# Workaround for https://bugs.python.org/issue7980
-strptime("20150102030405", "%Y%m%d%H%M%S")
 
 logger = getLogger(__name__)
 
