@@ -42,6 +42,7 @@ from .auth import (
     AuthByOAuth,
     AuthByOkta,
     AuthByPlugin,
+    AuthByStoredProcConnection,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
 )
@@ -100,6 +101,7 @@ from .network import (
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
     REQUEST_ID,
+    STORED_PROC_AUTHENTICATOR,
     USR_PWD_MFA_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
@@ -294,6 +296,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # disable saml url check in okta authentication
+    "is_stored_proc": (
+        False,
+        bool,
+    ),  # It is set to True for Stored Procedures
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -1160,6 +1166,9 @@ class SnowflakeConnection:
                     )
             setattr(self, "_" + name, value)
 
+        if self._is_stored_proc:
+            self._auth_class = AuthByStoredProcConnection
+
         if self._numpy:
             try:
                 import numpy  # noqa: F401
@@ -1221,8 +1230,10 @@ class SnowflakeConnection:
             with open(token_file_path) as f:
                 self._token = f.read()
 
+        tokenless_authenticators = {OAUTH_AUTHENTICATOR, STORED_PROC_AUTHENTICATOR}
+
         if not (self._master_token and self._session_token):
-            if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
+            if not self.user and self._authenticator not in tokenless_authenticators:
                 # OAuth Authentication does not require a username
                 Error.errorhandler_wrapper(
                     self,
@@ -1251,7 +1262,8 @@ class SnowflakeConnection:
                     {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
                 )
 
-        if not self._account:
+        # All connections other than Stored Procedures mandate presence of account name.
+        if not self._account and not self._is_stored_proc:
             Error.errorhandler_wrapper(
                 self,
                 None,
