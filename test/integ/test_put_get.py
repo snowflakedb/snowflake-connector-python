@@ -827,3 +827,20 @@ def test_put_md5(tmp_path, conn_cnx):
                     cur.execute(f"LS @{stage_name}").fetchall(),
                 )
             )
+
+
+def test_iobound_limit(tmp_path, conn_cnx, caplog):
+    tmp_stage_name = random_string(5, "test_iobound_limit")
+    file0 = tmp_path / "file0"
+    file1 = tmp_path / "file1"
+    file0.touch()
+    file1.touch()
+    with conn_cnx(iobound_tpe_limit=1) as conn:
+        with conn.cursor() as cur:
+            cur.execute(f"create temp stage {tmp_stage_name}")
+            with caplog.at_level(
+                logging.DEBUG, "snowflake.connector.file_transfer_agent"
+            ):
+                cur.execute(f"put file://{tmp_path}/* @{tmp_stage_name}")
+    assert "Decided IO-bound TPE size: 2" in caplog.text
+    assert "IO-bound TPE size is limited to: 1" in caplog.text
