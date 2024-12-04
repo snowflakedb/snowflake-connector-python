@@ -829,6 +829,7 @@ def test_put_md5(tmp_path, conn_cnx):
             )
 
 
+@pytest.mark.skipolddriver
 def test_iobound_limit(tmp_path, conn_cnx, caplog):
     tmp_stage_name = random_string(5, "test_iobound_limit")
     file0 = tmp_path / "file0"
