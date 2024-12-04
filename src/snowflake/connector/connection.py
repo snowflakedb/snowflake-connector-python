@@ -294,6 +294,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # disable saml url check in okta authentication
+    "iobound_tpe_limit": (
+        None,
+        (type(None), int),
+    ),  # SNOW-1817982: limit iobound TPE sizes when executing PUT/GET
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -725,6 +729,10 @@ class SnowflakeConnection:
     @property
     def is_query_context_cache_disabled(self) -> bool:
         return self._disable_query_context_cache
+
+    @property
+    def iobound_tpe_limit(self) -> int | None:
+        return self._iobound_tpe_limit
 
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
