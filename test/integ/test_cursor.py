@@ -11,6 +11,7 @@ import logging
 import os
 import pickle
 import time
+import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
@@ -96,17 +97,8 @@ def _drop_warehouse(conn, db_parameters):
 
 
 @pytest.fixture()
-def conn(request, conn_cnx, db_parameters):
-    def fin():
-        with conn_cnx() as cnx:
-            cnx.cursor().execute(
-                "use {db}.{schema}".format(
-                    db=db_parameters["database"], schema=db_parameters["schema"]
-                )
-            )
-            cnx.cursor().execute("drop table {name}".format(name=db_parameters["name"]))
-
-    request.addfinalizer(fin)
+def conn(conn_cnx, db_parameters):
+    name = "python_tests_" + str(uuid.uuid4()).replace("-", "_")
 
     with conn_cnx() as cnx:
         cnx.cursor().execute(
@@ -123,11 +115,19 @@ pct float,
 ratio number(5,2),
 b binary)
 """.format(
-                name=db_parameters["name"]
+                name=name
             )
         )
 
-    return conn_cnx
+    yield conn_cnx, name
+    with conn_cnx() as cnx:
+        cnx.cursor().execute(
+            "use {db}.{schema}".format(
+                db=db_parameters["database"],
+                schema=db_parameters["schema"],
+            )
+        )
+        cnx.cursor().execute(f"drop table {name}")
 
 
 def _check_results(cursor, results):
@@ -153,14 +153,15 @@ def _type_from_description(named_access: bool):
 
 
 @pytest.mark.skipolddriver
-def test_insert_select(conn, db_parameters, caplog):
+def test_insert_select(conn, caplog):
     """Inserts and selects integer data."""
+    conn, name = conn
     with conn() as cnx:
         c = cnx.cursor()
         try:
             c.execute(
                 "insert into {name}(aa) values(123456),"
-                "(98765),(65432)".format(name=db_parameters["name"])
+                "(98765),(65432)".format(name=name)
             )
             cnt = 0
             for rec in c:
@@ -172,9 +173,7 @@ def test_insert_select(conn, db_parameters, caplog):
 
         try:
             c = cnx.cursor()
-            c.execute(
-                "select aa from {name} order by aa".format(name=db_parameters["name"])
-            )
+            c.execute(f"select aa from {name} order by aa")
             results = []
             for rec in c:
                 results.append(rec[0])
@@ -186,9 +185,7 @@ def test_insert_select(conn, db_parameters, caplog):
         with cnx.cursor(snowflake.connector.DictCursor) as c:
             caplog.clear()
             assert "Number of results in first chunk: 3" not in caplog.text
-            c.execute(
-                "select aa from {name} order by aa".format(name=db_parameters["name"])
-            )
+            c.execute(f"select aa from {name} order by aa")
             results = []
             for rec in c:
                 results.append(rec["AA"])
@@ -197,13 +194,12 @@ def test_insert_select(conn, db_parameters, caplog):
 
 
 @pytest.mark.skipolddriver
-def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
+def test_insert_and_select_by_separate_connection(conn, conn_cnx, caplog):
     """Inserts a record and select it by a separate connection."""
+    conn, name = conn
     with conn() as cnx:
         result = cnx.cursor().execute(
-            "insert into {name}(aa) values({value})".format(
-                name=db_parameters["name"], value="1234"
-            )
+            "insert into {name}(aa) values({value})".format(name=name, value="1234")
         )
         cnt = 0
         for rec in result:
@@ -211,20 +207,11 @@ def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
         assert cnt == 1, "wrong number of records were inserted"
         assert result.rowcount == 1, "wrong number of records were inserted"
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
+    with conn_cnx(
         timezone="UTC",
-    )
-    try:
+    ) as cnx2:
         c = cnx2.cursor()
-        c.execute("select aa from {name}".format(name=db_parameters["name"]))
+        c.execute(f"select aa from {name}")
         results = []
         for rec in c:
             results.append(rec[0])
@@ -232,8 +219,6 @@ def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
         assert results[0] == 1234, "the first result was wrong"
         assert result.rowcount == 1, "wrong number of records were selected"
         assert "Number of results in first chunk: 1" in caplog.text
-    finally:
-        cnx2.close()
 
 
 def _total_milliseconds_from_timedelta(td):
@@ -246,12 +231,13 @@ def _total_seconds_from_timedelta(td):
     return _total_milliseconds_from_timedelta(td) // 10**3
 
 
-def test_insert_timestamp_select(conn, db_parameters):
+def test_insert_timestamp_select(conn, conn_cnx):
     """Inserts and gets timestamp, timestamp with tz, date, and time.
 
     Notes:
         Currently the session parameter TIMEZONE is ignored.
     """
+    conn, name = conn
     PST_TZ = "America/Los_Angeles"
     JST_TZ = "Asia/Tokyo"
     current_timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -271,7 +257,7 @@ def test_insert_timestamp_select(conn, db_parameters):
                 "%(dt)s, %(tm)s)"
             )
             c.execute(
-                fmt.format(name=db_parameters["name"]),
+                fmt.format(name=name),
                 {
                     "value": 1234,
                     "tsltz": current_timestamp,
@@ -289,24 +275,11 @@ def test_insert_timestamp_select(conn, db_parameters):
         finally:
             c.close()
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
+    with conn_cnx(
         timezone="UTC",
-    )
-    try:
+    ) as cnx2:
         c = cnx2.cursor()
-        c.execute(
-            "select aa, tsltz, tstz, tsntz, dt, tm from {name}".format(
-                name=db_parameters["name"]
-            )
-        )
+        c.execute(f"select aa, tsltz, tstz, tsntz, dt, tm from {name}")
 
         result_numeric_value = []
         result_timestamp_value = []
@@ -380,12 +353,11 @@ def test_insert_timestamp_select(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[5])] == "TIME"
             ), "invalid column name"
-    finally:
-        cnx2.close()
 
 
-def test_insert_timestamp_ltz(conn, db_parameters):
+def test_insert_timestamp_ltz(conn):
     """Inserts and retrieve timestamp ltz."""
+    conn, name = conn
     tzstr = "America/New_York"
     # sync with the session parameter
     with conn() as cnx:
@@ -398,7 +370,7 @@ def test_insert_timestamp_ltz(conn, db_parameters):
         try:
             fmt = "insert into {name}(aa, tsltz) values(%(value)s,%(ts)s)"
             c.execute(
-                fmt.format(name=db_parameters["name"]),
+                fmt.format(name=name),
                 {
                     "value": 8765,
                     "ts": current_time,
@@ -413,7 +385,7 @@ def test_insert_timestamp_ltz(conn, db_parameters):
 
         try:
             c = cnx.cursor()
-            c.execute("select aa,tsltz from {name}".format(name=db_parameters["name"]))
+            c.execute(f"select aa,tsltz from {name}")
             result_numeric_value = []
             result_timestamp_value = []
             for aa, ts in c:
@@ -429,8 +401,9 @@ def test_insert_timestamp_ltz(conn, db_parameters):
             c.close()
 
 
-def test_struct_time(conn, db_parameters):
+def test_struct_time(conn):
     """Binds struct_time object for updating timestamp."""
+    conn, name = conn
     tzstr = "America/New_York"
     os.environ["TZ"] = tzstr
     if not IS_WINDOWS:
@@ -442,7 +415,7 @@ def test_struct_time(conn, db_parameters):
         try:
             fmt = "insert into {name}(aa, tsltz) values(%(value)s,%(ts)s)"
             c.execute(
-                fmt.format(name=db_parameters["name"]),
+                fmt.format(name=name),
                 {
                     "value": 87654,
                     "ts": test_time,
@@ -459,9 +432,7 @@ def test_struct_time(conn, db_parameters):
         assert cnt == 1, "wrong number of records were inserted"
 
         try:
-            result = cnx.cursor().execute(
-                "select aa, tsltz from {name}".format(name=db_parameters["name"])
-            )
+            result = cnx.cursor().execute(f"select aa, tsltz from {name}")
             for _, _tsltz in result:
                 pass
 
@@ -479,34 +450,25 @@ def test_struct_time(conn, db_parameters):
                 time.tzset()
 
 
-def test_insert_binary_select(conn, db_parameters):
+def test_insert_binary_select(conn, conn_cnx):
     """Inserts and get a binary value."""
+    conn, name = conn
     value = b"\x00\xFF\xA1\xB2\xC3"
 
     with conn() as cnx:
         c = cnx.cursor()
         try:
             fmt = "insert into {name}(b) values(%(b)s)"
-            c.execute(fmt.format(name=db_parameters["name"]), {"b": value})
+            c.execute(fmt.format(name=name), {"b": value})
             count = sum(int(rec[0]) for rec in c)
             assert count == 1, "wrong number of records were inserted"
             assert c.rowcount == 1, "wrong number of records were selected"
         finally:
             c.close()
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-    )
-    try:
+    with conn_cnx() as cnx2:
         c = cnx2.cursor()
-        c.execute("select b from {name}".format(name=db_parameters["name"]))
+        c.execute(f"select b from {name}")
 
         results = [b for (b,) in c]
         assert value == results[0], "the binary result was wrong"
@@ -527,38 +489,27 @@ def test_insert_binary_select(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
             ), "invalid column name"
-    finally:
-        cnx2.close()
 
 
-def test_insert_binary_select_with_bytearray(conn, db_parameters):
+def test_insert_binary_select_with_bytearray(conn, conn_cnx):
     """Inserts and get a binary value using the bytearray type."""
+    conn, name = conn
     value = bytearray(b"\x00\xFF\xA1\xB2\xC3")
 
     with conn() as cnx:
         c = cnx.cursor()
         try:
             fmt = "insert into {name}(b) values(%(b)s)"
-            c.execute(fmt.format(name=db_parameters["name"]), {"b": value})
+            c.execute(fmt.format(name=name), {"b": value})
             count = sum(int(rec[0]) for rec in c)
             assert count == 1, "wrong number of records were inserted"
             assert c.rowcount == 1, "wrong number of records were selected"
         finally:
             c.close()
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-    )
-    try:
+    with conn_cnx() as cnx2:
         c = cnx2.cursor()
-        c.execute("select b from {name}".format(name=db_parameters["name"]))
+        c.execute(f"select b from {name}")
 
         results = [b for (b,) in c]
         assert bytes(value) == results[0], "the binary result was wrong"
@@ -579,13 +530,12 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
             ), "invalid column name"
-    finally:
-        cnx2.close()
 
 
-def test_variant(conn, db_parameters):
+def test_variant(conn):
     """Variant including JSON object."""
-    name_variant = db_parameters["name"] + "_variant"
+    conn, name = conn
+    name_variant = name + "_variant"
     with conn() as cnx:
         cnx.cursor().execute(
             """
@@ -774,12 +724,13 @@ def test_timeout_query(conn_cnx):
             )
 
 
-def test_executemany(conn, db_parameters):
+def test_executemany(conn):
     """Executes many statements. Client binding is supported by either dict, or list data types.
 
     Notes:
         The binding data type is dict and tuple, respectively.
     """
+    conn, name = conn
     table_name = random_string(5, "test_executemany_")
     with conn() as cnx:
         with cnx.cursor() as c:
@@ -797,7 +748,7 @@ def test_executemany(conn, db_parameters):
             assert c.rowcount == 4, "wrong number of records were inserted"
 
         with cnx.cursor() as c:
-            fmt = "insert into {name}(aa) values(%s)".format(name=db_parameters["name"])
+            fmt = f"insert into {name}(aa) values(%s)"
             c.executemany(
                 fmt,
                 [
@@ -813,7 +764,8 @@ def test_executemany(conn, db_parameters):
 
 
 @pytest.mark.skipolddriver
-def test_executemany_qmark_types(conn, db_parameters):
+def test_executemany_qmark_types(conn):
+    conn, _ = conn
     table_name = random_string(5, "test_executemany_qmark_types_")
     with conn(paramstyle="qmark") as cnx:
         with cnx.cursor() as cur:
@@ -850,6 +802,7 @@ def test_executemany_qmark_types(conn, db_parameters):
 @pytest.mark.skipolddriver
 def test_executemany_params_iterator(conn):
     """Cursor.executemany() works with an interator of params."""
+    conn, _ = conn
     table_name = random_string(5, "executemany_params_iterator_")
     with conn() as cnx:
         with cnx.cursor() as c:
@@ -869,6 +822,7 @@ def test_executemany_params_iterator(conn):
 @pytest.mark.skipolddriver
 def test_executemany_empty_params(conn):
     """Cursor.executemany() does nothing if params is empty."""
+    conn, _ = conn
     table_name = random_string(5, "executemany_empty_params_")
     with conn() as cnx:
         with cnx.cursor() as c:
@@ -880,12 +834,13 @@ def test_executemany_empty_params(conn):
 @pytest.mark.skipolddriver(
     reason="old driver raises DatabaseError instead of InterfaceError"
 )
-def test_closed_cursor(conn, db_parameters):
+def test_closed_cursor(conn):
     """Attempts to use the closed cursor. It should raise errors.
 
     Notes:
         The binding data type is scalar.
     """
+    conn, _ = conn
     table_name = random_string(5, "test_closed_cursor_")
     with conn() as cnx:
         with cnx.cursor() as c:
@@ -913,7 +868,8 @@ def test_closed_cursor(conn, db_parameters):
 
 
 @pytest.mark.skipolddriver
-def test_fetchmany(conn, db_parameters, caplog):
+def test_fetchmany(conn, caplog):
+    conn, _ = conn
     table_name = random_string(5, "test_fetchmany_")
     with conn() as cnx:
         with cnx.cursor() as c:
@@ -951,8 +907,9 @@ def test_fetchmany(conn, db_parameters, caplog):
             assert len(c.fetchmany(15)) == 0, "The number of records"
 
 
-def test_process_params(conn, db_parameters):
+def test_process_params(conn):
     """Binds variables for insert and other queries."""
+    conn, _ = conn
     table_name = random_string(5, "test_process_params_")
     with conn() as cnx:
         with cnx.cursor() as c:
@@ -996,11 +953,12 @@ def test_process_params_empty(conn_cnx, interpolate_empty_sequences, expected_ou
             assert cursor.fetchone() == (expected_outcome,)
 
 
-def test_real_decimal(conn, db_parameters):
+def test_real_decimal(conn):
+    conn, name = conn
     with conn() as cnx:
         c = cnx.cursor()
         fmt = ("insert into {name}(aa, pct, ratio) " "values(%s,%s,%s)").format(
-            name=db_parameters["name"]
+            name=name,
         )
         c.execute(fmt, (9876, 12.3, decimal.Decimal("23.4")))
         for (_cnt,) in c:
@@ -1009,7 +967,7 @@ def test_real_decimal(conn, db_parameters):
         c.close()
 
         c = cnx.cursor()
-        fmt = "select aa, pct, ratio from {name}".format(name=db_parameters["name"])
+        fmt = f"select aa, pct, ratio from {name}"
         c.execute(fmt)
         for _aa, _pct, _ratio in c:
             pass
@@ -1019,7 +977,7 @@ def test_real_decimal(conn, db_parameters):
         c.close()
 
         with cnx.cursor(snowflake.connector.DictCursor) as c:
-            fmt = "select aa, pct, ratio from {name}".format(name=db_parameters["name"])
+            fmt = f"select aa, pct, ratio from {name}"
             c.execute(fmt)
             rec = c.fetchone()
             assert rec["AA"] == 9876, "the integer value"
@@ -1083,7 +1041,8 @@ def test_execute_after_close(conn_testaccount):
         cursor.execute("show tables")
 
 
-def test_multi_table_insert(conn, db_parameters):
+def test_multi_table_insert(conn):
+    conn, name = conn
     try:
         with conn() as cnx:
             cur = cnx.cursor()
@@ -1091,7 +1050,7 @@ def test_multi_table_insert(conn, db_parameters):
                 """
     INSERT INTO {name}(aa) VALUES(1234),(9876),(2345)
     """.format(
-                    name=db_parameters["name"]
+                    name=name
                 )
             )
             assert cur.rowcount == 3, "the number of records"
@@ -1100,7 +1059,7 @@ def test_multi_table_insert(conn, db_parameters):
                 """
 CREATE OR REPLACE TABLE {name}_foo (aa_foo int)
     """.format(
-                    name=db_parameters["name"]
+                    name=name,
                 )
             )
 
@@ -1108,7 +1067,7 @@ CREATE OR REPLACE TABLE {name}_foo (aa_foo int)
                 """
 CREATE OR REPLACE TABLE {name}_bar (aa_bar int)
     """.format(
-                    name=db_parameters["name"]
+                    name=name,
                 )
             )
 
@@ -1119,7 +1078,7 @@ INSERT ALL
     INTO {name}_bar(aa_bar) VALUES(aa)
     SELECT aa FROM {name}
     """.format(
-                    name=db_parameters["name"]
+                    name=name,
                 )
             )
             assert cur.rowcount == 6
@@ -1129,14 +1088,14 @@ INSERT ALL
                 """
 DROP TABLE IF EXISTS {name}_foo
 """.format(
-                    name=db_parameters["name"]
+                    name=name,
                 )
             )
             cnx.cursor().execute(
                 """
 DROP TABLE IF EXISTS {name}_bar
 """.format(
-                    name=db_parameters["name"]
+                    name=name,
                 )
             )
 
@@ -1161,6 +1120,7 @@ def test_close_twice(conn_testaccount):
 
 @pytest.mark.parametrize("result_format", ("arrow", "json"))
 def test_fetch_out_of_range_timestamp_value(conn, result_format):
+    conn, _ = conn
     with conn() as cnx:
         cur = cnx.cursor()
         cur.execute(
@@ -1173,6 +1133,7 @@ def test_fetch_out_of_range_timestamp_value(conn, result_format):
 
 @pytest.mark.skipolddriver
 def test_null_in_non_null(conn):
+    conn, _ = conn
     table_name = random_string(5, "null_in_non_null")
     error_msg = "NULL result in a non-nullable column"
     with conn() as cnx:
@@ -1185,6 +1146,7 @@ def test_null_in_non_null(conn):
 @pytest.mark.parametrize("sql", (None, ""), ids=["None", "empty"])
 def test_empty_execution(conn, sql):
     """Checks whether executing an empty string, or nothing behaves as expected."""
+    conn, _ = conn
     with conn() as cnx:
         with cnx.cursor() as cur:
             if sql is not None:
@@ -1205,6 +1167,7 @@ def test_empty_execution(conn, sql):
 )
 def test_reset_fetch(conn, reuse_results):
     """Tests behavior after resetting an open cursor."""
+    conn, _ = conn
     with conn(reuse_results=reuse_results) as cnx:
         with cnx.cursor() as cur:
             cur.execute("select 1")
@@ -1223,6 +1186,7 @@ def test_reset_fetch(conn, reuse_results):
 
 def test_rownumber(conn):
     """Checks whether rownumber is returned as expected."""
+    conn, _ = conn
     with conn() as cnx:
         with cnx.cursor() as cur:
             assert cur.execute("select * from values (1), (2)")
@@ -1235,6 +1199,7 @@ def test_rownumber(conn):
 
 def test_values_set(conn):
     """Checks whether a bunch of properties start as Nones, but get set to something else when a query was executed."""
+    conn, _ = conn
     properties = [
         "timestamp_output_format",
         "timestamp_ltz_output_format",
@@ -1271,6 +1236,7 @@ def test_execute_helper_params_error(conn_testaccount):
 @pytest.mark.skipolddriver
 def test_desc_rewrite(conn, caplog):
     """Tests whether describe queries are rewritten as expected and this action is logged."""
+    conn, _ = conn
     with conn() as cnx:
         with cnx.cursor() as cur:
             table_name = random_string(5, "test_desc_rewrite_")

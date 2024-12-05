@@ -24,7 +24,10 @@ logger = getLogger(__name__)
 
 def test_no_auth(db_parameters):
     """SNOW-13588: No auth Rest API test."""
-    rest = SnowflakeRestful(host=db_parameters["host"], port=db_parameters["port"])
+    rest = SnowflakeRestful(
+        host=db_parameters["host"],
+        port=db_parameters.get("port", 443),
+    )
     try:
         # no auth
         # show warehouse

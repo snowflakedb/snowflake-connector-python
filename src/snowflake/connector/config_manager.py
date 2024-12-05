@@ -330,7 +330,7 @@ class ConfigManager:
                 continue
 
             if (
-                sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
+                sliceoptions.check_permissions  # Skip checking if this slice isn't holding sensitive information
                 # Same check as openssh does for permissions
                 # https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
                 and filep.stat().st_mode & READABLE_BY_OTHERS != 0

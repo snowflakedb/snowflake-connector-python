@@ -220,18 +220,7 @@ def test_multiple_key_pair(is_public_test, request, conn_cnx, db_parameters):
         pass
 
 
-def test_bad_private_key(db_parameters):
-    db_config = {
-        "protocol": db_parameters["protocol"],
-        "account": db_parameters["account"],
-        "user": db_parameters["user"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "database": db_parameters["database"],
-        "schema": db_parameters["schema"],
-        "timezone": "UTC",
-    }
-
+def test_bad_private_key(conn_cnx):
     dsa_private_key = dsa.generate_private_key(key_size=2048, backend=default_backend())
     dsa_private_key_der = dsa_private_key.private_bytes(
         encoding=serialization.Encoding.DER,
@@ -254,9 +243,12 @@ def test_bad_private_key(db_parameters):
     ]
 
     for private_key in bad_private_key_test_cases:
-        db_config["private_key"] = private_key
         with pytest.raises(snowflake.connector.errors.ProgrammingError) as exec_info:
-            snowflake.connector.connect(**db_config)
+            with conn_cnx(
+                timezone="UTC",
+                private_key=private_key,
+            ):
+                ...
         assert exec_info.value.errno == 251008
 
 
