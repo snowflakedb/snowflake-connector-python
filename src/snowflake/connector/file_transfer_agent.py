@@ -354,6 +354,7 @@ class SnowflakeFileTransferAgent:
         multipart_threshold: int | None = None,
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
+        iobound_tpe_limit: int | None = None,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -384,6 +385,7 @@ class SnowflakeFileTransferAgent:
         self._multipart_threshold = multipart_threshold or 67108864  # Historical value
         self._use_s3_regional_url = use_s3_regional_url
         self._credentials: StorageCredential | None = None
+        self._iobound_tpe_limit = iobound_tpe_limit
 
     def execute(self) -> None:
         self._parse_command()
@@ -440,10 +442,15 @@ class SnowflakeFileTransferAgent:
             result.result_status = result.result_status.value
 
     def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
+        iobound_tpe_limit = min(len(metas), os.cpu_count())
+        logger.debug("Decided IO-bound TPE size: %d", iobound_tpe_limit)
+        if self._iobound_tpe_limit is not None:
+            logger.debug("IO-bound TPE size is limited to: %d", self._iobound_tpe_limit)
+            iobound_tpe_limit = min(iobound_tpe_limit, self._iobound_tpe_limit)
         max_concurrency = self._parallel
         network_tpe = ThreadPoolExecutor(max_concurrency)
-        preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
-        postprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
+        preprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
+        postprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
         logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
         cv_main_thread = threading.Condition()  # to signal the main thread
         cv_chunk_process = (
@@ -454,6 +461,9 @@ class SnowflakeFileTransferAgent:
         transfer_metadata = TransferMetadata()  # this is protected by cv_chunk_process
         is_upload = self._command_type == CMD_TYPE_UPLOAD
         exception_caught_in_callback: Exception | None = None
+        logger.debug(
+            "Going to %sload %d files", "up" if is_upload else "down", len(metas)
+        )
 
         def notify_file_completed() -> None:
             # Increment the number of completed files, then notify the main thread.
