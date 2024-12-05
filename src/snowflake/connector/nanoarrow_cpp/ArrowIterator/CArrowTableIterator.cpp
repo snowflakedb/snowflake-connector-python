@@ -899,6 +899,7 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
 
   ArrowArrayView* epochArray;
   ArrowArrayView* fractionArray;
+  ArrowArrayView* timezoneArray;
   for (int64_t i = 0; i < field->schema->n_children; i++) {
     ArrowSchema* c_schema = field->schema->children[i];
     if (std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
@@ -906,6 +907,9 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
     } else if (std::strcmp(c_schema->name,
                            internal::FIELD_NAME_FRACTION.c_str()) == 0) {
       fractionArray = columnArray->children[i];
+    } else if (std::strcmp(c_schema->name,
+                           internal::FIELD_NAME_TIME_ZONE.c_str()) == 0) {
+      timezoneArray = columnArray->children[i];
     } else {
       // do nothing
     }
@@ -913,6 +917,11 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
 
   for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
     if (!ArrowArrayViewIsNull(columnArray, rowIdx)) {
+      // TODO:
+      //   1. is per record time offset supported?
+      //   2. if supported, how to append timezone info along with the UTC
+      //   timestamp to the newArray
+      int32_t timezone = ArrowArrayViewGetIntUnsafe(timezoneArray, rowIdx);
       if (byteLength == 8) {
         int64_t epoch = ArrowArrayViewGetIntUnsafe(epochArray, rowIdx);
         if (scale == 0) {
