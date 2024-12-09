@@ -1102,7 +1102,6 @@ class SnowflakeConnection:
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
-
             self.authenticate_with_retry(self.auth_class)
 
             self._password = None  # ensure password won't persist
@@ -1270,7 +1269,8 @@ class SnowflakeConnection:
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if "." in self._account:
+
+        if self._account and "." in self._account:
             self._account = parse_account(self._account)
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(
@@ -1705,6 +1705,8 @@ class SnowflakeConnection:
 
     def _validate_client_session_keep_alive_heartbeat_frequency(self) -> int:
         """Validate and return heartbeat frequency in seconds."""
+        if self._is_stored_proc:
+            return 0
         real_max = int(self.rest.master_validity_in_seconds / 4)
         real_min = int(real_max / 4)
 

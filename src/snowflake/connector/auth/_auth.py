@@ -63,6 +63,8 @@ from ..options import installed_keyring, keyring
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..version import VERSION
 
+from .sp_auth import AuthByStoredProcConnection
+
 if TYPE_CHECKING:
     from . import AuthByPlugin
 
@@ -184,7 +186,8 @@ class Auth:
         timeout: int | None = None,
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
-
+        if isinstance(auth_instance, AuthByStoredProcConnection):
+            return {}
         if timeout is None:
             timeout = auth_instance.timeout
 
