@@ -1469,6 +1469,6 @@ def test_is_valid(conn_cnx):
     """Tests whether connection and session validation happens."""
     with conn_cnx() as conn:
         assert conn
-        assert conn.is_valid is True
+        assert conn.is_valid() is True
         conn.close()
-        assert conn.is_valid is False
+        assert conn.is_valid() is False
