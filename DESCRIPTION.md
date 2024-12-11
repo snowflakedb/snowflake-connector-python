@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 - v3.12.5(TBD)
   - Added a feature to limit the sizes of IO-bound ThreadPoolExecutors during PUT and GET commands.
+  - Added a feature to verify if the connection is still good enough to send queries over
 
 - v3.12.4(December 3,2024)
   - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
