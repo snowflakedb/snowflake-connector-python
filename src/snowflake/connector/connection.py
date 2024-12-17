@@ -41,6 +41,7 @@ from .auth import (
     AuthByKeyPair,
     AuthByOAuth,
     AuthByOkta,
+    AuthByPAT,
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
@@ -99,6 +100,7 @@ from .network import (
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
+    PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
     ReauthenticationRequest,
@@ -185,7 +187,11 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "private_key": (None, (type(None), bytes, RSAPrivateKey)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
-    "token": (None, (type(None), str)),  # OAuth or JWT Token
+    "token": (None, (type(None), str)),  # OAuth/JWT/PAT Token
+    "token_file_path": (
+        None,
+        (type(None), str, bytes),
+    ),  # OAuth/JWT/PAT Token file path
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
@@ -1115,6 +1121,8 @@ class SnowflakeConnection:
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
+            elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
+                self.auth_class = AuthByPAT(self._token)
             else:
                 # okta URL, e.g., https://<account>.okta.com/
                 self.auth_class = AuthByOkta(
@@ -1263,11 +1271,12 @@ class SnowflakeConnection:
             if (
                 self.auth_class is None
                 and self._authenticator
-                not in [
+                not in (
                     EXTERNAL_BROWSER_AUTHENTICATOR,
                     OAUTH_AUTHENTICATOR,
                     KEY_PAIR_AUTHENTICATOR,
-                ]
+                    PROGRAMMATIC_ACCESS_TOKEN,
+                )
                 and not self._password
             ):
                 Error.errorhandler_wrapper(
