@@ -1355,13 +1355,12 @@ class SnowflakeConnection:
             data["queryContextDTO"] = queryContext
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
 
-        if logger.getEffectiveLevel() <= logging.DEBUG:
-            logger.debug(
-                "sql=[%s], sequence_id=[%s], is_file_transfer=[%s]",
-                self._format_query_for_log(data["sqlText"]),
-                data["sequenceId"],
-                is_file_transfer,
-            )
+        logger.debug(
+            "sql=[%s], sequence_id=[%s], is_file_transfer=[%s]",
+            self._format_query_for_log(data["sqlText"]),
+            data["sequenceId"],
+            is_file_transfer,
+        )
 
         url_parameters = {REQUEST_ID: request_id}
 
