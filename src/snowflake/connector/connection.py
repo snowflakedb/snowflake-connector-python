@@ -1998,6 +1998,6 @@ class SnowflakeConnection:
                 return session_valid
             except Exception as e:
                 logger.debug(
-                    "session could not be validated due to exception: %s", str(e)
+                    "session could not be validated due to exception: %s", e
                 )
                 return False
