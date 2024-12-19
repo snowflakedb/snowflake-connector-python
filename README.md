@@ -82,6 +82,26 @@ conn = snowflake.connector.connect(
 conn.telemetry_enabled = False
 ```
 
+## Verifying Package Signatures
+
+To ensure the authenticity and integrity of the Python package, follow the steps below to verify the package signature using `cosign`.
+
+**Steps to verify the signature:**
+- Install cosign:
+  - This example is using golang installation: [installing-cosign-with-go](https://edu.chainguard.dev/open-source/sigstore/cosign/how-to-install-cosign/#installing-cosign-with-go)
+- Download the file from the repository like pypi:
+  - https://pypi.org/project/snowflake-connector-python/#files
+- Download the signature files from the release tag, replace the version number with the version you are verifying:
+  - https://github.com/snowflakedb/snowflake-connector-python/releases/tag/v3.12.2
+- Verify signature:
+  ````bash
+  # replace the version number with the version you are verifying
+  ./cosign verify-blob snowflake_connector_python-3.12.2.tar.gz \
+  --key snowflake-connector-python-v3.12.2.pub \
+  --signature resources.linux.snowflake_connector_python-3.12.2.tar.gz.sig
+
+  Verified OK
+  ````
 
 ## NOTE
 
