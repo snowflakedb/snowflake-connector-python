@@ -1989,15 +1989,13 @@ class SnowflakeConnection:
         if self.is_closed():
             logger.debug("connection is already closed and not valid")
             return False
-        else:
-            try:
-                logger.debug("trying to heartbeat into the session to validate")
-                hb_result = self.rest._heartbeat()
-                session_valid = hb_result.get("success")
-                logger.debug("session still valid? %s", str(session_valid))
-                return session_valid
-            except Exception as e:
-                logger.debug(
-                    "session could not be validated due to exception: %s", e
-                )
-                return False
+
+        try:
+            logger.debug("trying to heartbeat into the session to validate")
+            hb_result = self.rest._heartbeat()
+            session_valid = hb_result.get("success")
+            logger.debug("session still valid? %s", str(session_valid))
+            return session_valid
+        except Exception as e:
+            logger.debug("session could not be validated due to exception: %s", e)
+            return False
