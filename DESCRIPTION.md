@@ -11,7 +11,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.12.5(TBD)
   - Added a feature to limit the sizes of IO-bound ThreadPoolExecutors during PUT and GET commands.
   - Adding support for the new PAT authentication method.
- - Updated README.md to include instructions on how to verify package signatures using `cosign`.
+  - Updated README.md to include instructions on how to verify package signatures using `cosign`.
+  - Updated the log level for cursor's chunk rowcount from INFO to DEBUG
 
 - v3.12.4(December 3,2024)
   - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
