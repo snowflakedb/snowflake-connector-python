@@ -154,6 +154,7 @@ def _type_from_description(named_access: bool):
 
 @pytest.mark.skipolddriver
 def test_insert_select(conn, db_parameters, caplog):
+    caplog.set_level(logging.DEBUG)
     """Inserts and selects integer data."""
     with conn() as cnx:
         c = cnx.cursor()
@@ -198,6 +199,7 @@ def test_insert_select(conn, db_parameters, caplog):
 
 @pytest.mark.skipolddriver
 def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
+    caplog.set_level(logging.DEBUG)
     """Inserts a record and select it by a separate connection."""
     with conn() as cnx:
         result = cnx.cursor().execute(
@@ -933,6 +935,7 @@ def test_fetchmany(conn, db_parameters, caplog):
             assert c.rowcount == 6, "number of records"
 
         with cnx.cursor() as c:
+            caplog.set_level(logging.DEBUG)
             c.execute(f"select aa from {table_name} order by aa desc")
             assert "Number of results in first chunk: 6" in caplog.text
 
