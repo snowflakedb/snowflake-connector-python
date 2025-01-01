@@ -42,6 +42,8 @@ from ._sql_util import get_file_transfer_type
 from ._utils import _TrackedQueryCancellationTimer
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .constants import (
+    CMD_TYPE_DOWNLOAD,
+    CMD_TYPE_UPLOAD,
     FIELD_NAME_TO_ID,
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     FileTransferType,
@@ -1720,6 +1722,111 @@ class SnowflakeCursor:
             TelemetryField.GET_PARTITIONS_USED, TelemetryData.TRUE
         )
         return self._result_set.batches
+
+    def _upload(
+        self,
+        local_file_name: str,
+        stage_location: str,
+        options: Dict[str, Any],
+        _do_reset: bool = True,
+    ):
+        if _do_reset:
+            self.reset()
+
+        from .file_transfer_agent import SnowflakeFileTransferAgent
+
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name=local_file_name,
+            target_directory=None,
+            command_type=CMD_TYPE_UPLOAD,
+            options=options,
+        )
+        file_transfer_agent = SnowflakeFileTransferAgent(self, "", ret)
+        file_transfer_agent.execute()
+        self._init_result_and_meta(file_transfer_agent.result())
+
+    def _download(
+        self,
+        stage_location: str,
+        target_directory: str,
+        options: Dict[str, Any],
+        _do_reset: bool = True,
+    ):
+        if _do_reset:
+            self.reset()
+
+        from .file_transfer_agent import SnowflakeFileTransferAgent
+
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name=None,
+            target_directory=target_directory,
+            command_type=CMD_TYPE_DOWNLOAD,
+            options=options,
+        )
+
+        file_transfer_agent = SnowflakeFileTransferAgent(self, "", ret)
+        file_transfer_agent.execute()
+        self._init_result_and_meta(file_transfer_agent.result())
+
+    def _upload_stream(
+        self,
+        input_stream: IO[bytes],
+        stage_location: str,
+        options: Dict[str, Any],
+        _do_reset: bool = True,
+    ):
+        if _do_reset:
+            self.reset()
+
+        from .file_transfer_agent import SnowflakeFileTransferAgent
+
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name="",
+            target_directory=None,
+            command_type=CMD_TYPE_UPLOAD,
+            options=options,
+            has_source_from_stream=input_stream,
+        )
+
+        file_transfer_agent = SnowflakeFileTransferAgent(
+            self, "", ret, source_from_stream=input_stream
+        )
+        file_transfer_agent.execute()
+        self._init_result_and_meta(file_transfer_agent.result())
+
+    def _download_stream(
+        self, stage_location: str, decompress: bool = False
+    ) -> IO[bytes]:
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name=None,
+            target_directory=None,
+            command_type=CMD_TYPE_DOWNLOAD,
+            options=None,
+            has_source_from_stream=True,
+        )
+
+        return self.connection._stream_downloader.download_as_stream(ret, decompress)
+
+    def upload_stream(self, input_stream, dest_path):
+        """This version of upload_stream is depricated. Please use _upload_stream function instead."""
+        from io import BufferedWriter
+
+        import _sfstream
+
+        input_stream.seek(0)
+        wstream = _sfstream.SfStream(
+            dest_path,
+            file_type=_sfstream.FileType.STAGE,
+            mode=_sfstream.Mode.WRITE,
+            rso_id=self._connection.rso_id,
+        )
+        writer = BufferedWriter(wstream)
+        writer.write(input_stream.read())
+        writer.close()
 
 
 class DictCursor(SnowflakeCursor):

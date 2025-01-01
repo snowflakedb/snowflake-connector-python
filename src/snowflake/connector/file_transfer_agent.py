@@ -33,6 +33,7 @@ from .constants import (
     S3_MAX_OBJECT_SIZE,
     S3_MAX_PARTS,
     S3_MIN_PART_SIZE,
+    STORED_PROC_FS,
     ResultStatus,
     megabyte,
 )
@@ -65,7 +66,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .cursor import SnowflakeCursor
     from .file_compression_type import CompressionType
 
-VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS]
+VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS, STORED_PROC_FS]
 
 INJECT_WAIT_IN_PUT = 0
 
@@ -690,6 +691,12 @@ class SnowflakeFileTransferAgent:
                 self._command,
                 use_s3_regional_url=self._use_s3_regional_url,
             )
+        elif self._stage_location_type == STORED_PROC_FS:
+            return self._cursor.connection._StoredProcStorageClient(
+                meta,
+                self._cursor,
+                self._stage_location,
+            )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 
     def _transfer_accelerate_config(self) -> None:
@@ -917,9 +924,10 @@ class SnowflakeFileTransferAgent:
 
         self._stage_location = response["stageInfo"]["location"]
         self._stage_info = response["stageInfo"]
-        self._credentials = StorageCredential(
-            self._stage_info["creds"], self._cursor.connection, self._command
-        )
+        if self._stage_location_type != STORED_PROC_FS:
+            self._credentials = StorageCredential(
+                self._stage_info["creds"], self._cursor.connection, self._command
+            )
         self._presigned_urls = self._ret["data"].get("presignedUrls")
 
         if self._command_type == CMD_TYPE_UPLOAD:

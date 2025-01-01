@@ -405,6 +405,7 @@ class SnowflakeConnection:
         the name explicitly.
         """
         # initiate easy logging during every connection
+        self.rso_id = kwargs.get("rso_id", -1)
         easy_logging = EasyLoggingConfigPython()
         easy_logging.create_log()
         self._lock_sequence_counter = Lock()
@@ -424,6 +425,8 @@ class SnowflakeConnection:
             PYTHON_VERSION,
             PLATFORM,
         )
+        self._file_operation_parser = None
+        self._stream_downloader = None
 
         self._rest = None
         for name, (value, _) in DEFAULT_CONFIGURATION.items():
