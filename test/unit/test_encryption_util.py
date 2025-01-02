@@ -46,7 +46,7 @@ def test_encrypt_decrypt_file(tmp_path):
             encryption_material, input_file, tmp_dir=str(tmp_path)
         )
         decrypted_file = SnowflakeEncryptionUtil.decrypt_file(
-            metadata, encryption_material, encrypted_file, tmp_dir=str(tmp_path)
+            metadata, encryption_material, encrypted_file
         )
 
         contents = ""
@@ -98,10 +98,10 @@ def test_encrypt_decrypt_large_file(tmpdir):
                 )
 
             (metadata, encrypted_file) = SnowflakeEncryptionUtil.encrypt_file(
-                encryption_material, input_file, tmp_dir=str(tmpdir)
+                encryption_material, input_file
             )
             decrypted_file = SnowflakeEncryptionUtil.decrypt_file(
-                metadata, encryption_material, encrypted_file, tmp_dir=str(tmpdir)
+                metadata, encryption_material, encrypted_file
             )
 
             digest_dec, size_dec = SnowflakeFileUtil.get_digest_and_size_for_file(
