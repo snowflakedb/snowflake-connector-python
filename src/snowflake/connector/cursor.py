@@ -1163,7 +1163,7 @@ class SnowflakeCursor:
         )
 
         if not (is_dml or self.is_file_transfer):
-            logger.info(
+            logger.debug(
                 "Number of results in first chunk: %s", result_chunks[0].rowcount
             )
 
