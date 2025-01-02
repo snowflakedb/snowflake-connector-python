@@ -5,7 +5,7 @@ requests.adapters
 This module contains the transport adapters that Requests uses to define
 and maintain connections.
 """
-
+import logging
 import os.path
 import socket  # noqa: F401
 
@@ -65,6 +65,8 @@ DEFAULT_POOLBLOCK = False
 DEFAULT_POOLSIZE = 10
 DEFAULT_RETRIES = 0
 DEFAULT_POOL_TIMEOUT = None
+
+log = logging.getLogger(__name__)
 
 
 class BaseAdapter:
@@ -535,4 +537,5 @@ class HTTPAdapter(BaseAdapter):
             else:
                 raise
 
+        log.debug(f"Exiting adapters.send(). request: {request}")
         return self.build_response(request, resp)
