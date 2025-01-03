@@ -54,7 +54,9 @@ from .config_manager import CONFIG_MANAGER, _get_default_connection_params
 from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
+    _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     _DOMAIN_NAME_MAP,
+    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -300,6 +302,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # It is set to True for Stored Procedures
+    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER: (
+        _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
+        int,  # type
+    ),  # Caps the max DoP for Stored Proc file transfer.
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")

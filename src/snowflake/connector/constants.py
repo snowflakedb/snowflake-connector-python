@@ -435,3 +435,12 @@ _CONNECTIVITY_ERR_MSG = (
     "\nTo further troubleshoot your connection you may reference the following article: "
     "https://docs.snowflake.com/en/user-guide/client-connectivity-troubleshooting/overview."
 )
+
+# Default server side cap on Degree of Parallelism for file transfer
+# This default value is set to 2^30 (~ 10^9), such that it will not
+# throttle regular sessions, when ported to public connector later.
+_DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER = 1 << 30
+# Variable name of server DoP cap for file transfer
+_VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER = (
+    "snowflake_server_dop_cap_for_file_transfer"
+)

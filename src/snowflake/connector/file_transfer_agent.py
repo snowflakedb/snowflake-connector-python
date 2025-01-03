@@ -22,6 +22,7 @@ from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import GET_CWD, IS_WINDOWS
 from .constants import (
+    _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     AZURE_CHUNK_SIZE,
     AZURE_FS,
     CMD_TYPE_DOWNLOAD,
@@ -355,6 +356,7 @@ class SnowflakeFileTransferAgent:
         multipart_threshold: int | None = None,
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
+        snowflake_server_dop_cap_for_file_transfer: int = _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -385,6 +387,9 @@ class SnowflakeFileTransferAgent:
         self._multipart_threshold = multipart_threshold or 67108864  # Historical value
         self._use_s3_regional_url = use_s3_regional_url
         self._credentials: StorageCredential | None = None
+        self._snowflake_server_dop_cap_for_file_transfer = (
+            snowflake_server_dop_cap_for_file_transfer
+        )
 
     def execute(self) -> None:
         self._parse_command()
@@ -441,10 +446,21 @@ class SnowflakeFileTransferAgent:
             result.result_status = result.result_status.value
 
     def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
-        max_concurrency = self._parallel
+        max_concurrency = min(
+            self._parallel, self._snowflake_server_dop_cap_for_file_transfer
+        )
         network_tpe = ThreadPoolExecutor(max_concurrency)
-        preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
-        postprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
+        preprocess_tpe = ThreadPoolExecutor(
+            min(len(metas), os.cpu_count()),
+            self._snowflake_server_dop_cap_for_file_transfer,
+        )
+        postprocess_tpe = ThreadPoolExecutor(
+            min(
+                len(metas),
+                os.cpu_count(),
+                self._snowflake_server_dop_cap_for_file_transfer,
+            )
+        )
         logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
         cv_main_thread = threading.Condition()  # to signal the main thread
         cv_chunk_process = (
