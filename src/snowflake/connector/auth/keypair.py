@@ -44,6 +44,7 @@ class AuthByKeyPair(AuthByPlugin):
     def __init__(
         self,
         private_key: bytes | RSAPrivateKey,
+        private_key_passphrase: bytes | None = None,
         lifetime_in_seconds: int = LIFETIME,
         **kwargs,
     ) -> None:
@@ -76,6 +77,7 @@ class AuthByKeyPair(AuthByPlugin):
         )
 
         self._private_key: bytes | RSAPrivateKey | None = private_key
+        self._private_key_passphrase: bytes | None = private_key_passphrase
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
@@ -109,7 +111,7 @@ class AuthByKeyPair(AuthByPlugin):
             try:
                 private_key = load_der_private_key(
                     data=self._private_key,
-                    password=None,
+                    password=self._private_key_passphrase,
                     backend=default_backend(),
                 )
             except Exception as e:
