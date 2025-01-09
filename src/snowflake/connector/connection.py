@@ -2004,7 +2004,7 @@ class SnowflakeConnection:
             hb_result = self.rest._heartbeat()
             session_valid = hb_result.get("success")
             logger.debug("session still valid? %s", session_valid)
-            return session_valid
+            return bool(session_valid)
         except Exception as e:
             logger.debug("session could not be validated due to exception: %s", e)
             return False
