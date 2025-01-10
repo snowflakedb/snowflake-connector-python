@@ -65,6 +65,39 @@ def test_auth_keypair():
     assert rest.master_token == "MASTER_TOKEN"
 
 
+def test_auth_keypair_with_passphrase():
+    """Simple Key Pair test with passphrase."""
+
+    passphrase = b"test"
+    private_key_der, public_key_der_encoded = generate_key_pair(
+        2048,
+        passphrase=passphrase,
+    )
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    auth_instance = AuthByKeyPair(
+        private_key=private_key_der,
+        private_key_passphrase=passphrase,
+    )
+    auth_instance._retry_ctx.set_start_time()
+    auth_instance.handle_timeout(
+        authenticator="SNOWFLAKE_JWT",
+        service_name=None,
+        account=account,
+        user=user,
+        password=None,
+    )
+
+    # success test case
+    rest = _init_rest(application, _create_mock_auth_keypair_rest_response())
+    auth = Auth(rest)
+    auth.authenticate(auth_instance, account, user)
+    assert not rest._connection.errorhandler.called  # not error
+    assert rest.token == "TOKEN"
+    assert rest.master_token == "MASTER_TOKEN"
+
+
 def test_auth_keypair_abc():
     """Simple Key Pair test using abstraction layer."""
     private_key_der, public_key_der_encoded = generate_key_pair(2048)
@@ -153,7 +186,7 @@ def _init_rest(application, post_requset):
     return rest
 
 
-def generate_key_pair(key_length):
+def generate_key_pair(key_length: int, *, passphrase: bytes | None = None):
     private_key = rsa.generate_private_key(
         backend=default_backend(), public_exponent=65537, key_size=key_length
     )
@@ -161,7 +194,11 @@ def generate_key_pair(key_length):
     private_key_der = private_key.private_bytes(
         encoding=serialization.Encoding.DER,
         format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
+        encryption_algorithm=(
+            serialization.BestAvailableEncryption(passphrase)
+            if passphrase
+            else serialization.NoEncryption()
+        ),
     )
 
     public_key_pem = (
