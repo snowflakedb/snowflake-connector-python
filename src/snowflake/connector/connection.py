@@ -1677,7 +1677,7 @@ class SnowflakeConnection:
             self._telemetry.try_add_log_to_batch(telemetry_data)
 
     def _add_heartbeat(self) -> None:
-        """Add an hourly heartbeat query in order to keep connection alive."""
+        """Add a periodic heartbeat query in order to keep connection alive."""
         if not self.heartbeat_thread:
             self._validate_client_session_keep_alive_heartbeat_frequency()
             heartbeat_wref = weakref.WeakMethod(self._heartbeat_tick)
@@ -1703,7 +1703,7 @@ class SnowflakeConnection:
             logger.debug("stopped heartbeat")
 
     def _heartbeat_tick(self) -> None:
-        """Execute a hearbeat if connection isn't closed yet."""
+        """Execute a heartbeat if connection isn't closed yet."""
         if not self.is_closed():
             logger.debug("heartbeating!")
             self.rest._heartbeat()
@@ -1990,3 +1990,21 @@ class SnowflakeConnection:
                     connection=self,
                 )
             )
+
+    def is_valid(self) -> bool:
+        """This function tries to answer the question: Is this connection still good for sending queries?
+        Attempts to validate the connections both on the TCP/IP and Session levels."""
+        logger.debug("validating connection and session")
+        if self.is_closed():
+            logger.debug("connection is already closed and not valid")
+            return False
+
+        try:
+            logger.debug("trying to heartbeat into the session to validate")
+            hb_result = self.rest._heartbeat()
+            session_valid = hb_result.get("success")
+            logger.debug("session still valid? %s", session_valid)
+            return bool(session_valid)
+        except Exception as e:
+            logger.debug("session could not be validated due to exception: %s", e)
+            return False
