@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import base64
 import uuid
 from datetime import datetime, timedelta, timezone
 from os import path
@@ -123,6 +124,11 @@ def test_different_key_length(is_public_test, request, conn_cnx, db_parameters):
             )
 
             db_config["private_key"] = private_key_der
+            with snowflake.connector.connect(**db_config) as _:
+                pass
+
+            # Ensure the base64-encoded version also works
+            db_config["private_key"] = base64.b64encode(private_key_der)
             with snowflake.connector.connect(**db_config) as _:
                 pass
 
