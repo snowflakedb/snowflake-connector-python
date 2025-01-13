@@ -110,7 +110,7 @@ class AuthByKeyPair(AuthByPlugin):
                 self._private_key = base64.b64decode(self._private_key)
             except Exception as e:
                 raise ProgrammingError(
-                    msg=f"Failed to load private key: {e}\nPlease provide a valid "
+                    msg=f"Failed to decode private key: {e}\nPlease provide a valid "
                     "unencrypted rsa private key in base64-encoded DER format as a "
                     "str object",
                     errno=ER_INVALID_PRIVATE_KEY,
