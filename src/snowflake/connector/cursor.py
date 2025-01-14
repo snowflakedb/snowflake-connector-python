@@ -930,7 +930,7 @@ class SnowflakeCursor:
         if _do_reset:
             self.reset()
         command = command.strip(" \t\n\r") if command else None
-        if not command:
+        if not command and not _dataframe_ast:
             logger.warning("execute: no query is given to execute")
             return None
         logger.debug("query: [%s]", self._format_query_for_log(command))
