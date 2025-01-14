@@ -116,6 +116,7 @@ class AuthByWebBrowser(AuthByPlugin):
         """Web Browser based Authentication."""
         logger.debug("authenticating by Web Browser")
 
+        # TODO: switch to the new AuthHttpServer class instead of doing this manually
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
 
         if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
