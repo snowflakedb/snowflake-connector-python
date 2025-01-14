@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import socket
+import string
 import time
 import urllib.parse
 import webbrowser
@@ -65,7 +67,8 @@ class AuthByOauthCode(AuthByPlugin):
         self.token_request_url = token_request_url
         self.redirect_uri = redirect_uri
         self.scope = scope
-        self.state = "this_is_a_test"
+        self._state = "".join(random.choices(string.ascii_letters, k=10))
+        logger.debug("chose oauth state: %s", self._state)
         self._oauth_token = None
         self._protocol = "http"
 
@@ -96,7 +99,7 @@ class AuthByOauthCode(AuthByPlugin):
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
             "scope": self.scope,
-            "state": self.state,
+            "state": self._state,
         }
         url_params = urllib.parse.urlencode(params)
         url = f"{self.authentication_url}?{url_params}"
