@@ -163,13 +163,13 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "user": ("", str),  # standard
     "password": ("", str),  # standard
     "host": ("127.0.0.1", str),  # standard
-    "port": (8080, (int, str)),  # standard
+    "port": (443, (int, str)),  # standard
     "database": (None, (type(None), str)),  # standard
     "proxy_host": (None, (type(None), str)),  # snowflake
     "proxy_port": (None, (type(None), str)),  # snowflake
     "proxy_user": (None, (type(None), str)),  # snowflake
     "proxy_password": (None, (type(None), str)),  # snowflake
-    "protocol": ("http", str),  # snowflake
+    "protocol": ("https", str),  # snowflake
     "warehouse": (None, (type(None), str)),  # snowflake
     "region": (None, (type(None), str)),  # snowflake
     "account": (None, (type(None), str)),  # snowflake
@@ -528,8 +528,8 @@ class SnowflakeConnection:
         return self._host
 
     @property
-    def port(self) -> int | str:  # TODO: shouldn't be a string
-        return self._port
+    def port(self) -> int:
+        return int(self._port)
 
     @property
     def region(self) -> str | None:
@@ -1238,10 +1238,6 @@ class SnowflakeConnection:
         if "account" in kwargs:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
-            if "port" not in kwargs:
-                self._port = "443"
-            if "protocol" not in kwargs:
-                self._protocol = "https"
 
         if "unsafe_file_write" in kwargs:
             self._unsafe_file_write = kwargs["unsafe_file_write"]
