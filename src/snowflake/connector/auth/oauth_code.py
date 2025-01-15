@@ -17,7 +17,11 @@ from typing import TYPE_CHECKING, Any
 import urllib3
 
 from ..compat import parse_qs, urlparse, urlsplit
-from ..errorcode import ER_IDP_CONNECTION_ERROR, ER_UNABLE_TO_OPEN_BROWSER
+from ..errorcode import (
+    ER_IDP_CONNECTION_ERROR,
+    ER_OAUTH_STATE_CHANGED,
+    ER_UNABLE_TO_OPEN_BROWSER,
+)
 from ..errors import InterfaceError
 from ..network import OAUTH_AUTHENTICATOR
 from ._http_server import AuthHttpServer
@@ -164,6 +168,14 @@ class AuthByOauthCode(AuthByPlugin):
         q_params = _get_query_params(url)
         code = q_params["code"][0]
         state = q_params["state"][0]
+        if state != self._state:
+            self._handle_failure(
+                conn=conn,
+                ret={
+                    "code": ER_OAUTH_STATE_CHANGED,
+                    "message": "State changed during OAuth process.",
+                },
+            )
         logger.debug(
             "received oauth code: %s and state: %s", "*" * len(code), "*" * len(state)
         )
