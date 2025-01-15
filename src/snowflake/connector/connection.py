@@ -90,7 +90,6 @@ from .errorcode import (
     ER_INVALID_VALUE,
     ER_NO_ACCOUNT_NAME,
     ER_NO_CLIENT_ID,
-    ER_NO_CLIENT_SECRET,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
     ER_NO_ROLE,
@@ -1139,16 +1138,6 @@ class SnowflakeConnection:
                         {
                             "msg": "Oauth code flow requirement 'client_id' is empty",
                             "errno": ER_NO_CLIENT_ID,
-                        },
-                    )
-                if self._client_secret is None:
-                    Error.errorhandler_wrapper(
-                        self,
-                        None,
-                        ProgrammingError,
-                        {
-                            "msg": "Oauth code flow requirement 'client_secret' is empty",
-                            "errno": ER_NO_CLIENT_SECRET,
                         },
                     )
                 if "{role}" in self._oauth_scope and self._role is None:
