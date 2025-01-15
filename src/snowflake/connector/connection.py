@@ -91,7 +91,6 @@ from .errorcode import (
     ER_INVALID_VALUE,
     ER_NO_ACCOUNT_NAME,
     ER_NO_CLIENT_ID,
-    ER_NO_CLIENT_SECRET,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
     ER_NO_ROLE,
