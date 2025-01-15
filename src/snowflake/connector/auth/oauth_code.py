@@ -49,7 +49,7 @@ class AuthByOauthCode(AuthByPlugin):
         self,
         application: str,
         client_id: str,
-        client_secret: str,
+        client_secret: str | None,
         authentication_url: str,
         token_request_url: str,
         redirect_uri: str,
@@ -167,17 +167,19 @@ class AuthByOauthCode(AuthByPlugin):
         logger.debug(
             "received oauth code: %s and state: %s", "*" * len(code), "*" * len(state)
         )
+        fields = {
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": self.client_id,
+            "redirect_uri": self.redirect_uri,
+        }
+        if self.client_secret:
+            fields["client_secret"] = self.client_secret
         resp = urllib3.PoolManager().request_encode_body(  # TODO: use network pool to gain use of proxy settings and so on
             "POST",
             self.token_request_url,
             encode_multipart=False,
-            fields={
-                "grant_type": "authorization_code",
-                "code": code,
-                "client_id": self.client_id,
-                "client_secret": self.client_secret,
-                "redirect_uri": self.redirect_uri,
-            },
+            fields=fields,
         )
         try:
             self._oauth_token = json.loads(resp.data)["access_token"]
