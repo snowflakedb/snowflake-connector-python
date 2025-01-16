@@ -6,9 +6,8 @@ from __future__ import annotations
 
 import json
 import logging
-import random
+import secrets
 import socket
-import string
 import time
 import urllib.parse
 import webbrowser
@@ -71,7 +70,7 @@ class AuthByOauthCode(AuthByPlugin):
         self.token_request_url = token_request_url
         self.redirect_uri = redirect_uri
         self.scope = scope
-        self._state = "".join(random.choices(string.ascii_letters, k=10))
+        self._state = secrets.token_urlsafe(43)
         logger.debug("chose oauth state: %s", self._state)
         self._oauth_token = None
         self._protocol = "http"
