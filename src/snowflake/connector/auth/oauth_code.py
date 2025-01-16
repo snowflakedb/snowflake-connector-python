@@ -5,8 +5,10 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
+import re
 import secrets
 import socket
 import time
@@ -54,6 +56,7 @@ class AuthByOauthCode(AuthByPlugin):
         token_request_url: str,
         redirect_uri: str,
         scope: str,
+        pkce: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -71,6 +74,10 @@ class AuthByOauthCode(AuthByPlugin):
         logger.debug("chose oauth state: %s", self._state)
         self._oauth_token = None
         self._protocol = "http"
+        self.pkce = pkce
+        if pkce:
+            logger.debug("oauth pkce is going to be used")
+        self._verifier: str | None = None
 
     def reset_secrets(self) -> None:
         self._oauth_token = None
@@ -102,6 +109,19 @@ class AuthByOauthCode(AuthByPlugin):
         }
         if self.scope:
             params["scope"] = self.scope
+        if self.pkce:
+            self._verifier = secrets.token_urlsafe(43)
+            self._verifier = re.sub("[^a-zA-Z0-9]+", "", self._verifier)
+            # calculate challenge and verifier
+            challenge = (
+                base64.urlsafe_b64encode(
+                    hashlib.sha256(self._verifier.encode("utf-8")).digest()
+                )
+                .decode("utf-8")
+                .replace("=", "")
+            )
+            params["code_challenge"] = challenge
+            params["code_challenge_method"] = "S256"
         url_params = urllib.parse.urlencode(params)
         url = f"{self.authentication_url}?{url_params}"
         return url
@@ -184,6 +204,10 @@ class AuthByOauthCode(AuthByPlugin):
         }
         if self.client_secret:
             fields["client_secret"] = self.client_secret
+        if self.pkce:
+            assert self._verifier is not None
+            fields["code_verifier"] = self._verifier
+
         resp = urllib3.PoolManager().request_encode_body(  # TODO: use network pool to gain use of proxy settings and so on
             "POST",
             self.token_request_url,
