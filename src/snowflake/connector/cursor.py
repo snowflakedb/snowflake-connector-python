@@ -930,14 +930,14 @@ class SnowflakeCursor:
         if _do_reset:
             self.reset()
         command = command.strip(" \t\n\r") if command else ""
-        if not command and not _dataframe_ast:
-            logger.warning("execute: no query is given to execute")
-            return None
-        if command:
-            logger.debug("query: [%s]", self._format_query_for_log(command))
-        if _dataframe_ast:
-            logger.debug("dataframe ast: [%s]", _dataframe_ast)
+        if not command:
+            if _dataframe_ast:
+                logger.debug("dataframe ast: [%s]", _dataframe_ast)
+            else:
+                logger.warning("execute: no query is given to execute")
+                return None
 
+        logger.debug("query: [%s]", self._format_query_for_log(command))
         _statement_params = _statement_params or dict()
         # If we need to add another parameter, please consider introducing a dict for all extra params
         # See discussion in https://github.com/snowflakedb/snowflake-connector-python/pull/1524#discussion_r1174061775
