@@ -933,7 +933,10 @@ class SnowflakeCursor:
         if not command and not _dataframe_ast:
             logger.warning("execute: no query is given to execute")
             return None
-        logger.debug("query: [%s]", self._format_query_for_log(command))
+        if command:
+            logger.debug("query: [%s]", self._format_query_for_log(command))
+        if _dataframe_ast:
+            logger.debug("dataframe ast: [%s]", _dataframe_ast)
 
         _statement_params = _statement_params or dict()
         # If we need to add another parameter, please consider introducing a dict for all extra params
