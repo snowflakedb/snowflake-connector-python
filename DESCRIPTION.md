@@ -8,9 +8,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
-- v3.12.5(TBD)
+- v3.13.0(January 22,2025)
   - Added a feature to limit the sizes of IO-bound ThreadPoolExecutors during PUT and GET commands.
-  - Adding support for the new PAT authentication method.
   - Updated README.md to include instructions on how to verify package signatures using `cosign`.
   - Updated the log level for cursor's chunk rowcount from INFO to DEBUG.
   - Added a feature to verify if the connection is still good enough to send queries over.
