@@ -335,7 +335,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         # SNOW-1825621: OAUTH implementation
     ),
     "oauth_security_features": (
-        ("pkce",),
+        ("pkce", "refresh_token"),
         collections.abc.Iterable,  # of strings
         # SNOW-1825621: OAUTH PKCE
     ),
@@ -1124,6 +1124,9 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
                 pkce = "pkce" in map(lambda e: e.lower(), self._oauth_security_features)
+                refresh_token = "refresh_token" in map(
+                    lambda e: e.lower(), self._oauth_security_features
+                )
                 if self._oauth_client_id is None:
                     Error.errorhandler_wrapper(
                         self,
@@ -1150,6 +1153,7 @@ class SnowflakeConnection:
                     redirect_uri="http://127.0.0.1:{port}/",
                     scope=self._oauth_scope,
                     pkce=pkce,
+                    refresh_token=refresh_token,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (

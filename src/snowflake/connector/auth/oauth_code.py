@@ -56,6 +56,7 @@ class AuthByOauthCode(AuthByPlugin):
         redirect_uri: str,
         scope: str,
         pkce: bool = False,
+        refresh_token: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -70,13 +71,19 @@ class AuthByOauthCode(AuthByPlugin):
         self.redirect_uri = redirect_uri
         self.scope = scope
         self._state = secrets.token_urlsafe(43)
+        self._oauth_token: str | None = None
+        self._refresh_token: str | None = None
         logger.debug("chose oauth state: %s", self._state)
-        self._oauth_token = None
         self._protocol = "http"
         self.pkce = pkce
         if pkce:
             logger.debug("oauth pkce is going to be used")
         self._verifier: str | None = None
+        self.refresh_token = refresh_token
+        self._refresh_token: str | None = None
+        if refresh_token:
+            logger.debug("oauth refresh token is going to be requested")
+            self.scope += (" " if self.scope else "") + "offline_access"
 
     def reset_secrets(self) -> None:
         self._oauth_token = None
@@ -218,7 +225,9 @@ class AuthByOauthCode(AuthByPlugin):
             fields=fields,
         )
         try:
-            self._oauth_token = json.loads(resp.data)["access_token"]
+            json_resp = json.loads(resp.data)
+            self._oauth_token = json_resp["access_token"]
+            self._refresh_token = json_resp.get("refresh_token")
         except (
             json.JSONDecodeError,
             KeyError,
@@ -360,3 +369,42 @@ You can close this window now and go back where you started from.
             if line.startswith("GET "):
                 return True
         return False
+
+    def _consume_refresh_token(self) -> None:
+        if not self._refresh_token:
+            return
+        fields = {
+            "client_id": self.client_id,
+            "grant_type": "refresh_token",
+            "refresh_token": self._refresh_token,
+        }
+        if self.client_secret:
+            fields["client_secret"] = self.client_secret
+
+        resp = urllib3.PoolManager().request_encode_body(  # TODO: use network pool to gain use of proxy settings and so on
+            "POST",
+            self.token_request_url,
+            encode_multipart=False,
+            fields=fields,
+        )
+        try:
+            json_resp = json.loads(resp.data)
+            self._oauth_token = json_resp["access_token"]
+            self._refresh_token = json_resp.get("refresh_token")
+        except (
+            json.JSONDecodeError,
+            KeyError,
+        ):
+            logger.error("oauth reponse invalid, does not contain 'access_token'")
+            logger.debug(
+                "received the following response body when requesting oauth token: %s",
+                resp.body,
+            )
+            self._handle_failure(
+                conn=conn,
+                ret={
+                    "code": ER_IDP_CONNECTION_ERROR,
+                    "message": "Invalid HTTP request from web browser. Idp "
+                    "authentication could have failed.",
+                },
+            )
