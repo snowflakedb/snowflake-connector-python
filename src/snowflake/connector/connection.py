@@ -41,6 +41,7 @@ from .auth import (
     AuthByKeyPair,
     AuthByOAuth,
     AuthByOkta,
+    AuthByPAT,
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
@@ -99,6 +100,7 @@ from .network import (
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
+    PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
     ReauthenticationRequest,
@@ -183,10 +185,14 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "backoff_policy": (DEFAULT_BACKOFF_POLICY, Callable),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
-    "private_key": (None, (type(None), bytes, RSAPrivateKey)),
+    "private_key": (None, (type(None), bytes, str, RSAPrivateKey)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
-    "token": (None, (type(None), str)),  # OAuth or JWT Token
+    "token": (None, (type(None), str)),  # OAuth/JWT/PAT Token
+    "token_file_path": (
+        None,
+        (type(None), str, bytes),
+    ),  # OAuth/JWT/PAT Token file path
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
@@ -295,6 +301,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # disable saml url check in okta authentication
+    "iobound_tpe_limit": (
+        None,
+        (type(None), int),
+    ),  # SNOW-1817982: limit iobound TPE sizes when executing PUT/GET
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -727,6 +737,10 @@ class SnowflakeConnection:
     def is_query_context_cache_disabled(self) -> bool:
         return self._disable_query_context_cache
 
+    @property
+    def iobound_tpe_limit(self) -> int | None:
+        return self._iobound_tpe_limit
+
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
@@ -1090,6 +1104,8 @@ class SnowflakeConnection:
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
+            elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
+                self.auth_class = AuthByPAT(self._token)
             else:
                 # okta URL, e.g., https://<account>.okta.com/
                 self.auth_class = AuthByOkta(
@@ -1238,11 +1254,12 @@ class SnowflakeConnection:
             if (
                 self.auth_class is None
                 and self._authenticator
-                not in [
+                not in (
                     EXTERNAL_BROWSER_AUTHENTICATOR,
                     OAUTH_AUTHENTICATOR,
                     KEY_PAIR_AUTHENTICATOR,
-                ]
+                    PROGRAMMATIC_ACCESS_TOKEN,
+                )
                 and not self._password
             ):
                 Error.errorhandler_wrapper(
@@ -1661,7 +1678,7 @@ class SnowflakeConnection:
             self._telemetry.try_add_log_to_batch(telemetry_data)
 
     def _add_heartbeat(self) -> None:
-        """Add an hourly heartbeat query in order to keep connection alive."""
+        """Add a periodic heartbeat query in order to keep connection alive."""
         if not self.heartbeat_thread:
             self._validate_client_session_keep_alive_heartbeat_frequency()
             heartbeat_wref = weakref.WeakMethod(self._heartbeat_tick)
@@ -1687,7 +1704,7 @@ class SnowflakeConnection:
             logger.debug("stopped heartbeat")
 
     def _heartbeat_tick(self) -> None:
-        """Execute a hearbeat if connection isn't closed yet."""
+        """Execute a heartbeat if connection isn't closed yet."""
         if not self.is_closed():
             logger.debug("heartbeating!")
             self.rest._heartbeat()
@@ -1974,3 +1991,21 @@ class SnowflakeConnection:
                     connection=self,
                 )
             )
+
+    def is_valid(self) -> bool:
+        """This function tries to answer the question: Is this connection still good for sending queries?
+        Attempts to validate the connections both on the TCP/IP and Session levels."""
+        logger.debug("validating connection and session")
+        if self.is_closed():
+            logger.debug("connection is already closed and not valid")
+            return False
+
+        try:
+            logger.debug("trying to heartbeat into the session to validate")
+            hb_result = self.rest._heartbeat()
+            session_valid = hb_result.get("success")
+            logger.debug("session still valid? %s", session_valid)
+            return bool(session_valid)
+        except Exception as e:
+            logger.debug("session could not be validated due to exception: %s", e)
+            return False

@@ -929,12 +929,15 @@ class SnowflakeCursor:
 
         if _do_reset:
             self.reset()
-        command = command.strip(" \t\n\r") if command else None
+        command = command.strip(" \t\n\r") if command else ""
         if not command:
-            logger.warning("execute: no query is given to execute")
-            return None
-        logger.debug("query: [%s]", self._format_query_for_log(command))
+            if _dataframe_ast:
+                logger.debug("dataframe ast: [%s]", _dataframe_ast)
+            else:
+                logger.warning("execute: no query is given to execute")
+                return None
 
+        logger.debug("query: [%s]", self._format_query_for_log(command))
         _statement_params = _statement_params or dict()
         # If we need to add another parameter, please consider introducing a dict for all extra params
         # See discussion in https://github.com/snowflakedb/snowflake-connector-python/pull/1524#discussion_r1174061775
@@ -1054,6 +1057,7 @@ class SnowflakeCursor:
                     source_from_stream=file_stream,
                     multipart_threshold=data.get("threshold"),
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
+                    iobound_tpe_limit=self._connection.iobound_tpe_limit,
                 )
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
@@ -1163,7 +1167,7 @@ class SnowflakeCursor:
         )
 
         if not (is_dml or self.is_file_transfer):
-            logger.info(
+            logger.debug(
                 "Number of results in first chunk: %s", result_chunks[0].rowcount
             )
 

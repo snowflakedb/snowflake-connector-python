@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import typing
 from base64 import b64decode, b64encode
 from collections import OrderedDict
 from datetime import datetime, timezone
@@ -28,6 +29,9 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, utils
+from cryptography.hazmat.primitives.asymmetric.dsa import DSAPublicKey
+from cryptography.hazmat.primitives.asymmetric.ec import ECDSA, EllipticCurvePublicKey
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from OpenSSL.SSL import Connection
 
 from snowflake.connector.errorcode import (
@@ -368,9 +372,21 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         hasher = hashes.Hash(chosen_hash, backend)
         hasher.update(data.dump())
         digest = hasher.finalize()
+        additional_kwargs: dict[str, typing.Any] = dict()
+        if isinstance(public_key, RSAPublicKey):
+            additional_kwargs["padding"] = padding.PKCS1v15()
+            additional_kwargs["algorithm"] = utils.Prehashed(chosen_hash)
+        elif isinstance(public_key, DSAPublicKey):
+            additional_kwargs["algorithm"] = utils.Prehashed(chosen_hash)
+        elif isinstance(public_key, EllipticCurvePublicKey):
+            additional_kwargs["signature_algorithm"] = ECDSA(
+                utils.Prehashed(chosen_hash)
+            )
         try:
             public_key.verify(
-                signature, digest, padding.PKCS1v15(), utils.Prehashed(chosen_hash)
+                signature,
+                digest,
+                **additional_kwargs,
             )
         except InvalidSignature:
             raise RevocationCheckError(msg="Failed to verify the signature")

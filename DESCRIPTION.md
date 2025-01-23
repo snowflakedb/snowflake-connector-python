@@ -8,6 +8,20 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.12.5(TBD)
+  - Added a feature to limit the sizes of IO-bound ThreadPoolExecutors during PUT and GET commands.
+  - Adding support for the new PAT authentication method.
+  - Updated README.md to include instructions on how to verify package signatures using `cosign`.
+  - Updated the log level for cursor's chunk rowcount from INFO to DEBUG.
+  - Added a feature to verify if the connection is still good enough to send queries over.
+  - Added support for base64-encoded DER private key strings in the `private_key` authentication type.
+
+- v3.12.4(December 3,2024)
+  - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
+  - Fixed a bug where OpenTelemetry header injection would sometimes cause Exceptions to be thrown.
+  - Fixed a bug where OCSP checks would throw TypeError and make mainly GCP blob storage unreachable.
+  - Bumped pyOpenSSL dependency from >=16.2.0,<25.0.0 to >=22.0.0,<25.0.0.
+
 - v3.12.3(October 25,2024)
   - Improved the error message for SSL-related issues to provide clearer guidance when an SSL error occurs.
   - Improved error message for SQL execution cancellations caused by timeout.
