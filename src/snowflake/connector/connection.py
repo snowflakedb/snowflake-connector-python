@@ -25,7 +25,16 @@ from logging import getLogger
 from threading import Lock
 from time import strptime
 from types import TracebackType
-from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence, TypeVar
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    NamedTuple,
+    Sequence,
+    TypeVar,
+)
 from uuid import UUID
 
 from cryptography.hazmat.backends import default_backend
@@ -115,7 +124,7 @@ from .util_text import construct_hostname, parse_account, split_statements
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
 DEFAULT_BACKOFF_POLICY = exponential_backoff()
-T = TypeVar('T', bound=SnowflakeCursor)
+T = TypeVar("T", bound=SnowflakeCursor)
 
 
 def DefaultConverterClass() -> type:
@@ -443,7 +452,7 @@ class SnowflakeConnection:
             elif "streamlit" in sys.modules:
                 kwargs["application"] = "streamlit"
 
-        self.converter = None
+        self.converter: SnowflakeConverter | None = None
         self.query_context_cache: QueryContextCache | None = None
         self.query_context_cache_size = 5
         if connections_file_path is not None:
@@ -869,9 +878,7 @@ class SnowflakeConnection:
         """Rolls back the current transaction."""
         self.cursor().execute("ROLLBACK")
 
-    def cursor(
-        self, cursor_class: type[T] = SnowflakeCursor
-    ) -> T:
+    def cursor(self, cursor_class: type[T] = SnowflakeCursor) -> T:
         """Creates a cursor object. Each statement will be executed in a new cursor object."""
         logger.debug("cursor")
         if not self.rest:
@@ -939,7 +946,7 @@ class SnowflakeConnection:
 
     def __open_connection(self):
         """Opens a new network connection."""
-        self.converter = self._converter_class(
+        self.converter = self.converter_class(
             use_numpy=self._numpy, support_negative_year=self._support_negative_year
         )
 
