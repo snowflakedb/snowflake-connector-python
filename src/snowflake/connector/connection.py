@@ -1238,7 +1238,7 @@ class SnowflakeConnection:
                 self._token = f.read()
 
         if not (self._master_token and self._session_token):
-            if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
+            if not self.user and self._authenticator != OAUTH_AUTHENTICATOR and self._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR:
                 # OAuth Authentication does not require a username
                 Error.errorhandler_wrapper(
                     self,
