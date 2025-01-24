@@ -308,27 +308,22 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # SNOW-1817982: limit iobound TPE sizes when executing PUT/GET
-    "client_id": (
+    "oauth_client_id": (
         None,
         (type(None), str),
         # SNOW-1825621: OAUTH implementation
     ),
-    "client_secret": (
+    "oauth_client_secret": (
         None,
         (type(None), str),
         # SNOW-1825621: OAUTH implementation
     ),
-    "oauth_redirect_uri": (
-        "http://127.0.0.1:{port}/",
-        str,
-        # SNOW-1825621: OAUTH implementation
-    ),
-    "external_authorization_url": (
+    "oauth_external_authorization_url": (
         "{host}/oauth/authorize",
         str,
         # SNOW-1825621: OAUTH implementation
     ),
-    "external_token_request_url": (
+    "oauth_external_token_request_url": (
         "{host}/oauth/token-request",
         str,
         # SNOW-1825621: OAUTH implementation
@@ -1122,7 +1117,7 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
-                if self._client_id is None:
+                if self._oauth_client_id is None:
                     Error.errorhandler_wrapper(
                         self,
                         None,
@@ -1144,15 +1139,15 @@ class SnowflakeConnection:
                     )
                 self.auth_class = AuthByOauthCode(
                     application=self.application,
-                    client_id=self._client_id,
-                    client_secret=self._client_secret,
-                    authentication_url=self._external_authorization_url.format(
+                    client_id=self._oauth_client_id,
+                    client_secret=self._oauth_client_secret,
+                    authentication_url=self._oauth_external_authorization_url.format(
                         host=self.host,
                     ),
-                    token_request_url=self._external_token_request_url.format(
+                    token_request_url=self._oauth_external_token_request_url.format(
                         host=self.host,
                     ),
-                    redirect_uri=self._oauth_redirect_uri,
+                    redirect_uri="http://127.0.0.1:{port}/",
                     scope=self._oauth_scope.format(role=self._role),
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
