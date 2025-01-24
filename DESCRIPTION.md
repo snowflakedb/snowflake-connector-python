@@ -8,6 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.13.1(January 23,2025)
+  - Updated type hints for cursor object
+
 - v3.13.0(January 23,2025)
   - Added a feature to limit the sizes of IO-bound ThreadPoolExecutors during PUT and GET commands.
   - Updated README.md to include instructions on how to verify package signatures using `cosign`.
