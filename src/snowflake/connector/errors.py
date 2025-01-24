@@ -10,7 +10,7 @@ import os
 import re
 import traceback
 from logging import getLogger
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from .secret_detector import SecretDetector
 from .telemetry import TelemetryData, TelemetryField
@@ -263,7 +263,7 @@ class Error(Exception):
         cursor: SnowflakeCursor | None,
         error_class: type[Error] | type[Exception],
         error_value: dict[str, Any],
-    ) -> None:
+    ) -> NoReturn:
         """Error handler wrapper that calls the errorhandler method.
 
         Args:
