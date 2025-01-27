@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import secrets
@@ -189,6 +190,11 @@ class AuthByOauthCode(AuthByPlugin):
         resp = urllib3.PoolManager().request_encode_body(  # TODO: use network pool to gain use of proxy settings and so on
             "POST",
             self.token_request_url,
+            headers={
+                "Authorization": base64.b64encode(
+                    f"{self.client_id}:{self.client_secret}".encode()
+                )
+            },
             encode_multipart=False,
             fields=fields,
         )
