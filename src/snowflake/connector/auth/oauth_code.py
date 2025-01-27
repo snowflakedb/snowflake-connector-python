@@ -46,7 +46,7 @@ def _get_query_params(
 
 
 class AuthByOauthCode(AuthByPlugin):
-    """Authenticates user by web browser. Only used for SAML based authentication."""
+    """Authenticates user by OAuth code flow."""
 
     def __init__(
         self,
@@ -146,10 +146,10 @@ class AuthByOauthCode(AuthByPlugin):
         else:
             print(
                 "We were unable to open a browser window for you, "
-                "please open the url above manually then paste the "
+                "please open the URL above manually then paste the "
                 "URL you are redirected to into the terminal."
             )
-            url = input("Enter the URL the SSO URL redirected you to: ")
+            url = input("Enter the URL the OAuth flow redirected you to: ")
             token = self._process_get_url(url)
             if not token:
                 self._handle_failure(
