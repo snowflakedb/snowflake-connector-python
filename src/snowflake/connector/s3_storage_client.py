@@ -37,6 +37,10 @@ SFC_DIGEST = "sfc-digest"
 AMZ_MATDESC = "x-amz-matdesc"
 AMZ_KEY = "x-amz-key"
 AMZ_IV = "x-amz-iv"
+AMZ_CIPHER = "x-amz-cipher"
+AMZ_KEY_IV = "x-amz-key-iv"
+AMZ_KEY_AAD = "x-amz-key-aad"
+AMZ_DATA_AAD = "x-amz-data-aad"
 
 ERRORNO_WSAECONNABORTED = 10053  # network connection was aborted
 
@@ -397,6 +401,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                     key=metadata.get(META_PREFIX + AMZ_KEY),
                     iv=metadata.get(META_PREFIX + AMZ_IV),
                     matdesc=metadata.get(META_PREFIX + AMZ_MATDESC),
+                    cipher=metadata.get(META_PREFIX + AMZ_CIPHER),
+                    key_iv=metadata.get(META_PREFIX + AMZ_KEY_IV, ""),
+                    key_aad=metadata.get(META_PREFIX + AMZ_KEY_AAD, ""),
+                    data_aad=metadata.get(META_PREFIX + AMZ_DATA_AAD, ""),
                 )
                 if metadata.get(META_PREFIX + AMZ_KEY)
                 else None
@@ -430,6 +438,10 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                     META_PREFIX + AMZ_IV: self.encryption_metadata.iv,
                     META_PREFIX + AMZ_KEY: self.encryption_metadata.key,
                     META_PREFIX + AMZ_MATDESC: self.encryption_metadata.matdesc,
+                    META_PREFIX + AMZ_CIPHER: self.encryption_metadata.cipher or "",
+                    META_PREFIX + AMZ_KEY_IV: self.encryption_metadata.key_iv or "",
+                    META_PREFIX + AMZ_KEY_AAD: self.encryption_metadata.key_aad or "",
+                    META_PREFIX + AMZ_DATA_AAD: self.encryption_metadata.data_aad or "",
                 }
             )
         return s3_metadata
@@ -557,7 +569,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         else:
             chunk_size = self.chunk_size
             if chunk_id < self.num_of_chunks - 1:
-                _range = f"{chunk_id * chunk_size}-{(chunk_id+1)*chunk_size-1}"
+                _range = f"{chunk_id * chunk_size}-{(chunk_id + 1) * chunk_size - 1}"
             else:
                 _range = f"{chunk_id * chunk_size}-"
 

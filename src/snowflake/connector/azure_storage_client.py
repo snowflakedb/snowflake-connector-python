@@ -15,7 +15,7 @@ from string import hexdigits
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from .compat import quote
-from .constants import FileHeader, ResultStatus
+from .constants import CipherAlgorithm, FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 from .storage_client import SnowflakeStorageClient
 from .util_text import get_md5
@@ -148,6 +148,15 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
                     key=encryption_data["WrappedContentKey"]["EncryptedKey"],
                     iv=encryption_data["ContentEncryptionIV"],
                     matdesc=r.headers.get(MATDESC),
+                    cipher=(
+                        str(CipherAlgorithm.AES_GCM)
+                        if "AES_GCM"
+                        in encryption_data["WrappedContentKey"]["Algorithm"]
+                        else str(CipherAlgorithm.AES_CBC)
+                    ),
+                    key_iv=encryption_data.get("KeyEncryptionIV", ""),
+                    key_aad=encryption_data.get("KeyAad", ""),
+                    data_aad=encryption_data.get("DataAad", ""),
                 )
             )
             return FileHeader(
@@ -169,6 +178,16 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         }
         encryption_metadata = self.encryption_metadata
         if encryption_metadata:
+            algorithm = (
+                "AES_GCM_256"
+                if encryption_metadata.cipher == CipherAlgorithm.AES_GCM
+                else "AES_CBC_256"
+            )
+            encryption_algorithm = (
+                "AES_GCM_256"
+                if encryption_metadata.cipher == CipherAlgorithm.AES_GCM
+                else "AES_CBC_128"
+            )
             azure_metadata.update(
                 {
                     ENCRYPTION_DATA: json.dumps(
@@ -177,13 +196,16 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
                             "WrappedContentKey": {
                                 "KeyId": "symmKey1",
                                 "EncryptedKey": encryption_metadata.key,
-                                "Algorithm": "AES_CBC_256",
+                                "Algorithm": algorithm,
                             },
                             "EncryptionAgent": {
                                 "Protocol": "1.0",
-                                "EncryptionAlgorithm": "AES_CBC_128",
+                                "EncryptionAlgorithm": encryption_algorithm,
                             },
                             "ContentEncryptionIV": encryption_metadata.iv,
+                            "KeyEncryptionIV": encryption_metadata.key_iv or "",
+                            "KeyAad": encryption_metadata.key_aad or "",
+                            "DataAad": encryption_metadata.data_aad or "",
                             "KeyWrappingMetadata": {"EncryptionLibrary": "Java 5.3.0"},
                         }
                     ),
@@ -275,7 +297,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         if self.num_of_chunks > 1:
             chunk_size = self.chunk_size
             if chunk_id < self.num_of_chunks - 1:
-                _range = f"{chunk_id * chunk_size}-{(chunk_id+1)*chunk_size-1}"
+                _range = f"{chunk_id * chunk_size}-{(chunk_id + 1) * chunk_size - 1}"
             else:
                 _range = f"{chunk_id * chunk_size}-"
             headers = {"Range": f"bytes={_range}"}

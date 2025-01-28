@@ -23,6 +23,7 @@ from .constants import (
     HTTP_HEADER_CONTENT_ENCODING,
     REQUEST_CONNECTION_TIMEOUT,
     REQUEST_READ_TIMEOUT,
+    CipherAlgorithm,
     FileHeader,
     ResultStatus,
 )
@@ -115,6 +116,14 @@ class SnowflakeStorageClient(ABC):
         self.failed_transfers: int = 0
         # only used when PRESIGNED_URL expires
         self.last_err_is_presigned_url = False
+        self._is_client_side_encrypted = self.stage_info.get(
+            "isClientSideEncrypted", True
+        )
+        self._ciphers = (
+            CipherAlgorithm(str(self.stage_info.get("ciphers").upper()))
+            if self.stage_info.get("ciphers", "")
+            else None
+        )
 
     def compress(self) -> None:
         if self.meta.require_compress:
@@ -154,11 +163,22 @@ class SnowflakeStorageClient(ABC):
     def encrypt(self) -> None:
         meta = self.meta
         logger.debug(f"encrypting file={meta.real_src_file_name}")
+        # TODO: when putting files, where to get key_aad and data_aad from?
+        encrypt_file_impl = (
+            SnowflakeEncryptionUtil.encrypt_file
+            if self._ciphers == CipherAlgorithm.AES_CBC
+            else SnowflakeEncryptionUtil.encrypt_file_gcm
+        )
+        encrypt_stream_impl = (
+            SnowflakeEncryptionUtil.encrypt_stream
+            if self._ciphers == CipherAlgorithm.AES_CBC
+            else SnowflakeEncryptionUtil.encrypt_stream_gcm
+        )
         if meta.intermediate_stream is None:
             (
                 self.encryption_metadata,
                 self.data_file,
-            ) = SnowflakeEncryptionUtil.encrypt_file(
+            ) = encrypt_file_impl(
                 meta.encryption_material,
                 meta.real_src_file_name,
                 tmp_dir=self.tmp_dir,
@@ -168,7 +188,7 @@ class SnowflakeStorageClient(ABC):
             encrypted_stream = BytesIO()
             src_stream = meta.src_stream or meta.intermediate_stream
             src_stream.seek(0)
-            self.encryption_metadata = SnowflakeEncryptionUtil.encrypt_stream(
+            self.encryption_metadata = encrypt_stream_impl(
                 meta.encryption_material, src_stream, encrypted_stream
             )
             src_stream.seek(0)
@@ -233,7 +253,7 @@ class SnowflakeStorageClient(ABC):
 
         logger.debug(f"Preparing to upload {meta.src_file_name}")
 
-        if meta.encryption_material:
+        if meta.encryption_material and self._is_client_side_encrypted:
             self.encrypt()
         else:
             self.data_file = meta.real_src_file_name
@@ -380,7 +400,12 @@ class SnowflakeStorageClient(ABC):
                     file_header = self.get_file_header(meta.src_file_name)
                     self.encryption_metadata = file_header.encryption_metadata
 
-                tmp_dst_file_name = SnowflakeEncryptionUtil.decrypt_file(
+                decrypt_file_impl = (
+                    SnowflakeEncryptionUtil.decrypt_file
+                    if self._ciphers == CipherAlgorithm.AES_CBC
+                    else SnowflakeEncryptionUtil.decrypt_file_gcm
+                )
+                tmp_dst_file_name = decrypt_file_impl(
                     self.encryption_metadata,
                     meta.encryption_material,
                     str(self.intermediate_dst_path),
