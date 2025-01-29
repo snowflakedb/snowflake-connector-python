@@ -37,13 +37,7 @@ import snowflake.connector.ocsp_snowflake
 from snowflake.connector import OperationalError
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
-from snowflake.connector.ocsp_snowflake import (
-    OCSPCache,
-    OCSPResponseValidationResult,
-    OCSPServer,
-    SnowflakeOCSP,
-    _OCSPResponseValidationResultCache,
-)
+from snowflake.connector.ocsp_snowflake import OCSPCache, OCSPServer, SnowflakeOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
 
 try:
@@ -718,7 +712,13 @@ def test_ocsp_server_domain_name():
     )
 
 
+@pytest.mark.skipolddriver
 def test_json_cache_serialization_and_deserialization(tmpdir):
+    from snowflake.connector.ocsp_snowflake import (
+        OCSPResponseValidationResult,
+        _OCSPResponseValidationResultCache,
+    )
+
     cache_path = os.path.join(tmpdir, "cache.json")
     cert = asn1crypto509.Certificate.load(
         create_x509_cert(hashes.SHA256()).public_bytes(Encoding.DER)
