@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
+import copy
 import datetime
+import io
+import json
 import logging
 import os
 import platform
@@ -14,6 +17,8 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from os import environ, path
 from unittest import mock
 
+import asn1crypto.x509
+from asn1crypto import ocsp
 from asn1crypto import x509 as asn1crypto509
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -74,6 +79,40 @@ TARGET_HOSTS = [
 ]
 
 THIS_DIR = path.dirname(path.realpath(__file__))
+
+
+def create_x509_cert(hash_algorithm):
+    # Generate a private key
+    private_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=1024, backend=default_backend()
+    )
+
+    # Generate a public key
+    public_key = private_key.public_key()
+
+    # Create a certificate
+    subject = x509.Name(
+        [
+            x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "US"),
+        ]
+    )
+
+    issuer = subject
+
+    return (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(public_key)
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.now())
+        .not_valid_after(datetime.datetime.now() + datetime.timedelta(days=365))
+        .add_extension(
+            x509.SubjectAlternativeName([x509.DNSName("example.com")]),
+            critical=False,
+        )
+        .sign(private_key, hash_algorithm, default_backend())
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -584,38 +623,7 @@ def test_building_new_retry():
     ],
 )
 def test_signature_verification(hash_algorithm):
-    # Generate a private key
-    private_key = rsa.generate_private_key(
-        public_exponent=65537, key_size=1024, backend=default_backend()
-    )
-
-    # Generate a public key
-    public_key = private_key.public_key()
-
-    # Create a certificate
-    subject = x509.Name(
-        [
-            x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "US"),
-        ]
-    )
-
-    issuer = subject
-
-    cert = (
-        x509.CertificateBuilder()
-        .subject_name(subject)
-        .issuer_name(issuer)
-        .public_key(public_key)
-        .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.now())
-        .not_valid_after(datetime.datetime.now() + datetime.timedelta(days=365))
-        .add_extension(
-            x509.SubjectAlternativeName([x509.DNSName("example.com")]),
-            critical=False,
-        )
-        .sign(private_key, hash_algorithm, default_backend())
-    )
-
+    cert = create_x509_cert(hash_algorithm)
     # in snowflake, we use lib asn1crypto to load certificate, not using lib cryptography
     asy1_509_cert = asn1crypto509.Certificate.load(cert.public_bytes(Encoding.DER))
 
@@ -710,3 +718,116 @@ def test_ocsp_server_domain_name():
         and SnowflakeOCSP.OCSP_WHITELIST.match("s3.amazonaws.com.cn")
         and not SnowflakeOCSP.OCSP_WHITELIST.match("s3.amazonaws.com.cn.com")
     )
+
+
+@pytest.mark.skipolddriver
+def test_json_cache_serialization_and_deserialization(tmpdir):
+    from snowflake.connector.ocsp_snowflake import (
+        OCSPResponseValidationResult,
+        _OCSPResponseValidationResultCache,
+    )
+
+    cache_path = os.path.join(tmpdir, "cache.json")
+    cert = asn1crypto509.Certificate.load(
+        create_x509_cert(hashes.SHA256()).public_bytes(Encoding.DER)
+    )
+    cert_id = ocsp.CertId(
+        {
+            "hash_algorithm": {"algorithm": "sha1"},  # Minimal hash algorithm
+            "issuer_name_hash": b"\0" * 20,  # Placeholder hash
+            "issuer_key_hash": b"\0" * 20,  # Placeholder hash
+            "serial_number": 1,  # Minimal serial number
+        }
+    )
+    test_cache = _OCSPResponseValidationResultCache(file_path=cache_path)
+    test_cache[(b"key1", b"key2", b"key3")] = OCSPResponseValidationResult(
+        exception=None,
+        issuer=cert,
+        subject=cert,
+        cert_id=cert_id,
+        ocsp_response=b"response",
+        ts=0,
+        validated=True,
+    )
+
+    def verify(verify_method, write_cache):
+        with io.BytesIO() as byte_stream:
+            byte_stream.write(write_cache._serialize())
+            byte_stream.seek(0)
+            read_cache = _OCSPResponseValidationResultCache._deserialize(byte_stream)
+            assert len(write_cache) == len(read_cache)
+            verify_method(write_cache, read_cache)
+
+    def verify_happy_path(origin_cache, loaded_cache):
+        for (key1, value1), (key2, value2) in zip(
+            origin_cache.items(), loaded_cache.items()
+        ):
+            assert key1 == key2
+            for sub_field1, sub_field2 in zip(value1, value2):
+                assert isinstance(sub_field1, type(sub_field2))
+                if isinstance(sub_field1, asn1crypto.x509.Certificate):
+                    for attr in [
+                        "issuer",
+                        "subject",
+                        "serial_number",
+                        "not_valid_before",
+                        "not_valid_after",
+                        "hash_algo",
+                    ]:
+                        assert getattr(sub_field1, attr) == getattr(sub_field2, attr)
+                elif isinstance(sub_field1, asn1crypto.ocsp.CertId):
+                    for attr in [
+                        "hash_algorithm",
+                        "issuer_name_hash",
+                        "issuer_key_hash",
+                        "serial_number",
+                    ]:
+                        assert sub_field1.native[attr] == sub_field2.native[attr]
+                else:
+                    assert sub_field1 == sub_field2
+
+    def verify_none(origin_cache, loaded_cache):
+        for (key1, value1), (key2, value2) in zip(
+            origin_cache.items(), loaded_cache.items()
+        ):
+            assert key1 == key2 and value1 == value2
+
+    def verify_exception(_, loaded_cache):
+        exc_1 = loaded_cache[(b"key1", b"key2", b"key3")].exception
+        exc_2 = loaded_cache[(b"key4", b"key5", b"key6")].exception
+        exc_3 = loaded_cache[(b"key7", b"key8", b"key9")].exception
+        assert (
+            isinstance(exc_1, RevocationCheckError)
+            and exc_1.raw_msg == "error"
+            and exc_1.errno == 1
+        )
+        assert isinstance(exc_2, ValueError) and str(exc_2) == "value error"
+        assert (
+            isinstance(exc_3, RevocationCheckError)
+            and "while deserializing ocsp cache, please try cleaning up the OCSP cache under directory"
+            in exc_3.msg
+        )
+
+    verify(verify_happy_path, copy.deepcopy(test_cache))
+
+    origin_cache = copy.deepcopy(test_cache)
+    origin_cache[(b"key1", b"key2", b"key3")] = OCSPResponseValidationResult(
+        None, None, None, None, None, None, False
+    )
+    verify(verify_none, origin_cache)
+
+    origin_cache = copy.deepcopy(test_cache)
+    origin_cache.update(
+        {
+            (b"key1", b"key2", b"key3"): OCSPResponseValidationResult(
+                exception=RevocationCheckError(msg="error", errno=1),
+            ),
+            (b"key4", b"key5", b"key6"): OCSPResponseValidationResult(
+                exception=ValueError("value error"),
+            ),
+            (b"key7", b"key8", b"key9"): OCSPResponseValidationResult(
+                exception=json.JSONDecodeError("json error", "doc", 0)
+            ),
+        }
+    )
+    verify(verify_exception, origin_cache)
