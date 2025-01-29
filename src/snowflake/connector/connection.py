@@ -56,6 +56,7 @@ from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
+    _OAUTH_DEFAULT_SCOPE,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -92,7 +93,6 @@ from .errorcode import (
     ER_NO_CLIENT_ID,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
-    ER_NO_ROLE,
     ER_NO_USER,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
@@ -330,7 +330,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         # SNOW-1825621: OAUTH implementation
     ),
     "oauth_scope": (
-        "session:role:{role}",
+        "",
         str,
         # SNOW-1825621: OAUTH implementation
     ),
@@ -1160,16 +1160,9 @@ class SnowflakeConnection:
                             "errno": ER_NO_CLIENT_ID,
                         },
                     )
-                if "{role}" in self._oauth_scope and self._role is None:
-                    Error.errorhandler_wrapper(
-                        self,
-                        None,
-                        ProgrammingError,
-                        {
-                            "msg": "Oauth code flow requirement 'role' is missing. When oauth_scope has '{role}' placeholder this is required.",
-                            "errno": ER_NO_ROLE,
-                        },
-                    )
+                if self._role and (self._oauth_scope == ""):
+                    # if role is known then let's inject it into scope
+                    self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
                 self.auth_class = AuthByOauthCode(
                     application=self.application,
                     client_id=self._oauth_client_id,
@@ -1181,7 +1174,7 @@ class SnowflakeConnection:
                         host=self.host,
                     ),
                     redirect_uri="http://127.0.0.1:{port}/",
-                    scope=self._oauth_scope.format(role=self._role),
+                    scope=self._oauth_scope,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
