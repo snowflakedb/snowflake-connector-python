@@ -207,7 +207,7 @@ class AuthByOauthCode(AuthByPlugin):
             logger.error("oauth reponse invalid, does not contain 'access_token'")
             logger.debug(
                 "received the following response body when requesting oauth token: %s",
-                resp.body,
+                resp.data,
             )
             self._handle_failure(
                 conn=conn,
