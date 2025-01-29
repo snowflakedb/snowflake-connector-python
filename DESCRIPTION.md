@@ -8,6 +8,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 
+- v3.13.1(January 29, 2025)
+  - Remedied SQL injection vulnerability in snowflake.connector.pandas_tools.write_pandas. See more https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-2vpq-fh52-j3wv
+  - Remedied vulnerability in deserialization of the OCSP response cache. See more: https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-m4f6-vcj4-w5mx
+  - Remedied vulnerability connected to cache files permissions. See more: https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-r2x6-cjg7-8r43
+
 - v3.13.0(January 23,2025)
   - Added a feature to limit the sizes of IO-bound ThreadPoolExecutors during PUT and GET commands.
   - Updated README.md to include instructions on how to verify package signatures using `cosign`.
