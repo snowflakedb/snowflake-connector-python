@@ -875,6 +875,7 @@ class SnowflakeCursor:
         _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
+        _force_qmark_paramstyle: bool = False,
         _dataframe_ast: str | None = None,
     ) -> Self | dict[str, Any] | None:
         """Executes a command/query.
@@ -910,6 +911,7 @@ class SnowflakeCursor:
             file_stream: File-like object to be uploaded with PUT
             num_statements: Query level parameter submitted in _statement_params constraining exact number of
             statements being submitted (or 0 if submitting an uncounted number) when using a multi-statement query.
+            _force_qmark_paramstyle: Force the use of qmark paramstyle regardless of the connection's paramstyle.
             _dataframe_ast: Base64-encoded dataframe request abstract syntax tree.
 
         Returns:
@@ -958,7 +960,7 @@ class SnowflakeCursor:
             "dataframe_ast": _dataframe_ast,
         }
 
-        if self._connection.is_pyformat:
+        if self._connection.is_pyformat and not _force_qmark_paramstyle:
             query = self._preprocess_pyformat_query(command, params)
         else:
             # qmark and numeric paramstyle
@@ -1458,7 +1460,9 @@ class SnowflakeCursor:
         else:
             if re.search(";/s*$", command) is None:
                 command = command + "; "
-            if self._connection.is_pyformat:
+            if self._connection.is_pyformat and not kwargs.get(
+                "_force_qmark_paramstyle", False
+            ):
                 processed_queries = [
                     self._preprocess_pyformat_query(command, params)
                     for params in seqparams
