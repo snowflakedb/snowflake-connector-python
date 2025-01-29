@@ -121,7 +121,7 @@ class AuthByOauthCode(AuthByPlugin):
         self.redirect_uri = self.redirect_uri.format(port=http_server.port)
         url = self.construct_url()
         logger.debug("authenticating with OAuth code flow")
-        logger.debug("step 1: going to open external authorization URL")
+        logger.debug("step 1: going to open authorization URL")
         print(
             "Initiating login request with your identity provider. A "
             "browser window should have opened for you to complete the "
