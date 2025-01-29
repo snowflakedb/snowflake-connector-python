@@ -320,12 +320,12 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         # SNOW-1825621: OAUTH implementation
     ),
     "oauth_authorization_url": (
-        "{host}/oauth/authorize",
+        "{host}:{port}/oauth/authorize",
         str,
         # SNOW-1825621: OAUTH implementation
     ),
     "oauth_token_request_url": (
-        "{host}/oauth/token-request",
+        "{host}:{port}/oauth/token-request",
         str,
         # SNOW-1825621: OAUTH implementation
     ),
@@ -1143,10 +1143,10 @@ class SnowflakeConnection:
                     client_id=self._oauth_client_id,
                     client_secret=self._oauth_client_secret,
                     authentication_url=self._oauth_authorization_url.format(
-                        host=self.host,
+                        host=self.host, port=self.port
                     ),
                     token_request_url=self._oauth_token_request_url.format(
-                        host=self.host,
+                        host=self.host, port=self.port
                     ),
                     redirect_uri="http://127.0.0.1:{port}/",
                     scope=self._oauth_scope,
