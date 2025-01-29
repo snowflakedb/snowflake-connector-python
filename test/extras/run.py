@@ -35,16 +35,18 @@ for test_file in pathlib.Path(__file__).parent.glob("*.py"):
         assert (
             cache_files
             == {
-                "ocsp_response_validation_cache.lock",
-                "ocsp_response_validation_cache",
+                "ocsp_response_validation_cache.json.lock",
+                "ocsp_response_validation_cache.json",
                 "ocsp_response_cache.json",
             }
             and not platform.system() == "Windows"
         ) or (
             cache_files
             == {
-                "ocsp_response_validation_cache",
+                "ocsp_response_validation_cache.json",
                 "ocsp_response_cache.json",
             }
             and platform.system() == "Windows"
+        ), str(
+            cache_files
         )
