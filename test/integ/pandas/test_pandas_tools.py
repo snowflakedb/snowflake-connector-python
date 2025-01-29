@@ -64,7 +64,7 @@ def assert_result_equals(
 
 
 def test_fix_snow_746341(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
 ):
     cat = '"cat"'
     df = pandas.DataFrame([[1], [2]], columns=[f"col_'{cat}'"])
@@ -906,7 +906,7 @@ def test_auto_create_table_similar_column_names(
 
 
 def test_all_pandas_types(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
 ):
     table_name = random_string(5, "all_types_")
     datetime_with_tz = datetime(1997, 6, 3, 14, 21, 32, 00, tzinfo=timezone.utc)
@@ -1030,7 +1030,7 @@ def test_no_create_internal_object_privilege_in_target_schema(
 
 
 def test_write_pandas_with_on_error(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
 ):
     """Tests whether overwriting table using a Pandas DataFrame works as expected."""
     random_table_name = random_string(5, "userspoints_")
