@@ -98,9 +98,10 @@ class AuthByOauthCode(AuthByPlugin):
             "response_type": "code",
             "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
-            "scope": self.scope,
             "state": self._state,
         }
+        if self.scope:
+            params["scope"] = self.scope
         url_params = urllib.parse.urlencode(params)
         url = f"{self.authentication_url}?{url_params}"
         return url

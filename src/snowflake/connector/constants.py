@@ -437,3 +437,5 @@ _CONNECTIVITY_ERR_MSG = (
     "\nTo further troubleshoot your connection you may reference the following article: "
     "https://docs.snowflake.com/en/user-guide/client-connectivity-troubleshooting/overview."
 )
+
+_OAUTH_DEFAULT_SCOPE = "session:role:{role}"
