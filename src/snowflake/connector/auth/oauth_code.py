@@ -35,10 +35,6 @@ logger = logging.getLogger(__name__)
 BUF_SIZE = 16384
 
 
-# global state of web server that receives the SAML assertion from
-# Snowflake server
-
-
 def _get_query_params(
     url: str,
 ) -> dict[str, list[str]]:
@@ -191,7 +187,7 @@ class AuthByOauthCode(AuthByPlugin):
             "POST",
             self.token_request_url,
             headers={
-                "Authorization": base64.b64encode(
+                "Basic": base64.b64encode(
                     f"{self.client_id}:{self.client_secret}".encode()
                 )
             },
