@@ -49,6 +49,7 @@ def get_temp_type_for_object(use_scoped_temp_objects: bool) -> str:
     """
     return TEMPORARY_STRING
 
+
 class _TrackedQueryCancellationTimer(Timer):
     def __init__(self, interval, function, args=None, kwargs=None):
         super().__init__(interval, function, args, kwargs)
