@@ -45,7 +45,7 @@ def random_name_for_temp_object(object_type: TempObjectType) -> str:
 def get_temp_type_for_object(use_scoped_temp_objects: bool) -> str:
     # return SCOPED_TEMPORARY_STRING if use_scoped_temp_objects else TEMPORARY_STRING
     """sfc-gh-yixie: scoped temp stage isn't required out side of a SP.
-    We may add this back when we merge the Python connector and the SP connector.
+    TODO: We may add this back when we merge the Python connector and the SP connector.
     """
     return TEMPORARY_STRING
 
