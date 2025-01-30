@@ -8,7 +8,6 @@ import base64
 import hashlib
 import json
 import logging
-import re
 import secrets
 import socket
 import time
@@ -111,14 +110,13 @@ class AuthByOauthCode(AuthByPlugin):
             params["scope"] = self.scope
         if self.pkce:
             self._verifier = secrets.token_urlsafe(43)
-            self._verifier = re.sub("[^a-zA-Z0-9]+", "", self._verifier)
             # calculate challenge and verifier
             challenge = (
                 base64.urlsafe_b64encode(
                     hashlib.sha256(self._verifier.encode("utf-8")).digest()
                 )
                 .decode("utf-8")
-                .replace("=", "")
+                .rstrip("=")
             )
             params["code_challenge"] = challenge
             params["code_challenge_method"] = "S256"
