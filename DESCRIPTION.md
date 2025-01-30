@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.13.3(TBD)
+  - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
+
 - v3.13.2(January 29, 2025)
   - Changed not to use scoped temporary objects.
 
