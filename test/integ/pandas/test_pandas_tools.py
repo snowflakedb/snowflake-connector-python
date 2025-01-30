@@ -608,6 +608,7 @@ def test_stage_location_building(
             )
 
 
+@pytest.mark.skip("scoped object isn't used yet.")
 @pytest.mark.parametrize(
     "database,schema,quote_identifiers,expected_db_schema",
     [

@@ -7,6 +7,8 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.13.2(January 29, 2025)
+  - Changed not to use scoped temporary objects.
 
 - v3.12.4(TBD)
   - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
