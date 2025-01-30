@@ -321,6 +321,12 @@ def write_pandas(
         else False
     )
 
+    """sfc-gh-yixie: scoped temp stage isn't required out side of a SP.
+    TODO: remove the following line when merging SP connector and Python Connector.
+    Make sure `create scoped temp stage` is supported when it's not run in a SP.
+    """
+    _use_scoped_temp_object = False
+
     if create_temp_table:
         warnings.warn(
             "create_temp_table is deprecated, we still respect this parameter when it is True but "

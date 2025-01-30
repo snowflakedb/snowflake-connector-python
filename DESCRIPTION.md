@@ -7,6 +7,8 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.13.2(January 29, 2025)
+  - Changed not to use scoped temporary objects.
 
 - v3.13.1(January 29, 2025)
   - Remedied SQL injection vulnerability in snowflake.connector.pandas_tools.write_pandas. See more https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-2vpq-fh52-j3wv
