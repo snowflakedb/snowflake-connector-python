@@ -474,6 +474,7 @@ def test_write_pandas_use_logical_type(
                 write_pandas(**write_pandas_kwargs)
                 df_read = cnx.cursor().execute(select_sql).fetch_pandas_all()
                 assert all(df_write == df_read)
+                assert pandas.api.types.is_datetime64tz_dtype(df_read[col_name])
             # For other use_logical_type values, a UserWarning should be displayed.
             else:
                 with pytest.warns(UserWarning, match="Dataframe contains a datetime.*"):
