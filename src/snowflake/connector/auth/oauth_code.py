@@ -68,7 +68,7 @@ class AuthByOauthCode(AuthByPlugin):
         self.redirect_uri = redirect_uri
         self.scope = scope
         self._state = secrets.token_urlsafe(43)
-        logger.debug("chose oauth state: %s", self._state)
+        logger.debug("chose oauth state: %s", "".join("*" for _ in self._state))
         self._oauth_token = None
         self._protocol = "http"
 
