@@ -1088,7 +1088,7 @@ class SnowflakeConnection:
                     self.auth_class = AuthByWebBrowser(
                         application=self.application,
                         protocol=self._protocol,
-                        host=self.host,  # TODO: delete this?
+                        host=self.host,
                         port=self.port,
                         timeout=self.login_timeout,
                         backoff_generator=self._backoff_generator,
