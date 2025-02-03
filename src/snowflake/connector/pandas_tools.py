@@ -231,6 +231,7 @@ def write_pandas(
     overwrite: bool = False,
     table_type: Literal["", "temp", "temporary", "transient"] = "",
     use_logical_type: bool | None = None,
+    use_vectorized_scanner: bool | None = None,
     **kwargs: Any,
 ) -> tuple[
     bool,
@@ -295,6 +296,10 @@ def write_pandas(
             Snowflake can interpret Parquet logical types during data loading. To enable Parquet logical types,
             set use_logical_type as True. Set to None to use Snowflakes default. For more information, see:
             https://docs.snowflake.com/en/sql-reference/sql/create-file-format
+        use_vectorized_scanner: Boolean that specifies to use a vectorized scanner for loading Parquet files.
+            Using the vectorized scanner can significantly reduce the latency for loading Parquet files. To enable
+            Vectorized scanning of Parquet files, set use_vectorized_scanner as True. Set to None to use Snowflakes default.
+            For more information, see: https://docs.snowflake.com/en/sql-reference/sql/copy-into-table#label-use-vectorized-scanner
 
 
     Returns:
@@ -533,6 +538,7 @@ def write_pandas(
             f"COMPRESSION={compression_map[compression]}"
             f"{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''}"
             f"{sql_use_logical_type}"
+            f"{' USE_VECTORIZED_SCANNER=' + str(use_vectorized_scanner).upper() if use_vectorized_scanner is not None else ''}"
             f") "
             f"PURGE=TRUE ON_ERROR=?"
         )
