@@ -331,7 +331,7 @@ class OCSPTelemetryData:
         self.cache_enabled = False
         self.cache_hit = False
         self.fail_open = False
-        self.insecure_mode = False
+        self.disable_ocsp_checks = False
 
     def set_event_sub_type(self, event_sub_type: str) -> None:
         """
@@ -380,8 +380,8 @@ class OCSPTelemetryData:
     def set_fail_open(self, fail_open) -> None:
         self.fail_open = fail_open
 
-    def set_insecure_mode(self, insecure_mode) -> None:
-        self.insecure_mode = insecure_mode
+    def set_disable_ocsp_checks(self, disable_ocsp_checks) -> None:
+        self.disable_ocsp_checks = disable_ocsp_checks
 
     def generate_telemetry_data(
         self, event_type: str, urgent: bool = False
@@ -396,7 +396,7 @@ class OCSPTelemetryData:
                 TelemetryField.KEY_OOB_OCSP_REQUEST_BASE64.value: self.ocsp_req,
                 TelemetryField.KEY_OOB_OCSP_RESPONDER_URL.value: self.ocsp_url,
                 TelemetryField.KEY_OOB_ERROR_MESSAGE.value: self.error_msg,
-                TelemetryField.KEY_OOB_INSECURE_MODE.value: self.insecure_mode,
+                TelemetryField.KEY_OOB_DISABLE_OCSP_CHECKS.value: self.disable_ocsp_checks,
                 TelemetryField.KEY_OOB_FAIL_OPEN.value: self.fail_open,
                 TelemetryField.KEY_OOB_CACHE_ENABLED.value: self.cache_enabled,
                 TelemetryField.KEY_OOB_CACHE_HIT.value: self.cache_hit,
@@ -1091,7 +1091,7 @@ class SnowflakeOCSP:
         cert_map = {}
         telemetry_data = OCSPTelemetryData()
         telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_SERVER_ENABLED)
-        telemetry_data.set_insecure_mode(False)
+        telemetry_data.set_disable_ocsp_checks(False)
         telemetry_data.set_sfc_peer_host(cert_filename)
         telemetry_data.set_fail_open(self.is_enabled_fail_open())
         try:
@@ -1137,7 +1137,7 @@ class SnowflakeOCSP:
 
         telemetry_data = OCSPTelemetryData()
         telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_SERVER_ENABLED)
-        telemetry_data.set_insecure_mode(False)
+        telemetry_data.set_disable_ocsp_checks(False)
         telemetry_data.set_sfc_peer_host(hostname)
         telemetry_data.set_fail_open(self.is_enabled_fail_open())
 

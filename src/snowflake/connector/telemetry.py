@@ -79,7 +79,7 @@ class TelemetryField(Enum):
     KEY_OOB_CERT_ID = "certId"
     KEY_OOB_OCSP_REQUEST_BASE64 = "ocspRequestBase64"
     KEY_OOB_OCSP_RESPONDER_URL = "ocspResponderURL"
-    KEY_OOB_INSECURE_MODE = "insecureMode"
+    KEY_OOB_DISABLE_OCSP_CHECKS = "disableOcspChecks"
     KEY_OOB_FAIL_OPEN = "failOpen"
     KEY_OOB_CACHE_ENABLED = "cacheEnabled"
     KEY_OOB_CACHE_HIT = "cacheHit"
