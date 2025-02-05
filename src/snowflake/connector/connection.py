@@ -488,6 +488,11 @@ class SnowflakeConnection:
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
+    # Deprecated
+    @property
+    def insecure_mode(self) -> bool:
+        return self._disable_ocsp_checks
+
     @property
     def disable_ocsp_checks(self) -> bool:
         return self._disable_ocsp_checks
@@ -497,8 +502,7 @@ class SnowflakeConnection:
         return self._ocsp_fail_open
 
     def _ocsp_mode(self) -> OCSPMode:
-        """OCSP mode. INSEC
-        URE, FAIL_OPEN or FAIL_CLOSED."""
+        """OCSP mode. DISABLE_OCSP_CHECKS, FAIL_OPEN or FAIL_CLOSED."""
         if self.disable_ocsp_checks:
             return OCSPMode.DISABLE_OCSP_CHECKS
         elif self.ocsp_fail_open:

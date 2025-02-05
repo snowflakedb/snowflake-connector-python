@@ -396,7 +396,7 @@ class OCSPTelemetryData:
                 TelemetryField.KEY_OOB_OCSP_REQUEST_BASE64.value: self.ocsp_req,
                 TelemetryField.KEY_OOB_OCSP_RESPONDER_URL.value: self.ocsp_url,
                 TelemetryField.KEY_OOB_ERROR_MESSAGE.value: self.error_msg,
-                TelemetryField.KEY_OOB_DISABLE_OCSP_CHECKS.value: self.disable_ocsp_checks,
+                TelemetryField.KEY_OOB_INSECURE_MODE.value: self.disable_ocsp_checks,
                 TelemetryField.KEY_OOB_FAIL_OPEN.value: self.fail_open,
                 TelemetryField.KEY_OOB_CACHE_ENABLED.value: self.cache_enabled,
                 TelemetryField.KEY_OOB_CACHE_HIT.value: self.cache_hit,
