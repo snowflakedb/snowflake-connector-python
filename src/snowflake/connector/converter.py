@@ -500,7 +500,7 @@ class SnowflakeConverter:
     _bytearray_to_snowflake = _bytes_to_snowflake
 
     def _bool_to_snowflake(self, value: bool) -> bool:
-        return value
+        return bool(value)
 
     def _bool__to_snowflake(self, value) -> bool:
         return bool(value)
@@ -630,6 +630,9 @@ class SnowflakeConverter:
     def __numpy_to_snowflake(self, value):
         return value
 
+    def _float16_to_snowflake(self, value):
+        return float(value)
+
     _int8_to_snowflake = __numpy_to_snowflake
     _int16_to_snowflake = __numpy_to_snowflake
     _int32_to_snowflake = __numpy_to_snowflake
@@ -638,9 +641,8 @@ class SnowflakeConverter:
     _uint16_to_snowflake = __numpy_to_snowflake
     _uint32_to_snowflake = __numpy_to_snowflake
     _uint64_to_snowflake = __numpy_to_snowflake
-    _float16_to_snowflake = __numpy_to_snowflake
-    _float32_to_snowflake = __numpy_to_snowflake
-    _float64_to_snowflake = __numpy_to_snowflake
+    _float32_to_snowflake = _float16_to_snowflake
+    _float64_to_snowflake = _float16_to_snowflake
 
     def _datetime64_to_snowflake(self, value) -> str:
         return str(value) + "+00:00"
