@@ -11,6 +11,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
   - Removed the workaround for a Python 2.7 bug.
   - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
+  - Added support for iceberg tables to `write_pandas`
+
 
 - v3.13.2(January 29, 2025)
   - Changed not to use scoped temporary objects.
@@ -36,9 +38,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.12.3(October 25,2024)
   - Improved the error message for SSL-related issues to provide clearer guidance when an SSL error occurs.
   - Improved error message for SQL execution cancellations caused by timeout.
-
-- v3.12.3(TBD)
-  - Added support for iceberg tables to `write_pandas`
 
 - v3.12.2(September 11,2024)
   - Improved error handling for asynchronous queries, providing more detailed and informative error messages when an async query fails.
