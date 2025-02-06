@@ -380,6 +380,9 @@ class OCSPTelemetryData:
     def set_fail_open(self, fail_open) -> None:
         self.fail_open = fail_open
 
+    def set_insecure_mode(self, insecure_mode) -> None:
+        self.disable_ocsp_checks = insecure_mode
+
     def set_disable_ocsp_checks(self, disable_ocsp_checks) -> None:
         self.disable_ocsp_checks = disable_ocsp_checks
 
