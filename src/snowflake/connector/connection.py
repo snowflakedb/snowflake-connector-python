@@ -441,9 +441,11 @@ class SnowflakeConnection:
                 kwargs["application"] = "streamlit"
 
         if "insecure_mode" in kwargs:
-            logger.warning(
+            warnings.warn(
                 "The 'insecure_mode' connection property is deprecated. "
-                "Please use 'disable_ocsp_checks' instead"
+                "Please use 'disable_ocsp_checks' instead",
+                DeprecationWarning,
+                stacklevel=2,
             )
 
             if (
