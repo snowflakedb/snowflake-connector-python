@@ -1224,15 +1224,10 @@ class SnowflakeOCSP:
         return self.FAIL_OPEN
 
     @staticmethod
-    def print_fail_open_warning(ocsp_log) -> None:
-        static_warning = (
-            "WARNING!!! Using fail-open to connect. Driver is connecting to an "
-            "HTTPS endpoint without OCSP based Certificate Revocation checking "
-            "as it could not obtain a valid OCSP Response to use from the CA OCSP "
-            "responder. Details:"
-        )
-        ocsp_warning = f"{static_warning} \n {ocsp_log}"
-        logger.warning(ocsp_warning)
+    def print_fail_open_debug(ocsp_log) -> None:
+        static_debug = "OCSP responder didn't respond correctly. Assuming certificate is not revoked. Details: "
+        ocsp_debug = f"{static_debug} \n {ocsp_log}"
+        logger.debug(ocsp_debug)
 
     def validate_by_direct_connection(
         self,
@@ -1320,7 +1315,7 @@ class SnowflakeOCSP:
                 )
                 return ex_obj
             else:
-                SnowflakeOCSP.print_fail_open_warning(
+                SnowflakeOCSP.print_fail_open_debug(
                     telemetry_data.generate_telemetry_data("RevocationCheckFailure")
                 )
                 return None
