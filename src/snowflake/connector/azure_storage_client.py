@@ -4,11 +4,12 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
-from logging import getLogger
+from logging import Filter, getLogger
 from random import choice
 from string import hexdigits
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -17,6 +18,7 @@ from .compat import quote
 from .constants import FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 from .storage_client import SnowflakeStorageClient
+from .util_text import get_md5
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -37,6 +39,22 @@ TOKEN_EXPIRATION_ERR_MESSAGE = (
 SFCDIGEST = "x-ms-meta-sfcdigest"
 ENCRYPTION_DATA = "x-ms-meta-encryptiondata"
 MATDESC = "x-ms-meta-matdesc"
+
+
+class AzureCredentialFilter(Filter):
+    LEAKY_FMT = '%s://%s:%s "%s %s %s" %s %s'
+
+    def filter(self, record):
+        if record.msg == AzureCredentialFilter.LEAKY_FMT and len(record.args) == 8:
+            record.args = (
+                record.args[:4] + (record.args[4].split("?")[0],) + record.args[5:]
+            )
+        return True
+
+
+getLogger("snowflake.connector.vendored.urllib3.connectionpool").addFilter(
+    AzureCredentialFilter()
+)
 
 
 class SnowflakeAzureRestClient(SnowflakeStorageClient):
@@ -133,7 +151,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
                 )
             )
             return FileHeader(
-                digest=r.headers.get("x-ms-meta-sfcdigest"),
+                digest=r.headers.get(SFCDIGEST),
                 content_length=int(r.headers.get("Content-Length")),
                 encryption_metadata=encryption_metadata,
             )
@@ -220,7 +238,27 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             part = ET.Element("Latest")
             part.text = block_id
             root.append(part)
-        headers = {"x-ms-blob-content-encoding": "utf-8"}
+        # SNOW-1778088: We need to calculate the MD5 sum of this file for Azure Blob storage
+        new_stream = not bool(self.meta.src_stream or self.meta.intermediate_stream)
+        fd = (
+            self.meta.src_stream
+            or self.meta.intermediate_stream
+            or open(self.meta.real_src_file_name, "rb")
+        )
+        try:
+            if not new_stream:
+                # Reset position in file
+                fd.seek(0)
+            file_content = fd.read()
+        finally:
+            if new_stream:
+                fd.close()
+        headers = {
+            "x-ms-blob-content-encoding": "utf-8",
+            "x-ms-blob-content-md5": base64.b64encode(get_md5(file_content)).decode(
+                "utf-8"
+            ),
+        }
         azure_metadata = self._prepare_file_metadata()
         headers.update(azure_metadata)
         retry_id = "COMPLETE"

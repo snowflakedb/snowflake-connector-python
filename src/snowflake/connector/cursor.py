@@ -16,7 +16,7 @@ import uuid
 import warnings
 from enum import Enum
 from logging import getLogger
-from threading import Lock, Timer
+from threading import Lock
 from types import TracebackType
 from typing import (
     IO,
@@ -39,6 +39,7 @@ from snowflake.connector.result_set import ResultSet
 
 from . import compat
 from ._sql_util import get_file_transfer_type
+from ._utils import _TrackedQueryCancellationTimer
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .constants import (
     FIELD_NAME_TO_ID,
@@ -392,7 +393,9 @@ class SnowflakeCursor:
         self.messages: list[
             tuple[type[Error] | type[Exception], dict[str, str | bool]]
         ] = []
-        self._timebomb: Timer | None = None  # must be here for abort_exit method
+        self._timebomb: _TrackedQueryCancellationTimer | None = (
+            None  # must be here for abort_exit method
+        )
         self._description: list[ResultMetadataV2] | None = None
         self._sfqid: str | None = None
         self._sqlstate = None
@@ -654,7 +657,9 @@ class SnowflakeCursor:
         )
 
         if real_timeout is not None:
-            self._timebomb = Timer(real_timeout, self.__cancel_query, [query])
+            self._timebomb = _TrackedQueryCancellationTimer(
+                real_timeout, self.__cancel_query, [query]
+            )
             self._timebomb.start()
             logger.debug("started timebomb in %ss", real_timeout)
         else:
@@ -870,6 +875,7 @@ class SnowflakeCursor:
         _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
+        _force_qmark_paramstyle: bool = False,
         _dataframe_ast: str | None = None,
     ) -> Self | dict[str, Any] | None:
         """Executes a command/query.
@@ -905,6 +911,7 @@ class SnowflakeCursor:
             file_stream: File-like object to be uploaded with PUT
             num_statements: Query level parameter submitted in _statement_params constraining exact number of
             statements being submitted (or 0 if submitting an uncounted number) when using a multi-statement query.
+            _force_qmark_paramstyle: Force the use of qmark paramstyle regardless of the connection's paramstyle.
             _dataframe_ast: Base64-encoded dataframe request abstract syntax tree.
 
         Returns:
@@ -924,12 +931,15 @@ class SnowflakeCursor:
 
         if _do_reset:
             self.reset()
-        command = command.strip(" \t\n\r") if command else None
+        command = command.strip(" \t\n\r") if command else ""
         if not command:
-            logger.warning("execute: no query is given to execute")
-            return None
-        logger.debug("query: [%s]", self._format_query_for_log(command))
+            if _dataframe_ast:
+                logger.debug("dataframe ast: [%s]", _dataframe_ast)
+            else:
+                logger.warning("execute: no query is given to execute")
+                return None
 
+        logger.debug("query: [%s]", self._format_query_for_log(command))
         _statement_params = _statement_params or dict()
         # If we need to add another parameter, please consider introducing a dict for all extra params
         # See discussion in https://github.com/snowflakedb/snowflake-connector-python/pull/1524#discussion_r1174061775
@@ -950,7 +960,7 @@ class SnowflakeCursor:
             "dataframe_ast": _dataframe_ast,
         }
 
-        if self._connection.is_pyformat:
+        if self._connection.is_pyformat and not _force_qmark_paramstyle:
             query = self._preprocess_pyformat_query(command, params)
         else:
             # qmark and numeric paramstyle
@@ -1049,6 +1059,7 @@ class SnowflakeCursor:
                     source_from_stream=file_stream,
                     multipart_threshold=data.get("threshold"),
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
+                    iobound_tpe_limit=self._connection.iobound_tpe_limit,
                 )
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
@@ -1071,6 +1082,11 @@ class SnowflakeCursor:
             logger.debug(ret)
             err = ret["message"]
             code = ret.get("code", -1)
+            if self._timebomb and self._timebomb.executed:
+                err = (
+                    f"SQL execution was cancelled by the client due to a timeout. "
+                    f"Error message received from the server: {err}"
+                )
             if "data" in ret:
                 err += ret["data"].get("errorMessage", "")
             errvalue = {
@@ -1153,7 +1169,7 @@ class SnowflakeCursor:
         )
 
         if not (is_dml or self.is_file_transfer):
-            logger.info(
+            logger.debug(
                 "Number of results in first chunk: %s", result_chunks[0].rowcount
             )
 
@@ -1238,6 +1254,7 @@ class SnowflakeCursor:
             )
 
     def query_result(self, qid: str) -> SnowflakeCursor:
+        """Query the result of a previously executed query."""
         url = f"/queries/{qid}/result"
         ret = self._connection.rest.request(url=url, method="get")
         self._sfqid = (
@@ -1443,7 +1460,9 @@ class SnowflakeCursor:
         else:
             if re.search(";/s*$", command) is None:
                 command = command + "; "
-            if self._connection.is_pyformat:
+            if self._connection.is_pyformat and not kwargs.get(
+                "_force_qmark_paramstyle", False
+            ):
                 processed_queries = [
                     self._preprocess_pyformat_query(command, params)
                     for params in seqparams
@@ -1631,7 +1650,9 @@ class SnowflakeCursor:
         self.close()
 
     def get_results_from_sfqid(self, sfqid: str) -> None:
-        """Gets the results from previously ran query."""
+        """Gets the results from previously ran query. This methods differs from ``SnowflakeCursor.query_result``
+        in that it monitors the ``sfqid`` until it is no longer running, and then retrieves the results.
+        """
 
         def wait_until_ready() -> None:
             """Makes sure query has finished executing and once it has retrieves results."""

@@ -33,14 +33,14 @@ class SecretDetector(logging.Formatter):
         flags=re.IGNORECASE,
     )
     PRIVATE_KEY_PATTERN = re.compile(
-        r"-----BEGIN PRIVATE KEY-----\\n([a-z0-9/+=\\n]{32,})\\n-----END PRIVATE KEY-----",
+        r"-{3,}BEGIN [A-Z ]*PRIVATE KEY-{3,}\n([\s\S]*?)\n-{3,}END [A-Z ]*PRIVATE KEY-{3,}",
         flags=re.MULTILINE | re.IGNORECASE,
     )
     PRIVATE_KEY_DATA_PATTERN = re.compile(
         r'"privateKeyData": "([a-z0-9/+=\\n]{10,})"', flags=re.MULTILINE | re.IGNORECASE
     )
     CONNECTION_TOKEN_PATTERN = re.compile(
-        r"(token|assertion content)" r"([\'\"\s:=]+)" r"([a-z0-9=/_\-\+]{8,})",
+        r"(token|assertion content)" r"([\'\"\s:=]+)" r"([a-z0-9=/_\-\+\.]{8,})",
         flags=re.IGNORECASE,
     )
 
