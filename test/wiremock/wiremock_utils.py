@@ -95,7 +95,7 @@ class WiremockClient:
 
     def _wait_for_wiremock(self):
         retry_count = 0
-        while retry_count < 5:
+        while retry_count < 10:
             if self._health_check():
                 return
             retry_count += 1
@@ -105,7 +105,7 @@ class WiremockClient:
 
     def _health_check(self):
         mappings_endpoint = (
-            f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/mappings"
+            f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/health"
         )
         try:
             response = requests.get(mappings_endpoint)
