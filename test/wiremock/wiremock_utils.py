@@ -87,11 +87,11 @@ class WiremockClient:
         try:
             response = requests.get(mappings_endpoint)
         except requests.exceptions.RequestException as e:
-            LOGGER.warning("Wiremock healthcheck failed with exception: ", e)
+            LOGGER.warning(f"Wiremock healthcheck failed with exception: {e}")
             return False
         if response.status_code != 200:
             LOGGER.warning(
-                "Wiremock healthcheck failed with status code: ", response.status_code
+                f"Wiremock healthcheck failed with status code: {response.status_code}"
             )
             return False
         return True

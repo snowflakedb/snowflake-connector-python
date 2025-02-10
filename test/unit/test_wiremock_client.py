@@ -17,6 +17,7 @@ def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
         yield client
 
 
+@pytest.mark.skipolddriver
 def test_wiremock(wiremock_client):
     connection_reset_by_peer_mapping = {
         "mappings": [
