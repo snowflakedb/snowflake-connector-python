@@ -3,6 +3,7 @@
 #
 
 import json
+import logging
 import os.path
 import pathlib
 import socket
@@ -11,6 +12,8 @@ from time import sleep
 from typing import Optional
 
 from snowflake.connector.vendored import requests
+
+LOGGER = logging.getLogger(__name__)
 
 
 def _get_mapping_str(mapping):
@@ -32,7 +35,6 @@ class WiremockClient:
     wiremock_https_port = None
 
     def __init__(self):
-        print("Initializing WiremockClient")
         self.wiremock_dir = pathlib.Path(__file__).parent.parent.parent / ".wiremock"
         assert self.wiremock_dir.exists(), f"{self.wiremock_dir} does not exist"
         self.wiremock_jar_path = self.wiremock_dir / self.wiremock_filename
@@ -66,16 +68,17 @@ class WiremockClient:
         self._wait_for_wiremock()
 
     def _stop_wiremock(self):
-        print("Stopping WiremockClient")
         self.wiremock_process.kill()
 
     def _wait_for_wiremock(self):
-        print("Waiting for WiremockClient")
         retry_count = 0
-        while not self._health_check() and retry_count < 5:
-            print(f"Retrying WiremockClient, retry count: {retry_count}")
+        while retry_count < 5:
+            if self._health_check():
+                return
             retry_count += 1
             sleep(1)
+
+        raise RuntimeError(f"WiremockClient did not respond within {5} seconds")
 
     def _health_check(self):
         mappings_endpoint = (
@@ -84,9 +87,12 @@ class WiremockClient:
         try:
             response = requests.get(mappings_endpoint)
         except requests.exceptions.RequestException as e:
-            print(e)
+            LOGGER.warning("Wiremock healthcheck failed with exception: ", e)
             return False
         if response.status_code != 200:
+            LOGGER.warning(
+                "Wiremock healthcheck failed with status code: ", response.status_code
+            )
             return False
         return True
 
@@ -105,7 +111,6 @@ class WiremockClient:
         return requests.post(endpoint, data=body, headers=headers)
 
     def import_mapping(self, mapping):
-        print("Importing mapping")
         self._reset_wiremock()
         import_mapping_endpoint = f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/mappings/import"
         mapping_str = _get_mapping_str(mapping)
@@ -114,7 +119,6 @@ class WiremockClient:
             raise RuntimeError("Failed to import mapping")
 
     def add_mapping(self, mapping):
-        print("Adding mapping")
         add_mapping_endpoint = (
             f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/mappings"
         )
@@ -129,10 +133,8 @@ class WiremockClient:
             return sock.getsockname()[1]
 
     def __enter__(self):
-        print("Entering WiremockClient")
         self._start_wiremock()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        print("Exiting WiremockClient")
         self._stop_wiremock()
