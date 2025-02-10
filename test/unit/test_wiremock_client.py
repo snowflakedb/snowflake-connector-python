@@ -6,19 +6,21 @@ from typing import Any, Generator, Union
 
 import pytest
 
-from snowflake.connector.vendored import requests
+try:
+    from snowflake.connector.vendored import requests
+except ImportError:
+    # old driver tests compatibility
+    import requests
 
 from ..wiremock.wiremock_utils import WiremockClient
 
 
-@pytest.mark.skipolddriver
 @pytest.fixture(scope="session")
 def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
     with WiremockClient() as client:
         yield client
 
 
-@pytest.mark.skipolddriver
 def test_wiremock(wiremock_client):
     connection_reset_by_peer_mapping = {
         "mappings": [

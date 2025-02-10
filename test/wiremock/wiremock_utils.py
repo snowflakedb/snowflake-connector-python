@@ -11,7 +11,11 @@ import subprocess
 from time import sleep
 from typing import Optional
 
-from snowflake.connector.vendored import requests
+try:
+    from snowflake.connector.vendored import requests
+except ImportError:
+    # old driver tests compatibility
+    import requests
 
 LOGGER = logging.getLogger(__name__)
 
@@ -48,16 +52,15 @@ class WiremockClient:
         self.wiremock_process = subprocess.Popen(
             [
                 "java",
-                "-version",
-                # "-jar",
-                # self.wiremock_jar_path,
-                # "--root-dir",
-                # self.wiremock_dir,
-                # "--enable-browser-proxying",  # work as forward proxy
-                # "--proxy-pass-through",
-                # "false",  # pass through only matched requests
-                # "--port",
-                # str(self.wiremock_http_port),
+                "-jar",
+                self.wiremock_jar_path,
+                "--root-dir",
+                self.wiremock_dir,
+                "--enable-browser-proxying",  # work as forward proxy
+                "--proxy-pass-through",
+                "false",  # pass through only matched requests
+                "--port",
+                str(self.wiremock_http_port),
                 # "--https-port",
                 # str(self.wiremock_https_port),
                 # "--https-keystore",
