@@ -957,8 +957,10 @@ class SnowflakeConnection:
                 os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"],
             )
 
-        if ".privatelink.snowflakecomputing." in self.host:
-            SnowflakeConnection.setup_ocsp_privatelink(self.application, self.host)
+        if ".privatelink.snowflakecomputing." in self.host.lower():
+            SnowflakeConnection.setup_ocsp_privatelink(
+                self.application, self.host.lower()
+            )
         else:
             if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
                 del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
