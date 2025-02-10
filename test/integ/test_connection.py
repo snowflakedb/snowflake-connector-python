@@ -671,10 +671,12 @@ def test_privatelink_ocsp_url_creation():
         == "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
     )
 
-    del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
 
+@pytest.mark.skipolddriver
+def test_uppercase_privatelink_ocsp_url_creation():
     account = "TESTACCOUNT.US-EAST-1.PRIVATELINK"
     hostname = account + ".snowflakecomputing.com"
+
     SnowflakeConnection.setup_ocsp_privatelink(CLIENT_NAME, hostname)
     ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
     assert (
