@@ -11,6 +11,7 @@ from snowflake.connector.vendored import requests
 from ..wiremock.wiremock_utils import WiremockClient
 
 
+@pytest.mark.skipolddriver
 @pytest.fixture(scope="session")
 def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
     with WiremockClient() as client:

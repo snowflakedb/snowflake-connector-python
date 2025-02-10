@@ -48,15 +48,16 @@ class WiremockClient:
         self.wiremock_process = subprocess.Popen(
             [
                 "java",
-                "-jar",
-                self.wiremock_jar_path,
-                "--root-dir",
-                self.wiremock_dir,
-                "--enable-browser-proxying",  # work as forward proxy
-                "--proxy-pass-through",
-                "false",  # pass through only matched requests
-                "--port",
-                str(self.wiremock_http_port),
+                "-version",
+                # "-jar",
+                # self.wiremock_jar_path,
+                # "--root-dir",
+                # self.wiremock_dir,
+                # "--enable-browser-proxying",  # work as forward proxy
+                # "--proxy-pass-through",
+                # "false",  # pass through only matched requests
+                # "--port",
+                # str(self.wiremock_http_port),
                 # "--https-port",
                 # str(self.wiremock_https_port),
                 # "--https-keystore",
@@ -65,7 +66,26 @@ class WiremockClient:
                 # self.wiremock_dir / "ca-cert.jks"
             ]
         )
-        self._wait_for_wiremock()
+        try:
+            self._wait_for_wiremock()
+        except RuntimeError as e:
+            if self.wiremock_process.poll() is not None:
+                if self.wiremock_process.returncode != 0:
+                    raise RuntimeError(
+                        "Wiremock did not start. Subprocess exited with: {} {}".format(
+                            self.wiremock_process.returncode,
+                            self.wiremock_process.stderr,
+                        )
+                    )
+                elif self.wiremock_process.stdout is not None:
+                    raise RuntimeError(
+                        f"Wiremock did not start. Subprocess exited with: {self.wiremock_process.stdout}"
+                    )
+                else:
+                    raise RuntimeError(
+                        f"Wiremock did not start. Subprocess exited with: {self.wiremock_process.returncode}"
+                    )
+            raise e
 
     def _stop_wiremock(self):
         self.wiremock_process.kill()
