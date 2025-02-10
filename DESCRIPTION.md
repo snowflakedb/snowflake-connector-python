@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
   - Removed the workaround for a Python 2.7 bug.
   - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
+  - Optimized distribution package lookup to speed up import.
 
 - v3.13.2(January 29, 2025)
   - Changed not to use scoped temporary objects.
