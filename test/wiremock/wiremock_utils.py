@@ -61,12 +61,12 @@ class WiremockClient:
                 "false",  # pass through only matched requests
                 "--port",
                 str(self.wiremock_http_port),
-                # "--https-port",
-                # str(self.wiremock_https_port),
-                # "--https-keystore",
-                # self.wiremock_dir / "ca-cert.jks",
-                # "--ca-keystore",
-                # self.wiremock_dir / "ca-cert.jks"
+                "--https-port",
+                str(self.wiremock_https_port),
+                "--https-keystore",
+                self.wiremock_dir / "ca-cert.jks",
+                "--ca-keystore",
+                self.wiremock_dir / "ca-cert.jks",
             ]
         )
         try:
@@ -95,7 +95,7 @@ class WiremockClient:
 
     def _wait_for_wiremock(self):
         retry_count = 0
-        while retry_count < 10:
+        while retry_count < 5:
             if self._health_check():
                 return
             retry_count += 1
@@ -112,7 +112,12 @@ class WiremockClient:
         except requests.exceptions.RequestException as e:
             LOGGER.warning(f"Wiremock healthcheck failed with exception: {e}")
             return False
-        if response.status_code != 200:
+        if (
+            response.status_code == requests.codes.ok
+            and response.json()["status"] == "healthy"
+        ):
+            LOGGER.debug(f"Wiremock healthcheck failed with response: {response}")
+        else:
             LOGGER.warning(
                 f"Wiremock healthcheck failed with status code: {response.status_code}"
             )
