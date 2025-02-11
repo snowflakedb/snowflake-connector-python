@@ -1,6 +1,8 @@
 ARG BASE_IMAGE=quay.io/pypa/manylinux2014_x86_64
 FROM $BASE_IMAGE
 
+RUN yum install -y java
+
 # This is to solve permission issue, read https://denibertovic.com/posts/handling-permissions-with-docker-volumes/
 ARG GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64
 ENV GOSU_PATH $GOSU_URL
