@@ -17,6 +17,7 @@ except ImportError:
     # old driver tests compatibility
     import requests
 
+MAX_RETRY_COUNT = 10
 LOGGER = logging.getLogger(__name__)
 
 
@@ -95,13 +96,15 @@ class WiremockClient:
 
     def _wait_for_wiremock(self):
         retry_count = 0
-        while retry_count < 5:
+        while retry_count < MAX_RETRY_COUNT:
             if self._health_check():
                 return
             retry_count += 1
             sleep(1)
 
-        raise RuntimeError(f"WiremockClient did not respond within {5} seconds")
+        raise RuntimeError(
+            f"WiremockClient did not respond within {MAX_RETRY_COUNT} seconds"
+        )
 
     def _health_check(self):
         mappings_endpoint = (
