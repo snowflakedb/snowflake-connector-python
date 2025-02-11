@@ -1,0 +1,68 @@
+#!/usr/bin/env python
+#
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
+#
+
+from __future__ import annotations
+
+from decimal import Decimal
+
+import numpy
+
+import snowflake.connector
+
+
+def test_decfloat_bindings(conn_cnx):
+    original_style = snowflake.connector.paramstyle
+    snowflake.connector.paramstyle = "qmark"
+    try:
+        with conn_cnx() as cnx:
+            # test decfloat bindings
+            ret = (
+                cnx.cursor()
+                .execute("select ?", [("DECFLOAT", Decimal("-1234e4000"))])
+                .fetchone()
+            )
+            assert isinstance(ret[0], Decimal)
+            assert ret[0] == Decimal("-1234e4000")
+            ret = cnx.cursor().execute("select ?", [("DECFLOAT", -1e3)]).fetchone()
+            assert isinstance(ret[0], Decimal)
+            assert ret[0] == Decimal("-1e3")
+            # test w/o explicit type specification
+            ret = cnx.cursor().execute("select ?", [-1e3]).fetchone()
+            assert isinstance(ret[0], float)
+            ret = cnx.cursor().execute("select ?", [Decimal("-1e3")]).fetchone()
+            assert isinstance(ret[0], int)
+    finally:
+        snowflake.connector.paramstyle = original_style
+
+
+def test_decfloat_from_compiler(conn_cnx):
+    # test both result formats
+    for fmt in ["json", "arrow"]:
+        with conn_cnx(
+            session_parameters={
+                "PYTHON_CONNECTOR_QUERY_RESULT_FORMAT": fmt,
+                "use_cached_result": "false",
+            }
+        ) as cnx:
+            # test endianess
+            ret = cnx.cursor().execute("SELECT 555::decfloat").fetchone()
+            assert isinstance(ret[0], Decimal)
+            assert ret[0] == Decimal("555")
+            # test with decimal separator
+            ret = cnx.cursor().execute("SELECT 123456789.12345678::decfloat").fetchone()
+            assert isinstance(ret[0], Decimal)
+            assert ret[0] == Decimal("123456789.12345678")
+    # test numpy
+    with conn_cnx(numpy=True) as cnx:
+        ret = (
+            cnx.cursor()
+            .execute(
+                "SELECT 1.234::decfloat",
+                None,
+            )
+            .fetchone()
+        )
+        assert isinstance(ret[0], numpy.float64)
+        assert ret[0] == numpy.float64("1.234")
