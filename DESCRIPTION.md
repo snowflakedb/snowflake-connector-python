@@ -11,6 +11,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
   - Removed the workaround for a Python 2.7 bug.
   - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
+  - Optimized distribution package lookup to speed up import.
+  - Fixed a bug where privatelink OCSP Cache url could not be determined if privatelink account name was specified in uppercase
   - Deprecated `insecure_mode` connection property and replaced it with `disable_ocsp_checks` with the same behavior as the former property.
 
 - v3.13.2(January 29, 2025)
