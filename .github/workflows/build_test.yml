@@ -146,7 +146,7 @@ jobs:
           java-package: 'jre'
       - name: Fetch Wiremock
         shell: bash
-        run: mkdir .wiremock && curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
+        run: curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
       - name: Setup parameters file
         shell: bash
         env:
@@ -245,7 +245,7 @@ jobs:
           java-package: 'jre'
       - name: Fetch Wiremock
         shell: bash
-        run: mkdir .wiremock && curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
+        run: curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
       - uses: actions/checkout@v4
       - name: Set up Python
         uses: actions/setup-python@v4
