@@ -447,7 +447,6 @@ class SnowflakeConnection:
                 DeprecationWarning,
                 stacklevel=2,
             )
-            logger.warning(warn_message)
 
             if (
                 "disable_ocsp_checks" in kwargs
