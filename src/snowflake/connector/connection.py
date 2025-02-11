@@ -916,6 +916,7 @@ class SnowflakeConnection:
 
     @staticmethod
     def setup_ocsp_privatelink(app, hostname) -> None:
+        hostname = hostname.lower()
         SnowflakeConnection.OCSP_ENV_LOCK.acquire()
         ocsp_cache_server = f"http://ocsp.{hostname}/ocsp_response_cache.json"
         os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"] = ocsp_cache_server
@@ -947,7 +948,7 @@ class SnowflakeConnection:
                 os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"],
             )
 
-        if ".privatelink.snowflakecomputing." in self.host:
+        if ".privatelink.snowflakecomputing." in self.host.lower():
             SnowflakeConnection.setup_ocsp_privatelink(self.application, self.host)
         else:
             if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
