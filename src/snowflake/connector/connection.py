@@ -105,6 +105,7 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
+from .snowflake_restful_interface import SnowflakeRestfulInterface
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
@@ -596,7 +597,7 @@ class SnowflakeConnection:
         self._validate_client_prefetch_threads()
 
     @property
-    def rest(self) -> SnowflakeRestful | None:
+    def rest(self) -> SnowflakeRestfulInterface | None:
         return self._rest
 
     @property
