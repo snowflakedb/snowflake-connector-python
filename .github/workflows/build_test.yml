@@ -265,18 +265,6 @@ jobs:
       matrix:
         cloud-provider: [aws]
     steps:
-      - name: Set up Java
-        uses: actions/setup-java@v4 # for wiremock
-        with:
-          java-version: 11
-          distribution: 'temurin'
-          java-package: 'jre'
-      - name: Create wiremock directory
-        shell: bash
-        run: mkdir -p .wiremock
-      - name: Fetch Wiremock
-        shell: bash
-        run: curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
       - uses: actions/checkout@v4
       - name: Setup parameters file
         shell: bash
