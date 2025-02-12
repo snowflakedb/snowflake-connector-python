@@ -13,6 +13,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
   - Optimized distribution package lookup to speed up import.
   - Fixed a bug where privatelink OCSP Cache url could not be determined if privatelink account name was specified in uppercase
+  - Fixed a bug where file permission check happened on Windows
 
 - v3.13.2(January 29, 2025)
   - Changed not to use scoped temporary objects.
