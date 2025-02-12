@@ -71,9 +71,9 @@ class AuthByOauthCode(AuthByPlugin):
         self.redirect_uri = redirect_uri
         self.scope = scope
         self._state = secrets.token_urlsafe(43)
+        logger.debug("chose oauth state: %s", "".join("*" for _ in self._state))
         self._oauth_token: str | None = None
-        self._refresh_token: str | None = kwargs.get("_refresh_token")
-        logger.debug("chose oauth state: %s", self._state)
+        self._refresh_token: str | None = kwargs.get("_refresh_token")        
         self._protocol = "http"
         self.pkce = pkce
         if pkce:
@@ -127,6 +127,7 @@ class AuthByOauthCode(AuthByPlugin):
             )
             params["code_challenge"] = challenge
             params["code_challenge_method"] = "S256"
+
         url_params = urllib.parse.urlencode(params)
         url = f"{self.authentication_url}?{url_params}"
         return url

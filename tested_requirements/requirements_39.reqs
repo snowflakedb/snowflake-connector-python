@@ -1,10 +1,10 @@
-# Generated on: Python 3.9.20
+# Generated on: Python 3.9.21
 asn1crypto==1.5.1
-certifi==2024.8.30
+certifi==2024.12.14
 cffi==1.17.1
-charset-normalizer==3.4.0
+charset-normalizer==3.4.1
 cryptography==44.0.0
-filelock==3.16.1
+filelock==3.17.0
 idna==3.10
 packaging==24.2
 platformdirs==4.3.6
@@ -17,4 +17,4 @@ sortedcontainers==2.4.0
 tomlkit==0.13.2
 typing_extensions==4.12.2
 urllib3==1.26.20
-snowflake-connector-python==3.12.4
+snowflake-connector-python==3.13.2

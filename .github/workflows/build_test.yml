@@ -93,6 +93,9 @@ jobs:
         if: ${{ matrix.os.id == 'manylinux_aarch64' }}
         uses: docker/setup-qemu-action@v2
         with:
+          # xref https://github.com/docker/setup-qemu-action/issues/188
+          # xref https://github.com/tonistiigi/binfmt/issues/215
+          image: tonistiigi/binfmt:qemu-v8.1.5
           platforms: all
       - uses: actions/checkout@v4
       - name: Building wheel

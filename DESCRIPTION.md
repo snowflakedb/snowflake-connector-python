@@ -7,17 +7,28 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.13.3(TBD)
+  - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
+  - Removed the workaround for a Python 2.7 bug.
+  - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
+  - Optimized distribution package lookup to speed up import.
+  - Fixed a bug where privatelink OCSP Cache url could not be determined if privatelink account name was specified in uppercase
 
-- v3.12.5(TBD)
+- v3.13.2(January 29, 2025)
+  - Changed not to use scoped temporary objects.
+
+- v3.13.1(January 29, 2025)
+  - Remedied SQL injection vulnerability in snowflake.connector.pandas_tools.write_pandas. See more https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-2vpq-fh52-j3wv
+  - Remedied vulnerability in deserialization of the OCSP response cache. See more: https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-m4f6-vcj4-w5mx
+  - Remedied vulnerability connected to cache files permissions. See more: https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-r2x6-cjg7-8r43
+
+- v3.13.0(January 23,2025)
   - Added a feature to limit the sizes of IO-bound ThreadPoolExecutors during PUT and GET commands.
-  - Adding support for the new PAT authentication method.
   - Updated README.md to include instructions on how to verify package signatures using `cosign`.
   - Updated the log level for cursor's chunk rowcount from INFO to DEBUG.
   - Added a feature to verify if the connection is still good enough to send queries over.
   - Added support for base64-encoded DER private key strings in the `private_key` authentication type.
   - Added support for OAuth authorization code flow.
-  - Added support for PKCE on top of OAuth authorization flow.
-  - Added support for refresh token on top of OAuth authorization flow.
 
 - v3.12.4(December 3,2024)
   - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
