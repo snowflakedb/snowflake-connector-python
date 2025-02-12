@@ -56,6 +56,7 @@ class AuthByOauthCode(AuthByPlugin):
         redirect_uri: str,
         scope: str,
         pkce: bool = False,
+        refresh_token: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -71,12 +72,18 @@ class AuthByOauthCode(AuthByPlugin):
         self.scope = scope
         self._state = secrets.token_urlsafe(43)
         logger.debug("chose oauth state: %s", "".join("*" for _ in self._state))
-        self._oauth_token = None
+        self._oauth_token: str | None = None
+        self._refresh_token: str | None = kwargs.get("_refresh_token")        
         self._protocol = "http"
         self.pkce = pkce
         if pkce:
             logger.debug("oauth pkce is going to be used")
         self._verifier: str | None = None
+        self.refresh_token = bool(self._refresh_token) or refresh_token
+        self._refresh_token: str | None = None
+        if refresh_token:
+            logger.debug("oauth refresh token is going to be requested")
+            self.scope += (" " if self.scope else "") + "offline_access"
 
     def reset_secrets(self) -> None:
         self._oauth_token = None
@@ -218,7 +225,9 @@ class AuthByOauthCode(AuthByPlugin):
             fields=fields,
         )
         try:
-            self._oauth_token = json.loads(resp.data)["access_token"]
+            json_resp = json.loads(resp.data)
+            self._oauth_token = json_resp["access_token"]
+            self._refresh_token = json_resp.get("refresh_token")
         except (
             json.JSONDecodeError,
             KeyError,
@@ -228,14 +237,20 @@ class AuthByOauthCode(AuthByPlugin):
                 "received the following response body when requesting oauth token: %s",
                 resp.data,
             )
-            self._handle_failure(
-                conn=conn,
-                ret={
-                    "code": ER_IDP_CONNECTION_ERROR,
-                    "message": "Invalid HTTP request from web browser. Idp "
-                    "authentication could have failed.",
-                },
-            )
+            if self.refresh_token:
+                logger.info(
+                    "oauth refresh token is available, going to try consuming it to recover"
+                )
+                self._consume_refresh_token(conn=conn)
+            else:
+                self._handle_failure(
+                    conn=conn,
+                    ret={
+                        "code": ER_IDP_CONNECTION_ERROR,
+                        "message": "Invalid HTTP request from web browser. Idp "
+                        "authentication could have failed.",
+                    },
+                )
         return
 
     def reauthenticate(
@@ -360,3 +375,52 @@ You can close this window now and go back where you started from.
             if line.startswith("GET "):
                 return True
         return False
+
+    def _consume_refresh_token(self, conn: SnowflakeConnection) -> None:
+        """If self._refresh_token is available get a new self._oauth_token from it.
+
+        Updates self as a side-effect. Needs at lest self._refresh_token and self.client_id set.
+        """
+        if not self._refresh_token:
+            return
+        fields = {
+            "client_id": self.client_id,
+            "grant_type": "refresh_token",
+            "refresh_token": self._refresh_token,
+        }
+        if self.client_secret:
+            fields["client_secret"] = self.client_secret
+
+        resp = urllib3.PoolManager().request_encode_body(  # TODO: use network pool to gain use of proxy settings and so on
+            "POST",
+            self.token_request_url,
+            encode_multipart=False,
+            fields=fields,
+        )
+        try:
+            json_resp = json.loads(resp.data)
+            self._oauth_token = json_resp["access_token"]
+            logger.debug("new oauth token received")
+            new_refresh_token = json_resp.get("refresh_token")
+            if new_refresh_token:
+                logger.debug("received new refresh token while consuming previous one")
+                self._refresh_token = new_refresh_token
+        except (
+            json.JSONDecodeError,
+            KeyError,
+        ):
+            logger.error(
+                "refresh token exchange response, did not contain 'access_token'"
+            )
+            logger.debug(
+                "received the following response body when consuing refresh token: %s",
+                resp.data,
+            )
+            self._handle_failure(
+                conn=conn,
+                ret={
+                    "code": ER_IDP_CONNECTION_ERROR,
+                    "message": "Invalid HTTP request from web browser. Idp "
+                    "authentication could have failed.",
+                },
+            )
