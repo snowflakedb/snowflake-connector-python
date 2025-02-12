@@ -8,6 +8,9 @@ THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 CONNECTOR_WHL="$(ls $CONNECTOR_DIR/dist/*cp38*manylinux2014*.whl | sort -r | head -n 1)"
 
+# fetch wiremock
+curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output "${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar"
+
 python3.8 -m venv fips_env
 source fips_env/bin/activate
 pip install -U setuptools pip
