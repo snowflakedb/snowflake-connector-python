@@ -331,12 +331,10 @@ class ConfigManager:
 
             if (
                 not IS_WINDOWS  # Skip checking on Windows
-                or (
-                    sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
-                    # Same check as openssh does for permissions
-                    # https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
-                    and filep.stat().st_mode & READABLE_BY_OTHERS != 0
-                )
+                and sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
+                # Same check as openssh does for permissions
+                # https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
+                and filep.stat().st_mode & READABLE_BY_OTHERS != 0
                 or (
                     # Windows doesn't have getuid, skip checking
                     hasattr(os, "getuid")
