@@ -24,7 +24,6 @@ from functools import partial
 from io import StringIO
 from logging import getLogger
 from threading import Lock
-from time import strptime
 from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
 from uuid import UUID
@@ -346,9 +345,6 @@ APPLICATION_RE = re.compile(r"[\w\d_]+")
 # adding the exception class to Connection class
 for m in [method for method in dir(errors) if callable(getattr(errors, method))]:
     setattr(sys.modules[__name__], m, getattr(errors, m))
-
-# Workaround for https://bugs.python.org/issue7980
-strptime("20150102030405", "%Y%m%d%H%M%S")
 
 logger = getLogger(__name__)
 
@@ -965,6 +961,7 @@ class SnowflakeConnection:
 
     @staticmethod
     def setup_ocsp_privatelink(app, hostname) -> None:
+        hostname = hostname.lower()
         SnowflakeConnection.OCSP_ENV_LOCK.acquire()
         ocsp_cache_server = f"http://ocsp.{hostname}/ocsp_response_cache.json"
         os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"] = ocsp_cache_server
@@ -996,7 +993,7 @@ class SnowflakeConnection:
                 os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"],
             )
 
-        if ".privatelink.snowflakecomputing." in self.host:
+        if ".privatelink.snowflakecomputing." in self.host.lower():
             SnowflakeConnection.setup_ocsp_privatelink(self.application, self.host)
         else:
             if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
