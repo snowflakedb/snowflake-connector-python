@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 import urllib3
 
 from ..compat import parse_qs, urlparse, urlsplit
+from ..constants import _OAUTH_TYPE_AUTHORIZATION_CODE
 from ..errorcode import (
     ER_IDP_CONNECTION_ERROR,
     ER_OAUTH_STATE_CHANGED,
@@ -92,6 +93,7 @@ class AuthByOauthCode(AuthByPlugin):
         """
         body["data"]["AUTHENTICATOR"] = OAUTH_AUTHENTICATOR
         body["data"]["TOKEN"] = self._oauth_token
+        body["data"]["OAUTH_TYPE"] = _OAUTH_TYPE_AUTHORIZATION_CODE
 
     def construct_url(self) -> str:
         params = {

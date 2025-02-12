@@ -436,3 +436,4 @@ _CONNECTIVITY_ERR_MSG = (
 )
 
 _OAUTH_DEFAULT_SCOPE = "session:role:{role}"
+_OAUTH_TYPE_AUTHORIZATION_CODE = "authorization_code"
