@@ -26,8 +26,8 @@ python3.10 -m pip install -U snowflake-connector-python --only-binary=cffi >& /d
 python3.10 ${THIS_DIR}/change_snowflake_test_pwd.py
 mv ${CONNECTOR_DIR}/test/parameters_jenkins.py ${CONNECTOR_DIR}/test/parameters.py
 
-# Fetch wiremock
-curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output ${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar
+# fetch wiremock
+curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output "${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar"
 
 # Run tests
 cd $CONNECTOR_DIR
