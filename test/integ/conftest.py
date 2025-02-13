@@ -251,6 +251,11 @@ def conn_cnx() -> Callable[..., ContextManager[SnowflakeConnection]]:
     return db
 
 
+@pytest.fixture(scope="module")
+def module_conn_cnx() -> Callable[..., ContextManager[SnowflakeConnection]]:
+    return db
+
+
 @pytest.fixture()
 def negative_conn_cnx() -> Callable[..., ContextManager[SnowflakeConnection]]:
     """Use this if an incident is expected and we don't want GS to create a dump file about the incident."""
