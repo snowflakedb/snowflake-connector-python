@@ -6,7 +6,11 @@ from typing import Any, Generator, Union
 
 import pytest
 
-from snowflake.connector.vendored import requests
+try:
+    from snowflake.connector.vendored import requests
+except ImportError:
+    import requests
+
 from src.snowflake.connector.test_util import RUNNING_ON_JENKINS
 
 from ..wiremock.wiremock_utils import WiremockClient
