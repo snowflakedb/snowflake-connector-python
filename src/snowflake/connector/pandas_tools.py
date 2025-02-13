@@ -215,7 +215,7 @@ def _create_temp_file_format(
     return file_format_location
 
 
-def _convert_value_to_sql_option(value: Union[str, bool, int, float] | None) -> str:
+def _convert_value_to_sql_option(value: Union[str, bool, int, float]) -> str:
     if isinstance(value, str):
         if len(value) > 1 and value.startswith("'") and value.endswith("'"):
             return value
@@ -238,7 +238,9 @@ def _iceberg_config_statement_helper(iceberg_config: dict[str, str]) -> str:
     }
 
     normalized = {
-        k.upper(): _convert_value_to_sql_option(v) for k, v in iceberg_config.items()
+        k.upper(): _convert_value_to_sql_option(v)
+        for k, v in iceberg_config.items()
+        if v is not None
     }
 
     if invalid_configs := set(normalized.keys()) - ALLOWED_CONFIGS:

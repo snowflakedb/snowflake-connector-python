@@ -1047,6 +1047,12 @@ def test__iceberg_config_statement_helper():
         == "EXTERNAL_VOLUME='vol' CATALOG='SNOWFLAKE' BASE_LOCATION='/root' CATALOG_SYNC='foo' STORAGE_SERIALIZATION_POLICY='bar'"
     )
 
+    config["STORAGE_SERIALIZATION_POLICY"] = None
+    assert (
+        _iceberg_config_statement_helper(config)
+        == "EXTERNAL_VOLUME='vol' CATALOG='SNOWFLAKE' BASE_LOCATION='/root' CATALOG_SYNC='foo'"
+    )
+
     config["foo"] = True
     config["bar"] = True
     with pytest.raises(
