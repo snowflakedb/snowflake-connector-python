@@ -17,7 +17,7 @@ except ImportError:
     # old driver tests compatibility
     import requests
 
-MAX_RETRY_COUNT = 10
+MAX_RETRY_COUNT = 12
 LOGGER = logging.getLogger(__name__)
 
 
@@ -132,7 +132,7 @@ class WiremockClient:
             f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/reset"
         )
         response = self._wiremock_post(reset_endpoint)
-        if response.status_code != 200:
+        if response.status_code != requests.codes.ok:
             raise RuntimeError("Failed to reset WiremockClient")
 
     def _wiremock_post(
@@ -146,7 +146,7 @@ class WiremockClient:
         import_mapping_endpoint = f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/mappings/import"
         mapping_str = _get_mapping_str(mapping)
         response = self._wiremock_post(import_mapping_endpoint, mapping_str)
-        if response.status_code != 200:
+        if response.status_code != requests.codes.ok:
             raise RuntimeError("Failed to import mapping")
 
     def add_mapping(self, mapping):
@@ -155,7 +155,7 @@ class WiremockClient:
         )
         mapping_str = _get_mapping_str(mapping)
         response = self._wiremock_post(add_mapping_endpoint, mapping_str)
-        if response.status_code != 201:
+        if response.status_code != requests.codes.created:
             raise RuntimeError("Failed to add mapping")
 
     def _find_free_port(self) -> int:
