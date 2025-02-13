@@ -15,5 +15,3 @@ RUN chmod 777 /home/user
 ENV PATH="${PATH}:/opt/python/cp37-cp37m/bin:/opt/python/cp38-cp38/bin/:/opt/python/cp39-cp39/bin/:/opt/python/cp310-cp310/bin/:/opt/python/cp311-cp311/bin/:/opt/python/cp312-cp312/bin/"
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-
-RUN yum install -y java
