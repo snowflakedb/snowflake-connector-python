@@ -19,7 +19,7 @@ RUN sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo && \
 RUN yum clean all && \
     yum install -y redhat-rpm-config gcc libffi-devel openssl openssl-devel && \
     yum install -y python38 python38-devel && \
-    yum install -y java && \
+    yum install -y java-11-openjdk && \
     yum clean all && \
     rm -rf /var/cache/yum
 RUN python3 -m pip install --user --upgrade pip setuptools wheel

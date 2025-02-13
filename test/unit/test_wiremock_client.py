@@ -6,6 +6,8 @@ from typing import Any, Generator, Union
 
 import pytest
 
+from src.snowflake.connector.test_util import RUNNING_ON_JENKINS
+
 try:
     from snowflake.connector.vendored import requests
 except ImportError:
@@ -21,6 +23,7 @@ def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
         yield client
 
 
+@pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
 def test_wiremock(wiremock_client):
     connection_reset_by_peer_mapping = {
         "mappings": [
@@ -45,5 +48,5 @@ def test_wiremock(wiremock_client):
 
     assert response is not None, "response is None"
     assert (
-        response.status_code == 200
+        response.status_code == requests.codes.ok
     ), f"response status is not 200, received status {response.status_code}"
