@@ -11,13 +11,9 @@ import subprocess
 from time import sleep
 from typing import Optional
 
-try:
-    from snowflake.connector.vendored import requests
-except ImportError:
-    # old driver tests compatibility
-    import requests
+from snowflake.connector.vendored import requests
 
-MAX_RETRY_COUNT = 12
+WIREMOCK_START_MAX_RETRY_COUNT = 12
 LOGGER = logging.getLogger(__name__)
 
 
@@ -34,14 +30,15 @@ def _get_mapping_str(mapping):
 
 
 class WiremockClient:
-    wiremock_filename = "wiremock-standalone.jar"
-    wiremock_host = "localhost"
-    wiremock_http_port = None
-    wiremock_https_port = None
-
     def __init__(self):
+        self.wiremock_filename = "wiremock-standalone.jar"
+        self.wiremock_host = "localhost"
+        self.wiremock_http_port = None
+        self.wiremock_https_port = None
+
         self.wiremock_dir = pathlib.Path(__file__).parent.parent.parent / ".wiremock"
         assert self.wiremock_dir.exists(), f"{self.wiremock_dir} does not exist"
+
         self.wiremock_jar_path = self.wiremock_dir / self.wiremock_filename
         assert (
             self.wiremock_jar_path.exists()
@@ -70,40 +67,21 @@ class WiremockClient:
                 self.wiremock_dir / "ca-cert.jks",
             ]
         )
-        try:
-            self._wait_for_wiremock()
-        except RuntimeError as e:
-            if self.wiremock_process.poll() is not None:
-                if self.wiremock_process.returncode != 0:
-                    raise RuntimeError(
-                        "Wiremock did not start. Subprocess exited with: {} {}".format(
-                            self.wiremock_process.returncode,
-                            self.wiremock_process.stderr,
-                        )
-                    )
-                elif self.wiremock_process.stdout is not None:
-                    raise RuntimeError(
-                        f"Wiremock did not start. Subprocess exited with: {self.wiremock_process.stdout}"
-                    )
-                else:
-                    raise RuntimeError(
-                        f"Wiremock did not start. Subprocess exited with: {self.wiremock_process.returncode}"
-                    )
-            raise e
+        self._wait_for_wiremock()
 
     def _stop_wiremock(self):
         self.wiremock_process.kill()
 
     def _wait_for_wiremock(self):
         retry_count = 0
-        while retry_count < MAX_RETRY_COUNT:
+        while retry_count < WIREMOCK_START_MAX_RETRY_COUNT:
             if self._health_check():
                 return
             retry_count += 1
             sleep(1)
 
-        raise RuntimeError(
-            f"WiremockClient did not respond within {MAX_RETRY_COUNT} seconds"
+        raise TimeoutError(
+            f"WiremockClient did not respond within {WIREMOCK_START_MAX_RETRY_COUNT} seconds"
         )
 
     def _health_check(self):

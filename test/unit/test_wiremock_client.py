@@ -6,13 +6,8 @@ from typing import Any, Generator, Union
 
 import pytest
 
+from snowflake.connector.vendored import requests
 from src.snowflake.connector.test_util import RUNNING_ON_JENKINS
-
-try:
-    from snowflake.connector.vendored import requests
-except ImportError:
-    # old driver tests compatibility
-    import requests
 
 from ..wiremock.wiremock_utils import WiremockClient
 
@@ -23,6 +18,7 @@ def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
         yield client
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
 def test_wiremock(wiremock_client):
     connection_reset_by_peer_mapping = {
@@ -38,13 +34,9 @@ def test_wiremock(wiremock_client):
     }
     wiremock_client.import_mapping(connection_reset_by_peer_mapping)
 
-    response = None
-    try:
-        response = requests.get(
-            f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/endpoint"
-        )
-    except requests.exceptions.ConnectionError as e:
-        print(f"Connection error: {e}")
+    response = requests.get(
+        f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/endpoint"
+    )
 
     assert response is not None, "response is None"
     assert (
