@@ -6,11 +6,11 @@ from typing import Any, Generator, Union
 
 import pytest
 
+# old driver support
 try:
     from snowflake.connector.vendored import requests
     from src.snowflake.connector.test_util import RUNNING_ON_JENKINS
 except ImportError:
-    # old driver support
     import os
 
     import requests

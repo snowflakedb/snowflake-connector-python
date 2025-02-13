@@ -11,7 +11,10 @@ import subprocess
 from time import sleep
 from typing import Optional
 
-from snowflake.connector.vendored import requests
+try:
+    from snowflake.connector.vendored import requests
+except ImportError:
+    import requests
 
 WIREMOCK_START_MAX_RETRY_COUNT = 12
 LOGGER = logging.getLogger(__name__)
