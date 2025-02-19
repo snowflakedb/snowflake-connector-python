@@ -215,6 +215,42 @@ def _create_temp_file_format(
     return file_format_location
 
 
+def _convert_value_to_sql_option(value: Union[str, bool, int, float]) -> str:
+    if isinstance(value, str):
+        if len(value) > 1 and value.startswith("'") and value.endswith("'"):
+            return value
+        else:
+            value = value.replace(
+                "'", "''"
+            )  # escape single quotes before adding a pair of quotes
+            return f"'{value}'"
+    else:
+        return str(value)
+
+
+def _iceberg_config_statement_helper(iceberg_config: dict[str, str]) -> str:
+    ALLOWED_CONFIGS = {
+        "EXTERNAL_VOLUME",
+        "CATALOG",
+        "BASE_LOCATION",
+        "CATALOG_SYNC",
+        "STORAGE_SERIALIZATION_POLICY",
+    }
+
+    normalized = {
+        k.upper(): _convert_value_to_sql_option(v)
+        for k, v in iceberg_config.items()
+        if v is not None
+    }
+
+    if invalid_configs := set(normalized.keys()) - ALLOWED_CONFIGS:
+        raise ProgrammingError(
+            f"Invalid iceberg configurations option(s) provided {', '.join(sorted(invalid_configs))}"
+        )
+
+    return " ".join(f"{k}={v}" for k, v in normalized.items())
+
+
 def write_pandas(
     conn: SnowflakeConnection,
     df: pandas.DataFrame,
@@ -231,6 +267,7 @@ def write_pandas(
     overwrite: bool = False,
     table_type: Literal["", "temp", "temporary", "transient"] = "",
     use_logical_type: bool | None = None,
+    iceberg_config: dict[str, str] | None = None,
     **kwargs: Any,
 ) -> tuple[
     bool,
@@ -295,6 +332,14 @@ def write_pandas(
             Snowflake can interpret Parquet logical types during data loading. To enable Parquet logical types,
             set use_logical_type as True. Set to None to use Snowflakes default. For more information, see:
             https://docs.snowflake.com/en/sql-reference/sql/create-file-format
+        iceberg_config: A dictionary that can contain the following iceberg configuration values:
+                * external_volume: specifies the identifier for the external volume where
+                    the Iceberg table stores its metadata files and data in Parquet format
+                * catalog: specifies either Snowflake or a catalog integration to use for this table
+                * base_location: the base directory that snowflake can write iceberg metadata and files to
+                * catalog_sync: optionally sets the catalog integration configured for Polaris Catalog
+                * storage_serialization_policy: specifies the storage serialization policy for the table
+
 
 
     Returns:
@@ -479,9 +524,14 @@ def write_pandas(
             quote_identifiers,
         )
 
+        iceberg = "ICEBERG " if iceberg_config else ""
+        iceberg_config_statement = _iceberg_config_statement_helper(
+            iceberg_config or {}
+        )
+
         create_table_sql = (
-            f"CREATE {table_type.upper()} TABLE IF NOT EXISTS identifier(?) "
-            f"({create_table_columns})"
+            f"CREATE {table_type.upper()} {iceberg}TABLE IF NOT EXISTS identifier(?) "
+            f"({create_table_columns}) {iceberg_config_statement}"
             f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         )
         params = (target_table_location,)
