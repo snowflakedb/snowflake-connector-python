@@ -120,7 +120,6 @@ class AuthByOauthCode(AuthByPlugin):
             )
             params["code_challenge"] = challenge
             params["code_challenge_method"] = "S256"
-
         url_params = urllib.parse.urlencode(params)
         url = f"{self.authentication_url}?{url_params}"
         return url
@@ -206,6 +205,7 @@ class AuthByOauthCode(AuthByPlugin):
         if self.pkce:
             assert self._verifier is not None
             fields["code_verifier"] = self._verifier
+
         resp = urllib3.PoolManager().request_encode_body(  # TODO: use network pool to gain use of proxy settings and so on
             "POST",
             self.token_request_url,
