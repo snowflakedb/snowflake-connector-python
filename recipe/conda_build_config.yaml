@@ -1,0 +1,6 @@
+c_compiler_version:
+  - 10.2.0  # [linux and aarch64]
+  - 9.3.0   # [linux and not aarch64]
+cxx_compiler_version:
+  - 10.2.0  # [linux and aarch64]
+  - 9.3.0   # [linux and not aarch64]
