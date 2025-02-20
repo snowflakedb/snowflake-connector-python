@@ -576,7 +576,6 @@ def test_table_location_building(
 
         def mocked_execute(*args, **kwargs):
             if len(args) >= 1 and args[0].startswith("COPY INTO"):
-                print(kwargs)
                 assert kwargs["params"][0] == expected_location
             cur = SnowflakeCursor(cnx)
             cur._result = iter([])
