@@ -188,6 +188,7 @@ OAUTH_AUTHENTICATOR = "OAUTH"
 ID_TOKEN_AUTHENTICATOR = "ID_TOKEN"
 USR_PWD_MFA_AUTHENTICATOR = "USERNAME_PASSWORD_MFA"
 PROGRAMMATIC_ACCESS_TOKEN = "PROGRAMMATIC_ACCESS_TOKEN"
+STORED_PROC_AUTHENTICATOR = "STORED_PROC"
 
 
 def is_retryable_http_code(code: int) -> bool:
@@ -608,6 +609,10 @@ class SnowflakeRestful:
             )
 
     def _heartbeat(self) -> Any | dict[Any, Any] | None:
+        if self._connection._is_stored_proc:
+            # Dummy heartbeat for Stored Proc connection, which returns success immediately.
+            return {"success": True}
+
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,

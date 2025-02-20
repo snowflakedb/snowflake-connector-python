@@ -42,6 +42,7 @@ from .auth import (
     AuthByOkta,
     AuthByPAT,
     AuthByPlugin,
+    AuthByStoredProcConnection,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
 )
@@ -101,6 +102,7 @@ from .network import (
     OAUTH_AUTHENTICATOR,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
+    STORED_PROC_AUTHENTICATOR,
     USR_PWD_MFA_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
@@ -1234,8 +1236,10 @@ class SnowflakeConnection:
             with open(token_file_path) as f:
                 self._token = f.read()
 
+        tokenless_authenticators = {OAUTH_AUTHENTICATOR, STORED_PROC_AUTHENTICATOR}
+
         if not (self._master_token and self._session_token):
-            if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
+            if not self.user and self._authenticator not in tokenless_authenticators:
                 # OAuth Authentication does not require a username
                 Error.errorhandler_wrapper(
                     self,
@@ -1265,14 +1269,15 @@ class SnowflakeConnection:
                     {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
                 )
 
-        if not self._account:
+        # All connections other than Stored Procedures mandate presence of account name.
+        if not self._account and not self._is_stored_proc:
             Error.errorhandler_wrapper(
                 self,
                 None,
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if "." in self._account:
+        if self._account and "." in self._account:
             self._account = parse_account(self._account)
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(
@@ -1707,13 +1712,21 @@ class SnowflakeConnection:
 
     def _validate_client_session_keep_alive_heartbeat_frequency(self) -> int:
         """Validate and return heartbeat frequency in seconds."""
-        real_max = int(self.rest.master_validity_in_seconds / 4)
-        real_min = int(real_max / 4)
-
-        # ensure the type is integer
+        # Ensure the type is integer
         self._client_session_keep_alive_heartbeat_frequency = int(
             self.client_session_keep_alive_heartbeat_frequency
         )
+
+        # For Stored Procs we do a light-weight validation (i.e. return
+        # immediately once we make sure the frequency / interval is int).
+        # Due to a different implementation of rest client in Stored Procs, we
+        # will have dummy heartbeat in such cases and therefore the frequency
+        # does not matter as much.
+        if self._is_stored_proc:
+            return self.client_session_keep_alive_heartbeat_frequency
+
+        real_max = int(self.rest.master_validity_in_seconds / 4)
+        real_min = int(real_max / 4)
 
         if self.client_session_keep_alive_heartbeat_frequency is None:
             # This is an unlikely scenario but covering it just in case.
@@ -2005,3 +2018,7 @@ class SnowflakeConnection:
         except Exception as e:
             logger.debug("session could not be validated due to exception: %s", e)
             return False
+
+    @property
+    def _is_stored_proc(self) -> bool:
+        return isinstance(self.auth_class, AuthByStoredProcConnection)
