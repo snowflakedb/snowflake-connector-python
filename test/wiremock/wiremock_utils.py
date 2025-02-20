@@ -4,12 +4,11 @@
 
 import json
 import logging
-import os.path
 import pathlib
 import socket
 import subprocess
 from time import sleep
-from typing import Optional
+from typing import Optional, Union
 
 try:
     from snowflake.connector.vendored import requests
@@ -17,17 +16,20 @@ except ImportError:
     import requests
 
 WIREMOCK_START_MAX_RETRY_COUNT = 12
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
-def _get_mapping_str(mapping):
+def _get_mapping_str(mapping: Union[str, dict, pathlib.Path]) -> str:
     if isinstance(mapping, str):
         return mapping
     if isinstance(mapping, dict):
         return json.dumps(mapping)
-    if os.path.isfile(str(mapping)):
-        with open(mapping) as f:
-            return f.read()
+    if isinstance(mapping, pathlib.Path):
+        if mapping.is_file():
+            with open(mapping) as f:
+                return f.read()
+        else:
+            raise RuntimeError(f"File with mapping: {mapping} does not exist")
 
     raise RuntimeError(f"Mapping {mapping} is of an invalid type")
 
@@ -49,7 +51,9 @@ class WiremockClient:
 
     def _start_wiremock(self):
         self.wiremock_http_port = self._find_free_port()
-        self.wiremock_https_port = self._find_free_port()
+        self.wiremock_https_port = self._find_free_port(
+            forbidden_ports=[self.wiremock_http_port]
+        )
         self.wiremock_process = subprocess.Popen(
             [
                 "java",
@@ -73,7 +77,14 @@ class WiremockClient:
         self._wait_for_wiremock()
 
     def _stop_wiremock(self):
-        self.wiremock_process.kill()
+        response = self._wiremock_post(
+            f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/shutdown"
+        )
+        if response.status_code != 200:
+            logger.info("Wiremock shutdown failed, the process will be killed")
+            self.wiremock_process.kill()
+        else:
+            logger.debug("Wiremock shutdown gracefully")
 
     def _wait_for_wiremock(self):
         retry_count = 0
@@ -94,18 +105,21 @@ class WiremockClient:
         try:
             response = requests.get(mappings_endpoint)
         except requests.exceptions.RequestException as e:
-            LOGGER.warning(f"Wiremock healthcheck failed with exception: {e}")
+            logger.warning(f"Wiremock healthcheck failed with exception: {e}")
             return False
+
         if (
             response.status_code == requests.codes.ok
-            and response.json()["status"] == "healthy"
+            and response.json()["status"] != "healthy"
         ):
-            LOGGER.debug(f"Wiremock healthcheck failed with response: {response}")
-        else:
-            LOGGER.warning(
+            logger.warning(f"Wiremock healthcheck failed with response: {response}")
+            return False
+        elif response.status_code != requests.codes.ok:
+            logger.warning(
                 f"Wiremock healthcheck failed with status code: {response.status_code}"
             )
             return False
+
         return True
 
     def _reset_wiremock(self):
@@ -122,7 +136,7 @@ class WiremockClient:
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
         return requests.post(endpoint, data=body, headers=headers)
 
-    def import_mapping(self, mapping):
+    def import_mapping(self, mapping: Union[str, dict, pathlib.Path]):
         self._reset_wiremock()
         import_mapping_endpoint = f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/mappings/import"
         mapping_str = _get_mapping_str(mapping)
@@ -130,7 +144,7 @@ class WiremockClient:
         if response.status_code != requests.codes.ok:
             raise RuntimeError("Failed to import mapping")
 
-    def add_mapping(self, mapping):
+    def add_mapping(self, mapping: Union[str, dict, pathlib.Path]):
         add_mapping_endpoint = (
             f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/mappings"
         )
@@ -139,14 +153,31 @@ class WiremockClient:
         if response.status_code != requests.codes.created:
             raise RuntimeError("Failed to add mapping")
 
-    def _find_free_port(self) -> int:
-        with socket.socket() as sock:
-            sock.bind((self.wiremock_host, 0))
-            return sock.getsockname()[1]
+    def _find_free_port(self, forbidden_ports: Union[list[int], None] = None) -> int:
+        max_retries = 1 if forbidden_ports is None else 3
+        if forbidden_ports is None:
+            forbidden_ports = []
+
+        retry_count = 0
+        while retry_count < max_retries:
+            retry_count += 1
+            with socket.socket() as sock:
+                sock.bind((self.wiremock_host, 0))
+                port = sock.getsockname()[1]
+                if port not in forbidden_ports:
+                    return port
+
+        raise RuntimeError(
+            f"Unable to find a free port for wiremock in {max_retries} attempts"
+        )
 
     def __enter__(self):
         self._start_wiremock()
+        logger.debug(
+            f"Starting wiremock process, listening on {self.wiremock_host}:{self.wiremock_http_port}"
+        )
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        logger.debug("Stopping wiremock process")
         self._stop_wiremock()

@@ -2,7 +2,7 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-from typing import Any, Generator, Union
+from typing import Any, Generator
 
 import pytest
 
@@ -22,7 +22,7 @@ from ..wiremock.wiremock_utils import WiremockClient
 
 
 @pytest.fixture(scope="session")
-def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
+def wiremock_client() -> Generator[WiremockClient, Any, None]:
     with WiremockClient() as client:
         yield client
 
