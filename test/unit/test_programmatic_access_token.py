@@ -10,6 +10,7 @@ import pytest
 try:
     import snowflake.connector
     from src.snowflake.connector.network import PROGRAMMATIC_ACCESS_TOKEN
+    from src.snowflake.connector.test_util import RUNNING_ON_JENKINS
 except ImportError:
     pass
 
@@ -23,6 +24,7 @@ def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
 def test_valid_pat(wiremock_client: WiremockClient) -> None:
     wiremock_data_dir = (
         pathlib.Path(__file__).parent.parent
@@ -33,7 +35,18 @@ def test_valid_pat(wiremock_client: WiremockClient) -> None:
         / "pat"
     )
 
+    wiremock_generic_data_dir = (
+        pathlib.Path(__file__).parent.parent
+        / "data"
+        / "wiremock"
+        / "mappings"
+        / "generic"
+    )
+
     wiremock_client.import_mapping(wiremock_data_dir / "successful_flow.json")
+    wiremock_client.add_mapping(
+        wiremock_generic_data_dir / "snowflake_disconnect_successful.json"
+    )
 
     cnx = snowflake.connector.connect(
         user="testUser",
@@ -46,9 +59,11 @@ def test_valid_pat(wiremock_client: WiremockClient) -> None:
     )
 
     assert cnx, "invalid cnx"
+    cnx.close()
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
 def test_invalid_pat(wiremock_client: WiremockClient) -> None:
     wiremock_data_dir = (
         pathlib.Path(__file__).parent.parent
