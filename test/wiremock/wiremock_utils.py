@@ -8,7 +8,7 @@ import pathlib
 import socket
 import subprocess
 from time import sleep
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 try:
     from snowflake.connector.vendored import requests
@@ -153,7 +153,7 @@ class WiremockClient:
         if response.status_code != requests.codes.created:
             raise RuntimeError("Failed to add mapping")
 
-    def _find_free_port(self, forbidden_ports: Union[list[int], None] = None) -> int:
+    def _find_free_port(self, forbidden_ports: Union[List[int], None] = None) -> int:
         max_retries = 1 if forbidden_ports is None else 3
         if forbidden_ports is None:
             forbidden_ports = []
