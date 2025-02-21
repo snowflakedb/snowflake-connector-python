@@ -12,7 +12,9 @@ try:
     from src.snowflake.connector.network import PROGRAMMATIC_ACCESS_TOKEN
     from src.snowflake.connector.test_util import RUNNING_ON_JENKINS
 except ImportError:
-    pass
+    import os
+
+    RUNNING_ON_JENKINS = os.getenv("JENKINS_HOME") is not None
 
 from ..wiremock.wiremock_utils import WiremockClient
 
