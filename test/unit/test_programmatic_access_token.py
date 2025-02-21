@@ -19,6 +19,7 @@ def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
         yield client
 
 
+@pytest.mark.skipolddriver
 def test_valid_pat(wiremock_client: WiremockClient) -> None:
     wiremock_data_dir = (
         pathlib.Path(__file__).parent.parent
@@ -44,6 +45,7 @@ def test_valid_pat(wiremock_client: WiremockClient) -> None:
     assert cnx, "invalid cnx"
 
 
+@pytest.mark.skipolddriver
 def test_invalid_pat(wiremock_client: WiremockClient) -> None:
     wiremock_data_dir = (
         pathlib.Path(__file__).parent.parent
