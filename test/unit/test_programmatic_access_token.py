@@ -7,8 +7,11 @@ from typing import Any, Generator, Union
 
 import pytest
 
-import snowflake.connector
-from src.snowflake.connector.network import PROGRAMMATIC_ACCESS_TOKEN
+try:
+    import snowflake.connector
+    from src.snowflake.connector.network import PROGRAMMATIC_ACCESS_TOKEN
+except ImportError:
+    pass
 
 from ..wiremock.wiremock_utils import WiremockClient
 
