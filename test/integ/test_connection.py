@@ -524,6 +524,8 @@ def test_invalid_account_timeout():
 
 @pytest.mark.timeout(15)
 def test_invalid_proxy(db_parameters):
+    http_proxy = os.environ.get("HTTP_PROXY")
+    https_proxy = os.environ.get("HTTPS_PROXY")
     with pytest.raises(OperationalError):
         snowflake.connector.connect(
             protocol="http",
@@ -532,13 +534,13 @@ def test_invalid_proxy(db_parameters):
             password=db_parameters["password"],
             host=db_parameters["host"],
             port=db_parameters["port"],
-            login_timeout=5,
+            login_timeout=0,
             proxy_host="localhost",
             proxy_port="3333",
         )
-    # NOTE environment variable is set if the proxy parameter is specified.
-    del os.environ["HTTP_PROXY"]
-    del os.environ["HTTPS_PROXY"]
+    # Proxy environment variables should not change
+    assert os.environ.get("HTTP_PROXY") == http_proxy
+    assert os.environ.get("HTTPS_PROXY") == https_proxy
 
 
 @pytest.mark.timeout(15)
