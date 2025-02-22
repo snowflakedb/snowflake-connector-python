@@ -1712,21 +1712,13 @@ class SnowflakeConnection:
 
     def _validate_client_session_keep_alive_heartbeat_frequency(self) -> int:
         """Validate and return heartbeat frequency in seconds."""
-        # Ensure the type is integer
+        real_max = int(self.rest.master_validity_in_seconds / 4)
+        real_min = int(real_max / 4)
+
+        # ensure the type is integer
         self._client_session_keep_alive_heartbeat_frequency = int(
             self.client_session_keep_alive_heartbeat_frequency
         )
-
-        # For Stored Procs we do a light-weight validation (i.e. return
-        # immediately once we make sure the frequency / interval is int).
-        # Due to a different implementation of rest client in Stored Procs, we
-        # will have dummy heartbeat in such cases and therefore the frequency
-        # does not matter as much.
-        if self._is_stored_proc:
-            return self.client_session_keep_alive_heartbeat_frequency
-
-        real_max = int(self.rest.master_validity_in_seconds / 4)
-        real_min = int(real_max / 4)
 
         if self.client_session_keep_alive_heartbeat_frequency is None:
             # This is an unlikely scenario but covering it just in case.
