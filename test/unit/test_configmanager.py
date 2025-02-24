@@ -575,6 +575,7 @@ def test_warn_config_file_owner(tmp_path, monkeypatch):
         )
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
 def test_warn_config_file_permissions(tmp_path):
     c_file = tmp_path / "config.toml"
     c1 = ConfigManager(file_path=c_file, name="root_parser")
@@ -590,15 +591,28 @@ def test_warn_config_file_permissions(tmp_path):
     with warnings.catch_warnings(record=True) as c:
         assert c1["b"] is True
     assert len(c) == 1
-    chmod_message = (
-        f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n'
-        if not IS_WINDOWS
-        else ""
-    )
+    chmod_message = f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n'
     assert (
         str(c[0].message)
         == f"Bad owner or permissions on {str(c_file)}" + chmod_message
     )
+
+
+@pytest.mark.skipif(not IS_WINDOWS, reason="Windows specific test")
+def test_warn_config_file_permissions_windows(tmp_path):
+    c_file = tmp_path / "config.toml"
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    with warnings.catch_warnings(record=True) as c:
+        assert c1["b"] is True
+    assert len(c) == 0
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
