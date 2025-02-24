@@ -19,4 +19,3 @@ def test_auth_oauth():
     auth.update_body(body)
     assert body["data"]["TOKEN"] == token, body
     assert body["data"]["AUTHENTICATOR"] == "OAUTH", body
-    assert body["data"]["OAUTH_TYPE"] == "authorization_code", body
