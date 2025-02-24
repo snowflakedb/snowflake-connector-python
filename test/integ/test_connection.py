@@ -1450,7 +1450,8 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
 
 @pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_deprecation_warning(conn_cnx):
-    with warnings.catch_warnings(record=True, action="ignore") as w:
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("ignore")
         warnings.filterwarnings(
             "always", category=DeprecationWarning, message=".*insecure_mode"
         )
