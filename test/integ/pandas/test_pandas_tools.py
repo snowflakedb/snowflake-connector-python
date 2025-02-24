@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import math
+import re
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Generator
 from unittest import mock
@@ -26,10 +27,14 @@ from ...lazy_var import LazyVar
 
 try:
     from snowflake.connector.options import pandas
-    from snowflake.connector.pandas_tools import write_pandas
+    from snowflake.connector.pandas_tools import (
+        _iceberg_config_statement_helper,
+        write_pandas,
+    )
 except ImportError:
     pandas = None
     write_pandas = None
+    _iceberg_config_statement_helper = None
 
 if TYPE_CHECKING:
     from snowflake.connector import SnowflakeConnection
@@ -64,7 +69,7 @@ def assert_result_equals(
 
 
 def test_fix_snow_746341(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]]
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
 ):
     cat = '"cat"'
     df = pandas.DataFrame([[1], [2]], columns=[f"col_'{cat}'"])
@@ -534,8 +539,7 @@ def test_table_location_building(
 
         def mocked_execute(*args, **kwargs):
             if len(args) >= 1 and args[0].startswith("COPY INTO"):
-                location = args[0].split(" ")[2]
-                assert location == expected_location
+                assert kwargs["params"][0] == expected_location
             cur = SnowflakeCursor(cnx)
             cur._result = iter([])
             return cur
@@ -608,6 +612,7 @@ def test_stage_location_building(
             )
 
 
+@pytest.mark.skip("scoped object isn't used yet.")
 @pytest.mark.parametrize(
     "database,schema,quote_identifiers,expected_db_schema",
     [
@@ -906,7 +911,7 @@ def test_auto_create_table_similar_column_names(
 
 
 def test_all_pandas_types(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]]
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
 ):
     table_name = random_string(5, "all_types_")
     datetime_with_tz = datetime(1997, 6, 3, 14, 21, 32, 00, tzinfo=timezone.utc)
@@ -997,7 +1002,7 @@ def test_no_create_internal_object_privilege_in_target_schema(
             def mock_execute(*args, **kwargs):
                 if (
                     f"CREATE TEMP {object_type}" in args[0]
-                    and "target_schema_no_create_" in args[0]
+                    and "target_schema_no_create_" in kwargs["params"][0]
                 ):
                     raise ProgrammingError("Cannot create temp object in target schema")
                 cursor = cnx.cursor()
@@ -1027,3 +1032,76 @@ def test_no_create_internal_object_privilege_in_target_schema(
         finally:
             cnx.execute_string(f"drop schema if exists {source_schema}")
             cnx.execute_string(f"drop schema if exists {target_schema}")
+
+
+def test__iceberg_config_statement_helper():
+    config = {
+        "EXTERNAL_VOLUME": "vol",
+        "CATALOG": "'SNOWFLAKE'",
+        "BASE_LOCATION": "/root",
+        "CATALOG_SYNC": "foo",
+        "STORAGE_SERIALIZATION_POLICY": "bar",
+    }
+    assert (
+        _iceberg_config_statement_helper(config)
+        == "EXTERNAL_VOLUME='vol' CATALOG='SNOWFLAKE' BASE_LOCATION='/root' CATALOG_SYNC='foo' STORAGE_SERIALIZATION_POLICY='bar'"
+    )
+
+    config["STORAGE_SERIALIZATION_POLICY"] = None
+    assert (
+        _iceberg_config_statement_helper(config)
+        == "EXTERNAL_VOLUME='vol' CATALOG='SNOWFLAKE' BASE_LOCATION='/root' CATALOG_SYNC='foo'"
+    )
+
+    config["foo"] = True
+    config["bar"] = True
+    with pytest.raises(
+        ProgrammingError,
+        match=re.escape("Invalid iceberg configurations option(s) provided BAR, FOO"),
+    ):
+        _iceberg_config_statement_helper(config)
+
+
+def test_write_pandas_with_on_error(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+):
+    """Tests whether overwriting table using a Pandas DataFrame works as expected."""
+    random_table_name = random_string(5, "userspoints_")
+    df_data = [("Dash", 50)]
+    df = pandas.DataFrame(df_data, columns=["name", "points"])
+
+    table_name = random_table_name
+    col_id = "id"
+    col_name = "name"
+    col_points = "points"
+
+    create_sql = (
+        f"CREATE OR REPLACE TABLE {table_name}"
+        f"({col_name} STRING, {col_points} INT, {col_id} INT AUTOINCREMENT)"
+    )
+
+    select_count_sql = f"SELECT count(*) FROM {table_name}"
+    drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        cnx.execute_string(create_sql)
+        try:
+            # Write dataframe with 1 row
+            success, nchunks, nrows, _ = write_pandas(
+                cnx,
+                df,
+                random_table_name,
+                quote_identifiers=False,
+                auto_create_table=False,
+                overwrite=True,
+                index=True,
+                on_error="continue",
+            )
+            # Check write_pandas output
+            assert success
+            assert nchunks == 1
+            assert nrows == 1
+            result = cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
+            # Check number of rows
+            assert result["COUNT(*)"] == 1
+        finally:
+            cnx.execute_string(drop_sql)
