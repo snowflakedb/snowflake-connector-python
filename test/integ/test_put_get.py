@@ -785,6 +785,7 @@ def test_get_unsafe_file_permission_when_flag_set(tmp_path, conn_cnx, caplog):
             assert (
                 oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
             )
+        cnx.unsafe_file_write = False
 
 
 @pytest.mark.skipolddriver
