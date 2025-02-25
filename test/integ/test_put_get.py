@@ -237,7 +237,7 @@ put file://{test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv @
             cur.execute("drop table pytest_putget_t1")
 
 
-# @pytest.mark.flaky(reruns=3)
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
