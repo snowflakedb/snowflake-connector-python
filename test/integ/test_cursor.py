@@ -699,6 +699,7 @@ def test_geometry(conn_cnx):
                 assert row in expected_data
 
 
+@pytest.mark.skip(reason="Skip until Snowflake 9.4 is released")  # TODO: SNOW-1949054
 @pytest.mark.skipolddriver
 def test_file(conn_cnx):
     """Variant including JSON object."""
