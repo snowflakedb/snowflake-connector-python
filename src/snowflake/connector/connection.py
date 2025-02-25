@@ -1121,7 +1121,6 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
                 pkce = "pkce" in map(lambda e: e.lower(), self._oauth_security_features)
-
                 if self._oauth_client_id is None:
                     Error.errorhandler_wrapper(
                         self,
