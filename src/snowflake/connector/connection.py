@@ -1269,8 +1269,10 @@ class SnowflakeConnection:
                     {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
                 )
 
-        # All connections other than Stored Procedures mandate presence of account name.
-        if not self._account and not self._is_stored_proc:
+        # Only AuthByStoredProcConnection allows account to be omitted.
+        if not self._account and not isinstance(
+            self.auth_class, AuthByStoredProcConnection
+        ):
             Error.errorhandler_wrapper(
                 self,
                 None,
@@ -2010,7 +2012,3 @@ class SnowflakeConnection:
         except Exception as e:
             logger.debug("session could not be validated due to exception: %s", e)
             return False
-
-    @property
-    def _is_stored_proc(self) -> bool:
-        return isinstance(self.auth_class, AuthByStoredProcConnection)
