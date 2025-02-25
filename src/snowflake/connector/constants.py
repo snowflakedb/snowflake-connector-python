@@ -357,12 +357,14 @@ class OCSPMode(Enum):
         FAIL_OPEN: A response indicating a revoked certificate results in a failed connection. A response with any
             other certificate errors or statuses allows the connection to occur, but denotes the message in the logs
             at the WARNING level with the relevant details in JSON format.
-        INSECURE: The connection will occur anyway.
+        INSECURE (deprecated): The connection will occur anyway.
+        DISABLE_OCSP_CHECKS: The OCSP check will not happen. If the certificate is valid then connection will occur.
     """
 
     FAIL_CLOSED = "FAIL_CLOSED"
     FAIL_OPEN = "FAIL_OPEN"
     INSECURE = "INSECURE"
+    DISABLE_OCSP_CHECKS = "DISABLE_OCSP_CHECKS"
 
 
 @unique
