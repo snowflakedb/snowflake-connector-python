@@ -237,7 +237,7 @@ put file://{test_data.test_data_dir}/ExecPlatform/Database/data/orders_10*.csv @
             cur.execute("drop table pytest_putget_t1")
 
 
-@pytest.mark.flaky(reruns=3)
+# @pytest.mark.flaky(reruns=3)
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN, reason="Snowflake admin account is not accessible."
 )
@@ -743,13 +743,34 @@ def test_get_empty_file(tmp_path, conn_cnx):
 def test_get_file_permission(tmp_path, conn_cnx, caplog):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
-    stage_name = random_string(5, "test_get_empty_file_")
+    stage_name = random_string(5, "test_get_file_permission_")
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
             filename_in_put = str(test_file).replace("\\", "/")
             cur.execute(
-                f"PUT 'file://{filename_in_put}' @{stage_name}",
+                f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS=FALSE",
+            )
+
+            with caplog.at_level(logging.ERROR):
+                cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
+            assert "FileNotFoundError" not in caplog.text
+
+            assert oct(os.stat(test_file).st_mode)[-3:] == oct(0o600)[-3:]
+
+
+@pytest.mark.skipolddriver
+def test_get_unsafe_file_permission_when_flag_set(tmp_path, conn_cnx, caplog):
+    test_file = tmp_path / "data.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_get_file_permission_")
+    with conn_cnx() as cnx:
+        cnx.unsafe_file_write = True
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+            filename_in_put = str(test_file).replace("\\", "/")
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS=FALSE",
             )
 
             with caplog.at_level(logging.ERROR):
