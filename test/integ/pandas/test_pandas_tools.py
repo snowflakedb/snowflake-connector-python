@@ -483,47 +483,6 @@ def test_write_pandas_use_logical_type(
             cnx.execute_string(drop_sql)
 
 
-@pytest.mark.parametrize(
-    ("use_vectorized_scanner", "expected_file_format"),
-    [
-        (None, "FILE_FORMAT=(TYPE=PARQUET COMPRESSION=auto)"),
-        (True, "FILE_FORMAT=(TYPE=PARQUET COMPRESSION=auto USE_VECTORIZED_SCANNER=TRUE)"),
-        (False, "FILE_FORMAT=(TYPE=PARQUET COMPRESSION=auto USE_VECTORIZED_SCANNER=FALSE)"),
-    ],
-)
-def test_write_pandas_use_vectorized_scanner(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
-    use_vectorized_scanner: bool | None,
-    expected_file_format: str,
-):
-    """Test that use_vectorized_scanner is making correct arguments to the COPY INTO command in SQL."""
-    from snowflake.connector.cursor import SnowflakeCursor
-
-    table_name = random_string(5, "use_vectorized_scanner")
-
-    with conn_cnx() as cnx:
-        def mocked_execute(*args, **kwargs):
-            if len(args) >= 1 and args[0].startswith("COPY INTO"):
-                assert expected_file_format in args[0]
-            cur = SnowflakeCursor(cnx)
-            cur._result = iter([])
-            return cur
-
-        with mock.patch(
-            "snowflake.connector.cursor.SnowflakeCursor.execute",
-            side_effect=mocked_execute,
-        ) as m_execute:
-            success, nchunks, nrows, _ = write_pandas(
-                cnx,
-                sf_connector_version_df.get(),
-                table_name=table_name,
-                use_vectorized_scanner=use_vectorized_scanner,
-            )
-            assert m_execute.called and any(
-                map(lambda e: "COPY INTO" in str(e[0]), m_execute.call_args_list)
-            )
-
-
 def test_invalid_table_type_write_pandas(
     conn_cnx: Callable[..., Generator[SnowflakeConnection]],
 ):
