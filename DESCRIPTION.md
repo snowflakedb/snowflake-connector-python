@@ -15,6 +15,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug where privatelink OCSP Cache url could not be determined if privatelink account name was specified in uppercase.
   - Added support for iceberg tables to `write_pandas`.
   - Fixed base64 encoded private key tests.
+  - Added Wiremock tests.
+  - Fixed a bug where file permission check happened on Windows
+  - Added support for File types.
 
 - v3.13.2(January 29, 2025)
   - Changed not to use scoped temporary objects.
