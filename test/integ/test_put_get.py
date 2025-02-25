@@ -756,7 +756,12 @@ def test_get_file_permission(tmp_path, conn_cnx, caplog):
                 cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
             assert "FileNotFoundError" not in caplog.text
 
-            assert oct(os.stat(test_file).st_mode)[-3:] == oct(0o600)[-3:]
+            default_mask = os.umask(0)
+            os.umask(default_mask)
+
+            assert (
+                oct(os.stat(test_file).st_mode)[-3:] == oct(0o600 & ~default_mask)[-3:]
+            )
 
 
 @pytest.mark.skipolddriver
