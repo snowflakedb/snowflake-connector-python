@@ -19,7 +19,13 @@ from unittest import mock
 import pytest
 
 from snowflake.connector import OperationalError
-from src.snowflake.connector.compat import IS_WINDOWS
+
+try:
+    from src.snowflake.connector.compat import IS_WINDOWS
+except ImportError:
+    import platform
+
+    IS_WINDOWS = platform.system() == "Windows"
 
 try:
     from snowflake.connector.util_text import random_string
