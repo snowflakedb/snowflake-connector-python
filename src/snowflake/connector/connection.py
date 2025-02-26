@@ -1240,7 +1240,7 @@ class SnowflakeConnection:
 
         if not (self._master_token and self._session_token):
             if not self.user and self._authenticator not in tokenless_authenticators:
-                # OAuth Authentication does not require a username
+                # OAuth and Stored Proc Authentication does not require a username
                 Error.errorhandler_wrapper(
                     self,
                     None,
