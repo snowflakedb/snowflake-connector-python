@@ -8,7 +8,6 @@ import base64
 import gzip
 import os
 import shutil
-import stat
 import struct
 from io import BytesIO
 from logging import getLogger
@@ -23,7 +22,7 @@ logger = getLogger(__name__)
 
 
 def owner_rw_opener(path, flags) -> int:
-    return os.open(path, flags, mode=stat.S_IRUSR | stat.S_IWUSR)
+    return os.open(path, flags, mode=0o600)
 
 
 class SnowflakeFileUtil:

@@ -19,6 +19,7 @@ from unittest import mock
 import pytest
 
 from snowflake.connector import OperationalError
+from src.snowflake.connector.compat import IS_WINDOWS
 
 try:
     from snowflake.connector.util_text import random_string
@@ -740,6 +741,7 @@ def test_get_empty_file(tmp_path, conn_cnx):
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
 def test_get_file_permission(tmp_path, conn_cnx, caplog):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
@@ -765,6 +767,7 @@ def test_get_file_permission(tmp_path, conn_cnx, caplog):
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
 def test_get_unsafe_file_permission_when_flag_set(tmp_path, conn_cnx, caplog):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
