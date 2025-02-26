@@ -25,7 +25,7 @@ class AuthByStoredProcConnection(AuthByPlugin):
         return AuthType.STORED_PROC
 
     @property
-    def assertion_content(self) -> str:
+    def assertion_content(self) -> str | None:
         return None
 
     def __init__(self) -> None:
