@@ -5,14 +5,14 @@
 from __future__ import annotations
 
 try:  # pragma: no cover
-    from snowflake.connector.auth import AuthByStoredProcConnection
+    from snowflake.connector.auth import AuthNoAuth
 except ImportError:
-    from snowflake.connector.auth.sp_auth import AuthByStoredProcConnection
+    from snowflake.connector.auth.no_auth import AuthNoAuth
 
 
-def test_auth_sp_auth():
-    """Simple test for AuthByStoredProcConnection."""
-    auth = AuthByStoredProcConnection()
+def test_auth_no_auth():
+    """Simple test for AuthNoAuth."""
+    auth = AuthNoAuth()
 
     body = {"data": {}}
     old_body = body
@@ -25,12 +25,12 @@ def test_auth_sp_auth():
 
     # reauthenticate should always return success.
     expected_reauth_response = {"success": True}
-
     reauth_response = auth.reauthenticate()
     assert (
         reauth_response == expected_reauth_response
     ), f"reauthenticate() is expected to return {expected_reauth_response}, but returns {reauth_response}"
 
+    # It also returns success response even if we pass extra keyword argument(s).
     reauth_response = auth.reauthenticate(foo="bar")
     assert (
         reauth_response == expected_reauth_response

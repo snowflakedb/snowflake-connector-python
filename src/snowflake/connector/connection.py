@@ -42,9 +42,9 @@ from .auth import (
     AuthByOkta,
     AuthByPAT,
     AuthByPlugin,
-    AuthByStoredProcConnection,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
+    AuthNoAuth,
 )
 from .auth.idtoken import AuthByIdToken
 from .backoff_policies import exponential_backoff
@@ -99,10 +99,10 @@ from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
+    NO_AUTH_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
-    STORED_PROC_AUTHENTICATOR,
     USR_PWD_MFA_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
@@ -1236,11 +1236,15 @@ class SnowflakeConnection:
             with open(token_file_path) as f:
                 self._token = f.read()
 
-        tokenless_authenticators = {OAUTH_AUTHENTICATOR, STORED_PROC_AUTHENTICATOR}
+        # Set of authenticators allowing empty user.
+        empty_user_allowed_authenticators = {OAUTH_AUTHENTICATOR, NO_AUTH_AUTHENTICATOR}
 
         if not (self._master_token and self._session_token):
-            if not self.user and self._authenticator not in tokenless_authenticators:
-                # OAuth and Stored Proc Authentications does not require a username
+            if (
+                not self.user
+                and self._authenticator not in empty_user_allowed_authenticators
+            ):
+                # OAuth and NoAuth Authentications does not require a username
                 Error.errorhandler_wrapper(
                     self,
                     None,
@@ -1269,10 +1273,8 @@ class SnowflakeConnection:
                     {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
                 )
 
-        # Only AuthByStoredProcConnection allows account to be omitted.
-        if not self._account and not isinstance(
-            self.auth_class, AuthByStoredProcConnection
-        ):
+        # Only AuthNoAuth allows account to be omitted.
+        if not self._account and not isinstance(self.auth_class, AuthNoAuth):
             Error.errorhandler_wrapper(
                 self,
                 None,

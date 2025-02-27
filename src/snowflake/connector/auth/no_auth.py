@@ -3,10 +3,6 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-#
-# Copyright (c) 2012-2025 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 from typing import Any
@@ -14,15 +10,15 @@ from typing import Any
 from .by_plugin import AuthByPlugin, AuthType
 
 
-class AuthByStoredProcConnection(AuthByPlugin):
-    """Stored Procedure Authentication.
+class AuthNoAuth(AuthByPlugin):
+    """No-auth Authentication.
 
     It is a dummy auth that requires no extra connection establishment.
     """
 
     @property
     def type_(self) -> AuthType:
-        return AuthType.STORED_PROC
+        return AuthType.NO_AUTH
 
     @property
     def assertion_content(self) -> str | None:

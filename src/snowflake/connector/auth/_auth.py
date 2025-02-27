@@ -63,7 +63,7 @@ from ..network import (
 from ..options import installed_keyring, keyring
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..version import VERSION
-from .sp_auth import AuthByStoredProcConnection
+from .no_auth import AuthNoAuth
 
 if TYPE_CHECKING:
     from . import AuthByPlugin
@@ -187,8 +187,8 @@ class Auth:
     ) -> dict[str, str | int | bool]:
         logger.debug("authenticate")
 
-        # For Stored Proc connection, the auth is no-op.
-        if isinstance(auth_instance, AuthByStoredProcConnection):
+        # For no-auth connection, authentication is no-op, and we can return early here.
+        if isinstance(auth_instance, AuthNoAuth):
             return {}
 
         if timeout is None:
