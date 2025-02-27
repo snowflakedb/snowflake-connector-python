@@ -16,8 +16,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added support for iceberg tables to `write_pandas`.
   - Fixed base64 encoded private key tests.
   - Added Wiremock tests.
-  - Fixed a bug where file permission check happened on Windows
+  - Fixed a bug where file permission check happened on Windows.
   - Added support for File types.
+  - Added `unsafe_file_write` connection parameter that restores the previous behaviour of saving files downloaded with GET with 644 permissions.
 
 - v3.13.2(January 29, 2025)
   - Changed not to use scoped temporary objects.
