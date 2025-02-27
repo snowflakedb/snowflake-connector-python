@@ -1509,3 +1509,12 @@ def test_no_auth_connection_negative_case():
     # connection is not able to run any query
     with pytest.raises(DatabaseError, match="Connection is closed"):
         conn.execute_string("select 1")
+
+
+# _file_operation_parser and _stream_downloader are newly introduced and
+# therefore should not be tested on old drivers.
+@pytest.mark.skipolddriver
+def test_file_utils_sanity_check():
+    conn = create_connection("default")
+    assert hasattr(conn._file_operation_parser, "parse_file_operation")
+    assert hasattr(conn._stream_downloader, "download_as_stream")
