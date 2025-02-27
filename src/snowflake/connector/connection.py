@@ -42,6 +42,7 @@ from .auth import (
     AuthByOkta,
     AuthByPAT,
     AuthByPlugin,
+    AuthByStoredProcConnection,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
 )
@@ -101,6 +102,7 @@ from .network import (
     OAUTH_AUTHENTICATOR,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
+    STORED_PROC_AUTHENTICATOR,
     USR_PWD_MFA_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
@@ -1248,9 +1250,11 @@ class SnowflakeConnection:
             with open(token_file_path) as f:
                 self._token = f.read()
 
+        tokenless_authenticators = {OAUTH_AUTHENTICATOR, STORED_PROC_AUTHENTICATOR}
+
         if not (self._master_token and self._session_token):
-            if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
-                # OAuth Authentication does not require a username
+            if not self.user and self._authenticator not in tokenless_authenticators:
+                # OAuth and Stored Proc Authentications does not require a username
                 Error.errorhandler_wrapper(
                     self,
                     None,
@@ -1279,14 +1283,17 @@ class SnowflakeConnection:
                     {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
                 )
 
-        if not self._account:
+        # Only AuthByStoredProcConnection allows account to be omitted.
+        if not self._account and not isinstance(
+            self.auth_class, AuthByStoredProcConnection
+        ):
             Error.errorhandler_wrapper(
                 self,
                 None,
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if "." in self._account:
+        if self._account and "." in self._account:
             self._account = parse_account(self._account)
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(

@@ -55,6 +55,7 @@ class AuthType(Enum):
     USR_PWD_MFA = "USERNAME_PASSWORD_MFA"
     OKTA = "OKTA"
     PAT = "PROGRAMMATIC_ACCESS_TOKEN'"
+    STORED_PROC = "STORED_PROC"
 
 
 class AuthByPlugin(ABC):
