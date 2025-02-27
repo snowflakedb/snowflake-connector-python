@@ -54,6 +54,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         cnx: SnowflakeConnection,
         command: str,
         use_s3_regional_url: bool = False,
+        unsafe_file_write: bool = False,
     ) -> None:
         """Creates a client object with given stage credentials.
 
@@ -64,7 +65,12 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             The client to communicate with GCS.
         """
         super().__init__(
-            meta, stage_info, -1, credentials=credentials, chunked_transfer=False
+            meta,
+            stage_info,
+            -1,
+            credentials=credentials,
+            chunked_transfer=False,
+            unsafe_file_write=unsafe_file_write,
         )
         self.stage_info = stage_info
         self._command = command

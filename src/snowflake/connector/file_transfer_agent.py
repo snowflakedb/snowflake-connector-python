@@ -355,6 +355,7 @@ class SnowflakeFileTransferAgent:
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
         iobound_tpe_limit: int | None = None,
+        unsafe_file_write: bool = False,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -386,6 +387,7 @@ class SnowflakeFileTransferAgent:
         self._use_s3_regional_url = use_s3_regional_url
         self._credentials: StorageCredential | None = None
         self._iobound_tpe_limit = iobound_tpe_limit
+        self._unsafe_file_write = unsafe_file_write
 
     def execute(self) -> None:
         self._parse_command()
@@ -673,6 +675,7 @@ class SnowflakeFileTransferAgent:
                 meta,
                 self._stage_info,
                 4 * megabyte,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == AZURE_FS:
             return SnowflakeAzureRestClient(
@@ -681,6 +684,7 @@ class SnowflakeFileTransferAgent:
                 AZURE_CHUNK_SIZE,
                 self._stage_info,
                 use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == S3_FS:
             return SnowflakeS3RestClient(
@@ -690,6 +694,7 @@ class SnowflakeFileTransferAgent:
                 _chunk_size_calculator(meta.src_file_size),
                 use_accelerate_endpoint=self._use_accelerate_endpoint,
                 use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == GCS_FS:
             return SnowflakeGCSRestClient(
@@ -699,6 +704,7 @@ class SnowflakeFileTransferAgent:
                 self._cursor._connection,
                 self._command,
                 use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 
