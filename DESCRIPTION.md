@@ -7,9 +7,8 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.13.3(TBD)
+- v3.14(Febuary 27, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
-  - Removed the workaround for a Python 2.7 bug.
   - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
   - Optimized distribution package lookup to speed up import.
   - Fixed a bug where privatelink OCSP Cache url could not be determined if privatelink account name was specified in uppercase.
