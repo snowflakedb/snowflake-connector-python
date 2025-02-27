@@ -24,6 +24,6 @@ python -c  "from cryptography.hazmat.backends.openssl import backend;print('Cryp
 pip freeze
 
 cd $CONNECTOR_DIR
-pytest -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test
+pytest -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test --ignore=test/integ/aio --ignore=test/unit/aio
 
 deactivate

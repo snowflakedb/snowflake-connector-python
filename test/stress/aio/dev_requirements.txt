@@ -1,0 +1,6 @@
+psutil
+../..
+matplotlib
+aiohttp
+pandas
+asyncio
