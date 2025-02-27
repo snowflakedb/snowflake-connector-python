@@ -40,7 +40,7 @@ from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
 from ..randomize import random_string
-from .conftest import RUNNING_ON_GH
+from .conftest import RUNNING_ON_GH, create_connection
 
 try:  # pragma: no cover
     from ..parameters import CONNECTION_PARAMETERS_ADMIN
@@ -57,6 +57,8 @@ try:
     from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
 except ImportError:  # Keep olddrivertest from breaking
     ER_FAILED_PROCESSING_QMARK = 252012
+
+from snowflake.connector.auth.no_auth import AuthNoAuth
 
 
 def test_basic(conn_testaccount):
@@ -1484,3 +1486,18 @@ def test_is_valid(conn_cnx):
         assert conn
         assert conn.is_valid() is True
     assert conn.is_valid() is False
+
+
+def test_no_auth_connection_negative_case():
+    no_auth = AuthNoAuth()
+
+    # Create a no-auth connection in an invalid way.
+    # We do not fail connection establishment because there is no validated way to tell whether the no-auth is a valid use case or not.
+    conn = create_connection("default", auth_class=no_auth)
+
+    # Make sure we are indeed passing the no-auth configuration to the connection
+    assert isinstance(conn.auth_class, AuthNoAuth)
+
+    # Because invalid no-auth connection is not able to run any query
+    with pytest.raises(DatabaseError, match="Connection is closed"):
+        conn.execute_string("select 1")
