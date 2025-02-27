@@ -21,6 +21,13 @@ import pytest
 from snowflake.connector import OperationalError
 
 try:
+    from src.snowflake.connector.compat import IS_WINDOWS
+except ImportError:
+    import platform
+
+    IS_WINDOWS = platform.system() == "Windows"
+
+try:
     from snowflake.connector.util_text import random_string
 except ImportError:
     from ..randomize import random_string
@@ -740,16 +747,44 @@ def test_get_empty_file(tmp_path, conn_cnx):
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
 def test_get_file_permission(tmp_path, conn_cnx, caplog):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
-    stage_name = random_string(5, "test_get_empty_file_")
+    stage_name = random_string(5, "test_get_file_permission_")
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
             filename_in_put = str(test_file).replace("\\", "/")
             cur.execute(
-                f"PUT 'file://{filename_in_put}' @{stage_name}",
+                f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS=FALSE",
+            )
+
+            with caplog.at_level(logging.ERROR):
+                cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
+            assert "FileNotFoundError" not in caplog.text
+
+            default_mask = os.umask(0)
+            os.umask(default_mask)
+
+            assert (
+                oct(os.stat(test_file).st_mode)[-3:] == oct(0o600 & ~default_mask)[-3:]
+            )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
+def test_get_unsafe_file_permission_when_flag_set(tmp_path, conn_cnx, caplog):
+    test_file = tmp_path / "data.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_get_file_permission_")
+    with conn_cnx() as cnx:
+        cnx.unsafe_file_write = True
+        with cnx.cursor() as cur:
+            cur.execute(f"create temporary stage {stage_name}")
+            filename_in_put = str(test_file).replace("\\", "/")
+            cur.execute(
+                f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS=FALSE",
             )
 
             with caplog.at_level(logging.ERROR):
@@ -764,6 +799,7 @@ def test_get_file_permission(tmp_path, conn_cnx, caplog):
             assert (
                 oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
             )
+        cnx.unsafe_file_write = False
 
 
 @pytest.mark.skipolddriver
