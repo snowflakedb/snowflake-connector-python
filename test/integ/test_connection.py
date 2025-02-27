@@ -1492,12 +1492,16 @@ def test_no_auth_connection_negative_case():
     no_auth = AuthNoAuth()
 
     # Create a no-auth connection in an invalid way.
-    # We do not fail connection establishment because there is no validated way to tell whether the no-auth is a valid use case or not.
+    # We do not fail connection establishment because there is no validated way
+    # to tell whether the no-auth is a valid use case or not. But it is
+    # effectively protected because invalid no-auth will fail to run any query.
     conn = create_connection("default", auth_class=no_auth)
 
-    # Make sure we are indeed passing the no-auth configuration to the connection
+    # Make sure we are indeed passing the no-auth configuration to the
+    # connection.
     assert isinstance(conn.auth_class, AuthNoAuth)
 
-    # Because invalid no-auth connection is not able to run any query
+    # We expect a failure here when executing queries, because invalid no-auth
+    # connection is not able to run any query
     with pytest.raises(DatabaseError, match="Connection is closed"):
         conn.execute_string("select 1")
