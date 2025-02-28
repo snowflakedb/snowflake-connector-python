@@ -138,3 +138,85 @@ def test_invalid_state(wiremock_client: WiremockClient, monkeypatch) -> None:
                 )
 
     assert str(execinfo.value).endswith("State changed during OAuth process.")
+
+
+# TODO: needs proper handling
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
+def test_scope_error(wiremock_client: WiremockClient, monkeypatch) -> None:
+    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
+
+    wiremock_oauth_authorization_code_dir = (
+        pathlib.Path(__file__).parent.parent
+        / "data"
+        / "wiremock"
+        / "mappings"
+        / "auth"
+        / "oauth"
+        / "authorization_code"
+    )
+
+    wiremock_client.import_mapping(
+        wiremock_oauth_authorization_code_dir / "invalid_scope_error.json"
+    )
+
+    webbrowser_mock = Mock()
+    webbrowser_mock.open = _webbrowser_redirect
+
+    with pytest.raises(KeyError):
+        with mock.patch("webbrowser.open", new=webbrowser_mock.open):
+            with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+                snowflake.connector.connect(
+                    user="testUser",
+                    authenticator="OAUTH_AUTHORIZATION_CODE",
+                    oauth_client_id="123",
+                    account="testAccount",
+                    protocol="http",
+                    role="ANALYST",
+                    host=wiremock_client.wiremock_host,
+                    port=wiremock_client.wiremock_http_port,
+                )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
+def test_token_request_error(wiremock_client: WiremockClient, monkeypatch) -> None:
+    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
+
+    wiremock_oauth_authorization_code_dir = (
+        pathlib.Path(__file__).parent.parent
+        / "data"
+        / "wiremock"
+        / "mappings"
+        / "auth"
+        / "oauth"
+        / "authorization_code"
+    )
+
+    wiremock_client.import_mapping(
+        wiremock_oauth_authorization_code_dir / "token_request_error.json"
+    )
+
+    webbrowser_mock = Mock()
+    webbrowser_mock.open = _webbrowser_redirect
+
+    # TODO: Is the DatabaseError correct? Possibly ConnectionError would make more sense?
+    with pytest.raises(snowflake.connector.DatabaseError) as execinfo:
+        with mock.patch("webbrowser.open", new=webbrowser_mock.open):
+            with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+                snowflake.connector.connect(
+                    user="testUser",
+                    authenticator="OAUTH_AUTHORIZATION_CODE",
+                    oauth_client_id="123",
+                    account="testAccount",
+                    protocol="http",
+                    role="ANALYST",
+                    host=wiremock_client.wiremock_host,
+                    port=wiremock_client.wiremock_http_port,
+                )
+
+    # TODO: possibly some more descriptive error message would make sense?
+    print(execinfo.value)
+    assert str(execinfo.value).endswith(
+        "Invalid HTTP request from web browser. Idp authentication could have failed."
+    )

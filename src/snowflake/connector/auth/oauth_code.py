@@ -212,9 +212,10 @@ class AuthByOauthCode(AuthByPlugin):
             "POST",
             f"{self._protocol}://{self.token_request_url}",
             headers={
-                "Basic": base64.b64encode(
+                "Authorization": "Basic "
+                + base64.b64encode(
                     f"{self.client_id}:{self.client_secret}".encode()
-                )
+                ).decode()
             },
             encode_multipart=False,
             fields=fields,
