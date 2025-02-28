@@ -98,3 +98,43 @@ def test_successful_flow(wiremock_client: WiremockClient, monkeypatch) -> None:
 
             assert cnx, "invalid cnx"
             cnx.close()
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
+def test_invalid_state(wiremock_client: WiremockClient, monkeypatch) -> None:
+    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
+
+    wiremock_oauth_authorization_code_dir = (
+        pathlib.Path(__file__).parent.parent
+        / "data"
+        / "wiremock"
+        / "mappings"
+        / "auth"
+        / "oauth"
+        / "authorization_code"
+    )
+
+    wiremock_client.import_mapping(
+        wiremock_oauth_authorization_code_dir / "invalid_state_error.json"
+    )
+
+    webbrowser_mock = Mock()
+    webbrowser_mock.open = _webbrowser_redirect
+
+    # TODO: Is the DatabaseError correct? Possibly ConnectionError would make more sense?
+    with pytest.raises(snowflake.connector.DatabaseError) as execinfo:
+        with mock.patch("webbrowser.open", new=webbrowser_mock.open):
+            with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+                snowflake.connector.connect(
+                    user="testUser",
+                    authenticator="OAUTH_AUTHORIZATION_CODE",
+                    oauth_client_id="123",
+                    account="testAccount",
+                    protocol="http",
+                    role="ANALYST",
+                    host=wiremock_client.wiremock_host,
+                    port=wiremock_client.wiremock_http_port,
+                )
+
+    assert str(execinfo.value).endswith("State changed during OAuth process.")
