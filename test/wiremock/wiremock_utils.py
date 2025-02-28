@@ -35,11 +35,12 @@ def _get_mapping_str(mapping: Union[str, dict, pathlib.Path]) -> str:
 
 
 class WiremockClient:
-    def __init__(self):
+    def __init__(self, forbidden_ports: Optional[List[int]] = None) -> None:
         self.wiremock_filename = "wiremock-standalone.jar"
         self.wiremock_host = "localhost"
         self.wiremock_http_port = None
         self.wiremock_https_port = None
+        self.forbidden_ports = forbidden_ports
 
         self.wiremock_dir = pathlib.Path(__file__).parent.parent.parent / ".wiremock"
         assert self.wiremock_dir.exists(), f"{self.wiremock_dir} does not exist"
@@ -52,7 +53,7 @@ class WiremockClient:
     def _start_wiremock(self):
         self.wiremock_http_port = self._find_free_port()
         self.wiremock_https_port = self._find_free_port(
-            forbidden_ports=[self.wiremock_http_port]
+            forbidden_ports=self.forbidden_ports + [self.wiremock_http_port]
         )
         self.wiremock_process = subprocess.Popen(
             [
