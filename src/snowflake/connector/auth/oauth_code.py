@@ -210,7 +210,7 @@ class AuthByOauthCode(AuthByPlugin):
 
         resp = urllib3.PoolManager().request_encode_body(  # TODO: use network pool to gain use of proxy settings and so on
             "POST",
-            self.token_request_url,
+            f"{self._protocol}://{self.token_request_url}",
             headers={
                 "Basic": base64.b64encode(
                     f"{self.client_id}:{self.client_secret}".encode()
