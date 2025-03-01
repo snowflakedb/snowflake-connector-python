@@ -8,6 +8,7 @@ from base64 import b64encode
 import boto3
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
+from dataclasses import dataclass
 import json
 import jwt
 import logging
@@ -27,7 +28,14 @@ def get_default_entra_resource(account: str) -> str:
     return ENTRA_SNOWFLAKE_RESOURCE
 
 
-def create_aws_attestation() -> Union[str, None]:
+@dataclass
+class WorkloadIdentityAttestation:
+    provider: str
+    credential: str
+    user_identifier: str
+
+
+def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
     """Tries to create a workload identity attestation for AWS.
     
     If the application isn't running on AWS or no credentials were found, returns None.
@@ -49,15 +57,18 @@ def create_aws_attestation() -> Union[str, None]:
 
     SigV4Auth(aws_creds, "sts", "us-east-1").add_auth(request)
 
-    assertion = {
+    assertion_dict = {
         "url": request.url,
         "method": request.method,
         "headers": dict(request.headers.items()),
     }
-    return b64encode(json.dumps(assertion).encode("utf-8")).decode("utf-8")
+    credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
+    # TODO: load the ARN.
+    return WorkloadIdentityAttestation("AWS", credential, "ARN")
 
 
-def create_gcp_attestation() -> Union[str, None]:
+
+def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
     """Tries to create a workload identity attestation for GCP.
     
     If the application isn't running on GCP or no credentials were found, returns None.
@@ -80,10 +91,10 @@ def create_gcp_attestation() -> Union[str, None]:
         logger.debug("Unexpected GCP token issuer '%s'", issuer)
         return None
 
-    return jwt_str
+    return WorkloadIdentityAttestation("GCP", jwt_str, claims["sub"])
 
 
-def create_azure_attestation(snowflake_entra_resource: str) -> Union[str, None]:
+def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIdentityAttestation, None]:
     """Tries to create a workload identity attestation for Azure.
     
     If the application isn't running on Azure or no credentials were found, returns None.
@@ -107,4 +118,4 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[str, None]:
         logger.debug("Unexpected Azure token issuer '%s'", issuer)
         return None
 
-    return jwt_str
+    return WorkloadIdentityAttestation("GCP", jwt_str, claims["sub"])
