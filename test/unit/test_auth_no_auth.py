@@ -4,12 +4,12 @@
 
 from __future__ import annotations
 
-try:  # pragma: no cover
-    from snowflake.connector.auth import AuthNoAuth
-except ImportError:
-    from snowflake.connector.auth.no_auth import AuthNoAuth
+import pytest
+
+from snowflake.connector.auth import AuthNoAuth
 
 
+@pytest.mark.skipolddriver
 def test_auth_no_auth():
     """Simple test for AuthNoAuth."""
     auth = AuthNoAuth()

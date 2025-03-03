@@ -1488,6 +1488,7 @@ def test_is_valid(conn_cnx):
     assert conn.is_valid() is False
 
 
+@pytest.mark.skipolddriver
 def test_no_auth_connection_negative_case():
     no_auth = AuthNoAuth()
 
