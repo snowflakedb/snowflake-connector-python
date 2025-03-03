@@ -6,12 +6,15 @@ from __future__ import annotations
 
 import pytest
 
-from snowflake.connector.auth import AuthNoAuth
-
 
 @pytest.mark.skipolddriver
 def test_auth_no_auth():
     """Simple test for AuthNoAuth."""
+
+    # AuthNoAuth does not exist in old drivers, so we import at test level to
+    # skip importing it for old driver tests.
+    from snowflake.connector.auth.no_auth import AuthNoAuth
+
     auth = AuthNoAuth()
 
     body = {"data": {}}

@@ -58,8 +58,6 @@ try:
 except ImportError:  # Keep olddrivertest from breaking
     ER_FAILED_PROCESSING_QMARK = 252012
 
-from snowflake.connector.auth.no_auth import AuthNoAuth
-
 
 def test_basic(conn_testaccount):
     """Basic Connection test."""
@@ -1490,6 +1488,10 @@ def test_is_valid(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_no_auth_connection_negative_case():
+    # AuthNoAuth does not exist in old drivers, so we import at test level to
+    # skip importing it for old driver tests.
+    from snowflake.connector.auth.no_auth import AuthNoAuth
+
     no_auth = AuthNoAuth()
 
     # Create a no-auth connection in an invalid way.
