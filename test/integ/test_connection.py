@@ -297,7 +297,7 @@ def test_with_string_login_timeout(db_parameters):
             login_timeout="5",
         )
 
-
+@pytest.mark.skip(reason="the test is affected by CI breaking change")
 def test_bogus(db_parameters):
     """Attempts to login with invalid user name and password.
 
