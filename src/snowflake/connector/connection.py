@@ -381,6 +381,7 @@ class SnowflakeConnection:
         server_session_keep_alive: When true, the connector does not destroy the session on the Snowflake server side
           before the connector shuts down. Default value is false.
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
+        unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -737,6 +738,14 @@ class SnowflakeConnection:
     @property
     def iobound_tpe_limit(self) -> int | None:
         return self._iobound_tpe_limit
+
+    @property
+    def unsafe_file_write(self) -> bool:
+        return self._unsafe_file_write
+
+    @unsafe_file_write.setter
+    def unsafe_file_write(self, value: bool) -> None:
+        self._unsafe_file_write = value
 
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
@@ -1208,6 +1217,11 @@ class SnowflakeConnection:
                 self._port = "443"
             if "protocol" not in kwargs:
                 self._protocol = "https"
+
+        if "unsafe_file_write" in kwargs:
+            self._unsafe_file_write = kwargs["unsafe_file_write"]
+        else:
+            self._unsafe_file_write = False
 
         logger.info(
             f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), 'GLOBAL')} Snowflake domain"
