@@ -9,6 +9,7 @@ from .by_plugin import AuthByPlugin, AuthType
 from .default import AuthByDefault
 from .idtoken import AuthByIdToken
 from .keypair import AuthByKeyPair
+from .no_auth import AuthNoAuth
 from .oauth import AuthByOAuth
 from .oauth_code import AuthByOauthCode
 from .okta import AuthByOkta
@@ -27,6 +28,7 @@ FIRST_PARTY_AUTHENTICATORS = frozenset(
         AuthByWebBrowser,
         AuthByIdToken,
         AuthByPAT,
+        AuthNoAuth,
     )
 )
 
@@ -40,6 +42,7 @@ __all__ = [
     "AuthByOkta",
     "AuthByUsrPwdMfa",
     "AuthByWebBrowser",
+    "AuthNoAuth",
     "Auth",
     "AuthType",
     "FIRST_PARTY_AUTHENTICATORS",
