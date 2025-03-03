@@ -1,19 +1,19 @@
-# Generated on: Python 3.12.8
+# Generated on: Python 3.12.9
 asn1crypto==1.5.1
-certifi==2024.12.14
+certifi==2025.1.31
 cffi==1.17.1
 charset-normalizer==3.4.1
-cryptography==44.0.0
+cryptography==44.0.2
 filelock==3.17.0
 idna==3.10
 packaging==24.2
 platformdirs==4.3.6
 pycparser==2.22
 PyJWT==2.10.1
-pyOpenSSL==24.3.0
-pytz==2024.2
+pyOpenSSL==25.0.0
+pytz==2025.1
 requests==2.32.3
-setuptools==75.8.0
+setuptools==75.8.2
 sortedcontainers==2.4.0
 tomlkit==0.13.2
 typing_extensions==4.12.2
