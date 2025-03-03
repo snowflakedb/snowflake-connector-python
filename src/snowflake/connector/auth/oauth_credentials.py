@@ -11,7 +11,6 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import secrets
 from typing import TYPE_CHECKING, Any
 
 from ..constants import OAUTH_TYPE_CLIENT_CREDENTIALS
@@ -46,8 +45,6 @@ class AuthByOauthCredentials(AuthByPlugin):
         self._authentication_url = authentication_url
         self._token_request_url = token_request_url
         self._scope = scope
-        self._state = secrets.token_urlsafe(43)
-        logger.debug("chose oauth state: %s", "".join("*" for _ in self._state))
 
     def type_(self) -> AuthType:
         return AuthType.OAUTH
