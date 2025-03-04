@@ -180,7 +180,7 @@ def create_autodetect_attestation(account: str, token: str | None = None) -> Uni
     return None
 
 
-def create_attestation(provider: AttestationProvider, account: str, token: str | None = None) -> WorkloadIdentityAttestation:
+def create_attestation(provider: AttestationProvider | None, account: str, token: str | None = None) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
     
     If the provider is None, this will try to auto-detect a credential from the runtime environment. If the provider fails to detect a credential,
@@ -199,7 +199,7 @@ def create_attestation(provider: AttestationProvider, account: str, token: str |
         attestation = create_autodetect_attestation(account, token)
 
     if not attestation:
-        provider_str = provider or "auto-detect"
+        provider_str = "auto-detect" if provider is None else provider.value
         raise ProgrammingError(
             msg=f"No workload identity credential was found for '{provider_str}'.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
