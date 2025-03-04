@@ -7,6 +7,8 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.14.1(TBD)
+  
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
   - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
