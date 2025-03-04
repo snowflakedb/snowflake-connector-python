@@ -148,7 +148,8 @@ def create_oidc_attestation(token: str | None) -> Union[WorkloadIdentityAttestat
 
     try:
         claims = jwt.decode(token, options={"verify_signature": False})
-        return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, claims["sub"])
+        user_identifier = '{"iss": "%s","sub":"%s"}' % (claims["iss"], claims["sub"])
+        return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, user_identifier)
     except jwt.exceptions.InvalidTokenError:
         raise ProgrammingError(
             msg=f"Specified token is not a valid JWT.",
