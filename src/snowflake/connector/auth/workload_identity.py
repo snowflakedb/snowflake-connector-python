@@ -42,12 +42,11 @@ class ApiFederatedAuthenticationType(Enum):
 class AuthByWorkloadIdentity(AuthByPlugin):
     """Plugin to authenticate via workload identity."""
 
-    def __init__(self, account: str, provider: AttestationProvider | None = None, token: str | None = None, token_file_path: str | None = None, **kwargs) -> None:
+    def __init__(self, account: str, provider: AttestationProvider | None = None, token: str | None = None, **kwargs) -> None:
         super().__init__(**kwargs)
         self.account = account
         self.provider = provider
         self.token = token
-        self.token_file_path = token_file_path
 
         self.attestation: WorkloadIdentityAttestation | None = None
 
@@ -67,7 +66,7 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         **kwargs: typing.Any,
     ) -> None:
         """Fetch the token."""
-        self.attestation = create_attestation(self.provider, self.account, self.token, self.token_file_path)
+        self.attestation = create_attestation(self.provider, self.account, self.token)
 
     def reauthenticate(self, **kwargs: typing.Any) -> dict[str, bool]:
         self.reset_secrets()

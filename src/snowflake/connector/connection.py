@@ -1148,7 +1148,6 @@ class SnowflakeConnection:
                     account=self._account,
                     provider=self._workload_identity_provider,
                     token=self._token,
-                    token_file_path=self._token_file_path,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/

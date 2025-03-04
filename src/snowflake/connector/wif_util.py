@@ -13,7 +13,6 @@ from enum import Enum, unique
 import json
 import jwt
 import logging
-import os
 from typing import Union
 
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
@@ -43,7 +42,7 @@ class AttestationProvider(Enum):
     GCP = "GCP"
     """Provider that requests an ID token for the workload's attached service account."""
     OIDC = "OIDC"
-    """Provider that looks for an OIDC ID token, either explicitly passed through config or in a specified file."""
+    """Provider that looks for an OIDC ID token."""
 
 
 @dataclass
@@ -139,51 +138,31 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
     return WorkloadIdentityAttestation(AttestationProvider.AZURE, jwt_str, claims["sub"])
 
 
-def create_oidc_attestation(token: str | None, token_file_path: str | None) -> Union[WorkloadIdentityAttestation, None]:
-    """Tries to create an attestation using the given token or token file path.
+def create_oidc_attestation(token: str | None) -> Union[WorkloadIdentityAttestation, None]:
+    """Tries to create an attestation using the given token.
     
-    If none of these are populated, returns None.
+    If this is not populated, returns None.
     """
-    # Simplest case: return an explicitly provided token.
-    if token:
-        try:
-            claims = jwt.decode(token, options={"verify_signature": False})
-            return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, claims["sub"])
-        except jwt.exceptions.InvalidTokenError:
-            raise ProgrammingError(
-                msg=f"Specified token is not a valid JWT.",
-                errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-            )
+    if not token:
+        return None
 
-    # Next case: load a token from an explicitly specific file.
-    if token_file_path:
-        if not os.path.exists(token_file_path):
-            raise ProgrammingError(
-                msg=f"Token file '{token_file_path}' was not found.",
-                errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-            )
-        with open(token_file_path, 'r') as f:
-            token = f.read().strip()
-            try:
-                claims = jwt.decode(token, options={"verify_signature": False})
-                return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, claims["sub"])
-            except jwt.exceptions.InvalidTokenError:
-                raise ProgrammingError(
-                    msg=f"Token file '{token_file_path}' does not contain a valid JWT.",
-                    errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-                )
-
-    # This provider is irrelevant if we don't have a token or token file.
-    return None
+    try:
+        claims = jwt.decode(token, options={"verify_signature": False})
+        return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, claims["sub"])
+    except jwt.exceptions.InvalidTokenError:
+        raise ProgrammingError(
+            msg=f"Specified token is not a valid JWT.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
 
 
-def create_autodetect_attestation(account: str, token: str | None = None, token_file_path: str | None = None) -> Union[WorkloadIdentityAttestation, None]:
+def create_autodetect_attestation(account: str, token: str | None = None) -> Union[WorkloadIdentityAttestation, None]:
     """Tries to create an attestation using the auto-detected runtime environment.
     
     If no attestation can be found, returns None.
     """
-    if token or token_file_path:
-        return create_oidc_attestation(token, token_file_path)
+    if token:
+        return create_oidc_attestation(token)
 
     attestation = create_aws_attestation()
     if attestation:
@@ -200,7 +179,7 @@ def create_autodetect_attestation(account: str, token: str | None = None, token_
     return None
 
 
-def create_attestation(provider: AttestationProvider, account: str, token: str | None = None, token_file_path: str | None = None) -> WorkloadIdentityAttestation:
+def create_attestation(provider: AttestationProvider, account: str, token: str | None = None) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
     
     If the provider is None, this will try to auto-detect a credential from the runtime environment. If the provider fails to detect a credential,
@@ -214,9 +193,9 @@ def create_attestation(provider: AttestationProvider, account: str, token: str |
     elif provider == AttestationProvider.GCP:
         attestation = create_gcp_attestation()
     elif provider == AttestationProvider.OIDC:
-        attestation = create_oidc_attestation(token, token_file_path)
+        attestation = create_oidc_attestation(token)
     elif provider == None:
-        attestation = create_autodetect_attestation(account, token, token_file_path)
+        attestation = create_autodetect_attestation(account, token)
 
     if not attestation:
         provider_str = provider or "auto-detect"
