@@ -1132,6 +1132,7 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
                 pkce = "pkce" in map(lambda e: e.lower(), self._oauth_security_features)
+
                 if self._oauth_client_id is None:
                     Error.errorhandler_wrapper(
                         self,
@@ -1155,8 +1156,7 @@ class SnowflakeConnection:
                     token_request_url=self._oauth_token_request_url.format(
                         host=self.host, port=self.port
                     ),
-                    # TODO: parameterize
-                    redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
+                    redirect_uri="http://127.0.0.1:{port}/",
                     scope=self._oauth_scope,
                     pkce=pkce,
                 )
