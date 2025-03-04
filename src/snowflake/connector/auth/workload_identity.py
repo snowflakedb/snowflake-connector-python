@@ -78,4 +78,4 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         """Returns the CSP provider name and an identifier. Used for logging purposes."""
         if not self.attestation:
             return ""
-        return f"{self.attestation.provider}_{self.attestation.user_identifier}"
+        return f"{self.attestation.provider.value}_{self.attestation.user_identifier}"
