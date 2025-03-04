@@ -15,6 +15,7 @@ from .okta import AuthByOkta
 from .pat import AuthByPAT
 from .usrpwdmfa import AuthByUsrPwdMfa
 from .webbrowser import AuthByWebBrowser
+from .workload_identity import AuthByWorkloadIdentity
 
 FIRST_PARTY_AUTHENTICATORS = frozenset(
     (
@@ -27,6 +28,7 @@ FIRST_PARTY_AUTHENTICATORS = frozenset(
         AuthByIdToken,
         AuthByPAT,
         AuthNoAuth,
+        AuthByWorkloadIdentity,
     )
 )
 
@@ -40,6 +42,7 @@ __all__ = [
     "AuthByUsrPwdMfa",
     "AuthByWebBrowser",
     "AuthNoAuth",
+    "AuthByWorkloadIdentity",
     "Auth",
     "AuthType",
     "FIRST_PARTY_AUTHENTICATORS",
