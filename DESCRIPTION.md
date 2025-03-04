@@ -7,11 +7,19 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.13.3(TBD)
+- v3.14.1(TBD)
+    - Added support for Python 3.13.
+
+- v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
-  - Removed the workaround for a Python 2.7 bug.
   - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
-  - Added support for Python 3.12.
+  - Optimized distribution package lookup to speed up import.
+  - Fixed a bug where privatelink OCSP Cache url could not be determined if privatelink account name was specified in uppercase.
+  - Added support for iceberg tables to `write_pandas`.
+  - Fixed base64 encoded private key tests.
+  - Fixed a bug where file permission check happened on Windows.
+  - Added support for File types.
+  - Added `unsafe_file_write` connection parameter that restores the previous behaviour of saving files downloaded with GET with 644 permissions.
 
 - v3.13.2(January 29, 2025)
   - Changed not to use scoped temporary objects.
