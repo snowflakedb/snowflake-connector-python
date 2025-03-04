@@ -58,7 +58,7 @@ class AuthByWorkloadIdentity(AuthByPlugin):
 
     def update_body(self, body: dict[typing.Any, typing.Any]) -> None:
         body["data"]["AUTHENTICATOR"] = WORKLOAD_IDENTITY_AUTHENTICATOR
-        body["data"]["PROVIDER"] = ApiFederatedAuthenticationType.from_attestation(self.attestation)
+        body["data"]["PROVIDER"] = ApiFederatedAuthenticationType.from_attestation(self.attestation).value
         body["data"]["TOKEN"] = self.attestation.credential
 
     def prepare(
