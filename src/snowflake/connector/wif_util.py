@@ -36,16 +36,16 @@ def get_default_entra_resource(account: str) -> str:
 class AttestationProvider(Enum):
     """A WIF provider implementation that can produce an attestation."""
     
-    """Provider that attempts to auto-detect a credential from the current runtime environment."""
     AUTODETECT = "AUTODETECT"
-    """Provider that builds an encoded pre-signed GetCallerIdentity request using the current workload's IAM role."""
+    """Provider that attempts to auto-detect a credential from the current runtime environment."""
     AWS = "AWS"
-    """Provider that requests an OAuth access token for the workload's managed identity."""
+    """Provider that builds an encoded pre-signed GetCallerIdentity request using the current workload's IAM role."""
     AZURE = "AZURE"
-    """Provider that requests an ID token for the workload's attached service account."""
+    """Provider that requests an OAuth access token for the workload's managed identity."""
     GCP = "GCP"
-    """Provider that looks for an OIDC ID token, either explicitly passed through config or in a specified file."""
+    """Provider that requests an ID token for the workload's attached service account."""
     OIDC = "OIDC"
+    """Provider that looks for an OIDC ID token, either explicitly passed through config or in a specified file."""
 
 
 @dataclass
