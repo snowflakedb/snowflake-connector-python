@@ -24,7 +24,7 @@ import snowflake.connector
 
 from ..wiremock.wiremock_utils import WiremockClient
 
-AUTH_SOCKET_PORT = 65000
+AUTH_SOCKET_PORT = 8009
 
 
 @pytest.fixture(scope="session")
@@ -34,7 +34,7 @@ def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
 
 
 def _call_auth_server(url: str):
-    response = requests.get(f"http://{url}", allow_redirects=True)
+    response = requests.get(url, allow_redirects=True)
     assert response.status_code == 200, "Invalid status code received from auth server"
 
 
@@ -92,6 +92,9 @@ def test_successful_flow(wiremock_client: WiremockClient, monkeypatch) -> None:
                 account="testAccount",
                 protocol="http",
                 role="ANALYST",
+                oauth_client_secret="testClientSecret",
+                oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+                oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
             )
@@ -133,6 +136,8 @@ def test_invalid_state(wiremock_client: WiremockClient, monkeypatch) -> None:
                     account="testAccount",
                     protocol="http",
                     role="ANALYST",
+                    oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+                    oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
@@ -173,6 +178,8 @@ def test_scope_error(wiremock_client: WiremockClient, monkeypatch) -> None:
                     account="testAccount",
                     protocol="http",
                     role="ANALYST",
+                    oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+                    oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
@@ -211,12 +218,13 @@ def test_token_request_error(wiremock_client: WiremockClient, monkeypatch) -> No
                     account="testAccount",
                     protocol="http",
                     role="ANALYST",
+                    oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+                    oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
 
     # TODO: possibly some more descriptive error message would make sense?
-    print(execinfo.value)
     assert str(execinfo.value).endswith(
         "Invalid HTTP request from web browser. Idp authentication could have failed."
     )

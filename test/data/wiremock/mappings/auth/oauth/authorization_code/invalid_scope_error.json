@@ -9,7 +9,7 @@
       "response": {
         "status": 302,
         "headers": {
-          "Location": "http://127.0.0.1:65000/snowflake/oauth-redirect?error=invalid_scope&error_description=One+or+more+scopes+are+not+configured+for+the+authorization+server+resource."
+          "Location": "http://localhost:8009/snowflake/oauth-redirect?error=invalid_scope&error_description=One+or+more+scopes+are+not+configured+for+the+authorization+server+resource."
         }
       }
     }

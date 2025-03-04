@@ -93,7 +93,6 @@ from .errorcode import (
     ER_NO_CLIENT_ID,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
-    ER_NO_ROLE,
     ER_NO_USER,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
@@ -1145,7 +1144,8 @@ class SnowflakeConnection:
                     token_request_url=self._oauth_token_request_url.format(
                         host=self.host, port=self.port
                     ),
-                    redirect_uri="http://127.0.0.1:{port}/",
+                    # TODO: parameterize
+                    redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
                     scope=self._oauth_scope,
                     pkce=pkce,
                 )

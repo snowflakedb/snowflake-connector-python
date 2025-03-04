@@ -6,7 +6,6 @@
       "newScenarioState": "Authorized",
       "request": {
         "urlPathPattern": "/oauth/authorize",
-        "method": "GET",
         "queryParameters": {
           "response_type": {
             "equalTo": "code"
@@ -18,7 +17,7 @@
             "equalTo": "S256"
           },
           "redirect_uri": {
-            "matches": "http://127.0.0.1:65000/"
+            "equalTo": "http://localhost:8009/snowflake/oauth-redirect"
           },
           "code_challenge": {
             "matches": ".*"
@@ -29,12 +28,13 @@
           "client_id": {
             "equalTo": "123"
           }
-        }
+        },
+        "method": "GET"
       },
       "response": {
         "status": 302,
         "headers": {
-          "Location": "http://127.0.0.1:65000/snowflake/oauth-redirect?code=123&state=abc123"
+          "Location": "http://localhost:8009/snowflake/oauth-redirect?code=123&state=abc123"
         }
       }
     },
@@ -42,22 +42,22 @@
       "scenarioName": "Successful OAuth authorization code flow",
       "requiredScenarioState": "Authorized",
       "newScenarioState": "Acquired access token",
- "request": {
-        "urlPathPattern": "/oauth/token-request",
+      "request": {
+        "urlPathPattern": "/oauth/token-request.*",
         "method": "POST",
         "headers": {
+          "Authorization": {
+            "contains": "Basic"
+          },
           "Content-Type": {
-            "contains": "application/x-www-form-urlencoded"
+            "contains": "application/x-www-form-urlencoded; charset=UTF-8"
           }
         },
-        "formParameters": {
-          "grant_type": {
-            "equalTo": "authorization_code"
-          },
-          "client_id": {
-            "equalTo": "123"
+        "bodyPatterns": [
+          {
+            "contains": "grant_type=authorization_code&code=123&redirect_uri=http%3A%2F%2Flocalhost%3A8009%2Fsnowflake%2Foauth-redirect&code_verifier="
           }
-        }
+        ]
       },
       "response": {
         "status": 200,

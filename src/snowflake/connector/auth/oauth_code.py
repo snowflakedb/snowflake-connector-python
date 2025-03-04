@@ -199,23 +199,22 @@ class AuthByOauthCode(AuthByPlugin):
         fields = {
             "grant_type": "authorization_code",
             "code": code,
-            "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
         }
-        if self.client_secret:
-            fields["client_secret"] = self.client_secret
         if self.pkce:
             assert self._verifier is not None
             fields["code_verifier"] = self._verifier
 
         resp = urllib3.PoolManager().request_encode_body(  # TODO: use network pool to gain use of proxy settings and so on
             "POST",
-            f"{self._protocol}://{self.token_request_url}",
+            self.token_request_url,
             headers={
                 "Authorization": "Basic "
                 + base64.b64encode(
                     f"{self.client_id}:{self.client_secret}".encode()
-                ).decode()
+                ).decode(),
+                "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             },
             encode_multipart=False,
             fields=fields,
@@ -226,7 +225,7 @@ class AuthByOauthCode(AuthByPlugin):
             json.JSONDecodeError,
             KeyError,
         ):
-            logger.error("oauth reponse invalid, does not contain 'access_token'")
+            logger.error("oauth response invalid, does not contain 'access_token'")
             logger.debug(
                 "received the following response body when requesting oauth token: %s",
                 resp.data,

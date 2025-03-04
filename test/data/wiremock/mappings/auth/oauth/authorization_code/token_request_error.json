@@ -11,7 +11,7 @@
       "response": {
         "status": 302,
         "headers": {
-          "Location": "http://127.0.0.1:65000/snowflake/oauth-redirect?code=123&state=abc123"
+          "Location": "http://localhost:8009/snowflake/oauth-redirect?code=123&state=abc123"
         }
       }
     },
@@ -27,13 +27,12 @@
             "contains": "Basic"
           },
           "Content-Type": {
-            "contains": "application/x-www-form-urlencoded"
+            "contains": "application/x-www-form-urlencoded; charset=UTF-8"
           }
         },
         "bodyPatterns": [
           {
-            "contains": "grant_type=authorization_code&code=123&client_id=123&redirect_uri=http%3A%2F%2F127.0.0.1%3A65000%2F&code_verifier="
-            //            "contains": "grant_type=authorization_code&code=123&redirect_uri=http%3A%2F%2F127.0.0.1%3A8003%2Fsnowflake%2Foauth-redirect&code_verifier="
+            "contains": "grant_type=authorization_code&code=123&redirect_uri=http%3A%2F%2Flocalhost%3A8009%2Fsnowflake%2Foauth-redirect&code_verifier="
           }
         ]
       },
