@@ -34,8 +34,10 @@ def get_default_entra_resource(account: str) -> str:
 
 @unique
 class AttestationProvider(Enum):
-    """A WIF provider that can produce an attestation."""
+    """A WIF provider implementation that can produce an attestation."""
     
+    """Provider that attempts to auto-detect a credential from the current runtime environment."""
+    AUTODETECT = "AUTODETECT"
     """Provider that builds an encoded pre-signed GetCallerIdentity request using the current workload's IAM role."""
     AWS = "AWS"
     """Provider that requests an OAuth access token for the workload's managed identity."""
@@ -147,7 +149,7 @@ def create_oidc_attestation(token: str | None, token_file_path: str | None) -> U
     # Simplest case: return an explicitly provided token.
     if token:
         try:
-            claims = jwt.decode(jwt_str, options={"verify_signature": False})
+            claims = jwt.decode(token, options={"verify_signature": False})
             return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, claims["sub"])
         except jwt.exceptions.InvalidTokenError:
             raise ProgrammingError(
@@ -165,7 +167,7 @@ def create_oidc_attestation(token: str | None, token_file_path: str | None) -> U
         with open(token_file_path, 'r') as f:
             token = f.read().strip()
             try:
-                claims = jwt.decode(jwt_str, options={"verify_signature": False})
+                claims = jwt.decode(token, options={"verify_signature": False})
                 return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, claims["sub"])
             except jwt.exceptions.InvalidTokenError:
                 raise ProgrammingError(
@@ -174,5 +176,27 @@ def create_oidc_attestation(token: str | None, token_file_path: str | None) -> U
                 )
 
     # This provider is irrelevant if we don't have a token or token file.
-    if not token and not token_file_path:
-        return None
+    return None
+
+
+def create_autodetect_attestation(account: str, token: str | None = None, token_file_path: str | None = None) -> Union[WorkloadIdentityAttestation, None]:
+    """Tries to create an attestation using the auto-detected runtime environment.
+    
+    If no attestation can be found, returns None.
+    """
+    if token or token_file_path:
+        return create_oidc_attestation(token, token_file_path)
+
+    attestation = create_aws_attestation()
+    if attestation:
+        return attestation
+
+    attestation = create_azure_attestation(get_default_entra_resource(account))
+    if attestation:
+        return attestation
+
+    attestation = create_gcp_attestation()
+    if attestation:
+        return attestation
+
+    return None
