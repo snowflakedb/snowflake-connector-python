@@ -46,6 +46,7 @@ from .auth import (
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
+    AuthNoAuth,
 )
 from .auth.idtoken import AuthByIdToken
 from .backoff_policies import exponential_backoff
@@ -102,6 +103,7 @@ from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
+    NO_AUTH_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
     OAUTH_AUTHORIZATION_CODE,
     PROGRAMMATIC_ACCESS_TOKEN,
@@ -414,6 +416,7 @@ class SnowflakeConnection:
         server_session_keep_alive: When true, the connector does not destroy the session on the Snowflake server side
           before the connector shuts down. Default value is false.
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
+        unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -771,6 +774,14 @@ class SnowflakeConnection:
     def iobound_tpe_limit(self) -> int | None:
         return self._iobound_tpe_limit
 
+    @property
+    def unsafe_file_write(self) -> bool:
+        return self._unsafe_file_write
+
+    @unsafe_file_write.setter
+    def unsafe_file_write(self, value: bool) -> None:
+        self._unsafe_file_write = value
+
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
@@ -1124,6 +1135,7 @@ class SnowflakeConnection:
                 refresh_token = "refresh_token" in map(
                     lambda e: e.lower(), self._oauth_security_features
                 )
+
                 if self._oauth_client_id is None:
                     Error.errorhandler_wrapper(
                         self,
@@ -1271,6 +1283,11 @@ class SnowflakeConnection:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
 
+        if "unsafe_file_write" in kwargs:
+            self._unsafe_file_write = kwargs["unsafe_file_write"]
+        else:
+            self._unsafe_file_write = False
+
         logger.info(
             f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), 'GLOBAL')} Snowflake domain"
         )
@@ -1298,9 +1315,15 @@ class SnowflakeConnection:
             with open(token_file_path) as f:
                 self._token = f.read()
 
+        # Set of authenticators allowing empty user.
+        empty_user_allowed_authenticators = {OAUTH_AUTHENTICATOR, NO_AUTH_AUTHENTICATOR}
+
         if not (self._master_token and self._session_token):
-            if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
-                # OAuth Authentication does not require a username
+            if (
+                not self.user
+                and self._authenticator not in empty_user_allowed_authenticators
+            ):
+                # OAuth and NoAuth Authentications does not require a username
                 Error.errorhandler_wrapper(
                     self,
                     None,
@@ -1330,14 +1353,15 @@ class SnowflakeConnection:
                     {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
                 )
 
-        if not self._account:
+        # Only AuthNoAuth allows account to be omitted.
+        if not self._account and not isinstance(self.auth_class, AuthNoAuth):
             Error.errorhandler_wrapper(
                 self,
                 None,
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if "." in self._account:
+        if self._account and "." in self._account:
             self._account = parse_account(self._account)
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(
