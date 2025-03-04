@@ -1,0 +1,82 @@
+#
+# Copyright (c) 2012-2025 Snowflake Computing Inc. All rights reserved.
+#
+
+from __future__ import annotations
+
+import typing
+from enum import Enum, unique
+
+from ..network import WORKLOAD_IDENTITY_AUTHENTICATOR
+from ..wif_util import AttestationProvider, WorkloadIdentityAttestation, create_attestation
+from .by_plugin import AuthByPlugin, AuthType
+
+
+@unique
+class ApiFederatedAuthenticationType(Enum):
+    """An API-specific enum of the WIF authentication type."""
+    AWS = "AWS"
+    AZURE = "AZURE"
+    GCP = "GCP"
+    OIDC = "OIDC"
+
+    @staticmethod
+    def from_attestation(attestation: WorkloadIdentityAttestation) -> ApiFederatedAuthenticationType:
+        """Maps the internal / driver-specific attestation providers to API authenticator types.
+        
+        The AttestationProvider is related to how the driver fetches the credential, while the API authenticator
+        type is related to how the credential is verified. In most current cases these may be the same, though
+        in the future we could have, for example, multiple AttestationProviders that all fetch an OIDC token.
+        """
+        if attestation.provider == AttestationProvider.AWS:
+            return ApiFederatedAuthenticationType.AWS
+        if attestation.provider == AttestationProvider.AZURE:
+            return ApiFederatedAuthenticationType.AZURE
+        if attestation.provider == AttestationProvider.GCP:
+            return ApiFederatedAuthenticationType.GCP
+        if attestation.provider == AttestationProvider.OIDC:
+            return ApiFederatedAuthenticationType.OIDC
+        return ValueError(f"Unknown attestation provider '{attestation.provider}'")
+
+
+class AuthByWorkloadIdentity(AuthByPlugin):
+    """Plugin to authenticate via workload identity."""
+
+    def __init__(self, account: str, provider: AttestationProvider | None = None, token: str | None = None, token_file_path: str | None = None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.account = account
+        self.provider = provider
+        self.token = token
+        self.token_file_path = token_file_path
+
+        self.attestation: WorkloadIdentityAttestation | None = None
+
+    def type_(self) -> AuthType:
+        return AuthType.WORKLOAD_IDENTITY
+
+    def reset_secrets(self) -> None:
+        self.attestation = None
+
+    def update_body(self, body: dict[typing.Any, typing.Any]) -> None:
+        body["data"]["AUTHENTICATOR"] = WORKLOAD_IDENTITY_AUTHENTICATOR
+        body["data"]["PROVIDER"] = ApiFederatedAuthenticationType.from_attestation(self.attestation)
+        body["data"]["TOKEN"] = self.attestation.credential
+
+    def prepare(
+        self,
+        **kwargs: typing.Any,
+    ) -> None:
+        """Fetch the token."""
+        self.attestation = create_attestation(self.provider, self.account, self.token, self.token_file_path)
+
+    def reauthenticate(self, **kwargs: typing.Any) -> dict[str, bool]:
+        self.reset_secrets()
+        self.prepare()
+        return {"success": True}
+
+    @property
+    def assertion_content(self) -> str | None:
+        """Returns the CSP provider name and an identifier. Used for logging purposes."""
+        if not self.attestation:
+            return ""
+        return f"{self.attestation.provider}_{self.attestation.user_identifier}"
