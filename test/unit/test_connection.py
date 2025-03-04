@@ -30,6 +30,7 @@ from snowflake.connector.errors import (
     ProgrammingError,
 )
 from snowflake.connector.network import SnowflakeRestful
+from snowflake.connector.wif_util import AttestationProvider
 
 from ..randomize import random_string
 from .mock_utils import mock_request_with_action, zero_backoff
@@ -588,3 +589,26 @@ def test_otel_error_message(caplog, mock_post_requests):
     ]
     assert len(important_records) == 1
     assert important_records[0].exc_text is not None
+
+
+def test_cannot_set_wlid_provider_without_wlid_authenticator(mock_post_requests):
+    with pytest.raises(ProgrammingError) as excinfo:
+        snowflake.connector.connect(user="user", account="account", password="password", workload_identity_provider="AWS")
+    assert "workload_identity_provider was set but authenticator was not set to WORKLOAD_IDENTITY" in str(excinfo.value)
+
+
+@patch("snowflake.connector.SnowflakeConnection._authenticate", return_value=None)
+@patch("snowflake.connector.auth.AuthByWorkloadIdentity.__init__", return_value=None)
+def test_connection_params_are_plumbed_into_authbyworkloadidentity(mock_auth_constructor, mock_authenticate):
+    snowflake.connector.connect(
+        account="my_account_1",
+        workload_identity_provider=AttestationProvider.AWS,
+        token="my_token",
+        authenticator="WORKLOAD_IDENTITY",
+    )
+    _, kwargs = mock_auth_constructor.call_args
+    assert kwargs == {
+        "account": "my_account_1",
+        "provider": AttestationProvider.AWS,
+        "token": "my_token",
+    }
