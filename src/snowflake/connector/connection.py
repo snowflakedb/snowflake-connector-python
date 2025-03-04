@@ -198,7 +198,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), str, bytes),
     ),  # OAuth/JWT/PAT/OIDC Token file path
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
-    "workload_identity_provider": {type(None), AttestationProvider},
+    "workload_identity_provider": {None, (type(None), AttestationProvider)},
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -1308,7 +1308,7 @@ class SnowflakeConnection:
             if self._private_key or self._private_key_file:
                 self._authenticator = KEY_PAIR_AUTHENTICATOR
 
-            if self._workload_identity_provider and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR:
+            if self._workload_identity_provider is not None and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR:
                 Error.errorhandler_wrapper(
                     self,
                     None,
