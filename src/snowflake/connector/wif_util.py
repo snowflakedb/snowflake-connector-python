@@ -35,9 +35,7 @@ def get_default_entra_resource(account: str) -> str:
 @unique
 class AttestationProvider(Enum):
     """A WIF provider implementation that can produce an attestation."""
-    
-    AUTODETECT = "AUTODETECT"
-    """Provider that attempts to auto-detect a credential from the current runtime environment."""
+
     AWS = "AWS"
     """Provider that builds an encoded pre-signed GetCallerIdentity request using the current workload's IAM role."""
     AZURE = "AZURE"
@@ -200,3 +198,31 @@ def create_autodetect_attestation(account: str, token: str | None = None, token_
         return attestation
 
     return None
+
+
+def create_attestation(provider: AttestationProvider, account: str, token: str | None = None, token_file_path: str | None = None) -> WorkloadIdentityAttestation:
+    """Entry point to create an attestation using the given provider.
+    
+    If the provider is None, this will try to auto-detect a credential from the runtime environment. If the provider fails to detect a credential,
+    a ProgrammingError will be raised.
+    """
+    attestation: WorkloadIdentityAttestation = None
+    if provider == AttestationProvider.AWS:
+        attestation = create_aws_attestation()
+    elif provider == AttestationProvider.AZURE:
+        attestation = create_azure_attestation(get_default_entra_resource(account))
+    elif provider == AttestationProvider.GCP:
+        attestation = create_gcp_attestation()
+    elif provider == AttestationProvider.OIDC:
+        attestation = create_oidc_attestation(token, token_file_path)
+    elif provider == None:
+        attestation = create_autodetect_attestation(account, token, token_file_path)
+
+    if not attestation:
+        provider_str = provider or "auto-detect"
+        raise ProgrammingError(
+            msg=f"No workload identity credential was found for '{provider_str}'.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+
+    return attestation
