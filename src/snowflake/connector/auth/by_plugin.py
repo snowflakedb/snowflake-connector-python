@@ -56,6 +56,7 @@ class AuthType(Enum):
     OKTA = "OKTA"
     PAT = "PROGRAMMATIC_ACCESS_TOKEN'"
     NO_AUTH = "NO_AUTH"
+    WORKLOAD_IDENTITY = "WORKLOAD_IDENTITY"
 
 
 class AuthByPlugin(ABC):
