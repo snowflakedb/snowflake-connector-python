@@ -9,11 +9,15 @@ import boto3
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from dataclasses import dataclass
+from enum import Enum, unique
 import json
 import jwt
 import logging
+import os
 from typing import Union
 
+from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
+from .errors import ProgrammingError
 from .vendored import requests
 from .vendored.requests import Response
 
@@ -28,9 +32,23 @@ def get_default_entra_resource(account: str) -> str:
     return ENTRA_SNOWFLAKE_RESOURCE
 
 
+@unique
+class AttestationProvider(Enum):
+    """A WIF provider that can produce an attestation."""
+    
+    """Provider that builds an encoded pre-signed GetCallerIdentity request using the current workload's IAM role."""
+    AWS = "AWS"
+    """Provider that requests an OAuth access token for the workload's managed identity."""
+    AZURE = "AZURE"
+    """Provider that requests an ID token for the workload's attached service account."""
+    GCP = "GCP"
+    """Provider that looks for an OIDC ID token, either explicitly passed through config or in a specified file."""
+    OIDC = "OIDC"
+
+
 @dataclass
 class WorkloadIdentityAttestation:
-    provider: str
+    provider: AttestationProvider
     credential: str
     user_identifier: str
 
@@ -40,7 +58,6 @@ def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
     
     If the application isn't running on AWS or no credentials were found, returns None.
     """
-    # TODO: figure out a way to get the current workload's region and use a regional URL.
     session = boto3.session.Session()
     aws_creds = session.get_credentials()
     if not aws_creds:
@@ -50,11 +67,13 @@ def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
         method="POST",
         url="https://sts.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15",
         headers={
+            # TODO: use a regional STS URL.
             "Host": "sts.amazonaws.com",
             "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
         },
     )
 
+    # TODO: figure out a way to get the current workload's region and use a regional URL.
     SigV4Auth(aws_creds, "sts", "us-east-1").add_auth(request)
 
     assertion_dict = {
@@ -64,8 +83,7 @@ def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
     }
     credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
     # TODO: load the ARN.
-    return WorkloadIdentityAttestation("AWS", credential, "ARN")
-
+    return WorkloadIdentityAttestation(AttestationProvider.AWS, credential, "<ARN-goes-here>")
 
 
 def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
@@ -91,7 +109,7 @@ def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
         logger.debug("Unexpected GCP token issuer '%s'", issuer)
         return None
 
-    return WorkloadIdentityAttestation("GCP", jwt_str, claims["sub"])
+    return WorkloadIdentityAttestation(AttestationProvider.GCP, jwt_str, claims["sub"])
 
 
 def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIdentityAttestation, None]:
@@ -118,4 +136,43 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
         logger.debug("Unexpected Azure token issuer '%s'", issuer)
         return None
 
-    return WorkloadIdentityAttestation("GCP", jwt_str, claims["sub"])
+    return WorkloadIdentityAttestation(AttestationProvider.AZURE, jwt_str, claims["sub"])
+
+
+def create_oidc_attestation(token: str | None, token_file_path: str | None) -> Union[WorkloadIdentityAttestation, None]:
+    """Tries to create an attestation using the given token or token file path.
+    
+    If none of these are populated, returns None.
+    """
+    # Simplest case: return an explicitly provided token.
+    if token:
+        try:
+            claims = jwt.decode(jwt_str, options={"verify_signature": False})
+            return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, claims["sub"])
+        except jwt.exceptions.InvalidTokenError:
+            raise ProgrammingError(
+                msg=f"Specified token is not a valid JWT.",
+                errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+            )
+
+    # Next case: load a token from an explicitly specific file.
+    if token_file_path:
+        if not os.path.exists(token_file_path):
+            raise ProgrammingError(
+                msg=f"Token file '{token_file_path}' was not found.",
+                errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+            )
+        with open(token_file_path, 'r') as f:
+            token = f.read().strip()
+            try:
+                claims = jwt.decode(jwt_str, options={"verify_signature": False})
+                return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, claims["sub"])
+            except jwt.exceptions.InvalidTokenError:
+                raise ProgrammingError(
+                    msg=f"Token file '{token_file_path}' does not contain a valid JWT.",
+                    errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+                )
+
+    # This provider is irrelevant if we don't have a token or token file.
+    if not token and not token_file_path:
+        return None
