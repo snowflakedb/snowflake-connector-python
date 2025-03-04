@@ -65,8 +65,15 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         chunk_size: int,
         stage_info: dict[str, Any],
         use_s3_regional_url: bool = False,
+        unsafe_file_write: bool = False,
     ) -> None:
-        super().__init__(meta, stage_info, chunk_size, credentials=credentials)
+        super().__init__(
+            meta,
+            stage_info,
+            chunk_size,
+            credentials=credentials,
+            unsafe_file_write=unsafe_file_write,
+        )
         end_point: str = stage_info["endPoint"]
         if end_point.startswith("blob."):
             end_point = end_point[len("blob.") :]
