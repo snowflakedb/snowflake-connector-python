@@ -9,6 +9,7 @@ import json
 import jwt
 from time import time
 import pytest
+from urllib.parse import urlparse, parse_qs
 
 from snowflake.connector.auth import AuthByWorkloadIdentity
 from snowflake.connector.errors import ProgrammingError
@@ -251,6 +252,30 @@ def test_explicit_azure_generates_unique_assertion_content():
         auth_class.prepare()
 
     assert auth_class.assertion_content == '{"_provider":"AZURE","iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"611ab25b-2e81-4e18-92a7-b21f2bebb269"}'
+
+
+def test_explicit_azure_uses_default_entra_resource_if_unspecified():
+    dummy_token = gen_dummy_id_token(sub="611ab25b-2e81-4e18-92a7-b21f2bebb269", iss="https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd")
+    with mock.patch("snowflake.connector.vendored.requests.request", return_value=fake_response_json({"access_token": dummy_token})) as mock_request:
+        auth_class = AuthByWorkloadIdentity(AttestationProvider.AZURE)
+        auth_class.prepare()
+
+        _, request_kwargs = mock_request.call_args
+        url = urlparse(request_kwargs["url"])
+        query_string = parse_qs(url.query)
+        assert query_string.get("resource")[0] == "api://snowflakecomputing.com"  # the default entra resource defined in wif_util.py.
+
+
+def test_explicit_azure_uses_explicit_entra_resource():
+    dummy_token = gen_dummy_id_token(sub="611ab25b-2e81-4e18-92a7-b21f2bebb269", iss="https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd")
+    with mock.patch("snowflake.connector.vendored.requests.request", return_value=fake_response_json({"access_token": dummy_token})) as mock_request:
+        auth_class = AuthByWorkloadIdentity(AttestationProvider.AZURE, entra_resource="api://non-standard")
+        auth_class.prepare()
+
+        _, request_kwargs = mock_request.call_args
+        url = urlparse(request_kwargs["url"])
+        query_string = parse_qs(url.query)
+        assert query_string.get("resource")[0] == "api://non-standard"
 
 
 # -- Auto-detect Tests --
