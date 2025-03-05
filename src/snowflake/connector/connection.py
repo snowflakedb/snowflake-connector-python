@@ -57,6 +57,7 @@ from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
     ENV_VAR_PARTNER,
+    ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -1146,6 +1147,17 @@ class SnowflakeConnection:
                     self._token = self._password
                 self.auth_class = AuthByPAT(self._token)
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
+                if not ENV_VAR_EXPERIMENTAL_AUTHENTICATION in os.environ:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg":
+                                f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{WORKLOAD_IDENTITY_AUTHENTICATOR}' authenticator.", 
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
                 self.auth_class = AuthByWorkloadIdentity(
                     account=self._account,
                     provider=self._workload_identity_provider,
