@@ -194,8 +194,9 @@ def create_autodetect_attestation(account: str, token: str | None = None) -> Uni
     
     If no attestation can be found, returns None.
     """
-    if token:
-        return create_oidc_attestation(token)
+    attestation = create_oidc_attestation(token)
+    if attestation:
+        return attestation
 
     attestation = create_aws_attestation()
     if attestation:
