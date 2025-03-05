@@ -44,8 +44,8 @@ from .auth import (
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
-    AuthNoAuth,
     AuthByWorkloadIdentity,
+    AuthNoAuth,
 )
 from .auth.idtoken import AuthByIdToken
 from .backoff_policies import exponential_backoff
