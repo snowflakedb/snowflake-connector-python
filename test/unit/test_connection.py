@@ -597,9 +597,16 @@ def test_cannot_set_wlid_provider_without_wlid_authenticator(mock_post_requests)
     assert "workload_identity_provider was set but authenticator was not set to WORKLOAD_IDENTITY" in str(excinfo.value)
 
 
+def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
+    with pytest.raises(ProgrammingError) as excinfo:
+        snowflake.connector.connect(account="account", authenticator="WORKLOAD_IDENTITY")
+    assert "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable to use the 'WORKLOAD_IDENTITY' authenticator" in str(excinfo.value)
+
+
 @patch("snowflake.connector.SnowflakeConnection._authenticate", return_value=None)
 @patch("snowflake.connector.auth.AuthByWorkloadIdentity.__init__", return_value=None)
 def test_connection_params_are_plumbed_into_authbyworkloadidentity(mock_auth_constructor, mock_authenticate):
+    os.environ["SF_ENABLE_EXPERIMENTAL_AUTHENTICATION"] = ""  # we can set this to any value.
     snowflake.connector.connect(
         account="my_account_1",
         workload_identity_provider=AttestationProvider.AWS,
