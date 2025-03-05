@@ -143,7 +143,8 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
         logger.debug("Unexpected Azure token issuer '%s'", issuer)
         return None
 
-    return WorkloadIdentityAttestation(AttestationProvider.AZURE, jwt_str, claims["sub"])
+    user_identifier = '{"iss":"%s","sub":"%s"}' % (claims["iss"], claims["sub"])
+    return WorkloadIdentityAttestation(AttestationProvider.AZURE, jwt_str, user_identifier)
 
 
 def create_oidc_attestation(token: str | None) -> Union[WorkloadIdentityAttestation, None]:
