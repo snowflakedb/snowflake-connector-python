@@ -27,8 +27,8 @@ FIRST_PARTY_AUTHENTICATORS = frozenset(
         AuthByWebBrowser,
         AuthByIdToken,
         AuthByPAT,
-        AuthNoAuth,
         AuthByWorkloadIdentity,
+        AuthNoAuth,
     )
 )
 
@@ -41,8 +41,8 @@ __all__ = [
     "AuthByOkta",
     "AuthByUsrPwdMfa",
     "AuthByWebBrowser",
-    "AuthNoAuth",
     "AuthByWorkloadIdentity",
+    "AuthNoAuth",
     "Auth",
     "AuthType",
     "FIRST_PARTY_AUTHENTICATORS",
