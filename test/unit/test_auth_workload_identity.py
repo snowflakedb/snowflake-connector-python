@@ -111,7 +111,7 @@ def test_explicit_oidc_valid_inline_token_generates_unique_assertion_content():
     dummy_token = gen_dummy_id_token(sub="service-1", iss="issuer-1")
     auth_class = AuthByWorkloadIdentity("account", AttestationProvider.OIDC, dummy_token)
     auth_class.prepare()
-    assert auth_class.assertion_content == 'OIDC_{"iss":"issuer-1","sub":"service-1"}'
+    assert auth_class.assertion_content == '{"_provider":"OIDC","iss":"issuer-1","sub":"service-1"}'
 
 
 def test_explicit_oidc_invalid_inline_token_raises_error():
@@ -204,7 +204,7 @@ def test_explicit_gcp_generates_unique_assertion_content():
         auth_class = AuthByWorkloadIdentity("account", AttestationProvider.GCP)
         auth_class.prepare()
 
-    assert auth_class.assertion_content == "GCP_123456"
+    assert auth_class.assertion_content == '{"_provider":"GCP","sub":"123456"}'
 
 
 # -- Azure Tests --
@@ -250,7 +250,7 @@ def test_explicit_azure_generates_unique_assertion_content():
         auth_class = AuthByWorkloadIdentity("account", AttestationProvider.AZURE)
         auth_class.prepare()
 
-    assert auth_class.assertion_content == 'AZURE_{"iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"611ab25b-2e81-4e18-92a7-b21f2bebb269"}'
+    assert auth_class.assertion_content == '{"_provider":"AZURE","iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"611ab25b-2e81-4e18-92a7-b21f2bebb269"}'
 
 
 # -- Auto-detect Tests --

@@ -4,8 +4,9 @@
 
 from __future__ import annotations
 
-import typing
 from enum import Enum, unique
+import json
+import typing
 
 from ..network import WORKLOAD_IDENTITY_AUTHENTICATOR
 from ..wif_util import AttestationProvider, WorkloadIdentityAttestation, create_attestation
@@ -74,8 +75,10 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         return {"success": True}
 
     @property
-    def assertion_content(self) -> str | None:
+    def assertion_content(self) -> str:
         """Returns the CSP provider name and an identifier. Used for logging purposes."""
         if not self.attestation:
             return ""
-        return f"{self.attestation.provider.value}_{self.attestation.user_identifier}"
+        properties = self.attestation.user_identifier_components
+        properties["_provider"] = self.attestation.provider.value
+        return json.dumps(properties, sort_keys=True, separators=(',', ':'))
