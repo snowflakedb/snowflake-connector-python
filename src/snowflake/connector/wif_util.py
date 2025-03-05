@@ -23,12 +23,7 @@ from .vendored.requests import Response
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
 # TODO: use real app ID or domain name.
-ENTRA_SNOWFLAKE_RESOURCE = "api://snowflakecomputing.com"
-
-
-def get_default_entra_resource(account: str) -> str:
-    # TODO: handle sovereign regions based on account name.
-    return ENTRA_SNOWFLAKE_RESOURCE
+DEFAULT_ENTRA_SNOWFLAKE_RESOURCE = "api://snowflakecomputing.com"
 
 
 @unique
@@ -189,7 +184,7 @@ def create_oidc_attestation(token: str | None) -> Union[WorkloadIdentityAttestat
         )
 
 
-def create_autodetect_attestation(account: str, token: str | None = None) -> Union[WorkloadIdentityAttestation, None]:
+def create_autodetect_attestation(entra_resource: str, token: str | None = None) -> Union[WorkloadIdentityAttestation, None]:
     """Tries to create an attestation using the auto-detected runtime environment.
     
     If no attestation can be found, returns None.
@@ -202,7 +197,7 @@ def create_autodetect_attestation(account: str, token: str | None = None) -> Uni
     if attestation:
         return attestation
 
-    attestation = create_azure_attestation(get_default_entra_resource(account))
+    attestation = create_azure_attestation(entra_resource)
     if attestation:
         return attestation
 
@@ -213,23 +208,27 @@ def create_autodetect_attestation(account: str, token: str | None = None) -> Uni
     return None
 
 
-def create_attestation(provider: AttestationProvider | None, account: str, token: str | None = None) -> WorkloadIdentityAttestation:
+def create_attestation(provider: AttestationProvider | None, entra_resource: str | None = None, token: str | None = None) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
-    
+
     If the provider is None, this will try to auto-detect a credential from the runtime environment. If the provider fails to detect a credential,
     a ProgrammingError will be raised.
+
+    If an explicit entra_resource was provided to the connector, this will be used. Otherwise, the default Snowflake Entra resource will be used.
     """
+    entra_resource = entra_resource or DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
+
     attestation: WorkloadIdentityAttestation = None
     if provider == AttestationProvider.AWS:
         attestation = create_aws_attestation()
     elif provider == AttestationProvider.AZURE:
-        attestation = create_azure_attestation(get_default_entra_resource(account))
+        attestation = create_azure_attestation(entra_resource)
     elif provider == AttestationProvider.GCP:
         attestation = create_gcp_attestation()
     elif provider == AttestationProvider.OIDC:
         attestation = create_oidc_attestation(token)
     elif provider == None:
-        attestation = create_autodetect_attestation(account, token)
+        attestation = create_autodetect_attestation(entra_resource, token)
 
     if not attestation:
         provider_str = "auto-detect" if provider is None else provider.value
