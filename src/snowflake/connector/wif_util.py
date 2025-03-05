@@ -90,15 +90,19 @@ def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
     
     If the application isn't running on GCP or no credentials were found, returns None.
     """
-    res: Response = requests.request(
-        method="GET",
-        url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
-        headers={
-            "Metadata-Flavor": "Google",
-        },
-        timeout=3  # Don't want longer than 3 seconds, in case we're not running in GCP.
-    )
-    if not res.ok:
+    res: Response
+    try:
+        res = requests.request(
+            method="GET",
+            url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
+            headers={
+                "Metadata-Flavor": "Google",
+            },
+            timeout=3  # Don't want longer than 3 seconds, in case we're not running in GCP.
+        )
+        if not res.ok:
+            return None
+    except:
         return None
 
     jwt_str = res.content.decode("utf-8")
@@ -117,15 +121,19 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
     If the application isn't running on Azure or no credentials were found, returns None.
     """
     # TODO: ensure this works in Azure functions.
-    res: Response = requests.request(
-        method="GET",
-        url=f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={snowflake_entra_resource}",
-        headers={
-            "Metadata": "True"
-        },
-        timeout=3  # Don't want longer than 3 seconds, in case we're not running in Azure.
-    )
-    if not res.ok:
+    res: Response
+    try:
+        res = requests.request(
+            method="GET",
+            url=f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={snowflake_entra_resource}",
+            headers={
+                "Metadata": "True"
+            },
+            timeout=3  # Don't want longer than 3 seconds, in case we're not running in Azure.
+        )
+        if not res.ok:
+            return None
+    except:
         return None
 
     jwt_str = str(res.json()["access_token"])
