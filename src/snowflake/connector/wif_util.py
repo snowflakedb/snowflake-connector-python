@@ -49,7 +49,21 @@ class AttestationProvider(Enum):
 class WorkloadIdentityAttestation:
     provider: AttestationProvider
     credential: str
-    user_identifier: str
+    user_identifier_components: dict
+
+
+def try_metadata_service_call(method: str, url: str, headers: dict, timeout_sec: int = 3) -> Union[Response, None]:
+    """Tries to make a HTTP request to the metadata service with the given URL, method, headers and timeout.
+    
+    If we receive an error response or any exceptions are raised, returns None. Otherwise returns the response.
+    """
+    try:
+        res: Response = requests.request(method=method,url=url,headers=headers,timeout=timeout_sec)
+        if not res.ok:
+            return None
+    except:
+        return None
+    return res
 
 
 def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
@@ -60,6 +74,7 @@ def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
     session = boto3.session.Session()
     aws_creds = session.get_credentials()
     if not aws_creds:
+        logger.debug('No AWS credentials were found.')
         return None
 
     request = AWSRequest(
@@ -82,7 +97,7 @@ def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
     }
     credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
     # TODO: load the ARN.
-    return WorkloadIdentityAttestation(AttestationProvider.AWS, credential, "<ARN-goes-here>")
+    return WorkloadIdentityAttestation(AttestationProvider.AWS, credential, {"arn": "<ARN-goes-here>"})
 
 
 def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
@@ -90,29 +105,27 @@ def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
     
     If the application isn't running on GCP or no credentials were found, returns None.
     """
-    res: Response
-    try:
-        res = requests.request(
-            method="GET",
-            url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
-            headers={
-                "Metadata-Flavor": "Google",
-            },
-            timeout=3  # Don't want longer than 3 seconds, in case we're not running in GCP.
-        )
-        if not res.ok:
-            return None
-    except:
+    res = try_metadata_service_call(
+        method="GET",
+        url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
+        headers={
+            "Metadata-Flavor": "Google",
+        },
+    )
+    if res is None:
+        # Most likely we're just not running on GCP, which may be expected.
+        logger.debug('GCP metadata server request was not successful.')
         return None
 
     jwt_str = res.content.decode("utf-8")
     claims = jwt.decode(jwt_str, options={"verify_signature": False})
     issuer = claims["iss"]
     if issuer != "https://accounts.google.com":
+        # This might happen if we're running on a different platform that responds to the same metadata request signature as GCP.
         logger.debug("Unexpected GCP token issuer '%s'", issuer)
         return None
 
-    return WorkloadIdentityAttestation(AttestationProvider.GCP, jwt_str, claims["sub"])
+    return WorkloadIdentityAttestation(AttestationProvider.GCP, jwt_str, {"sub": claims["sub"]})
 
 
 def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIdentityAttestation, None]:
@@ -121,30 +134,27 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
     If the application isn't running on Azure or no credentials were found, returns None.
     """
     # TODO: ensure this works in Azure functions.
-    res: Response
-    try:
-        res = requests.request(
-            method="GET",
-            url=f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={snowflake_entra_resource}",
-            headers={
-                "Metadata": "True"
-            },
-            timeout=3  # Don't want longer than 3 seconds, in case we're not running in Azure.
-        )
-        if not res.ok:
-            return None
-    except:
+    res = try_metadata_service_call(
+        method="GET",
+        url=f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={snowflake_entra_resource}",
+        headers={
+            "Metadata": "True"
+        },
+    )
+    if res is None:
+        # Most likely we're just not running on Azure, which may be expected.
+        logger.debug('Azure metadata server request was not successful.')
         return None
 
     jwt_str = str(res.json()["access_token"])
     claims = jwt.decode(jwt_str, options={"verify_signature": False})
     issuer = claims["iss"]
     if not issuer.startswith("https://sts.windows.net/"):
+        # This might happen if we're running on a different platform that responds to the same metadata request signature as Azure.
         logger.debug("Unexpected Azure token issuer '%s'", issuer)
         return None
 
-    user_identifier = '{"iss":"%s","sub":"%s"}' % (claims["iss"], claims["sub"])
-    return WorkloadIdentityAttestation(AttestationProvider.AZURE, jwt_str, user_identifier)
+    return WorkloadIdentityAttestation(AttestationProvider.AZURE, jwt_str, {"iss": claims["iss"], "sub": claims["sub"]})
 
 
 def create_oidc_attestation(token: str | None) -> Union[WorkloadIdentityAttestation, None]:
@@ -153,12 +163,12 @@ def create_oidc_attestation(token: str | None) -> Union[WorkloadIdentityAttestat
     If this is not populated, returns None.
     """
     if not token:
+        logger.debug("No OIDC token was specified.")
         return None
 
     try:
         claims = jwt.decode(token, options={"verify_signature": False})
-        user_identifier = '{"iss":"%s","sub":"%s"}' % (claims["iss"], claims["sub"])
-        return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, user_identifier)
+        return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, {"iss": claims["iss"], "sub": claims["sub"]})
     except jwt.exceptions.InvalidTokenError:
         raise ProgrammingError(
             msg=f"Specified token is not a valid JWT.",
