@@ -200,6 +200,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # OAuth/JWT/PAT/OIDC Token file path
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "workload_identity_provider": {None, (type(None), AttestationProvider)},
+    "workload_identity_entra_resource": {None, (type(None), str)},
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -1132,9 +1133,9 @@ class SnowflakeConnection:
                         },
                     )
                 self.auth_class = AuthByWorkloadIdentity(
-                    account=self._account,
                     provider=self._workload_identity_provider,
                     token=self._token,
+                    entra_resource=self._workload_identity_entra_resource,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
@@ -1293,16 +1294,18 @@ class SnowflakeConnection:
             if self._private_key or self._private_key_file:
                 self._authenticator = KEY_PAIR_AUTHENTICATOR
 
-            if self._workload_identity_provider is not None and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR:
-                Error.errorhandler_wrapper(
-                    self,
-                    None,
-                    ProgrammingError,
-                    {
-                        "msg": f"workload_identity_provider was set but authenticator was not set to {WORKLOAD_IDENTITY_AUTHENTICATOR}",
-                        "errno": ER_INVALID_WIF_SETTINGS
-                    },
-                )
+            workload_identity_dependent_options = ["workload_identity_provider", "workload_identity_entra_resource"]
+            for dependent_option in workload_identity_dependent_options:
+                if self.__getattribute__(f"_{dependent_option}") is not None and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"{dependent_option} was set but authenticator was not set to {WORKLOAD_IDENTITY_AUTHENTICATOR}",
+                            "errno": ER_INVALID_WIF_SETTINGS
+                        },
+                    )
 
             if (
                 self.auth_class is None

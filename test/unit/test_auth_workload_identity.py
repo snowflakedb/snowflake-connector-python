@@ -97,7 +97,7 @@ def is_gcp_metadata_req(method: str, url: str, headers: dict) -> bool:
 
 def test_explicit_oidc_valid_inline_token_plumbed_to_api():
     dummy_token = gen_dummy_id_token(sub="service-1", iss="issuer-1")
-    auth_class = AuthByWorkloadIdentity("account", AttestationProvider.OIDC, dummy_token)
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.OIDC, dummy_token)
     auth_class.prepare()
 
     assert extract_api_data(auth_class) == {
@@ -109,21 +109,21 @@ def test_explicit_oidc_valid_inline_token_plumbed_to_api():
 
 def test_explicit_oidc_valid_inline_token_generates_unique_assertion_content():
     dummy_token = gen_dummy_id_token(sub="service-1", iss="issuer-1")
-    auth_class = AuthByWorkloadIdentity("account", AttestationProvider.OIDC, dummy_token)
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.OIDC, dummy_token)
     auth_class.prepare()
     assert auth_class.assertion_content == '{"_provider":"OIDC","iss":"issuer-1","sub":"service-1"}'
 
 
 def test_explicit_oidc_invalid_inline_token_raises_error():
     invalid_token = 'not-a-jwt'
-    auth_class = AuthByWorkloadIdentity("account", AttestationProvider.OIDC, invalid_token)
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.OIDC, invalid_token)
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare()
     assert "token is not a valid JWT" in str(excinfo.value)
 
 
 def test_explicit_oidc_no_token_raises_error():
-    auth_class = AuthByWorkloadIdentity("account", AttestationProvider.OIDC, token=None)
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.OIDC, token=None)
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare()
     assert "No workload identity credential was found for 'OIDC'" in str(excinfo.value)
@@ -134,7 +134,7 @@ def test_explicit_oidc_no_token_raises_error():
 
 @mock.patch("boto3.session.Session.get_credentials", return_value=None)
 def test_explicit_aws_no_auth_raises_error(_):
-    auth_class = AuthByWorkloadIdentity("account", AttestationProvider.AWS)
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.AWS)
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare()
     assert "No workload identity credential was found for 'AWS'" in str(excinfo.value)
@@ -143,7 +143,7 @@ def test_explicit_aws_no_auth_raises_error(_):
 @mock.patch("boto3.session.Session.get_credentials", return_value=Credentials(access_key="ak", secret_key="sk"))
 @mock.patch("botocore.auth.SigV4Auth.add_auth", side_effect=fake_sign_aws_req)
 def test_explicit_aws_encodes_audience_host_signature_to_api(mock_add_auth, mock_get_credentials):
-    auth_class = AuthByWorkloadIdentity("account", AttestationProvider.AWS)
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.AWS)
     auth_class.prepare()
 
     data = extract_api_data(auth_class)
@@ -155,7 +155,7 @@ def test_explicit_aws_encodes_audience_host_signature_to_api(mock_add_auth, mock
 @mock.patch("boto3.session.Session.get_credentials", return_value=Credentials(access_key="ak", secret_key="sk"))
 @mock.patch("botocore.auth.SigV4Auth.add_auth", side_effect=fake_sign_aws_req)
 def test_explicit_aws_generates_unique_assertion_content(mock_add_auth, mock_get_credentials):
-    auth_class = AuthByWorkloadIdentity("account", AttestationProvider.AWS)
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.AWS)
     auth_class.prepare()
     # TODO: update this test once the ARN retrieval logic is ready.
     # assert "AWS_TODO" == auth_class.assertion_content
@@ -170,7 +170,7 @@ def test_explicit_aws_generates_unique_assertion_content(mock_add_auth, mock_get
     ConnectTimeout(),
 ])
 def test_explicit_gcp_metadata_server_error_raises_auth_error(exception):
-    auth_class = AuthByWorkloadIdentity("account", AttestationProvider.GCP)
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.GCP)
     with mock.patch("snowflake.connector.vendored.requests.request", side_effect=exception):
         with pytest.raises(ProgrammingError) as excinfo:
             auth_class.prepare()
@@ -179,7 +179,7 @@ def test_explicit_gcp_metadata_server_error_raises_auth_error(exception):
 
 @mock.patch("snowflake.connector.vendored.requests.request", return_value=fake_response_string(gen_dummy_id_token(iss="not-google")))
 def test_explicit_gcp_wrong_issuer_raises_error(_):
-    auth_class = AuthByWorkloadIdentity("account", AttestationProvider.GCP)
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.GCP)
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare()
     assert "No workload identity credential was found for 'GCP'" in str(excinfo.value)
@@ -188,7 +188,7 @@ def test_explicit_gcp_wrong_issuer_raises_error(_):
 def test_explicit_gcp_plumbs_token_to_api():
     dummy_token = gen_dummy_id_token(sub="123456", iss="https://accounts.google.com")
     with mock.patch("snowflake.connector.vendored.requests.request", return_value=fake_response_string(dummy_token)):
-        auth_class = AuthByWorkloadIdentity("account", AttestationProvider.GCP)
+        auth_class = AuthByWorkloadIdentity(AttestationProvider.GCP)
         auth_class.prepare()
 
     assert extract_api_data(auth_class) == {
@@ -201,7 +201,7 @@ def test_explicit_gcp_plumbs_token_to_api():
 def test_explicit_gcp_generates_unique_assertion_content():
     dummy_token = gen_dummy_id_token(sub="123456", iss="https://accounts.google.com")
     with mock.patch("snowflake.connector.vendored.requests.request", return_value=fake_response_string(dummy_token)):
-        auth_class = AuthByWorkloadIdentity("account", AttestationProvider.GCP)
+        auth_class = AuthByWorkloadIdentity(AttestationProvider.GCP)
         auth_class.prepare()
 
     assert auth_class.assertion_content == '{"_provider":"GCP","sub":"123456"}'
@@ -216,7 +216,7 @@ def test_explicit_gcp_generates_unique_assertion_content():
     ConnectTimeout(),
 ])
 def test_explicit_azure_metadata_server_error_raises_auth_error(exception):
-    auth_class = AuthByWorkloadIdentity("account", AttestationProvider.AZURE)
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.AZURE)
     with mock.patch("snowflake.connector.vendored.requests.request", side_effect=exception):
         with pytest.raises(ProgrammingError) as excinfo:
             auth_class.prepare()
@@ -225,7 +225,7 @@ def test_explicit_azure_metadata_server_error_raises_auth_error(exception):
 
 @mock.patch("snowflake.connector.vendored.requests.request", return_value=fake_response_json({"access_token": gen_dummy_id_token(iss="not-azure")}))
 def test_explicit_azure_wrong_issuer_raises_error(_):
-    auth_class = AuthByWorkloadIdentity("account", AttestationProvider.AZURE)
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.AZURE)
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare()
     assert "No workload identity credential was found for 'AZURE'" in str(excinfo.value)
@@ -234,7 +234,7 @@ def test_explicit_azure_wrong_issuer_raises_error(_):
 def test_explicit_azure_plumbs_token_to_api():
     dummy_token = gen_dummy_id_token(sub="611ab25b-2e81-4e18-92a7-b21f2bebb269", iss="https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd")
     with mock.patch("snowflake.connector.vendored.requests.request", return_value=fake_response_json({"access_token": dummy_token})):
-        auth_class = AuthByWorkloadIdentity("account", AttestationProvider.AZURE)
+        auth_class = AuthByWorkloadIdentity(AttestationProvider.AZURE)
         auth_class.prepare()
 
     assert extract_api_data(auth_class) == {
@@ -247,7 +247,7 @@ def test_explicit_azure_plumbs_token_to_api():
 def test_explicit_azure_generates_unique_assertion_content():
     dummy_token = gen_dummy_id_token(sub="611ab25b-2e81-4e18-92a7-b21f2bebb269", iss="https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd")
     with mock.patch("snowflake.connector.vendored.requests.request", return_value=fake_response_json({"access_token": dummy_token})):
-        auth_class = AuthByWorkloadIdentity("account", AttestationProvider.AZURE)
+        auth_class = AuthByWorkloadIdentity(AttestationProvider.AZURE)
         auth_class.prepare()
 
     assert auth_class.assertion_content == '{"_provider":"AZURE","iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"611ab25b-2e81-4e18-92a7-b21f2bebb269"}'
@@ -260,7 +260,7 @@ def test_explicit_azure_generates_unique_assertion_content():
 @mock.patch("botocore.auth.SigV4Auth.add_auth", side_effect=fake_sign_aws_req)
 @mock.patch("snowflake.connector.vendored.requests.request", side_effect=ConnectTimeout())
 def test_autodetect_aws_present(mock_metadata_request, mock_add_auth, mock_get_creds):
-    auth_class = AuthByWorkloadIdentity("account", provider=None)
+    auth_class = AuthByWorkloadIdentity(provider=None)
     auth_class.prepare()
 
     data = extract_api_data(auth_class)
@@ -278,7 +278,7 @@ def test_autodetect_gcp_present(_):
         raise ConnectTimeout()
 
     with mock.patch("snowflake.connector.vendored.requests.request", side_effect=gcp_metadata_server):
-        auth_class = AuthByWorkloadIdentity("account", provider=None)
+        auth_class = AuthByWorkloadIdentity(provider=None)
         auth_class.prepare()
 
     assert extract_api_data(auth_class) == {
@@ -297,7 +297,7 @@ def test_autodetect_azure_present(_):
         raise ConnectTimeout()
 
     with mock.patch("snowflake.connector.vendored.requests.request", side_effect=azure_metadata_server):
-        auth_class = AuthByWorkloadIdentity("account", provider=None)
+        auth_class = AuthByWorkloadIdentity(provider=None)
         auth_class.prepare()
 
     assert extract_api_data(auth_class) == {
@@ -311,7 +311,7 @@ def test_autodetect_azure_present(_):
 @mock.patch("snowflake.connector.vendored.requests.request", side_effect=ConnectTimeout())
 def test_autodetect_oidc_present(mock_metadata_request, mock_get_creds):
     dummy_token = gen_dummy_id_token(sub="service-1", iss="issuer-1")
-    auth_class = AuthByWorkloadIdentity("account", provider=None, token=dummy_token)
+    auth_class = AuthByWorkloadIdentity(provider=None, token=dummy_token)
     auth_class.prepare()
 
     assert extract_api_data(auth_class) == {
@@ -324,7 +324,7 @@ def test_autodetect_oidc_present(mock_metadata_request, mock_get_creds):
 @mock.patch("boto3.session.Session.get_credentials", return_value=None)
 @mock.patch("snowflake.connector.vendored.requests.request", side_effect=ConnectTimeout())
 def test_autodetect_no_provider_raises_error(mock_metadata_request, mock_get_creds):
-    auth_class = AuthByWorkloadIdentity("account", provider=None, token=None)
+    auth_class = AuthByWorkloadIdentity(provider=None, token=None)
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare()
     assert "No workload identity credential was found for 'auto-detect" in str(excinfo.value)
