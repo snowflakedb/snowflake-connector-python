@@ -54,7 +54,7 @@ class WorkloadIdentityAttestation:
 
 def try_metadata_service_call(method: str, url: str, headers: dict, timeout_sec: int = 3) -> Union[Response, None]:
     """Tries to make a HTTP request to the metadata service with the given URL, method, headers and timeout.
-    
+
     If we receive an error response or any exceptions are raised, returns None. Otherwise returns the response.
     """
     try:
@@ -64,6 +64,21 @@ def try_metadata_service_call(method: str, url: str, headers: dict, timeout_sec:
     except:
         return None
     return res
+
+
+def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[str, str]:
+    """Extracts the 'iss' and 'sub' claims from the given JWT, without verifying the signature.
+
+    Note: the real token verification (including signature verification) happens on the Snowflake side. The driver doesn't have
+    the keys to verify these JWTs, and in any case that's not where the security boundary is drawn.
+
+    We only decode the JWT here to get some basic claims, which will be used for a) a quick smoke test to ensure we got the right
+    issuer, and b) to find the unique user being asserted and populate assertion_content. The latter may be used for logging
+    and possibly caching.
+    """
+    claims = jwt.decode(jwt_str, options={"verify_signature": False})
+    return claims["iss"], claims["sub"]
+
 
 
 def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
@@ -118,14 +133,13 @@ def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
         return None
 
     jwt_str = res.content.decode("utf-8")
-    claims = jwt.decode(jwt_str, options={"verify_signature": False})
-    issuer = claims["iss"]
+    issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     if issuer != "https://accounts.google.com":
         # This might happen if we're running on a different platform that responds to the same metadata request signature as GCP.
         logger.debug("Unexpected GCP token issuer '%s'", issuer)
         return None
 
-    return WorkloadIdentityAttestation(AttestationProvider.GCP, jwt_str, {"sub": claims["sub"]})
+    return WorkloadIdentityAttestation(AttestationProvider.GCP, jwt_str, {"sub": subject})
 
 
 def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIdentityAttestation, None]:
@@ -147,14 +161,13 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
         return None
 
     jwt_str = str(res.json()["access_token"])
-    claims = jwt.decode(jwt_str, options={"verify_signature": False})
-    issuer = claims["iss"]
+    issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     if not issuer.startswith("https://sts.windows.net/"):
         # This might happen if we're running on a different platform that responds to the same metadata request signature as Azure.
         logger.debug("Unexpected Azure token issuer '%s'", issuer)
         return None
 
-    return WorkloadIdentityAttestation(AttestationProvider.AZURE, jwt_str, {"iss": claims["iss"], "sub": claims["sub"]})
+    return WorkloadIdentityAttestation(AttestationProvider.AZURE, jwt_str, {"iss": issuer, "sub": subject})
 
 
 def create_oidc_attestation(token: str | None) -> Union[WorkloadIdentityAttestation, None]:
