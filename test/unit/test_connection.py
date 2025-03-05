@@ -591,10 +591,11 @@ def test_otel_error_message(caplog, mock_post_requests):
     assert important_records[0].exc_text is not None
 
 
-def test_cannot_set_wlid_provider_without_wlid_authenticator(mock_post_requests):
+@pytest.mark.parametrize("dependent_param,value", [("workload_identity_provider", "AWS"), ("workload_identity_entra_resource", "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b")])
+def test_cannot_set_dependent_params_without_wlid_authenticator(mock_post_requests, dependent_param, value):
     with pytest.raises(ProgrammingError) as excinfo:
-        snowflake.connector.connect(user="user", account="account", password="password", workload_identity_provider="AWS")
-    assert "workload_identity_provider was set but authenticator was not set to WORKLOAD_IDENTITY" in str(excinfo.value)
+        snowflake.connector.connect(user="user", account="account", password="password", **{dependent_param: value})
+    assert f"{dependent_param} was set but authenticator was not set to WORKLOAD_IDENTITY" in str(excinfo.value)
 
 
 def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
@@ -610,12 +611,13 @@ def test_connection_params_are_plumbed_into_authbyworkloadidentity(mock_auth_con
     snowflake.connector.connect(
         account="my_account_1",
         workload_identity_provider=AttestationProvider.AWS,
+        workload_identity_entra_resource="api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
         token="my_token",
         authenticator="WORKLOAD_IDENTITY",
     )
     _, kwargs = mock_auth_constructor.call_args
     assert kwargs == {
-        "account": "my_account_1",
         "provider": AttestationProvider.AWS,
+        "entra_resource": "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
         "token": "my_token",
     }
