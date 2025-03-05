@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from logging import getLogger
 
 import pytest
@@ -13,6 +14,7 @@ from snowflake.connector import ProgrammingError
 from snowflake.connector.connection import DefaultConverterClass
 from snowflake.connector.converter import SnowflakeConverter
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
+from src.snowflake.connector.arrow_context import ArrowConverterContext
 
 logger = getLogger(__name__)
 
@@ -79,6 +81,12 @@ def test_converter_to_snowflake_error():
         ProgrammingError, match=r"Binding data in type \(bogus\) is not supported"
     ):
         converter._bogus_to_snowflake("Bogus")
+
+
+def test_decfloat_to_decimal_converter():
+    ctx = ArrowConverterContext()
+    decimal = ctx.DECFLOAT_to_decimal(42, bytes.fromhex("11AA"))
+    assert decimal == Decimal("4522e42")
 
 
 def test_converter_to_snowflake_bindings_error():
