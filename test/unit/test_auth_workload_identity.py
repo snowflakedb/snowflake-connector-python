@@ -22,6 +22,10 @@ from snowflake.connector.vendored.requests.models import Response
 from snowflake.connector.vendored.requests.exceptions import HTTPError, Timeout, ConnectTimeout
 
 
+DUMMY_AWS_ARN = "arn:aws:sts::376129840140:assumed-role/Outgoing-EC2-Role/i-08b76420b06af883c"
+DUMMY_AWS_REGION = "us-east-1"
+
+
 def gen_dummy_id_token(sub = "test-subject", iss = "test-issuer") -> str:
     """Generates a dummy ID token using the given subject and issuer."""
     now = int(time())
@@ -54,6 +58,15 @@ def fake_sign_aws_req(request: AWSRequest):
         "Authorization",
         f"AWS4-HMAC-SHA256 Credential=<cred>, SignedHeaders={';'.join(request.headers.keys())}, Signature=<sig>"
     )
+
+
+@pytest.fixture
+def fake_aws_imds():
+    with mock.patch("boto3.session.Session.get_credentials", return_value=Credentials(access_key="ak", secret_key="sk")):
+        with mock.patch("botocore.auth.SigV4Auth.add_auth", side_effect=fake_sign_aws_req):
+            with mock.patch("snowflake.connector.wif_util.get_aws_region", return_value=DUMMY_AWS_REGION):
+                with mock.patch("snowflake.connector.wif_util.get_aws_arn", return_value=DUMMY_AWS_ARN):
+                    yield
 
 
 def verify_aws_token(token: str):
@@ -141,9 +154,7 @@ def test_explicit_aws_no_auth_raises_error(_):
     assert "No workload identity credential was found for 'AWS'" in str(excinfo.value)
 
 
-@mock.patch("boto3.session.Session.get_credentials", return_value=Credentials(access_key="ak", secret_key="sk"))
-@mock.patch("botocore.auth.SigV4Auth.add_auth", side_effect=fake_sign_aws_req)
-def test_explicit_aws_encodes_audience_host_signature_to_api(mock_add_auth, mock_get_credentials):
+def test_explicit_aws_encodes_audience_host_signature_to_api(fake_aws_imds):
     auth_class = AuthByWorkloadIdentity(AttestationProvider.AWS)
     auth_class.prepare()
 
@@ -153,13 +164,26 @@ def test_explicit_aws_encodes_audience_host_signature_to_api(mock_add_auth, mock
     verify_aws_token(data["TOKEN"])
 
 
-@mock.patch("boto3.session.Session.get_credentials", return_value=Credentials(access_key="ak", secret_key="sk"))
-@mock.patch("botocore.auth.SigV4Auth.add_auth", side_effect=fake_sign_aws_req)
-def test_explicit_aws_generates_unique_assertion_content(mock_add_auth, mock_get_credentials):
+def test_explicit_aws_uses_regional_hostname(fake_aws_imds):
     auth_class = AuthByWorkloadIdentity(AttestationProvider.AWS)
     auth_class.prepare()
-    # TODO: update this test once the ARN retrieval logic is ready.
-    # assert "AWS_TODO" == auth_class.assertion_content
+
+    data = extract_api_data(auth_class)
+    decoded_token = json.loads(b64decode(data["TOKEN"]))
+    hostname_in_url = urlparse(decoded_token["url"]).hostname
+    hostname_in_header = decoded_token["headers"]["Host"]
+
+    expected_hostname = f"sts.{DUMMY_AWS_REGION}.amazonaws.com"
+    assert expected_hostname == hostname_in_url
+    assert expected_hostname == hostname_in_header
+
+
+def test_explicit_aws_generates_unique_assertion_content(fake_aws_imds):
+    auth_class = AuthByWorkloadIdentity(AttestationProvider.AWS)
+    auth_class.prepare()
+
+    expected_assertion_content = '{"_provider":"AWS","arn":"%s"}' % DUMMY_AWS_ARN
+    assert expected_assertion_content == auth_class.assertion_content
 
 
 # -- GCP Tests --
@@ -281,10 +305,8 @@ def test_explicit_azure_uses_explicit_entra_resource():
 # -- Auto-detect Tests --
 
 
-@mock.patch("boto3.session.Session.get_credentials", return_value=Credentials(access_key="ak", secret_key="sk"))
-@mock.patch("botocore.auth.SigV4Auth.add_auth", side_effect=fake_sign_aws_req)
 @mock.patch("snowflake.connector.vendored.requests.request", side_effect=ConnectTimeout())
-def test_autodetect_aws_present(mock_metadata_request, mock_add_auth, mock_get_creds):
+def test_autodetect_aws_present(mock_metadata_request, fake_aws_imds):
     auth_class = AuthByWorkloadIdentity(provider=None)
     auth_class.prepare()
 
