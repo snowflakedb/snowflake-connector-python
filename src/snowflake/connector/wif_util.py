@@ -164,20 +164,53 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
     
     If the application isn't running on Azure or no credentials were found, returns None.
     """
-    # TODO: ensure this works in Azure functions.
+    headers = {"Metadata": "True"}
+    url_without_query_string = "http://169.254.169.254/metadata/identity/oauth2/token"
+    query_params = f"api-version=2018-02-01&resource={snowflake_entra_resource}"
+
+    # Check if running in Azure Functions environment
+    identity_endpoint = os.environ.get("IDENTITY_ENDPOINT")
+    identity_header = os.environ.get("IDENTITY_HEADER")
+    is_azure_functions = identity_endpoint is not None
+
+    # TODO: add tests for azure functions, including without managed identity enabled.
+    if is_azure_functions:
+        if not identity_header:
+            # TODO: instead of returning None, consider a message that says something more useful
+            # like "Managed identity is not enabled on this Azure function."
+            logger.warning("Managed identity is not enabled on this Azure function.")
+            return None
+
+        # Azure Functions uses a different endpoint, headers and API version.
+        url_without_query_string = identity_endpoint
+        headers = { "X-IDENTITY-HEADER": identity_header }
+        query_params = f"api-version=2019-08-01&resource={snowflake_entra_resource}"
+
+        # Some Azure Functions environments may require client_id in the URL
+        managed_identity_client_id = os.environ.get("MANAGED_IDENTITY_CLIENT_ID")
+        if managed_identity_client_id:
+            query_params += f"&client_id={managed_identity_client_id}"
+
     res = try_metadata_service_call(
         method="GET",
-        url=f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={snowflake_entra_resource}",
-        headers={
-            "Metadata": "True"
-        },
+        url=f"{url_without_query_string}?{query_params}",
+        headers=headers,
     )
     if res is None:
         # Most likely we're just not running on Azure, which may be expected.
         logger.debug('Azure metadata server request was not successful.')
         return None
 
-    jwt_str = str(res.json()["access_token"])
+    try:
+        jwt_str = res.json().get("access_token")
+        if not jwt_str:
+            # Could be that Managed Identity is disabled.
+            logger.debug("No access token found in Azure response.")
+            return None
+    except (ValueError, KeyError) as e:
+        logger.debug(f"Error parsing Azure response: {e}")
+        return None
+
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     if not issuer.startswith("https://sts.windows.net/"):
         # This might happen if we're running on a different platform that responds to the same metadata request signature as Azure.
