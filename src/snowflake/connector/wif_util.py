@@ -164,13 +164,17 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
     
     If the application isn't running on Azure or no credentials were found, returns None.
     """
-    # TODO: ensure this works in Azure functions.
+    headers = {"Metadata": "True"}
+    # Special case for Azure functions.
+    identity_header = os.environ.get("IDENTITY_HEADER")
+    if identity_header:
+        headers["X-IDENTITY-HEADER"] = identity_header
+
+    
     res = try_metadata_service_call(
         method="GET",
         url=f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={snowflake_entra_resource}",
-        headers={
-            "Metadata": "True"
-        },
+        headers=headers,
     )
     if res is None:
         # Most likely we're just not running on Azure, which may be expected.
