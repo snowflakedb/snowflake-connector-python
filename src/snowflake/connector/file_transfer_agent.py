@@ -33,6 +33,7 @@ from .constants import (
     S3_MAX_OBJECT_SIZE,
     S3_MAX_PARTS,
     S3_MIN_PART_SIZE,
+    STORED_PROC_FS,
     ResultStatus,
     megabyte,
 )
@@ -65,7 +66,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .cursor import SnowflakeCursor
     from .file_compression_type import CompressionType
 
-VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS]
+VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS, STORED_PROC_FS]
 
 INJECT_WAIT_IN_PUT = 0
 
@@ -705,6 +706,12 @@ class SnowflakeFileTransferAgent:
                 self._command,
                 use_s3_regional_url=self._use_s3_regional_url,
                 unsafe_file_write=self._unsafe_file_write,
+            )
+        elif self._stage_location_type == STORED_PROC_FS:
+            return self._cursor.connection._StoredProcStorageClient(
+                meta,
+                self._cursor,
+                self._stage_location,
             )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 
