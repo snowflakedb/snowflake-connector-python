@@ -12,6 +12,7 @@
 #include "BinaryConverter.hpp"
 #include "BooleanConverter.hpp"
 #include "DateConverter.hpp"
+#include "DecFloatConverter.hpp"
 #include "DecimalConverter.hpp"
 #include "FixedSizeListConverter.hpp"
 #include "FloatConverter.hpp"
@@ -468,6 +469,12 @@ std::shared_ptr<sf::IColumnConverter> getConverterFromSchema(
 
     case SnowflakeType::Type::VECTOR: {
       converter = std::make_shared<sf::FixedSizeListConverter>(array);
+      break;
+    }
+
+    case SnowflakeType::Type::DECFLOAT: {
+      converter = std::make_shared<sf::DecFloatConverter>(*array, schemaView,
+                                                          *context, useNumpy);
       break;
     }
 
