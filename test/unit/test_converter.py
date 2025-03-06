@@ -14,7 +14,11 @@ from snowflake.connector import ProgrammingError
 from snowflake.connector.connection import DefaultConverterClass
 from snowflake.connector.converter import SnowflakeConverter
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
-from src.snowflake.connector.arrow_context import ArrowConverterContext
+
+try:
+    from src.snowflake.connector.arrow_context import ArrowConverterContext
+except ImportError:
+    pass
 
 logger = getLogger(__name__)
 
@@ -83,6 +87,7 @@ def test_converter_to_snowflake_error():
         converter._bogus_to_snowflake("Bogus")
 
 
+@pytest.mark.skipolddriver
 def test_decfloat_to_decimal_converter():
     ctx = ArrowConverterContext()
     decimal = ctx.DECFLOAT_to_decimal(42, bytes.fromhex("11AA"))
