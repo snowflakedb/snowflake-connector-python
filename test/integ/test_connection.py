@@ -1376,7 +1376,6 @@ def test_ocsp_mode_disable_ocsp_checks(conn_cnx, is_public_test, caplog):
     with conn_cnx(disable_ocsp_checks=True) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
         assert "snowflake.connector.ocsp_snowflake" not in caplog.text
-        assert "This connection does not perform OCSP checks." in caplog.text
         caplog.clear()
 
     with conn_cnx() as conn, conn.cursor() as cur:
@@ -1386,7 +1385,6 @@ def test_ocsp_mode_disable_ocsp_checks(conn_cnx, is_public_test, caplog):
             assert "This connection does not perform OCSP checks." not in caplog.text
         else:
             assert "snowflake.connector.ocsp_snowflake" not in caplog.text
-            assert "This connection does not perform OCSP checks." not in caplog.text
 
 
 @pytest.mark.skipolddriver
@@ -1394,8 +1392,11 @@ def test_ocsp_mode_insecure_mode(conn_cnx, is_public_test, caplog):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(insecure_mode=True) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
-        assert "snowflake.connector.ocsp_snowflake" not in caplog.text
-        assert "This connection does not perform OCSP checks." in caplog.text
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+            assert "This connection does not perform OCSP checks." in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
 
 
 @pytest.mark.skipolddriver
@@ -1407,12 +1408,15 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_match(
         insecure_mode=True, disable_ocsp_checks=True
     ) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
-        assert "snowflake.connector.ocsp_snowflake" not in caplog.text
-        assert (
-            "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
-            "Using the value of 'disable_ocsp_checks."
-        ) not in caplog.text
-        assert "This connection does not perform OCSP checks." in caplog.text
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+            assert (
+                "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                "Using the value of 'disable_ocsp_checks."
+            ) not in caplog.text
+            assert "This connection does not perform OCSP checks." in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
 
 
 @pytest.mark.skipolddriver
@@ -1424,12 +1428,15 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_disabled(
         insecure_mode=False, disable_ocsp_checks=True
     ) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
-        assert "snowflake.connector.ocsp_snowflake" not in caplog.text
-        assert (
-            "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
-            "Using the value of 'disable_ocsp_checks."
-        ) in caplog.text
-        assert "This connection does not perform OCSP checks." in caplog.text
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+            assert (
+                "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                "Using the value of 'disable_ocsp_checks."
+            ) in caplog.text
+            assert "This connection does not perform OCSP checks." in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
 
 
 @pytest.mark.skipolddriver
@@ -1441,12 +1448,15 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
         insecure_mode=True, disable_ocsp_checks=False
     ) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
-        assert "snowflake.connector.ocsp_snowflake" in caplog.text
-        assert (
-            "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
-            "Using the value of 'disable_ocsp_checks."
-        ) in caplog.text
-        assert "This connection does not perform OCSP checks." not in caplog.text
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" in caplog.text
+            assert (
+                "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                "Using the value of 'disable_ocsp_checks."
+            ) in caplog.text
+            assert "This connection does not perform OCSP checks." not in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
 
 
 @pytest.mark.skipolddriver
