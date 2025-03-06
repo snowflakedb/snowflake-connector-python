@@ -8,8 +8,10 @@ from base64 import b64encode
 import boto3
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
+from botocore.utils import InstanceMetadataRegionFetcher
 from dataclasses import dataclass
 from enum import Enum, unique
+import os
 import json
 import jwt
 import logging
@@ -75,30 +77,51 @@ def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[st
     return claims["iss"], claims["sub"]
 
 
+def get_aws_region() -> str | None:
+    """Get the current AWS workload's region, if any."""
+    if "AWS_REGION" in os.environ:  # Lambda
+        return os.environ["AWS_REGION"]
+    else:  # EC2
+        return InstanceMetadataRegionFetcher().retrieve_region()
+
+
+def get_aws_arn() -> str | None:
+    """Get the current AWS workload's ARN, if any."""
+    caller_identity = boto3.client('sts').get_caller_identity()
+    if not caller_identity or "Arn" not in caller_identity:
+        return None
+    return caller_identity["Arn"]
+
 
 def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
     """Tries to create a workload identity attestation for AWS.
     
     If the application isn't running on AWS or no credentials were found, returns None.
     """
-    session = boto3.session.Session()
-    aws_creds = session.get_credentials()
+    aws_creds = boto3.session.Session().get_credentials()
     if not aws_creds:
-        logger.debug('No AWS credentials were found.')
+        logger.debug("No AWS credentials were found.")
+        return None
+    region = get_aws_region()
+    if not region:
+        logger.debug("No AWS region was found.")
+        return None
+    arn = get_aws_arn()
+    if not arn:
+        logger.debug("No AWS caller identity was found.")
         return None
 
+    sts_hostname = f"sts.{region}.amazonaws.com"
     request = AWSRequest(
         method="POST",
-        url="https://sts.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15",
+        url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
         headers={
-            # TODO: use a regional STS URL.
-            "Host": "sts.amazonaws.com",
+            "Host": sts_hostname,
             "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
         },
     )
 
-    # TODO: figure out a way to get the current workload's region and use a regional URL.
-    SigV4Auth(aws_creds, "sts", "us-east-1").add_auth(request)
+    SigV4Auth(aws_creds, "sts", region).add_auth(request)
 
     assertion_dict = {
         "url": request.url,
@@ -106,8 +129,7 @@ def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
         "headers": dict(request.headers.items()),
     }
     credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
-    # TODO: load the ARN.
-    return WorkloadIdentityAttestation(AttestationProvider.AWS, credential, {"arn": "<ARN-goes-here>"})
+    return WorkloadIdentityAttestation(AttestationProvider.AWS, credential, {"arn": arn})
 
 
 def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
