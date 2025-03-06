@@ -33,6 +33,30 @@ def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
         yield client
 
 
+@pytest.fixture(scope="session")
+def wiremock_oauth_authorization_code_dir() -> pathlib.Path:
+    return (
+        pathlib.Path(__file__).parent.parent
+        / "data"
+        / "wiremock"
+        / "mappings"
+        / "auth"
+        / "oauth"
+        / "authorization_code"
+    )
+
+
+@pytest.fixture(scope="session")
+def wiremock_generic_mappings_dir() -> pathlib.Path:
+    return (
+        pathlib.Path(__file__).parent.parent
+        / "data"
+        / "wiremock"
+        / "mappings"
+        / "generic"
+    )
+
+
 def _call_auth_server(url: str):
     response = requests.get(url, allow_redirects=True)
     assert response.status_code == 200, "Invalid status code received from auth server"
@@ -47,28 +71,24 @@ def _webbrowser_redirect(*args):
     return thread.is_alive()
 
 
+@pytest.fixture(scope="session")
+def webbrowser_mock() -> Mock:
+    webbrowser_mock = Mock()
+    webbrowser_mock.open = _webbrowser_redirect
+    return webbrowser_mock
+
+
 @pytest.mark.skipolddriver
 @pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
-def test_successful_flow(wiremock_client: WiremockClient, monkeypatch) -> None:
+def test_successful_flow(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_authorization_code_dir,
+    wiremock_generic_mappings_dir,
+    webbrowser_mock,
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
-
-    wiremock_oauth_authorization_code_dir = (
-        pathlib.Path(__file__).parent.parent
-        / "data"
-        / "wiremock"
-        / "mappings"
-        / "auth"
-        / "oauth"
-        / "authorization_code"
-    )
-
-    wiremock_generic_mappings_dir = (
-        pathlib.Path(__file__).parent.parent
-        / "data"
-        / "wiremock"
-        / "mappings"
-        / "generic"
-    )
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir / "successful_flow.json"
@@ -79,9 +99,6 @@ def test_successful_flow(wiremock_client: WiremockClient, monkeypatch) -> None:
     wiremock_client.add_mapping(
         wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
     )
-
-    webbrowser_mock = Mock()
-    webbrowser_mock.open = _webbrowser_redirect
 
     with mock.patch("webbrowser.open", new=webbrowser_mock.open):
         with mock.patch("secrets.token_urlsafe", return_value="abc123"):
@@ -95,6 +112,7 @@ def test_successful_flow(wiremock_client: WiremockClient, monkeypatch) -> None:
                 oauth_client_secret="testClientSecret",
                 oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
+                oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
             )
@@ -105,25 +123,18 @@ def test_successful_flow(wiremock_client: WiremockClient, monkeypatch) -> None:
 
 @pytest.mark.skipolddriver
 @pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
-def test_invalid_state(wiremock_client: WiremockClient, monkeypatch) -> None:
+def test_invalid_state(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_authorization_code_dir,
+    webbrowser_mock,
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
-
-    wiremock_oauth_authorization_code_dir = (
-        pathlib.Path(__file__).parent.parent
-        / "data"
-        / "wiremock"
-        / "mappings"
-        / "auth"
-        / "oauth"
-        / "authorization_code"
-    )
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir / "invalid_state_error.json"
     )
-
-    webbrowser_mock = Mock()
-    webbrowser_mock.open = _webbrowser_redirect
 
     # TODO: Is the DatabaseError correct? Possibly ConnectionError would make more sense?
     with pytest.raises(snowflake.connector.DatabaseError) as execinfo:
@@ -138,6 +149,7 @@ def test_invalid_state(wiremock_client: WiremockClient, monkeypatch) -> None:
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
+                    oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
@@ -148,25 +160,18 @@ def test_invalid_state(wiremock_client: WiremockClient, monkeypatch) -> None:
 # TODO: needs proper handling
 @pytest.mark.skipolddriver
 @pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
-def test_scope_error(wiremock_client: WiremockClient, monkeypatch) -> None:
+def test_scope_error(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_authorization_code_dir,
+    webbrowser_mock,
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
-
-    wiremock_oauth_authorization_code_dir = (
-        pathlib.Path(__file__).parent.parent
-        / "data"
-        / "wiremock"
-        / "mappings"
-        / "auth"
-        / "oauth"
-        / "authorization_code"
-    )
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir / "invalid_scope_error.json"
     )
-
-    webbrowser_mock = Mock()
-    webbrowser_mock.open = _webbrowser_redirect
 
     with pytest.raises(KeyError):
         with mock.patch("webbrowser.open", new=webbrowser_mock.open):
@@ -180,6 +185,7 @@ def test_scope_error(wiremock_client: WiremockClient, monkeypatch) -> None:
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
+                    oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
@@ -187,18 +193,14 @@ def test_scope_error(wiremock_client: WiremockClient, monkeypatch) -> None:
 
 @pytest.mark.skipolddriver
 @pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
-def test_token_request_error(wiremock_client: WiremockClient, monkeypatch) -> None:
+def test_token_request_error(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_authorization_code_dir,
+    webbrowser_mock,
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
-
-    wiremock_oauth_authorization_code_dir = (
-        pathlib.Path(__file__).parent.parent
-        / "data"
-        / "wiremock"
-        / "mappings"
-        / "auth"
-        / "oauth"
-        / "authorization_code"
-    )
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir / "token_request_error.json"
@@ -220,6 +222,7 @@ def test_token_request_error(wiremock_client: WiremockClient, monkeypatch) -> No
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
+                    oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )

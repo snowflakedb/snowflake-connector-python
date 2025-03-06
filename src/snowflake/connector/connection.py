@@ -330,6 +330,8 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-1825621: OAUTH implementation
     ),
+    # TODO: remove redundant environment variables
+    "oauth_redirect_uri": ("http://127.0.0.1:{port}/", str),
     "oauth_scope": (
         "",
         str,
@@ -1156,7 +1158,9 @@ class SnowflakeConnection:
                     token_request_url=self._oauth_token_request_url.format(
                         host=self.host, port=self.port
                     ),
-                    redirect_uri="http://127.0.0.1:{port}/",
+                    # redirect_uri="http://127.0.0.1:{port}/",
+                    # redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
+                    redirect_uri=self._oauth_redirect_uri,
                     scope=self._oauth_scope,
                     pkce=pkce,
                 )
