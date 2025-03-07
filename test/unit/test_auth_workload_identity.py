@@ -130,11 +130,14 @@ def test_explicit_aws_uses_regional_hostname(fake_aws_environment: FakeAwsEnviro
 
 
 def test_explicit_aws_generates_unique_assertion_content(fake_aws_environment: FakeAwsEnvironment):
+    fake_aws_environment.arn = "arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"
     auth_class = AuthByWorkloadIdentity(AttestationProvider.AWS)
     auth_class.prepare()
 
-    expected_assertion_content = '{"_provider":"AWS","arn":"%s"}' % fake_aws_environment.arn
-    assert expected_assertion_content == auth_class.assertion_content
+    assert (
+        '{"_provider":"AWS","arn":"arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"}'
+        == auth_class.assertion_content
+    )
 
 
 # -- GCP Tests --
@@ -163,8 +166,6 @@ def test_explicit_gcp_wrong_issuer_raises_error(fake_gce_metadata_service: FakeG
 
 
 def test_explicit_gcp_plumbs_token_to_api(fake_gce_metadata_service: FakeGceMetadataService):
-    fake_gce_metadata_service.sub = "123456"
-
     auth_class = AuthByWorkloadIdentity(AttestationProvider.GCP)
     auth_class.prepare()
 
@@ -227,7 +228,10 @@ def test_explicit_azure_generates_unique_assertion_content(fake_azure_metadata_s
     auth_class = AuthByWorkloadIdentity(AttestationProvider.AZURE)
     auth_class.prepare()
 
-    assert auth_class.assertion_content == '{"_provider":"AZURE","iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"611ab25b-2e81-4e18-92a7-b21f2bebb269"}'
+    assert (
+        '{"_provider":"AZURE","iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"611ab25b-2e81-4e18-92a7-b21f2bebb269"}'
+        == auth_class.assertion_content
+    )
 
 
 def test_explicit_azure_uses_default_entra_resource_if_unspecified(fake_azure_metadata_service):
