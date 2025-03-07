@@ -33,6 +33,7 @@ class SnowflakeType {
     VARIANT = 15,
     VECTOR = 16,
     MAP = 17,
+    DECFLOAT = 18,
   };
 
   static SnowflakeType::Type snowflakeTypeFromString(std::string str) {

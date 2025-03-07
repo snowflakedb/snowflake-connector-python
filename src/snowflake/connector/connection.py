@@ -44,6 +44,7 @@ from .auth import (
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
+    AuthNoAuth,
 )
 from .auth.idtoken import AuthByIdToken
 from .backoff_policies import exponential_backoff
@@ -98,6 +99,7 @@ from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
+    NO_AUTH_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
@@ -202,7 +204,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     # add the new client type to the server to support these features.
     "internal_application_name": (CLIENT_NAME, (type(None), str)),
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
-    "insecure_mode": (False, bool),  # Error security fix requirement
+    "disable_ocsp_checks": (False, bool),
     "ocsp_fail_open": (True, bool),  # fail open on ocsp issues, default true
     "inject_client_pause": (0, int),  # snowflake internal
     "session_parameters": (None, (type(None), dict)),  # snowflake session parameters
@@ -327,8 +329,10 @@ class SnowflakeConnection:
     Use connect(..) to get the object.
 
     Attributes:
-        insecure_mode: Whether or not the connection is in insecure mode. Insecure mode means that the connection
-            validates the TLS certificate but doesn't check revocation status.
+        insecure_mode (deprecated): Whether or not the connection is in OCSP disabled mode. It means that the connection
+            validates the TLS certificate but doesn't check revocation status with OCSP provider.
+        disable_ocsp_checks: Whether or not the connection is in OCSP disabled mode. It means that the connection
+            validates the TLS certificate but doesn't check revocation status with OCSP provider.
         ocsp_fail_open: Whether or not the connection is in fail open mode. Fail open mode decides if TLS certificates
             continue to be validated. Revoked certificates are blocked. Any other exceptions are disregarded.
         session_id: The session ID of the connection.
@@ -379,6 +383,7 @@ class SnowflakeConnection:
         server_session_keep_alive: When true, the connector does not destroy the session on the Snowflake server side
           before the connector shuts down. Default value is false.
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
+        unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -438,6 +443,25 @@ class SnowflakeConnection:
             elif "streamlit" in sys.modules:
                 kwargs["application"] = "streamlit"
 
+        if "insecure_mode" in kwargs:
+            warn_message = "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
+            warnings.warn(
+                warn_message,
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+            if (
+                "disable_ocsp_checks" in kwargs
+                and kwargs["disable_ocsp_checks"] != kwargs["insecure_mode"]
+            ):
+                logger.warning(
+                    "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                    "Using the value of 'disable_ocsp_checks."
+                )
+            else:
+                self._disable_ocsp_checks = kwargs["insecure_mode"]
+
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None
         self.query_context_cache_size = 5
@@ -469,19 +493,23 @@ class SnowflakeConnection:
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
+    # Deprecated
     @property
     def insecure_mode(self) -> bool:
-        return self._insecure_mode
+        return self._disable_ocsp_checks
+
+    @property
+    def disable_ocsp_checks(self) -> bool:
+        return self._disable_ocsp_checks
 
     @property
     def ocsp_fail_open(self) -> bool:
         return self._ocsp_fail_open
 
     def _ocsp_mode(self) -> OCSPMode:
-        """OCSP mode. INSEC
-        URE, FAIL_OPEN or FAIL_CLOSED."""
-        if self.insecure_mode:
-            return OCSPMode.INSECURE
+        """OCSP mode. DISABLE_OCSP_CHECKS, FAIL_OPEN or FAIL_CLOSED."""
+        if self.disable_ocsp_checks:
+            return OCSPMode.DISABLE_OCSP_CHECKS
         elif self.ocsp_fail_open:
             return OCSPMode.FAIL_OPEN
         else:
@@ -735,6 +763,14 @@ class SnowflakeConnection:
     @property
     def iobound_tpe_limit(self) -> int | None:
         return self._iobound_tpe_limit
+
+    @property
+    def unsafe_file_write(self) -> bool:
+        return self._unsafe_file_write
+
+    @unsafe_file_write.setter
+    def unsafe_file_write(self, value: bool) -> None:
+        self._unsafe_file_write = value
 
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
@@ -1207,6 +1243,11 @@ class SnowflakeConnection:
             if "protocol" not in kwargs:
                 self._protocol = "https"
 
+        if "unsafe_file_write" in kwargs:
+            self._unsafe_file_write = kwargs["unsafe_file_write"]
+        else:
+            self._unsafe_file_write = False
+
         logger.info(
             f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), 'GLOBAL')} Snowflake domain"
         )
@@ -1234,9 +1275,15 @@ class SnowflakeConnection:
             with open(token_file_path) as f:
                 self._token = f.read()
 
+        # Set of authenticators allowing empty user.
+        empty_user_allowed_authenticators = {OAUTH_AUTHENTICATOR, NO_AUTH_AUTHENTICATOR}
+
         if not (self._master_token and self._session_token):
-            if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
-                # OAuth Authentication does not require a username
+            if (
+                not self.user
+                and self._authenticator not in empty_user_allowed_authenticators
+            ):
+                # OAuth and NoAuth Authentications does not require a username
                 Error.errorhandler_wrapper(
                     self,
                     None,
@@ -1265,14 +1312,15 @@ class SnowflakeConnection:
                     {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
                 )
 
-        if not self._account:
+        # Only AuthNoAuth allows account to be omitted.
+        if not self._account and not isinstance(self.auth_class, AuthNoAuth):
             Error.errorhandler_wrapper(
                 self,
                 None,
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if "." in self._account:
+        if self._account and "." in self._account:
             self._account = parse_account(self._account)
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(
@@ -1289,7 +1337,7 @@ class SnowflakeConnection:
             )
 
         if self.ocsp_fail_open:
-            logger.info(
+            logger.debug(
                 "This connection is in OCSP Fail Open Mode. "
                 "TLS Certificates would be checked for validity "
                 "and revocation status. Any other Certificate "
@@ -1298,12 +1346,10 @@ class SnowflakeConnection:
                 "connectivity."
             )
 
-        if self.insecure_mode:
-            logger.info(
-                "THIS CONNECTION IS IN INSECURE MODE. IT "
-                "MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE "
-                "CERTIFICATE REVOCATION STATUS WILL NOT BE "
-                "CHECKED."
+        if self.disable_ocsp_checks:
+            logger.debug(
+                "This connection runs with disabled OCSP checks. "
+                "Revocation status of the certificate will not be checked against OCSP Responder."
             )
 
     def cmd_query(
