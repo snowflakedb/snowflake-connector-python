@@ -57,6 +57,7 @@ class FakeMetadataService(ABC):
     def __init__(self):
         self.reset_defaults()
 
+    @abstractmethod
     def reset_defaults(self):
         """Resets any default values for test parameters.
 
@@ -122,6 +123,9 @@ class FakeMetadataService(ABC):
 class NoMetadataService(FakeMetadataService):
     """Emulates an environment without any metadata service."""
 
+    def reset_defaults(self):
+        pass
+
     @property
     def expected_hostname(self):
         return None  # Always raise a ConnectTimeout.
@@ -153,7 +157,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
             and headers.get("Metadata") == "True"
             and query_string["resource"]
         ):
-            return HTTPError(status_code=400)
+            raise HTTPError()
 
         logger.debug("Received request for Azure VM metadata service")
 
@@ -191,7 +195,7 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
             logger.warning(
                 f"Received malformed request: {method} {parsed_url.path} {str(headers)} {str(query_string)}"
             )
-            return HTTPError(status_code=400)
+            raise HTTPError()
 
         logger.debug("Received request for Azure Functions metadata service")
 
@@ -234,7 +238,7 @@ class FakeGceMetadataService(FakeMetadataService):
             and headers.get("Metadata-Flavor") == "Google"
             and query_string["audience"]
         ):
-            return HTTPError(status_code=400)
+            raise HTTPError()
 
         logger.debug("Received request for GCE metadata service")
 
