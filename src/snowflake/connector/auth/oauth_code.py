@@ -21,6 +21,7 @@ from ..compat import parse_qs, urlparse, urlsplit
 from ..constants import OAUTH_TYPE_AUTHORIZATION_CODE
 from ..errorcode import (
     ER_IDP_CONNECTION_ERROR,
+    ER_OAUTH_CALLBACK_ERROR,
     ER_OAUTH_STATE_CHANGED,
     ER_UNABLE_TO_OPEN_BROWSER,
 )
@@ -183,6 +184,14 @@ class AuthByOauthCode(AuthByPlugin):
                 return
         logger.debug("step 2: received OAUTH callback")
         q_params = _get_query_params(url)
+        if "error" in q_params:
+            self._handle_failure(
+                conn=conn,
+                ret={
+                    "code": ER_OAUTH_CALLBACK_ERROR,
+                    "message": f"Oauth callback returned an {q_params['error'][0]} error{': ' + q_params['error_description'][0] if 'error_description' in q_params else '.'}",
+                },
+            )
         code = q_params["code"][0]
         state = q_params["state"][0]
         if state != self._state:
@@ -199,11 +208,8 @@ class AuthByOauthCode(AuthByPlugin):
         fields = {
             "grant_type": "authorization_code",
             "code": code,
-            "client_id": self.client_id,
             "redirect_uri": self.redirect_uri,
         }
-        if self.client_secret:
-            fields["client_secret"] = self.client_secret
         if self.pkce:
             assert self._verifier is not None
             fields["code_verifier"] = self._verifier
@@ -212,9 +218,12 @@ class AuthByOauthCode(AuthByPlugin):
             "POST",
             self.token_request_url,
             headers={
-                "Basic": base64.b64encode(
+                "Authorization": "Basic "
+                + base64.b64encode(
                     f"{self.client_id}:{self.client_secret}".encode()
-                )
+                ).decode(),
+                "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             },
             encode_multipart=False,
             fields=fields,
@@ -225,7 +234,7 @@ class AuthByOauthCode(AuthByPlugin):
             json.JSONDecodeError,
             KeyError,
         ):
-            logger.error("oauth reponse invalid, does not contain 'access_token'")
+            logger.error("oauth response invalid, does not contain 'access_token'")
             logger.debug(
                 "received the following response body when requesting oauth token: %s",
                 resp.data,
