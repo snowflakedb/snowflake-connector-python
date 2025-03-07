@@ -23,6 +23,13 @@ from . import (
     INTERNAL_SKIP_TAGS,
     running_on_public_ci,
 )
+from .csp_helpers import (
+    FakeAwsEnvironment,
+    FakeAzureFunctionMetadataService,
+    FakeAzureVmMetadataService,
+    FakeGceMetadataService,
+    NoMetadataService,
+)
 
 
 class TelemetryCaptureHandler(TelemetryClient):
@@ -121,6 +128,37 @@ def filter_log() -> None:
         )
     )
     _logger.addHandler(sd)
+
+
+@pytest.fixture
+def no_metadata_service():
+    """Emulates an environment without any metadata service."""
+    with NoMetadataService() as server:
+        yield server
+
+
+@pytest.fixture
+def fake_aws_environment():
+    """Emulates the AWS environment, returning dummy credentials."""
+    with FakeAwsEnvironment() as env:
+        yield env
+
+
+@pytest.fixture(
+    params=[FakeAzureFunctionMetadataService(), FakeAzureVmMetadataService()],
+    ids=["azure_function", "azure_vm"],
+)
+def fake_azure_metadata_service(request):
+    """Parameterized fixture that emulates both the Azure VM and Azure Functions metadata services."""
+    with request.param as server:
+        yield server
+
+
+@pytest.fixture
+def fake_gce_metadata_service():
+    """Emulates the GCE metadata service, returning a dummy token."""
+    with FakeGceMetadataService() as server:
+        yield server
 
 
 def pytest_runtest_setup(item) -> None:
