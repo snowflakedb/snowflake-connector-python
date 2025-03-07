@@ -56,7 +56,10 @@ class FakeMetadataService(ABC):
         self.reset_defaults()
 
     def reset_defaults(self):
-        """Resets any default values for test parameters. This is called in __enter__."""
+        """Resets any default values for test parameters.
+
+        This is called in the constructor and when entering as a context manager.
+        """
         pass
 
     @property
@@ -70,9 +73,11 @@ class FakeMetadataService(ABC):
 
     @abstractmethod
     def handle_request(self, method, parsed_url, headers, timeout):
+        """Main business logic for handling this request. Should return a Response object."""
         pass
 
     def __call__(self, method, url, headers, timeout):
+        """Entry point for the requests mock."""
         logger.debug(f"Received request: {method} {url} {str(headers)}")
         parsed_url = urlparse(url)
 
@@ -83,9 +88,14 @@ class FakeMetadataService(ABC):
         return self.handle_request(method, parsed_url, headers, timeout)
 
     def __enter__(self):
+        """Patches the relevant HTTP calls when entering as a context manager."""
         self.reset_defaults()
         self.patchers = []
+        # requests.request is used by the direct metadata service API calls from our code. This is the main
+        # thing being faked here.
         self.patchers.append(mock.patch("snowflake.connector.vendored.requests.request", side_effect=self))
+        # HTTPConnection.request is used by the AWS boto libraries. We're not mocking those calls here, so we
+        # simply raise a ConnectTimeout to avoid making real network calls.
         self.patchers.append(mock.patch("urllib3.connection.HTTPConnection.request", side_effect=ConnectTimeout()))
         for patcher in self.patchers:
             patcher.__enter__()
@@ -162,6 +172,7 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
         return build_response(json.dumps({"access_token": self.token}).encode("utf-8"))
 
     def __enter__(self):
+        # In addition to the normal patching, we need to set the environment variables that Azure Functions would set.
         os.environ["IDENTITY_ENDPOINT"] = self.identity_endpoint
         os.environ["IDENTITY_HEADER"] = self.identity_header
         return super().__enter__()
@@ -202,7 +213,7 @@ class FakeAwsEnvironment:
 
     Unlike the other metadata services, the HTTP calls made by AWS are deep within boto libaries, so
     emulating them here would be complex and fragile. Instead, we emulate the higher-level functions
-    called by the product code.
+    called by the connector code.
     """
     def __init__(self):
         # Defaults used for generating a token. Can be overriden in individual tests.
@@ -226,7 +237,7 @@ class FakeAwsEnvironment:
             "Authorization",
             f"AWS4-HMAC-SHA256 Credential=<cred>, SignedHeaders={';'.join(request.headers.keys())}, Signature=<sig>"
         )
-    
+
     def __enter__(self):
         # Patch the relevant functions to do what we want.
         self.patchers = []
@@ -237,7 +248,7 @@ class FakeAwsEnvironment:
         for patcher in self.patchers:
             patcher.__enter__()
         return self
-    
+
     def __exit__(self, *args, **kwargs):
         for patcher in self.patchers:
             patcher.__exit__(*args, **kwargs)
@@ -252,13 +263,14 @@ def no_metadata_service():
 
 @pytest.fixture
 def fake_aws_environment():
+    """Emulates the AWS environment, returning dummy credentials."""
     with FakeAwsEnvironment() as env:
         yield env
 
 
 @pytest.fixture(params=[FakeAzureFunctionMetadataService(), FakeAzureVmMetadataService()], ids=["azure_function", "azure_vm"])
 def fake_azure_metadata_service(request):
-    """Parameterized fixture that emulates the Azure VM + Azure Functions metadata services."""
+    """Parameterized fixture that emulates both the Azure VM and Azure Functions metadata services."""
     with request.param as server:
         yield server
 
