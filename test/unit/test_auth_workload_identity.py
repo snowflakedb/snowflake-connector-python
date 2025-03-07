@@ -8,7 +8,7 @@ import json
 import jwt
 import logging
 import pytest
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
 from snowflake.connector.auth import AuthByWorkloadIdentity
 from snowflake.connector.errors import ProgrammingError
@@ -35,14 +35,22 @@ def extract_api_data(auth_class: AuthByWorkloadIdentity):
     return req_body["data"]
 
 
-def verify_aws_token(token: str):
+def verify_aws_token(token: str, region: str):
     """Performs some basic checks on a 'token' produced for AWS, to ensure it includes the expected fields."""
     decoded_token = json.loads(b64decode(token))
-    assert "Action=GetCallerIdentity" in decoded_token["url"]
+
+    parsed_url = urlparse(decoded_token["url"])
+    assert parsed_url.scheme == "https"
+    assert parsed_url.hostname == f"sts.{region}.amazonaws.com"    
+    query_string = parse_qs(parsed_url.query)
+    assert query_string.get("Action")[0] == "GetCallerIdentity"
+    assert query_string.get("Version")[0] == "2011-06-15"
+
     assert decoded_token["method"] == "POST"
-    
+
     headers = decoded_token["headers"]
     assert set(headers.keys()) == set(["Host", "X-Snowflake-Audience", "X-Amz-Date", "X-Amz-Security-Token", "Authorization"])
+    assert headers["Host"] == f"sts.{region}.amazonaws.com"
     assert headers["X-Snowflake-Audience"] == "snowflakecomputing.com"
 
 
@@ -102,10 +110,12 @@ def test_explicit_aws_encodes_audience_host_signature_to_api(fake_aws_environmen
     data = extract_api_data(auth_class)
     assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
     assert data["PROVIDER"] == "AWS"
-    verify_aws_token(data["TOKEN"])
+    verify_aws_token(data["TOKEN"], fake_aws_environment.region)
 
 
 def test_explicit_aws_uses_regional_hostname(fake_aws_environment: FakeAwsEnvironment):
+    fake_aws_environment.region = "antarctica-northeast-3"
+
     auth_class = AuthByWorkloadIdentity(AttestationProvider.AWS)
     auth_class.prepare()
 
@@ -114,7 +124,7 @@ def test_explicit_aws_uses_regional_hostname(fake_aws_environment: FakeAwsEnviro
     hostname_from_url = urlparse(decoded_token["url"]).hostname
     hostname_from_header = decoded_token["headers"]["Host"]
 
-    expected_hostname = f"sts.{fake_aws_environment.region}.amazonaws.com"
+    expected_hostname = f"sts.antarctica-northeast-3.amazonaws.com"
     assert expected_hostname == hostname_from_url
     assert expected_hostname == hostname_from_header
 
@@ -248,7 +258,7 @@ def test_autodetect_aws_present(no_metadata_service, fake_aws_environment: FakeA
     data = extract_api_data(auth_class)
     assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
     assert data["PROVIDER"] == "AWS"
-    verify_aws_token(data["TOKEN"])
+    verify_aws_token(data["TOKEN"], fake_aws_environment.region)
 
 
 def test_autodetect_gcp_present(fake_gce_metadata_service: FakeGceMetadataService):
