@@ -36,13 +36,7 @@ def gen_dummy_id_token(sub = "test-subject", iss = "test-issuer", aud="snowflake
     }
     logger.debug(f"Generating dummy token with the following claims:\n{str(payload)}")
     return jwt.encode(
-        payload={
-            "sub": sub,
-            "iss": iss,
-            "aud": aud,
-            "iat": now,
-            "exp": now + 60 * 60,
-        },
+        payload=payload,
         key=key,
         algorithm="HS256",
     )
