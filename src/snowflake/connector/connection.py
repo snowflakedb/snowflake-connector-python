@@ -1146,7 +1146,7 @@ class SnowflakeConnection:
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
                 self.auth_class = AuthByPAT(self._token)
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
-                if not ENV_VAR_EXPERIMENTAL_AUTHENTICATION in os.environ:
+                if ENV_VAR_EXPERIMENTAL_AUTHENTICATION not in os.environ:
                     Error.errorhandler_wrapper(
                         self,
                         None,
