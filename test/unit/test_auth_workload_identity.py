@@ -20,15 +20,7 @@ from snowflake.connector.vendored.requests.exceptions import (
 )
 from snowflake.connector.wif_util import AttestationProvider
 
-from ..csp_helpers import (
-    FakeAwsEnvironment,
-    FakeGceMetadataService,
-    fake_aws_environment,
-    fake_azure_metadata_service,
-    fake_gce_metadata_service,
-    gen_dummy_id_token,
-    no_metadata_service,
-)
+from ..csp_helpers import FakeAwsEnvironment, FakeGceMetadataService, gen_dummy_id_token
 
 logger = logging.getLogger(__name__)
 
