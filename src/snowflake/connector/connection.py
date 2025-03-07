@@ -1137,6 +1137,8 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
+                if not self._token and self._password:
+                    self._token = self._password
                 self.auth_class = AuthByPAT(self._token)
             else:
                 # okta URL, e.g., https://<account>.okta.com/
