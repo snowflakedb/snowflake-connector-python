@@ -10,7 +10,6 @@ import os
 from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Union
 
 import boto3
 import jwt
@@ -63,7 +62,7 @@ def try_metadata_service_call(
         )
         if not res.ok:
             return None
-    except:
+    except requests.RequestException:
         return None
     return res
 
@@ -82,7 +81,7 @@ def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[st
     """
     try:
         claims = jwt.decode(jwt_str, options={"verify_signature": False})
-    except jwt.exceptions.InvalidTokenError as e:
+    except jwt.exceptions.InvalidTokenError:
         logger.warning("Token is not a valid JWT.", exc_info=True)
         return None, None
 
@@ -312,7 +311,7 @@ def create_attestation(
         attestation = create_gcp_attestation()
     elif provider == AttestationProvider.OIDC:
         attestation = create_oidc_attestation(token)
-    elif provider == None:
+    elif provider is None:
         attestation = create_autodetect_attestation(entra_resource, token)
 
     if not attestation:

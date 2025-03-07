@@ -132,7 +132,7 @@ def test_explicit_aws_uses_regional_hostname(fake_aws_environment: FakeAwsEnviro
     hostname_from_url = urlparse(decoded_token["url"]).hostname
     hostname_from_header = decoded_token["headers"]["Host"]
 
-    expected_hostname = f"sts.antarctica-northeast-3.amazonaws.com"
+    expected_hostname = "sts.antarctica-northeast-3.amazonaws.com"
     assert expected_hostname == hostname_from_url
     assert expected_hostname == hostname_from_header
 
