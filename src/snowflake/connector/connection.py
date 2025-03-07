@@ -1396,6 +1396,8 @@ class SnowflakeConnection:
             queryContext = self.get_query_context()
             #  Here queryContextDTO should be a dict object field, same with `parameters` field
             data["queryContextDTO"] = queryContext
+        if self.session_id is not None:
+            data["sessionId"] = self.session_id
         client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
 
         if logger.getEffectiveLevel() <= logging.DEBUG:
