@@ -24,8 +24,8 @@ from .vendored.requests import Response
 
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
-# TODO: use real app ID or domain name.
-DEFAULT_ENTRA_SNOWFLAKE_RESOURCE = "api://snowflakecomputing.com"
+# TODO: use real app ID or domain name once it's available.
+DEFAULT_ENTRA_SNOWFLAKE_RESOURCE = "NOT REAL - WILL BREAK"
 
 
 @unique
