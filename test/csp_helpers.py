@@ -217,7 +217,7 @@ class FakeAwsEnvironment:
     """
     def __init__(self):
         # Defaults used for generating a token. Can be overriden in individual tests.
-        self.arn = "arn:aws:sts::376129840140:assumed-role/Outgoing-EC2-Role/i-08b76420b06af883c"
+        self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-34afe100cad287fab"
         self.region = "us-east-1"
         self.credentials = Credentials(access_key="ak", secret_key="sk")
 
