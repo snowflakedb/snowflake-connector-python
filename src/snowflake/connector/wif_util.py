@@ -173,11 +173,8 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
     identity_header = os.environ.get("IDENTITY_HEADER")
     is_azure_functions = identity_endpoint is not None
 
-    # TODO: add tests for azure functions, including without managed identity enabled.
     if is_azure_functions:
         if not identity_header:
-            # TODO: instead of returning None, consider a message that says something more useful
-            # like "Managed identity is not enabled on this Azure function."
             logger.warning("Managed identity is not enabled on this Azure function.")
             return None
 
