@@ -1,30 +1,37 @@
 #
-# Copyright (c) 2012-2025 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
 
-from enum import Enum, unique
 import json
 import typing
+from enum import Enum, unique
 
 from ..network import WORKLOAD_IDENTITY_AUTHENTICATOR
-from ..wif_util import AttestationProvider, WorkloadIdentityAttestation, create_attestation
+from ..wif_util import (
+    AttestationProvider,
+    WorkloadIdentityAttestation,
+    create_attestation,
+)
 from .by_plugin import AuthByPlugin, AuthType
 
 
 @unique
 class ApiFederatedAuthenticationType(Enum):
     """An API-specific enum of the WIF authentication type."""
+
     AWS = "AWS"
     AZURE = "AZURE"
     GCP = "GCP"
     OIDC = "OIDC"
 
     @staticmethod
-    def from_attestation(attestation: WorkloadIdentityAttestation) -> ApiFederatedAuthenticationType:
+    def from_attestation(
+        attestation: WorkloadIdentityAttestation,
+    ) -> ApiFederatedAuthenticationType:
         """Maps the internal / driver-specific attestation providers to API authenticator types.
-        
+
         The AttestationProvider is related to how the driver fetches the credential, while the API authenticator
         type is related to how the credential is verified. In most current cases these may be the same, though
         in the future we could have, for example, multiple AttestationProviders that all fetch an OIDC token.
@@ -43,7 +50,13 @@ class ApiFederatedAuthenticationType(Enum):
 class AuthByWorkloadIdentity(AuthByPlugin):
     """Plugin to authenticate via workload identity."""
 
-    def __init__(self, provider: AttestationProvider | None = None, token: str | None = None, entra_resource: str | None = None, **kwargs) -> None:
+    def __init__(
+        self,
+        provider: AttestationProvider | None = None,
+        token: str | None = None,
+        entra_resource: str | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         self.provider = provider
         self.token = token
@@ -59,7 +72,9 @@ class AuthByWorkloadIdentity(AuthByPlugin):
 
     def update_body(self, body: dict[typing.Any, typing.Any]) -> None:
         body["data"]["AUTHENTICATOR"] = WORKLOAD_IDENTITY_AUTHENTICATOR
-        body["data"]["PROVIDER"] = ApiFederatedAuthenticationType.from_attestation(self.attestation).value
+        body["data"]["PROVIDER"] = ApiFederatedAuthenticationType.from_attestation(
+            self.attestation
+        ).value
         body["data"]["TOKEN"] = self.attestation.credential
 
     def prepare(
@@ -67,7 +82,9 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         **kwargs: typing.Any,
     ) -> None:
         """Fetch the token."""
-        self.attestation = create_attestation(self.provider, self.entra_resource, self.token)
+        self.attestation = create_attestation(
+            self.provider, self.entra_resource, self.token
+        )
 
     def reauthenticate(self, **kwargs: typing.Any) -> dict[str, bool]:
         self.reset_secrets()
@@ -81,4 +98,4 @@ class AuthByWorkloadIdentity(AuthByPlugin):
             return ""
         properties = self.attestation.user_identifier_components
         properties["_provider"] = self.attestation.provider.value
-        return json.dumps(properties, sort_keys=True, separators=(',', ':'))
+        return json.dumps(properties, sort_keys=True, separators=(",", ":"))

@@ -1,27 +1,32 @@
 #
-# Copyright (c) 2012-2025 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
+import json
+import logging
 from base64 import b64decode
 from unittest import mock
-import json
+from urllib.parse import parse_qs, urlparse
+
 import jwt
-import logging
 import pytest
-from urllib.parse import urlparse, parse_qs
 
 from snowflake.connector.auth import AuthByWorkloadIdentity
 from snowflake.connector.errors import ProgrammingError
+from snowflake.connector.vendored.requests.exceptions import (
+    ConnectTimeout,
+    HTTPError,
+    Timeout,
+)
 from snowflake.connector.wif_util import AttestationProvider
-from snowflake.connector.vendored.requests.exceptions import HTTPError, Timeout, ConnectTimeout
 
 from ..csp_helpers import (
-    gen_dummy_id_token,
     FakeAwsEnvironment,
     FakeGceMetadataService,
     fake_aws_environment,
     fake_azure_metadata_service,
     fake_gce_metadata_service,
+    gen_dummy_id_token,
     no_metadata_service,
 )
 
@@ -41,7 +46,7 @@ def verify_aws_token(token: str, region: str):
 
     parsed_url = urlparse(decoded_token["url"])
     assert parsed_url.scheme == "https"
-    assert parsed_url.hostname == f"sts.{region}.amazonaws.com"    
+    assert parsed_url.hostname == f"sts.{region}.amazonaws.com"
     query_string = parse_qs(parsed_url.query)
     assert query_string.get("Action")[0] == "GetCallerIdentity"
     assert query_string.get("Version")[0] == "2011-06-15"
@@ -49,7 +54,13 @@ def verify_aws_token(token: str, region: str):
     assert decoded_token["method"] == "POST"
 
     headers = decoded_token["headers"]
-    assert set(headers.keys()) == set(["Host", "X-Snowflake-Audience", "X-Amz-Date", "X-Amz-Security-Token", "Authorization"])
+    assert set(headers.keys()) == {
+        "Host",
+        "X-Snowflake-Audience",
+        "X-Amz-Date",
+        "X-Amz-Security-Token",
+        "Authorization",
+    }
     assert headers["Host"] == f"sts.{region}.amazonaws.com"
     assert headers["X-Snowflake-Audience"] == "snowflakecomputing.com"
 
@@ -73,11 +84,14 @@ def test_explicit_oidc_valid_inline_token_generates_unique_assertion_content():
     dummy_token = gen_dummy_id_token(sub="service-1", iss="issuer-1")
     auth_class = AuthByWorkloadIdentity(AttestationProvider.OIDC, dummy_token)
     auth_class.prepare()
-    assert auth_class.assertion_content == '{"_provider":"OIDC","iss":"issuer-1","sub":"service-1"}'
+    assert (
+        auth_class.assertion_content
+        == '{"_provider":"OIDC","iss":"issuer-1","sub":"service-1"}'
+    )
 
 
 def test_explicit_oidc_invalid_inline_token_raises_error():
-    invalid_token = 'not-a-jwt'
+    invalid_token = "not-a-jwt"
     auth_class = AuthByWorkloadIdentity(AttestationProvider.OIDC, invalid_token)
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare()
@@ -103,7 +117,9 @@ def test_explicit_aws_no_auth_raises_error(fake_aws_environment: FakeAwsEnvironm
     assert "No workload identity credential was found for 'AWS'" in str(excinfo.value)
 
 
-def test_explicit_aws_encodes_audience_host_signature_to_api(fake_aws_environment: FakeAwsEnvironment):
+def test_explicit_aws_encodes_audience_host_signature_to_api(
+    fake_aws_environment: FakeAwsEnvironment,
+):
     auth_class = AuthByWorkloadIdentity(AttestationProvider.AWS)
     auth_class.prepare()
 
@@ -129,8 +145,12 @@ def test_explicit_aws_uses_regional_hostname(fake_aws_environment: FakeAwsEnviro
     assert expected_hostname == hostname_from_header
 
 
-def test_explicit_aws_generates_unique_assertion_content(fake_aws_environment: FakeAwsEnvironment):
-    fake_aws_environment.arn = "arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"
+def test_explicit_aws_generates_unique_assertion_content(
+    fake_aws_environment: FakeAwsEnvironment,
+):
+    fake_aws_environment.arn = (
+        "arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"
+    )
     auth_class = AuthByWorkloadIdentity(AttestationProvider.AWS)
     auth_class.prepare()
 
@@ -143,20 +163,29 @@ def test_explicit_aws_generates_unique_assertion_content(fake_aws_environment: F
 # -- GCP Tests --
 
 
-@pytest.mark.parametrize("exception", [
-    HTTPError(),
-    Timeout(),
-    ConnectTimeout(),
-])
+@pytest.mark.parametrize(
+    "exception",
+    [
+        HTTPError(),
+        Timeout(),
+        ConnectTimeout(),
+    ],
+)
 def test_explicit_gcp_metadata_server_error_raises_auth_error(exception):
     auth_class = AuthByWorkloadIdentity(AttestationProvider.GCP)
-    with mock.patch("snowflake.connector.vendored.requests.request", side_effect=exception):
+    with mock.patch(
+        "snowflake.connector.vendored.requests.request", side_effect=exception
+    ):
         with pytest.raises(ProgrammingError) as excinfo:
             auth_class.prepare()
-        assert "No workload identity credential was found for 'GCP'" in str(excinfo.value)
+        assert "No workload identity credential was found for 'GCP'" in str(
+            excinfo.value
+        )
 
 
-def test_explicit_gcp_wrong_issuer_raises_error(fake_gce_metadata_service: FakeGceMetadataService):
+def test_explicit_gcp_wrong_issuer_raises_error(
+    fake_gce_metadata_service: FakeGceMetadataService,
+):
     fake_gce_metadata_service.iss = "not-google"
 
     auth_class = AuthByWorkloadIdentity(AttestationProvider.GCP)
@@ -165,7 +194,9 @@ def test_explicit_gcp_wrong_issuer_raises_error(fake_gce_metadata_service: FakeG
     assert "No workload identity credential was found for 'GCP'" in str(excinfo.value)
 
 
-def test_explicit_gcp_plumbs_token_to_api(fake_gce_metadata_service: FakeGceMetadataService):
+def test_explicit_gcp_plumbs_token_to_api(
+    fake_gce_metadata_service: FakeGceMetadataService,
+):
     auth_class = AuthByWorkloadIdentity(AttestationProvider.GCP)
     auth_class.prepare()
 
@@ -176,9 +207,11 @@ def test_explicit_gcp_plumbs_token_to_api(fake_gce_metadata_service: FakeGceMeta
     }
 
 
-def test_explicit_gcp_generates_unique_assertion_content(fake_gce_metadata_service: FakeGceMetadataService):
+def test_explicit_gcp_generates_unique_assertion_content(
+    fake_gce_metadata_service: FakeGceMetadataService,
+):
     fake_gce_metadata_service.sub = "123456"
- 
+
     auth_class = AuthByWorkloadIdentity(AttestationProvider.GCP)
     auth_class.prepare()
 
@@ -188,17 +221,24 @@ def test_explicit_gcp_generates_unique_assertion_content(fake_gce_metadata_servi
 # -- Azure Tests --
 
 
-@pytest.mark.parametrize("exception", [
-    HTTPError(),
-    Timeout(),
-    ConnectTimeout(),
-])
+@pytest.mark.parametrize(
+    "exception",
+    [
+        HTTPError(),
+        Timeout(),
+        ConnectTimeout(),
+    ],
+)
 def test_explicit_azure_metadata_server_error_raises_auth_error(exception):
     auth_class = AuthByWorkloadIdentity(AttestationProvider.AZURE)
-    with mock.patch("snowflake.connector.vendored.requests.request", side_effect=exception):
+    with mock.patch(
+        "snowflake.connector.vendored.requests.request", side_effect=exception
+    ):
         with pytest.raises(ProgrammingError) as excinfo:
             auth_class.prepare()
-        assert "No workload identity credential was found for 'AZURE'" in str(excinfo.value)
+        assert "No workload identity credential was found for 'AZURE'" in str(
+            excinfo.value
+        )
 
 
 def test_explicit_azure_wrong_issuer_raises_error(fake_azure_metadata_service):
@@ -222,7 +262,9 @@ def test_explicit_azure_plumbs_token_to_api(fake_azure_metadata_service):
 
 
 def test_explicit_azure_generates_unique_assertion_content(fake_azure_metadata_service):
-    fake_azure_metadata_service.iss = "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
+    fake_azure_metadata_service.iss = (
+        "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
+    )
     fake_azure_metadata_service.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
 
     auth_class = AuthByWorkloadIdentity(AttestationProvider.AZURE)
@@ -234,17 +276,23 @@ def test_explicit_azure_generates_unique_assertion_content(fake_azure_metadata_s
     )
 
 
-def test_explicit_azure_uses_default_entra_resource_if_unspecified(fake_azure_metadata_service):
+def test_explicit_azure_uses_default_entra_resource_if_unspecified(
+    fake_azure_metadata_service,
+):
     auth_class = AuthByWorkloadIdentity(AttestationProvider.AZURE)
     auth_class.prepare()
 
     token = fake_azure_metadata_service.token
     parsed = jwt.decode(token, options={"verify_signature": False})
-    assert parsed["aud"] == "NOT REAL - WILL BREAK"  # the default entra resource defined in wif_util.py.
+    assert (
+        parsed["aud"] == "NOT REAL - WILL BREAK"
+    )  # the default entra resource defined in wif_util.py.
 
 
 def test_explicit_azure_uses_explicit_entra_resource(fake_azure_metadata_service):
-    auth_class = AuthByWorkloadIdentity(AttestationProvider.AZURE, entra_resource="api://non-standard")
+    auth_class = AuthByWorkloadIdentity(
+        AttestationProvider.AZURE, entra_resource="api://non-standard"
+    )
     auth_class.prepare()
 
     token = fake_azure_metadata_service.token
@@ -255,7 +303,9 @@ def test_explicit_azure_uses_explicit_entra_resource(fake_azure_metadata_service
 # -- Auto-detect Tests --
 
 
-def test_autodetect_aws_present(no_metadata_service, fake_aws_environment: FakeAwsEnvironment):
+def test_autodetect_aws_present(
+    no_metadata_service, fake_aws_environment: FakeAwsEnvironment
+):
     auth_class = AuthByWorkloadIdentity(provider=None)
     auth_class.prepare()
 
@@ -303,4 +353,6 @@ def test_autodetect_no_provider_raises_error(no_metadata_service):
     auth_class = AuthByWorkloadIdentity(provider=None, token=None)
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare()
-    assert "No workload identity credential was found for 'auto-detect" in str(excinfo.value)
+    assert "No workload identity credential was found for 'auto-detect" in str(
+        excinfo.value
+    )

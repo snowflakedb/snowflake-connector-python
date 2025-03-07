@@ -591,23 +591,50 @@ def test_otel_error_message(caplog, mock_post_requests):
     assert important_records[0].exc_text is not None
 
 
-@pytest.mark.parametrize("dependent_param,value", [("workload_identity_provider", "AWS"), ("workload_identity_entra_resource", "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b")])
-def test_cannot_set_dependent_params_without_wlid_authenticator(mock_post_requests, dependent_param, value):
+@pytest.mark.parametrize(
+    "dependent_param,value",
+    [
+        ("workload_identity_provider", "AWS"),
+        (
+            "workload_identity_entra_resource",
+            "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
+        ),
+    ],
+)
+def test_cannot_set_dependent_params_without_wlid_authenticator(
+    mock_post_requests, dependent_param, value
+):
     with pytest.raises(ProgrammingError) as excinfo:
-        snowflake.connector.connect(user="user", account="account", password="password", **{dependent_param: value})
-    assert f"{dependent_param} was set but authenticator was not set to WORKLOAD_IDENTITY" in str(excinfo.value)
+        snowflake.connector.connect(
+            user="user",
+            account="account",
+            password="password",
+            **{dependent_param: value},
+        )
+    assert (
+        f"{dependent_param} was set but authenticator was not set to WORKLOAD_IDENTITY"
+        in str(excinfo.value)
+    )
 
 
 def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
     with pytest.raises(ProgrammingError) as excinfo:
-        snowflake.connector.connect(account="account", authenticator="WORKLOAD_IDENTITY")
-    assert "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable to use the 'WORKLOAD_IDENTITY' authenticator" in str(excinfo.value)
+        snowflake.connector.connect(
+            account="account", authenticator="WORKLOAD_IDENTITY"
+        )
+    assert (
+        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable to use the 'WORKLOAD_IDENTITY' authenticator"
+        in str(excinfo.value)
+    )
 
 
 @patch("snowflake.connector.SnowflakeConnection._authenticate", return_value=None)
 @patch("snowflake.connector.auth.AuthByWorkloadIdentity.__init__", return_value=None)
-def test_connection_params_are_plumbed_into_authbyworkloadidentity(mock_auth_constructor, mock_authenticate):
-    os.environ["SF_ENABLE_EXPERIMENTAL_AUTHENTICATION"] = ""  # we can set this to any value.
+def test_connection_params_are_plumbed_into_authbyworkloadidentity(
+    mock_auth_constructor, mock_authenticate
+):
+    # We can set this to any value.
+    os.environ["SF_ENABLE_EXPERIMENTAL_AUTHENTICATION"] = ""
     snowflake.connector.connect(
         account="my_account_1",
         workload_identity_provider=AttestationProvider.AWS,
@@ -621,3 +648,4 @@ def test_connection_params_are_plumbed_into_authbyworkloadidentity(mock_auth_con
         "entra_resource": "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
         "token": "my_token",
     }
+    os.environ.pop("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION")

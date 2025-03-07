@@ -1,21 +1,22 @@
 #
-# Copyright (c) 2012-2025 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
 from __future__ import annotations
 
+import json
+import logging
+import os
 from base64 import b64encode
+from dataclasses import dataclass
+from enum import Enum, unique
+from typing import Union
+
 import boto3
+import jwt
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from botocore.utils import InstanceMetadataRegionFetcher
-from dataclasses import dataclass
-from enum import Enum, unique
-import os
-import json
-import jwt
-import logging
-from typing import Union
 
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
@@ -49,13 +50,17 @@ class WorkloadIdentityAttestation:
     user_identifier_components: dict
 
 
-def try_metadata_service_call(method: str, url: str, headers: dict, timeout_sec: int = 3) -> Union[Response, None]:
+def try_metadata_service_call(
+    method: str, url: str, headers: dict, timeout_sec: int = 3
+) -> Response | None:
     """Tries to make a HTTP request to the metadata service with the given URL, method, headers and timeout.
 
     If we receive an error response or any exceptions are raised, returns None. Otherwise returns the response.
     """
     try:
-        res: Response = requests.request(method=method,url=url,headers=headers,timeout=timeout_sec)
+        res: Response = requests.request(
+            method=method, url=url, headers=headers, timeout=timeout_sec
+        )
         if not res.ok:
             return None
     except:
@@ -98,15 +103,15 @@ def get_aws_region() -> str | None:
 
 def get_aws_arn() -> str | None:
     """Get the current AWS workload's ARN, if any."""
-    caller_identity = boto3.client('sts').get_caller_identity()
+    caller_identity = boto3.client("sts").get_caller_identity()
     if not caller_identity or "Arn" not in caller_identity:
         return None
     return caller_identity["Arn"]
 
 
-def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
+def create_aws_attestation() -> WorkloadIdentityAttestation | None:
     """Tries to create a workload identity attestation for AWS.
-    
+
     If the application isn't running on AWS or no credentials were found, returns None.
     """
     aws_creds = boto3.session.Session().get_credentials()
@@ -140,12 +145,14 @@ def create_aws_attestation() -> Union[WorkloadIdentityAttestation, None]:
         "headers": dict(request.headers.items()),
     }
     credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
-    return WorkloadIdentityAttestation(AttestationProvider.AWS, credential, {"arn": arn})
+    return WorkloadIdentityAttestation(
+        AttestationProvider.AWS, credential, {"arn": arn}
+    )
 
 
-def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
+def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
     """Tries to create a workload identity attestation for GCP.
-    
+
     If the application isn't running on GCP or no credentials were found, returns None.
     """
     res = try_metadata_service_call(
@@ -157,7 +164,7 @@ def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
     )
     if res is None:
         # Most likely we're just not running on GCP, which may be expected.
-        logger.debug('GCP metadata server request was not successful.')
+        logger.debug("GCP metadata server request was not successful.")
         return None
 
     jwt_str = res.content.decode("utf-8")
@@ -169,12 +176,16 @@ def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
         logger.debug("Unexpected GCP token issuer '%s'", issuer)
         return None
 
-    return WorkloadIdentityAttestation(AttestationProvider.GCP, jwt_str, {"sub": subject})
+    return WorkloadIdentityAttestation(
+        AttestationProvider.GCP, jwt_str, {"sub": subject}
+    )
 
 
-def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIdentityAttestation, None]:
+def create_azure_attestation(
+    snowflake_entra_resource: str,
+) -> WorkloadIdentityAttestation | None:
     """Tries to create a workload identity attestation for Azure.
-    
+
     If the application isn't running on Azure or no credentials were found, returns None.
     """
     headers = {"Metadata": "True"}
@@ -193,7 +204,7 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
 
         # Azure Functions uses a different endpoint, headers and API version.
         url_without_query_string = identity_endpoint
-        headers = { "X-IDENTITY-HEADER": identity_header }
+        headers = {"X-IDENTITY-HEADER": identity_header}
         query_params = f"api-version=2019-08-01&resource={snowflake_entra_resource}"
 
         # Some Azure Functions environments may require client_id in the URL
@@ -208,7 +219,7 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
     )
     if res is None:
         # Most likely we're just not running on Azure, which may be expected.
-        logger.debug('Azure metadata server request was not successful.')
+        logger.debug("Azure metadata server request was not successful.")
         return None
 
     try:
@@ -229,12 +240,14 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
         logger.debug("Unexpected Azure token issuer '%s'", issuer)
         return None
 
-    return WorkloadIdentityAttestation(AttestationProvider.AZURE, jwt_str, {"iss": issuer, "sub": subject})
+    return WorkloadIdentityAttestation(
+        AttestationProvider.AZURE, jwt_str, {"iss": issuer, "sub": subject}
+    )
 
 
-def create_oidc_attestation(token: str | None) -> Union[WorkloadIdentityAttestation, None]:
+def create_oidc_attestation(token: str | None) -> WorkloadIdentityAttestation | None:
     """Tries to create an attestation using the given token.
-    
+
     If this is not populated, returns None.
     """
     if not token:
@@ -245,12 +258,16 @@ def create_oidc_attestation(token: str | None) -> Union[WorkloadIdentityAttestat
     if not issuer or not subject:
         return None
 
-    return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, {"iss": issuer, "sub": subject})
+    return WorkloadIdentityAttestation(
+        AttestationProvider.OIDC, token, {"iss": issuer, "sub": subject}
+    )
 
 
-def create_autodetect_attestation(entra_resource: str, token: str | None = None) -> Union[WorkloadIdentityAttestation, None]:
+def create_autodetect_attestation(
+    entra_resource: str, token: str | None = None
+) -> WorkloadIdentityAttestation | None:
     """Tries to create an attestation using the auto-detected runtime environment.
-    
+
     If no attestation can be found, returns None.
     """
     attestation = create_oidc_attestation(token)
@@ -272,7 +289,11 @@ def create_autodetect_attestation(entra_resource: str, token: str | None = None)
     return None
 
 
-def create_attestation(provider: AttestationProvider | None, entra_resource: str | None = None, token: str | None = None) -> WorkloadIdentityAttestation:
+def create_attestation(
+    provider: AttestationProvider | None,
+    entra_resource: str | None = None,
+    token: str | None = None,
+) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
 
     If the provider is None, this will try to auto-detect a credential from the runtime environment. If the provider fails to detect a credential,

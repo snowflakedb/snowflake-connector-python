@@ -56,8 +56,8 @@ from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
-    ENV_VAR_PARTNER,
     ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
+    ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -89,12 +89,12 @@ from .errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_BACKOFF_POLICY,
     ER_INVALID_VALUE,
+    ER_INVALID_WIF_SETTINGS,
     ER_NO_ACCOUNT_NAME,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
     ER_NO_USER,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
-    ER_INVALID_WIF_SETTINGS,
 )
 from .errors import DatabaseError, Error, OperationalError, ProgrammingError
 from .log_configuration import EasyLoggingConfigPython
@@ -1154,8 +1154,7 @@ class SnowflakeConnection:
                         None,
                         ProgrammingError,
                         {
-                            "msg":
-                                f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{WORKLOAD_IDENTITY_AUTHENTICATOR}' authenticator.", 
+                            "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{WORKLOAD_IDENTITY_AUTHENTICATOR}' authenticator.",
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
@@ -1303,7 +1302,11 @@ class SnowflakeConnection:
                 self._token = f.read()
 
         # Set of authenticators allowing empty user.
-        empty_user_allowed_authenticators = {OAUTH_AUTHENTICATOR, NO_AUTH_AUTHENTICATOR, WORKLOAD_IDENTITY_AUTHENTICATOR}
+        empty_user_allowed_authenticators = {
+            OAUTH_AUTHENTICATOR,
+            NO_AUTH_AUTHENTICATOR,
+            WORKLOAD_IDENTITY_AUTHENTICATOR,
+        }
 
         if not (self._master_token and self._session_token):
             if (
@@ -1321,16 +1324,22 @@ class SnowflakeConnection:
             if self._private_key or self._private_key_file:
                 self._authenticator = KEY_PAIR_AUTHENTICATOR
 
-            workload_identity_dependent_options = ["workload_identity_provider", "workload_identity_entra_resource"]
+            workload_identity_dependent_options = [
+                "workload_identity_provider",
+                "workload_identity_entra_resource",
+            ]
             for dependent_option in workload_identity_dependent_options:
-                if self.__getattribute__(f"_{dependent_option}") is not None and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR:
+                if (
+                    self.__getattribute__(f"_{dependent_option}") is not None
+                    and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR
+                ):
                     Error.errorhandler_wrapper(
                         self,
                         None,
                         ProgrammingError,
                         {
                             "msg": f"{dependent_option} was set but authenticator was not set to {WORKLOAD_IDENTITY_AUTHENTICATOR}",
-                            "errno": ER_INVALID_WIF_SETTINGS
+                            "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
 
