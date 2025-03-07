@@ -10,11 +10,8 @@ import pytest
 try:
     import snowflake.connector
     from src.snowflake.connector.network import PROGRAMMATIC_ACCESS_TOKEN
-    from src.snowflake.connector.test_util import RUNNING_ON_JENKINS
 except ImportError:
-    import os
-
-    RUNNING_ON_JENKINS = os.getenv("JENKINS_HOME") is not None
+    pass
 
 from ..wiremock.wiremock_utils import WiremockClient
 
@@ -26,7 +23,6 @@ def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
 def test_valid_pat(wiremock_client: WiremockClient) -> None:
     wiremock_data_dir = (
         pathlib.Path(__file__).parent.parent
@@ -65,7 +61,6 @@ def test_valid_pat(wiremock_client: WiremockClient) -> None:
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
 def test_invalid_pat(wiremock_client: WiremockClient) -> None:
     wiremock_data_dir = (
         pathlib.Path(__file__).parent.parent
