@@ -1,33 +1,35 @@
 #!/usr/bin/env python
 #
-# Copyright (c) 2012-2025 Snowflake Computing Inc. All rights reserved.
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-from abc import ABC, abstractmethod
 import datetime
 import json
-import jwt
 import logging
 import os
-import pytest
+from abc import ABC, abstractmethod
 from time import time
 from unittest import mock
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
-from botocore.credentials import Credentials
+import jwt
+import pytest
 from botocore.awsrequest import AWSRequest
+from botocore.credentials import Credentials
 
+from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
 from snowflake.connector.vendored.requests.models import Response
-from snowflake.connector.vendored.requests.exceptions import HTTPError, ConnectTimeout
 
 logger = logging.getLogger(__name__)
 
 
-def gen_dummy_id_token(sub = "test-subject", iss = "test-issuer", aud="snowflakecomputing.com") -> str:
+def gen_dummy_id_token(
+    sub="test-subject", iss="test-issuer", aud="snowflakecomputing.com"
+) -> str:
     """Generates a dummy ID token using the given subject and issuer."""
     now = int(time())
     key = "secret"
-    payload={
+    payload = {
         "sub": sub,
         "iss": iss,
         "aud": aud,
@@ -52,6 +54,7 @@ def build_response(content: bytes, status_code: int = 200) -> Response:
 
 class FakeMetadataService(ABC):
     """Base class for fake metadata service implementations."""
+
     def __init__(self):
         self.reset_defaults()
 
@@ -82,7 +85,9 @@ class FakeMetadataService(ABC):
         parsed_url = urlparse(url)
 
         if not parsed_url.hostname == self.expected_hostname:
-            logger.debug(f"Received request to unexpected hostname {parsed_url.hostname}")
+            logger.debug(
+                f"Received request to unexpected hostname {parsed_url.hostname}"
+            )
             raise ConnectTimeout()
 
         return self.handle_request(method, parsed_url, headers, timeout)
@@ -93,10 +98,19 @@ class FakeMetadataService(ABC):
         self.patchers = []
         # requests.request is used by the direct metadata service API calls from our code. This is the main
         # thing being faked here.
-        self.patchers.append(mock.patch("snowflake.connector.vendored.requests.request", side_effect=self))
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.vendored.requests.request", side_effect=self
+            )
+        )
         # HTTPConnection.request is used by the AWS boto libraries. We're not mocking those calls here, so we
         # simply raise a ConnectTimeout to avoid making real network calls.
-        self.patchers.append(mock.patch("urllib3.connection.HTTPConnection.request", side_effect=ConnectTimeout()))
+        self.patchers.append(
+            mock.patch(
+                "urllib3.connection.HTTPConnection.request",
+                side_effect=ConnectTimeout(),
+            )
+        )
         for patcher in self.patchers:
             patcher.__enter__()
         return self
@@ -108,6 +122,7 @@ class FakeMetadataService(ABC):
 
 class NoMetadataService(FakeMetadataService):
     """Emulates an environment without any metadata service."""
+
     @property
     def expected_hostname(self):
         return None  # Always raise a ConnectTimeout.
@@ -119,6 +134,7 @@ class NoMetadataService(FakeMetadataService):
 
 class FakeAzureVmMetadataService(FakeMetadataService):
     """Emulates an environment with the Azure VM metadata service."""
+
     def reset_defaults(self):
         # Defaults used for generating an Entra ID token. Can be overriden in individual tests.
         self.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
@@ -132,7 +148,12 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         query_string = parse_qs(parsed_url.query)
 
         # Reject malformed requests.
-        if not (method == "GET" and parsed_url.path == "/metadata/identity/oauth2/token" and headers.get("Metadata") == "True" and query_string["resource"]):
+        if not (
+            method == "GET"
+            and parsed_url.path == "/metadata/identity/oauth2/token"
+            and headers.get("Metadata") == "True"
+            and query_string["resource"]
+        ):
             return HTTPError(status_code=400)
 
         logger.debug("Received request for Azure VM metadata service")
@@ -144,6 +165,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
 
 class FakeAzureFunctionMetadataService(FakeMetadataService):
     """Emulates an environment with the Azure Function metadata service."""
+
     def reset_defaults(self):
         # Defaults used for generating an Entra ID token. Can be overriden in individual tests.
         self.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
@@ -161,8 +183,15 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
         query_string = parse_qs(parsed_url.query)
 
         # Reject malformed requests.
-        if not (method == "GET" and parsed_url.path == self.parsed_identity_endpoint.path and headers.get("X-IDENTITY-HEADER") == self.identity_header and query_string["resource"]):
-            logger.warning(f"Received malformed request: {method} {parsed_url.path} {str(headers)} {str(query_string)}")
+        if not (
+            method == "GET"
+            and parsed_url.path == self.parsed_identity_endpoint.path
+            and headers.get("X-IDENTITY-HEADER") == self.identity_header
+            and query_string["resource"]
+        ):
+            logger.warning(
+                f"Received malformed request: {method} {parsed_url.path} {str(headers)} {str(query_string)}"
+            )
             return HTTPError(status_code=400)
 
         logger.debug("Received request for Azure Functions metadata service")
@@ -185,6 +214,7 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
 
 class FakeGceMetadataService(FakeMetadataService):
     """Emulates an environment with the GCE metadata service."""
+
     def reset_defaults(self):
         # Defaults used for generating a token. Can be overriden in individual tests.
         self.sub = "123"
@@ -198,7 +228,13 @@ class FakeGceMetadataService(FakeMetadataService):
         query_string = parse_qs(parsed_url.query)
 
         # Reject malformed requests.
-        if not (method == "GET" and parsed_url.path == "/computeMetadata/v1/instance/service-accounts/default/identity" and headers.get("Metadata-Flavor") == "Google" and query_string["audience"]):
+        if not (
+            method == "GET"
+            and parsed_url.path
+            == "/computeMetadata/v1/instance/service-accounts/default/identity"
+            and headers.get("Metadata-Flavor") == "Google"
+            and query_string["audience"]
+        ):
             return HTTPError(status_code=400)
 
         logger.debug("Received request for GCE metadata service")
@@ -215,6 +251,7 @@ class FakeAwsEnvironment:
     emulating them here would be complex and fragile. Instead, we emulate the higher-level functions
     called by the connector code.
     """
+
     def __init__(self):
         # Defaults used for generating a token. Can be overriden in individual tests.
         self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-34afe100cad287fab"
@@ -235,16 +272,34 @@ class FakeAwsEnvironment:
         request.headers.add_header("X-Amz-Security-Token", "<TOKEN>")
         request.headers.add_header(
             "Authorization",
-            f"AWS4-HMAC-SHA256 Credential=<cred>, SignedHeaders={';'.join(request.headers.keys())}, Signature=<sig>"
+            f"AWS4-HMAC-SHA256 Credential=<cred>, SignedHeaders={';'.join(request.headers.keys())}, Signature=<sig>",
         )
 
     def __enter__(self):
         # Patch the relevant functions to do what we want.
         self.patchers = []
-        self.patchers.append(mock.patch("boto3.session.Session.get_credentials", side_effect=self.get_credentials))
-        self.patchers.append(mock.patch("botocore.auth.SigV4Auth.add_auth", side_effect=self.sign_request))
-        self.patchers.append(mock.patch("snowflake.connector.wif_util.get_aws_region", side_effect=self.get_region))
-        self.patchers.append(mock.patch("snowflake.connector.wif_util.get_aws_arn", side_effect=self.get_arn))
+        self.patchers.append(
+            mock.patch(
+                "boto3.session.Session.get_credentials",
+                side_effect=self.get_credentials,
+            )
+        )
+        self.patchers.append(
+            mock.patch(
+                "botocore.auth.SigV4Auth.add_auth", side_effect=self.sign_request
+            )
+        )
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.wif_util.get_aws_region",
+                side_effect=self.get_region,
+            )
+        )
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.wif_util.get_aws_arn", side_effect=self.get_arn
+            )
+        )
         for patcher in self.patchers:
             patcher.__enter__()
         return self
@@ -268,7 +323,10 @@ def fake_aws_environment():
         yield env
 
 
-@pytest.fixture(params=[FakeAzureFunctionMetadataService(), FakeAzureVmMetadataService()], ids=["azure_function", "azure_vm"])
+@pytest.fixture(
+    params=[FakeAzureFunctionMetadataService(), FakeAzureVmMetadataService()],
+    ids=["azure_function", "azure_vm"],
+)
 def fake_azure_metadata_service(request):
     """Parameterized fixture that emulates both the Azure VM and Azure Functions metadata services."""
     with request.param as server:
