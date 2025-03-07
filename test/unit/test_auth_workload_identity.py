@@ -81,7 +81,7 @@ def test_explicit_oidc_invalid_inline_token_raises_error():
     auth_class = AuthByWorkloadIdentity(AttestationProvider.OIDC, invalid_token)
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare()
-    assert "token is not a valid JWT" in str(excinfo.value)
+    assert "No workload identity credential was found for 'OIDC'" in str(excinfo.value)
 
 
 def test_explicit_oidc_no_token_raises_error():

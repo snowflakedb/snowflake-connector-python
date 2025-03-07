@@ -72,8 +72,19 @@ def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[st
     We only decode the JWT here to get some basic claims, which will be used for a) a quick smoke test to ensure we got the right
     issuer, and b) to find the unique user being asserted and populate assertion_content. The latter may be used for logging
     and possibly caching.
+
+    If there are any errors in parsing the token or extracting iss and sub, this will return (None, None).
     """
-    claims = jwt.decode(jwt_str, options={"verify_signature": False})
+    try:
+        claims = jwt.decode(jwt_str, options={"verify_signature": False})
+    except jwt.exceptions.InvalidTokenError as e:
+        logger.warning("Token is not a valid JWT.", exc_info=True)
+        return None, None
+
+    if not ("iss" in claims and "sub" in claims):
+        logger.warning("Token is missing 'iss' or 'sub' claims.")
+        return None, None
+
     return claims["iss"], claims["sub"]
 
 
@@ -151,6 +162,8 @@ def create_gcp_attestation() -> Union[WorkloadIdentityAttestation, None]:
 
     jwt_str = res.content.decode("utf-8")
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
+    if not issuer or not subject:
+        return None
     if issuer != "https://accounts.google.com":
         # This might happen if we're running on a different platform that responds to the same metadata request signature as GCP.
         logger.debug("Unexpected GCP token issuer '%s'", issuer)
@@ -209,6 +222,8 @@ def create_azure_attestation(snowflake_entra_resource: str) -> Union[WorkloadIde
         return None
 
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
+    if not issuer or not subject:
+        return None
     if not issuer.startswith("https://sts.windows.net/"):
         # This might happen if we're running on a different platform that responds to the same metadata request signature as Azure.
         logger.debug("Unexpected Azure token issuer '%s'", issuer)
@@ -226,14 +241,11 @@ def create_oidc_attestation(token: str | None) -> Union[WorkloadIdentityAttestat
         logger.debug("No OIDC token was specified.")
         return None
 
-    try:
-        issuer, subject = extract_iss_and_sub_without_signature_verification(token)
-        return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, {"iss": issuer, "sub": subject})
-    except jwt.exceptions.InvalidTokenError:
-        raise ProgrammingError(
-            msg=f"Specified token is not a valid JWT.",
-            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-        )
+    issuer, subject = extract_iss_and_sub_without_signature_verification(token)
+    if not issuer or not subject:
+        return None
+
+    return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, {"iss": issuer, "sub": subject})
 
 
 def create_autodetect_attestation(entra_resource: str, token: str | None = None) -> Union[WorkloadIdentityAttestation, None]:
