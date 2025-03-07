@@ -21,6 +21,7 @@ from ..compat import parse_qs, urlparse, urlsplit
 from ..constants import OAUTH_TYPE_AUTHORIZATION_CODE
 from ..errorcode import (
     ER_IDP_CONNECTION_ERROR,
+    ER_OAUTH_CALLBACK_ERROR,
     ER_OAUTH_STATE_CHANGED,
     ER_UNABLE_TO_OPEN_BROWSER,
 )
@@ -183,6 +184,14 @@ class AuthByOauthCode(AuthByPlugin):
                 return
         logger.debug("step 2: received OAUTH callback")
         q_params = _get_query_params(url)
+        if "error" in q_params:
+            self._handle_failure(
+                conn=conn,
+                ret={
+                    "code": ER_OAUTH_CALLBACK_ERROR,
+                    "message": f"Oauth callback returned an {q_params['error'][0]} error{': ' + q_params['error_description'][0] if 'error_description' in q_params else '.'}",
+                },
+            )
         code = q_params["code"][0]
         state = q_params["state"][0]
         if state != self._state:

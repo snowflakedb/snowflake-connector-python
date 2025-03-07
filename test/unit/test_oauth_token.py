@@ -173,7 +173,7 @@ def test_scope_error(
         wiremock_oauth_authorization_code_dir / "invalid_scope_error.json"
     )
 
-    with pytest.raises(KeyError):
+    with pytest.raises(snowflake.connector.DatabaseError) as execinfo:
         with mock.patch("webbrowser.open", new=webbrowser_mock.open):
             with mock.patch("secrets.token_urlsafe", return_value="abc123"):
                 snowflake.connector.connect(
@@ -190,6 +190,10 @@ def test_scope_error(
                     port=wiremock_client.wiremock_http_port,
                 )
 
+        assert str(execinfo.value).endswith(
+            "Oauth callback returned an invalid_scope error: One or more scopes are not configured for the authorization server resource."
+        )
+
 
 @pytest.mark.skipolddriver
 @pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
@@ -205,9 +209,6 @@ def test_token_request_error(
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir / "token_request_error.json"
     )
-
-    webbrowser_mock = Mock()
-    webbrowser_mock.open = _webbrowser_redirect
 
     # TODO: Is the DatabaseError correct? Possibly ConnectionError would make more sense?
     with pytest.raises(snowflake.connector.DatabaseError) as execinfo:
