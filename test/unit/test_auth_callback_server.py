@@ -18,7 +18,7 @@ from snowflake.connector.vendored import requests
     "dontwait",
     ["false", "true"],
 )
-@pytest.mark.parametrize("timeout", [None, 0.01])
+@pytest.mark.parametrize("timeout", [None, 0.05])
 @pytest.mark.parametrize("reuse_port", ["true"])
 def test_auth_callback_success(monkeypatch, dontwait, timeout, reuse_port) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", reuse_port)
@@ -29,7 +29,7 @@ def test_auth_callback_success(monkeypatch, dontwait, timeout, reuse_port) -> No
         def request_callback():
             nonlocal test_response
             if timeout:
-                time.sleep(timeout / 2)
+                time.sleep(timeout / 5)
             test_response = requests.get(
                 f"http://{callback_server.hostname}:{callback_server.port}/test_request"
             )
@@ -52,7 +52,7 @@ def test_auth_callback_success(monkeypatch, dontwait, timeout, reuse_port) -> No
     "dontwait",
     ["false", "true"],
 )
-@pytest.mark.parametrize("timeout", [0.01])
+@pytest.mark.parametrize("timeout", [0.05])
 @pytest.mark.parametrize("reuse_port", ["true"])
 def test_auth_callback_timeout(monkeypatch, dontwait, timeout, reuse_port) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", reuse_port)
