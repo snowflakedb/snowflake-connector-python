@@ -40,7 +40,7 @@ class WiremockClient:
         self.wiremock_host = "localhost"
         self.wiremock_http_port = None
         self.wiremock_https_port = None
-        self.forbidden_ports = forbidden_ports
+        self.forbidden_ports = forbidden_ports if forbidden_ports is not None else []
 
         self.wiremock_dir = pathlib.Path(__file__).parent.parent.parent / ".wiremock"
         assert self.wiremock_dir.exists(), f"{self.wiremock_dir} does not exist"
@@ -51,7 +51,9 @@ class WiremockClient:
         ), f"{self.wiremock_jar_path} does not exist"
 
     def _start_wiremock(self):
-        self.wiremock_http_port = self._find_free_port()
+        self.wiremock_http_port = self._find_free_port(
+            forbidden_ports=self.forbidden_ports,
+        )
         self.wiremock_https_port = self._find_free_port(
             forbidden_ports=self.forbidden_ports + [self.wiremock_http_port]
         )
