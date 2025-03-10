@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.14.1(TBD)
+  - Basic decimal floating-point type support.
+
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
   - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
@@ -17,6 +20,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug where file permission check happened on Windows.
   - Added support for File types.
   - Added `unsafe_file_write` connection parameter that restores the previous behaviour of saving files downloaded with GET with 644 permissions.
+  - Deprecated `insecure_mode` connection property and replaced it with `disable_ocsp_checks` with the same behavior as the former property.
 
 - v3.13.2(January 29, 2025)
   - Changed not to use scoped temporary objects.

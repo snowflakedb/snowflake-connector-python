@@ -209,7 +209,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     # add the new client type to the server to support these features.
     "internal_application_name": (CLIENT_NAME, (type(None), str)),
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
-    "insecure_mode": (False, bool),  # Error security fix requirement
+    "disable_ocsp_checks": (False, bool),
     "ocsp_fail_open": (True, bool),  # fail open on ocsp issues, default true
     "inject_client_pause": (0, int),  # snowflake internal
     "session_parameters": (None, (type(None), dict)),  # snowflake session parameters
@@ -366,8 +366,10 @@ class SnowflakeConnection:
     Use connect(..) to get the object.
 
     Attributes:
-        insecure_mode: Whether or not the connection is in insecure mode. Insecure mode means that the connection
-            validates the TLS certificate but doesn't check revocation status.
+        insecure_mode (deprecated): Whether or not the connection is in OCSP disabled mode. It means that the connection
+            validates the TLS certificate but doesn't check revocation status with OCSP provider.
+        disable_ocsp_checks: Whether or not the connection is in OCSP disabled mode. It means that the connection
+            validates the TLS certificate but doesn't check revocation status with OCSP provider.
         ocsp_fail_open: Whether or not the connection is in fail open mode. Fail open mode decides if TLS certificates
             continue to be validated. Revoked certificates are blocked. Any other exceptions are disregarded.
         session_id: The session ID of the connection.
@@ -478,6 +480,25 @@ class SnowflakeConnection:
             elif "streamlit" in sys.modules:
                 kwargs["application"] = "streamlit"
 
+        if "insecure_mode" in kwargs:
+            warn_message = "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
+            warnings.warn(
+                warn_message,
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+            if (
+                "disable_ocsp_checks" in kwargs
+                and kwargs["disable_ocsp_checks"] != kwargs["insecure_mode"]
+            ):
+                logger.warning(
+                    "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                    "Using the value of 'disable_ocsp_checks."
+                )
+            else:
+                self._disable_ocsp_checks = kwargs["insecure_mode"]
+
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None
         self.query_context_cache_size = 5
@@ -509,19 +530,23 @@ class SnowflakeConnection:
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
+    # Deprecated
     @property
     def insecure_mode(self) -> bool:
-        return self._insecure_mode
+        return self._disable_ocsp_checks
+
+    @property
+    def disable_ocsp_checks(self) -> bool:
+        return self._disable_ocsp_checks
 
     @property
     def ocsp_fail_open(self) -> bool:
         return self._ocsp_fail_open
 
     def _ocsp_mode(self) -> OCSPMode:
-        """OCSP mode. INSEC
-        URE, FAIL_OPEN or FAIL_CLOSED."""
-        if self.insecure_mode:
-            return OCSPMode.INSECURE
+        """OCSP mode. DISABLE_OCSP_CHECKS, FAIL_OPEN or FAIL_CLOSED."""
+        if self.disable_ocsp_checks:
+            return OCSPMode.DISABLE_OCSP_CHECKS
         elif self.ocsp_fail_open:
             return OCSPMode.FAIL_OPEN
         else:
@@ -1158,8 +1183,6 @@ class SnowflakeConnection:
                     token_request_url=self._oauth_token_request_url.format(
                         host=self.host, port=self.port
                     ),
-                    # redirect_uri="http://127.0.0.1:{port}/",
-                    # redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
                     redirect_uri=self._oauth_redirect_uri,
                     scope=self._oauth_scope,
                     pkce=pkce,
@@ -1378,7 +1401,7 @@ class SnowflakeConnection:
             )
 
         if self.ocsp_fail_open:
-            logger.info(
+            logger.debug(
                 "This connection is in OCSP Fail Open Mode. "
                 "TLS Certificates would be checked for validity "
                 "and revocation status. Any other Certificate "
@@ -1387,12 +1410,10 @@ class SnowflakeConnection:
                 "connectivity."
             )
 
-        if self.insecure_mode:
-            logger.info(
-                "THIS CONNECTION IS IN INSECURE MODE. IT "
-                "MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE "
-                "CERTIFICATE REVOCATION STATUS WILL NOT BE "
-                "CHECKED."
+        if self.disable_ocsp_checks:
+            logger.debug(
+                "This connection runs with disabled OCSP checks. "
+                "Revocation status of the certificate will not be checked against OCSP Responder."
             )
 
     def cmd_query(
