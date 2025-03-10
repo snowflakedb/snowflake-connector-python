@@ -100,18 +100,37 @@ class AuthHttpServer:
             self.close()
             raise
 
-    def _try_poll(self, timeout: float | None) -> socket.socket | None:
-        read_sockets = select.select([self._socket], [], [], timeout)[0]
-        if read_sockets and read_sockets[0] is not None:
-            return self._socket.accept()[0]
+    def _try_poll(
+        self, attempts: int, attempt_timeout: float | None
+    ) -> (socket.socket | None, int):
+        for attempt in range(attempts):
+            read_sockets = select.select([self._socket], [], [], attempt_timeout)[0]
+            if read_sockets and read_sockets[0] is not None:
+                return self._socket.accept()[0], attempt
+        return None, attempts
 
     def _try_receive_block(
-        self, recv: Callable[[socket.socket, int], bytes], timeout: float | None
-    ) -> (bytes | None, socket.socket | None):
-        client_socket = self._try_poll(timeout)
-        if client_socket is not None:
-            return recv(client_socket, self.buf_size), client_socket
-        return None, None
+        self, client_socket: socket.socket, attempts: int, attempt_timeout: float | None
+    ) -> bytes | None:
+        if attempt_timeout is not None:
+            client_socket.settimeout(attempt_timeout)
+        recv = _wrap_socket_recv()
+        for attempt in range(attempts):
+            try:
+                return recv(client_socket, self.buf_size)
+            except BlockingIOError:
+                if attempt < attempts - 1:
+                    cooldown = min(attempt_timeout, 0.25) if attempt_timeout else 0.25
+                    logger.debug(
+                        f"BlockingIOError raised from socket.recv on {1 + attempt}/{attempts} attempt."
+                        f"Waiting for {cooldown} seconds before trying again"
+                    )
+                    time.sleep(cooldown)
+            except socket.timeout:
+                logger.debug(
+                    f"socket.recv timed out on {1 + attempt}/{attempts} attempt."
+                )
+        return None
 
     def receive_block(
         self,
@@ -123,27 +142,17 @@ class AuthHttpServer:
             raise RuntimeError(
                 "Operation is not supported, server was already shut down."
             )
-        recv = _wrap_socket_recv()
         attempt_timeout = timeout / max_attempts if timeout else None
-        for attempt in range(max_attempts):
-            try:
-                raw_block, client_socket = self._try_receive_block(
-                    recv, attempt_timeout
-                )
-                if raw_block:
-                    return raw_block.decode("utf-8").split("\r\n"), client_socket
-                elif client_socket:
-                    client_socket.shutdown(socket.SHUT_RDWR)
-                    client_socket.close()
-            except BlockingIOError:
-                logger.debug(
-                    f"BlockingIOError raised from socket.recv on attempt {1+attempt}"
-                    " to retrieve callback request"
-                )
-                if attempt < max_attempts - 1:
-                    cooldown = min(attempt_timeout, 0.25) if attempt_timeout else 0.25
-                    logger.debug(f"Waiting for {cooldown} seconds before trying again")
-                    time.sleep(cooldown)
+        client_socket, poll_attempts = self._try_poll(max_attempts, attempt_timeout)
+        if client_socket is None:
+            return None, None
+        raw_block = self._try_receive_block(
+            client_socket, max_attempts - poll_attempts, attempt_timeout
+        )
+        if raw_block:
+            return raw_block.decode("utf-8").split("\r\n"), client_socket
+        client_socket.shutdown(socket.SHUT_RDWR)
+        client_socket.close()
         return None, None
 
     def close(self) -> None:
