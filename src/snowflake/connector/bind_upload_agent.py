@@ -23,43 +23,35 @@ logger = getLogger(__name__)
 
 
 class BindUploadAgent:
+    _STAGE_NAME = "SNOWPARK_TEMP_STAGE_BIND"
 
     def __init__(
         self,
         cursor: SnowflakeCursor,
-        rows: list[bytes],
+        rows: List[bytes],
         stream_buffer_size: int = 1024 * 1024 * 10,
-    ) -> None:
+    ):
         """Construct an agent that uploads binding parameters as CSV files to a temporary stage.
-
         Args:
             cursor: The cursor object.
             rows: Rows of binding parameters in CSV format.
             stream_buffer_size: Size of each file, default to 10MB.
         """
-        self._use_scoped_temp_object = (
-            cursor.connection._session_parameters.get(
-                _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, False
-            )
-            if cursor.connection._session_parameters
-            else False
-        )
-        self._STAGE_NAME = (
-            "SNOWPARK_TEMP_STAGE_BIND" if self._use_scoped_temp_object else "SYSTEMBIND"
-        )
         self.cursor = cursor
         self.rows = rows
         self._stream_buffer_size = stream_buffer_size
         self.stage_path = f"@{self._STAGE_NAME}/{uuid.uuid4().hex}"
-
-    def _create_stage(self) -> None:
-        create_stage_sql = (
-            f"create or replace {get_temp_type_for_object(self._use_scoped_temp_object)} stage {self._STAGE_NAME} "
+        # More discussion of using IF NOT EXISTS could be found in
+        # https://snowflake.slack.com/archives/C02BTC3HY/p1629743618443400
+        self._create_stage_stmt = (
+            f"create scoped temporary stage if not exists {self._STAGE_NAME} "
             "file_format=(type=csv field_optionally_enclosed_by='\"')"
         )
-        self.cursor.execute(create_stage_sql)
 
-    def upload(self) -> None:
+    def _create_stage(self):
+        self.cursor.execute(self._create_stage_stmt)
+
+    def upload(self):
         try:
             self._create_stage()
         except Error as err:
@@ -80,10 +72,17 @@ class BindUploadAgent:
                 if row_idx >= len(self.rows) or size >= self._stream_buffer_size:
                     break
             try:
-                self.cursor.execute(
-                    f"PUT file://{row_idx}.csv {self.stage_path}", file_stream=f
+                f.seek(0)
+                options = {
+                    "parallel": 1,
+                    "source_compression": "AUTO_DETECT",
+                    "auto_compress": False,
+                    "overwrite": True,
+                }
+                self.cursor._upload_stream(
+                    f, f"{self.stage_path}/{row_idx}.csv", options
                 )
             except Error as err:
-                logger.debug("Failed to upload the bindings file to stage.")
+                logger.debug(f"Failed to upload the bindings file to stage: {err}")
                 raise BindUploadError from err
             f.close()
