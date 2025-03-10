@@ -370,7 +370,7 @@ def write_pandas(
     TODO: remove the following line when merging SP connector and Python Connector.
     Make sure `create scoped temp stage` is supported when it's not run in a SP.
     """
-    _use_scoped_temp_object = False
+    _use_scoped_temp_object = True
 
     if create_temp_table:
         warnings.warn(
@@ -386,6 +386,11 @@ def write_pandas(
         raise ValueError(
             "Unsupported table type. Expected table types: temp/temporary, transient"
         )
+
+    if _use_scoped_temp_object and table_type.lower() in ["temp", "temporary"]:
+        stricter_table_type = get_temp_type_for_object(_use_scoped_temp_object)
+    else:
+        stricter_table_type = table_type
 
     if chunk_size is None:
         chunk_size = len(df)
@@ -442,22 +447,10 @@ def write_pandas(
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression, **kwargs)
             # Upload parquet file
-            upload_sql = (
-                "PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                "'file://{path}' ? PARALLEL={parallel}"
-            ).format(
-                path=chunk_path.replace("\\", "\\\\").replace("'", "\\'"),
-                parallel=parallel,
-            )
-            params = ("@" + stage_location,)
-            logger.debug(f"uploading files with '{upload_sql}', params: %s", params)
-            cursor.execute(
-                upload_sql,
-                _is_internal=True,
-                _force_qmark_paramstyle=True,
-                params=params,
-                num_statements=1,
-            )
+            cursor._upload(
+                chunk_path.replace("\\", "\\\\").replace("'", "\\'"),
+                "@" + stage_location,
+                {"parallel": parallel, "source_compression": "AUTO_DETECT",})
             # Remove chunk file
             os.remove(chunk_path)
 
@@ -520,7 +513,7 @@ def write_pandas(
         target_table_location = build_location_helper(
             database,
             schema,
-            random_string() if (overwrite and auto_create_table) else table_name,
+            random_name_for_temp_object(TempObjectType.TABLE) if (overwrite and auto_create_table) else table_name,
             quote_identifiers,
         )
 
@@ -530,7 +523,7 @@ def write_pandas(
         )
 
         create_table_sql = (
-            f"CREATE {table_type.upper()} {iceberg}TABLE IF NOT EXISTS identifier(?) "
+            f"CREATE {stricter_table_type.upper()} {iceberg}TABLE IF NOT EXISTS identifier(?) "
             f"({create_table_columns}) {iceberg_config_statement}"
             f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
         )
