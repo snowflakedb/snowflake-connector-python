@@ -203,6 +203,12 @@ class SnowflakeConverter:
 
             return conv
 
+    def _DECFLOAT_numpy_to_python(self, ctx: dict[str, Any]) -> Callable:
+        return numpy.float64
+
+    def _DECFLOAT_to_python(self, ctx: dict[str, Any]) -> Callable:
+        return decimal.Decimal
+
     def _REAL_to_python(self, _: dict[str, str | None] | dict[str, str]) -> Callable:
         return float
 

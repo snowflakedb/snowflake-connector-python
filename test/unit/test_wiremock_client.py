@@ -9,13 +9,8 @@ import pytest
 # old driver support
 try:
     from snowflake.connector.vendored import requests
-    from src.snowflake.connector.test_util import RUNNING_ON_JENKINS
 except ImportError:
-    import os
-
     import requests
-
-    RUNNING_ON_JENKINS = os.getenv("JENKINS_HOME") is not None
 
 
 from ..wiremock.wiremock_utils import WiremockClient
@@ -27,7 +22,6 @@ def wiremock_client() -> Generator[WiremockClient, Any, None]:
         yield client
 
 
-@pytest.mark.skipif(RUNNING_ON_JENKINS, reason="jenkins doesn't support wiremock tests")
 def test_wiremock(wiremock_client):
     connection_reset_by_peer_mapping = {
         "mappings": [
