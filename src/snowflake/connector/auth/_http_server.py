@@ -136,7 +136,7 @@ class AuthHttpServer:
     def receive_block(
         self,
         max_attempts: int = 15,
-        timeout: float | None = 30.0,
+        timeout: float | None = 60.0,
     ) -> (list[str] | None, socket.socket | None):
         """Receive a message with a maximum attempt count and a timeout in seconds, blocking."""
         if not self._socket:
