@@ -9,6 +9,9 @@ import os
 import select
 import socket
 import time
+from collections.abc import Callable
+from types import TracebackType
+from typing import Self
 
 from ..compat import IS_WINDOWS
 from ..errorcode import ER_NO_HOSTNAME_FOUND
@@ -17,29 +20,64 @@ from ..errors import OperationalError
 logger = logging.getLogger(__name__)
 
 
+def _use_msg_dont_wait() -> bool:
+    if os.getenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "false").lower() != "true":
+        return False
+    if IS_WINDOWS:
+        logger.warning(
+            "Configuration SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT is not available in Windows. Ignoring."
+        )
+        return False
+    return True
+
+
+def _wrap_socket_recv() -> Callable[[socket.socket, int], bytes]:
+    dont_wait = _use_msg_dont_wait()
+    if dont_wait:
+        # WSL containerized environment sometimes causes socket_client.recv to hang indefinetly
+        #   To avoid this, passing the socket.MSG_DONTWAIT flag which raises BlockingIOError if
+        #   operation would block
+        logger.debug(
+            "Will call socket.recv with MSG_DONTWAIT flag due to SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT env var"
+        )
+    socket_recv = (
+        (lambda sock, buf_size: socket.socket.recv(sock, buf_size, socket.MSG_DONTWAIT))
+        if dont_wait
+        else (lambda sock, buf_size: socket.socket.recv(sock, buf_size))
+    )
+
+    def socket_recv_checked(sock: socket.socket, buf_size: int) -> bytes:
+        raw = socket_recv(sock, buf_size)
+        # when running in a containerized environment, socket_client.recv occasionally returns an empty byte array
+        #   an immediate successive call to socket_client.recv gets the actual data
+        if len(raw) == 0:
+            raw = socket_recv(sock, buf_size)
+        return raw
+
+    return socket_recv_checked
+
+
 class AuthHttpServer:
     """Simple HTTP server to receive callbacks through for auth purposes."""
 
     def __init__(
         self,
-        hostname: str = "localhost",
+        hostname: str = "127.0.0.1",
         buf_size: int = 16384,
     ) -> None:
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.hostname = hostname
         self.buf_size = buf_size
-        self._socket_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
         if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
             if IS_WINDOWS:
                 logger.warning(
                     "Configuration SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not available in Windows. Ignoring."
                 )
             else:
-                self._socket_connection.setsockopt(
-                    socket.SOL_SOCKET, socket.SO_REUSEPORT, 1
-                )
+                self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
         try:
-            self._socket_connection.bind(
+            self._socket.bind(
                 (
                     os.getenv("SF_AUTH_SOCKET_ADDR", hostname),
                     int(os.getenv("SF_AUTH_SOCKET_PORT", 0)),
@@ -53,76 +91,87 @@ class AuthHttpServer:
                     errno=ER_NO_HOSTNAME_FOUND,
                 )
             raise
+
         try:
-            self._socket_connection.listen(0)  # no backlog
-            self.port = self._socket_connection.getsockname()[1]
-        except Exception:
-            self._socket_connection.close()
+            self._socket.listen(0)  # no backlog
+            self.port = self._socket.getsockname()[1]
+        except Exception as ex:
+            logger.error(f"Failed to start listening for auth callback: {ex}")
+            self.close()
+            raise
+
+    def _try_poll(
+        self, attempts: int, attempt_timeout: float | None
+    ) -> (socket.socket | None, int):
+        for attempt in range(attempts):
+            read_sockets = select.select([self._socket], [], [], attempt_timeout)[0]
+            if read_sockets and read_sockets[0] is not None:
+                return self._socket.accept()[0], attempt
+        return None, attempts
+
+    def _try_receive_block(
+        self, client_socket: socket.socket, attempts: int, attempt_timeout: float | None
+    ) -> bytes | None:
+        if attempt_timeout is not None:
+            client_socket.settimeout(attempt_timeout)
+        recv = _wrap_socket_recv()
+        for attempt in range(attempts):
+            try:
+                return recv(client_socket, self.buf_size)
+            except BlockingIOError:
+                if attempt < attempts - 1:
+                    cooldown = min(attempt_timeout, 0.25) if attempt_timeout else 0.25
+                    logger.debug(
+                        f"BlockingIOError raised from socket.recv on {1 + attempt}/{attempts} attempt."
+                        f"Waiting for {cooldown} seconds before trying again"
+                    )
+                    time.sleep(cooldown)
+            except socket.timeout:
+                logger.debug(
+                    f"socket.recv timed out on {1 + attempt}/{attempts} attempt."
+                )
+        return None
 
     def receive_block(
         self,
         max_attempts: int = 15,
-    ) -> tuple[list[str], socket.socket]:
-        """Receive a message with a maximum attempt count, blocking."""
-        socket_client = None
-        while True:
-            try:
-                attempts = 0
-                raw_data = bytearray()
+        timeout: float | None = 30.0,
+    ) -> (list[str] | None, socket.socket | None):
+        """Receive a message with a maximum attempt count and a timeout in seconds, blocking."""
+        if not self._socket:
+            raise RuntimeError(
+                "Operation is not supported, server was already shut down."
+            )
+        attempt_timeout = timeout / max_attempts if timeout else None
+        client_socket, poll_attempts = self._try_poll(max_attempts, attempt_timeout)
+        if client_socket is None:
+            return None, None
+        raw_block = self._try_receive_block(
+            client_socket, max_attempts - poll_attempts, attempt_timeout
+        )
+        if raw_block:
+            return raw_block.decode("utf-8").split("\r\n"), client_socket
+        client_socket.shutdown(socket.SHUT_RDWR)
+        client_socket.close()
+        return None, None
 
-                msg_dont_wait = (
-                    os.getenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "false").lower()
-                    == "true"
-                )
-                if IS_WINDOWS:
-                    if msg_dont_wait:
-                        logger.warning(
-                            "Configuration SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT is not available in Windows. Ignoring."
-                        )
-                    msg_dont_wait = False
+    def close(self) -> None:
+        """Closes the underlying socket.
+        After having close() being called the server object cannot be reused.
+        """
+        if self._socket:
+            self._socket.close()
+            self._socket = None
 
-                # when running in a containerized environment, socket_client.recv ocassionally returns an empty byte array
-                #   an immediate successive call to socket_client.recv gets the actual data
-                while len(raw_data) == 0 and attempts < max_attempts:
-                    attempts += 1
-                    read_sockets, _write_sockets, _exception_sockets = select.select(
-                        [self._socket_connection], [], []
-                    )
+    def __enter__(self) -> Self:
+        """Context manager."""
+        return self
 
-                    if read_sockets[0] is not None:
-                        # Receive the data in small chunks and retransmit it
-                        socket_client, _ = self._socket_connection.accept()
-
-                        try:
-                            if msg_dont_wait:
-                                # WSL containerized environment sometimes causes socket_client.recv to hang indefinetly
-                                #   To avoid this, passing the socket.MSG_DONTWAIT flag which raises BlockingIOError if
-                                #   operation would block
-                                logger.debug(
-                                    "Calling socket_client.recv with MSG_DONTWAIT flag due to SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT env var"
-                                )
-                                raw_data = socket_client.recv(
-                                    BUF_SIZE, socket.MSG_DONTWAIT
-                                )
-                            else:
-                                raw_data = socket_client.recv(self.buf_size)
-
-                        except BlockingIOError:
-                            logger.debug(
-                                "BlockingIOError raised from socket.recv while attempting to retrieve callback request"
-                            )
-                            if attempts < max_attempts:
-                                sleep_time = 0.25
-                                logger.debug(
-                                    f"Waiting {sleep_time} seconds before trying again"
-                                )
-                                time.sleep(sleep_time)
-                            else:
-                                logger.debug("Exceeded retry count")
-
-                assert socket_client is not None
-                return raw_data.decode("utf-8").split("\r\n"), socket_client
-            except Exception:
-                if socket_client is not None:
-                    socket_client.shutdown(socket.SHUT_RDWR)
-                    socket_client.close()
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Context manager with disposing underlying networking objects."""
+        self.close()
