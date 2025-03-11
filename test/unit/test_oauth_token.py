@@ -130,7 +130,6 @@ def test_invalid_state(
         wiremock_oauth_authorization_code_dir / "invalid_state_error.json"
     )
 
-    # TODO: Is the DatabaseError correct? Possibly ConnectionError would make more sense?
     with pytest.raises(snowflake.connector.DatabaseError) as execinfo:
         with mock.patch("webbrowser.open", new=webbrowser_mock.open):
             with mock.patch("secrets.token_urlsafe", return_value="abc123"):
@@ -151,7 +150,6 @@ def test_invalid_state(
     assert str(execinfo.value).endswith("State changed during OAuth process.")
 
 
-# TODO: needs proper handling
 @pytest.mark.skipolddriver
 def test_scope_error(
     wiremock_client: WiremockClient,
@@ -219,7 +217,6 @@ def test_token_request_error(
                     port=wiremock_client.wiremock_http_port,
                 )
 
-    # TODO: possibly some more descriptive error message would make sense?
     assert str(execinfo.value).endswith(
         "Invalid HTTP request from web browser. Idp authentication could have failed."
     )

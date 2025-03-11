@@ -158,7 +158,7 @@ class AuthByOauthCode(AuthByPlugin):
                     conn=conn,
                     ret={
                         "code": ER_OAUTH_SERVER_TIMEOUT,
-                        "message": "Unable to receive the OAuth message within a given timeout",
+                        "message": "Unable to receive the OAuth message within a given timeout. Please check the redirect URI and try again.",
                     },
                 )
                 return
