@@ -58,6 +58,8 @@ try:  # Platform-specific: Python 3
 except AttributeError:  # Platform-specific: Python 2
     from .packages.backports.weakref_finalize import weakref_finalize
 
+from ..ext_logging import enable_extended_networking_logging
+
 xrange = six.moves.xrange
 
 log = logging.getLogger(__name__)
@@ -1022,6 +1024,7 @@ class HTTPSConnectionPool(HTTPConnectionPool):
             self.host,
             self.port or "443",
         )
+        enable_extended_networking_logging()
 
         if not self.ConnectionCls or self.ConnectionCls is DummyConnection:
             raise SSLError(

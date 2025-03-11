@@ -24,6 +24,7 @@ import OpenSSL.SSL
 from .constants import OCSPMode
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
+from .vendored.ext_logging import disable_extended_networking_logging
 from .vendored.urllib3 import connection as connection_
 from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
 from .vendored.urllib3.util import ssl_ as ssl_
@@ -75,6 +76,8 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
         kwargs["ca_certs"] = certifi.where()
 
     ret = ssl_.ssl_wrap_socket(*args, **kwargs)
+
+    disable_extended_networking_logging()
 
     log.debug(
         "OCSP Mode: %s, " "OCSP response cache file name: %s",
