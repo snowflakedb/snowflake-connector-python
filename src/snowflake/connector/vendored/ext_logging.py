@@ -13,9 +13,9 @@ log = logging.getLogger(__name__)
 
 
 def _relevant_path(path: str) -> str | None:
-    pos = path.rfind("snowflake-connector-python/src/snowflake/connector/")
+    pos = path.rfind("snowflake/connector/")
     if pos != -1:
-        return path[pos + 51 :]
+        return path[pos + 20:]
     return None
 
 
