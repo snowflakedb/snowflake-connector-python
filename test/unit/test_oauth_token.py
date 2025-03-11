@@ -257,9 +257,8 @@ def test_browser_timeout(
                     port=wiremock_client.wiremock_http_port,
                 )
 
-    # TODO: possibly some more descriptive error message would make sense?
     assert str(execinfo.value).endswith(
-        "Invalid HTTP request from web browser. Idp authentication could have failed."
+        "Unable to receive the OAuth message within a given timeout"
     )
 
 

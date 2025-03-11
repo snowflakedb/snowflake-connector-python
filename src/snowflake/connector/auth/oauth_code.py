@@ -22,6 +22,7 @@ from ..constants import OAUTH_TYPE_AUTHORIZATION_CODE
 from ..errorcode import (
     ER_IDP_CONNECTION_ERROR,
     ER_OAUTH_CALLBACK_ERROR,
+    ER_OAUTH_SERVER_TIMEOUT,
     ER_OAUTH_STATE_CHANGED,
     ER_UNABLE_TO_OPEN_BROWSER,
 )
@@ -152,6 +153,15 @@ class AuthByOauthCode(AuthByPlugin):
         )
         if webbrowser.open(url):
             data, socket_connection = http_server.receive_block()
+            if data is None or socket_connection is None:
+                self._handle_failure(
+                    conn=conn,
+                    ret={
+                        "code": ER_OAUTH_SERVER_TIMEOUT,
+                        "message": "Unable to receive the OAuth message within a given timeout",
+                    },
+                )
+                return
             try:
                 if not self._process_options(
                     data, socket_connection, hostname, http_server.port

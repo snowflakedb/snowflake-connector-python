@@ -11,7 +11,6 @@ import socket
 import time
 from collections.abc import Callable
 from types import TracebackType
-from typing import Self
 
 from ..compat import IS_WINDOWS
 from ..errorcode import ER_NO_HOSTNAME_FOUND
@@ -163,7 +162,7 @@ class AuthHttpServer:
             self._socket.close()
             self._socket = None
 
-    def __enter__(self) -> Self:
+    def __enter__(self) -> AuthHttpServer:
         """Context manager."""
         return self
 
