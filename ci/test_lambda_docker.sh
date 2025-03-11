@@ -2,7 +2,7 @@
 
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
-PYTHON_VERSION="${1:-3.9}"
+PYTHON_VERSION="${1:-3.8}"
 PYTHON_SHORT_VERSION="$(echo "$PYTHON_VERSION" | tr -d .)"
 # In case this is not run locally and not on Jenkins
 
