@@ -58,6 +58,8 @@ if typing.TYPE_CHECKING:
 
     from ._base_connection import BaseHTTPConnection, BaseHTTPSConnection
 
+from ..ext_logging import enable_extended_networking_logging
+
 log = logging.getLogger(__name__)
 
 _TYPE_TIMEOUT = typing.Union[Timeout, float, _TYPE_DEFAULT, None]
@@ -1052,6 +1054,7 @@ class HTTPSConnectionPool(HTTPConnectionPool):
             self.host,
             self.port or "443",
         )
+        enable_extended_networking_logging()
 
         if not self.ConnectionCls or self.ConnectionCls is DummyConnection:  # type: ignore[comparison-overlap]
             raise ImportError(
