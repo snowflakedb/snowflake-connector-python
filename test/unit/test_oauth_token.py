@@ -255,7 +255,7 @@ def test_browser_timeout(
                 )
 
     assert str(execinfo.value).endswith(
-        "Unable to receive the OAuth message within a given timeout"
+        "Unable to receive the OAuth message within a given timeout. Please check the redirect URI and try again."
     )
 
 
