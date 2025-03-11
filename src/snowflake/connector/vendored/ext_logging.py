@@ -27,7 +27,7 @@ def _trace(frame, event, arg):
                 f"EXT-NTWRK-LOG:%s:%d:%s",
                 rel_path,
                 frame.f_back.f_lineno,
-                frame.f_code.co_qualname,
+                frame.f_code.co_name,
             )
 
 
