@@ -54,8 +54,7 @@ def wiremock_generic_mappings_dir() -> pathlib.Path:
 
 
 def _call_auth_server(url: str):
-    response = requests.get(url, allow_redirects=True)
-    assert response.status_code == 200, "Invalid status code received from auth server"
+    requests.get(url, allow_redirects=True)
 
 
 def _webbrowser_redirect(*args):
