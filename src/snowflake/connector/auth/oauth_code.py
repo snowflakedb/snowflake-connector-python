@@ -152,6 +152,10 @@ class AuthByOauthCode(AuthByPlugin):
             "or your OS settings. Press CTRL+C to abort and try again..."
         )
         if webbrowser.open(url):
+            # TODO: remove this log
+            logger.info(
+                f"awaiting the request, host: {hostname}, port: {http_server.port}, url: {url}"
+            )
             data, socket_connection = http_server.receive_block()
             if data is None or socket_connection is None:
                 self._handle_failure(
