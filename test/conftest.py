@@ -24,20 +24,6 @@ from . import (
     running_on_public_ci,
 )
 
-try:
-    from .csp_helpers import (
-        FakeAwsEnvironment,
-        FakeAzureFunctionMetadataService,
-        FakeAzureVmMetadataService,
-        FakeGceMetadataService,
-        NoMetadataService,
-    )
-except ImportError:
-    # This file gets imported from the old driver tests, which run against a version of the connector
-    # that doesn't have these modules. Our new tests don't run in that environment, so it's OK to just
-    # pass on this error.
-    pass
-
 
 class TelemetryCaptureHandler(TelemetryClient):
     def __init__(
@@ -135,51 +121,6 @@ def filter_log() -> None:
         )
     )
     _logger.addHandler(sd)
-
-
-@pytest.fixture
-def is_old_driver_test(request):
-    """Fixture that returns whether the current test doesn't skip the old driver."""
-    return request.node.get_closest_market("skipolddriver") is None
-
-
-@pytest.fixture
-def no_metadata_service(is_old_driver_test):
-    """Emulates an environment without any metadata service."""
-    if is_old_driver_test:
-        return
-    with NoMetadataService() as server:
-        yield server
-
-
-@pytest.fixture
-def fake_aws_environment(is_old_driver_test):
-    """Emulates the AWS environment, returning dummy credentials."""
-    if is_old_driver_test:
-        return
-    with FakeAwsEnvironment() as env:
-        yield env
-
-
-@pytest.fixture(
-    params=[FakeAzureFunctionMetadataService(), FakeAzureVmMetadataService()],
-    ids=["azure_function", "azure_vm"],
-)
-def fake_azure_metadata_service(request, is_old_driver_test):
-    """Parameterized fixture that emulates both the Azure VM and Azure Functions metadata services."""
-    if is_old_driver_test:
-        return
-    with request.param as server:
-        yield server
-
-
-@pytest.fixture
-def fake_gce_metadata_service(is_old_driver_test):
-    """Emulates the GCE metadata service, returning a dummy token."""
-    if is_old_driver_test:
-        return
-    with FakeGceMetadataService() as server:
-        yield server
 
 
 def pytest_runtest_setup(item) -> None:
