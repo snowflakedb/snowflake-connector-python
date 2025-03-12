@@ -62,7 +62,7 @@ class AuthHttpServer:
     """Simple HTTP server to receive callbacks through for auth purposes."""
 
     DEFAULT_MAX_ATTEMPTS = 15
-    DEFAULT_TIMEOUT = 30
+    DEFAULT_TIMEOUT = 30.0
 
     def __init__(
         self,
