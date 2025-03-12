@@ -11,7 +11,8 @@ import socket
 import time
 from collections.abc import Callable
 from types import TracebackType
-from typing import Self
+
+from typing_extensions import Self
 
 from ..compat import IS_WINDOWS
 from ..errorcode import ER_NO_HOSTNAME_FOUND
