@@ -130,6 +130,30 @@ b binary)
     return conn_cnx
 
 
+class LobBackendParams(NamedTuple):
+    max_lob_size_in_memory: int
+    max_lob_size_persisted: int
+
+
+@pytest.fixture()
+def lob_params(conn_cnx) -> LobBackendParams:
+    with conn_cnx() as cnx:
+        max_lob_size_in_memory = (
+            cnx.cursor()
+            .execute("show parameters like 'MAX_LOB_SIZE_IN_MEMORY'")
+            .fetchone()
+        )
+        max_lob_size_persisted = (
+            cnx.cursor()
+            .execute("show parameters like 'MAX_LOB_SIZE_PERSISTED'")
+            .fetchone()
+        )
+        return LobBackendParams(
+            int(max_lob_size_in_memory[1]) if max_lob_size_in_memory else 2**24,
+            int(max_lob_size_persisted[1]) if max_lob_size_persisted else 2**24,
+        )
+
+
 def _check_results(cursor, results):
     assert cursor.sfqid, "Snowflake query id is None"
     assert cursor.rowcount == 3, "the number of records"
@@ -1608,7 +1632,9 @@ def test_resultbatch(
         ("arrow", "snowflake.connector.result_batch.ArrowResultBatch.create_iter"),
     ),
 )
-def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_path):
+def test_resultbatch_lazy_fetching_and_schemas(
+    conn_cnx, result_format, patch_path, lob_params
+):
     """Tests whether pre-fetching results chunks fetches the right amount of them."""
     rowcount = 1000000  # We need at least 5 chunks for this test
     with conn_cnx(
@@ -1636,7 +1662,15 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
                     # all batches should have the same schema
                     assert schema == [
                         ResultMetadata("C1", 0, None, None, 10, 0, False),
-                        ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                        ResultMetadata(
+                            "C2",
+                            2,
+                            None,
+                            lob_params.max_lob_size_in_memory,
+                            None,
+                            None,
+                            False,
+                        ),
                     ]
                 assert patched_download.call_count == 0
                 assert len(result_batches) > 5
@@ -1657,7 +1691,7 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
 
 @pytest.mark.skipolddriver(reason="new feature in v2.5.0")
 @pytest.mark.parametrize("result_format", ["json", "arrow"])
-def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
+def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format, lob_params):
     with conn_cnx(
         session_parameters={"python_connector_query_result_format": result_format}
     ) as con:
@@ -1673,7 +1707,9 @@ def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
             schema = result_batches[0].schema
             assert schema == [
                 ResultMetadata("C1", 0, None, None, 10, 0, False),
-                ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                ResultMetadata(
+                    "C2", 2, None, lob_params.max_lob_size_in_memory, None, None, False
+                ),
             ]
 
 
