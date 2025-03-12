@@ -23,13 +23,20 @@ from . import (
     INTERNAL_SKIP_TAGS,
     running_on_public_ci,
 )
-from .csp_helpers import (
-    FakeAwsEnvironment,
-    FakeAzureFunctionMetadataService,
-    FakeAzureVmMetadataService,
-    FakeGceMetadataService,
-    NoMetadataService,
-)
+
+try:
+    from .csp_helpers import (
+        FakeAwsEnvironment,
+        FakeAzureFunctionMetadataService,
+        FakeAzureVmMetadataService,
+        FakeGceMetadataService,
+        NoMetadataService,
+    )
+except ImportError:
+    # This file gets imported from the old driver tests, which run against a version of the connector
+    # that doesn't have these modules. Our new tests don't run in that environment, so it's OK to just
+    # pass on this error.
+    pass
 
 
 class TelemetryCaptureHandler(TelemetryClient):
