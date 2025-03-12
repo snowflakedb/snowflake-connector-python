@@ -132,26 +132,27 @@ b binary)
 
 class LobBackendParams(NamedTuple):
     max_lob_size_in_memory: int
-    max_lob_size_persisted: int
 
 
 @pytest.fixture()
 def lob_params(conn_cnx) -> LobBackendParams:
     with conn_cnx() as cnx:
+        (max_lob_size_in_memory_feat, max_lob_size_in_memory) = (
+            (cnx.cursor().execute(f"show parameters like '{lob_param}'").fetchone())
+            for lob_param in (
+                "FEATURE_INCREASED_MAX_LOB_SIZE_IN_MEMORY",
+                "MAX_LOB_SIZE_IN_MEMORY",
+            )
+        )
+        max_lob_size_in_memory_feat = (
+            max_lob_size_in_memory_feat and max_lob_size_in_memory_feat[1] == "ENABLED"
+        )
         max_lob_size_in_memory = (
-            cnx.cursor()
-            .execute("show parameters like 'MAX_LOB_SIZE_IN_MEMORY'")
-            .fetchone()
+            int(max_lob_size_in_memory[1])
+            if (max_lob_size_in_memory_feat and max_lob_size_in_memory)
+            else 2**24
         )
-        max_lob_size_persisted = (
-            cnx.cursor()
-            .execute("show parameters like 'MAX_LOB_SIZE_PERSISTED'")
-            .fetchone()
-        )
-        return LobBackendParams(
-            int(max_lob_size_in_memory[1]) if max_lob_size_in_memory else 2**24,
-            int(max_lob_size_persisted[1]) if max_lob_size_persisted else 2**24,
-        )
+        return LobBackendParams(max_lob_size_in_memory)
 
 
 def _check_results(cursor, results):
