@@ -16,8 +16,14 @@ import jwt
 from botocore.awsrequest import AWSRequest
 from botocore.credentials import Credentials
 
-from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
-from snowflake.connector.vendored.requests.models import Response
+try:
+    from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
+    from snowflake.connector.vendored.requests.models import Response
+except ModuleNotFoundError:
+    # This file gets imported from the old driver tests, which run against a version of the connector
+    # that doesn't have these modules. Our new tests don't run in that environment, so it's OK to just
+    # pass on this error.
+    pass
 
 logger = logging.getLogger(__name__)
 
