@@ -138,15 +138,25 @@ def filter_log() -> None:
 
 
 @pytest.fixture
-def no_metadata_service():
+def is_old_driver_test(request):
+    """Fixture that returns whether the current test doesn't skip the old driver."""
+    return request.node.get_closest_market("skipolddriver") is None
+
+
+@pytest.fixture
+def no_metadata_service(is_old_driver_test):
     """Emulates an environment without any metadata service."""
+    if is_old_driver_test:
+        return
     with NoMetadataService() as server:
         yield server
 
 
 @pytest.fixture
-def fake_aws_environment():
+def fake_aws_environment(is_old_driver_test):
     """Emulates the AWS environment, returning dummy credentials."""
+    if is_old_driver_test:
+        return
     with FakeAwsEnvironment() as env:
         yield env
 
@@ -155,15 +165,19 @@ def fake_aws_environment():
     params=[FakeAzureFunctionMetadataService(), FakeAzureVmMetadataService()],
     ids=["azure_function", "azure_vm"],
 )
-def fake_azure_metadata_service(request):
+def fake_azure_metadata_service(request, is_old_driver_test):
     """Parameterized fixture that emulates both the Azure VM and Azure Functions metadata services."""
+    if is_old_driver_test:
+        return
     with request.param as server:
         yield server
 
 
 @pytest.fixture
-def fake_gce_metadata_service():
+def fake_gce_metadata_service(is_old_driver_test):
     """Emulates the GCE metadata service, returning a dummy token."""
+    if is_old_driver_test:
+        return
     with FakeGceMetadataService() as server:
         yield server
 
