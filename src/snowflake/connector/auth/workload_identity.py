@@ -34,7 +34,7 @@ class ApiFederatedAuthenticationType(Enum):
 
         The AttestationProvider is related to how the driver fetches the credential, while the API authenticator
         type is related to how the credential is verified. In most current cases these may be the same, though
-        in the future we could have, for example, multiple AttestationProviders that all fetch an OIDC token.
+        in the future we could have, for example, multiple AttestationProviders that all fetch an OIDC ID token.
         """
         if attestation.provider == AttestationProvider.AWS:
             return ApiFederatedAuthenticationType.AWS

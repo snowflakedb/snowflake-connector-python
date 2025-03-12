@@ -17,7 +17,10 @@ from botocore.awsrequest import AWSRequest
 from botocore.credentials import Credentials
 
 try:
-    from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
+    from snowflake.connector.vendored.requests.exceptions import (
+        ConnectTimeout,
+        HTTPError,
+    )
     from snowflake.connector.vendored.requests.models import Response
 except ModuleNotFoundError:
     # This file gets imported from the old driver tests, which run against a version of the connector
