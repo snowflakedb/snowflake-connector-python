@@ -70,9 +70,9 @@ jobs:
     strategy:
       matrix:
         os:
-          - image: ubuntu-20.04
+          - image: ubuntu-latest
             id: manylinux_x86_64
-          - image: ubuntu-20.04
+          - image: ubuntu-latest
             id: manylinux_aarch64
           - image: windows-2019
             id: win_amd64
@@ -93,6 +93,9 @@ jobs:
         if: ${{ matrix.os.id == 'manylinux_aarch64' }}
         uses: docker/setup-qemu-action@v2
         with:
+          # xref https://github.com/docker/setup-qemu-action/issues/188
+          # xref https://github.com/tonistiigi/binfmt/issues/215
+          image: tonistiigi/binfmt:qemu-v8.1.5
           platforms: all
       - uses: actions/checkout@v4
       - name: Building wheel
@@ -135,6 +138,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
+      - name: Set up Java
+        uses: actions/setup-java@v4 # for wiremock
+        with:
+          java-version: 11
+          distribution: 'temurin'
+          java-package: 'jre'
+      - name: Fetch Wiremock
+        shell: bash
+        run: curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
       - name: Setup parameters file
         shell: bash
         env:

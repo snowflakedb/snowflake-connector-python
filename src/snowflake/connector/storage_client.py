@@ -77,6 +77,7 @@ class SnowflakeStorageClient(ABC):
         chunked_transfer: bool | None = True,
         credentials: StorageCredential | None = None,
         max_retry: int = 5,
+        unsafe_file_write: bool = False,
     ) -> None:
         self.meta = meta
         self.stage_info = stage_info
@@ -115,6 +116,7 @@ class SnowflakeStorageClient(ABC):
         self.failed_transfers: int = 0
         # only used when PRESIGNED_URL expires
         self.last_err_is_presigned_url = False
+        self.unsafe_file_write = unsafe_file_write
 
     def compress(self) -> None:
         if self.meta.require_compress:
@@ -329,6 +331,11 @@ class SnowflakeStorageClient(ABC):
                 f"{verb} with url {url} failed for exceeding maximum retries."
             )
 
+    def _open_intermediate_dst_path(self, mode):
+        if not self.intermediate_dst_path.exists():
+            self.intermediate_dst_path.touch(mode=0o600)
+        return self.intermediate_dst_path.open(mode)
+
     def prepare_download(self) -> None:
         # TODO: add nicer error message for when target directory is not writeable
         #  but this should be done before we get here
@@ -352,13 +359,13 @@ class SnowflakeStorageClient(ABC):
                 self.num_of_chunks = ceil(file_header.content_length / self.chunk_size)
 
         # Preallocate encrypted file.
-        with self.intermediate_dst_path.open("wb+") as fd:
+        with self._open_intermediate_dst_path("wb+") as fd:
             fd.truncate(self.meta.src_file_size)
 
     def write_downloaded_chunk(self, chunk_id: int, data: bytes) -> None:
         """Writes given data to the temp location starting at chunk_id * chunk_size."""
         # TODO: should we use chunking and write content in smaller chunks?
-        with self.intermediate_dst_path.open("rb+") as fd:
+        with self._open_intermediate_dst_path("rb+") as fd:
             fd.seek(self.chunk_size * chunk_id)
             fd.write(data)
 
@@ -371,7 +378,7 @@ class SnowflakeStorageClient(ABC):
                 # For storage utils that do not have the privilege of
                 # getting the metadata early, both object and metadata
                 # are downloaded at once. In which case, the file meta will
-                # be updated with all the metadata that we need and
+                # be updated with all the metadata that we need, and
                 # then we can call get_file_header to get just that and also
                 # preserve the idea of getting metadata in the first place.
                 # One example of this is the utils that use presigned url
@@ -385,6 +392,7 @@ class SnowflakeStorageClient(ABC):
                     meta.encryption_material,
                     str(self.intermediate_dst_path),
                     tmp_dir=self.tmp_dir,
+                    unsafe_file_write=self.unsafe_file_write,
                 )
                 shutil.move(tmp_dst_file_name, self.full_dst_file_name)
                 self.intermediate_dst_path.unlink()

@@ -54,6 +54,8 @@ class AuthType(Enum):
     ID_TOKEN = "ID_TOKEN"
     USR_PWD_MFA = "USERNAME_PASSWORD_MFA"
     OKTA = "OKTA"
+    PAT = "PROGRAMMATIC_ACCESS_TOKEN'"
+    NO_AUTH = "NO_AUTH"
 
 
 class AuthByPlugin(ABC):

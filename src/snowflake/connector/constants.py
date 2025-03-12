@@ -182,6 +182,9 @@ FIELD_TYPES: tuple[FieldType, ...] = (
     ),
     FieldType(name="VECTOR", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=vector_pa_type),
     FieldType(name="MAP", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=map_pa_type),
+    FieldType(
+        name="FILE", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()
+    ),
 )
 
 FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
@@ -354,12 +357,14 @@ class OCSPMode(Enum):
         FAIL_OPEN: A response indicating a revoked certificate results in a failed connection. A response with any
             other certificate errors or statuses allows the connection to occur, but denotes the message in the logs
             at the WARNING level with the relevant details in JSON format.
-        INSECURE: The connection will occur anyway.
+        INSECURE (deprecated): The connection will occur anyway.
+        DISABLE_OCSP_CHECKS: The OCSP check will not happen. If the certificate is valid then connection will occur.
     """
 
     FAIL_CLOSED = "FAIL_CLOSED"
     FAIL_OPEN = "FAIL_OPEN"
     INSECURE = "INSECURE"
+    DISABLE_OCSP_CHECKS = "DISABLE_OCSP_CHECKS"
 
 
 @unique

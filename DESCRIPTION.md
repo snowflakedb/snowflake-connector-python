@@ -7,11 +7,41 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.14.1(TBD)
+  - Basic decimal floating-point type support.
 
-- v3.12.4(TBD)
+- v3.14.0(March 03, 2025)
+  - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
+  - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
+  - Optimized distribution package lookup to speed up import.
+  - Fixed a bug where privatelink OCSP Cache url could not be determined if privatelink account name was specified in uppercase.
+  - Added support for iceberg tables to `write_pandas`.
+  - Fixed base64 encoded private key tests.
+  - Fixed a bug where file permission check happened on Windows.
+  - Added support for File types.
+  - Added `unsafe_file_write` connection parameter that restores the previous behaviour of saving files downloaded with GET with 644 permissions.
+  - Deprecated `insecure_mode` connection property and replaced it with `disable_ocsp_checks` with the same behavior as the former property.
+
+- v3.13.2(January 29, 2025)
+  - Changed not to use scoped temporary objects.
+
+- v3.13.1(January 29, 2025)
+  - Remedied SQL injection vulnerability in snowflake.connector.pandas_tools.write_pandas. See more https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-2vpq-fh52-j3wv
+  - Remedied vulnerability in deserialization of the OCSP response cache. See more: https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-m4f6-vcj4-w5mx
+  - Remedied vulnerability connected to cache files permissions. See more: https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-r2x6-cjg7-8r43
+
+- v3.13.0(January 23,2025)
+  - Added a feature to limit the sizes of IO-bound ThreadPoolExecutors during PUT and GET commands.
+  - Updated README.md to include instructions on how to verify package signatures using `cosign`.
+  - Updated the log level for cursor's chunk rowcount from INFO to DEBUG.
+  - Added a feature to verify if the connection is still good enough to send queries over.
+  - Added support for base64-encoded DER private key strings in the `private_key` authentication type.
+
+- v3.12.4(December 3,2024)
   - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
   - Fixed a bug where OpenTelemetry header injection would sometimes cause Exceptions to be thrown.
   - Fixed a bug where OCSP checks would throw TypeError and make mainly GCP blob storage unreachable.
+  - Bumped pyOpenSSL dependency from >=16.2.0,<25.0.0 to >=22.0.0,<25.0.0.
 
 - v3.12.3(October 25,2024)
   - Improved the error message for SSL-related issues to provide clearer guidance when an SSL error occurs.
