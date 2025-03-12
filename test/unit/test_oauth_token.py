@@ -6,7 +6,7 @@ import pathlib
 from threading import Thread
 from typing import Any, Generator, Union
 from unittest import mock
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -75,6 +75,8 @@ def webbrowser_mock() -> Mock:
 
 
 @pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_MAX_ATTEMPTS", 1)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 80)
 def test_successful_flow(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
@@ -117,6 +119,8 @@ def test_successful_flow(
 
 
 @pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_MAX_ATTEMPTS", 1)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 80)
 def test_invalid_state(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
@@ -151,6 +155,8 @@ def test_invalid_state(
 
 
 @pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_MAX_ATTEMPTS", 1)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 80)
 def test_scope_error(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
@@ -187,6 +193,8 @@ def test_scope_error(
 
 
 @pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_MAX_ATTEMPTS", 1)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 80)
 def test_token_request_error(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
@@ -223,6 +231,8 @@ def test_token_request_error(
 
 
 @pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_MAX_ATTEMPTS", 1)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 1)
 def test_browser_timeout(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
@@ -260,6 +270,8 @@ def test_browser_timeout(
 
 
 @pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_MAX_ATTEMPTS", 1)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 80)
 def test_custom_urls(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,

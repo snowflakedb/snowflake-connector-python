@@ -61,6 +61,9 @@ def _wrap_socket_recv() -> Callable[[socket.socket, int], bytes]:
 class AuthHttpServer:
     """Simple HTTP server to receive callbacks through for auth purposes."""
 
+    DEFAULT_MAX_ATTEMPTS = 15
+    DEFAULT_TIMEOUT = 30
+
     def __init__(
         self,
         hostname: str = "127.0.0.1",
@@ -135,9 +138,14 @@ class AuthHttpServer:
 
     def receive_block(
         self,
-        max_attempts: int = 15,
-        timeout: float | None = 60.0,
+        max_attempts: int = None,
+        timeout: float | None = None,
     ) -> (list[str] | None, socket.socket | None):
+        if max_attempts is None:
+            max_attempts = self.DEFAULT_MAX_ATTEMPTS
+        if timeout is None:
+            timeout = self.DEFAULT_TIMEOUT
+
         """Receive a message with a maximum attempt count and a timeout in seconds, blocking."""
         if not self._socket:
             raise RuntimeError(
