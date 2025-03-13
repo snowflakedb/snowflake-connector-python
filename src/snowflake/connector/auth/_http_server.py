@@ -11,7 +11,6 @@ import socket
 import time
 from collections.abc import Callable
 from types import TracebackType
-
 from typing_extensions import Self
 
 from ..compat import IS_WINDOWS
@@ -145,7 +144,6 @@ class AuthHttpServer:
             max_attempts = self.DEFAULT_MAX_ATTEMPTS
         if timeout is None:
             timeout = self.DEFAULT_TIMEOUT
-
         """Receive a message with a maximum attempt count and a timeout in seconds, blocking."""
         if not self._socket:
             raise RuntimeError(
