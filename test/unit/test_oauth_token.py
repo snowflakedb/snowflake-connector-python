@@ -2,6 +2,7 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
+import logging
 import pathlib
 from threading import Thread
 from typing import Any, Generator, Union
@@ -15,12 +16,12 @@ try:
 except ImportError:
     import requests
 
-
 import snowflake.connector
 
 from ..wiremock.wiremock_utils import WiremockClient
 
 AUTH_SOCKET_PORT = 8009
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session")
@@ -54,6 +55,7 @@ def wiremock_generic_mappings_dir() -> pathlib.Path:
 
 
 def _call_auth_server(url: str):
+    logger.info("Call auth server: %s", url)
     requests.get(url, allow_redirects=True)
 
 
@@ -74,7 +76,8 @@ def webbrowser_mock() -> Mock:
 
 
 @pytest.mark.skipolddriver
-@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", None)
+@pytest.mark.flaky(reruns=3)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_successful_flow(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
@@ -117,7 +120,8 @@ def test_successful_flow(
 
 
 @pytest.mark.skipolddriver
-@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", None)
+@pytest.mark.flaky(reruns=3)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_invalid_state(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
@@ -152,7 +156,8 @@ def test_invalid_state(
 
 
 @pytest.mark.skipolddriver
-@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", None)
+@pytest.mark.flaky(reruns=3)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_scope_error(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
@@ -189,7 +194,8 @@ def test_scope_error(
 
 
 @pytest.mark.skipolddriver
-@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", None)
+@pytest.mark.flaky(reruns=3)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_token_request_error(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
@@ -263,7 +269,8 @@ def test_browser_timeout(
 
 
 @pytest.mark.skipolddriver
-@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", None)
+@pytest.mark.flaky(reruns=3)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_custom_urls(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,

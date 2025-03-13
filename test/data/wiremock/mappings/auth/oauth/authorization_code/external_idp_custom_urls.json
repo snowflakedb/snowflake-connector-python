@@ -70,7 +70,8 @@
           "expires_in": 600,
           "refresh_token_expires_in": 86399,
           "idpInitiated": false
-        }      }
+        }
+      }
     }
   ]
 }
