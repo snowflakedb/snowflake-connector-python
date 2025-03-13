@@ -66,23 +66,23 @@ class AuthByOauthCode(AuthByPlugin):
             raise InterfaceError("redirect_uri needs '{port}' placeholder for now")
         self._application = application
         self._origin: str | None = None
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.authentication_url = authentication_url
-        self.token_request_url = token_request_url
-        self.redirect_uri = redirect_uri
-        self.scope = scope
+        self._client_id = client_id
+        self._client_secret = client_secret
+        self._authentication_url = authentication_url
+        self._token_request_url = token_request_url
+        self._redirect_uri = redirect_uri
+        self._scope = scope
         self._state = secrets.token_urlsafe(43)
         logger.debug("chose oauth state: %s", "".join("*" for _ in self._state))
-        self._oauth_token = None
+        self._access_token = None
         self._protocol = "http"
-        self.pkce = pkce
+        self._pkce = pkce
         if pkce:
             logger.debug("oauth pkce is going to be used")
         self._verifier: str | None = None
 
     def reset_secrets(self) -> None:
-        self._oauth_token = None
+        self._access_token = None
 
     @property
     def type_(self) -> AuthType:
@@ -91,7 +91,7 @@ class AuthByOauthCode(AuthByPlugin):
     @property
     def assertion_content(self) -> str:
         """Returns the token."""
-        return self._oauth_token or ""
+        return self._access_token or ""
 
     def update_body(self, body: dict[Any, Any]) -> None:
         """Used by Auth to update the request that gets sent to /v1/login-request.
@@ -100,19 +100,19 @@ class AuthByOauthCode(AuthByPlugin):
             body: existing request dictionary
         """
         body["data"]["AUTHENTICATOR"] = OAUTH_AUTHENTICATOR
-        body["data"]["TOKEN"] = self._oauth_token
+        body["data"]["TOKEN"] = self._access_token
         body["data"]["OAUTH_TYPE"] = OAUTH_TYPE_AUTHORIZATION_CODE
 
     def construct_url(self) -> str:
         params = {
             "response_type": "code",
-            "client_id": self.client_id,
-            "redirect_uri": self.redirect_uri,
+            "client_id": self._client_id,
+            "redirect_uri": self._redirect_uri,
             "state": self._state,
         }
-        if self.scope:
-            params["scope"] = self.scope
-        if self.pkce:
+        if self._scope:
+            params["scope"] = self._scope
+        if self._pkce:
             self._verifier = secrets.token_urlsafe(43)
             # calculate challenge and verifier
             challenge = (
@@ -125,7 +125,7 @@ class AuthByOauthCode(AuthByPlugin):
             params["code_challenge"] = challenge
             params["code_challenge_method"] = "S256"
         url_params = urllib.parse.urlencode(params)
-        url = f"{self.authentication_url}?{url_params}"
+        url = f"{self._authentication_url}?{url_params}"
         return url
 
     def prepare(
@@ -141,7 +141,7 @@ class AuthByOauthCode(AuthByPlugin):
         """Web Browser based Authentication."""
         hostname = "127.0.0.1"
         http_server = AuthHttpServer(hostname=hostname)
-        self.redirect_uri = self.redirect_uri.format(port=http_server.port)
+        self._redirect_uri = self._redirect_uri.format(port=http_server.port)
         url = self.construct_url()
         logger.debug("authenticating with OAuth code flow")
         logger.debug("step 1: going to open authorization URL")
@@ -218,19 +218,19 @@ class AuthByOauthCode(AuthByPlugin):
         fields = {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": self.redirect_uri,
+            "redirect_uri": self._redirect_uri,
         }
-        if self.pkce:
+        if self._pkce:
             assert self._verifier is not None
             fields["code_verifier"] = self._verifier
 
         resp = urllib3.PoolManager().request_encode_body(  # TODO: use network pool to gain use of proxy settings and so on
             "POST",
-            self.token_request_url,
+            self._token_request_url,
             headers={
                 "Authorization": "Basic "
                 + base64.b64encode(
-                    f"{self.client_id}:{self.client_secret}".encode()
+                    f"{self._client_id}:{self._client_secret}".encode()
                 ).decode(),
                 "Accept": "application/json",
                 "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -239,7 +239,7 @@ class AuthByOauthCode(AuthByPlugin):
             fields=fields,
         )
         try:
-            self._oauth_token = json.loads(resp.data)["access_token"]
+            self._access_token = json.loads(resp.data)["access_token"]
         except (
             json.JSONDecodeError,
             KeyError,
