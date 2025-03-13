@@ -170,8 +170,7 @@ class AuthByOauthCode(AuthByPlugin):
             finally:
                 socket_connection.shutdown(socket.SHUT_RDWR)
                 socket_connection.close()
-            _, url, _ = data[0].split(maxsplit=2)
-            token = self._process_get_url(url)
+            url = data[0].split(maxsplit=2)[1]
         else:
             print(
                 "We were unable to open a browser window for you, "
@@ -179,15 +178,14 @@ class AuthByOauthCode(AuthByPlugin):
                 "URL you are redirected to into the terminal."
             )
             url = input("Enter the URL the OAuth flow redirected you to: ")
-            token = self._process_get_url(url)
-            if not token:
+            if not self._has_code(url):
                 self._handle_failure(
                     conn=conn,
                     ret={
                         "code": ER_UNABLE_TO_OPEN_BROWSER,
                         "message": (
                             "Unable to open a browser in this environment and "
-                            "OAuth URL contained no token"
+                            "OAuth URL contained no code"
                         ),
                     },
                 )
@@ -367,13 +365,9 @@ You can close this window now and go back where you started from.
 
         socket_client.sendall("\r\n".join(response).encode("utf-8"))
 
-    def _process_get_url(self, url: str) -> str | None:
-        parsed = parse_qs(urlparse(url).query)
-        try:
-            token = parsed["token"][0]
-            return token
-        except (KeyError, IndexError):
-            return
+    @staticmethod
+    def _has_code(url: str) -> bool:
+        return "code" in parse_qs(urlparse(url).query)
 
     @staticmethod
     def _is_request_get(data: list[str]) -> bool:
