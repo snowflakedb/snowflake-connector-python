@@ -4,7 +4,6 @@
 
 import pathlib
 from threading import Thread
-from time import sleep
 from typing import Any, Generator, Union
 from unittest import mock
 from unittest.mock import Mock, patch
@@ -55,7 +54,6 @@ def wiremock_generic_mappings_dir() -> pathlib.Path:
 
 
 def _call_auth_server(url: str):
-    sleep(3)
     requests.get(url, allow_redirects=True)
 
 
