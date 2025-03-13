@@ -530,6 +530,10 @@ class SnowflakeConnection:
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
+        self._oauth_security_features = [
+            ft.lower() for ft in self._oauth_security_features
+        ]
+
     # Deprecated
     @property
     def insecure_mode(self) -> bool:
@@ -1158,7 +1162,9 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
-                pkce = "pkce" in map(lambda e: e.lower(), self._oauth_security_features)
+                pkce_enabled = "pkce" in self._oauth_security_features
+                token_cache_enabled = "token_cache" in self._oauth_security_features
+                refresh_token_enabled = "refresh_token" in self._oauth_security_features
 
                 if self._oauth_client_id is None:
                     Error.errorhandler_wrapper(
@@ -1185,7 +1191,9 @@ class SnowflakeConnection:
                     ),
                     redirect_uri=self._oauth_redirect_uri,
                     scope=self._oauth_scope,
-                    pkce=pkce,
+                    pkce_enabled=pkce_enabled,
+                    token_cache_enabled=token_cache_enabled,
+                    refresh_token_enabled=refresh_token_enabled,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (

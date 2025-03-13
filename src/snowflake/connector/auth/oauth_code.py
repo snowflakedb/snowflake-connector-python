@@ -58,7 +58,9 @@ class AuthByOauthCode(AuthByPlugin):
         token_request_url: str,
         redirect_uri: str,
         scope: str,
-        pkce: bool = False,
+        pkce_enabled: bool = False,
+        token_cache_enabled: bool = False,
+        refresh_token_enabled: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -76,9 +78,15 @@ class AuthByOauthCode(AuthByPlugin):
         logger.debug("chose oauth state: %s", "".join("*" for _ in self._state))
         self._access_token = None
         self._protocol = "http"
-        self._pkce = pkce
-        if pkce:
+        self._pkce_enabled = pkce_enabled
+        if pkce_enabled:
             logger.debug("oauth pkce is going to be used")
+        self._token_cache_enabled = token_cache_enabled
+        if token_cache_enabled:
+            logger.debug("token cache is going to be used if needed")
+        self._refresh_token_enabled = refresh_token_enabled
+        if refresh_token_enabled:
+            logger.debug("oauth refresh token is going to be used if needed")
         self._verifier: str | None = None
 
     def reset_secrets(self) -> None:
@@ -252,7 +260,7 @@ You can close this window now and go back where you started from.
         }
         if self._scope:
             params["scope"] = self._scope
-        if self._pkce:
+        if self._pkce_enabled:
             self._verifier = secrets.token_urlsafe(43)
             # calculate challenge and verifier
             challenge = (
@@ -328,7 +336,7 @@ You can close this window now and go back where you started from.
             "code": code,
             "redirect_uri": self._redirect_uri.format(port=callback_server.port),
         }
-        if self._pkce:
+        if self._pkce_enabled:
             assert self._verifier is not None
             fields["code_verifier"] = self._verifier
         resp = urllib3.PoolManager().request_encode_body(
