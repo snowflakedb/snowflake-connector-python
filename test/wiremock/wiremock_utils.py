@@ -160,6 +160,13 @@ class WiremockClient:
         if response.status_code != requests.codes.created:
             raise RuntimeError("Failed to add mapping")
 
+    # TODO: debug method - to be removed
+    def list_received_requests(self):
+        requests_endpoint = (
+            f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/requests"
+        )
+        logger.warning(requests.get(requests_endpoint))
+
     def _find_free_port(self, forbidden_ports: Union[List[int], None] = None) -> int:
         max_retries = 1 if forbidden_ports is None else 3
         if forbidden_ports is None:
