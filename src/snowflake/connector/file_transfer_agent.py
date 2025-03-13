@@ -707,12 +707,6 @@ class SnowflakeFileTransferAgent:
                 use_s3_regional_url=self._use_s3_regional_url,
                 unsafe_file_write=self._unsafe_file_write,
             )
-        elif self._stage_location_type == STORED_PROC_FS:
-            return self._cursor.connection._StoredProcStorageClient(
-                meta,
-                self._cursor,
-                self._stage_location,
-            )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 
     def _transfer_accelerate_config(self) -> None:
