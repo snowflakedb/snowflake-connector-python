@@ -375,9 +375,7 @@ You can close this window now and go back where you started from.
         except (KeyError, IndexError):
             return
 
-    def _is_request_get(self, data: list[str]) -> bool:
+    @staticmethod
+    def _is_request_get(data: list[str]) -> bool:
         """Whether an HTTP request is a GET."""
-        for line in data:
-            if line.startswith("GET "):
-                return True
-        return False
+        return any(line.startswith("GET ") for line in data)
