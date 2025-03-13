@@ -126,6 +126,10 @@ class WiremockClient:
         return True
 
     def _reset_wiremock(self):
+        clean_journal_endpoint = (
+            f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/requests"
+        )
+        requests.delete(clean_journal_endpoint)
         reset_endpoint = (
             f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/reset"
         )
