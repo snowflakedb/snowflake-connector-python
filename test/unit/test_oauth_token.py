@@ -10,11 +10,7 @@ from unittest import mock
 from unittest.mock import Mock, patch
 
 import pytest
-
-try:
-    from snowflake.connector.vendored import requests
-except ImportError:
-    import requests
+import requests
 
 import snowflake.connector
 
@@ -55,8 +51,7 @@ def wiremock_generic_mappings_dir() -> pathlib.Path:
 
 
 def _call_auth_server(url: str):
-    logger.info("Call auth server: %s", url)
-    requests.get(url, allow_redirects=True)
+    requests.get(url, allow_redirects=True, timeout=5)
 
 
 def _webbrowser_redirect(*args):
