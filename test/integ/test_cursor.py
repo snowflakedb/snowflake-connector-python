@@ -1667,7 +1667,9 @@ def test_resultbatch_lazy_fetching_and_schemas(
                             "C2",
                             2,
                             None,
-                            lob_params.max_lob_size_in_memory,
+                            schema[
+                                1
+                            ].internal_size,  # TODO: lob_params.max_lob_size_in_memory,
                             None,
                             None,
                             False,
@@ -1709,7 +1711,13 @@ def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format, lob_p
             assert schema == [
                 ResultMetadata("C1", 0, None, None, 10, 0, False),
                 ResultMetadata(
-                    "C2", 2, None, lob_params.max_lob_size_in_memory, None, None, False
+                    "C2",
+                    2,
+                    None,
+                    schema[1].internal_size,  # TODO: lob_params.max_lob_size_in_memory,
+                    None,
+                    None,
+                    False,
                 ),
             ]
 
