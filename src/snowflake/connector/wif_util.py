@@ -41,6 +41,11 @@ class AttestationProvider(Enum):
     OIDC = "OIDC"
     """Provider that looks for an OIDC ID token."""
 
+    @staticmethod
+    def from_string(provider: str) -> AttestationProvider:
+        """Converts a string to a strongly-typed enum value of AttestationProvider."""
+        return AttestationProvider[provider.upper()]
+
 
 @dataclass
 class WorkloadIdentityAttestation:

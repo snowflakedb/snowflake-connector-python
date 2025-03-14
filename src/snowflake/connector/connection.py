@@ -1158,6 +1158,13 @@ class SnowflakeConnection:
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
+                # Standardize the provider enum.
+                if self._workload_identity_provider and isinstance(
+                    self._workload_identity_provider, str
+                ):
+                    self._workload_identity_provider = AttestationProvider.from_string(
+                        self._workload_identity_provider
+                    )
                 self.auth_class = AuthByWorkloadIdentity(
                     provider=self._workload_identity_provider,
                     token=self._token,
