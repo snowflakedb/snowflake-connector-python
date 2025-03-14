@@ -584,7 +584,7 @@ You can close this window now and go back where you started from.
         resp = self._get_refresh_token_response(conn)
         if not resp:
             logger.info(
-                "Failed to exchange the refresh token on a new OAuth access token"
+                "failed to exchange the refresh token on a new OAuth access token"
             )
             self._reset_refresh_token()
             return
@@ -592,7 +592,8 @@ You can close this window now and go back where you started from.
         try:
             json_resp = json.loads(resp.data.decode())
             self._reset_access_token(json_resp["access_token"])
-            self._reset_refresh_token(json_resp.get("refresh_token"))
+            if "refresh_token" in json_resp:
+                self._reset_refresh_token(json_resp["refresh_token"])
         except (
             json.JSONDecodeError,
             KeyError,

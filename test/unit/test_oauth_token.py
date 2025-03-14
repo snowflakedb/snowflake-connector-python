@@ -428,7 +428,7 @@ def test_successful_refresh_token_flow(
         account, user, AuthByOauthCode._REFRESH_TOKEN_CACHE_KEY
     )
     assert new_access_token == "access-token-123"
-    assert new_refresh_token is None
+    assert new_refresh_token == "refresh-token-123"
 
 
 @pytest.mark.skipolddriver
