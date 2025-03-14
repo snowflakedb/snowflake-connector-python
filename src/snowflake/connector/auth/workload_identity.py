@@ -78,19 +78,15 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         ).value
         body["data"]["TOKEN"] = self.attestation.credential
 
-    def prepare(
-        self,
-        **kwargs: typing.Any,
-    ) -> None:
+    def prepare(self, **kwargs: typing.Any) -> None:
         """Fetch the token."""
         self.attestation = create_attestation(
             self.provider, self.entra_resource, self.token
         )
 
     def reauthenticate(self, **kwargs: typing.Any) -> dict[str, bool]:
-        self.reset_secrets()
-        self.prepare()
-        return {"success": True}
+        """This is only relevant for AuthByIdToken, which uses a web-browser based flow. All other auth plugins just call authenticate() again."""
+        return {"success": False}
 
     @property
     def assertion_content(self) -> str:
