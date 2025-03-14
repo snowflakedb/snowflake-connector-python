@@ -1,0 +1,30 @@
+{
+  "requiredScenarioState": "Expired access token",
+  "newScenarioState": "Acquired access token",
+  "request": {
+    "urlPathPattern": "/oauth/token-request.*",
+    "method": "POST",
+    "headers": {
+      "Authorization": {
+        "contains": "Basic"
+      },
+      "Content-Type": {
+        "contains": "application/x-www-form-urlencoded; charset=UTF-8"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "grant_type=refresh_token&refresh_token=refresh-token-123&scope=session%3Arole%3AANALYST"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": {
+      "access_token": "access-token-123",
+      "token_type": "Bearer",
+      "expires_in": 599,
+      "idpInitiated": false
+    }
+  }
+}

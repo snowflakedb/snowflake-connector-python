@@ -534,10 +534,6 @@ class SnowflakeConnection:
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
-        self._oauth_security_features = [
-            ft.lower() for ft in self._oauth_security_features
-        ]
-
     # Deprecated
     @property
     def insecure_mode(self) -> bool:
@@ -1166,9 +1162,12 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
-                pkce_enabled = "pkce" in self._oauth_security_features
-                token_cache_enabled = "token_cache" in self._oauth_security_features
-                refresh_token_enabled = "refresh_token" in self._oauth_security_features
+                features = [
+                    feature.lower() for feature in self._oauth_security_features
+                ]
+                pkce_enabled = "pkce" in features
+                token_cache_enabled = "token_cache" in features
+                refresh_token_enabled = "refresh_token" in features
 
                 if self._oauth_client_id is None:
                     Error.errorhandler_wrapper(
@@ -1524,9 +1523,9 @@ class SnowflakeConnection:
         except ReauthenticationRequest as ex:
             # cached id_token expiration error, we have cleaned id_token and try to authenticate again
             logger.debug("ID token expired. Reauthenticating...: %s", ex)
-            if isinstance(auth_instance, AuthByIdToken):
-                # Note: SNOW-733835 IDToken auth needs to authenticate through
-                #  SSO if it has expired
+            if type(auth_instance) in (AuthByIdToken, AuthByOauthCode):
+                # IDToken and OAuth auth need to authenticate through
+                # SSO if its credential has expired
                 self._reauthenticate()
             else:
                 self._authenticate(auth_instance)

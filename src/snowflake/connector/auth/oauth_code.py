@@ -14,12 +14,14 @@ import time
 import urllib.parse
 import webbrowser
 from typing import TYPE_CHECKING, Any
+from urllib.error import HTTPError, URLError
 
 import urllib3
 
 from ..compat import parse_qs, urlparse, urlsplit
 from ..constants import OAUTH_TYPE_AUTHORIZATION_CODE
 from ..errorcode import (
+    ER_FAILED_TO_REQUEST,
     ER_IDP_CONNECTION_ERROR,
     ER_OAUTH_CALLBACK_ERROR,
     ER_OAUTH_SERVER_TIMEOUT,
@@ -28,7 +30,7 @@ from ..errorcode import (
 )
 from ..errors import InterfaceError
 from ..network import OAUTH_AUTHENTICATOR
-from ._auth import Auth, delete_temporary_credential
+from ._auth import Auth
 from ._http_server import AuthHttpServer
 from .by_plugin import AuthByPlugin, AuthType
 
@@ -81,6 +83,7 @@ class AuthByOauthCode(AuthByPlugin):
         self._state = secrets.token_urlsafe(43)
         logger.debug("chose oauth state: %s", "".join("*" for _ in self._state))
         self._access_token = None
+        self._refresh_token = None
         self._protocol = "http"
         self._pkce_enabled = pkce_enabled
         if pkce_enabled:
@@ -151,12 +154,10 @@ class AuthByOauthCode(AuthByPlugin):
     ) -> dict[str, bool]:
         self._reset_access_token()
         if self._refresh_token:
-            logger.info(
+            logger.debug(
                 "OAuth refresh token is available, try to use it and get a new access token"
             )
-            if self._do_refresh_token(conn=conn):
-                logger.info("OAuth access token refreshed")
-                return {"success": True}
+            self._do_refresh_token(conn=conn)
         conn.authenticate_with_retry(self)
         return {"success": True}
 
@@ -341,6 +342,16 @@ You can close this window now and go back where you started from.
             return None
         return code
 
+    def _create_token_request_headers(self) -> dict[str, str]:
+        return {
+            "Authorization": "Basic "
+            + base64.b64encode(
+                f"{self._client_id}:{self._client_secret}".encode()
+            ).decode(),
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        }
+
     def _do_token_request(
         self,
         code: str,
@@ -360,14 +371,7 @@ You can close this window now and go back where you started from.
             # TODO: use network pool to gain use of proxy settings and so on
             "POST",
             self._token_request_url,
-            headers={
-                "Authorization": "Basic "
-                + base64.b64encode(
-                    f"{self._client_id}:{self._client_secret}".encode()
-                ).decode(),
-                "Accept": "application/json",
-                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            },
+            headers=self._create_token_request_headers(),
             encode_multipart=False,
             fields=fields,
         )
@@ -485,7 +489,7 @@ You can close this window now and go back where you started from.
                 *self._token_cache_prefix, self._ACCESS_TOKEN_CACHE_KEY, access_token
             )
         else:
-            delete_temporary_credential(
+            Auth.delete_temporary_credential(
                 *self._token_cache_prefix, self._ACCESS_TOKEN_CACHE_KEY
             )
 
@@ -505,7 +509,7 @@ You can close this window now and go back where you started from.
                 *self._token_cache_prefix, self._REFRESH_TOKEN_CACHE_KEY, refresh_token
             )
         else:
-            delete_temporary_credential(
+            Auth.delete_temporary_credential(
                 *self._token_cache_prefix, self._REFRESH_TOKEN_CACHE_KEY
             )
 
@@ -524,50 +528,80 @@ You can close this window now and go back where you started from.
                 else None
             )
 
+    def _get_refresh_token_response(
+        self, conn: SnowflakeConnection
+    ) -> urllib3.BaseHTTPResponse | None:
+        fields = {
+            "grant_type": "refresh_token",
+            "refresh_token": self._refresh_token,
+        }
+        if self._scope:
+            fields["scope"] = self._scope
+        try:
+            return urllib3.PoolManager().request_encode_body(
+                # TODO: use network pool to gain use of proxy settings and so on
+                "POST",
+                self._token_request_url,
+                encode_multipart=False,
+                headers=self._create_token_request_headers(),
+                fields=fields,
+            )
+        except HTTPError as e:
+            self._handle_failure(
+                conn=conn,
+                ret={
+                    "code": ER_FAILED_TO_REQUEST,
+                    "message": f"Failed to request new OAuth access token with a refresh token,"
+                    f" url={e.url}, code={e.code}, reason={e.reason}",
+                },
+            )
+        except URLError as e:
+            self._handle_failure(
+                conn=conn,
+                ret={
+                    "code": ER_FAILED_TO_REQUEST,
+                    "message": f"Failed to request new OAuth access token with a refresh token, reason: {e.reason}",
+                },
+            )
+        except Exception:
+            self._handle_failure(
+                conn=conn,
+                ret={
+                    "code": ER_FAILED_TO_REQUEST,
+                    "message": "Failed to request new OAuth access token with a refresh token by unknown reason",
+                },
+            )
+        return None
+
     def _do_refresh_token(self, conn: SnowflakeConnection) -> None:
         """If a refresh token is available exchanges it with a new access token.
         Updates self as a side-effect. Needs at lest self._refresh_token and client_id set.
         """
         if not self._refresh_token_enabled:
+            logger.debug("refresh_token feature is disabled")
             return
-        fields = {
-            "client_id": self._client_id,
-            "grant_type": "refresh_token",
-            "refresh_token": self._refresh_token,
-        }
-        if self._client_secret:
-            fields["client_secret"] = self._client_secret
 
-        resp = urllib3.PoolManager().request_encode_body(  # TODO: use network pool to gain use of proxy settings and so on
-            "POST",
-            self._token_request_url,
-            encode_multipart=False,
-            fields=fields,
-        )
+        resp = self._get_refresh_token_response(conn)
+        if not resp:
+            logger.info(
+                "Failed to exchange the refresh token on a new OAuth access token"
+            )
+            self._reset_refresh_token()
+            return
+
         try:
-            json_resp = json.loads(resp.data)
-            self._oauth_token = json_resp["access_token"]
-            logger.debug("new oauth token received")
-            new_refresh_token = json_resp.get("refresh_token")
-            if new_refresh_token:
-                logger.debug("received new refresh token while consuming previous one")
-                self._refresh_token = new_refresh_token
+            json_resp = json.loads(resp.data.decode())
+            self._reset_access_token(json_resp["access_token"])
+            self._reset_refresh_token(json_resp.get("refresh_token"))
         except (
             json.JSONDecodeError,
             KeyError,
         ):
             logger.error(
-                "refresh token exchange response, did not contain 'access_token'"
+                "refresh token exchange response did not contain 'access_token'"
             )
             logger.debug(
-                "received the following response body when consuming refresh token: %s",
+                "received the following response body when exchanging refresh token: %s",
                 resp.data,
             )
-            self._handle_failure(
-                conn=conn,
-                ret={
-                    "code": ER_IDP_CONNECTION_ERROR,
-                    "message": "Invalid HTTP request from web browser. Idp "
-                    "authentication could have failed.",
-                },
-            )
+            self._reset_refresh_token()

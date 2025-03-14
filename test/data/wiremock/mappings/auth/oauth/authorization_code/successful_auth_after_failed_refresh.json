@@ -1,0 +1,37 @@
+{
+  "requiredScenarioState": "Failed refresh token attempt",
+  "newScenarioState": "Authorized",
+  "request": {
+    "urlPathPattern": "/oauth/authorize",
+    "queryParameters": {
+      "response_type": {
+        "equalTo": "code"
+      },
+      "scope": {
+        "equalTo": "session:role:ANALYST"
+      },
+      "code_challenge_method": {
+        "equalTo": "S256"
+      },
+      "redirect_uri": {
+        "equalTo": "http://localhost:8009/snowflake/oauth-redirect"
+      },
+      "code_challenge": {
+        "matches": ".*"
+      },
+      "state": {
+        "matches": ".*"
+      },
+      "client_id": {
+        "equalTo": "123"
+      }
+    },
+    "method": "GET"
+  },
+  "response": {
+    "status": 302,
+    "headers": {
+      "Location": "http://localhost:8009/snowflake/oauth-redirect?code=123&state=abc123"
+    }
+  }
+}
