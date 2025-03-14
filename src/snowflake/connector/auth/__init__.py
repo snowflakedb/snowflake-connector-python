@@ -12,6 +12,7 @@ from .keypair import AuthByKeyPair
 from .no_auth import AuthNoAuth
 from .oauth import AuthByOAuth
 from .oauth_code import AuthByOauthCode
+from .oauth_credentials import AuthByOauthCredentials
 from .okta import AuthByOkta
 from .pat import AuthByPAT
 from .usrpwdmfa import AuthByUsrPwdMfa
@@ -23,6 +24,7 @@ FIRST_PARTY_AUTHENTICATORS = frozenset(
         AuthByKeyPair,
         AuthByOAuth,
         AuthByOauthCode,
+        AuthByOauthCredentials,
         AuthByOkta,
         AuthByUsrPwdMfa,
         AuthByWebBrowser,
@@ -39,6 +41,7 @@ __all__ = [
     "AuthByPAT",
     "AuthByOAuth",
     "AuthByOauthCode",
+    "AuthByOauthCredentials",
     "AuthByOkta",
     "AuthByUsrPwdMfa",
     "AuthByWebBrowser",
