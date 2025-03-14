@@ -55,7 +55,7 @@
         },
         "bodyPatterns": [
           {
-            "contains": "grant_type=authorization_code&code=123&redirect_uri=http%3A%2F%2Flocalhost%3A8009%2Fsnowflake%2Foauth-redirect&code_verifier="
+            "matches": "^grant_type=authorization_code&code=123&redirect_uri=http%3A%2F%2Flocalhost%3A([0-9]+)%2Fsnowflake%2Foauth-redirect&code_verifier=abc123$"
           }
         ]
       },

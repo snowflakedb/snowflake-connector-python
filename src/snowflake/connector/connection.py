@@ -342,6 +342,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         collections.abc.Iterable,  # of strings
         # SNOW-1825621: OAUTH PKCE
     ),
+    "oauth_authorization_redirect_uri": (
+        "http://localhost:{port}/snowflake/oauth-redirect",
+        str,
+    ),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -1158,7 +1162,12 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
-                pkce = "pkce" in map(lambda e: e.lower(), self._oauth_security_features)
+                features = [
+                    feature.lower() for feature in self._oauth_security_features
+                ]
+                pkce_enabled = "pkce" in features
+                token_cache_enabled = "token_cache" in features
+                refresh_token_enabled = "refresh_token" in features
 
                 if self._oauth_client_id is None:
                     Error.errorhandler_wrapper(
@@ -1185,7 +1194,9 @@ class SnowflakeConnection:
                     ),
                     redirect_uri=self._oauth_redirect_uri,
                     scope=self._oauth_scope,
-                    pkce=pkce,
+                    pkce_enabled=pkce_enabled,
+                    token_cache_enabled=token_cache_enabled,
+                    refresh_token_enabled=refresh_token_enabled,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
@@ -1512,9 +1523,9 @@ class SnowflakeConnection:
         except ReauthenticationRequest as ex:
             # cached id_token expiration error, we have cleaned id_token and try to authenticate again
             logger.debug("ID token expired. Reauthenticating...: %s", ex)
-            if isinstance(auth_instance, AuthByIdToken):
-                # Note: SNOW-733835 IDToken auth needs to authenticate through
-                #  SSO if it has expired
+            if type(auth_instance) in (AuthByIdToken, AuthByOauthCode):
+                # IDToken and OAuth auth need to authenticate through
+                # SSO if its credential has expired
                 self._reauthenticate()
             else:
                 self._authenticate(auth_instance)

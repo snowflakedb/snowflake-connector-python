@@ -51,6 +51,7 @@ from ..network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
+    OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
@@ -364,6 +365,14 @@ class Auth:
                         sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     )
                 )
+            elif errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE:
+                raise ReauthenticationRequest(
+                    ProgrammingError(
+                        msg=ret["message"],
+                        errno=int(errno),
+                        sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                    )
+                )
 
             from . import AuthByKeyPair
 
@@ -464,8 +473,8 @@ class Auth:
             self._rest._connection._update_parameters(session_parameters)
             return session_parameters
 
-    def _read_temporary_credential(
-        self,
+    @staticmethod
+    def read_temporary_credential(
         host: str,
         user: str,
         cred_type: TokenType,
@@ -479,21 +488,21 @@ class Auth:
         session_parameters: dict[str, Any],
     ) -> None:
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
-            self._rest.id_token = self._read_temporary_credential(
+            self._rest.id_token = self.read_temporary_credential(
                 host,
                 user,
                 TokenType.ID_TOKEN,
             )
 
         if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
-            self._rest.mfa_token = self._read_temporary_credential(
+            self._rest.mfa_token = self.read_temporary_credential(
                 host,
                 user,
                 TokenType.MFA_TOKEN,
             )
 
-    def _write_temporary_credential(
-        self,
+    @staticmethod
+    def write_temporary_credential(
         host: str,
         user: str,
         cred_type: TokenType,
@@ -527,7 +536,8 @@ class Auth:
             self._write_temporary_credential(
                 host, user, TokenType.MFA_TOKEN, response["data"].get("mfaToken")
             )
-
+    
+    @staticmethod
     def delete_temporary_credential(
         self, host: str, user: str, cred_type: TokenType
     ) -> None:
