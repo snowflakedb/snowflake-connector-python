@@ -94,6 +94,7 @@ class AuthByOauthCode(AuthByPlugin):
         self._refresh_token_enabled = refresh_token_enabled
         if refresh_token_enabled:
             logger.debug("oauth refresh token is going to be used if needed")
+            self._scope += (" " if self._scope else "") + "offline_access"
         self._verifier: str | None = None
 
     def reset_secrets(self) -> None:

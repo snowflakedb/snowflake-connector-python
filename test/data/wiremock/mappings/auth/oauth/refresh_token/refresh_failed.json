@@ -14,7 +14,7 @@
     },
     "bodyPatterns": [
       {
-        "contains": "grant_type=refresh_token&refresh_token=expired-refresh-token-123&scope=session%3Arole%3AANALYST"
+        "contains": "grant_type=refresh_token&refresh_token=expired-refresh-token-123&scope=session%3Arole%3AANALYST+offline_access"
       }
     ]
   },

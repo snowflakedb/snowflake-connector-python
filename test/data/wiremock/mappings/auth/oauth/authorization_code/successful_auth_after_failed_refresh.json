@@ -8,7 +8,7 @@
         "equalTo": "code"
       },
       "scope": {
-        "equalTo": "session:role:ANALYST"
+        "equalTo": "session:role:ANALYST offline_access"
       },
       "code_challenge_method": {
         "equalTo": "S256"
