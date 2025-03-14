@@ -83,7 +83,7 @@ class AuthByOauthCode(AuthByPlugin):
 
     def reset_secrets(self) -> None:
         logger.debug("resetting secrets")
-        self._reset_access_token()
+        self._oauth_token = None
 
     @property
     def type_(self) -> AuthType:
