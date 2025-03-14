@@ -11,7 +11,6 @@ import socket
 import time
 from collections.abc import Callable
 from types import TracebackType
-
 from typing_extensions import Self
 
 from ..compat import IS_WINDOWS
