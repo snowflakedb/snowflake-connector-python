@@ -52,6 +52,7 @@ class AuthByWorkloadIdentity(AuthByPlugin):
 
     def __init__(
         self,
+        *,
         provider: AttestationProvider | None = None,
         token: str | None = None,
         entra_resource: str | None = None,
