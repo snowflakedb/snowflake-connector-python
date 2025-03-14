@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import atexit
+import collections.abc
 import logging
 import os
 import pathlib
@@ -39,6 +40,7 @@ from .auth import (
     AuthByDefault,
     AuthByKeyPair,
     AuthByOAuth,
+    AuthByOauthCode,
     AuthByOkta,
     AuthByPAT,
     AuthByPlugin,
@@ -55,6 +57,7 @@ from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
+    _OAUTH_DEFAULT_SCOPE,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -88,6 +91,7 @@ from .errorcode import (
     ER_INVALID_BACKOFF_POLICY,
     ER_INVALID_VALUE,
     ER_NO_ACCOUNT_NAME,
+    ER_NO_CLIENT_ID,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
     ER_NO_USER,
@@ -101,6 +105,7 @@ from .network import (
     KEY_PAIR_AUTHENTICATOR,
     NO_AUTH_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
+    OAUTH_AUTHORIZATION_CODE,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
@@ -163,13 +168,13 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "user": ("", str),  # standard
     "password": ("", str),  # standard
     "host": ("127.0.0.1", str),  # standard
-    "port": (8080, (int, str)),  # standard
+    "port": (443, (int, str)),  # standard
     "database": (None, (type(None), str)),  # standard
     "proxy_host": (None, (type(None), str)),  # snowflake
     "proxy_port": (None, (type(None), str)),  # snowflake
     "proxy_user": (None, (type(None), str)),  # snowflake
     "proxy_password": (None, (type(None), str)),  # snowflake
-    "protocol": ("http", str),  # snowflake
+    "protocol": ("https", str),  # snowflake
     "warehouse": (None, (type(None), str)),  # snowflake
     "region": (None, (type(None), str)),  # snowflake
     "account": (None, (type(None), str)),  # snowflake
@@ -305,6 +310,36 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # SNOW-1817982: limit iobound TPE sizes when executing PUT/GET
+    "oauth_client_id": (
+        None,
+        (type(None), str),
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_client_secret": (
+        None,
+        (type(None), str),
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_authorization_url": (
+        "{host}:{port}/oauth/authorize",
+        str,
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_token_request_url": (
+        "{host}:{port}/oauth/token-request",
+        str,
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_scope": (
+        "",
+        str,
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_security_features": (
+        ("pkce",),
+        collections.abc.Iterable,  # of strings
+        # SNOW-1825621: OAUTH PKCE
+    ),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -528,8 +563,8 @@ class SnowflakeConnection:
         return self._host
 
     @property
-    def port(self) -> int | str:  # TODO: shouldn't be a string
-        return self._port
+    def port(self) -> int:
+        return int(self._port)
 
     @property
     def region(self) -> str | None:
@@ -1084,7 +1119,7 @@ class SnowflakeConnection:
                     self.auth_class = AuthByWebBrowser(
                         application=self.application,
                         protocol=self._protocol,
-                        host=self.host,
+                        host=self.host,  # TODO: delete this?
                         port=self.port,
                         timeout=self.login_timeout,
                         backoff_generator=self._backoff_generator,
@@ -1119,6 +1154,36 @@ class SnowflakeConnection:
                     oauth_token=self._token,
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
+                )
+            elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
+                pkce = "pkce" in map(lambda e: e.lower(), self._oauth_security_features)
+
+                if self._oauth_client_id is None:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": "Oauth code flow requirement 'client_id' is empty",
+                            "errno": ER_NO_CLIENT_ID,
+                        },
+                    )
+                if self._role and (self._oauth_scope == ""):
+                    # if role is known then let's inject it into scope
+                    self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
+                self.auth_class = AuthByOauthCode(
+                    application=self.application,
+                    client_id=self._oauth_client_id,
+                    client_secret=self._oauth_client_secret,
+                    authentication_url=self._oauth_authorization_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    token_request_url=self._oauth_token_request_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    redirect_uri="http://127.0.0.1:{port}/",
+                    scope=self._oauth_scope,
+                    pkce=pkce,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
@@ -1238,10 +1303,6 @@ class SnowflakeConnection:
         if "account" in kwargs:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
-            if "port" not in kwargs:
-                self._port = "443"
-            if "protocol" not in kwargs:
-                self._protocol = "https"
 
         if "unsafe_file_write" in kwargs:
             self._unsafe_file_write = kwargs["unsafe_file_write"]
@@ -1300,6 +1361,7 @@ class SnowflakeConnection:
                 not in (
                     EXTERNAL_BROWSER_AUTHENTICATOR,
                     OAUTH_AUTHENTICATOR,
+                    OAUTH_AUTHORIZATION_CODE,
                     KEY_PAIR_AUTHENTICATOR,
                     PROGRAMMATIC_ACCESS_TOKEN,
                 )
