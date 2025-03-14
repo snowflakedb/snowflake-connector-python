@@ -98,6 +98,13 @@ def mock_post_requests(monkeypatch):
     return request_body
 
 
+def write_temp_file(file_path: Path, contents: str) -> Path:
+    """Write the given string text to the given path, chmods it to be accessible, and returns the same path."""
+    file_path.write_text(contents)
+    file_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    return file_path
+
+
 def test_connect_with_service_name(mock_post_requests):
     assert fake_connector().service_name == "FAKE_SERVICE_NAME"
 
@@ -628,24 +635,56 @@ def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
     )
 
 
-@patch("snowflake.connector.SnowflakeConnection._authenticate", return_value=None)
-@patch("snowflake.connector.auth.AuthByWorkloadIdentity.__init__", return_value=None)
-def test_connection_params_are_plumbed_into_authbyworkloadidentity(
-    mock_auth_constructor, mock_authenticate
+def test_connection_params_are_plumbed_into_authbyworkloadidentity(monkeypatch):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "")  # Can be set to anything.
+
+        conn = snowflake.connector.connect(
+            account="my_account_1",
+            workload_identity_provider=AttestationProvider.AWS,
+            workload_identity_entra_resource="api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
+            token="my_token",
+            authenticator="WORKLOAD_IDENTITY",
+        )
+        assert conn.auth_class.provider == AttestationProvider.AWS
+        assert (
+            conn.auth_class.entra_resource
+            == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        )
+        assert conn.auth_class.token == "my_token"
+
+
+def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
+    monkeypatch, tmp_path
 ):
-    # We can set this to any value.
-    os.environ["SF_ENABLE_EXPERIMENTAL_AUTHENTICATION"] = ""
-    snowflake.connector.connect(
-        account="my_account_1",
-        workload_identity_provider=AttestationProvider.AWS,
-        workload_identity_entra_resource="api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
-        token="my_token",
-        authenticator="WORKLOAD_IDENTITY",
+    token_file = write_temp_file(tmp_path / "token.txt", contents="my_token")
+    connections_file = write_temp_file(
+        tmp_path / "connections.toml",
+        contents=dedent(
+            f"""\
+        [default]
+        account = "my_account_1"
+        authenticator = "WORKLOAD_IDENTITY"
+        workload_identity_provider = "OIDC"
+        workload_identity_entra_resource = "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        token_file_path = "{token_file}"
+        """
+        ),
     )
-    _, kwargs = mock_auth_constructor.call_args
-    assert kwargs == {
-        "provider": AttestationProvider.AWS,
-        "entra_resource": "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
-        "token": "my_token",
-    }
-    os.environ.pop("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION")
+
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "")
+
+        conn = snowflake.connector.connect(connections_file_path=connections_file)
+        assert conn.auth_class.provider == AttestationProvider.OIDC
+        assert (
+            conn.auth_class.entra_resource
+            == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        )
+        assert conn.auth_class.token == "my_token"
