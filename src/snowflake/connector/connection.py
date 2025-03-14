@@ -342,6 +342,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         collections.abc.Iterable,  # of strings
         # SNOW-1825621: OAUTH PKCE
     ),
+    "oauth_authorization_redirect_uri": (
+        "http://localhost:{port}/snowflake/oauth-redirect",
+        str,
+    ),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")

@@ -28,6 +28,7 @@ from ..errorcode import (
 )
 from ..errors import InterfaceError
 from ..network import OAUTH_AUTHENTICATOR
+from ._auth import Auth, delete_temporary_credential
 from ._http_server import AuthHttpServer
 from .by_plugin import AuthByPlugin, AuthType
 
@@ -48,6 +49,9 @@ def _get_query_params(
 
 class AuthByOauthCode(AuthByPlugin):
     """Authenticates user by OAuth code flow."""
+
+    _ACCESS_TOKEN_CACHE_KEY = "OAUTH_ACCESS_TOKEN"
+    _REFRESH_TOKEN_CACHE_KEY = "OAUTH_REFRESH_TOKEN"
 
     def __init__(
         self,
@@ -91,7 +95,8 @@ class AuthByOauthCode(AuthByPlugin):
 
     def reset_secrets(self) -> None:
         logger.debug("resetting secrets")
-        self._reset_access_token()
+        self._access_token = None
+        self._refresh_token = None
 
     @property
     def type_(self) -> AuthType:
@@ -124,6 +129,7 @@ class AuthByOauthCode(AuthByPlugin):
     ) -> None:
         """Web Browser based Authentication."""
         logger.debug("authenticating with OAuth authorization code flow")
+        self._pop_cached_tokens(account, user)
         if self._access_token:
             logger.info(
                 "OAuth access token is already available in cache, no need to update it."
@@ -131,8 +137,11 @@ class AuthByOauthCode(AuthByPlugin):
             return
         with AuthHttpServer() as callback_server:
             code = self._do_authorization_request(callback_server, conn)
-            access_token = self._do_token_request(code, callback_server, conn)
+            access_token, refresh_token = self._do_token_request(
+                code, callback_server, conn
+            )
         self._reset_access_token(access_token)
+        self._reset_refresh_token(refresh_token)
 
     def reauthenticate(
         self,
@@ -140,6 +149,14 @@ class AuthByOauthCode(AuthByPlugin):
         conn: SnowflakeConnection,
         **kwargs: Any,
     ) -> dict[str, bool]:
+        self._reset_access_token()
+        if self._refresh_token:
+            logger.info(
+                "OAuth refresh token is available, try to use it and get a new access token"
+            )
+            if self._do_refresh_token(conn=conn):
+                logger.info("OAuth access token refreshed")
+                return {"success": True}
         conn.authenticate_with_retry(self)
         return {"success": True}
 
@@ -329,7 +346,7 @@ You can close this window now and go back where you started from.
         code: str,
         callback_server: AuthHttpServer,
         connection: SnowflakeConnection,
-    ) -> str | None:
+    ) -> (str | None, str | None):
         logger.debug("step 2: received OAUTH callback, requesting token")
         fields = {
             "grant_type": "authorization_code",
@@ -358,7 +375,8 @@ You can close this window now and go back where you started from.
             logger.debug("OAuth IdP response received, try to parse it")
             json_resp: dict = json.loads(resp.data)
             access_token = json_resp["access_token"]
-            return access_token
+            refresh_token = json_resp.get("refresh_token")
+            return access_token, refresh_token
         except (
             json.JSONDecodeError,
             KeyError,
@@ -376,7 +394,7 @@ You can close this window now and go back where you started from.
                     "authentication could have failed.",
                 },
             )
-        return None
+        return None, None
 
     def _receive_authorization_callback(
         self,
@@ -385,7 +403,7 @@ You can close this window now and go back where you started from.
     ) -> (str | None, str | None):
         logger.debug("trying to receive authorization redirected uri")
         data, socket_connection = http_server.receive_block()
-        if data is None or socket_connection is None:
+        if socket_connection is None:
             self._handle_failure(
                 conn=connection,
                 ret={
@@ -406,13 +424,6 @@ You can close this window now and go back where you started from.
             data[0].split(maxsplit=2)[1],
             connection,
         )
-
-    def _reset_access_token(self, access_token: str | None = None) -> None:
-        logger.debug(
-            "resetting access token to %s",
-            "*" * len(access_token) if access_token else None,
-        )
-        self._access_token = access_token
 
     def _ask_authorization_callback_from_user(
         self,
@@ -459,3 +470,104 @@ You can close this window now and go back where you started from.
                 },
             )
         return parsed.get("code", [None])[0], parsed.get("state", [None])[0]
+
+    def _reset_access_token(self, access_token: str | None = None) -> None:
+        """Updates OAuth access token both in memory and in the token cache if enabled"""
+        logger.debug(
+            "resetting access token to %s",
+            "*" * len(access_token) if access_token else None,
+        )
+        self._access_token = access_token
+        if not self._token_cache_enabled:
+            return
+        if access_token:
+            Auth.write_temporary_credential(
+                *self._token_cache_prefix, self._ACCESS_TOKEN_CACHE_KEY, access_token
+            )
+        else:
+            delete_temporary_credential(
+                *self._token_cache_prefix, self._ACCESS_TOKEN_CACHE_KEY
+            )
+
+    def _reset_refresh_token(self, refresh_token: str | None = None) -> None:
+        """Updates OAuth refresh token both in memory and in the token cache if necessary"""
+        logger.debug(
+            "resetting access token to %s",
+            "*" * len(refresh_token) if refresh_token else None,
+        )
+        if not self._refresh_token_enabled:
+            return
+        self._refresh_token = refresh_token
+        if not self._token_cache_enabled:
+            return
+        if refresh_token:
+            Auth.write_temporary_credential(
+                *self._token_cache_prefix, self._REFRESH_TOKEN_CACHE_KEY, refresh_token
+            )
+        else:
+            delete_temporary_credential(
+                *self._token_cache_prefix, self._REFRESH_TOKEN_CACHE_KEY
+            )
+
+    def _pop_cached_tokens(self, account: str, user: str) -> None:
+        """Retrieves OAuth access and refresh tokens from the token cache if enabled"""
+        if self._token_cache_enabled:
+            self._token_cache_prefix = (account, user)
+            self._access_token = Auth.read_temporary_credential(
+                *self._token_cache_prefix, self._ACCESS_TOKEN_CACHE_KEY
+            )
+            self._refresh_token = (
+                Auth.read_temporary_credential(
+                    *self._token_cache_prefix, self._REFRESH_TOKEN_CACHE_KEY
+                )
+                if self._refresh_token_enabled
+                else None
+            )
+
+    def _do_refresh_token(self, conn: SnowflakeConnection) -> None:
+        """If a refresh token is available exchanges it with a new access token.
+        Updates self as a side-effect. Needs at lest self._refresh_token and client_id set.
+        """
+        if not self._refresh_token_enabled:
+            return
+        fields = {
+            "client_id": self._client_id,
+            "grant_type": "refresh_token",
+            "refresh_token": self._refresh_token,
+        }
+        if self._client_secret:
+            fields["client_secret"] = self._client_secret
+
+        resp = urllib3.PoolManager().request_encode_body(  # TODO: use network pool to gain use of proxy settings and so on
+            "POST",
+            self._token_request_url,
+            encode_multipart=False,
+            fields=fields,
+        )
+        try:
+            json_resp = json.loads(resp.data)
+            self._oauth_token = json_resp["access_token"]
+            logger.debug("new oauth token received")
+            new_refresh_token = json_resp.get("refresh_token")
+            if new_refresh_token:
+                logger.debug("received new refresh token while consuming previous one")
+                self._refresh_token = new_refresh_token
+        except (
+            json.JSONDecodeError,
+            KeyError,
+        ):
+            logger.error(
+                "refresh token exchange response, did not contain 'access_token'"
+            )
+            logger.debug(
+                "received the following response body when consuming refresh token: %s",
+                resp.data,
+            )
+            self._handle_failure(
+                conn=conn,
+                ret={
+                    "code": ER_IDP_CONNECTION_ERROR,
+                    "message": "Invalid HTTP request from web browser. Idp "
+                    "authentication could have failed.",
+                },
+            )
