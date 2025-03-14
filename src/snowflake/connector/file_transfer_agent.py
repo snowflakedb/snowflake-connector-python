@@ -33,7 +33,6 @@ from .constants import (
     S3_MAX_OBJECT_SIZE,
     S3_MAX_PARTS,
     S3_MIN_PART_SIZE,
-    STORED_PROC_FS,
     ResultStatus,
     megabyte,
 )
@@ -66,7 +65,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .cursor import SnowflakeCursor
     from .file_compression_type import CompressionType
 
-VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS, STORED_PROC_FS]
+VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS]
 
 INJECT_WAIT_IN_PUT = 0
 
