@@ -13,9 +13,7 @@ except ModuleNotFoundError:
     vendored_imported = False
 
 
-@pytest.mark.skipif(
-    not vendored_imported, reason="vendored library is not imported for old driver"
-)
+@pytest.mark.skipolddriver
 def test_local_fix_for_closed_socket_bug():
     # https://github.com/urllib3/urllib3/issues/1878#issuecomment-641534573
     http = urllib3.PoolManager(maxsize=1)
