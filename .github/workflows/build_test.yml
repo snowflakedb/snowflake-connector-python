@@ -74,7 +74,7 @@ jobs:
             id: manylinux_x86_64
           - image: ubuntu-latest
             id: manylinux_aarch64
-          - image: windows-2019
+          - image: windows-2022
             id: win_amd64
           - image: macos-latest
             id: macosx_x86_64
@@ -99,7 +99,7 @@ jobs:
           platforms: all
       - uses: actions/checkout@v4
       - name: Building wheel
-        uses: pypa/cibuildwheel@v2.16.5
+        uses: pypa/cibuildwheel@v2.21.3
         env:
           CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os.id }}
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
@@ -126,7 +126,7 @@ jobs:
            download_name: manylinux_x86_64
          - image_name: macos-latest
            download_name: macosx_x86_64
-         - image_name: windows-2019
+         - image_name: windows-2022
            download_name: win_amd64
         python-version: ["3.9", "3.10", "3.11", "3.12"]
         cloud-provider: [aws, azure, gcp]
