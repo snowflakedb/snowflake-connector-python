@@ -205,6 +205,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
+      - name: Check OpenSSL version
+        run: openssl version
+      - name: Check libcrypto version
+        run: dpkg -s libssl-dev | grep Version
       - name: Setup parameters file
         shell: bash
         env:
