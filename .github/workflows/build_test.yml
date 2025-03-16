@@ -209,6 +209,8 @@ jobs:
         run: openssl version
       - name: Check libcrypto version
         run: dpkg -s libssl-dev | grep Version
+      - name: Show oscrypto
+        run:  pip show oscrypto
       - name: Setup parameters file
         shell: bash
         env:
