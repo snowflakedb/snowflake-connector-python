@@ -193,7 +193,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-         - image_name: ubuntu-latest
+         - image_name: ubuntu-20.04
            download_name: linux
         python-version: [3.9]
         cloud-provider: [aws]
@@ -209,8 +209,6 @@ jobs:
         run: openssl version
       - name: Check libcrypto version
         run: dpkg -s libssl-dev | grep Version
-      - name: Show oscrypto
-        run: python -c "import ssl; print(ssl.OPENSSL_VERSION)"; ldd $(which python) | grep crypto
       - name: Setup parameters file
         shell: bash
         env:
