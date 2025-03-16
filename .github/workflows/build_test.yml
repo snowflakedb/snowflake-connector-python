@@ -193,7 +193,8 @@ jobs:
       fail-fast: false
       matrix:
         os:
-         - image_name: ubuntu-20.04
+         - image_name: ubuntu-latest
+#         - image_name: ubuntu-20.04
            download_name: linux
         python-version: [3.9]
         cloud-provider: [aws]
