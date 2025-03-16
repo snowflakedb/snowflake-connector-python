@@ -216,9 +216,9 @@ jobs:
         # Install OpenSSL 1.1
       - name: Install OpenSSL 1.1
         run: |
-           sudo apt-get install -y wget
-           wget http://security.ubuntu.com/ubuntu/pool/main/o/openssl1.1/libssl1.1_1.1.1f-1ubuntu2.19_amd64.deb
-           sudo dpkg -i libssl1.1_1.1.1f-1ubuntu2.19_amd64.deb
+          sudo apt-get install -y wget
+          wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.0g-2ubuntu4_amd64.deb
+          sudo dpkg -i libssl1.1_1.1.0g-2ubuntu4_amd64.deb
            ls -lh /usr/lib/x86_64-linux-gnu/libcrypto.so*
       - name: Setup parameters file
         shell: bash
