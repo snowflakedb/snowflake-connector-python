@@ -195,7 +195,8 @@ jobs:
         os:
          # Because old version of snowflake-connector-python depends on oscrypto which causes conflicts with higher versions of libssl
          # It can be changed to ubuntu-latest, when python sf connector version in tox is above 3.4.0
-         - image_name: ubuntu-20.04
+#         - image_name: ubuntu-20.04
+         - image_name: ubuntu-latest
            download_name: linux
         python-version: [3.9]
         cloud-provider: [aws]
@@ -211,6 +212,14 @@ jobs:
         run: openssl version
       - name: Check libcrypto version
         run: dpkg -s libssl-dev | grep Version
+
+        # Install OpenSSL 1.1
+      - name: Install OpenSSL 1.1
+        run: |
+           sudo apt-get install -y wget
+           wget http://security.ubuntu.com/ubuntu/pool/main/o/openssl1.1/libssl1.1_1.1.1f-1ubuntu2.19_amd64.deb
+           sudo dpkg -i libssl1.1_1.1.1f-1ubuntu2.19_amd64.deb
+           ls -lh /usr/lib/x86_64-linux-gnu/libcrypto.so*
       - name: Setup parameters file
         shell: bash
         env:
