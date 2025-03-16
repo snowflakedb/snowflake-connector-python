@@ -7,7 +7,6 @@ from __future__ import annotations
 import os
 import pathlib
 from functools import cached_property
-from tempfile import TemporaryDirectory
 from typing import Protocol
 from warnings import warn
 
@@ -38,10 +37,7 @@ def _resolve_platform_dirs() -> PlatformDirsProto:
     ).expanduser()
     try:
         if snowflake_home.exists():
-            return SFPlatformDirs(
-                str(snowflake_home),
-                **platformdir_kwargs,
-            )
+            return SFPlatformDirs(str(snowflake_home), **platformdir_kwargs)
         else:
             # In case SNOWFLAKE_HOME does not exist we fall back to using
             # platformdirs to determine where system files should be placed. Please
@@ -49,16 +45,9 @@ def _resolve_platform_dirs() -> PlatformDirsProto:
             # https://platformdirs.readthedocs.io/
             return PlatformDirs(**platformdir_kwargs)
     except PermissionError as pe:
-        tmp_dir = TemporaryDirectory(
-            suffix="_snowflake", ignore_cleanup_errors=True
-        )
         warn(
-            f"Received permission error while checking if {snowflake_home} exists. Continue with temporary direcoty `{tmp_dir.name}`.\n"
+            f"Received permission error while checking if {snowflake_home} exists. Continue without snowflake home directory.\n"
             f"Original Error: {pe}"
-        )
-        return SFPlatformDirs(
-            str(tmp_dir.name),
-            **platformdir_kwargs,
         )
 
 
