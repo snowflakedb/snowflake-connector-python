@@ -196,7 +196,6 @@ jobs:
          # Because old version of snowflake-connector-python depends on oscrypto which causes conflicts with higher versions of libssl
          # It can be changed to ubuntu-latest, when python sf connector version in tox is above 3.4.0
          - image_name: ubuntu-20.04
-#         - image_name: ubuntu-latest
            download_name: linux
         python-version: [3.9]
         cloud-provider: [aws]
