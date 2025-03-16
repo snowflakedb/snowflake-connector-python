@@ -210,8 +210,7 @@ jobs:
       - name: Check libcrypto version
         run: dpkg -s libssl-dev | grep Version
       - name: Show oscrypto
-        run:  python -c "import ssl; print(ssl.OPENSSL_VERSION)"
-              ldd $(which python) | grep crypto
+        run: python -c "import ssl; print(ssl.OPENSSL_VERSION)"; ldd $(which python) | grep crypto
       - name: Setup parameters file
         shell: bash
         env:
