@@ -49,6 +49,7 @@ def _resolve_platform_dirs() -> PlatformDirsProto:
             f"Received permission error while checking if {snowflake_home} exists. Continue without snowflake home directory.\n"
             f"Original Error: {pe}"
         )
+        return PlatformDirs(**platformdir_kwargs)
 
 
 class SFPlatformDirs:
