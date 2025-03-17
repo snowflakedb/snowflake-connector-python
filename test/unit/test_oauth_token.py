@@ -221,8 +221,6 @@ def test_token_request_error(
             "Invalid HTTP request from web browser. Idp authentication could have failed."
         )
 
-        wiremock_client.list_received_requests()
-
 
 @pytest.mark.skipolddriver
 def test_browser_timeout(
@@ -301,5 +299,3 @@ def test_custom_urls(
 
             assert cnx, "invalid cnx"
             cnx.close()
-
-    wiremock_client.list_received_requests()
