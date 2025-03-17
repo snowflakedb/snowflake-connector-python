@@ -13,7 +13,8 @@ import pytest
 import requests
 
 import snowflake.connector
-from snowflake.connector.auth import AuthByOauthCode
+from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
+
 from ..wiremock.wiremock_utils import WiremockClient
 
 AUTH_SOCKET_PORT = 8009
@@ -316,48 +317,24 @@ def test_custom_urls(
 
 @pytest.fixture()
 def temp_cache():
-    class TemporaryCache:
+    class TemporaryCache(TokenCache):
         def __init__(self):
             self._cache = {}
 
-        def read_temporary_credential(
-            self,
-            account: str,
-            user: str,
-            cred_type: str,
-        ) -> str | None:
-            return self._cache.get((account, user, cred_type))
+        def store(self, key: TokenKey, token: str) -> None:
+            self._cache[(key.user, key.host, key.tokenType)] = token
 
-        def write_temporary_credential(
-            self,
-            account: str,
-            user: str,
-            cred_type: str,
-            value: str,
-        ) -> None:
-            self._cache[(account, user, cred_type)] = value
+        def retrieve(self, key: TokenKey) -> str:
+            return self._cache.get((key.user, key.host, key.tokenType))
 
-        def delete_temporary_credential(
-            self,
-            account: str,
-            user: str,
-            cred_type: str,
-        ) -> None:
-            self._cache.pop((account, user, cred_type))
+        def remove(self, key: TokenKey) -> None:
+            self._cache.pop((key.user, key.host, key.tokenType))
 
     tmp_cache = TemporaryCache()
     with (
         mock.patch(
-            "snowflake.connector.auth._auth.Auth.write_temporary_credential",
-            new=tmp_cache.write_temporary_credential,
-        ),
-        mock.patch(
-            "snowflake.connector.auth._auth.Auth.read_temporary_credential",
-            new=tmp_cache.read_temporary_credential,
-        ),
-        mock.patch(
-            "snowflake.connector.auth._auth.Auth.delete_temporary_credential",
-            new=tmp_cache.delete_temporary_credential,
+            "snowflake.connector.auth._auth.Auth.get_token_cache",
+            return_value=tmp_cache,
         ),
     ):
         yield tmp_cache
@@ -387,18 +364,12 @@ def test_successful_refresh_token_flow(
     wiremock_client.add_mapping(
         wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
     )
-
     account = "testAccount"
     user = "testUser"
-    temp_cache.write_temporary_credential(
-        account,
-        user,
-        AuthByOauthCode._ACCESS_TOKEN_CACHE_KEY,
-        "expired-access-token-123",
-    )
-    temp_cache.write_temporary_credential(
-        account, user, AuthByOauthCode._REFRESH_TOKEN_CACHE_KEY, "refresh-token-123"
-    )
+    access_token_key = TokenKey(user, account, TokenType.OAUTH_ACCESS_TOKEN)
+    refresh_token_key = TokenKey(user, account, TokenType.OAUTH_REFRESH_TOKEN)
+    temp_cache.store(access_token_key, "expired-access-token-123")
+    temp_cache.store(refresh_token_key, "refresh-token-123")
     cnx = snowflake.connector.connect(
         user=user,
         authenticator="OAUTH_AUTHORIZATION_CODE",
@@ -416,12 +387,9 @@ def test_successful_refresh_token_flow(
     )
     assert cnx, "invalid cnx"
     cnx.close()
-    new_access_token = temp_cache.read_temporary_credential(
-        account, user, AuthByOauthCode._ACCESS_TOKEN_CACHE_KEY
-    )
-    new_refresh_token = temp_cache.read_temporary_credential(
-        account, user, AuthByOauthCode._REFRESH_TOKEN_CACHE_KEY
-    )
+    new_access_token = temp_cache.retrieve(access_token_key)
+    new_refresh_token = temp_cache.retrieve(refresh_token_key)
+
     assert new_access_token == "access-token-123"
     assert new_refresh_token == "refresh-token-123"
 
@@ -462,18 +430,10 @@ def test_expired_refresh_token_flow(
 
     account = "testAccount"
     user = "testUser"
-    temp_cache.write_temporary_credential(
-        account,
-        user,
-        AuthByOauthCode._ACCESS_TOKEN_CACHE_KEY,
-        "expired-access-token-123",
-    )
-    temp_cache.write_temporary_credential(
-        account,
-        user,
-        AuthByOauthCode._REFRESH_TOKEN_CACHE_KEY,
-        "expired-refresh-token-123",
-    )
+    access_token_key = TokenKey(user, account, TokenType.OAUTH_ACCESS_TOKEN)
+    refresh_token_key = TokenKey(user, account, TokenType.OAUTH_REFRESH_TOKEN)
+    temp_cache.store(access_token_key, "expired-access-token-123")
+    temp_cache.store(refresh_token_key, "expired-refresh-token-123")
     with (
         mock.patch("webbrowser.open", new=webbrowser_mock.open),
         mock.patch("secrets.token_urlsafe", return_value="abc123"),
@@ -496,11 +456,7 @@ def test_expired_refresh_token_flow(
         assert cnx, "invalid cnx"
         cnx.close()
 
-    new_access_token = temp_cache.read_temporary_credential(
-        account, user, AuthByOauthCode._ACCESS_TOKEN_CACHE_KEY
-    )
-    new_refresh_token = temp_cache.read_temporary_credential(
-        account, user, AuthByOauthCode._REFRESH_TOKEN_CACHE_KEY
-    )
+    new_access_token = temp_cache.retrieve(access_token_key)
+    new_refresh_token = temp_cache.retrieve(refresh_token_key)
     assert new_access_token == "access-token-123"
     assert new_refresh_token == "refresh-token-123"

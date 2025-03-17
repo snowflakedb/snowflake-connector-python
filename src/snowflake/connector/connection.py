@@ -342,10 +342,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         collections.abc.Iterable,  # of strings
         # SNOW-1825621: OAUTH PKCE
     ),
-    "oauth_authorization_redirect_uri": (
-        "http://localhost:{port}/snowflake/oauth-redirect",
-        str,
-    ),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -1195,7 +1191,7 @@ class SnowflakeConnection:
                     redirect_uri=self._oauth_redirect_uri,
                     scope=self._oauth_scope,
                     pkce_enabled=pkce_enabled,
-                    token_cache_enabled=token_cache_enabled,
+                    token_cache=auth.get_token_cache() if token_cache_enabled else None,
                     refresh_token_enabled=refresh_token_enabled,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:

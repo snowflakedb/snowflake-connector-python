@@ -30,7 +30,7 @@ from ..errorcode import (
 )
 from ..errors import InterfaceError
 from ..network import OAUTH_AUTHENTICATOR
-from ._auth import Auth
+from ..token_cache import TokenCache, TokenKey, TokenType
 from ._http_server import AuthHttpServer
 from .by_plugin import AuthByPlugin, AuthType
 
@@ -52,9 +52,6 @@ def _get_query_params(
 class AuthByOauthCode(AuthByPlugin):
     """Authenticates user by OAuth code flow."""
 
-    _ACCESS_TOKEN_CACHE_KEY = "OAUTH_ACCESS_TOKEN"
-    _REFRESH_TOKEN_CACHE_KEY = "OAUTH_REFRESH_TOKEN"
-
     def __init__(
         self,
         application: str,
@@ -65,7 +62,7 @@ class AuthByOauthCode(AuthByPlugin):
         redirect_uri: str,
         scope: str,
         pkce_enabled: bool = False,
-        token_cache_enabled: bool = False,
+        token_cache: TokenCache | None = None,
         refresh_token_enabled: bool = False,
         **kwargs,
     ) -> None:
@@ -88,9 +85,11 @@ class AuthByOauthCode(AuthByPlugin):
         self._pkce_enabled = pkce_enabled
         if pkce_enabled:
             logger.debug("oauth pkce is going to be used")
-        self._token_cache_enabled = token_cache_enabled
-        if token_cache_enabled:
+        self._token_cache = token_cache
+        if token_cache:
             logger.debug("token cache is going to be used if needed")
+            self._access_token_key: TokenKey | None = None
+            self._refresh_token_key: TokenKey | None = None
         self._refresh_token_enabled = refresh_token_enabled
         if refresh_token_enabled:
             logger.debug("oauth refresh token is going to be used if needed")
@@ -136,7 +135,7 @@ class AuthByOauthCode(AuthByPlugin):
         self._pop_cached_tokens(account, user)
         if self._access_token:
             logger.info(
-                "OAuth access token is already available in cache, no need to update it."
+                "OAuth access token is already available in cache, no need to authenticate."
             )
             return
         with AuthHttpServer() as callback_server:
@@ -483,16 +482,12 @@ You can close this window now and go back where you started from.
             "*" * len(access_token) if access_token else None,
         )
         self._access_token = access_token
-        if not self._token_cache_enabled:
+        if not self._token_cache:
             return
         if access_token:
-            Auth.write_temporary_credential(
-                *self._token_cache_prefix, self._ACCESS_TOKEN_CACHE_KEY, access_token
-            )
+            self._token_cache.store(self._access_token_key, access_token)
         else:
-            Auth.delete_temporary_credential(
-                *self._token_cache_prefix, self._ACCESS_TOKEN_CACHE_KEY
-            )
+            self._token_cache.remove(self._access_token_key)
 
     def _reset_refresh_token(self, refresh_token: str | None = None) -> None:
         """Updates OAuth refresh token both in memory and in the token cache if necessary"""
@@ -503,31 +498,30 @@ You can close this window now and go back where you started from.
         if not self._refresh_token_enabled:
             return
         self._refresh_token = refresh_token
-        if not self._token_cache_enabled:
+        if not self._token_cache:
             return
         if refresh_token:
-            Auth.write_temporary_credential(
-                *self._token_cache_prefix, self._REFRESH_TOKEN_CACHE_KEY, refresh_token
-            )
+            self._token_cache.store(self._refresh_token_key, refresh_token)
         else:
-            Auth.delete_temporary_credential(
-                *self._token_cache_prefix, self._REFRESH_TOKEN_CACHE_KEY
-            )
+            self._token_cache.remove(self._refresh_token_key)
 
     def _pop_cached_tokens(self, account: str, user: str) -> None:
         """Retrieves OAuth access and refresh tokens from the token cache if enabled"""
-        if self._token_cache_enabled:
-            self._token_cache_prefix = (account, user)
-            self._access_token = Auth.read_temporary_credential(
-                *self._token_cache_prefix, self._ACCESS_TOKEN_CACHE_KEY
+        if self._token_cache:
+            self._access_token_key = TokenKey(
+                user, account, TokenType.OAUTH_ACCESS_TOKEN
             )
-            self._refresh_token = (
-                Auth.read_temporary_credential(
-                    *self._token_cache_prefix, self._REFRESH_TOKEN_CACHE_KEY
+            self._access_token = self._token_cache.retrieve(self._access_token_key)
+            if self._refresh_token_enabled:
+                self._refresh_token_key = TokenKey(
+                    user, account, TokenType.OAUTH_REFRESH_TOKEN
                 )
-                if self._refresh_token_enabled
-                else None
-            )
+                self._refresh_token = self._token_cache.retrieve(
+                    self._refresh_token_key
+                )
+            else:
+                self._refresh_token_key = None
+                self._refresh_token = None
 
     def _get_refresh_token_response(
         self, conn: SnowflakeConnection

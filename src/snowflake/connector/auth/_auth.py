@@ -91,7 +91,7 @@ class Auth:
 
     def __init__(self, rest) -> None:
         self._rest = rest
-        self.token_cache = TokenCache.make()
+        self._token_cache = TokenCache.make()
 
     @staticmethod
     def base_auth_data(
@@ -355,7 +355,7 @@ class Auth:
                 # clear stored id_token if failed to connect because of id_token
                 # raise an exception for reauth without id_token
                 self._rest.id_token = None
-                self.delete_temporary_credential(
+                self._delete_temporary_credential(
                     self._rest._host, user, TokenType.ID_TOKEN
                 )
                 raise ReauthenticationRequest(
@@ -387,7 +387,7 @@ class Auth:
             from . import AuthByUsrPwdMfa
 
             if isinstance(auth_instance, AuthByUsrPwdMfa):
-                self.delete_temporary_credential(
+                self._delete_temporary_credential(
                     self._rest._host, user, TokenType.MFA_TOKEN
                 )
             Error.errorhandler_wrapper(
@@ -473,13 +473,13 @@ class Auth:
             self._rest._connection._update_parameters(session_parameters)
             return session_parameters
 
-    @staticmethod
-    def read_temporary_credential(
+    def _read_temporary_credential(
+        self,
         host: str,
         user: str,
         cred_type: TokenType,
     ) -> str | None:
-        return self.token_cache.retrieve(TokenKey(host, user, cred_type))
+        return self._token_cache.retrieve(TokenKey(host, user, cred_type))
 
     def read_temporary_credentials(
         self,
@@ -488,21 +488,21 @@ class Auth:
         session_parameters: dict[str, Any],
     ) -> None:
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
-            self._rest.id_token = self.read_temporary_credential(
+            self._rest.id_token = self._read_temporary_credential(
                 host,
                 user,
                 TokenType.ID_TOKEN,
             )
 
         if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
-            self._rest.mfa_token = self.read_temporary_credential(
+            self._rest.mfa_token = self._read_temporary_credential(
                 host,
                 user,
                 TokenType.MFA_TOKEN,
             )
 
-    @staticmethod
-    def write_temporary_credential(
+    def _write_temporary_credential(
+        self,
         host: str,
         user: str,
         cred_type: TokenType,
@@ -513,7 +513,7 @@ class Auth:
                 "no credential is given when try to store temporary credential"
             )
             return
-        self.token_cache.store(TokenKey(host, user, cred_type), cred)
+        self._token_cache.store(TokenKey(host, user, cred_type), cred)
 
     def write_temporary_credentials(
         self,
@@ -536,12 +536,14 @@ class Auth:
             self._write_temporary_credential(
                 host, user, TokenType.MFA_TOKEN, response["data"].get("mfaToken")
             )
-    
-    @staticmethod
-    def delete_temporary_credential(
+
+    def _delete_temporary_credential(
         self, host: str, user: str, cred_type: TokenType
     ) -> None:
-        self.token_cache.remove(TokenKey(host, user, cred_type))
+        self._token_cache.remove(TokenKey(host, user, cred_type))
+
+    def get_token_cache(self) -> TokenCache:
+        return self._token_cache
 
 
 def get_token_from_private_key(
