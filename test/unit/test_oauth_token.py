@@ -331,11 +331,8 @@ def temp_cache():
             self._cache.pop((key.user, key.host, key.tokenType))
 
     tmp_cache = TemporaryCache()
-    with (
-        mock.patch(
-            "snowflake.connector.auth._auth.Auth.get_token_cache",
-            return_value=tmp_cache,
-        ),
+    with mock.patch(
+        "snowflake.connector.auth._auth.Auth.get_token_cache", return_value=tmp_cache
     ):
         yield tmp_cache
 
