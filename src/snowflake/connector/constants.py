@@ -430,6 +430,7 @@ DAY_IN_SECONDS = 60 * 60 * 24
 # TODO: all env variables definitions should be here
 ENV_VAR_PARTNER = "SF_PARTNER"
 ENV_VAR_TEST_MODE = "SNOWFLAKE_TEST_MODE"
+ENV_VAR_EXPERIMENTAL_AUTHENTICATION = "SF_ENABLE_EXPERIMENTAL_AUTHENTICATION"  # Needed to enable new strong auth features during the private preview.
 
 
 _DOMAIN_NAME_MAP = {_DEFAULT_HOSTNAME_TLD: "GLOBAL", _CHINA_HOSTNAME_TLD: "CHINA"}
