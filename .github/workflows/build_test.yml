@@ -195,8 +195,8 @@ jobs:
         os:
          # Because old version of snowflake-connector-python depends on oscrypto which causes conflicts with higher versions of libssl
          # It can be changed to ubuntu-latest, when python sf connector version in tox is above 3.4.0
-#         - image_name: ubuntu-20.04
-         - image_name: ubuntu-latest
+         - image_name: ubuntu-20.04
+#         - image_name: ubuntu-latest
            download_name: linux
         python-version: [3.9]
         cloud-provider: [aws]
@@ -208,33 +208,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
-      - name: Check OpenSSL version
-        run: openssl version
-      - name: Check libcrypto version
-        run: dpkg -s libssl-dev | grep Version
-
-        # Install OpenSSL 1.1
-      - name: Install OpenSSL 1.1
-        run: |
-          sudo apt-get update && sudo apt-get install -y wget
-          wget http://security.ubuntu.com/ubuntu/pool/main/o/openssl/openssl_1.1.1f-1ubuntu2.24_amd64.deb
-          wget http://security.ubuntu.com/ubuntu/pool/main/o/openssl/libssl-dev_1.1.1f-1ubuntu2.24_amd64.deb
-          wget http://security.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb
-
-          # install downloaded binary packages
-          sudo dpkg -i libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb
-          sudo dpkg -i libssl-dev_1.1.1f-1ubuntu2.24_amd64.deb
-          sudo dpkg -i openssl_1.1.1f-1ubuntu2.24_amd64.deb
-
-          ls -l /usr/lib/x86_64-linux-gnu/libcrypto.so
-
-
-
-      - name: Check OpenSSL version after install
-        run: openssl version
-      - name: Check libcrypto version
-        run: dpkg -s libssl-dev | grep Version
-
       - name: Setup parameters file
         shell: bash
         env:
@@ -247,9 +220,7 @@ jobs:
       - name: Install tox
         run: python -m pip install tox>=4
       - name: Run tests
-        run: |
-          export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1
-          python -m tox run -e olddriver
+        run: python -m tox run -e olddriver
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
