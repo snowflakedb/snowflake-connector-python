@@ -12,7 +12,7 @@ def test_mfa_token_cache():
         "snowflake.connector.network.SnowflakeRestful.fetch",
     ):
         with mock.patch(
-            "snowflake.connector.auth._auth.Auth.write_temporary_credential",
+            "snowflake.connector.auth._auth.Auth._write_temporary_credential",
         ) as save_mock:
             with connect(
                 account="account",
@@ -37,7 +37,7 @@ def test_mfa_token_cache():
             "snowflake.connector.cursor.SnowflakeCursor._init_result_and_meta",
         ):
             with mock.patch(
-                "snowflake.connector.auth._auth.Auth.read_temporary_credential",
+                "snowflake.connector.auth._auth.Auth._read_temporary_credential",
                 return_value=None,
             ) as load_mock:
                 with connect(
