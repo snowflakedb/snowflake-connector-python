@@ -216,14 +216,13 @@ jobs:
         # Install OpenSSL 1.1
       - name: Install OpenSSL 1.1
         run: |
-          sudo apt-get install -y wget
-          wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.0g-2ubuntu4_amd64.deb
-          sudo dpkg -i libssl1.1_1.1.0g-2ubuntu4_amd64.deb
+          sudo apt-get update && sudo apt-get install -y wget
+          wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl1.1/libssl1.1_1.1.1f-1ubuntu2_amd64.deb
           sudo rm /usr/lib/x86_64-linux-gnu/libcrypto.so
           sudo ln -s /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 /usr/lib/x86_64-linux-gnu/libcrypto.so
-          ls -lh /usr/lib/x86_64-linux-gnu/libcrypto.so*
+          ls -l /usr/lib/x86_64-linux-gnu/libcrypto.so
 
-      - name: Check OpenSSL version after istall
+      - name: Check OpenSSL version after install
         run: openssl version
       - name: Check libcrypto version
         run: dpkg -s libssl-dev | grep Version
@@ -242,11 +241,8 @@ jobs:
       - name: Run tests
         run: |
           export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1
-          export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1:$LD_LIBRARY_PATH
           python -m tox run -e olddriver
         env:
-          LD_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1:$LD_LIBRARY_PATH"
-          LD_PRELOAD: /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
