@@ -239,9 +239,12 @@ jobs:
         run: python -m pip install tox>=4
       - name: Run tests
         run: |
-          export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+          export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1
+          export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1:$LD_LIBRARY_PATH
           python -m tox run -e olddriver
         env:
+          LD_LIBRARY_PATH: "/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1:$LD_LIBRARY_PATH"
+          LD_PRELOAD: /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
