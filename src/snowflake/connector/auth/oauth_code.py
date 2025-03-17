@@ -421,8 +421,8 @@ You can close this window now and go back where you started from.
                 data, socket_connection, http_server.hostname, http_server.port
             ):
                 self._send_response(data, socket_connection)
-        finally:
             socket_connection.shutdown(socket.SHUT_RDWR)
+        finally:
             socket_connection.close()
         return self._parse_authorization_redirected_request(
             data[0].split(maxsplit=2)[1],
