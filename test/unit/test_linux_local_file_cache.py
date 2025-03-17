@@ -5,12 +5,12 @@
 
 from __future__ import annotations
 
-import os
-
 import pytest
 from _pytest import pathlib
 
 from snowflake.connector.compat import IS_LINUX
+
+pytestmark = pytest.mark.skipif(not IS_LINUX, reason="Testing on linux only")
 
 try:
     from snowflake.connector.token_cache import FileTokenCache, TokenKey, TokenType
@@ -28,159 +28,127 @@ CRED_0 = "cred_0"
 CRED_1 = "cred_1"
 
 
-class EnvOverride:
-    def __init__(self, env, value):
-        self.env = env
-        self.value = value
-        self.active = False
+@pytest.mark.skipolddriver
+def test_basic_store(tmpdir, monkeypatch):
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
+    cache = FileTokenCache()
+    assert cache.cache_dir == pathlib.Path(tmpdir)
+    cache.cache_file().unlink(missing_ok=True)
 
-    def __enter__(self):
-        self.active = True
-        self.oldValue = os.environ.get(self.env)
-        if self.value is None:
-            os.environ.pop(self.env, None)
-        else:
-            os.environ[self.env] = self.value
+    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    cache.store(TokenKey(HOST_1, USER_1, CRED_TYPE_1), CRED_1)
+    cache.store(TokenKey(HOST_0, USER_1, CRED_TYPE_1), CRED_1)
 
-    def __exit__(self, type, value, traceback):
-        if self.active:
-            if self.oldValue is not None:
-                os.environ[self.env] = self.oldValue
-            self.active = False
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    assert cache.retrieve(TokenKey(HOST_1, USER_1, CRED_TYPE_1)) == CRED_1
+    assert cache.retrieve(TokenKey(HOST_0, USER_1, CRED_TYPE_1)) == CRED_1
+
+    cache.cache_file().unlink(missing_ok=True)
 
 
 @pytest.mark.skipif(not IS_LINUX, reason="The test is only for Linux platform")
-@pytest.mark.skipolddriver
-def test_basic_store(tmpdir):
-    with EnvOverride("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir)):
-        cache = FileTokenCache()
-        assert cache.cache_dir == pathlib.Path(tmpdir)
-        cache.cache_file().unlink(missing_ok=True)
+def test_delete_specific_item(tmpdir, monkeypatch):
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
+    cache = FileTokenCache()
+    cache.cache_file().unlink(missing_ok=True)
+    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_1), CRED_1)
 
-        cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-        cache.store(TokenKey(HOST_1, USER_1, CRED_TYPE_1), CRED_1)
-        cache.store(TokenKey(HOST_0, USER_1, CRED_TYPE_1), CRED_1)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_1)) == CRED_1
 
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
-        assert cache.retrieve(TokenKey(HOST_1, USER_1, CRED_TYPE_1)) == CRED_1
-        assert cache.retrieve(TokenKey(HOST_0, USER_1, CRED_TYPE_1)) == CRED_1
-
-        cache.cache_file().unlink(missing_ok=True)
+    cache.remove(TokenKey(HOST_0, USER_0, CRED_TYPE_0))
+    assert not cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0))
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_1)) == CRED_1
+    cache.cache_file().unlink(missing_ok=True)
 
 
-def test_delete_specific_item(tmpdir):
-    """The old behavior of delete cache is deleting the whole cache file. Now we change it to partially deletion."""
-    with EnvOverride("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir)):
-        cache = FileTokenCache()
-        cache.cache_file().unlink(missing_ok=True)
-        cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-        cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_1), CRED_1)
-
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_1)) == CRED_1
-
-        cache.remove(TokenKey(HOST_0, USER_0, CRED_TYPE_0))
-        assert not cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0))
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_1)) == CRED_1
-        cache.cache_file().unlink(missing_ok=True)
+def test_malformed_json_cache(tmpdir, monkeypatch):
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
+    cache = FileTokenCache()
+    cache.cache_file().unlink(missing_ok=True)
+    cache.cache_file().touch(0o600)
+    invalid_json = "[}"
+    cache.cache_file().write_text(invalid_json)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
 
 
-def test_malformed_json_cache(tmpdir):
-    with EnvOverride("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir)):
-        cache = FileTokenCache()
-        cache.cache_file().unlink(missing_ok=True)
-        cache.cache_file().touch(0o600)
-        invalid_json = "[}"
-        cache.cache_file().write_text(invalid_json)
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
-        cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+def test_malformed_utf_cache(tmpdir, monkeypatch):
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
+    cache = FileTokenCache()
+    cache.cache_file().unlink(missing_ok=True)
+    cache.cache_file().touch(0o600)
+    invalid_utf_sequence = bytes.fromhex("c0af")
+    cache.cache_file().write_bytes(invalid_utf_sequence)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
 
 
-def test_malformed_utf_cache(tmpdir):
-    with EnvOverride("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir)):
-        cache = FileTokenCache()
-        cache.cache_file().unlink(missing_ok=True)
-        cache.cache_file().touch(0o600)
-        invalid_utf_sequence = bytes.fromhex("c0af")
-        cache.cache_file().write_bytes(invalid_utf_sequence)
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
-        cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
-
-
-def test_cache_dir_is_not_a_directory(tmpdir):
+def test_cache_dir_is_not_a_directory(tmpdir, monkeypatch):
     file = pathlib.Path(str(tmpdir)) / "file"
     file.touch()
-    with (
-        EnvOverride("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(file)),
-        EnvOverride("XDG_CACHE_HOME", None),
-        EnvOverride("HOME", None),
-    ):
-        cache = FileTokenCache()
-        assert cache.cache_dir is None
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(file))
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("HOME", raising=False)
+    cache = FileTokenCache()
+    assert cache.cache_dir is None
     file.unlink()
 
 
-def test_cache_dir_does_not_exist(tmpdir):
+def test_cache_dir_does_not_exist(tmpdir, monkeypatch):
     directory = pathlib.Path(str(tmpdir)) / "dir"
     directory.unlink(missing_ok=True)
-    with (
-        EnvOverride("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(directory)),
-        EnvOverride("XDG_CACHE_HOME", None),
-        EnvOverride("HOME", None),
-    ):
-        cache = FileTokenCache()
-        assert cache.cache_dir is None
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(directory))
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("HOME", raising=False)
+    cache = FileTokenCache()
+    assert cache.cache_dir is None
 
 
-def test_cache_dir_incorrect_permissions(tmpdir):
+def test_cache_dir_incorrect_permissions(tmpdir, monkeypatch):
     directory = pathlib.Path(str(tmpdir)) / "dir"
     directory.unlink(missing_ok=True)
     directory.touch(0o777)
-    with (
-        EnvOverride("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(directory)),
-        EnvOverride("XDG_CACHE_HOME", None),
-        EnvOverride("HOME", None),
-    ):
-        cache = FileTokenCache()
-        assert cache.cache_dir is None
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(directory))
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("HOME", raising=False)
+    cache = FileTokenCache()
+    assert cache.cache_dir is None
     directory.unlink()
 
 
-def test_cache_file_incorrect_permissions(tmpdir):
-    with EnvOverride("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir)):
-        cache = FileTokenCache()
-        cache.cache_file().unlink(missing_ok=True)
-        cache.cache_file().touch(0o777)
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
-        cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
-        assert len(cache.cache_file().read_text("utf-8")) == 0
-        cache.cache_file().unlink()
+def test_cache_file_incorrect_permissions(tmpdir, monkeypatch):
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
+    cache = FileTokenCache()
+    cache.cache_file().unlink(missing_ok=True)
+    cache.cache_file().touch(0o777)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
+    assert len(cache.cache_file().read_text("utf-8")) == 0
+    cache.cache_file().unlink()
 
 
-def test_cache_dir_xdg_cache_home(tmpdir):
-    with (
-        EnvOverride("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", None),
-        EnvOverride("XDG_CACHE_HOME", str(tmpdir)),
-    ):
-        cache = FileTokenCache()
-        cache.cache_file().unlink(missing_ok=True)
-        assert cache.cache_dir == pathlib.Path(str(tmpdir)) / "snowflake"
-        cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
-        cache.cache_file().unlink()
+def test_cache_dir_xdg_cache_home(tmpdir, monkeypatch):
+    monkeypatch.delenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmpdir))
+    cache = FileTokenCache()
+    cache.cache_file().unlink(missing_ok=True)
+    assert cache.cache_dir == pathlib.Path(str(tmpdir)) / "snowflake"
+    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    cache.cache_file().unlink()
 
 
-def test_cache_dir_home(tmpdir):
-    with (
-        EnvOverride("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", None),
-        EnvOverride("XDG_CACHE_HOME", None),
-        EnvOverride("HOME", str(tmpdir)),
-    ):
-        cache = FileTokenCache()
-        cache.cache_file().unlink(missing_ok=True)
-        assert cache.cache_dir == pathlib.Path(str(tmpdir)) / ".cache" / "snowflake"
-        cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
-        assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+def test_cache_dir_home(tmpdir, monkeypatch):
+    monkeypatch.delenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmpdir))
+    cache = FileTokenCache()
+    cache.cache_file().unlink(missing_ok=True)
+    assert cache.cache_dir == pathlib.Path(str(tmpdir)) / ".cache" / "snowflake"
+    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0

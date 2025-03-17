@@ -215,12 +215,24 @@ class FileTokenCache(TokenCache):
         def lookup_env_dir(env_var: str, subpath_segments: list[str]) -> Path | None:
             env_val = os.getenv(env_var)
             if env_val is None:
+                self.logger.debug(
+                    f"Environment variable {env_var} not set. Skipping it in cache directory lookup."
+                )
                 return None
 
             directory = Path(env_val)
 
             if len(subpath_segments) > 0:
-                if not (directory.exists() and directory.is_dir()):
+                if not directory.exists():
+                    self.logger.debug(
+                        f"Path {str(directory)} does not exist. Skipping it in cache directory lookup."
+                    )
+                    return None
+
+                if not directory.is_dir():
+                    self.logger.debug(
+                        f"Path {str(directory)} is not a directory. Skipping it in cache directory lookup."
+                    )
                     return None
 
                 for subpath in subpath_segments[:-1]:
@@ -233,7 +245,10 @@ class FileTokenCache(TokenCache):
             try:
                 self._validate_cache_dir(directory)
                 return directory
-            except FileTokenCacheError:
+            except FileTokenCacheError as e:
+                self.logger.debug(
+                    f"Cache directory validation failed for {str(directory)} due to error '{e}'. Skipping it in cache directory lookup."
+                )
                 return None
 
         lookup_functions = [
