@@ -661,6 +661,9 @@ def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
     monkeypatch, tmp_path
 ):
     token_file = write_temp_file(tmp_path / "token.txt", contents="my_token")
+    # On Windows, this path includes backslashes which will result in errors while parsing the TOML.
+    # Escape the backslashes to ensure it parses correctly.
+    token_file_path_escaped = str(token_file).replace("\\", "\\\\")
     connections_file = write_temp_file(
         tmp_path / "connections.toml",
         contents=dedent(
@@ -670,7 +673,7 @@ def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
         authenticator = "WORKLOAD_IDENTITY"
         workload_identity_provider = "OIDC"
         workload_identity_entra_resource = "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
-        token_file_path = "{token_file}"
+        token_file_path = "{token_file_path_escaped}"
         """
         ),
     )
