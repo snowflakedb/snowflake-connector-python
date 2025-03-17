@@ -11,7 +11,7 @@ CONNECTOR_WHL="$(ls $CONNECTOR_DIR/dist/*cp39*manylinux2014*.whl | sort -r | hea
 # fetch wiremock
 curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output "${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar"
 
-python3.9 -m venv fips_env
+python3 -m venv fips_env
 source fips_env/bin/activate
 pip install -U setuptools pip
 pip install "${CONNECTOR_WHL}[pandas,secure-local-storage,development]"
