@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import math
 import os
 import random
@@ -43,7 +44,7 @@ except ImportError:
     QueryStatus = None
 
 
-def create_mock_response(status_code: int) -> Mock:
+def create_mock_response(status_code: int, text: str = "") -> Mock:
     """Create a Mock "Response" with a given status code. See `test_result_batch.py` for examples.
     Args:
         status_code: the status code of the response.
@@ -53,6 +54,7 @@ def create_mock_response(status_code: int) -> Mock:
     mock_resp = Mock()
     mock_resp.status_code = status_code
     mock_resp.raw = "success" if status_code == OK else "fail"
+    mock_resp.text = text
     return mock_resp
 
 
