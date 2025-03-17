@@ -220,6 +220,12 @@ jobs:
           wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.0g-2ubuntu4_amd64.deb
           sudo dpkg -i libssl1.1_1.1.0g-2ubuntu4_amd64.deb
            ls -lh /usr/lib/x86_64-linux-gnu/libcrypto.so*
+
+      - name: Check OpenSSL version after istall
+        run: openssl version
+      - name: Check libcrypto version
+        run: dpkg -s libssl-dev | grep Version
+
       - name: Setup parameters file
         shell: bash
         env:
