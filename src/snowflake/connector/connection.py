@@ -47,6 +47,7 @@ from .auth import (
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
+    AuthByWorkloadIdentity,
     AuthNoAuth,
 )
 from .auth.idtoken import AuthByIdToken
@@ -59,6 +60,7 @@ from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
     _OAUTH_DEFAULT_SCOPE,
+    ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -91,6 +93,7 @@ from .errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_BACKOFF_POLICY,
     ER_INVALID_VALUE,
+    ER_INVALID_WIF_SETTINGS,
     ER_NO_ACCOUNT_NAME,
     ER_NO_CLIENT_ID,
     ER_NO_NUMPY,
@@ -111,6 +114,7 @@ from .network import (
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
+    WORKLOAD_IDENTITY_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
 )
@@ -119,6 +123,7 @@ from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
+from .wif_util import AttestationProvider
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -195,12 +200,14 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "private_key": (None, (type(None), bytes, str, RSAPrivateKey)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
-    "token": (None, (type(None), str)),  # OAuth/JWT/PAT Token
+    "token": (None, (type(None), str)),  # OAuth/JWT/PAT/OIDC Token
     "token_file_path": (
         None,
         (type(None), str, bytes),
-    ),  # OAuth/JWT/PAT Token file path
+    ),  # OAuth/JWT/PAT/OIDC Token file path
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
+    "workload_identity_provider": (None, (type(None), AttestationProvider)),
+    "workload_identity_entra_resource": (None, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -1250,7 +1257,32 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
+                if not self._token and self._password:
+                    self._token = self._password
                 self.auth_class = AuthByPAT(self._token)
+            elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
+                if ENV_VAR_EXPERIMENTAL_AUTHENTICATION not in os.environ:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{WORKLOAD_IDENTITY_AUTHENTICATOR}' authenticator.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
+                # Standardize the provider enum.
+                if self._workload_identity_provider and isinstance(
+                    self._workload_identity_provider, str
+                ):
+                    self._workload_identity_provider = AttestationProvider.from_string(
+                        self._workload_identity_provider
+                    )
+                self.auth_class = AuthByWorkloadIdentity(
+                    provider=self._workload_identity_provider,
+                    token=self._token,
+                    entra_resource=self._workload_identity_entra_resource,
+                )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
                 self.auth_class = AuthByOkta(
@@ -1375,6 +1407,7 @@ class SnowflakeConnection:
                 KEY_PAIR_AUTHENTICATOR,
                 OAUTH_AUTHENTICATOR,
                 USR_PWD_MFA_AUTHENTICATOR,
+                WORKLOAD_IDENTITY_AUTHENTICATOR,
             ]:
                 self._authenticator = auth_tmp
 
@@ -1385,14 +1418,18 @@ class SnowflakeConnection:
                 self._token = f.read()
 
         # Set of authenticators allowing empty user.
-        empty_user_allowed_authenticators = {OAUTH_AUTHENTICATOR, NO_AUTH_AUTHENTICATOR}
+        empty_user_allowed_authenticators = {
+            OAUTH_AUTHENTICATOR,
+            NO_AUTH_AUTHENTICATOR,
+            WORKLOAD_IDENTITY_AUTHENTICATOR,
+        }
 
         if not (self._master_token and self._session_token):
             if (
                 not self.user
                 and self._authenticator not in empty_user_allowed_authenticators
             ):
-                # OAuth and NoAuth Authentications does not require a username
+                # Some authenticators do not require a username
                 Error.errorhandler_wrapper(
                     self,
                     None,
@@ -1402,6 +1439,25 @@ class SnowflakeConnection:
 
             if self._private_key or self._private_key_file:
                 self._authenticator = KEY_PAIR_AUTHENTICATOR
+
+            workload_identity_dependent_options = [
+                "workload_identity_provider",
+                "workload_identity_entra_resource",
+            ]
+            for dependent_option in workload_identity_dependent_options:
+                if (
+                    self.__getattribute__(f"_{dependent_option}") is not None
+                    and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR
+                ):
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"{dependent_option} was set but authenticator was not set to {WORKLOAD_IDENTITY_AUTHENTICATOR}",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
 
             if (
                 self.auth_class is None
@@ -1413,6 +1469,7 @@ class SnowflakeConnection:
                     OAUTH_CLIENT_CREDENTIALS,
                     KEY_PAIR_AUTHENTICATOR,
                     PROGRAMMATIC_ACCESS_TOKEN,
+                    WORKLOAD_IDENTITY_AUTHENTICATOR,
                 )
                 and not self._password
             ):
