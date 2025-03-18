@@ -2,7 +2,7 @@
 #
 # Test Snowflake Connector in Linux
 # NOTES:
-#   - Versions to be tested should be passed in as the first argument, e.g: "3.8 3.9". If omitted 3.7-3.11 will be assumed.
+#   - Versions to be tested should be passed in as the first argument, e.g: "3.9 3.10". If omitted 3.9-3.13 will be assumed.
 #   - This script assumes that ../dist/repaired_wheels has the wheel(s) built for all versions to be tested
 #   - This is the script that test_docker.sh runs inside of the docker container
 
