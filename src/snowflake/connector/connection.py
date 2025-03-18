@@ -41,6 +41,7 @@ from .auth import (
     AuthByKeyPair,
     AuthByOAuth,
     AuthByOauthCode,
+    AuthByOauthCredentials,
     AuthByOkta,
     AuthByPAT,
     AuthByPlugin,
@@ -106,6 +107,7 @@ from .network import (
     NO_AUTH_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
     OAUTH_AUTHORIZATION_CODE,
+    OAUTH_CLIENT_CREDENTIALS,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
@@ -342,6 +344,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         collections.abc.Iterable,  # of strings
         # SNOW-1825621: OAUTH PKCE
     ),
+    "oauth_redirect_uri": ("127.0.0.1:{port}", str),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -1194,6 +1197,42 @@ class SnowflakeConnection:
                     token_cache=auth.get_token_cache() if token_cache_enabled else None,
                     refresh_token_enabled=refresh_token_enabled,
                 )
+            elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
+                if self._oauth_client_id is None:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": "Oauth code flow requirement 'client_id' is empty",
+                            "errno": ER_NO_CLIENT_ID,
+                        },
+                    )
+                if self._oauth_client_secret is None:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": "Oauth code flow requirement 'client_secret' is empty",
+                            "errno": ER_NO_CLIENT_ID,
+                        },
+                    )
+                if self._role and (self._oauth_scope == ""):
+                    # if role is known then let's inject it into scope
+                    self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
+                self.auth_class = AuthByOauthCredentials(
+                    application=self.application,
+                    client_id=self._oauth_client_id,
+                    client_secret=self._oauth_client_secret,
+                    authentication_url=self._oauth_authorization_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    token_request_url=self._oauth_token_request_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    scope=self._oauth_scope,
+                )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                     self._client_request_mfa_token if IS_LINUX else True
@@ -1371,6 +1410,7 @@ class SnowflakeConnection:
                     EXTERNAL_BROWSER_AUTHENTICATOR,
                     OAUTH_AUTHENTICATOR,
                     OAUTH_AUTHORIZATION_CODE,
+                    OAUTH_CLIENT_CREDENTIALS,
                     KEY_PAIR_AUTHENTICATOR,
                     PROGRAMMATIC_ACCESS_TOKEN,
                 )
