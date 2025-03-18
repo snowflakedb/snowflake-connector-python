@@ -52,13 +52,8 @@ timestamps {
           'Test Python 311': { build job: 'RT-PyConnector311-PC',parameters: params},
           'Test Python 312': { build job: 'RT-PyConnector312-PC',parameters: params},
           'Test Python 313': { build job: 'RT-PyConnector313-PC',parameters: params},
-          'Test Python 39 Aarch': { build job: 'RT-PyConnector39-Aarch-PC',parameters: params},
-          'Test Python 310 Aarch': { build job: 'RT-PyConnector310-Aarch-PC',parameters: params},
-          'Test Python 311 Aarch': { build job: 'RT-PyConnector311-Aarch-PC',parameters: params},
-          'Test Python 312 Aarch': { build job: 'RT-PyConnector312-Aarch-PC',parameters: params},
-          'Test Python 312 OldDriver': { build job: 'RT-PyConnector38-OldDriver-PC',parameters: params},
-          'Test Python 312 FIPS': { build job: 'RT-FIPS-PyConnector38',parameters: params},
-          'Test Python 312 FIPS': { build job: 'RT-FIPS-PyConnector38-Aarch',parameters: params},
+          'Test Python 38 OldDriver': { build job: 'RT-PyConnector38-OldDriver-PC',parameters: params},
+          'Test Python 38 FIPS': { build job: 'RT-FIPS-PyConnector38',parameters: params},
           )
         }
       }
