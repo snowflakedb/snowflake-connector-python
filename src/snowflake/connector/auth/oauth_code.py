@@ -492,7 +492,7 @@ You can close this window now and go back where you started from.
     def _reset_refresh_token(self, refresh_token: str | None = None) -> None:
         """Updates OAuth refresh token both in memory and in the token cache if necessary"""
         logger.debug(
-            "resetting access token to %s",
+            "resetting refresh token to %s",
             "*" * len(refresh_token) if refresh_token else None,
         )
         if not self._refresh_token_enabled:
