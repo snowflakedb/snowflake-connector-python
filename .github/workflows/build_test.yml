@@ -79,7 +79,7 @@ jobs:
             id: manylinux_x86_64
           - image: ubuntu-latest
             id: manylinux_aarch64
-          - image: windows-2019
+          - image: windows-2022
             id: win_amd64
           - image: macos-latest
             id: macosx_x86_64
@@ -131,7 +131,7 @@ jobs:
            download_name: manylinux_x86_64
          - image_name: macos-latest
            download_name: macosx_x86_64
-         - image_name: windows-2019
+         - image_name: windows-2022
            download_name: win_amd64
         python-version: ["3.9", "3.10", "3.11", "3.12"]
         cloud-provider: [aws, azure, gcp]
