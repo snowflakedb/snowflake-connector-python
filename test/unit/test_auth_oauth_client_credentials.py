@@ -9,6 +9,7 @@ from unittest import mock
 import pytest
 
 import snowflake.connector
+from snowflake.connector.auth import AuthByOauthCredentials
 
 from ..wiremock.wiremock_utils import WiremockClient
 
@@ -41,6 +42,22 @@ def wiremock_generic_mappings_dir() -> pathlib.Path:
         / "mappings"
         / "generic"
     )
+
+
+@pytest.mark.skipolddriver
+def test_auth_oauth_auth_code_oauth_type():
+    """Simple OAuth Client credentials type test."""
+    auth = AuthByOauthCredentials(
+        "app",
+        "clientId",
+        "clientSecret",
+        "auth_url",
+        "tokenRequestUrl",
+        "scope",
+    )
+    body = {"data": {}}
+    auth.update_body(body)
+    assert body["data"]["OAUTH_TYPE"] == "client_credentials"
 
 
 @pytest.mark.skipolddriver
