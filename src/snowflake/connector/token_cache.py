@@ -17,9 +17,11 @@ from pathlib import Path
 from typing import TypeVar
 
 from .compat import IS_LINUX, IS_MACOS, IS_WINDOWS
+from .file_lock import FileLock, FileLockError
 from .options import installed_keyring, keyring
 
-KEYRING_DRIVER_NAME = "SNOWFLAKE-PYTHON-DRIVER"
+logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 
 class TokenType(Enum):
@@ -59,7 +61,11 @@ class TokenCache(ABC):
             return KeyringTokenCache()
 
         if IS_LINUX:
-            return FileTokenCache()
+            cache = FileTokenCache.make()
+            if cache:
+                return cache
+            else:
+                return NoopTokenCache()
 
     @abstractmethod
     def store(self, key: TokenKey, token: str) -> None:
@@ -72,21 +78,6 @@ class TokenCache(ABC):
     @abstractmethod
     def remove(self, key: TokenKey) -> None:
         pass
-
-
-T = TypeVar("T")
-
-
-class FileLock:
-    def __init__(self, path: Path) -> None:
-        self.path: Path = path
-
-    def __enter__(self):
-        # TODO Improve locking
-        self.path.mkdir(mode=0o700)
-
-    def __exit__(self, exc_type, exc_val, exc_tbc):
-        self.path.rmdir()
 
 
 class FileTokenCacheError(Exception):
@@ -122,51 +113,68 @@ class CacheFileWriteError(FileTokenCacheError):
 
 
 class FileTokenCache(TokenCache):
-    def __init__(self):
+    @staticmethod
+    def make() -> FileTokenCache | None:
+        cache_dir = FileTokenCache.find_cache_dir()
+        if cache_dir is None:
+            return None
+        else:
+            return FileTokenCache(cache_dir)
+
+    def __init__(self, cache_dir: Path) -> None:
         self.logger = logging.getLogger(__name__)
-        self.cache_dir: Path | None = self._find_cache_dir()
-        self.logger.error(f"Cache dir {self.cache_dir}")
+        self.cache_dir: Path = cache_dir
 
     def store(self, key: TokenKey, token: str) -> None:
         try:
-            self._validate_cache_dir(self.cache_dir)
+            FileTokenCache.validate_cache_dir(self.cache_dir)
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
                 cache["tokens"][key.hash_key()] = token
                 self._write_cache_file(cache)
         except FileTokenCacheError as e:
-            self.logger.error(f"Failed to store token: {type(e)} - {e}")
+            self.logger.error(f"Failed to store token: {e=} - {e}")
+            return None
+        except FileLockError as e:
+            self.logger.error(f"Unable to lock file lock: {e=} - {e}")
             return None
 
     def retrieve(self, key: TokenKey) -> str | None:
         try:
-            self._validate_cache_dir(self.cache_dir)
+            FileTokenCache.validate_cache_dir(self.cache_dir)
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
                 return cache["tokens"].get(key.hash_key(), None)
         except FileTokenCacheError as e:
-            self.logger.error(f"Failed to retrieve token: {type(e)} - {e}")
+            self.logger.error(f"Failed to retrieve token: {e=} - {e}")
+            return None
+        except FileLockError as e:
+            self.logger.error(f"Unable to lock file lock: {e=} - {e}")
             return None
 
     def remove(self, key: TokenKey) -> None:
         try:
-            self._validate_cache_dir(self.cache_dir)
+            FileTokenCache.validate_cache_dir(self.cache_dir)
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
                 cache["tokens"].pop(key.hash_key(), None)
                 self._write_cache_file(cache)
         except FileTokenCacheError as e:
-            self.logger.error(f"Failed to remove token: {type(e)} - {e}")
+            self.logger.error(f"Failed to remove token: {e=} - {e}")
+            return None
+        except FileLockError as e:
+            self.logger.error(f"Unable to lock file lock: {e=} - {e}")
             return None
 
     def cache_file(self) -> Path:
         return self.cache_dir / "credential_cache_v1.json"
 
     def lock_file(self) -> Path:
-        return self.cache_dir / "credential_cache_lock.json.lck"
+        return self.cache_dir / "credential_cache_v1.json.lck"
 
     def _read_cache_file(self):
         fd = -1
+        json_data = {"tokens": {}}
         try:
             fd = os.open(self.cache_file(), os.O_RDONLY)
             self._ensure_permissions(fd, 0o600)
@@ -177,23 +185,21 @@ class FileTokenCache(TokenCache):
             return json_data
         except FileNotFoundError:
             self.logger.debug(f"{self.cache_file()} not found")
-            return {"tokens": {}}
         except json.decoder.JSONDecodeError as e:
             self.logger.warning(
                 f"Failed to decode json read from cache file {self.cache_file()}: {e}"
             )
-            return {"tokens": {}}
         except UnicodeError as e:
             self.logger.warning(
                 f"Failed to decode utf-8 read from cache file {self.cache_file()}: {e}"
             )
-            return {"tokens": {}}
         except OSError as e:
             self.logger.warning(f"Failed to read cache file {self.cache_file()}: {e}")
-            return {"tokens": {}}
         finally:
             if fd > 0:
                 os.close(fd)
+
+        return json_data
 
     def _write_cache_file(self, json_data: dict):
         fd = -1
@@ -211,11 +217,12 @@ class FileTokenCache(TokenCache):
             if fd > 0:
                 os.close(fd)
 
-    def _find_cache_dir(self) -> Path | None:
+    @staticmethod
+    def find_cache_dir() -> Path | None:
         def lookup_env_dir(env_var: str, subpath_segments: list[str]) -> Path | None:
             env_val = os.getenv(env_var)
             if env_val is None:
-                self.logger.debug(
+                logger.debug(
                     f"Environment variable {env_var} not set. Skipping it in cache directory lookup."
                 )
                 return None
@@ -224,13 +231,13 @@ class FileTokenCache(TokenCache):
 
             if len(subpath_segments) > 0:
                 if not directory.exists():
-                    self.logger.debug(
+                    logger.debug(
                         f"Path {str(directory)} does not exist. Skipping it in cache directory lookup."
                     )
                     return None
 
                 if not directory.is_dir():
-                    self.logger.debug(
+                    logger.debug(
                         f"Path {str(directory)} is not a directory. Skipping it in cache directory lookup."
                     )
                     return None
@@ -243,10 +250,10 @@ class FileTokenCache(TokenCache):
                 directory.mkdir(exist_ok=True, mode=0o700)
 
             try:
-                self._validate_cache_dir(directory)
+                FileTokenCache.validate_cache_dir(directory)
                 return directory
             except FileTokenCacheError as e:
-                self.logger.debug(
+                logger.debug(
                     f"Cache directory validation failed for {str(directory)} due to error '{e}'. Skipping it in cache directory lookup."
                 )
                 return None
@@ -264,7 +271,8 @@ class FileTokenCache(TokenCache):
 
         return None
 
-    def _validate_cache_dir(self, cache_dir: Path | None) -> None:
+    @staticmethod
+    def validate_cache_dir(cache_dir: Path | None) -> None:
         try:
             statinfo = cache_dir.stat()
 
@@ -294,11 +302,11 @@ class FileTokenCache(TokenCache):
     def _ensure_permissions(self, fd: int, permissions: int) -> None:
         try:
             statinfo = os.fstat(fd)
-            permissions = stat.S_IMODE(statinfo.st_mode)
+            actual_permissions = stat.S_IMODE(statinfo.st_mode)
 
-            if permissions != 0o600:
+            if actual_permissions != permissions:
                 raise PermissionsTooWideError(
-                    f"Cache file {self.cache_file()} has incorrect permissions. {permissions:o} != 0600"
+                    f"Cache file {self.cache_file()} has incorrect permissions. {permissions:o} != {actual_permissions:o}"
                 )
 
             euid = os.geteuid()
