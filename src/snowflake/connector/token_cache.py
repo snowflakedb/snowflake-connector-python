@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from .compat import IS_LINUX, IS_MACOS, IS_WINDOWS
 from .file_lock import FileLock, FileLockError
@@ -80,35 +80,35 @@ class TokenCache(ABC):
         pass
 
 
-class FileTokenCacheError(Exception):
+class _FileTokenCacheError(Exception):
     pass
 
 
-class OwnershipError(FileTokenCacheError):
+class _OwnershipError(_FileTokenCacheError):
     pass
 
 
-class PermissionsTooWideError(FileTokenCacheError):
+class _PermissionsTooWideError(_FileTokenCacheError):
     pass
 
 
-class CacheDirNotFoundError(FileTokenCacheError):
+class _CacheDirNotFoundError(_FileTokenCacheError):
     pass
 
 
-class InvalidCacheDirError(FileTokenCacheError):
+class _InvalidCacheDirError(_FileTokenCacheError):
     pass
 
 
-class MalformedCacheFileError(FileTokenCacheError):
+class _MalformedCacheFileError(_FileTokenCacheError):
     pass
 
 
-class CacheFileReadError(FileTokenCacheError):
+class _CacheFileReadError(_FileTokenCacheError):
     pass
 
 
-class CacheFileWriteError(FileTokenCacheError):
+class _CacheFileWriteError(_FileTokenCacheError):
     pass
 
 
@@ -132,24 +132,26 @@ class FileTokenCache(TokenCache):
                 cache = self._read_cache_file()
                 cache["tokens"][key.hash_key()] = token
                 self._write_cache_file(cache)
-        except FileTokenCacheError as e:
-            self.logger.error(f"Failed to store token: {e=} - {e}")
-            return None
+        except _FileTokenCacheError as e:
+            self.logger.error(f"Failed to store token: {e=}")
         except FileLockError as e:
-            self.logger.error(f"Unable to lock file lock: {e=} - {e}")
-            return None
+            self.logger.error(f"Unable to lock file lock: {e=}")
 
     def retrieve(self, key: TokenKey) -> str | None:
         try:
             FileTokenCache.validate_cache_dir(self.cache_dir)
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
-                return cache["tokens"].get(key.hash_key(), None)
-        except FileTokenCacheError as e:
-            self.logger.error(f"Failed to retrieve token: {e=} - {e}")
+                token = cache["tokens"].get(key.hash_key(), None)
+                if isinstance(token, str):
+                    return token
+                else:
+                    return None
+        except _FileTokenCacheError as e:
+            self.logger.error(f"Failed to retrieve token: {e=}")
             return None
         except FileLockError as e:
-            self.logger.error(f"Unable to lock file lock: {e=} - {e}")
+            self.logger.error(f"Unable to lock file lock: {e=}")
             return None
 
     def remove(self, key: TokenKey) -> None:
@@ -159,12 +161,10 @@ class FileTokenCache(TokenCache):
                 cache = self._read_cache_file()
                 cache["tokens"].pop(key.hash_key(), None)
                 self._write_cache_file(cache)
-        except FileTokenCacheError as e:
-            self.logger.error(f"Failed to remove token: {e=} - {e}")
-            return None
+        except _FileTokenCacheError as e:
+            self.logger.error(f"Failed to remove token: {e=}")
         except FileLockError as e:
-            self.logger.error(f"Unable to lock file lock: {e=} - {e}")
-            return None
+            self.logger.error(f"Unable to lock file lock: {e=}")
 
     def cache_file(self) -> Path:
         return self.cache_dir / "credential_cache_v1.json"
@@ -172,7 +172,7 @@ class FileTokenCache(TokenCache):
     def lock_file(self) -> Path:
         return self.cache_dir / "credential_cache_v1.json.lck"
 
-    def _read_cache_file(self):
+    def _read_cache_file(self) -> dict[str, dict[str, Any]]:
         fd = -1
         json_data = {"tokens": {}}
         try:
@@ -182,7 +182,6 @@ class FileTokenCache(TokenCache):
             os.lseek(fd, 0, os.SEEK_SET)
             data = os.read(fd, size)
             json_data = json.loads(codecs.decode(data, "utf-8"))
-            return json_data
         except FileNotFoundError:
             self.logger.debug(f"{self.cache_file()} not found")
         except json.decoder.JSONDecodeError as e:
@@ -199,6 +198,9 @@ class FileTokenCache(TokenCache):
             if fd > 0:
                 os.close(fd)
 
+        if "tokens" not in json_data or not isinstance(json_data["tokens"], dict):
+            json_data["tokens"] = {}
+
         return json_data
 
     def _write_cache_file(self, json_data: dict):
@@ -212,7 +214,7 @@ class FileTokenCache(TokenCache):
             os.write(fd, codecs.encode(json.dumps(json_data), "utf-8"))
             return json_data
         except OSError as e:
-            raise CacheFileWriteError("Failed to write cache file", e)
+            raise _CacheFileWriteError("Failed to write cache file", e)
         finally:
             if fd > 0:
                 os.close(fd)
@@ -252,7 +254,7 @@ class FileTokenCache(TokenCache):
             try:
                 FileTokenCache.validate_cache_dir(directory)
                 return directory
-            except FileTokenCacheError as e:
+            except _FileTokenCacheError as e:
                 logger.debug(
                     f"Cache directory validation failed for {str(directory)} due to error '{e}'. Skipping it in cache directory lookup."
                 )
@@ -277,25 +279,25 @@ class FileTokenCache(TokenCache):
             statinfo = cache_dir.stat()
 
             if cache_dir is None:
-                raise CacheDirNotFoundError("Cache dir was not found")
+                raise _CacheDirNotFoundError("Cache dir was not found")
 
             if not stat.S_ISDIR(statinfo.st_mode):
-                raise InvalidCacheDirError(f"Cache dir {cache_dir} is not a directory")
+                raise _InvalidCacheDirError(f"Cache dir {cache_dir} is not a directory")
 
             permissions = stat.S_IMODE(statinfo.st_mode)
             if permissions != 0o700:
-                raise PermissionsTooWideError(
+                raise _PermissionsTooWideError(
                     f"Cache dir {cache_dir} has incorrect permissions. {permissions:o} != 0700"
                 )
 
             euid = os.geteuid()
             if statinfo.st_uid != euid:
-                raise OwnershipError(
+                raise _OwnershipError(
                     f"Cache dir {cache_dir} has incorrect owner. {euid} != {statinfo.st_uid}"
                 )
 
         except FileNotFoundError:
-            raise CacheDirNotFoundError(
+            raise _CacheDirNotFoundError(
                 f"Cache dir {cache_dir} was not found. Failed to stat."
             )
 
@@ -305,13 +307,13 @@ class FileTokenCache(TokenCache):
             actual_permissions = stat.S_IMODE(statinfo.st_mode)
 
             if actual_permissions != permissions:
-                raise PermissionsTooWideError(
+                raise _PermissionsTooWideError(
                     f"Cache file {self.cache_file()} has incorrect permissions. {permissions:o} != {actual_permissions:o}"
                 )
 
             euid = os.geteuid()
             if statinfo.st_uid != euid:
-                raise OwnershipError(
+                raise _OwnershipError(
                     f"Cache file {self.cache_file()} has incorrect owner. {euid} != {statinfo.st_uid}"
                 )
 

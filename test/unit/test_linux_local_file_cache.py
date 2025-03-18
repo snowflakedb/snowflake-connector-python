@@ -207,3 +207,27 @@ def test_file_lock_stale(tmpdir, monkeypatch):
     time.sleep(1)
     assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
     assert not cache.lock_file().exists()
+
+
+def test_file_missing_tokens_field(tmpdir, monkeypatch):
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
+    cache = FileTokenCache.make()
+    assert cache
+    cache.cache_file().touch(0o600)
+    cache.cache_file().write_text("{}")
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    cache.cache_file().unlink()
+
+
+def test_file_tokens_is_not_dict(tmpdir, monkeypatch):
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
+    cache = FileTokenCache.make()
+    assert cache
+    cache.cache_file().touch(0o600)
+    cache.cache_file().write_text('{ "tokens": [] }')
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    cache.cache_file().unlink()
