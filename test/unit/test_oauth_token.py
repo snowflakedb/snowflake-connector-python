@@ -431,27 +431,25 @@ def test_expired_refresh_token_flow(
     refresh_token_key = TokenKey(user, account, TokenType.OAUTH_REFRESH_TOKEN)
     temp_cache.store(access_token_key, "expired-access-token-123")
     temp_cache.store(refresh_token_key, "expired-refresh-token-123")
-    with (
-        mock.patch("webbrowser.open", new=webbrowser_mock.open),
-        mock.patch("secrets.token_urlsafe", return_value="abc123"),
-    ):
-        cnx = snowflake.connector.connect(
-            user=user,
-            authenticator="OAUTH_AUTHORIZATION_CODE",
-            oauth_client_id="123",
-            account=account,
-            protocol="http",
-            role="ANALYST",
-            oauth_client_secret="testClientSecret",
-            oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
-            oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-            oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
-            host=wiremock_client.wiremock_host,
-            port=wiremock_client.wiremock_http_port,
-            oauth_security_features=("pkce", "token_cache", "refresh_token"),
-        )
-        assert cnx, "invalid cnx"
-        cnx.close()
+    with mock.patch("webbrowser.open", new=webbrowser_mock.open):
+        with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+            cnx = snowflake.connector.connect(
+                user=user,
+                authenticator="OAUTH_AUTHORIZATION_CODE",
+                oauth_client_id="123",
+                account=account,
+                protocol="http",
+                role="ANALYST",
+                oauth_client_secret="testClientSecret",
+                oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+                oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
+                oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
+                host=wiremock_client.wiremock_host,
+                port=wiremock_client.wiremock_http_port,
+                oauth_security_features=("pkce", "token_cache", "refresh_token"),
+            )
+            assert cnx, "invalid cnx"
+            cnx.close()
 
     new_access_token = temp_cache.retrieve(access_token_key)
     new_refresh_token = temp_cache.retrieve(refresh_token_key)
