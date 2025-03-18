@@ -13,6 +13,7 @@ import pytest
 import requests
 
 import snowflake.connector
+from snowflake.connector.auth import AuthByOauthCredentials
 from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
 from ..wiremock.wiremock_utils import WiremockClient
@@ -37,6 +38,19 @@ def wiremock_oauth_authorization_code_dir() -> pathlib.Path:
         / "auth"
         / "oauth"
         / "authorization_code"
+    )
+
+
+@pytest.fixture(scope="session")
+def wiremock_oauth_client_creds_dir() -> pathlib.Path:
+    return (
+        pathlib.Path(__file__).parent.parent
+        / "data"
+        / "wiremock"
+        / "mappings"
+        / "auth"
+        / "oauth"
+        / "client_credentials"
     )
 
 
@@ -455,3 +469,93 @@ def test_expired_refresh_token_flow(
     new_refresh_token = temp_cache.retrieve(refresh_token_key)
     assert new_access_token == "access-token-123"
     assert new_refresh_token == "refresh-token-123"
+
+
+@pytest.mark.skipolddriver
+def test_client_creds_oauth_type():
+    """Simple OAuth Client credentials type test."""
+    auth = AuthByOauthCredentials(
+        "app",
+        "clientId",
+        "clientSecret",
+        "auth_url",
+        "tokenRequestUrl",
+        "scope",
+    )
+    body = {"data": {}}
+    auth.update_body(body)
+    assert body["data"]["OAUTH_TYPE"] == "client_credentials"
+
+
+@pytest.mark.skipolddriver
+def test_client_creds_successful_flow(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_client_creds_dir,
+    wiremock_generic_mappings_dir,
+    monkeypatch,
+) -> None:
+    wiremock_client.import_mapping(
+        wiremock_oauth_client_creds_dir / "successful_flow.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+
+    with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+        cnx = snowflake.connector.connect(
+            user="testUser",
+            authenticator="OAUTH_CLIENT_CREDENTIALS",
+            oauth_client_id="123",
+            oauth_client_secret="123",
+            account="testAccount",
+            protocol="http",
+            role="ANALYST",
+            oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+            oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
+            host=wiremock_client.wiremock_host,
+            port=wiremock_client.wiremock_http_port,
+        )
+
+        assert cnx, "invalid cnx"
+        cnx.close()
+
+
+@pytest.mark.skipolddriver
+def test_client_creds_token_request_error(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_client_creds_dir,
+    wiremock_generic_mappings_dir,
+    monkeypatch,
+) -> None:
+    wiremock_client.import_mapping(
+        wiremock_oauth_client_creds_dir / "token_request_error.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+
+    with pytest.raises(snowflake.connector.DatabaseError) as execinfo:
+        with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+            snowflake.connector.connect(
+                user="testUser",
+                authenticator="OAUTH_CLIENT_CREDENTIALS",
+                oauth_client_id="123",
+                oauth_client_secret="123",
+                account="testAccount",
+                protocol="http",
+                role="ANALYST",
+                oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+                oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
+                host=wiremock_client.wiremock_host,
+                port=wiremock_client.wiremock_http_port,
+            )
+
+        assert str(execinfo.value).endswith(
+            "Invalid HTTP request from web browser. Idp authentication could have failed."
+        )
