@@ -163,7 +163,7 @@ def get_db_parameters(connection_name: str = "default") -> dict[str, Any]:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def init_test_schema(db_parameters) -> Generator[None, None, None]:
+def init_test_schema(db_parameters) -> Generator[None]:
     """Initializes and destroys the schema specific to this pytest session.
 
     This is automatically called per test session.
@@ -200,7 +200,7 @@ def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
 def db(
     connection_name: str = "default",
     **kwargs,
-) -> Generator[SnowflakeConnection, None, None]:
+) -> Generator[SnowflakeConnection]:
     if not kwargs.get("timezone"):
         kwargs["timezone"] = "UTC"
     if not kwargs.get("converter_class"):
@@ -216,7 +216,7 @@ def db(
 def negative_db(
     connection_name: str = "default",
     **kwargs,
-) -> Generator[SnowflakeConnection, None, None]:
+) -> Generator[SnowflakeConnection]:
     if not kwargs.get("timezone"):
         kwargs["timezone"] = "UTC"
     if not kwargs.get("converter_class"):
