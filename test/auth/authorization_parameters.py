@@ -65,6 +65,15 @@ def get_rsa_private_key_for_key_pair(key_path: str) -> serialization.load_pem_pr
         )
         return private_key
 
+def get_rsa_private_key_for_key_pair(key_path: str) -> serialization.load_pem_private_key:
+    with open(_get_env_variable(key_path), "rb") as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(),
+            password=None,
+            backend=default_backend()
+        )
+        return private_key
+
 
 class AuthConnectionParameters:
     def __init__(self):
