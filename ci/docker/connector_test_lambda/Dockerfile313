@@ -1,10 +1,13 @@
 FROM public.ecr.aws/lambda/python:3.13-x86_64
 
 WORKDIR /home/user/snowflake-connector-python
+
+RUN dnf -y update && dnf -y install gcc g++ make
+
 RUN chmod 777 /home/user/snowflake-connector-python
 ENV PATH="${PATH}:/opt/python/cp313-cp313/bin/"
 ENV PYTHONPATH="${PYTHONPATH}:/home/user/snowflake-connector-python/ci/docker/connector_test_lambda/"
 
 RUN pip3 install -U pip setuptools wheel tox>=4
 
-CMD [ "app.handler" ]
+CMD [ "__todo_remove_when_solved_app.handler" ]
