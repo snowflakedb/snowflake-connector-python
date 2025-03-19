@@ -7,15 +7,15 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import urllib.parse
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError, URLError
 
-import urllib3
-
 from ..errorcode import ER_FAILED_TO_REQUEST, ER_IDP_CONNECTION_ERROR
 from ..network import OAUTH_AUTHENTICATOR
 from ..token_cache import TokenCache, TokenKey, TokenType
+from ..vendored import urllib3
 from .by_plugin import AuthByPlugin, AuthType
 
 if TYPE_CHECKING:
@@ -29,6 +29,7 @@ class _OAuthTokensMixin:
         self,
         token_cache: TokenCache | None,
         refresh_token_enabled: bool,
+        idp_host: str,
     ) -> None:
         self._access_token = None
         self._refresh_token_enabled = refresh_token_enabled
@@ -37,29 +38,26 @@ class _OAuthTokensMixin:
         self._token_cache = token_cache
         if self._token_cache:
             logger.debug("token cache is going to be used if needed")
+            self._idp_host = idp_host
             self._access_token_key: TokenKey | None = None
             if self._refresh_token_enabled:
                 self._refresh_token_key: TokenKey | None = None
 
-    def _update_cache_keys(self, account: str, user: str) -> None:
+    def _update_cache_keys(self, user: str) -> None:
         if self._token_cache:
             self._user = user
-            self._account = account
 
     def _get_access_token_cache_key(self) -> TokenKey | None:
         return (
-            TokenKey(self._user, self._account, TokenType.OAUTH_ACCESS_TOKEN)
-            if self._token_cache and self._user and self._account
+            TokenKey(self._user, self._idp_host, TokenType.OAUTH_ACCESS_TOKEN)
+            if self._token_cache and self._user
             else None
         )
 
     def _get_refresh_token_cache_key(self) -> TokenKey | None:
         return (
-            TokenKey(self._user, self._account, TokenType.OAUTH_REFRESH_TOKEN)
-            if self._refresh_token_enabled
-            and self._token_cache
-            and self._user
-            and self._account
+            TokenKey(self._user, self._idp_host, TokenType.OAUTH_REFRESH_TOKEN)
+            if self._refresh_token_enabled and self._token_cache and self._user
             else None
         )
 
@@ -116,7 +114,7 @@ class _OAuthTokensMixin:
         if self._refresh_token_enabled:
             self._refresh_token = None
         if self._token_cache:
-            self._user, self.account = None, None
+            self._user = None
 
 
 class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
@@ -133,7 +131,12 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        _OAuthTokensMixin.__init__(self, token_cache, refresh_token_enabled)
+        _OAuthTokensMixin.__init__(
+            self,
+            token_cache=token_cache,
+            refresh_token_enabled=refresh_token_enabled,
+            idp_host=urllib.parse.urlparse(token_request_url).hostname,
+        )
         self._client_id = client_id
         self._client_secret = client_secret
         self._token_request_url = token_request_url
@@ -208,7 +211,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
     ) -> None:
         """Web Browser based Authentication."""
         logger.debug("authenticating with OAuth authorization code flow")
-        self._update_cache_keys(account=account, user=user)
+        self._update_cache_keys(user=user)
         if self._pop_cached_access_token():
             logger.info(
                 "OAuth access token is already available in cache, no need to authenticate."

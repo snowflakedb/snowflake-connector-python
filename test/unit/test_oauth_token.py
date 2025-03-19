@@ -382,17 +382,20 @@ def test_oauth_code_successful_refresh_token_flow(
     wiremock_client.add_mapping(
         wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
     )
-    account = "testAccount"
     user = "testUser"
-    access_token_key = TokenKey(user, account, TokenType.OAUTH_ACCESS_TOKEN)
-    refresh_token_key = TokenKey(user, account, TokenType.OAUTH_REFRESH_TOKEN)
+    access_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
+    )
+    refresh_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
+    )
     temp_cache.store(access_token_key, "expired-access-token-123")
     temp_cache.store(refresh_token_key, "refresh-token-123")
     cnx = snowflake.connector.connect(
         user=user,
         authenticator="OAUTH_AUTHORIZATION_CODE",
         oauth_client_id="123",
-        account=account,
+        account="testAccount",
         protocol="http",
         role="ANALYST",
         oauth_client_secret="testClientSecret",
@@ -447,10 +450,13 @@ def test_oauth_code_expired_refresh_token_flow(
         wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
     )
 
-    account = "testAccount"
     user = "testUser"
-    access_token_key = TokenKey(user, account, TokenType.OAUTH_ACCESS_TOKEN)
-    refresh_token_key = TokenKey(user, account, TokenType.OAUTH_REFRESH_TOKEN)
+    access_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
+    )
+    refresh_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
+    )
     temp_cache.store(access_token_key, "expired-access-token-123")
     temp_cache.store(refresh_token_key, "expired-refresh-token-123")
     with mock.patch("webbrowser.open", new=webbrowser_mock.open):
@@ -459,7 +465,7 @@ def test_oauth_code_expired_refresh_token_flow(
                 user=user,
                 authenticator="OAUTH_AUTHORIZATION_CODE",
                 oauth_client_id="123",
-                account=account,
+                account="testAccount",
                 protocol="http",
                 role="ANALYST",
                 oauth_client_secret="testClientSecret",
@@ -592,17 +598,20 @@ def test_client_creds_successful_refresh_token_flow(
     wiremock_client.add_mapping(
         wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
     )
-    account = "testAccount"
     user = "testUser"
-    access_token_key = TokenKey(user, account, TokenType.OAUTH_ACCESS_TOKEN)
-    refresh_token_key = TokenKey(user, account, TokenType.OAUTH_REFRESH_TOKEN)
+    access_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
+    )
+    refresh_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
+    )
     temp_cache.store(access_token_key, "expired-access-token-123")
     temp_cache.store(refresh_token_key, "refresh-token-123")
     cnx = snowflake.connector.connect(
         user=user,
         authenticator="OAUTH_CLIENT_CREDENTIALS",
         oauth_client_id="123",
-        account=account,
+        account="testAccount",
         protocol="http",
         role="ANALYST",
         oauth_client_secret="testClientSecret",
@@ -648,17 +657,20 @@ def test_client_creds_expired_refresh_token_flow(
         wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
     )
 
-    account = "testAccount"
     user = "testUser"
-    access_token_key = TokenKey(user, account, TokenType.OAUTH_ACCESS_TOKEN)
-    refresh_token_key = TokenKey(user, account, TokenType.OAUTH_REFRESH_TOKEN)
+    access_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
+    )
+    refresh_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
+    )
     temp_cache.store(access_token_key, "expired-access-token-123")
     temp_cache.store(refresh_token_key, "expired-refresh-token-123")
     cnx = snowflake.connector.connect(
         user=user,
         authenticator="OAUTH_CLIENT_CREDENTIALS",
         oauth_client_id="123",
-        account=account,
+        account="testAccount",
         protocol="http",
         role="ANALYST",
         oauth_client_secret="testClientSecret",
