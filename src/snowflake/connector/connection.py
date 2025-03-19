@@ -88,6 +88,7 @@ from .description import (
 )
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
+    ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
     ER_FAILED_TO_CONNECT_TO_DB,
@@ -1166,6 +1167,7 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
+                self._check_experimental_authentication_flag()
                 features = [
                     feature.lower() for feature in self._oauth_security_features
                 ]
@@ -1203,6 +1205,7 @@ class SnowflakeConnection:
                     refresh_token_enabled=refresh_token_enabled,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
+                self._check_experimental_authentication_flag()
                 features = [
                     feature.lower() for feature in self._oauth_security_features
                 ]
@@ -1263,16 +1266,7 @@ class SnowflakeConnection:
                     self._token = self._password
                 self.auth_class = AuthByPAT(self._token)
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
-                if ENV_VAR_EXPERIMENTAL_AUTHENTICATION not in os.environ:
-                    Error.errorhandler_wrapper(
-                        self,
-                        None,
-                        ProgrammingError,
-                        {
-                            "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{WORKLOAD_IDENTITY_AUTHENTICATOR}' authenticator.",
-                            "errno": ER_INVALID_WIF_SETTINGS,
-                        },
-                    )
+                self._check_experimental_authentication_flag()
                 # Standardize the provider enum.
                 if self._workload_identity_provider and isinstance(
                     self._workload_identity_provider, str
@@ -2225,3 +2219,15 @@ class SnowflakeConnection:
         except Exception as e:
             logger.debug("session could not be validated due to exception: %s", e)
             return False
+
+    def _check_experimental_authentication_flag(self) -> None:
+        if ENV_VAR_EXPERIMENTAL_AUTHENTICATION not in os.environ:
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{self._authenticator}' authenticator.",
+                    "errno": ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
+                },
+            )
