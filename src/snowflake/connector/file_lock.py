@@ -31,26 +31,24 @@ class FileLock:
             statinfo = self.path.stat()
         except FileNotFoundError:
             pass
+        except OSError as e:
+            raise FileLockError(f"Failed to stat lock file {self.path} due to {e=}")
 
         if statinfo and statinfo.st_ctime < time.time() - STALE_LOCK_AGE_SECONDS:
             self.logger.debug("Removing stale file lock")
             try:
                 self.path.rmdir()
-            except OSError:
+            except FileNotFoundError:
                 pass
-
-            try:
-                self.path.mkdir(mode=0o700)
-                self.locked = True
-            except FileExistsError:
-                pass
+            except OSError as e:
+                raise FileLockError(
+                    f"Failed to remove stale lock file {self.path} due to {e=}"
+                )
 
         backoff_seconds = INITIAL_BACKOFF_SECONDS
         for attempt in range(MAX_RETRIES):
             self.logger.debug(
-                "Trying to acquire file lock after %d seconds in attempt number %d.",
-                backoff_seconds,
-                attempt,
+                f"Trying to acquire file lock after {backoff_seconds} seconds in attempt number {attempt}.",
             )
             backoff_seconds = backoff_seconds * 2
             try:
@@ -60,9 +58,15 @@ class FileLock:
             except FileExistsError:
                 sleep(backoff_seconds)
                 continue
+            except OSError as e:
+                raise FileLockError(
+                    f"Failed to acquire lock file {self.path} due to {e=}"
+                )
 
         if not self.locked:
-            raise FileLockError()
+            raise FileLockError(
+                f"Failed to acquire file lock, after {MAX_RETRIES} attempts."
+            )
 
     def __exit__(self, exc_type, exc_val, exc_tbc):
         self.path.rmdir()

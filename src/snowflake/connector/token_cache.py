@@ -53,7 +53,7 @@ class TokenCache(ABC):
             if not installed_keyring:
                 logging.getLogger(__name__).debug(
                     "Dependency 'keyring' is not installed, cannot cache id token. You might experience "
-                    "multiple authentication pop ups while using ExternalBrowser Authenticator. To avoid "
+                    "multiple authentication pop ups while using ExternalBrowser/OAuth/MFA Authenticator. To avoid"
                     "this please install keyring module using the following command : pip install "
                     "snowflake-connector-python[secure-local-storage]"
                 )
@@ -65,6 +65,10 @@ class TokenCache(ABC):
             if cache:
                 return cache
             else:
+                logging.getLogger(__name__).debug(
+                    "Failed to initialize file based token cache. You might experience "
+                    "multiple authentication pop ups while using ExternalBrowser/OAuth/MFA Authenticator."
+                )
                 return NoopTokenCache()
 
     @abstractmethod
@@ -117,6 +121,9 @@ class FileTokenCache(TokenCache):
     def make() -> FileTokenCache | None:
         cache_dir = FileTokenCache.find_cache_dir()
         if cache_dir is None:
+            logging.getLogger(__name__).debug(
+                "Failed to find suitable cache directory for token cache. File based token cache initialization failed."
+            )
             return None
         else:
             return FileTokenCache(cache_dir)
