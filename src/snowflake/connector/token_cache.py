@@ -31,6 +31,10 @@ class TokenType(Enum):
     OAUTH_REFRESH_TOKEN = "OAUTH_REFRESH_TOKEN"
 
 
+class _InvalidTokenKeyError(Exception):
+    pass
+
+
 @dataclass
 class TokenKey:
     user: str
@@ -38,6 +42,10 @@ class TokenKey:
     tokenType: TokenType
 
     def string_key(self) -> str:
+        if len(self.host) == 0:
+            raise _InvalidTokenKeyError("Invalid host, host is empty")
+        if len(self.user) == 0:
+            raise _InvalidTokenKeyError("Invalid user, user is empty")
         return f"{self.host.upper()}:{self.user.upper()}:{self.tokenType.value}"
 
     def hash_key(self) -> str:
@@ -143,6 +151,8 @@ class FileTokenCache(TokenCache):
             self.logger.error(f"Failed to store token: {e=}")
         except FileLockError as e:
             self.logger.error(f"Unable to lock file lock: {e=}")
+        except _InvalidTokenKeyError as e:
+            self.logger.error(f"Failed to produce token key {e=}")
 
     def retrieve(self, key: TokenKey) -> str | None:
         try:
@@ -160,6 +170,9 @@ class FileTokenCache(TokenCache):
         except FileLockError as e:
             self.logger.error(f"Unable to lock file lock: {e=}")
             return None
+        except _InvalidTokenKeyError as e:
+            self.logger.error(f"Failed to produce token key {e=}")
+            return None
 
     def remove(self, key: TokenKey) -> None:
         try:
@@ -172,6 +185,8 @@ class FileTokenCache(TokenCache):
             self.logger.error(f"Failed to remove token: {e=}")
         except FileLockError as e:
             self.logger.error(f"Unable to lock file lock: {e=}")
+        except _InvalidTokenKeyError as e:
+            self.logger.error(f"Failed to produce token key {e=}")
 
     def cache_file(self) -> Path:
         return self.cache_dir / "credential_cache_v1.json"
@@ -339,6 +354,8 @@ class KeyringTokenCache(TokenCache):
                 key.user.upper(),
                 token,
             )
+        except _InvalidTokenKeyError as e:
+            self.logger.error(f"Could not retrieve {key.tokenType} from keyring, {e=}")
         except keyring.errors.KeyringError as ke:
             self.logger.error("Could not store id_token to keyring, %s", str(ke))
 
@@ -354,6 +371,8 @@ class KeyringTokenCache(TokenCache):
                     key.tokenType.value, str(ke)
                 )
             )
+        except _InvalidTokenKeyError as e:
+            self.logger.error(f"Could not retrieve {key.tokenType} from keyring, {e=}")
 
     def remove(self, key: TokenKey) -> None:
         try:
@@ -361,6 +380,8 @@ class KeyringTokenCache(TokenCache):
                 key.string_key(),
                 key.user.upper(),
             )
+        except _InvalidTokenKeyError as e:
+            self.logger.error(f"Could not retrieve {key.tokenType} from keyring, {e=}")
         except Exception as ex:
             self.logger.error(
                 "Failed to delete credential in the keyring: err=[%s]", ex
