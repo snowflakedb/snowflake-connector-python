@@ -58,7 +58,7 @@ class AuthConnectionParameters:
         config = self.basic_config.copy()
 
         config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
-        config["password"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_PASSWORD")
+        config["password"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_PASS")
         config["authenticator"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_OAUTH_URL")
 
         return config
