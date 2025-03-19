@@ -1,6 +1,9 @@
 import os
 import sys
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 def get_oauth_token_parameters():
@@ -22,6 +25,15 @@ def get_okta_login_credentials():
     return {"login": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_USER"),
             "password": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_PASS")}
 
+def get_rsa_private_key_for_key_pair(key_path: str) -> serialization.load_pem_private_key:
+    with open(_get_env_variable(key_path), "rb") as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(),
+            password=None,
+            backend=default_backend()
+        )
+        return private_key
+
 
 class AuthConnectionParameters:
     def __init__(self):
@@ -38,6 +50,13 @@ class AuthConnectionParameters:
 
     def get_base_connection_parameters(self):
         return self.basic_config
+
+    def get_key_pair_connection_parameters(self):
+        config = self.basic_config.copy()
+        config["authenticator"] = "KEY_PAIR_AUTHENTICATOR"
+        config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
+
+        return config
 
     def get_external_browser_connection_parameters(self):
         config = self.basic_config.copy()
