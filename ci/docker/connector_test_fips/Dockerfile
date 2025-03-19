@@ -18,7 +18,7 @@ RUN sed -i s/mirror.centos.org/vault.centos.org/g /etc/yum.repos.d/*.repo && \
 
 RUN yum clean all && \
     yum install -y redhat-rpm-config gcc libffi-devel openssl openssl-devel && \
-    yum install -y python38 python38-devel && \
+    yum install -y python39 python39-devel && \
     yum install -y java-11-openjdk && \
     yum clean all && \
     rm -rf /var/cache/yum
