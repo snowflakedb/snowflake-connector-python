@@ -10,10 +10,7 @@ on:
             - v*
     pull_request:
         branches:
-            - master
-            - main
-            - prep-**
-            - dev/aio-connector
+            - '**'
     workflow_dispatch:
         inputs:
           logLevel:
