@@ -339,7 +339,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-1825621: OAUTH implementation
     ),
-    # TODO: remove redundant environment variables
     "oauth_redirect_uri": ("http://127.0.0.1:{port}/", str),
     "oauth_scope": (
         "",
@@ -351,7 +350,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         collections.abc.Iterable,  # of strings
         # SNOW-1825621: OAUTH PKCE
     ),
-    "oauth_redirect_uri": ("127.0.0.1:{port}", str),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -1205,6 +1203,11 @@ class SnowflakeConnection:
                     refresh_token_enabled=refresh_token_enabled,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
+                features = [
+                    feature.lower() for feature in self._oauth_security_features
+                ]
+                token_cache_enabled = "token_cache" in features
+                refresh_token_enabled = "refresh_token" in features
                 if self._oauth_client_id is None:
                     Error.errorhandler_wrapper(
                         self,
@@ -1232,13 +1235,12 @@ class SnowflakeConnection:
                     application=self.application,
                     client_id=self._oauth_client_id,
                     client_secret=self._oauth_client_secret,
-                    authentication_url=self._oauth_authorization_url.format(
-                        host=self.host, port=self.port
-                    ),
                     token_request_url=self._oauth_token_request_url.format(
                         host=self.host, port=self.port
                     ),
                     scope=self._oauth_scope,
+                    token_cache=auth.get_token_cache() if token_cache_enabled else None,
+                    refresh_token_enabled=refresh_token_enabled,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
@@ -1616,7 +1618,11 @@ class SnowflakeConnection:
         except ReauthenticationRequest as ex:
             # cached id_token expiration error, we have cleaned id_token and try to authenticate again
             logger.debug("ID token expired. Reauthenticating...: %s", ex)
-            if type(auth_instance) in (AuthByIdToken, AuthByOauthCode):
+            if type(auth_instance) in (
+                AuthByIdToken,
+                AuthByOauthCode,
+                AuthByOauthCredentials,
+            ):
                 # IDToken and OAuth auth need to authenticate through
                 # SSO if its credential has expired
                 self._reauthenticate()

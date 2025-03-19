@@ -100,7 +100,7 @@ def webbrowser_mock() -> Mock:
 
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
-def test_successful_flow(
+def test_oauth_code_successful_flow(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
     wiremock_generic_mappings_dir,
@@ -143,7 +143,7 @@ def test_successful_flow(
 
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
-def test_invalid_state(
+def test_oauth_code_invalid_state(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock,
@@ -178,7 +178,7 @@ def test_invalid_state(
 
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
-def test_scope_error(
+def test_oauth_code_scope_error(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock,
@@ -215,7 +215,7 @@ def test_scope_error(
 
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
-def test_token_request_error(
+def test_oauth_code_token_request_error(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock,
     monkeypatch,
@@ -251,7 +251,7 @@ def test_token_request_error(
 
 
 @pytest.mark.skipolddriver
-def test_browser_timeout(
+def test_oauth_code_browser_timeout(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock,
@@ -289,7 +289,7 @@ def test_browser_timeout(
 
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
-def test_custom_urls(
+def test_oauth_code_custom_urls(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
     wiremock_generic_mappings_dir,
@@ -353,7 +353,7 @@ def temp_cache():
 
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
-def test_successful_refresh_token_flow(
+def test_oauth_code_successful_refresh_token_flow(
     wiremock_client: WiremockClient,
     wiremock_oauth_refresh_token_dir,
     wiremock_generic_mappings_dir,
@@ -407,7 +407,7 @@ def test_successful_refresh_token_flow(
 
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
-def test_expired_refresh_token_flow(
+def test_oauth_code_expired_refresh_token_flow(
     wiremock_client: WiremockClient,
     wiremock_oauth_refresh_token_dir,
     wiremock_oauth_authorization_code_dir,
@@ -559,3 +559,114 @@ def test_client_creds_token_request_error(
         assert str(execinfo.value).endswith(
             "Invalid HTTP request from web browser. Idp authentication could have failed."
         )
+
+
+@pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
+def test_client_creds_successful_refresh_token_flow(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_refresh_token_dir,
+    wiremock_generic_mappings_dir,
+    monkeypatch,
+    temp_cache,
+) -> None:
+    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
+
+    wiremock_client.import_mapping(
+        wiremock_generic_mappings_dir / "snowflake_login_failed.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_oauth_refresh_token_dir / "refresh_successful.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+    account = "testAccount"
+    user = "testUser"
+    access_token_key = TokenKey(user, account, TokenType.OAUTH_ACCESS_TOKEN)
+    refresh_token_key = TokenKey(user, account, TokenType.OAUTH_REFRESH_TOKEN)
+    temp_cache.store(access_token_key, "expired-access-token-123")
+    temp_cache.store(refresh_token_key, "refresh-token-123")
+    cnx = snowflake.connector.connect(
+        user=user,
+        authenticator="OAUTH_CLIENT_CREDENTIALS",
+        oauth_client_id="123",
+        account=account,
+        protocol="http",
+        role="ANALYST",
+        oauth_client_secret="testClientSecret",
+        oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+        host=wiremock_client.wiremock_host,
+        port=wiremock_client.wiremock_http_port,
+        oauth_security_features=("token_cache", "refresh_token"),
+    )
+    assert cnx, "invalid cnx"
+    cnx.close()
+    new_access_token = temp_cache.retrieve(access_token_key)
+    new_refresh_token = temp_cache.retrieve(refresh_token_key)
+
+    assert new_access_token == "access-token-123"
+    assert new_refresh_token == "refresh-token-123"
+
+
+@pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
+def test_client_creds_expired_refresh_token_flow(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_refresh_token_dir,
+    wiremock_oauth_client_creds_dir,
+    wiremock_generic_mappings_dir,
+    webbrowser_mock,
+    monkeypatch,
+    temp_cache,
+) -> None:
+    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
+
+    wiremock_client.import_mapping(
+        wiremock_generic_mappings_dir / "snowflake_login_failed.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_oauth_refresh_token_dir / "refresh_failed.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_oauth_client_creds_dir / "successful_auth_after_failed_refresh.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+
+    account = "testAccount"
+    user = "testUser"
+    access_token_key = TokenKey(user, account, TokenType.OAUTH_ACCESS_TOKEN)
+    refresh_token_key = TokenKey(user, account, TokenType.OAUTH_REFRESH_TOKEN)
+    temp_cache.store(access_token_key, "expired-access-token-123")
+    temp_cache.store(refresh_token_key, "expired-refresh-token-123")
+    with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+        cnx = snowflake.connector.connect(
+            user=user,
+            authenticator="OAUTH_CLIENT_CREDENTIALS",
+            oauth_client_id="123",
+            account=account,
+            protocol="http",
+            role="ANALYST",
+            oauth_client_secret="testClientSecret",
+            oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
+            host=wiremock_client.wiremock_host,
+            port=wiremock_client.wiremock_http_port,
+            oauth_security_features=("token_cache", "refresh_token"),
+        )
+        assert cnx, "invalid cnx"
+        cnx.close()
+
+    new_access_token = temp_cache.retrieve(access_token_key)
+    new_refresh_token = temp_cache.retrieve(refresh_token_key)
+    assert new_access_token == "access-token-123"
+    assert new_refresh_token == "refresh-token-123"
