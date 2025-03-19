@@ -674,3 +674,23 @@ def test_client_creds_expired_refresh_token_flow(
     new_refresh_token = temp_cache.retrieve(refresh_token_key)
     assert new_access_token == "access-token-123"
     assert new_refresh_token == "refresh-token-123"
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "authenticator", ["OAUTH_AUTHORIZATION_CODE", "OAUTH_CLIENT_CREDENTIALS"]
+)
+def test_auth_is_experimental(
+    authenticator,
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", False)
+    with pytest.raises(
+        snowflake.connector.ProgrammingError,
+        match=r"SF_ENABLE_EXPERIMENTAL_AUTHENTICATION",
+    ):
+        snowflake.connector.connect(
+            user="testUser",
+            account="testAccount",
+            authenticator=authenticator,
+        )
