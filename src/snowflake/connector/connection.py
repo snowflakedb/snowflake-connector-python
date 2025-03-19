@@ -339,8 +339,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-1825621: OAUTH implementation
     ),
-    # TODO: remove redundant environment variables
-    "oauth_redirect_uri": ("http://127.0.0.1:{port}/", str),
     "oauth_scope": (
         "",
         str,
