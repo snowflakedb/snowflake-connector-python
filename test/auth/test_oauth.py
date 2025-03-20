@@ -30,7 +30,7 @@ def test_oauth_mismatched_user():
     connection_parameters["user"] = "differentUsername"
     test_helper = AuthorizationTestHelper(connection_parameters)
     assert (
-        test_helper.connect_and_execute_simple_query() == False
+        test_helper.connect_and_execute_simple_query() is False
     ), "Connection should not be established"
     assert (
         "The user you were trying to authenticate as differs from the user"
@@ -46,7 +46,7 @@ def test_oauth_invalid_token():
     )
     test_helper = AuthorizationTestHelper(connection_parameters)
     assert (
-        test_helper.connect_and_execute_simple_query() == False
+        test_helper.connect_and_execute_simple_query() is False
     ), "Connection should not be established"
     assert "Invalid OAuth access token" in test_helper.get_error_msg()
 
