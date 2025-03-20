@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.14.1(TBD)
   - Basic decimal floating-point type support.
   - Added handling of PAT provided in `password` field.
+  - Added experimental support for OAuth authorization code and client credentials flows.
 
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
@@ -37,7 +38,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Updated the log level for cursor's chunk rowcount from INFO to DEBUG.
   - Added a feature to verify if the connection is still good enough to send queries over.
   - Added support for base64-encoded DER private key strings in the `private_key` authentication type.
-  - Added support for OAuth authorization code flow.
 
 - v3.12.4(December 3,2024)
   - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
