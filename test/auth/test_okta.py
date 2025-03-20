@@ -2,14 +2,13 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-import pytest
 from test.auth.authorization_parameters import AuthConnectionParameters
 from test.auth.authorization_test_helper import AuthorizationTestHelper
 
 import pytest
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_okta_successful():
     connection_parameters = AuthConnectionParameters().get_okta_connection_parameters()
     test_helper = AuthorizationTestHelper(connection_parameters)
@@ -20,7 +19,7 @@ def test_okta_successful():
     assert test_helper.error_msg == "", "Error message should be empty"
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_okta_with_wrong_okta_username():
     connection_parameters = AuthConnectionParameters().get_okta_connection_parameters()
     connection_parameters["user"] = "differentUsername"
@@ -32,7 +31,7 @@ def test_okta_with_wrong_okta_username():
     assert "Failed to get authentication by OKTA" in test_helper.get_error_msg()
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_okta_wrong_url():
     connection_parameters = AuthConnectionParameters().get_okta_connection_parameters()
 
@@ -47,7 +46,7 @@ def test_okta_wrong_url():
     )
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 @pytest.mark.skip(reason="SNOW-1852279 implement error handling for invalid URL")
 def test_okta_wrong_url_2():
     connection_parameters = AuthConnectionParameters().get_okta_connection_parameters()

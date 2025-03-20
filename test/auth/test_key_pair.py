@@ -11,7 +11,7 @@ from test.auth.authorization_test_helper import AuthorizationTestHelper
 import pytest
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_key_pair_successful():
     connection_parameters = (
         AuthConnectionParameters().get_key_pair_connection_parameters()
@@ -27,7 +27,7 @@ def test_key_pair_successful():
     assert test_helper.error_msg == "", "Error message should be empty"
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_key_pair_invalid_key():
     connection_parameters = (
         AuthConnectionParameters().get_key_pair_connection_parameters()

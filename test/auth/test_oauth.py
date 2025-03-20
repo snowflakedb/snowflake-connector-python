@@ -3,13 +3,12 @@
 #
 
 import pytest
-from authorization_parameters import get_oauth_token_parameters
-from authorization_test_helper import AuthorizationTestHelper, get_oauth_access_token
 
-from authorization_parameters import AuthConnectionParameters
+from test.auth.authorization_parameters import AuthConnectionParameters, get_oauth_token_parameters
+from test.auth.authorization_test_helper import AuthorizationTestHelper, get_oauth_access_token
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_oauth_successful():
     token = get_oauth_token()
     connection_parameters = AuthConnectionParameters().get_oauth_connection_parameters(
@@ -22,7 +21,7 @@ def test_oauth_successful():
     assert test_helper.error_msg == "", "Error message should be empty"
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_oauth_mismatched_user():
     token = get_oauth_token()
     connection_parameters = AuthConnectionParameters().get_oauth_connection_parameters(
@@ -39,7 +38,7 @@ def test_oauth_mismatched_user():
     )
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_oauth_invalid_token():
     token = "invalidToken"
     connection_parameters = AuthConnectionParameters().get_oauth_connection_parameters(
@@ -52,7 +51,7 @@ def test_oauth_invalid_token():
     assert "Invalid OAuth access token" in test_helper.get_error_msg()
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def get_oauth_token():
     oauth_config = get_oauth_token_parameters()
     return get_oauth_access_token(oauth_config)
