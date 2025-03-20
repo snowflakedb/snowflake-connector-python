@@ -9,9 +9,7 @@ on:
             - v*
     pull_request:
         branches:
-            - master
-            - main
-            - prep-**
+            - '**'
     workflow_dispatch:
         inputs:
           logLevel:
@@ -20,6 +18,11 @@ on:
             required: true
           tags:
             description: "Test scenario tags"
+
+concurrency:
+  # older builds for the same pull request numer or branch should be cancelled
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 
 jobs:
   lint:
