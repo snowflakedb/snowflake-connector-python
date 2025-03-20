@@ -23,7 +23,6 @@ from ..errorcode import (
     ER_OAUTH_STATE_CHANGED,
     ER_UNABLE_TO_OPEN_BROWSER,
 )
-from ..errors import InterfaceError
 from ..token_cache import TokenCache
 from ._http_server import AuthHttpServer
 from ._oauth_base import AuthByOAuthBase
@@ -69,8 +68,6 @@ class AuthByOauthCode(AuthByOAuthBase):
             refresh_token_enabled=refresh_token_enabled,
             **kwargs,
         )
-        if "{port}" not in redirect_uri:
-            raise InterfaceError("redirect_uri needs '{port}' placeholder for now")
         self._application = application
         self._origin: str | None = None
         self._authentication_url = authentication_url
@@ -98,7 +95,7 @@ class AuthByOauthCode(AuthByOAuthBase):
     ) -> (str | None, str | None):
         """Web Browser based Authentication."""
         logger.debug("authenticating with OAuth authorization code flow")
-        with AuthHttpServer() as callback_server:
+        with AuthHttpServer(self._redirect_uri) as callback_server:
             code = self._do_authorization_request(callback_server, conn)
             return self._do_token_request(code, callback_server, conn)
 
@@ -210,11 +207,11 @@ You can close this window now and go back where you started from.
         """Whether an HTTP request is a GET."""
         return any(line.startswith("GET ") for line in data)
 
-    def _construct_authorization_request(self, redirect_port: int) -> str:
+    def _construct_authorization_request(self, redirect_uri: str) -> str:
         params = {
             "response_type": "code",
             "client_id": self._client_id,
-            "redirect_uri": self._redirect_uri.format(port=redirect_port),
+            "redirect_uri": redirect_uri,
             "state": self._state,
         }
         if self._scope:
@@ -241,7 +238,7 @@ You can close this window now and go back where you started from.
         connection: SnowflakeConnection,
     ) -> str | None:
         authorization_request = self._construct_authorization_request(
-            callback_server.port
+            callback_server.url
         )
         logger.debug("step 1: going to open authorization URL")
         print(
@@ -293,7 +290,7 @@ You can close this window now and go back where you started from.
         fields = {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": self._redirect_uri.format(port=callback_server.port),
+            "redirect_uri": callback_server.url,
         }
         if self._pkce_enabled:
             assert self._verifier is not None

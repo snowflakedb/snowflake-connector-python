@@ -9,14 +9,13 @@ import os
 import select
 import socket
 import time
+import urllib.parse
 from collections.abc import Callable
 from types import TracebackType
 
 from typing_extensions import Self
 
 from ..compat import IS_WINDOWS
-from ..errorcode import ER_NO_HOSTNAME_FOUND
-from ..errors import OperationalError
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +65,11 @@ class AuthHttpServer:
 
     def __init__(
         self,
-        hostname: str = "127.0.0.1",
+        uri: str,
         buf_size: int = 16384,
     ) -> None:
+        parsed_uri = urllib.parse.urlparse(uri)
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.hostname = hostname
         self.buf_size = buf_size
         if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
             if IS_WINDOWS:
@@ -80,29 +79,47 @@ class AuthHttpServer:
             else:
                 self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
+        port = parsed_uri.port or 0
         try:
             self._socket.bind(
                 (
-                    os.getenv("SF_AUTH_SOCKET_ADDR", hostname),
-                    int(os.getenv("SF_AUTH_SOCKET_PORT", 0)),
+                    parsed_uri.hostname,
+                    port,
                 )
             )
-        except socket.gaierror as ex:
-            if ex.args[0] == socket.EAI_NONAME and hostname == "localhost":
-                raise OperationalError(
-                    msg="localhost is not found. Ensure /etc/hosts has "
-                    "localhost entry.",
-                    errno=ER_NO_HOSTNAME_FOUND,
-                )
+        except (OSError, socket.gaierror) as ex:
+            logger.error(
+                f"Failed to bind authorization callback server to port {port}: {ex}"
+            )
             raise
 
         try:
             self._socket.listen(0)  # no backlog
-            self.port = self._socket.getsockname()[1]
         except Exception as ex:
             logger.error(f"Failed to start listening for auth callback: {ex}")
             self.close()
             raise
+        port = self._socket.getsockname()[1]
+        self._uri = urllib.parse.ParseResult(
+            scheme=parsed_uri.scheme,
+            netloc=parsed_uri.hostname + ":" + str(port),
+            path=parsed_uri.path,
+            params=parsed_uri.params,
+            query=parsed_uri.query,
+            fragment=parsed_uri.fragment,
+        )
+
+    @property
+    def url(self) -> str:
+        return self._uri.geturl()
+
+    @property
+    def port(self) -> int:
+        return self._uri.port
+
+    @property
+    def hostname(self) -> str:
+        return self._uri.hostname
 
     def _try_poll(
         self, attempts: int, attempt_timeout: float | None

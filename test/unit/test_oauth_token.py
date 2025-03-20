@@ -155,7 +155,7 @@ def test_oauth_code_successful_flow(
                 oauth_client_secret="testClientSecret",
                 oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
+                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
             )
@@ -192,7 +192,7 @@ def test_oauth_code_invalid_state(
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                    oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
+                    oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
@@ -228,7 +228,7 @@ def test_oauth_code_scope_error(
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                    oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
+                    oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
@@ -266,7 +266,7 @@ def test_oauth_code_token_request_error(
                         role="ANALYST",
                         oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                         oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                        oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
+                        oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
                         host=wiremock_client.wiremock_host,
                         port=wiremock_client.wiremock_http_port,
                     )
@@ -304,7 +304,7 @@ def test_oauth_code_browser_timeout(
                     role="ANALYST",
                     oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                     oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                    oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
+                    oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
                 )
@@ -348,7 +348,7 @@ def test_oauth_code_custom_urls(
                 role="ANALYST",
                 oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/tokenrequest",
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/authorization",
-                oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
+                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
             )
@@ -401,7 +401,7 @@ def test_oauth_code_successful_refresh_token_flow(
         oauth_client_secret="testClientSecret",
         oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
         oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-        oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
+        oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
         host=wiremock_client.wiremock_host,
         port=wiremock_client.wiremock_http_port,
         oauth_security_features=("pkce", "token_cache", "refresh_token"),
@@ -471,7 +471,7 @@ def test_oauth_code_expired_refresh_token_flow(
                 oauth_client_secret="testClientSecret",
                 oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
-                oauth_redirect_uri="http://localhost:{port}/snowflake/oauth-redirect",
+                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
                 oauth_security_features=("pkce", "token_cache", "refresh_token"),
