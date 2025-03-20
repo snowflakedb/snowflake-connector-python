@@ -3,6 +3,10 @@
 #
 
 import logging
+from test.auth.authorization_parameters import (
+    AuthConnectionParameters,
+    get_okta_login_credentials,
+)
 
 import pytest
 from authorization_test_helper import (
@@ -10,7 +14,6 @@ from authorization_test_helper import (
     Scenario,
     clean_browser_processes,
 )
-from test.auth.authorization_parameters import AuthConnectionParameters, get_okta_login_credentials
 
 
 @pytest.fixture(autouse=True)
@@ -35,7 +38,7 @@ def test_okta_authorization_code_successful():
         Scenario.SUCCESS, browser_login, browser_password
     )
 
-    assert test_helper.error_msg is "", "Error message should be empty"
+    assert test_helper.error_msg == "", "Error message should be empty"
 
 
 @pytest.mark.auth

@@ -2,10 +2,16 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-import pytest
+from test.auth.authorization_parameters import (
+    AuthConnectionParameters,
+    get_oauth_token_parameters,
+)
+from test.auth.authorization_test_helper import (
+    AuthorizationTestHelper,
+    get_oauth_access_token,
+)
 
-from test.auth.authorization_parameters import AuthConnectionParameters, get_oauth_token_parameters
-from test.auth.authorization_test_helper import AuthorizationTestHelper, get_oauth_access_token
+import pytest
 
 
 @pytest.mark.auth
