@@ -3,13 +3,10 @@
 #
 
 import logging
+from test.auth.authorization_parameters import AuthConnectionParameters
 
 import pytest
-from authorization_test_helper import (
-    AuthorizationTestHelper,
-    clean_browser_processes,
-)
-from test.auth.authorization_parameters import AuthConnectionParameters
+from authorization_test_helper import AuthorizationTestHelper, clean_browser_processes
 
 
 @pytest.fixture(autouse=True)

@@ -3,6 +3,10 @@
 #
 
 import logging
+from test.auth.authorization_parameters import (
+    AuthConnectionParameters,
+    get_okta_login_credentials,
+)
 
 import pytest
 from authorization_test_helper import (
@@ -10,7 +14,6 @@ from authorization_test_helper import (
     Scenario,
     clean_browser_processes,
 )
-from test.auth.authorization_parameters import AuthConnectionParameters, get_okta_login_credentials
 
 
 @pytest.fixture(autouse=True)
