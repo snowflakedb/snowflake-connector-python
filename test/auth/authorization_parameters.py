@@ -1,3 +1,7 @@
+#
+# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
+#
+
 import os
 import sys
 
@@ -6,31 +10,40 @@ from cryptography.hazmat.primitives import serialization
 
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
+
 def get_oauth_token_parameters():
-    return {"auth_url": _get_env_variable("SNOWFLAKE_AUTH_TEST_OAUTH_URL"),
-                    "oauth_client_id": _get_env_variable("SNOWFLAKE_AUTH_TEST_OAUTH_CLIENT_ID"),
-                    "oauth_client_secret": _get_env_variable("SNOWFLAKE_AUTH_TEST_OAUTH_CLIENT_SECRET"),
-                    "okta_user": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_USER"),
-                    "okta_pass": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_PASS"),
-                    "role": (_get_env_variable("SNOWFLAKE_AUTH_TEST_ROLE")).lower()
-                    }
+    return {
+        "auth_url": _get_env_variable("SNOWFLAKE_AUTH_TEST_OAUTH_URL"),
+        "oauth_client_id": _get_env_variable("SNOWFLAKE_AUTH_TEST_OAUTH_CLIENT_ID"),
+        "oauth_client_secret": _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_OAUTH_CLIENT_SECRET"
+        ),
+        "okta_user": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_USER"),
+        "okta_pass": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_PASS"),
+        "role": (_get_env_variable("SNOWFLAKE_AUTH_TEST_ROLE")).lower(),
+    }
+
 
 def _get_env_variable(name: str, required: bool = True) -> str:
     value = os.getenv(name)
     if required and value is None:
-        raise EnvironmentError(f"Environment variable {name} is not set")
+        raise OSError(f"Environment variable {name} is not set")
     return value
 
-def get_okta_login_credentials():
-    return {"login": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_USER"),
-            "password": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_PASS")}
 
-def get_rsa_private_key_for_key_pair(key_path: str) -> serialization.load_pem_private_key:
+def get_okta_login_credentials():
+    return {
+        "login": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_USER"),
+        "password": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_PASS"),
+    }
+
+
+def get_rsa_private_key_for_key_pair(
+    key_path: str,
+) -> serialization.load_pem_private_key:
     with open(_get_env_variable(key_path), "rb") as key_file:
         private_key = serialization.load_pem_private_key(
-            key_file.read(),
-            password=None,
-            backend=default_backend()
+            key_file.read(), password=None, backend=default_backend()
         )
         return private_key
 
@@ -45,7 +58,7 @@ class AuthConnectionParameters:
             "db": _get_env_variable("SNOWFLAKE_AUTH_TEST_DATABASE"),
             "schema": _get_env_variable("SNOWFLAKE_AUTH_TEST_SCHEMA"),
             "warehouse": _get_env_variable("SNOWFLAKE_AUTH_TEST_WAREHOUSE"),
-            "CLIENT_STORE_TEMPORARY_CREDENTIAL": False
+            "CLIENT_STORE_TEMPORARY_CREDENTIAL": False,
         }
 
     def get_base_connection_parameters(self):
@@ -69,7 +82,9 @@ class AuthConnectionParameters:
     def get_store_id_token_connection_parameters(self):
         config = self.get_external_browser_connection_parameters()
 
-        config["CLIENT_STORE_TEMPORARY_CREDENTIAL"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_STORE_ID_TOKEN_USER")
+        config["CLIENT_STORE_TEMPORARY_CREDENTIAL"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_STORE_ID_TOKEN_USER"
+        )
 
         return config
 
@@ -94,47 +109,81 @@ class AuthConnectionParameters:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
-        config["oauthClientId"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID")
-        config["oauthClientSecret"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_SECRET")
-        config["oauthRedirectURI"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_REDIRECT_URI")
-        config["oauthAuthorizationUrl"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_AUTH_URL")
-        config["oauthTokenRequestUrl"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_TOKEN")
+        config["oauthClientId"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID"
+        )
+        config["oauthClientSecret"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_SECRET"
+        )
+        config["oauthRedirectURI"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_REDIRECT_URI"
+        )
+        config["oauthAuthorizationUrl"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_AUTH_URL"
+        )
+        config["oauthTokenRequestUrl"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_TOKEN"
+        )
         config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
 
         return config
 
-    def get_snowflake_external_authorization_code_connection_parameters(self):
+    def get_snowflake_authorization_code_connection_parameters(self):
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
-        config["oauthClientId"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_CLIENT_ID")
-        config["oauthClientSecret"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_CLIENT_SECRET")
-        config["oauthRedirectURI"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_REDIRECT_URI")
-        config["role"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_ROLE")
-        config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID")
+        config["oauthClientId"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_CLIENT_ID"
+        )
+        config["oauthClientSecret"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_CLIENT_SECRET"
+        )
+        config["oauthRedirectURI"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_REDIRECT_URI"
+        )
+        config["role"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_ROLE"
+        )
+        config["user"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID"
+        )
 
         return config
-
 
     def get_snowflake_wildcard_external_authorization_code_connection_parameters(self):
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
-        config["oauthClientId"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_WILDCARDS_CLIENT_ID")
-        config["oauthClientSecret"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_WILDCARDS_CLIENT_SECRET")
-        config["role"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_ROLE")
-        config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID")
+        config["oauthClientId"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_WILDCARDS_CLIENT_ID"
+        )
+        config["oauthClientSecret"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_WILDCARDS_CLIENT_SECRET"
+        )
+        config["role"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_ROLE"
+        )
+        config["user"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID"
+        )
 
         return config
 
-    def get_oauth_snowflake_client_credential_parameters(self):
+    def get_oauth_external_client_credential_connection_parameters(self):
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_CLIENT_CREDENTIALS"
-        config["oauthClientId"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID")
-        config["oauthClientSecret"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_SECRET")
-        config["oauthTokenRequestUrl"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_TOKEN")
-        config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID")
+        config["oauthClientId"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID"
+        )
+        config["oauthClientSecret"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_SECRET"
+        )
+        config["oauthTokenRequestUrl"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_TOKEN"
+        )
+        config["user"] = _get_env_variable(
+            "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID"
+        )
 
         return config
-
