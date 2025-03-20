@@ -38,7 +38,7 @@ def test_okta_authorization_code_successful():
         Scenario.SUCCESS, browser_login, browser_password
     )
 
-    assert test_helper.error_msg == "", "Error message should be empty"
+    assert test_helper.error_msg is "", "Error message should be empty"
 
 
 @pytest.mark.auth
