@@ -10,11 +10,7 @@ from authorization_test_helper import (
     Scenario,
     clean_browser_processes,
 )
-
-from .authorization_parameters import (
-    AuthConnectionParameters,
-    get_okta_login_credentials,
-)
+from test.auth.authorization_parameters import AuthConnectionParameters, get_okta_login_credentials
 
 
 @pytest.fixture(autouse=True)
@@ -28,7 +24,7 @@ def setup_and_teardown():
     clean_browser_processes()
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_okta_authorization_code_successful():
     connection_parameters = (
         AuthConnectionParameters().get_oauth_external_authorization_code_connection_parameters()
@@ -42,7 +38,7 @@ def test_okta_authorization_code_successful():
     assert test_helper.error_msg == "", "Error message should be empty"
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_okta_authorization_code_mismatched_user():
     connection_parameters = (
         AuthConnectionParameters().get_oauth_external_authorization_code_connection_parameters()
@@ -61,7 +57,7 @@ def test_okta_authorization_code_mismatched_user():
     )
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_okta_authorization_code_timeout():
     connection_parameters = (
         AuthConnectionParameters().get_oauth_external_authorization_code_connection_parameters()
@@ -77,7 +73,7 @@ def test_okta_authorization_code_timeout():
     )  # TODO: Adjust error message here
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_okta_authorization_code_token_cache():
     connection_parameters = (
         AuthConnectionParameters().get_oauth_external_authorization_code_connection_parameters()

@@ -7,14 +7,9 @@ import logging
 import pytest
 from authorization_test_helper import (
     AuthorizationTestHelper,
-    Scenario,
     clean_browser_processes,
 )
-
-from .authorization_parameters import (
-    AuthConnectionParameters,
-    get_okta_login_credentials,
-)
+from test.auth.authorization_parameters import AuthConnectionParameters
 
 
 @pytest.fixture(autouse=True)
@@ -28,7 +23,7 @@ def setup_and_teardown():
     clean_browser_processes()
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_okta_client_credentials_successful():
     connection_parameters = (
         AuthConnectionParameters().get_oauth_external_client_credential_connection_parameters()
@@ -40,7 +35,7 @@ def test_okta_client_credentials_successful():
     assert test_helper.error_msg == "", "Error message should be empty"
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_okta_client_credentials_mismatched_user():
     connection_parameters = (
         AuthConnectionParameters().get_oauth_external_client_credential_connection_parameters()
@@ -56,7 +51,7 @@ def test_okta_client_credentials_mismatched_user():
     )
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_external_browser_unauthorized():
     connection_parameters = (
         AuthConnectionParameters().get_oauth_external_client_credential_connection_parameters()
