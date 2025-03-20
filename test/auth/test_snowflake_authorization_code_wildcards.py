@@ -72,7 +72,7 @@ def test_okta_authorization_code_token_cache():
     )
 
     assert (
-        test_helper.connect_and_execute_simple_query() == True
+        test_helper.connect_and_execute_simple_query() is True
     ), "Connection should be established"
     assert test_helper.error_msg == "", "Error message should be empty"
 
@@ -92,7 +92,7 @@ def test_okta_authorization_code__without_token_cache():
     )
 
     assert (
-        test_helper.connect_and_execute_simple_query() == False
+        test_helper.connect_and_execute_simple_query() is False
     ), "Connection should be established"
     assert (
         "TIMEOUT" in test_helper.error_msg
@@ -108,6 +108,6 @@ def test_external_browser_timeout():
     connection_parameters["timeout"] = 1
 
     assert (
-        test_helper.connect_and_execute_simple_query() == False
+        test_helper.connect_and_execute_simple_query() is False
     ), "Connection should not be established"
     assert "Invalid OAuth access token" in test_helper.get_error_msg()

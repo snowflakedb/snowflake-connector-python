@@ -35,7 +35,7 @@ def test_okta_authorization_code_successful():
         Scenario.SUCCESS, browser_login, browser_password
     )
 
-    assert test_helper.error_msg == "", "Error message should be empty"
+    assert test_helper.error_msg is "", "Error message should be empty"
 
 
 @pytest.mark.auth
@@ -66,7 +66,7 @@ def test_okta_authorization_code_timeout():
     connection_parameters["timeout"] = 1
 
     assert (
-        test_helper.connect_and_execute_simple_query() == False
+        test_helper.connect_and_execute_simple_query() is False
     ), "Connection should not be established"
     assert (
         "TIMEOUT INFO" in test_helper.get_error_msg()
@@ -87,6 +87,6 @@ def test_okta_authorization_code_token_cache():
     )
 
     assert (
-        test_helper.connect_and_execute_simple_query() == True
+        test_helper.connect_and_execute_simple_query() is True
     ), "Connection should be established"
     assert test_helper.error_msg == "", "Error message should be empty"
