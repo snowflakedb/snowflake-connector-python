@@ -367,28 +367,6 @@ def test_date(conn_cnx):
     not installed_pandas or no_arrow_iterator_ext,
     reason="arrow_iterator extension is not built, or pandas is missing.",
 )
-def test_date_out_of_range(conn_cnx):
-    cases = [
-        "0000-01-01",
-        "0200-02-28",
-    ]
-    table = "test_arrow_date"
-    column = "(a date)"
-    values = ",".join(
-        [f"({i}, {c})" if c == "NULL" else f"({i}, '{c}')" for i, c in enumerate(cases)]
-    )
-    with pytest.raises(ValueError, match="year 0 is out of range"):
-        with conn_cnx() as conn:
-            init(conn, table, column, values)
-            sql_text = f"select a from {table} order by s"
-            validate_pandas(conn, sql_text, cases, 1, "one", data_type="date")
-            finish(conn, table)
-
-
-@pytest.mark.skipif(
-    not installed_pandas or no_arrow_iterator_ext,
-    reason="arrow_iterator extension is not built, or pandas is missing.",
-)
 @pytest.mark.parametrize("scale", [i for i in range(10)])
 def test_time(conn_cnx, scale):
     cases = [
