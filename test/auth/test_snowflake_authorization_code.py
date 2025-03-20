@@ -10,11 +10,7 @@ from authorization_test_helper import (
     Scenario,
     clean_browser_processes,
 )
-
-from .authorization_parameters import (
-    AuthConnectionParameters,
-    get_okta_login_credentials,
-)
+from test.auth.authorization_parameters import AuthConnectionParameters, get_okta_login_credentials
 
 
 @pytest.fixture(autouse=True)
@@ -28,7 +24,7 @@ def setup_and_teardown():
     clean_browser_processes()
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_snowflake_authorization_code_successful():
     connection_parameters = (
         AuthConnectionParameters().get_snowflake_authorization_code_connection_parameters()
@@ -43,7 +39,7 @@ def test_snowflake_authorization_code_successful():
     assert test_helper.error_msg == "", "Error message should be empty"
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_snowflake_authorization_code_mismatched_user():
     connection_parameters = (
         AuthConnectionParameters().get_snowflake_authorization_code_connection_parameters()
@@ -62,7 +58,7 @@ def test_snowflake_authorization_code_mismatched_user():
     )
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_snowflake_authorization_code_timeout():
     connection_parameters = (
         AuthConnectionParameters().get_snowflake_authorization_code_connection_parameters()
@@ -76,7 +72,7 @@ def test_snowflake_authorization_code_timeout():
     assert "Invalid OAuth access token" in test_helper.get_error_msg()
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_snowflake_authorization_code_token_cache():
     connection_parameters = (
         AuthConnectionParameters().get_snowflake_authorization_code_connection_parameters()
@@ -95,7 +91,7 @@ def test_snowflake_authorization_code_token_cache():
     assert test_helper.error_msg == "", "Error message should be empty"
 
 
-@pytest.mark.auth_test
+@pytest.mark.auth
 def test_snowflake_authorization_code_without_token_cache():
     connection_parameters = (
         AuthConnectionParameters().get_snowflake_authorization_code_connection_parameters()

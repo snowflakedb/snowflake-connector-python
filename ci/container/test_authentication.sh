@@ -14,7 +14,8 @@ export SNOWFLAKE_AUTH_TEST_PRIVATE_KEY_PATH=./.github/workflows/parameters/priva
 export SNOWFLAKE_AUTH_TEST_INVALID_PRIVATE_KEY_PATH=./.github/workflows/parameters/private/rsa_keys/rsa_key_invalid.p8
 
 export SF_OCSP_TEST_MODE=true
-export SF_ENABLE_EXPERIMENTAL_AUTHENTICATION=true
+export SF_ENABLE_EXPERIMENTAL_AUTHENTICATION=false
+export RUN_AUTH_TESTS=true
 export PYTHONPATH=$SOURCE_ROOT
 
 python3 -m pip install --break-system-packages -e .
