@@ -102,6 +102,9 @@ def test_cursor_execute_timeout(mockCancelQuery):
     assert mockCancelQuery.called
 
 
+# The _upload/_download/_upload_stream/_download_stream are newly introduced
+# and therefore should not be tested in old drivers.
+@pytest.mark.skipolddriver
 class TestUploadDownloadMethods(TestCase):
     """Test the _upload/_download/_upload_stream/_download_stream methods."""
 
