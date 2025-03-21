@@ -515,6 +515,9 @@ void DictCArrowChunkIterator::createRowPyObject() {
   for (int i = 0; i < m_ipcArrowSchema->n_children; i++) {
     py::UniqueRef value(
         m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
+    if (py::checkPyError) {
+      return;
+    }
     if (!value.empty()) {
       // PyDict_SetItemString doesn't steal a reference to value.get().
       PyDict_SetItemString(m_latestReturnedRow.get(),
