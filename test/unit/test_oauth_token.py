@@ -18,13 +18,12 @@ from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
 from ..wiremock.wiremock_utils import WiremockClient
 
-AUTH_SOCKET_PORT = 8009
 logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session")
 def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
-    with WiremockClient(forbidden_ports=[AUTH_SOCKET_PORT]) as client:
+    with WiremockClient() as client:
         yield client
 
 
@@ -130,8 +129,7 @@ def test_oauth_code_successful_flow(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
-    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
-    # monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir / "successful_flow.json"
@@ -173,7 +171,6 @@ def test_oauth_code_invalid_state(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
-    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
@@ -210,7 +207,6 @@ def test_oauth_code_scope_error(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
-    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
@@ -247,10 +243,9 @@ def test_oauth_code_token_request_error(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
-    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
-    with WiremockClient(forbidden_ports=[AUTH_SOCKET_PORT]) as wiremock_client:
+    with WiremockClient() as wiremock_client:
         wiremock_client.import_mapping(
             wiremock_oauth_authorization_code_dir / "token_request_error.json"
         )
@@ -286,7 +281,6 @@ def test_oauth_code_browser_timeout(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
-    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
@@ -327,7 +321,6 @@ def test_oauth_code_custom_urls(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
-    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
@@ -371,7 +364,6 @@ def test_oauth_code_successful_refresh_token_flow(
     temp_cache,
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
-    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
@@ -431,7 +423,6 @@ def test_oauth_code_expired_refresh_token_flow(
     temp_cache,
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
-    monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
