@@ -109,19 +109,19 @@ class AuthConnectionParameters:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
-        config["oauthClientId"] = _get_env_variable(
+        config["oauth_client_id"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID"
         )
-        config["oauthClientSecret"] = _get_env_variable(
+        config["oauth_client_secret"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_SECRET"
         )
-        config["oauthRedirectURI"] = _get_env_variable(
+        config["oauth_redirect_uri"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_REDIRECT_URI"
         )
-        config["oauthAuthorizationUrl"] = _get_env_variable(
+        config["oauth_authorization_url"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_AUTH_URL"
         )
-        config["oauthTokenRequestUrl"] = _get_env_variable(
+        config["oauth_token_request_url"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_TOKEN"
         )
         config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
@@ -132,13 +132,13 @@ class AuthConnectionParameters:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
-        config["oauthClientId"] = _get_env_variable(
+        config["oauth_client_id"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_CLIENT_ID"
         )
-        config["oauthClientSecret"] = _get_env_variable(
+        config["oauth_client_secret"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_CLIENT_SECRET"
         )
-        config["oauthRedirectURI"] = _get_env_variable(
+        config["oauth_redirect_uri"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_REDIRECT_URI"
         )
         config["role"] = _get_env_variable(
@@ -154,10 +154,10 @@ class AuthConnectionParameters:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
-        config["oauthClientId"] = _get_env_variable(
+        config["oauth_client_id"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_WILDCARDS_CLIENT_ID"
         )
-        config["oauthClientSecret"] = _get_env_variable(
+        config["oauth_client_secret"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_WILDCARDS_CLIENT_SECRET"
         )
         config["role"] = _get_env_variable(
@@ -173,13 +173,13 @@ class AuthConnectionParameters:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_CLIENT_CREDENTIALS"
-        config["oauthClientId"] = _get_env_variable(
+        config["oauth_client_id"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID"
         )
-        config["oauthClientSecret"] = _get_env_variable(
+        config["oauth_client_secret"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_SECRET"
         )
-        config["oauthTokenRequestUrl"] = _get_env_variable(
+        config["oauth_token_request_url"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_TOKEN"
         )
         config["user"] = _get_env_variable(
