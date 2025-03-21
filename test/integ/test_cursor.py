@@ -1780,11 +1780,7 @@ def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
             cur.execute("select TO_DATE('10000-01-01'), TO_DATE('9999-01-01')")
             with pytest.raises(
                 InterfaceError,
-                match=(
-                    "date value out of range"
-                    if IS_WINDOWS or result_format == "json"
-                    else "year 10000 is out of range"
-                ),
+                match="out of range",
             ):
                 cur.fetchall()
 
