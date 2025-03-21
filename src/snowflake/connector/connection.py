@@ -1166,11 +1166,9 @@ class SnowflakeConnection:
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
-            elif (
-                self._authenticator == OAUTH_AUTHORIZATION_CODE
-                or self._authenticator == OAUTH_CLIENT_CREDENTIALS
-            ):
+            elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
                 self._check_experimental_authentication_flag()
+                self._check_oauth_required_parameters()
                 features = [
                     feature.lower() for feature in self._oauth_security_features
                 ]
@@ -1178,62 +1176,48 @@ class SnowflakeConnection:
                 token_cache_enabled = "token_cache" in features
                 refresh_token_enabled = "refresh_token" in features
 
-                if self._oauth_client_id is None:
-                    Error.errorhandler_wrapper(
-                        self,
-                        None,
-                        ProgrammingError,
-                        {
-                            "msg": "Oauth code flow requirement 'client_id' is empty",
-                            "errno": ER_NO_CLIENT_ID,
-                        },
-                    )
-                if self._oauth_client_secret is None:
-                    Error.errorhandler_wrapper(
-                        self,
-                        None,
-                        ProgrammingError,
-                        {
-                            "msg": "Oauth code flow requirement 'client_secret' is empty",
-                            "errno": ER_NO_CLIENT_ID,
-                        },
-                    )
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
-                if self._authenticator == OAUTH_AUTHORIZATION_CODE:
-                    self.auth_class = AuthByOauthCode(
-                        application=self.application,
-                        client_id=self._oauth_client_id,
-                        client_secret=self._oauth_client_secret,
-                        authentication_url=self._oauth_authorization_url.format(
-                            host=self.host, port=self.port
-                        ),
-                        token_request_url=self._oauth_token_request_url.format(
-                            host=self.host, port=self.port
-                        ),
-                        redirect_uri=self._oauth_redirect_uri,
-                        scope=self._oauth_scope,
-                        pkce_enabled=pkce_enabled,
-                        token_cache=(
-                            auth.get_token_cache() if token_cache_enabled else None
-                        ),
-                        refresh_token_enabled=refresh_token_enabled,
-                    )
-                else:
-                    self.auth_class = AuthByOauthCredentials(
-                        application=self.application,
-                        client_id=self._oauth_client_id,
-                        client_secret=self._oauth_client_secret,
-                        token_request_url=self._oauth_token_request_url.format(
-                            host=self.host, port=self.port
-                        ),
-                        scope=self._oauth_scope,
-                        token_cache=(
-                            auth.get_token_cache() if token_cache_enabled else None
-                        ),
-                        refresh_token_enabled=refresh_token_enabled,
-                    )
+                self.auth_class = AuthByOauthCode(
+                    application=self.application,
+                    client_id=self._oauth_client_id,
+                    client_secret=self._oauth_client_secret,
+                    authentication_url=self._oauth_authorization_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    token_request_url=self._oauth_token_request_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    redirect_uri=self._oauth_redirect_uri,
+                    scope=self._oauth_scope,
+                    pkce_enabled=pkce_enabled,
+                    token_cache=auth.get_token_cache() if token_cache_enabled else None,
+                    refresh_token_enabled=refresh_token_enabled,
+                )
+            elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
+                self._check_experimental_authentication_flag()
+                self._check_oauth_required_parameters()
+                features = [
+                    feature.lower() for feature in self._oauth_security_features
+                ]
+                token_cache_enabled = "token_cache" in features
+                refresh_token_enabled = "refresh_token" in features
+
+                if self._role and (self._oauth_scope == ""):
+                    # if role is known then let's inject it into scope
+                    self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
+                self.auth_class = AuthByOauthCredentials(
+                    application=self.application,
+                    client_id=self._oauth_client_id,
+                    client_secret=self._oauth_client_secret,
+                    token_request_url=self._oauth_token_request_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    scope=self._oauth_scope,
+                    token_cache=auth.get_token_cache() if token_cache_enabled else None,
+                    refresh_token_enabled=refresh_token_enabled,
+                )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                     self._client_request_mfa_token if IS_LINUX else True
@@ -2218,5 +2202,27 @@ class SnowflakeConnection:
                 {
                     "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{self._authenticator}' authenticator.",
                     "errno": ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
+                },
+            )
+
+    def _check_oauth_required_parameters(self) -> None:
+        if self._oauth_client_id is None:
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Oauth code flow requirement 'client_id' is empty",
+                    "errno": ER_NO_CLIENT_ID,
+                },
+            )
+        if self._oauth_client_secret is None:
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Oauth code flow requirement 'client_secret' is empty",
+                    "errno": ER_NO_CLIENT_ID,
                 },
             )
