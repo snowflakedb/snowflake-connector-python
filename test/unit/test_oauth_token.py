@@ -131,7 +131,7 @@ def test_oauth_code_successful_flow(
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
     monkeypatch.setenv("SF_AUTH_SOCKET_PORT", str(AUTH_SOCKET_PORT))
-    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
+    # monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir / "successful_flow.json"
@@ -187,6 +187,7 @@ def test_oauth_code_invalid_state(
                     user="testUser",
                     authenticator="OAUTH_AUTHORIZATION_CODE",
                     oauth_client_id="123",
+                    oauth_client_secret="testClientSecret",
                     account="testAccount",
                     protocol="http",
                     role="ANALYST",
@@ -261,6 +262,7 @@ def test_oauth_code_token_request_error(
                         user="testUser",
                         authenticator="OAUTH_AUTHORIZATION_CODE",
                         oauth_client_id="123",
+                        oauth_client_secret="testClientSecret",
                         account="testAccount",
                         protocol="http",
                         role="ANALYST",
@@ -299,6 +301,7 @@ def test_oauth_code_browser_timeout(
                     user="testUser",
                     authenticator="OAUTH_AUTHORIZATION_CODE",
                     oauth_client_id="123",
+                    oauth_client_secret="testClientSecret",
                     account="testAccount",
                     protocol="http",
                     role="ANALYST",
@@ -343,6 +346,7 @@ def test_oauth_code_custom_urls(
                 user="testUser",
                 authenticator="OAUTH_AUTHORIZATION_CODE",
                 oauth_client_id="123",
+                oauth_client_secret="testClientSecret",
                 account="testAccount",
                 protocol="http",
                 role="ANALYST",
