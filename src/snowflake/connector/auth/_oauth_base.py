@@ -123,7 +123,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
     def __init__(
         self,
         client_id: str,
-        client_secret: str | None,
+        client_secret: str,
         token_request_url: str,
         scope: str,
         token_cache: TokenCache | None,

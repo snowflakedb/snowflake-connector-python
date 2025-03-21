@@ -49,7 +49,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         self,
         application: str,
         client_id: str,
-        client_secret: str | None,
+        client_secret: str,
         authentication_url: str,
         token_request_url: str,
         redirect_uri: str,

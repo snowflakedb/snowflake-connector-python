@@ -1168,6 +1168,7 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
                 self._check_experimental_authentication_flag()
+                self._check_oauth_required_parameters()
                 features = [
                     feature.lower() for feature in self._oauth_security_features
                 ]
@@ -1175,16 +1176,6 @@ class SnowflakeConnection:
                 token_cache_enabled = "token_cache" in features
                 refresh_token_enabled = "refresh_token" in features
 
-                if self._oauth_client_id is None:
-                    Error.errorhandler_wrapper(
-                        self,
-                        None,
-                        ProgrammingError,
-                        {
-                            "msg": "Oauth code flow requirement 'client_id' is empty",
-                            "errno": ER_NO_CLIENT_ID,
-                        },
-                    )
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1206,31 +1197,13 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
                 self._check_experimental_authentication_flag()
+                self._check_oauth_required_parameters()
                 features = [
                     feature.lower() for feature in self._oauth_security_features
                 ]
                 token_cache_enabled = "token_cache" in features
                 refresh_token_enabled = "refresh_token" in features
-                if self._oauth_client_id is None:
-                    Error.errorhandler_wrapper(
-                        self,
-                        None,
-                        ProgrammingError,
-                        {
-                            "msg": "Oauth code flow requirement 'client_id' is empty",
-                            "errno": ER_NO_CLIENT_ID,
-                        },
-                    )
-                if self._oauth_client_secret is None:
-                    Error.errorhandler_wrapper(
-                        self,
-                        None,
-                        ProgrammingError,
-                        {
-                            "msg": "Oauth code flow requirement 'client_secret' is empty",
-                            "errno": ER_NO_CLIENT_ID,
-                        },
-                    )
+
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -2229,5 +2202,27 @@ class SnowflakeConnection:
                 {
                     "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{self._authenticator}' authenticator.",
                     "errno": ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
+                },
+            )
+
+    def _check_oauth_required_parameters(self) -> None:
+        if self._oauth_client_id is None:
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Oauth code flow requirement 'client_id' is empty",
+                    "errno": ER_NO_CLIENT_ID,
+                },
+            )
+        if self._oauth_client_secret is None:
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Oauth code flow requirement 'client_secret' is empty",
+                    "errno": ER_NO_CLIENT_ID,
                 },
             )
