@@ -92,6 +92,9 @@ void CArrowChunkIterator::createRowPyObject() {
     PyTuple_SET_ITEM(
         m_latestReturnedRow.get(), i,
         m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
+    if (py::checkPyError()) {
+      return;
+    }
   }
   return;
 }
