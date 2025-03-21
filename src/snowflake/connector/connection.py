@@ -44,6 +44,7 @@ from .auth import (
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
+    AuthByWorkloadIdentity,
     AuthNoAuth,
 )
 from .auth.idtoken import AuthByIdToken
@@ -55,6 +56,7 @@ from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
+    ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -88,6 +90,7 @@ from .errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_BACKOFF_POLICY,
     ER_INVALID_VALUE,
+    ER_INVALID_WIF_SETTINGS,
     ER_NO_ACCOUNT_NAME,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
@@ -105,6 +108,7 @@ from .network import (
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
+    WORKLOAD_IDENTITY_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
 )
@@ -113,6 +117,7 @@ from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
+from .wif_util import AttestationProvider
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -189,12 +194,14 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "private_key": (None, (type(None), bytes, str, RSAPrivateKey)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
-    "token": (None, (type(None), str)),  # OAuth/JWT/PAT Token
+    "token": (None, (type(None), str)),  # OAuth/JWT/PAT/OIDC Token
     "token_file_path": (
         None,
         (type(None), str, bytes),
-    ),  # OAuth/JWT/PAT Token file path
+    ),  # OAuth/JWT/PAT/OIDC Token file path
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
+    "workload_identity_provider": (None, (type(None), AttestationProvider)),
+    "workload_identity_entra_resource": (None, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -205,7 +212,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     # add the new client type to the server to support these features.
     "internal_application_name": (CLIENT_NAME, (type(None), str)),
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
-    "insecure_mode": (False, bool),  # Error security fix requirement
+    "disable_ocsp_checks": (False, bool),
     "ocsp_fail_open": (True, bool),  # fail open on ocsp issues, default true
     "inject_client_pause": (0, int),  # snowflake internal
     "session_parameters": (None, (type(None), dict)),  # snowflake session parameters
@@ -330,8 +337,10 @@ class SnowflakeConnection:
     Use connect(..) to get the object.
 
     Attributes:
-        insecure_mode: Whether or not the connection is in insecure mode. Insecure mode means that the connection
-            validates the TLS certificate but doesn't check revocation status.
+        insecure_mode (deprecated): Whether or not the connection is in OCSP disabled mode. It means that the connection
+            validates the TLS certificate but doesn't check revocation status with OCSP provider.
+        disable_ocsp_checks: Whether or not the connection is in OCSP disabled mode. It means that the connection
+            validates the TLS certificate but doesn't check revocation status with OCSP provider.
         ocsp_fail_open: Whether or not the connection is in fail open mode. Fail open mode decides if TLS certificates
             continue to be validated. Revoked certificates are blocked. Any other exceptions are disregarded.
         session_id: The session ID of the connection.
@@ -442,6 +451,25 @@ class SnowflakeConnection:
             elif "streamlit" in sys.modules:
                 kwargs["application"] = "streamlit"
 
+        if "insecure_mode" in kwargs:
+            warn_message = "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
+            warnings.warn(
+                warn_message,
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+            if (
+                "disable_ocsp_checks" in kwargs
+                and kwargs["disable_ocsp_checks"] != kwargs["insecure_mode"]
+            ):
+                logger.warning(
+                    "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                    "Using the value of 'disable_ocsp_checks."
+                )
+            else:
+                self._disable_ocsp_checks = kwargs["insecure_mode"]
+
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None
         self.query_context_cache_size = 5
@@ -477,19 +505,23 @@ class SnowflakeConnection:
         self._file_operation_parser = FileOperationParser(self)
         self._stream_downloader = StreamDownloader(self)
 
+    # Deprecated
     @property
     def insecure_mode(self) -> bool:
-        return self._insecure_mode
+        return self._disable_ocsp_checks
+
+    @property
+    def disable_ocsp_checks(self) -> bool:
+        return self._disable_ocsp_checks
 
     @property
     def ocsp_fail_open(self) -> bool:
         return self._ocsp_fail_open
 
     def _ocsp_mode(self) -> OCSPMode:
-        """OCSP mode. INSEC
-        URE, FAIL_OPEN or FAIL_CLOSED."""
-        if self.insecure_mode:
-            return OCSPMode.INSECURE
+        """OCSP mode. DISABLE_OCSP_CHECKS, FAIL_OPEN or FAIL_CLOSED."""
+        if self.disable_ocsp_checks:
+            return OCSPMode.DISABLE_OCSP_CHECKS
         elif self.ocsp_fail_open:
             return OCSPMode.FAIL_OPEN
         else:
@@ -1117,7 +1149,32 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
+                if not self._token and self._password:
+                    self._token = self._password
                 self.auth_class = AuthByPAT(self._token)
+            elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
+                if ENV_VAR_EXPERIMENTAL_AUTHENTICATION not in os.environ:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{WORKLOAD_IDENTITY_AUTHENTICATOR}' authenticator.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
+                # Standardize the provider enum.
+                if self._workload_identity_provider and isinstance(
+                    self._workload_identity_provider, str
+                ):
+                    self._workload_identity_provider = AttestationProvider.from_string(
+                        self._workload_identity_provider
+                    )
+                self.auth_class = AuthByWorkloadIdentity(
+                    provider=self._workload_identity_provider,
+                    token=self._token,
+                    entra_resource=self._workload_identity_entra_resource,
+                )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
                 self.auth_class = AuthByOkta(
@@ -1246,6 +1303,7 @@ class SnowflakeConnection:
                 KEY_PAIR_AUTHENTICATOR,
                 OAUTH_AUTHENTICATOR,
                 USR_PWD_MFA_AUTHENTICATOR,
+                WORKLOAD_IDENTITY_AUTHENTICATOR,
             ]:
                 self._authenticator = auth_tmp
 
@@ -1256,14 +1314,18 @@ class SnowflakeConnection:
                 self._token = f.read()
 
         # Set of authenticators allowing empty user.
-        empty_user_allowed_authenticators = {OAUTH_AUTHENTICATOR, NO_AUTH_AUTHENTICATOR}
+        empty_user_allowed_authenticators = {
+            OAUTH_AUTHENTICATOR,
+            NO_AUTH_AUTHENTICATOR,
+            WORKLOAD_IDENTITY_AUTHENTICATOR,
+        }
 
         if not (self._master_token and self._session_token):
             if (
                 not self.user
                 and self._authenticator not in empty_user_allowed_authenticators
             ):
-                # OAuth and NoAuth Authentications does not require a username
+                # Some authenticators do not require a username
                 Error.errorhandler_wrapper(
                     self,
                     None,
@@ -1274,6 +1336,25 @@ class SnowflakeConnection:
             if self._private_key or self._private_key_file:
                 self._authenticator = KEY_PAIR_AUTHENTICATOR
 
+            workload_identity_dependent_options = [
+                "workload_identity_provider",
+                "workload_identity_entra_resource",
+            ]
+            for dependent_option in workload_identity_dependent_options:
+                if (
+                    self.__getattribute__(f"_{dependent_option}") is not None
+                    and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR
+                ):
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"{dependent_option} was set but authenticator was not set to {WORKLOAD_IDENTITY_AUTHENTICATOR}",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
+
             if (
                 self.auth_class is None
                 and self._authenticator
@@ -1282,6 +1363,7 @@ class SnowflakeConnection:
                     OAUTH_AUTHENTICATOR,
                     KEY_PAIR_AUTHENTICATOR,
                     PROGRAMMATIC_ACCESS_TOKEN,
+                    WORKLOAD_IDENTITY_AUTHENTICATOR,
                 )
                 and not self._password
             ):
@@ -1317,7 +1399,7 @@ class SnowflakeConnection:
             )
 
         if self.ocsp_fail_open:
-            logger.info(
+            logger.debug(
                 "This connection is in OCSP Fail Open Mode. "
                 "TLS Certificates would be checked for validity "
                 "and revocation status. Any other Certificate "
@@ -1326,12 +1408,10 @@ class SnowflakeConnection:
                 "connectivity."
             )
 
-        if self.insecure_mode:
-            logger.info(
-                "THIS CONNECTION IS IN INSECURE MODE. IT "
-                "MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE "
-                "CERTIFICATE REVOCATION STATUS WILL NOT BE "
-                "CHECKED."
+        if self.disable_ocsp_checks:
+            logger.debug(
+                "This connection runs with disabled OCSP checks. "
+                "Revocation status of the certificate will not be checked against OCSP Responder."
             )
 
     def cmd_query(

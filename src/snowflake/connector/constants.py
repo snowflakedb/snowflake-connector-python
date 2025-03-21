@@ -358,12 +358,14 @@ class OCSPMode(Enum):
         FAIL_OPEN: A response indicating a revoked certificate results in a failed connection. A response with any
             other certificate errors or statuses allows the connection to occur, but denotes the message in the logs
             at the WARNING level with the relevant details in JSON format.
-        INSECURE: The connection will occur anyway.
+        INSECURE (deprecated): The connection will occur anyway.
+        DISABLE_OCSP_CHECKS: The OCSP check will not happen. If the certificate is valid then connection will occur.
     """
 
     FAIL_CLOSED = "FAIL_CLOSED"
     FAIL_OPEN = "FAIL_OPEN"
     INSECURE = "INSECURE"
+    DISABLE_OCSP_CHECKS = "DISABLE_OCSP_CHECKS"
 
 
 @unique
@@ -429,6 +431,7 @@ DAY_IN_SECONDS = 60 * 60 * 24
 # TODO: all env variables definitions should be here
 ENV_VAR_PARTNER = "SF_PARTNER"
 ENV_VAR_TEST_MODE = "SNOWFLAKE_TEST_MODE"
+ENV_VAR_EXPERIMENTAL_AUTHENTICATION = "SF_ENABLE_EXPERIMENTAL_AUTHENTICATION"  # Needed to enable new strong auth features during the private preview.
 
 
 _DOMAIN_NAME_MAP = {_DEFAULT_HOSTNAME_TLD: "GLOBAL", _CHINA_HOSTNAME_TLD: "CHINA"}
