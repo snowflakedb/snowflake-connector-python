@@ -1576,6 +1576,23 @@ def test_is_valid(conn_cnx):
 
 
 @pytest.mark.skipolddriver
+def test_no_auth_connection_basic():
+    """Tests connection creation with AuthNoAuth."""
+    # AuthNoAuth does not exist in old drivers, so we import at test level to
+    # skip importing it for old driver tests.
+    from snowflake.connector.auth.no_auth import AuthNoAuth
+
+    no_auth = AuthNoAuth()
+
+    # Simulates how Snowpark server creates no-auth connection, such creation
+    # should succeed. Here we intentionally avoid using create_connection test
+    # utility. Because we want to validate that even with much information
+    # (like account, user etc.) missing, we should still be able to create a
+    # no-auth connection.
+    snowflake.connector.connect(auth_class=no_auth)
+
+
+@pytest.mark.skipolddriver
 def test_no_auth_connection_negative_case():
     # AuthNoAuth does not exist in old drivers, so we import at test level to
     # skip importing it for old driver tests.
@@ -1583,10 +1600,15 @@ def test_no_auth_connection_negative_case():
 
     no_auth = AuthNoAuth()
 
-    # Create a no-auth connection in an invalid way.
-    # We do not fail connection establishment because there is no validated way
-    # to tell whether the no-auth is a valid use case or not. But it is
-    # effectively protected because invalid no-auth will fail to run any query.
+    # Create a no-auth connection in user code (and we create connection as we
+    # would for other tests, to provide all the needed information like
+    # account, user etc.). Such connection can be successfully created, but it
+    # is not fully functional because it lacks certain setup that is on the
+    # server side.
+    # We do not fail connection establishment in user code because there is no
+    # validated way to tell whether the no-auth is a valid use case or not. But
+    # it is effectively protected because invalid no-auth will fail to run any
+    # query.
     conn = create_connection("default", auth_class=no_auth)
 
     # Make sure we are indeed passing the no-auth configuration to the
