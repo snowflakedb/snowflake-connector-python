@@ -818,6 +818,23 @@ class SnowflakeConnection:
     def unsafe_file_write(self, value: bool) -> None:
         self._unsafe_file_write = value
 
+    class _OAuthSecurityFeatures(NamedTuple):
+        pkce_enabled: bool
+        refresh_token_enabled: bool
+        token_cache_enabled: bool
+
+    @property
+    def oauth_security_features(self) -> _OAuthSecurityFeatures:
+        features = self._oauth_security_features
+        if isinstance(features, str):
+            features = features.split(" ")
+        features = [feat.lower() for feat in features]
+        return self._OAuthSecurityFeatures(
+            pkce_enabled="pkce" in features,
+            token_cache_enabled="token_cache" in features,
+            refresh_token_enabled="refresh_token" in features,
+        )
+
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
@@ -1169,13 +1186,7 @@ class SnowflakeConnection:
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
                 self._check_experimental_authentication_flag()
                 self._check_oauth_required_parameters()
-                features = [
-                    feature.lower() for feature in self._oauth_security_features
-                ]
-                pkce_enabled = "pkce" in features
-                token_cache_enabled = "token_cache" in features
-                refresh_token_enabled = "refresh_token" in features
-
+                features = self.oauth_security_features
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1191,19 +1202,16 @@ class SnowflakeConnection:
                     ),
                     redirect_uri=self._oauth_redirect_uri,
                     scope=self._oauth_scope,
-                    pkce_enabled=pkce_enabled,
-                    token_cache=auth.get_token_cache() if token_cache_enabled else None,
-                    refresh_token_enabled=refresh_token_enabled,
+                    pkce_enabled=features.pkce_enabled,
+                    token_cache=(
+                        auth.get_token_cache() if features.token_cache_enabled else None
+                    ),
+                    refresh_token_enabled=features.refresh_token_enabled,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
                 self._check_experimental_authentication_flag()
                 self._check_oauth_required_parameters()
-                features = [
-                    feature.lower() for feature in self._oauth_security_features
-                ]
-                token_cache_enabled = "token_cache" in features
-                refresh_token_enabled = "refresh_token" in features
-
+                features = self.oauth_security_features
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1215,8 +1223,10 @@ class SnowflakeConnection:
                         host=self.host, port=self.port
                     ),
                     scope=self._oauth_scope,
-                    token_cache=auth.get_token_cache() if token_cache_enabled else None,
-                    refresh_token_enabled=refresh_token_enabled,
+                    token_cache=(
+                        auth.get_token_cache() if features.token_cache_enabled else None
+                    ),
+                    refresh_token_enabled=features.refresh_token_enabled,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (

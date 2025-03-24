@@ -63,6 +63,9 @@ class AuthHttpServer:
     DEFAULT_MAX_ATTEMPTS = 15
     DEFAULT_TIMEOUT = 30.0
 
+    PORT_BIND_MAX_ATTEMPTS = 10
+    PORT_BIND_TIMEOUT = 20.0
+
     def __init__(
         self,
         uri: str,
@@ -80,19 +83,31 @@ class AuthHttpServer:
                 self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
         port = parsed_uri.port or 0
-        try:
-            self._socket.bind(
-                (
-                    parsed_uri.hostname,
-                    port,
+        for attempt in range(1, self.DEFAULT_MAX_ATTEMPTS + 1):
+            try:
+                self._socket.bind(
+                    (
+                        parsed_uri.hostname,
+                        port,
+                    )
                 )
-            )
-        except (OSError, socket.gaierror) as ex:
-            logger.error(
-                f"Failed to bind authorization callback server to port {port}: {ex}"
-            )
-            raise
-
+                break
+            except socket.gaierror as ex:
+                logger.error(
+                    f"Failed to bind authorization callback server to port {port}: {ex}"
+                )
+                raise
+            except OSError as ex:
+                if attempt == self.DEFAULT_MAX_ATTEMPTS:
+                    logger.error(
+                        f"Failed to bind authorization callback server to port {port}: {ex}"
+                    )
+                    raise
+                logger.warning(
+                    f"Attempt {attempt}/{self.DEFAULT_MAX_ATTEMPTS}. "
+                    f"Failed to bind authorization callback server to port {port}: {ex}"
+                )
+                time.sleep(self.PORT_BIND_TIMEOUT / self.PORT_BIND_MAX_ATTEMPTS)
         try:
             self._socket.listen(0)  # no backlog
         except Exception as ex:
