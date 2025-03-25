@@ -23,39 +23,6 @@ repos:
         exclude: .github/repo_meta.yaml
     -   id: debug-statements
     -   id: check-ast
--   repo: https://github.com/Lucas-C/pre-commit-hooks.git
-    rev: v1.5.5
-    hooks:
-    -   id: insert-license
-        name: insert-py-license
-        files: >
-            (?x)^(
-                src/snowflake/connector/.*\.pyx?|
-                test/.*\.py|
-            )$
-        exclude: >
-            (?x)^(
-                src/snowflake/connector/version.py|
-                src/snowflake/connector/nanoarrow_cpp|
-            )$
-        args:
-            - --license-filepath
-            - license_header.txt
-    -   id: insert-license
-        name: insert-cpp-license
-        files: >
-            (?x)^(
-                src/snowflake/connector/nanoarrow_cpp/.*\.(cpp|hpp)|
-            )$
-        args:
-            - --comment-style
-            - //
-            - --license-filepath
-            - license_header.txt
-        exclude: >
-            (?x)^(
-                src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow.hpp|
-            )$
 -   repo: https://github.com/asottile/yesqa
     rev: v1.5.0
     hooks:

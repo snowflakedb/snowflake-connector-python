@@ -44,7 +44,7 @@ class ApiFederatedAuthenticationType(Enum):
             return ApiFederatedAuthenticationType.GCP
         if attestation.provider == AttestationProvider.OIDC:
             return ApiFederatedAuthenticationType.OIDC
-        return ValueError(f"Unknown attestation provider '{attestation.provider}'")
+        raise ValueError(f"Unknown attestation provider '{attestation.provider}'")
 
 
 class AuthByWorkloadIdentity(AuthByPlugin):
