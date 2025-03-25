@@ -81,7 +81,8 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         self.presigned_url: str = meta.presigned_url or stage_info.get("presignedUrl")
         self.security_token = credentials.creds.get("GCS_ACCESS_TOKEN")
         self.use_regional_url = (
-            stage_info["region"].lower() == GCS_REGION_ME_CENTRAL_2
+            "region" in stage_info
+            and stage_info["region"].lower() == GCS_REGION_ME_CENTRAL_2
             or "useRegionalUrl" in stage_info
             and stage_info["useRegionalUrl"]
         )

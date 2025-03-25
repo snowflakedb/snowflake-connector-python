@@ -361,13 +361,13 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
         ("US-CENTRAL1", "https://storage.googleapis.com", False, None),
         (
             "US-CENTRAL1",
-            "https://overridden_url.com",
+            "https://overriddenurl.com",
             False,
             "https://overriddenurl.com",
         ),
         (
             "US-CENTRAL1",
-            "https://overridden_url.com",
+            "https://overriddenurl.com",
             True,
             "https://overriddenurl.com",
         ),
