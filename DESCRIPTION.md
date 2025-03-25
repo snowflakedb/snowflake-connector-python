@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.14.1(TBD)
   - Basic decimal floating-point type support.
   - Added handling of PAT provided in `password` field.
+  - Added support of GCS regional endpoints.
 
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
