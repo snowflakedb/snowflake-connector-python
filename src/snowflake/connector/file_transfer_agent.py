@@ -683,7 +683,6 @@ class SnowflakeFileTransferAgent:
                 self._credentials,
                 AZURE_CHUNK_SIZE,
                 self._stage_info,
-                use_s3_regional_url=self._use_s3_regional_url,
                 unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == S3_FS:
@@ -703,7 +702,6 @@ class SnowflakeFileTransferAgent:
                 self._stage_info,
                 self._cursor._connection,
                 self._command,
-                use_s3_regional_url=self._use_s3_regional_url,
                 unsafe_file_write=self._unsafe_file_write,
             )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")

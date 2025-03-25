@@ -351,3 +351,63 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
     )
     file_header = client.get_file_header(meta.name)
     assert file_header is None
+
+
+@pytest.mark.parametrize(
+    "region,return_url,use_regional_url,endpoint",
+    [
+        ("US-CENTRAL1", "https://storage.us-central1.rep.googleapis.com", True, None),
+        ("ME-CENTRAL2", "https://storage.me-central2.rep.googleapis.com", True, None),
+        ("US-CENTRAL1", "https://storage.googleapis.com", False, None),
+        (
+            "US-CENTRAL1",
+            "https://overridden_url.com",
+            False,
+            "https://overriddenurl.com",
+        ),
+        (
+            "US-CENTRAL1",
+            "https://overridden_url.com",
+            True,
+            "https://overriddenurl.com",
+        ),
+    ],
+)
+def test_url(region, return_url, use_regional_url, endpoint):
+    gcs_location = SnowflakeGCSRestClient.get_location(
+        stage_location="location",
+        use_regional_url=use_regional_url,
+        region=region,
+        endpoint=endpoint,
+    )
+    assert gcs_location.endpoint == return_url
+
+
+@pytest.mark.parametrize(
+    "region,use_regional_url,return_value",
+    [
+        ("ME-CENTRAL2", False, True),
+        ("ME-CENTRAL2", True, True),
+        ("US-CENTRAL1", False, False),
+        ("US-CENTRAL1", True, True),
+    ],
+)
+def test_use_regional_url(region, use_regional_url, return_value):
+    meta = SnowflakeFileMeta(
+        name="path/some_file",
+        src_file_name="path/some_file",
+        stage_location_type="GCS",
+        presigned_url="www.example.com",
+    )
+    storage_credentials = Mock()
+    storage_credentials.creds = {}
+    stage_info: dict[str, any] = dict()
+    stage_info["region"] = region
+    stage_info["useRegionalUrl"] = use_regional_url
+    connection = Mock()
+
+    client = SnowflakeGCSRestClient(
+        meta, storage_credentials, stage_info, connection, ""
+    )
+
+    assert client.use_regional_url == return_value
