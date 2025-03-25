@@ -252,7 +252,9 @@ You can close this window now and go back where you started from.
         code, state = (
             self._receive_authorization_callback(callback_server, connection)
             if webbrowser.open(authorization_request)
-            else self._ask_authorization_callback_from_user(connection)
+            else self._ask_authorization_callback_from_user(
+                authorization_request, connection
+            )
         )
         if not code:
             self._handle_failure(
@@ -322,6 +324,7 @@ You can close this window now and go back where you started from.
                 data, socket_connection, http_server.hostname, http_server.port
             ):
                 self._send_response(data, socket_connection)
+            socket_connection.shutdown(socket.SHUT_RDWR)
         finally:
             socket_connection.close()
         return self._parse_authorization_redirected_request(
@@ -331,13 +334,15 @@ You can close this window now and go back where you started from.
 
     def _ask_authorization_callback_from_user(
         self,
+        authorization_request: str,
         connection: SnowflakeConnection,
     ) -> (str | None, str | None):
         logger.debug("requesting authorization redirected url from user")
         print(
             "We were unable to open a browser window for you, "
-            "please open the URL above manually then paste the "
-            "URL you are redirected to into the terminal."
+            "please open the URL manually then paste the "
+            "URL you are redirected to into the terminal:\n"
+            f"{authorization_request}"
         )
         received_redirected_request = input(
             "Enter the URL the OAuth flow redirected you to: "
