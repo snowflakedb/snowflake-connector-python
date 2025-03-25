@@ -331,12 +331,12 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         # SNOW-1825621: OAUTH implementation
     ),
     "oauth_authorization_url": (
-        "{host}:{port}/oauth/authorize",
+        "https://{host}:{port}/oauth/authorize",
         str,
         # SNOW-1825621: OAUTH implementation
     ),
     "oauth_token_request_url": (
-        "{host}:{port}/oauth/token-request",
+        "https://{host}:{port}/oauth/token-request",
         str,
         # SNOW-1825621: OAUTH implementation
     ),
