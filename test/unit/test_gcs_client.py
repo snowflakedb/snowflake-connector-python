@@ -344,7 +344,7 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
     )
     storage_credentials = Mock()
     storage_credentials.creds = {}
-    stage_info = Mock()
+    stage_info: dict[str, any] = dict()
     connection = Mock()
     client = SnowflakeGCSRestClient(
         meta, storage_credentials, stage_info, connection, ""
