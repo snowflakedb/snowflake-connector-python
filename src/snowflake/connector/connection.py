@@ -351,6 +351,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         collections.abc.Iterable,  # of strings
         # SNOW-1825621: OAUTH PKCE
     ),
+    "external_browser_timeout": (120, int),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -1207,6 +1208,7 @@ class SnowflakeConnection:
                         auth.get_token_cache() if features.token_cache_enabled else None
                     ),
                     refresh_token_enabled=features.refresh_token_enabled,
+                    external_browser_timeout=self._external_browser_timeout,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
                 self._check_experimental_authentication_flag()

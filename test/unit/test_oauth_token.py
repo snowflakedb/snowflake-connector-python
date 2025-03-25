@@ -304,6 +304,7 @@ def test_oauth_code_browser_timeout(
                     oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
                     host=wiremock_client.wiremock_host,
                     port=wiremock_client.wiremock_http_port,
+                    external_browser_timeout=2,
                 )
 
     assert str(execinfo.value).endswith(

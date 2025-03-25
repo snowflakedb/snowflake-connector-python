@@ -57,6 +57,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         pkce_enabled: bool = False,
         token_cache: TokenCache | None = None,
         refresh_token_enabled: bool = False,
+        external_browser_timeout: int | None = None,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -79,6 +80,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         if pkce_enabled:
             logger.debug("oauth pkce is going to be used")
         self._verifier: str | None = None
+        self._external_browser_timeout = external_browser_timeout
 
     def _get_oauth_type_id(self) -> str:
         return OAUTH_TYPE_AUTHORIZATION_CODE
@@ -303,7 +305,9 @@ You can close this window now and go back where you started from.
         connection: SnowflakeConnection,
     ) -> (str | None, str | None):
         logger.debug("trying to receive authorization redirected uri")
-        data, socket_connection = http_server.receive_block()
+        data, socket_connection = http_server.receive_block(
+            timeout=self._external_browser_timeout
+        )
         if socket_connection is None:
             self._handle_failure(
                 conn=connection,

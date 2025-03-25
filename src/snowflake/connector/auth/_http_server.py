@@ -171,7 +171,7 @@ class AuthHttpServer:
     def receive_block(
         self,
         max_attempts: int = None,
-        timeout: float | None = None,
+        timeout: float | int | None = None,
     ) -> (list[str] | None, socket.socket | None):
         if max_attempts is None:
             max_attempts = self.DEFAULT_MAX_ATTEMPTS
