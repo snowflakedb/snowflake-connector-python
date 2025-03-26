@@ -27,7 +27,8 @@ namespace sf {
 
 CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes,
                                          int64_t arrow_bytes_size,
-                                         PyObject* use_numpy)
+                                         PyObject* use_numpy,
+                                         PyObject* check_error_on_every_column)
     : CArrowIterator(arrow_bytes, arrow_bytes_size),
       m_latestReturnedRow(nullptr),
       m_context(context) {
@@ -39,6 +40,7 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes,
   m_rowCountInBatch = 0;
   m_latestReturnedRow.reset();
   m_useNumpy = PyObject_IsTrue(use_numpy);
+  m_checkErrorOnEveryColumn = PyObject_IsTrue(check_error_on_every_column);
 
   m_batchCount = m_ipcArrowArrayVec.size();
   m_columnCount = m_batchCount > 0 ? m_ipcArrowSchema->n_children : 0;
@@ -92,7 +94,7 @@ void CArrowChunkIterator::createRowPyObject() {
     PyTuple_SET_ITEM(
         m_latestReturnedRow.get(), i,
         m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
-    if (py::checkPyError()) {
+    if (m_checkErrorOnEveryColumn && py::checkPyError()) {
       return;
     }
   }
@@ -508,7 +510,8 @@ DictCArrowChunkIterator::DictCArrowChunkIterator(PyObject* context,
                                                  char* arrow_bytes,
                                                  int64_t arrow_bytes_size,
                                                  PyObject* use_numpy)
-    : CArrowChunkIterator(context, arrow_bytes, arrow_bytes_size, use_numpy) {}
+    : CArrowChunkIterator(context, arrow_bytes, arrow_bytes_size, use_numpy,
+                          Py_False) {}
 
 void DictCArrowChunkIterator::createRowPyObject() {
   m_latestReturnedRow.reset(PyDict_New());
