@@ -14,7 +14,7 @@ RUN dnf -y update && \
     lapack-devel && \
     dnf clean all
 
-RUN dnf install rust cargo
+RUN dnf -y install rust cargo
 
 
 RUN dnf -y upgrade
