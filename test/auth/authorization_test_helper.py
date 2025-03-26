@@ -27,7 +27,7 @@ class Scenario(Enum):
     INTERNAL_OAUTH_SNOWFLAKE_SUCCESS = "internalOauthSnowflakeSuccess"
 
 
-def get_oauth_access_token(cfg):
+def get_access_token_oauth(cfg):
     auth_url = cfg["auth_url"]
 
     data = {
@@ -50,6 +50,7 @@ def get_oauth_access_token(cfg):
     except requests.exceptions.HTTPError as http_err:
         logger.error(f"HTTP error occurred: {http_err}")
         raise
+
 
 
 def clean_browser_processes():

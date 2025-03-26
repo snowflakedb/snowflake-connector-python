@@ -53,9 +53,9 @@ def test_external_browser_unauthorized():
     connection_parameters = (
         AuthConnectionParameters().get_oauth_external_client_credential_connection_parameters()
     )
-    connection_parameters["oauthClientId"] = "invalidClientID"
+    connection_parameters["oauth_client_id"] = "invalidClientID"
     test_helper = AuthorizationTestHelper(connection_parameters)
 
     test_helper.connect_and_execute_simple_query()
 
-    assert "Invalid OAuth access token" in test_helper.get_error_msg()
+    assert "Invalid HTTP request from web browser" in test_helper.get_error_msg()

@@ -62,16 +62,16 @@ def test_external_browser_mismatched_user():
 # def test_external_browser_wrong_credentials():
 #     connection_parameters = AuthConnectionParameters().get_external_browser_connection_parameters()
 #     browser_login, browser_password = "invalidUser", "invalidPassword"
-#     connection_parameters["LOGIN_TIMEOUT"] = 10
+#     connection_parameters["external_browser_timeout"] = 10
 #     test_helper = AuthorizationTestHelper(connection_parameters)
 #     test_helper.connect_and_provide_credentials(Scenario.FAIL, browser_login, browser_password)
 #
-#     assert "Invalid OAuth access token" in test_helper.get_error_msg()
-
+#     assert "Unable to receive the OAuth message within a given timeout" in test_helper.get_error_msg()
+#
 # @pytest.mark.auth
 # def test_external_browser_timeout():
 #     connection_parameters = AuthConnectionParameters().get_external_browser_connection_parameters()
 #     test_helper = AuthorizationTestHelper(connection_parameters)
-#     connection_parameters["timeout"] = 1
+#     connection_parameters["external_browser_timeout"] = 1
 #     assert test_helper.connect_and_execute_simple_query() == False, "Connection should not be established"
-#     assert "Invalid OAuth access token" in test_helper.get_error_msg()
+#     assert "Unable to receive the OAuth message within a given timeout" in test_helper.get_error_msg()

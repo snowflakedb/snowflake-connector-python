@@ -8,7 +8,7 @@ from test.auth.authorization_parameters import (
 )
 from test.auth.authorization_test_helper import (
     AuthorizationTestHelper,
-    get_oauth_access_token,
+    get_access_token_oauth,
 )
 
 import pytest
@@ -57,7 +57,7 @@ def test_oauth_invalid_token():
     assert "Invalid OAuth access token" in test_helper.get_error_msg()
 
 
-@pytest.mark.auth
 def get_oauth_token():
     oauth_config = get_oauth_token_parameters()
-    return get_oauth_access_token(oauth_config)
+    token = get_access_token_oauth(oauth_config)
+    return token
