@@ -37,6 +37,11 @@ def get_okta_login_credentials():
         "password": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_PASS"),
     }
 
+def get_soteria_okta_login_credentials():
+    return {
+        "login": _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID"),
+        "password": _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_USER_PASSWORD"),
+    }
 
 def get_rsa_private_key_for_key_pair(
     key_path: str,

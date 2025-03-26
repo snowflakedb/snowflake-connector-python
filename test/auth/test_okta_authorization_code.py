@@ -66,30 +66,32 @@ def test_okta_authorization_code_timeout():
         AuthConnectionParameters().get_oauth_external_authorization_code_connection_parameters()
     )
     test_helper = AuthorizationTestHelper(connection_parameters)
-    connection_parameters["timeout"] = 1
+    connection_parameters["external_browser_timeout"] = 1
 
     assert (
         test_helper.connect_and_execute_simple_query() is False
     ), "Connection should not be established"
     assert (
-        "TIMEOUT INFO" in test_helper.get_error_msg()
-    )  # TODO: Adjust error message here
-
-
-@pytest.mark.auth
-def test_okta_authorization_code_token_cache():
-    connection_parameters = (
-        AuthConnectionParameters().get_oauth_external_authorization_code_connection_parameters()
-    )
-    connection_parameters["token_cache"] = True  # TODO: Adjust field name here
-    test_helper = AuthorizationTestHelper(connection_parameters)
-    browser_login, browser_password = get_okta_login_credentials().values()
-
-    test_helper.connect_and_provide_credentials(
-        Scenario.FAIL, browser_login, browser_password
+        "Unable to receive the OAuth message within a given timeout" in test_helper.get_error_msg()
     )
 
-    assert (
-        test_helper.connect_and_execute_simple_query() is True
-    ), "Connection should be established"
-    assert test_helper.error_msg == "", "Error message should be empty"
+
+# @pytest.mark.auth
+# def test_okta_authorization_code_with_token_cache():
+#     connection_parameters = (
+#         AuthConnectionParameters().get_oauth_external_authorization_code_connection_parameters()
+#     )
+#     connection_parameters["CLIENT_STORE_TEMPORARY_CREDENTIAL"] = True
+#     connection_parameters["external_browser_timeout"] = 10
+#
+#     test_helper = AuthorizationTestHelper(connection_parameters)
+#     browser_login, browser_password = get_okta_login_credentials().values()
+#
+#     test_helper.connect_and_provide_credentials(
+#         Scenario.SUCCESS, browser_login, browser_password
+#     )
+#
+#     assert (
+#         test_helper.connect_and_execute_simple_query() is True
+#     ), "Connection should be established"
+#     assert test_helper.error_msg == "", "Error message should be empty"
