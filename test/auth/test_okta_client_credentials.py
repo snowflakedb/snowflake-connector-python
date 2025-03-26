@@ -49,7 +49,7 @@ def test_okta_client_credentials_mismatched_user():
 
 
 @pytest.mark.auth
-def test_external_browser_unauthorized():
+def test_okta_client_credentials_unauthorized():
     connection_parameters = (
         AuthConnectionParameters().get_oauth_external_client_credential_connection_parameters()
     )
