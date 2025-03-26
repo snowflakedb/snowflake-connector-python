@@ -822,7 +822,6 @@ class SnowflakeConnection:
     class _OAuthSecurityFeatures(NamedTuple):
         pkce_enabled: bool
         refresh_token_enabled: bool
-        token_cache_enabled: bool
 
     @property
     def oauth_security_features(self) -> _OAuthSecurityFeatures:
@@ -832,7 +831,6 @@ class SnowflakeConnection:
         features = [feat.lower() for feat in features]
         return self._OAuthSecurityFeatures(
             pkce_enabled="pkce" in features,
-            token_cache_enabled="token_cache" in features,
             refresh_token_enabled="refresh_token" in features,
         )
 
@@ -1205,7 +1203,9 @@ class SnowflakeConnection:
                     scope=self._oauth_scope,
                     pkce_enabled=features.pkce_enabled,
                     token_cache=(
-                        auth.get_token_cache() if features.token_cache_enabled else None
+                        auth.get_token_cache()
+                        if self._client_store_temporary_credential
+                        else None
                     ),
                     refresh_token_enabled=features.refresh_token_enabled,
                     external_browser_timeout=self._external_browser_timeout,
@@ -1226,7 +1226,9 @@ class SnowflakeConnection:
                     ),
                     scope=self._oauth_scope,
                     token_cache=(
-                        auth.get_token_cache() if features.token_cache_enabled else None
+                        auth.get_token_cache()
+                        if self._client_store_temporary_credential
+                        else None
                     ),
                     refresh_token_enabled=features.refresh_token_enabled,
                 )
