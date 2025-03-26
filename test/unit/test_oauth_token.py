@@ -401,7 +401,8 @@ def test_oauth_code_successful_refresh_token_flow(
         oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
         host=wiremock_client.wiremock_host,
         port=wiremock_client.wiremock_http_port,
-        oauth_security_features=("pkce", "token_cache", "refresh_token"),
+        oauth_security_features=("pkce", "refresh_token"),
+        client_store_temporary_credential=True,
     )
     assert cnx, "invalid cnx"
     cnx.close()
@@ -470,7 +471,8 @@ def test_oauth_code_expired_refresh_token_flow(
                 oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
-                oauth_security_features=("pkce", "token_cache", "refresh_token"),
+                oauth_security_features=("pkce", "refresh_token"),
+                client_store_temporary_credential=True,
             )
             assert cnx, "invalid cnx"
             cnx.close()
@@ -614,7 +616,8 @@ def test_client_creds_successful_refresh_token_flow(
         oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
         host=wiremock_client.wiremock_host,
         port=wiremock_client.wiremock_http_port,
-        oauth_security_features=("token_cache", "refresh_token"),
+        oauth_security_features=("refresh_token",),
+        client_store_temporary_credential=True,
     )
     assert cnx, "invalid cnx"
     cnx.close()
@@ -673,7 +676,8 @@ def test_client_creds_expired_refresh_token_flow(
         oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
         host=wiremock_client.wiremock_host,
         port=wiremock_client.wiremock_http_port,
-        oauth_security_features=("token_cache", "refresh_token"),
+        oauth_security_features=("refresh_token",),
+        client_store_temporary_credential=True,
     )
     assert cnx, "invalid cnx"
     cnx.close()
