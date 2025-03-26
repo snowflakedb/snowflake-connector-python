@@ -1,10 +1,10 @@
 #!/bin/bash -e
 
 set -o pipefail
+
+
 export THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export WORKSPACE=${WORKSPACE:-/tmp}
-export INTERNAL_REPO=nexus.int.snowflakecomputing.com:8086
-
 
 CI_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 if [[ -n "$JENKINS_HOME" ]]; then
