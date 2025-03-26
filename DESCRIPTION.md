@@ -9,6 +9,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v3.14.1(TBD)
   - Added support for Python 3.13.
+    - NOTE: Windows 64 support is still experimental and should not yet be used for production environments.
+  - Dropped support for Python 3.8.
   - Basic decimal floating-point type support.
   - Added handling of PAT provided in `password` field.
 

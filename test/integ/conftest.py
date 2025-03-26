@@ -186,7 +186,7 @@ def init_test_schema(db_parameters) -> Generator[None]:
 def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
     """Creates a connection using the parameters defined in parameters.py.
 
-    You can select from the different connections by supplying the appropiate
+    You can select from the different connections by supplying the appropriate
     connection_name parameter and then anything else supplied will overwrite the values
     from parameters.py.
     """

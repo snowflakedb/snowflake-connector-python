@@ -45,12 +45,6 @@ sleep 5
 lambda_result=$(curl -XPOST "http://localhost:8080/2015-03-31/functions/function/invocations" -d '{}')
 echo "Lambda result:$lambda_result"
 
-echo "PWD"
-pwd
-
-echo "1-install_package_deps.log"
-cat ../../../py313-lambda-ci/log/1-install_package_deps.log
-
 # stop all docker processes
 docker stop $(docker ps -a -q)
 
