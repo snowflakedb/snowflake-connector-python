@@ -1090,10 +1090,10 @@ class SnowflakeCursor:
                 and self._timebomb.executed
                 and "SQL execution canceled" in err
             ):
-                # we only modify the error message when the error message returned from the server
-                # indicates that the query was indeed canceled
-                # otherwise the query might have encountered error already before query cancellation if the timeout
-                # is very short
+                # Modify the error message only if the server error response indicates the query was canceled.
+                # If the error occurs before the cancellation request reaches the backend
+                # (e.g., due to a very short timeout), we retain the original error message
+                # as the query might have encountered an issue prior to cancellation.
                 err = (
                     f"SQL execution was cancelled by the client due to a timeout. "
                     f"Error message received from the server: {err}"
