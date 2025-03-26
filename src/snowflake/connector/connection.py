@@ -82,6 +82,7 @@ from .description import (
     PYTHON_VERSION,
     SNOWFLAKE_CONNECTOR_VERSION,
 )
+from .direct_file_operation_utils import FileOperationParser, StreamDownloader
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
@@ -499,6 +500,10 @@ class SnowflakeConnection:
         self._log_telemetry_imported_packages()
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
+
+        # Set up the file operation parser and stream downloader.
+        self._file_operation_parser = FileOperationParser(self)
+        self._stream_downloader = StreamDownloader(self)
 
     # Deprecated
     @property
