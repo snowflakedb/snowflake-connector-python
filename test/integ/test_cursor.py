@@ -827,6 +827,7 @@ def test_invalid_bind_data_type(conn_cnx):
             cnx.cursor().execute("select 1 from dual where 1=%s", ([1, 2, 3],))
 
 
+@pytest.mark.skipolddriver
 def test_timeout_query(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as c:
@@ -842,7 +843,7 @@ def test_timeout_query(conn_cnx):
             )
 
             with pytest.raises(errors.ProgrammingError) as err:
-                # we can not preciously control the timing to send cancel query request right after server
+                # we can not precisely control the timing to send cancel query request right after server
                 # executes the query but before returning the results back to client
                 # it depends on python scheduling and server processing speed, so we mock here
                 with mock.patch.object(
