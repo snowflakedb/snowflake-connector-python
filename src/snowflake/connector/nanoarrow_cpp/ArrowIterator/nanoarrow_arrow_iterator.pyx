@@ -207,7 +207,7 @@ cdef class PyArrowTableIterator(PyArrowIterator):
         object numpy,
         object number_to_decimal,
     ):
-        super().__init__(cursor, py_inputstream, arrow_context, use_dict_result, numpy, number_to_decimal)
+        super().__init__(cursor, py_inputstream, arrow_context, use_dict_result, numpy, number_to_decimal, False)
         if not INSTALLED_PYARROW:
             raise Error.errorhandler_make_exception(
                 ProgrammingError,
