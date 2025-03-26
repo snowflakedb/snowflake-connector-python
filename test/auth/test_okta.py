@@ -51,10 +51,9 @@ def test_okta_wrong_url():
 def test_okta_wrong_url_2():
     connection_parameters = AuthConnectionParameters().get_okta_connection_parameters()
 
-    connection_parameters["authenticator"] = "https://invalid.okta.com/"
+    connection_parameters["authenticator"] = "https://invalid.abc.com/"
     test_helper = AuthorizationTestHelper(connection_parameters)
     assert (
         not test_helper.connect_and_execute_simple_query()
     ), "Connection to Snowflake should not be established"
-    print(test_helper.get_error_msg())
-    assert "TODO" in test_helper.get_error_msg()
+    assert "The specified authenticator is not accepted by your Snowflake account configuration" in test_helper.get_error_msg()
