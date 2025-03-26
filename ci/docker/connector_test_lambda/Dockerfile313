@@ -14,6 +14,9 @@ RUN dnf -y update && \
     lapack-devel && \
     dnf clean all
 
+RUN dnf install rust cargo
+
+
 RUN dnf -y upgrade
 
 RUN chmod 777 /home/user/snowflake-connector-python
