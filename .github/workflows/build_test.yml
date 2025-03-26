@@ -133,6 +133,15 @@ jobs:
            download_name: win_amd64
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         cloud-provider: [aws, azure, gcp]
+        # TODO: When there are prebuilt wheels accessible for our dependencies (i.e. numpy)
+        # for Python 3.13 windows runs can be re-enabled. Currently, according to numpy:
+        # "Numpy built with MINGW-W64 on Windows 64 bits is experimental, and only available for
+        # testing. You are advised not to use it for production."
+        exclude:
+          - os:
+              image_name: windows-latest
+              download_name: win_amd64
+            python-version: "3.13"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
