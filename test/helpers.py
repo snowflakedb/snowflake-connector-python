@@ -124,6 +124,7 @@ def create_nanoarrow_pyarrow_iterator(input_data, use_table_iterator):
             False,
             False,
             False,
+            True,
         )
         if not use_table_iterator
         else NanoarrowPyArrowTableIterator(
