@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Basic decimal floating-point type support.
   - Added handling of PAT provided in `password` field.
   - Added experimental support for OAuth authorization code and client credentials flows.
+  - Improved error message for client-side query cancellations due to timeouts.
 
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
