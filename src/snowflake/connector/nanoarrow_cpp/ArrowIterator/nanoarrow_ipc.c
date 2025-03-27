@@ -17,18 +17,15 @@
     flatbuffers_voffset_t id__tmp, *vt__tmp;                              \
     FLATCC_ASSERT(t != 0 && "null pointer table access");                 \
     id__tmp = ID;                                                         \
-    vt__tmp =                                                             \
-        (flatbuffers_voffset_t *)((uint8_t *)(t) -                        \
-                                  __flatbuffers_soffset_read_from_pe(t)); \
+    vt__tmp = (flatbuffers_voffset_t *)((                                 \
+        uint8_t *)(t)-__flatbuffers_soffset_read_from_pe(t));             \
     if (__flatbuffers_voffset_read_from_pe(vt__tmp) >=                    \
         sizeof(vt__tmp[0]) * (id__tmp + 3u)) {                            \
       offset = __flatbuffers_voffset_read_from_pe(vt__tmp + id__tmp + 2); \
     }                                                                     \
   }
-#define __flatbuffers_field_present(ID, t)                             \
-  {                                                                    \
-    __flatbuffers_read_vt(ID, offset__tmp, t) return offset__tmp != 0; \
-  }
+#define __flatbuffers_field_present(ID, t) \
+  { __flatbuffers_read_vt(ID, offset__tmp, t) return offset__tmp != 0; }
 #define __flatbuffers_scalar_field(T, ID, t)                     \
   {                                                              \
     __flatbuffers_read_vt(ID, offset__tmp, t) if (offset__tmp) { \
@@ -225,27 +222,27 @@ static inline flatbuffers_string_t flatbuffers_string_cast_from_union(
     const flatbuffers_union_t u__tmp) {
   return flatbuffers_string_cast_from_generic(u__tmp.value);
 }
-#define __flatbuffers_define_union_field(NS, ID, N, NK, T, r)                  \
-  static inline T##_union_type_t N##_##NK##_type_get(N##_table_t t__tmp)       \
-      __##NS##union_type_field(((ID) - 1), t__tmp) static inline NS##generic_t \
-          N##_##NK##_get(N##_table_t t__tmp) __##NS##table_field(              \
-              NS##generic_t, ID, t__tmp, r) static inline T##_union_type_t     \
-              N##_##NK##_type(N##_table_t t__tmp) __##NS##union_type_field(    \
-                  ((ID) - 1), t__tmp) static inline NS##generic_t              \
-                  N##_##NK(N##_table_t t__tmp) __##NS##table_field(            \
-                      NS##generic_t, ID, t__tmp, r) static inline int          \
-                      N##_##NK##_is_present(N##_table_t t__tmp)                \
-                          __##NS##field_present(                               \
-                              ID, t__tmp) static inline T##_union_t            \
-                              N##_##NK##_union(N##_table_t t__tmp) {           \
-    T##_union_t u__tmp = {0, 0};                                               \
-    u__tmp.type = N##_##NK##_type_get(t__tmp);                                 \
-    if (u__tmp.type == 0) return u__tmp;                                       \
-    u__tmp.value = N##_##NK##_get(t__tmp);                                     \
-    return u__tmp;                                                             \
-  }                                                                            \
-  static inline NS##string_t N##_##NK##_as_string(N##_table_t t__tmp) {        \
-    return NS##string_cast_from_generic(N##_##NK##_get(t__tmp));               \
+#define __flatbuffers_define_union_field(NS, ID, N, NK, T, r)                \
+  static inline T##_union_type_t N##_##NK##_type_get(N##_table_t t__tmp)     \
+      __##NS##union_type_field(((ID)-1), t__tmp) static inline NS##generic_t \
+          N##_##NK##_get(N##_table_t t__tmp) __##NS##table_field(            \
+              NS##generic_t, ID, t__tmp, r) static inline T##_union_type_t   \
+              N##_##NK##_type(N##_table_t t__tmp) __##NS##union_type_field(  \
+                  ((ID)-1), t__tmp) static inline NS##generic_t              \
+                  N##_##NK(N##_table_t t__tmp) __##NS##table_field(          \
+                      NS##generic_t, ID, t__tmp, r) static inline int        \
+                      N##_##NK##_is_present(N##_table_t t__tmp)              \
+                          __##NS##field_present(                             \
+                              ID, t__tmp) static inline T##_union_t          \
+                              N##_##NK##_union(N##_table_t t__tmp) {         \
+    T##_union_t u__tmp = {0, 0};                                             \
+    u__tmp.type = N##_##NK##_type_get(t__tmp);                               \
+    if (u__tmp.type == 0) return u__tmp;                                     \
+    u__tmp.value = N##_##NK##_get(t__tmp);                                   \
+    return u__tmp;                                                           \
+  }                                                                          \
+  static inline NS##string_t N##_##NK##_as_string(N##_table_t t__tmp) {      \
+    return NS##string_cast_from_generic(N##_##NK##_get(t__tmp));             \
   }
 
 #define __flatbuffers_define_union_vector_ops(NS, T)                          \
@@ -706,14 +703,10 @@ static inline int __flatbuffers_string_cmp(flatbuffers_string_t v,
     T##_mutable_vec_t v__tmp = (T##_mutable_vec_t)N##_##NK##_get(t); \
     if (v__tmp) T##_vec_sort(v__tmp);                                \
   }
-#define __flatbuffers_sort_table_field(N, NK, T, t)   \
-  {                                                   \
-    T##_sort((T##_mutable_table_t)N##_##NK##_get(t)); \
-  }
-#define __flatbuffers_sort_union_field(N, NK, T, t)        \
-  {                                                        \
-    T##_sort(T##_mutable_union_cast(N##_##NK##_union(t))); \
-  }
+#define __flatbuffers_sort_table_field(N, NK, T, t) \
+  { T##_sort((T##_mutable_table_t)N##_##NK##_get(t)); }
+#define __flatbuffers_sort_union_field(N, NK, T, t) \
+  { T##_sort(T##_mutable_union_cast(N##_##NK##_union(t))); }
 #define __flatbuffers_sort_table_vector_field_elements(N, NK, T, t) \
   {                                                                 \
     T##_vec_t v__tmp = N##_##NK##_get(t);                           \
@@ -12013,9 +12006,7 @@ static inline size_t org_apache_arrow_flatbuf_Tensor_vec_len(
 #endif
 
         static const flatbuffers_voffset_t
-    __org_apache_arrow_flatbuf_TensorDim_required[] = {
-      0
-    };
+    __org_apache_arrow_flatbuf_TensorDim_required[] = {0};
 typedef flatbuffers_ref_t org_apache_arrow_flatbuf_TensorDim_ref_t;
 static org_apache_arrow_flatbuf_TensorDim_ref_t
 org_apache_arrow_flatbuf_TensorDim_clone(
@@ -24274,9 +24265,7 @@ static inline size_t org_apache_arrow_flatbuf_Tensor_vec_len(
 #endif
 
         static const flatbuffers_voffset_t
-    __org_apache_arrow_flatbuf_TensorDim_required[] = {
-      0
-    };
+    __org_apache_arrow_flatbuf_TensorDim_required[] = {0};
 typedef flatbuffers_ref_t org_apache_arrow_flatbuf_TensorDim_ref_t;
 static org_apache_arrow_flatbuf_TensorDim_ref_t
 org_apache_arrow_flatbuf_TensorDim_clone(
@@ -30678,9 +30667,7 @@ static inline size_t org_apache_arrow_flatbuf_Tensor_vec_len(
 #endif
 
         static const flatbuffers_voffset_t
-    __org_apache_arrow_flatbuf_TensorDim_required[] = {
-      0
-    };
+    __org_apache_arrow_flatbuf_TensorDim_required[] = {0};
 typedef flatbuffers_ref_t org_apache_arrow_flatbuf_TensorDim_ref_t;
 static org_apache_arrow_flatbuf_TensorDim_ref_t
 org_apache_arrow_flatbuf_TensorDim_clone(
