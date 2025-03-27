@@ -506,7 +506,7 @@ class SnowflakeConverter:
     _bytearray_to_snowflake = _bytes_to_snowflake
 
     def _bool_to_snowflake(self, value: bool) -> bool:
-        return bool(value)
+        return value
 
     def _bool__to_snowflake(self, value) -> bool:
         return bool(value)
