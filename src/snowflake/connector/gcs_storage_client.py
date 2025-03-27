@@ -420,6 +420,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         use_regional_url: str = False,
         region: str = None,
         endpoint: str = None,
+        use_virtual_endpoints: bool = False,
     ) -> GcsLocation:
         container_name = stage_location
         path = ""
@@ -434,6 +435,12 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             if endpoint.endswith("/"):
                 endpoint = endpoint[:-1]
             return GcsLocation(bucket_name=container_name, path=path, endpoint=endpoint)
+        elif use_virtual_endpoints:
+            return GcsLocation(
+                bucket_name=container_name,
+                path=path,
+                endpoint=f"https://{container_name}.storage.googleapis.com",
+            )
         elif use_regional_url:
             return GcsLocation(
                 bucket_name=container_name,
@@ -450,10 +457,14 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         use_regional_url: str = False,
         region: str = None,
         endpoint: str = None,
+        use_virtual_endpoints: bool = False,
     ) -> str:
         gcs_location = SnowflakeGCSRestClient.get_location(
             stage_location, use_regional_url, region, endpoint
         )
         full_file_path = f"{gcs_location.path}{filename}"
 
-        return f"{gcs_location.endpoint}/{gcs_location.bucket_name}/{quote(full_file_path)}"
+        if use_virtual_endpoints:
+            return f"{gcs_location.endpoint}/{quote(full_file_path)}"
+        else:
+            return f"{gcs_location.endpoint}/{gcs_location.bucket_name}/{quote(full_file_path)}"

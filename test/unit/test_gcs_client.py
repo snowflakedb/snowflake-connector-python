@@ -354,31 +354,70 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "region,return_url,use_regional_url,endpoint",
+    "region,return_url,use_regional_url,endpoint,gcs_use_virtual_endpoints",
     [
-        ("US-CENTRAL1", "https://storage.us-central1.rep.googleapis.com", True, None),
-        ("ME-CENTRAL2", "https://storage.me-central2.rep.googleapis.com", True, None),
-        ("US-CENTRAL1", "https://storage.googleapis.com", False, None),
+        (
+            "US-CENTRAL1",
+            "https://storage.us-central1.rep.googleapis.com",
+            True,
+            None,
+            False,
+        ),
+        (
+            "ME-CENTRAL2",
+            "https://storage.me-central2.rep.googleapis.com",
+            True,
+            None,
+            False,
+        ),
+        ("US-CENTRAL1", "https://storage.googleapis.com", False, None, False),
+        ("US-CENTRAL1", "https://storage.googleapis.com", False, None, False),
+        ("US-CENTRAL1", "https://location.storage.googleapis.com", False, None, True),
+        ("US-CENTRAL1", "https://location.storage.googleapis.com", True, None, True),
         (
             "US-CENTRAL1",
             "https://overriddenurl.com",
             False,
             "https://overriddenurl.com",
+            False,
         ),
         (
             "US-CENTRAL1",
             "https://overriddenurl.com",
             True,
             "https://overriddenurl.com",
+            False,
+        ),
+        (
+            "US-CENTRAL1",
+            "https://overriddenurl.com",
+            True,
+            "https://overriddenurl.com",
+            True,
+        ),
+        (
+            "US-CENTRAL1",
+            "https://overriddenurl.com",
+            False,
+            "https://overriddenurl.com",
+            False,
+        ),
+        (
+            "US-CENTRAL1",
+            "https://overriddenurl.com",
+            False,
+            "https://overriddenurl.com",
+            True,
         ),
     ],
 )
-def test_url(region, return_url, use_regional_url, endpoint):
+def test_url(region, return_url, use_regional_url, endpoint, gcs_use_virtual_endpoints):
     gcs_location = SnowflakeGCSRestClient.get_location(
         stage_location="location",
         use_regional_url=use_regional_url,
         region=region,
         endpoint=endpoint,
+        use_virtual_endpoints=gcs_use_virtual_endpoints,
     )
     assert gcs_location.endpoint == return_url
 
