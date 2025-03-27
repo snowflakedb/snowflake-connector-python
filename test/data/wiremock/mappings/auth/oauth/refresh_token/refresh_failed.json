@@ -1,0 +1,28 @@
+{
+  "requiredScenarioState": "Expired access token",
+  "newScenarioState": "Failed refresh token attempt",
+  "request": {
+    "urlPathPattern": "/oauth/token-request.*",
+    "method": "POST",
+    "headers": {
+      "Authorization": {
+        "contains": "Basic"
+      },
+      "Content-Type": {
+        "contains": "application/x-www-form-urlencoded; charset=UTF-8"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "contains": "grant_type=refresh_token&refresh_token=expired-refresh-token-123&scope=session%3Arole%3AANALYST+offline_access"
+      }
+    ]
+  },
+  "response": {
+    "status": 400,
+    "jsonBody": {
+      "error": "invalid_grant",
+      "error_description": "Unknown or invalid refresh token."
+    }
+  }
+}
