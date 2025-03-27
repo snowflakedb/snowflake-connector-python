@@ -14,6 +14,7 @@ from urllib.error import HTTPError, URLError
 
 from ..errorcode import ER_FAILED_TO_REQUEST, ER_IDP_CONNECTION_ERROR
 from ..network import OAUTH_AUTHENTICATOR
+from ..secret_detector import SecretDetector
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..vendored import urllib3
 from .by_plugin import AuthByPlugin, AuthType
@@ -268,7 +269,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             )
             logger.debug(
                 "received the following response body when exchanging refresh token: %s",
-                resp.data,
+                SecretDetector.mask_secrets(str(resp.data)),
             )
             self._reset_refresh_token()
 
@@ -343,7 +344,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             logger.error("oauth response invalid, does not contain 'access_token'")
             logger.debug(
                 "received the following response body when requesting oauth token: %s",
-                resp.data,
+                SecretDetector.mask_secrets(str(resp.data)),
             )
             self._handle_failure(
                 conn=connection,
