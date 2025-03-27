@@ -196,6 +196,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), int),
     ),  # network timeout (infinite by default)
     "socket_timeout": (None, (type(None), int)),
+    "external_browser_timeout": (120, int),
     "backoff_policy": (DEFAULT_BACKOFF_POLICY, Callable),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
@@ -321,6 +322,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # SNOW-1817982: limit iobound TPE sizes when executing PUT/GET
+    "gcs_use_virtual_endpoints": (
+        False,
+        bool,
+    ),  # use https://{bucket}.storage.googleapis.com instead of https://storage.googleapis.com/{bucket}
     "oauth_client_id": (
         None,
         (type(None), str),
@@ -352,7 +357,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         collections.abc.Iterable,  # of strings
         # SNOW-1825621: OAUTH PKCE
     ),
-    "external_browser_timeout": (120, int),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -432,6 +436,7 @@ class SnowflakeConnection:
           before the connector shuts down. Default value is false.
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
         unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
+        gcs_use_virtual_endpoints: When true, the virtual endpoint url is used, see: https://cloud.google.com/storage/docs/request-endpoints#xml-api
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -838,6 +843,14 @@ class SnowflakeConnection:
             pkce_enabled="pkce" in features,
             refresh_token_enabled="refresh_token" in features,
         )
+
+    @property
+    def gcs_use_virtual_endpoints(self) -> bool:
+        return self._gcs_use_virtual_endpoints
+
+    @gcs_use_virtual_endpoints.setter
+    def gcs_use_virtual_endpoints(self, value: bool) -> None:
+        self._gcs_use_virtual_endpoints = value
 
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""

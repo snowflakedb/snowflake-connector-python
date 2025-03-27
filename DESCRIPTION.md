@@ -12,6 +12,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added handling of PAT provided in `password` field.
   - Added experimental support for OAuth authorization code and client credentials flows.
   - Improved error message for client-side query cancellations due to timeouts.
+  - Added support of GCS regional endpoints.
+  - Added `gcs_use_virtual_endpoints` connection property that forces the usage of the virtual GCS usage. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
 
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
