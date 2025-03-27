@@ -28,7 +28,7 @@ from .sfbinaryformat import binary_to_python, binary_to_snowflake
 from .sfdatetime import sfdatetime_total_seconds_from_timedelta
 
 if TYPE_CHECKING:
-    from numpy import int64
+    from numpy import bool_, int64
 
 try:
     import numpy
@@ -505,8 +505,8 @@ class SnowflakeConverter:
 
     _bytearray_to_snowflake = _bytes_to_snowflake
 
-    def _bool_to_snowflake(self, value: bool) -> bool:
-        return value
+    def _bool_to_snowflake(self, value: bool | bool_) -> bool:
+        return bool(value)
 
     def _bool__to_snowflake(self, value) -> bool:
         return bool(value)
