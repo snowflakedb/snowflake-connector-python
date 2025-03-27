@@ -85,6 +85,7 @@ def _create_nanoarrow_iterator(
             use_dict_result,
             numpy,
             number_to_decimal,
+            check_error_on_every_column,
         )
     )
 
