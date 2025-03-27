@@ -802,6 +802,14 @@ class SnowflakeConnection:
     def gcs_use_virtual_endpoints(self, value: bool) -> None:
         self._gcs_use_virtual_endpoints = value
 
+    @property
+    def check_arrow_conversion_error_on_every_column(self) -> bool:
+        return self._check_arrow_conversion_error_on_every_column
+
+    @check_arrow_conversion_error_on_every_column.setter
+    def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
+        self._check_arrow_conversion_error_on_every_column = value
+
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")

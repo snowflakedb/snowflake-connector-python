@@ -14,6 +14,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added support of GCS regional endpoints.
   - Added `gcs_use_virtual_endpoints` connection property that forces the usage of the virtual GCS usage. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
   - Fixed a bug that caused driver to fail silently on `TO_DATE` arrow to python conversion when invalid date was followed by the correct one.
+  - Added `check_arrow_conversion_error_on_every_column` connection property that can be set to `False` to restore previous behaviour in which driver will ignore errors until it occurs in the last column. This flag's purpose is to unblock workflows that may be impacted by the bugfix and will be removed in later releases.
 
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.

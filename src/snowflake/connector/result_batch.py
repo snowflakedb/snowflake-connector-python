@@ -673,7 +673,7 @@ class ArrowResultBatch(ResultBatch):
                     self._data,
                     iter_unit,
                     (
-                        connection._check_arrow_conversion_error_on_every_column
+                        connection.check_arrow_conversion_error_on_every_column
                         if connection
                         else None
                     ),
