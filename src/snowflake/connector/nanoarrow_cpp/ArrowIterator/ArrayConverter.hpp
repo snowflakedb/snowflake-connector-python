@@ -1,7 +1,3 @@
-//
-// Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-//
-
 #ifndef PC_ARRAYCONVERTER_HPP
 #define PC_ARRAYCONVERTER_HPP
 
