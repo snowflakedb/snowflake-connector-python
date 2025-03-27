@@ -617,7 +617,7 @@ class ArrowResultBatch(ResultBatch):
         )
 
     def _from_data(
-        self, data: str, iter_unit: IterUnit, check_error_on_every_column: bool
+        self, data: str, iter_unit: IterUnit, check_error_on_every_column: bool = True
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` files from a str.
 
@@ -672,7 +672,11 @@ class ArrowResultBatch(ResultBatch):
                 return self._from_data(
                     self._data,
                     iter_unit,
-                    connection._check_arrow_conversion_error_on_every_column,
+                    (
+                        connection._check_arrow_conversion_error_on_every_column
+                        if connection
+                        else None
+                    ),
                 )
             except Exception:
                 if connection and getattr(connection, "_debug_arrow_chunk", False):
