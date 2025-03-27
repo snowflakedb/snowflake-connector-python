@@ -11,6 +11,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Basic decimal floating-point type support.
   - Added handling of PAT provided in `password` field.
   - Improved error message for client-side query cancellations due to timeouts.
+  - Added support of GCS regional endpoints.
+  - Added `gcs_use_virtual_endpoints` connection property that forces the usage of the virtual GCS usage. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
   - Fixed a bug that caused driver to fail silently on `TO_DATE` arrow to python conversion when invalid date was followed by the correct one.
 
 - v3.14.0(March 03, 2025)
