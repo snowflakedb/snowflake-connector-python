@@ -46,6 +46,7 @@ cdef extern from "CArrowChunkIterator.hpp" namespace "sf":
             char* arrow_bytes,
             int64_t arrow_bytes_size,
             PyObject* use_numpy,
+            PyObject* check_error_on_every_column,
         ) except +
 
     cdef cppclass DictCArrowChunkIterator(CArrowChunkIterator):
@@ -96,6 +97,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     # still be converted into native python types.
     # https://docs.snowflake.com/en/user-guide/sqlalchemy.html#numpy-data-type-support
     cdef object use_numpy
+    cdef object check_error_on_every_column
     cdef object number_to_decimal
     cdef object pyarrow_table
 
@@ -107,12 +109,14 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             object use_dict_result,
             object numpy,
             object number_to_decimal,
+            object check_error_on_every_column
     ):
         self.context = arrow_context
         self.cIterator = NULL
         self.use_dict_result = use_dict_result
         self.cursor = cursor
         self.use_numpy = numpy
+        self.check_error_on_every_column = check_error_on_every_column
         self.number_to_decimal = number_to_decimal
         self.pyarrow_table = None
         self.table_returned = False
@@ -135,8 +139,9 @@ cdef class PyArrowRowIterator(PyArrowIterator):
         object use_dict_result,
         object numpy,
         object number_to_decimal,
+        object check_error_on_every_column,
     ):
-        super().__init__(cursor, py_inputstream, arrow_context, use_dict_result, numpy, number_to_decimal)
+        super().__init__(cursor, py_inputstream, arrow_context, use_dict_result, numpy, number_to_decimal, check_error_on_every_column)
         if self.cIterator is not NULL:
             return
 
@@ -151,7 +156,8 @@ cdef class PyArrowRowIterator(PyArrowIterator):
             <PyObject *> self.context,
             self.arrow_bytes,
             self.arrow_bytes_size,
-            <PyObject *> self.use_numpy
+            <PyObject *> self.use_numpy,
+            <PyObject *> self.check_error_on_every_column
             )
         cdef ReturnVal cret = self.cIterator.checkInitializationStatus()
         if cret.exception:
@@ -196,8 +202,9 @@ cdef class PyArrowTableIterator(PyArrowIterator):
         object use_dict_result,
         object numpy,
         object number_to_decimal,
+        object check_error_on_every_column
     ):
-        super().__init__(cursor, py_inputstream, arrow_context, use_dict_result, numpy, number_to_decimal)
+        super().__init__(cursor, py_inputstream, arrow_context, use_dict_result, numpy, number_to_decimal, check_error_on_every_column)
         if not INSTALLED_PYARROW:
             raise Error.errorhandler_make_exception(
                 ProgrammingError,

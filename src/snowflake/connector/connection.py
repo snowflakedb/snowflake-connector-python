@@ -313,6 +313,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # use https://{bucket}.storage.googleapis.com instead of https://storage.googleapis.com/{bucket}
+    "check_arrow_conversion_error_on_every_column": (
+        True,
+        bool,
+    ),  # SNOW-XXXXX: remove the check_arrow_conversion_error_on_every_column flag
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -393,6 +397,7 @@ class SnowflakeConnection:
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
         unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
         gcs_use_virtual_endpoints: When true, the virtual endpoint url is used, see: https://cloud.google.com/storage/docs/request-endpoints#xml-api
+        check_arrow_conversion_error_on_every_column: When true, the error check after the conversion from arrow to python types will happen for every column in the row. This is a new behaviour which fixes the bug that caused the type errors to trigger silently when occurring at any place other than last column in a row. To revert the previous (faulty) behaviour, please set this flag to false.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -792,6 +797,14 @@ class SnowflakeConnection:
     @gcs_use_virtual_endpoints.setter
     def gcs_use_virtual_endpoints(self, value: bool) -> None:
         self._gcs_use_virtual_endpoints = value
+
+    @property
+    def check_arrow_conversion_error_on_every_column(self) -> bool:
+        return self._check_arrow_conversion_error_on_every_column
+
+    @check_arrow_conversion_error_on_every_column.setter
+    def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
+        self._check_arrow_conversion_error_on_every_column = value
 
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""

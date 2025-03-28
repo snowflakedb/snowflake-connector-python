@@ -426,7 +426,9 @@ def iterate_over_test_chunk(
     stream.seek(0)
     context = ArrowConverterContext()
 
-    it = NanoarrowPyArrowRowIterator(None, stream.read(), context, False, False, False)
+    it = NanoarrowPyArrowRowIterator(
+        None, stream.read(), context, False, False, False, True
+    )
 
     count = 0
     while True:
