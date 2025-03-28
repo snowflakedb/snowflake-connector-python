@@ -175,6 +175,7 @@ def create_nanoarrow_pyarrow_iterator(input_data, use_table_iterator):
             False,
             False,
             False,
+            True,
         )
         if not use_table_iterator
         else NanoarrowPyArrowTableIterator(
@@ -183,6 +184,7 @@ def create_nanoarrow_pyarrow_iterator(input_data, use_table_iterator):
             ArrowConverterContext(
                 session_parameters={"TIMEZONE": "America/Los_Angeles"}
             ),
+            False,
             False,
             False,
             False,
