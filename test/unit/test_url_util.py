@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 try:
     from snowflake.connector.url_util import (
         extract_top_level_domain_from_hostname,

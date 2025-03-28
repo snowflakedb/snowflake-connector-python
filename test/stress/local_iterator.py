@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 """
 This script is used for PyArrowIterator performance test.
 It tracks the processing time of PyArrowIterator converting data to python objects.
