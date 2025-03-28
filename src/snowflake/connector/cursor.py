@@ -648,7 +648,10 @@ class SnowflakeCursor:
 
         # If requestId is contained in statement parameters, use it to set request id. Verify here it is a valid uuid4
         # identifier.
-        if REQUEST_ID_STATEMENT_PARAM_NAME in statement_params:
+        if (
+            statement_params is not None
+            and REQUEST_ID_STATEMENT_PARAM_NAME in statement_params
+        ):
             request_id = statement_params[REQUEST_ID_STATEMENT_PARAM_NAME]
 
             if not is_uuid4(request_id):
