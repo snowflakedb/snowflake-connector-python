@@ -19,7 +19,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug that caused driver to fail silently on `TO_DATE` arrow to python conversion when invalid date was followed by the correct one.
   - Added `check_arrow_conversion_error_on_every_column` connection property that can be set to `False` to restore previous behaviour in which driver will ignore errors until it occurs in the last column. This flag's purpose is to unblock workflows that may be impacted by the bugfix and will be removed in later releases.
   - Allow to overwrite the automatically generated HTTP Request Id with a custom UUID4 as part of statement parameters (field: `requestId`).
-  
+
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
   - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
