@@ -21,3 +21,4 @@ COMPILER = platform.python_compiler()
 
 CLIENT_NAME = "PythonConnector"  # don't change!
 CLIENT_VERSION = ".".join([str(v) for v in VERSION[:3]])
+ZEXIN = '2025-03-29 16:58'
