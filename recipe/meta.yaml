@@ -52,6 +52,8 @@ test:
   requires:
     - pip
     - asn1crypto
+    - boto3>=1.0
+    - botocore>=1.0
     - certifi
     - cffi
     - charset-normalizer
