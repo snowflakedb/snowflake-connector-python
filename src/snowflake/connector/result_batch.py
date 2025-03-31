@@ -62,6 +62,7 @@ def _create_nanoarrow_iterator(
     numpy: bool,
     number_to_decimal: bool,
     row_unit: IterUnit,
+    check_error_on_every_column: bool = True,
 ):
     from .nanoarrow_arrow_iterator import PyArrowRowIterator, PyArrowTableIterator
 
@@ -74,6 +75,7 @@ def _create_nanoarrow_iterator(
             use_dict_result,
             numpy,
             number_to_decimal,
+            check_error_on_every_column,
         )
         if row_unit == IterUnit.ROW_UNIT
         else PyArrowTableIterator(
@@ -83,6 +85,7 @@ def _create_nanoarrow_iterator(
             use_dict_result,
             numpy,
             number_to_decimal,
+            check_error_on_every_column,
         )
     )
 
@@ -614,7 +617,7 @@ class ArrowResultBatch(ResultBatch):
         )
 
     def _from_data(
-        self, data: str, iter_unit: IterUnit
+        self, data: str, iter_unit: IterUnit, check_error_on_every_column: bool = True
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` files from a str.
 
@@ -631,6 +634,7 @@ class ArrowResultBatch(ResultBatch):
             self._numpy,
             self._number_to_decimal,
             iter_unit,
+            check_error_on_every_column,
         )
 
     @classmethod
@@ -665,7 +669,15 @@ class ArrowResultBatch(ResultBatch):
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
         if self._local:
             try:
-                return self._from_data(self._data, iter_unit)
+                return self._from_data(
+                    self._data,
+                    iter_unit,
+                    (
+                        connection.check_arrow_conversion_error_on_every_column
+                        if connection
+                        else None
+                    ),
+                )
             except Exception:
                 if connection and getattr(connection, "_debug_arrow_chunk", False):
                     logger.debug(f"arrow data can not be parsed: {self._data}")
