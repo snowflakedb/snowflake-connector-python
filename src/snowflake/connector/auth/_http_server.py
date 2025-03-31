@@ -191,7 +191,10 @@ class AuthHttpServer:
         )
         if raw_block:
             return raw_block.decode("utf-8").split("\r\n"), client_socket
-        client_socket.shutdown(socket.SHUT_RDWR)
+        try:
+            client_socket.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
         client_socket.close()
         return None, None
 
