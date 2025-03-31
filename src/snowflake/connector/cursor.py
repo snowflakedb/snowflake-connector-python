@@ -1815,6 +1815,7 @@ class SnowflakeCursor:
             self,
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
+            force_put_overwrite=False,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
@@ -1882,6 +1883,7 @@ class SnowflakeCursor:
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
             source_from_stream=input_stream,
+            force_put_overwrite=False,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
