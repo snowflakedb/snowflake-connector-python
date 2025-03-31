@@ -56,6 +56,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         cnx: SnowflakeConnection,
         command: str,
         unsafe_file_write: bool = False,
+        use_virtual_endpoints: bool = False,
     ) -> None:
         """Creates a client object with given stage credentials.
 
@@ -89,6 +90,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         self.endpoint: str | None = (
             None if "endPoint" not in stage_info else stage_info["endPoint"]
         )
+        self.use_virtual_endpoints: bool = use_virtual_endpoints
 
         if self.security_token:
             logger.debug(f"len(GCS_ACCESS_TOKEN): {len(self.security_token)}")
@@ -170,6 +172,8 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                         if "region" not in self.stage_info
                         else self.stage_info["region"]
                     ),
+                    self.endpoint,
+                    self.use_virtual_endpoints,
                 )
                 access_token = self.security_token
             else:
@@ -208,6 +212,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                         else self.stage_info["region"]
                     ),
                     self.endpoint,
+                    self.use_virtual_endpoints,
                 )
                 access_token = self.security_token
                 gcs_headers["Authorization"] = f"Bearer {access_token}"
@@ -372,6 +377,8 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                         if "region" not in self.stage_info
                         else self.stage_info["region"]
                     ),
+                    self.endpoint,
+                    self.use_virtual_endpoints,
                 )
                 gcs_headers = {"Authorization": f"Bearer {self.security_token}"}
                 rest_args = {"headers": gcs_headers}
