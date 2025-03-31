@@ -51,7 +51,7 @@ class TelemetryCaptureFixture:
         self,
         con: SnowflakeConnection,
         propagate: bool = True,
-    ) -> Generator[TelemetryCaptureHandler, None, None]:
+    ) -> Generator[TelemetryCaptureHandler]:
         original_telemetry = con._telemetry
         new_telemetry = TelemetryCaptureHandler(
             original_telemetry,

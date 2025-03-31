@@ -974,7 +974,7 @@ class SnowflakeConnection:
         remove_comments: bool = False,
         cursor_class: SnowflakeCursor = SnowflakeCursor,
         **kwargs,
-    ) -> Generator[SnowflakeCursor, None, None]:
+    ) -> Generator[SnowflakeCursor]:
         """Executes a stream of SQL statements. This is a non-standard convenient method."""
         split_statements_list = split_statements(
             stream, remove_comments=remove_comments
