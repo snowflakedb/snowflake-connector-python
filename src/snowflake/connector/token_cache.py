@@ -39,9 +39,9 @@ class TokenKey:
 
     def string_key(self) -> str:
         if len(self.host) == 0:
-            raise _InvalidTokenKeyError("Invalid host, host is empty")
+            raise _InvalidTokenKeyError("Invalid key, host is empty")
         if len(self.user) == 0:
-            raise _InvalidTokenKeyError("Invalid user, user is empty")
+            raise _InvalidTokenKeyError("Invalid key, user is empty")
         return f"{self.host.upper()}:{self.user.upper()}:{self.tokenType.value}"
 
     def hash_key(self) -> str:
@@ -204,11 +204,11 @@ class FileTokenCache(TokenCache):
             self.logger.debug(f"{self.cache_file()} not found")
         except json.decoder.JSONDecodeError as e:
             self.logger.warning(
-                f"Failed to decode json read from cache file {self.cache_file()}: {e}"
+                f"Failed to decode json read from cache file {self.cache_file()}: {e.__class__.__name__}"
             )
         except UnicodeError as e:
             self.logger.warning(
-                f"Failed to decode utf-8 read from cache file {self.cache_file()}: {e}"
+                f"Failed to decode utf-8 read from cache file {self.cache_file()}: {e.__class__.__name__}"
             )
         except OSError as e:
             self.logger.warning(f"Failed to read cache file {self.cache_file()}: {e}")

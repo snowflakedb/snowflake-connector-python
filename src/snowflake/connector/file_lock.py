@@ -65,5 +65,8 @@ class FileLock:
             )
 
     def __exit__(self, exc_type, exc_val, exc_tbc):
-        self.path.rmdir()
+        try:
+            self.path.rmdir()
+        except FileNotFoundError:
+            pass
         self.locked = False
