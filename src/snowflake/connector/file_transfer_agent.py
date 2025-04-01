@@ -989,6 +989,12 @@ class SnowflakeFileTransferAgent:
                     },
                 )
 
+    def _get_dst_file_name_from_source_location_for_download(self, file_name):
+        first_path_sep = file_name.find("/")
+        if first_path_sep >= 0:
+            return file_name[first_path_sep + 1:]
+        return file_name
+
     def _init_file_metadata(self) -> None:
         logger.debug(f"command type: {self._command_type}")
 
@@ -1065,12 +1071,7 @@ class SnowflakeFileTransferAgent:
             for idx, file_name in enumerate(self._src_files):
                 if not file_name:
                     continue
-                first_path_sep = file_name.find("/")
-                dst_file_name = (
-                    file_name[first_path_sep + 1 :]
-                    if first_path_sep >= 0
-                    else file_name
-                )
+                dst_file_name = self._get_dst_file_name_from_source_location_for_download(file_name)
                 url = None
                 if self._presigned_urls and idx < len(self._presigned_urls):
                     url = self._presigned_urls[idx]
