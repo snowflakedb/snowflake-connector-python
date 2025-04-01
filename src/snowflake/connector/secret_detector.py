@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 """The secret detector detects sensitive information.
 
 It masks secrets that might be leaked from two potential avenues
