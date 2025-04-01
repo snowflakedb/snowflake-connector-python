@@ -58,6 +58,8 @@ try:  # Platform-specific: Python 3
 except AttributeError:  # Platform-specific: Python 2
     from .packages.backports.weakref_finalize import weakref_finalize
 
+from ...secret_detector import SecretDetector
+
 xrange = six.moves.xrange
 
 log = logging.getLogger(__name__)
@@ -477,7 +479,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
             self.host,
             self.port,
             method,
-            url,
+            SecretDetector.mask_secrets(url),
             http_version,
             httplib_response.status,
             httplib_response.length,
@@ -488,7 +490,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
         except (HeaderParsingError, TypeError) as hpe:  # Platform-specific: Python 3
             log.warning(
                 "Failed to parse headers (url=%s): %s",
-                self._absolute_url(url),
+                self._absolute_url(SecretDetector.mask_secrets(url)),
                 hpe,
                 exc_info=True,
             )
@@ -822,7 +824,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
         if not conn:
             # Try again
             log.warning(
-                "Retrying (%r) after connection broken by '%r': %s", retries, err, url
+                "Retrying (%r) after connection broken by '%r': %s", retries, err, SecretDetector.mask_secrets(url)
             )
             return self.urlopen(
                 method,
@@ -860,7 +862,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
 
             response.drain_conn()
             retries.sleep_for_retry(response)
-            log.debug("Redirecting %s -> %s", url, redirect_location)
+            log.debug("Redirecting %s -> %s", SecretDetector.mask_secrets(url), SecretDetector.mask_secrets(redirect_location))
             return self.urlopen(
                 method,
                 redirect_location,
@@ -890,7 +892,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
 
             response.drain_conn()
             retries.sleep(response)
-            log.debug("Retry: %s", url)
+            log.debug("Retry: %s", SecretDetector.mask_secrets(url))
             return self.urlopen(
                 method,
                 url,
