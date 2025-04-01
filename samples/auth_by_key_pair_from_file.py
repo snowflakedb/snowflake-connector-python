@@ -1,7 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
 """
 This sample shows how to implement a key pair authentication plugin
 which reads private key from a file
