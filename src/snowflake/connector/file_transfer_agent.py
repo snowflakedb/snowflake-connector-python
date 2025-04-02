@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import binascii
@@ -705,6 +701,7 @@ class SnowflakeFileTransferAgent:
                 self._cursor._connection,
                 self._command,
                 unsafe_file_write=self._unsafe_file_write,
+                use_virtual_endpoints=self._gcs_use_virtual_endpoints,
             )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 

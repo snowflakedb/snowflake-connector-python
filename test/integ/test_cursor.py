@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import decimal
@@ -1791,6 +1787,7 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
                 fetch_next_fn()
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize("result_format", ("json", "arrow"))
 def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
     """Tests whether the year 10000 is out of range exception is raised as expected."""
