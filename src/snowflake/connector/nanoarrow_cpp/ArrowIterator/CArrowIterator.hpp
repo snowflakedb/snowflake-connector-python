@@ -1,7 +1,3 @@
-//
-// Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-//
-
 #ifndef PC_ARROWITERATOR_HPP
 #define PC_ARROWITERATOR_HPP
 
