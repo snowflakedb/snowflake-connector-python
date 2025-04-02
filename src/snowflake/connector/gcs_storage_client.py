@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import json
@@ -36,6 +32,7 @@ GCS_METADATA_ENCRYPTIONDATAPROP = GCS_METADATA_PREFIX + "encryptiondata"
 GCS_FILE_HEADER_DIGEST = "gcs-file-header-digest"
 GCS_FILE_HEADER_CONTENT_LENGTH = "gcs-file-header-content-length"
 GCS_FILE_HEADER_ENCRYPTION_METADATA = "gcs-file-header-encryption-metadata"
+GCS_REGION_ME_CENTRAL_2 = "me-central2"
 CONTENT_CHUNK_SIZE = 10 * kilobyte
 ACCESS_TOKEN = "GCS_ACCESS_TOKEN"
 
@@ -43,6 +40,7 @@ ACCESS_TOKEN = "GCS_ACCESS_TOKEN"
 class GcsLocation(NamedTuple):
     bucket_name: str
     path: str
+    endpoint: str = "https://storage.googleapis.com"
 
 
 class SnowflakeGCSRestClient(SnowflakeStorageClient):
@@ -53,8 +51,8 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         stage_info: dict[str, Any],
         cnx: SnowflakeConnection,
         command: str,
-        use_s3_regional_url: bool = False,
         unsafe_file_write: bool = False,
+        use_virtual_endpoints: bool = False,
     ) -> None:
         """Creates a client object with given stage credentials.
 
@@ -79,6 +77,16 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         # presigned_url in meta is for downloading
         self.presigned_url: str = meta.presigned_url or stage_info.get("presignedUrl")
         self.security_token = credentials.creds.get("GCS_ACCESS_TOKEN")
+        self.use_regional_url = (
+            "region" in stage_info
+            and stage_info["region"].lower() == GCS_REGION_ME_CENTRAL_2
+            or "useRegionalUrl" in stage_info
+            and stage_info["useRegionalUrl"]
+        )
+        self.endpoint: str | None = (
+            None if "endPoint" not in stage_info else stage_info["endPoint"]
+        )
+        self.use_virtual_endpoints: bool = use_virtual_endpoints
 
         if self.security_token:
             logger.debug(f"len(GCS_ACCESS_TOKEN): {len(self.security_token)}")
@@ -91,7 +99,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
 
     def _has_expired_presigned_url(self, response: requests.Response) -> bool:
         # Presigned urls can be generated for any xml-api operation
-        # offered by GCS. Hence the error codes expected are similar
+        # offered by GCS. Hence, the error codes expected are similar
         # to xml api.
         # https://cloud.google.com/storage/docs/xml-api/reference-status
 
@@ -152,7 +160,16 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         ):
             if not self.presigned_url:
                 upload_url = self.generate_file_url(
-                    self.stage_info["location"], meta.dst_file_name.lstrip("/")
+                    self.stage_info["location"],
+                    meta.dst_file_name.lstrip("/"),
+                    self.use_regional_url,
+                    (
+                        None
+                        if "region" not in self.stage_info
+                        else self.stage_info["region"]
+                    ),
+                    self.endpoint,
+                    self.use_virtual_endpoints,
                 )
                 access_token = self.security_token
             else:
@@ -182,7 +199,16 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             gcs_headers = {}
             if not self.presigned_url:
                 download_url = self.generate_file_url(
-                    self.stage_info["location"], meta.src_file_name.lstrip("/")
+                    self.stage_info["location"],
+                    meta.src_file_name.lstrip("/"),
+                    self.use_regional_url,
+                    (
+                        None
+                        if "region" not in self.stage_info
+                        else self.stage_info["region"]
+                    ),
+                    self.endpoint,
+                    self.use_virtual_endpoints,
                 )
                 access_token = self.security_token
                 gcs_headers["Authorization"] = f"Bearer {access_token}"
@@ -339,7 +365,16 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
 
             def generate_url_and_authenticated_headers():
                 url = self.generate_file_url(
-                    self.stage_info["location"], filename.lstrip("/")
+                    self.stage_info["location"],
+                    filename.lstrip("/"),
+                    self.use_regional_url,
+                    (
+                        None
+                        if "region" not in self.stage_info
+                        else self.stage_info["region"]
+                    ),
+                    self.endpoint,
+                    self.use_virtual_endpoints,
                 )
                 gcs_headers = {"Authorization": f"Bearer {self.security_token}"}
                 rest_args = {"headers": gcs_headers}
@@ -383,7 +418,13 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             return None
 
     @staticmethod
-    def extract_bucket_name_and_path(stage_location: str) -> GcsLocation:
+    def get_location(
+        stage_location: str,
+        use_regional_url: str = False,
+        region: str = None,
+        endpoint: str = None,
+        use_virtual_endpoints: bool = False,
+    ) -> GcsLocation:
         container_name = stage_location
         path = ""
 
@@ -393,13 +434,40 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             path = stage_location[stage_location.index("/") + 1 :]
             if path and not path.endswith("/"):
                 path += "/"
-
-        return GcsLocation(bucket_name=container_name, path=path)
+        if endpoint:
+            if endpoint.endswith("/"):
+                endpoint = endpoint[:-1]
+            return GcsLocation(bucket_name=container_name, path=path, endpoint=endpoint)
+        elif use_virtual_endpoints:
+            return GcsLocation(
+                bucket_name=container_name,
+                path=path,
+                endpoint=f"https://{container_name}.storage.googleapis.com",
+            )
+        elif use_regional_url:
+            return GcsLocation(
+                bucket_name=container_name,
+                path=path,
+                endpoint=f"https://storage.{region.lower()}.rep.googleapis.com",
+            )
+        else:
+            return GcsLocation(bucket_name=container_name, path=path)
 
     @staticmethod
-    def generate_file_url(stage_location: str, filename: str) -> str:
-        gcs_location = SnowflakeGCSRestClient.extract_bucket_name_and_path(
-            stage_location
+    def generate_file_url(
+        stage_location: str,
+        filename: str,
+        use_regional_url: str = False,
+        region: str = None,
+        endpoint: str = None,
+        use_virtual_endpoints: bool = False,
+    ) -> str:
+        gcs_location = SnowflakeGCSRestClient.get_location(
+            stage_location, use_regional_url, region, endpoint
         )
         full_file_path = f"{gcs_location.path}{filename}"
-        return f"https://storage.googleapis.com/{gcs_location.bucket_name}/{quote(full_file_path)}"
+
+        if use_virtual_endpoints:
+            return f"{gcs_location.endpoint}/{quote(full_file_path)}"
+        else:
+            return f"{gcs_location.endpoint}/{gcs_location.bucket_name}/{quote(full_file_path)}"

@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 # network
@@ -31,6 +27,8 @@ ER_NO_HOSTNAME_FOUND = 251009
 ER_JWT_RETRY_EXPIRED = 251010
 ER_CONNECTION_TIMEOUT = 251011
 ER_RETRYABLE_CODE = 251012
+ER_INVALID_WIF_SETTINGS = 251013
+ER_WIF_CREDENTIALS_NOT_FOUND = 251014
 
 # cursor
 ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT = 252001

@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 from ._auth import Auth, get_public_key_fingerprint, get_token_from_private_key
@@ -15,6 +11,7 @@ from .okta import AuthByOkta
 from .pat import AuthByPAT
 from .usrpwdmfa import AuthByUsrPwdMfa
 from .webbrowser import AuthByWebBrowser
+from .workload_identity import AuthByWorkloadIdentity
 
 FIRST_PARTY_AUTHENTICATORS = frozenset(
     (
@@ -26,6 +23,7 @@ FIRST_PARTY_AUTHENTICATORS = frozenset(
         AuthByWebBrowser,
         AuthByIdToken,
         AuthByPAT,
+        AuthByWorkloadIdentity,
         AuthNoAuth,
     )
 )
@@ -39,6 +37,7 @@ __all__ = [
     "AuthByOkta",
     "AuthByUsrPwdMfa",
     "AuthByWebBrowser",
+    "AuthByWorkloadIdentity",
     "AuthNoAuth",
     "Auth",
     "AuthType",

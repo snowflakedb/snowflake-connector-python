@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import binascii
@@ -356,6 +352,7 @@ class SnowflakeFileTransferAgent:
         use_s3_regional_url: bool = False,
         iobound_tpe_limit: int | None = None,
         unsafe_file_write: bool = False,
+        gcs_use_virtual_endpoints: bool = False,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -388,6 +385,7 @@ class SnowflakeFileTransferAgent:
         self._credentials: StorageCredential | None = None
         self._iobound_tpe_limit = iobound_tpe_limit
         self._unsafe_file_write = unsafe_file_write
+        self._gcs_use_virtual_endpoints = gcs_use_virtual_endpoints
 
     def execute(self) -> None:
         self._parse_command()
@@ -683,7 +681,6 @@ class SnowflakeFileTransferAgent:
                 self._credentials,
                 AZURE_CHUNK_SIZE,
                 self._stage_info,
-                use_s3_regional_url=self._use_s3_regional_url,
                 unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == S3_FS:
@@ -703,8 +700,8 @@ class SnowflakeFileTransferAgent:
                 self._stage_info,
                 self._cursor._connection,
                 self._command,
-                use_s3_regional_url=self._use_s3_regional_url,
                 unsafe_file_write=self._unsafe_file_write,
+                use_virtual_endpoints=self._gcs_use_virtual_endpoints,
             )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 

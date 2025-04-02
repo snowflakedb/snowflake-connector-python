@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 """This module implements the base class for authenticator classes.
@@ -56,6 +52,7 @@ class AuthType(Enum):
     OKTA = "OKTA"
     PAT = "PROGRAMMATIC_ACCESS_TOKEN'"
     NO_AUTH = "NO_AUTH"
+    WORKLOAD_IDENTITY = "WORKLOAD_IDENTITY"
 
 
 class AuthByPlugin(ABC):

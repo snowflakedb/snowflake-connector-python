@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import atexit
@@ -44,6 +40,7 @@ from .auth import (
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
+    AuthByWorkloadIdentity,
     AuthNoAuth,
 )
 from .auth.idtoken import AuthByIdToken
@@ -55,6 +52,7 @@ from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
+    ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -80,6 +78,7 @@ from .description import (
     PYTHON_VERSION,
     SNOWFLAKE_CONNECTOR_VERSION,
 )
+from .direct_file_operation_utils import FileOperationParser, StreamDownloader
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
@@ -87,6 +86,7 @@ from .errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_BACKOFF_POLICY,
     ER_INVALID_VALUE,
+    ER_INVALID_WIF_SETTINGS,
     ER_NO_ACCOUNT_NAME,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
@@ -104,6 +104,7 @@ from .network import (
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
+    WORKLOAD_IDENTITY_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
 )
@@ -112,6 +113,7 @@ from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
+from .wif_util import AttestationProvider
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -188,12 +190,14 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "private_key": (None, (type(None), bytes, str, RSAPrivateKey)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
-    "token": (None, (type(None), str)),  # OAuth/JWT/PAT Token
+    "token": (None, (type(None), str)),  # OAuth/JWT/PAT/OIDC Token
     "token_file_path": (
         None,
         (type(None), str, bytes),
-    ),  # OAuth/JWT/PAT Token file path
+    ),  # OAuth/JWT/PAT/OIDC Token file path
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
+    "workload_identity_provider": (None, (type(None), AttestationProvider)),
+    "workload_identity_entra_resource": (None, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -305,6 +309,14 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # SNOW-1817982: limit iobound TPE sizes when executing PUT/GET
+    "gcs_use_virtual_endpoints": (
+        False,
+        bool,
+    ),  # use https://{bucket}.storage.googleapis.com instead of https://storage.googleapis.com/{bucket}
+    "check_arrow_conversion_error_on_every_column": (
+        True,
+        bool,
+    ),  # SNOW-XXXXX: remove the check_arrow_conversion_error_on_every_column flag
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -384,6 +396,8 @@ class SnowflakeConnection:
           before the connector shuts down. Default value is false.
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
         unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
+        gcs_use_virtual_endpoints: When true, the virtual endpoint url is used, see: https://cloud.google.com/storage/docs/request-endpoints#xml-api
+        check_arrow_conversion_error_on_every_column: When true, the error check after the conversion from arrow to python types will happen for every column in the row. This is a new behaviour which fixes the bug that caused the type errors to trigger silently when occurring at any place other than last column in a row. To revert the previous (faulty) behaviour, please set this flag to false.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -492,6 +506,10 @@ class SnowflakeConnection:
         self._log_telemetry_imported_packages()
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
+
+        # Set up the file operation parser and stream downloader.
+        self._file_operation_parser = FileOperationParser(self)
+        self._stream_downloader = StreamDownloader(self)
 
     # Deprecated
     @property
@@ -772,6 +790,22 @@ class SnowflakeConnection:
     def unsafe_file_write(self, value: bool) -> None:
         self._unsafe_file_write = value
 
+    @property
+    def gcs_use_virtual_endpoints(self) -> bool:
+        return self._gcs_use_virtual_endpoints
+
+    @gcs_use_virtual_endpoints.setter
+    def gcs_use_virtual_endpoints(self, value: bool) -> None:
+        self._gcs_use_virtual_endpoints = value
+
+    @property
+    def check_arrow_conversion_error_on_every_column(self) -> bool:
+        return self._check_arrow_conversion_error_on_every_column
+
+    @check_arrow_conversion_error_on_every_column.setter
+    def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
+        self._check_arrow_conversion_error_on_every_column = value
+
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
@@ -940,7 +974,7 @@ class SnowflakeConnection:
         remove_comments: bool = False,
         cursor_class: SnowflakeCursor = SnowflakeCursor,
         **kwargs,
-    ) -> Generator[SnowflakeCursor, None, None]:
+    ) -> Generator[SnowflakeCursor]:
         """Executes a stream of SQL statements. This is a non-standard convenient method."""
         split_statements_list = split_statements(
             stream, remove_comments=remove_comments
@@ -1140,6 +1174,29 @@ class SnowflakeConnection:
                 if not self._token and self._password:
                     self._token = self._password
                 self.auth_class = AuthByPAT(self._token)
+            elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
+                if ENV_VAR_EXPERIMENTAL_AUTHENTICATION not in os.environ:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{WORKLOAD_IDENTITY_AUTHENTICATOR}' authenticator.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
+                # Standardize the provider enum.
+                if self._workload_identity_provider and isinstance(
+                    self._workload_identity_provider, str
+                ):
+                    self._workload_identity_provider = AttestationProvider.from_string(
+                        self._workload_identity_provider
+                    )
+                self.auth_class = AuthByWorkloadIdentity(
+                    provider=self._workload_identity_provider,
+                    token=self._token,
+                    entra_resource=self._workload_identity_entra_resource,
+                )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
                 self.auth_class = AuthByOkta(
@@ -1268,6 +1325,7 @@ class SnowflakeConnection:
                 KEY_PAIR_AUTHENTICATOR,
                 OAUTH_AUTHENTICATOR,
                 USR_PWD_MFA_AUTHENTICATOR,
+                WORKLOAD_IDENTITY_AUTHENTICATOR,
             ]:
                 self._authenticator = auth_tmp
 
@@ -1278,14 +1336,18 @@ class SnowflakeConnection:
                 self._token = f.read()
 
         # Set of authenticators allowing empty user.
-        empty_user_allowed_authenticators = {OAUTH_AUTHENTICATOR, NO_AUTH_AUTHENTICATOR}
+        empty_user_allowed_authenticators = {
+            OAUTH_AUTHENTICATOR,
+            NO_AUTH_AUTHENTICATOR,
+            WORKLOAD_IDENTITY_AUTHENTICATOR,
+        }
 
         if not (self._master_token and self._session_token):
             if (
                 not self.user
                 and self._authenticator not in empty_user_allowed_authenticators
             ):
-                # OAuth and NoAuth Authentications does not require a username
+                # Some authenticators do not require a username
                 Error.errorhandler_wrapper(
                     self,
                     None,
@@ -1296,6 +1358,25 @@ class SnowflakeConnection:
             if self._private_key or self._private_key_file:
                 self._authenticator = KEY_PAIR_AUTHENTICATOR
 
+            workload_identity_dependent_options = [
+                "workload_identity_provider",
+                "workload_identity_entra_resource",
+            ]
+            for dependent_option in workload_identity_dependent_options:
+                if (
+                    self.__getattribute__(f"_{dependent_option}") is not None
+                    and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR
+                ):
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"{dependent_option} was set but authenticator was not set to {WORKLOAD_IDENTITY_AUTHENTICATOR}",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
+
             if (
                 self.auth_class is None
                 and self._authenticator
@@ -1304,6 +1385,7 @@ class SnowflakeConnection:
                     OAUTH_AUTHENTICATOR,
                     KEY_PAIR_AUTHENTICATOR,
                     PROGRAMMATIC_ACCESS_TOKEN,
+                    WORKLOAD_IDENTITY_AUTHENTICATOR,
                 )
                 and not self._password
             ):

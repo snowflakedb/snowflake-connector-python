@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import collections
@@ -189,6 +185,7 @@ ID_TOKEN_AUTHENTICATOR = "ID_TOKEN"
 USR_PWD_MFA_AUTHENTICATOR = "USERNAME_PASSWORD_MFA"
 PROGRAMMATIC_ACCESS_TOKEN = "PROGRAMMATIC_ACCESS_TOKEN"
 NO_AUTH_AUTHENTICATOR = "NO_AUTH"
+WORKLOAD_IDENTITY_AUTHENTICATOR = "WORKLOAD_IDENTITY"
 
 
 def is_retryable_http_code(code: int) -> bool:

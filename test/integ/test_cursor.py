@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import decimal
@@ -14,6 +10,7 @@ import time
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
+from unittest.mock import MagicMock
 
 import pytest
 import pytz
@@ -724,7 +721,6 @@ def test_geometry(conn_cnx):
                 assert row in expected_data
 
 
-@pytest.mark.skip(reason="Skip until Snowflake 9.4 is released")  # TODO: SNOW-1949054
 @pytest.mark.skipolddriver
 def test_file(conn_cnx):
     """Variant including JSON object."""
@@ -827,6 +823,7 @@ def test_invalid_bind_data_type(conn_cnx):
             cnx.cursor().execute("select 1 from dual where 1=%s", ([1, 2, 3],))
 
 
+@pytest.mark.skipolddriver
 def test_timeout_query(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as c:
@@ -837,8 +834,28 @@ def test_timeout_query(conn_cnx):
                 )
             assert err.value.errno == 604, (
                 "Invalid error code"
-                and "SQL execution was cancelled by the client due to a timeout"
+                and "SQL execution was cancelled by the client due to a timeout. Error message received from the server: SQL execution canceled"
                 in err.value.msg
+            )
+
+            with pytest.raises(errors.ProgrammingError) as err:
+                # we can not precisely control the timing to send cancel query request right after server
+                # executes the query but before returning the results back to client
+                # it depends on python scheduling and server processing speed, so we mock here
+                with mock.patch.object(
+                    c, "_timebomb", new_callable=MagicMock
+                ) as mock_timerbomb:
+                    mock_timerbomb.executed = True
+                    c.execute(
+                        "select 123'",
+                        timeout=0.1,
+                    )
+            assert c._timebomb.executed is True and err.value.errno == 1003, (
+                "Invalid error code"
+                and "SQL compilation error:\nsyntax error line 1 at position 10 unexpected '''."
+                in err.value.msg
+                and "SQL execution was cancelled by the client due to a timeout"
+                not in err.value.msg
             )
 
 
@@ -1767,6 +1784,24 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
                 ),
             ):
                 fetch_next_fn()
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("result_format", ("json", "arrow"))
+def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
+    """Tests whether the year 10000 is out of range exception is raised as expected."""
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: result_format
+        }
+    ) as con:
+        with con.cursor() as cur:
+            cur.execute("select TO_DATE('10000-01-01'), TO_DATE('9999-01-01')")
+            with pytest.raises(
+                InterfaceError,
+                match="out of range",
+            ):
+                cur.fetchall()
 
 
 @pytest.mark.skipolddriver

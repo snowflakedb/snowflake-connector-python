@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -116,7 +112,7 @@ if pandas_available:
             pandas.NaT,
             pandas.Timestamp("2024-01-01 12:00:00+0000", tz="UTC"),
         ],
-        "NUMBER": [numpy.NAN, 1.0, 2.0, 3.0],
+        "NUMBER": [numpy.nan, 1.0, 2.0, 3.0],
     }
 
     PANDAS_STRUCTURED_REPRS = {
