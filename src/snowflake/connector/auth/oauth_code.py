@@ -54,7 +54,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         token_request_url: str,
         redirect_uri: str,
         scope: str,
-        pkce_enabled: bool = False,
+        pkce_enabled: bool = True,
         token_cache: TokenCache | None = None,
         refresh_token_enabled: bool = False,
         external_browser_timeout: int | None = None,

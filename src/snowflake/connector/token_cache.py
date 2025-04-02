@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import stat
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -50,16 +51,21 @@ class TokenKey:
         return m.hexdigest()
 
 
+def _warn(warning: str) -> None:
+    logger.warning(warning)
+    print("Warning: " + warning, file=sys.stderr)
+
+
 class TokenCache(ABC):
     @staticmethod
     def make() -> TokenCache:
         if IS_MACOS or IS_WINDOWS:
             if not installed_keyring:
-                logging.getLogger(__name__).debug(
+                _warn(
                     "Dependency 'keyring' is not installed, cannot cache id token. You might experience "
-                    "multiple authentication pop ups while using ExternalBrowser/OAuth/MFA Authenticator. To avoid"
-                    "this please install keyring module using the following command : pip install "
-                    "snowflake-connector-python[secure-local-storage]"
+                    "multiple authentication pop ups while using ExternalBrowser/OAuth/MFA Authenticator. To avoid "
+                    "this please install keyring module using the following command:\n"
+                    " pip install snowflake-connector-python[secure-local-storage]"
                 )
                 return NoopTokenCache()
             return KeyringTokenCache()
@@ -69,7 +75,7 @@ class TokenCache(ABC):
             if cache:
                 return cache
             else:
-                logging.getLogger(__name__).debug(
+                _warn(
                     "Failed to initialize file based token cache. You might experience "
                     "multiple authentication pop ups while using ExternalBrowser/OAuth/MFA Authenticator."
                 )
