@@ -87,7 +87,7 @@ class Auth:
 
     def __init__(self, rest) -> None:
         self._rest = rest
-        self._token_cache = TokenCache.make()
+        self._token_cache: TokenCache | None = None
 
     @staticmethod
     def base_auth_data(
@@ -475,7 +475,7 @@ class Auth:
         user: str,
         cred_type: TokenType,
     ) -> str | None:
-        return self._token_cache.retrieve(TokenKey(host, user, cred_type))
+        return self.get_token_cache().retrieve(TokenKey(host, user, cred_type))
 
     def read_temporary_credentials(
         self,
@@ -509,7 +509,7 @@ class Auth:
                 "no credential is given when try to store temporary credential"
             )
             return
-        self._token_cache.store(TokenKey(host, user, cred_type), cred)
+        self.get_token_cache().store(TokenKey(host, user, cred_type), cred)
 
     def write_temporary_credentials(
         self,
@@ -536,9 +536,11 @@ class Auth:
     def _delete_temporary_credential(
         self, host: str, user: str, cred_type: TokenType
     ) -> None:
-        self._token_cache.remove(TokenKey(host, user, cred_type))
+        self.get_token_cache().remove(TokenKey(host, user, cred_type))
 
     def get_token_cache(self) -> TokenCache:
+        if self._token_cache is None:
+            self._token_cache = TokenCache.make()
         return self._token_cache
 
 
