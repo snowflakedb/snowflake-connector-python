@@ -1281,7 +1281,7 @@ class SnowflakeCursor:
             data = ret.get("data")
             self._init_result_and_meta(data)
         else:
-            logger.info("failed")
+            logger.debug("failed")
             logger.debug(ret)
             err = ret["message"]
             code = ret.get("code", -1)
