@@ -55,21 +55,32 @@ class SecretDetector(logging.Formatter):
         flags=re.IGNORECASE,
     )
 
+    SECRET_STARRED_MASK_STR = "****"
+    SECRET_STARRED_MASK_QUOTED_STR = f"'{SECRET_STARRED_MASK_STR}'"
+
     @staticmethod
     def mask_connection_token(text: str) -> str:
-        return SecretDetector.CONNECTION_TOKEN_PATTERN.sub(r"\1\2****", text)
+        return SecretDetector.CONNECTION_TOKEN_PATTERN.sub(
+            r"\1\2" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text
+        )
 
     @staticmethod
     def mask_password(text: str) -> str:
-        return SecretDetector.PASSWORD_PATTERN.sub(r"\1\2****", text)
+        return SecretDetector.PASSWORD_PATTERN.sub(
+            r"\1\2" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text
+        )
 
     @staticmethod
     def mask_aws_keys(text: str) -> str:
-        return SecretDetector.AWS_KEY_PATTERN.sub(r"\1='****'", text)
+        return SecretDetector.AWS_KEY_PATTERN.sub(
+            r"\1=" + f"{SecretDetector.SECRET_STARRED_MASK_QUOTED_STR}", text
+        )
 
     @staticmethod
     def mask_sas_tokens(text: str) -> str:
-        return SecretDetector.SAS_TOKEN_PATTERN.sub(r"\1=****", text)
+        return SecretDetector.SAS_TOKEN_PATTERN.sub(
+            r"\1=" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text
+        )
 
     @staticmethod
     def mask_aws_tokens(text: str) -> str:
