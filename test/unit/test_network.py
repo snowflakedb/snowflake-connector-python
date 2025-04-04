@@ -3,11 +3,11 @@ import io
 import json
 import unittest.mock
 import uuid
-
-from src.snowflake.connector.network import SnowflakeRestfulJsonEncoder
 from test.unit.mock_utils import mock_connection
 
 import pytest
+
+from src.snowflake.connector.network import SnowflakeRestfulJsonEncoder
 
 try:
     from snowflake.connector import Error, InterfaceError
@@ -68,13 +68,19 @@ def test_fetch():
         with pytest.raises(InterfaceError) as exc:
             assert rest.fetch(**default_parameters, no_retry=False)
 
-@pytest.mark.parametrize("u", [uuid.uuid1(),
+
+@pytest.mark.parametrize(
+    "u",
+    [
+        uuid.uuid1(),
         uuid.uuid3(uuid.NAMESPACE_URL, "www.snowflake.com"),
-                             uuid.uuid4(),
-        uuid.uuid5(uuid.NAMESPACE_URL, "www.snowflake.com")])
+        uuid.uuid4(),
+        uuid.uuid5(uuid.NAMESPACE_URL, "www.snowflake.com"),
+    ],
+)
 def test_json_serialize_uuid(u):
-    expected = f"{{\"u\": \"{u}\", \"a\": 42}}"
+    expected = f'{{"u": "{u}", "a": 42}}'
 
-    assert(json.dumps(u, cls=SnowflakeRestfulJsonEncoder)) == f"\"{u}\""
+    assert (json.dumps(u, cls=SnowflakeRestfulJsonEncoder)) == f'"{u}"'
 
-    assert json.dumps({"u":u, "a":42}, cls=SnowflakeRestfulJsonEncoder) == expected
+    assert json.dumps({"u": u, "a": 42}, cls=SnowflakeRestfulJsonEncoder) == expected

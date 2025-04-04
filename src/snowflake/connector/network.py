@@ -352,6 +352,7 @@ class SessionPool:
         self._active_sessions.clear()
         self._idle_sessions.clear()
 
+
 # Customizable JSONEncoder to support additional types.
 class SnowflakeRestfulJsonEncoder(json.JSONEncoder):
     def default(self, o):
@@ -359,6 +360,7 @@ class SnowflakeRestfulJsonEncoder(json.JSONEncoder):
             return str(o)
 
         return super().default(o)
+
 
 class SnowflakeRestful:
     """Snowflake Restful class."""
