@@ -288,5 +288,14 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             # single request
             r = self._send_request_with_authentication_and_retry("GET", url, chunk_id)
         if r.status_code in (200, 206):
+            logger.debug(
+                f"Writing downloaded chunk. chunk_id: {chunk_id}/{self.num_of_chunks}, url: {url}"
+            )
             self.write_downloaded_chunk(chunk_id, r.content)
+            logger.debug(
+                f"Wrote downloaded chunk. chunk_id: {chunk_id}/{self.num_of_chunks}, url: {url}"
+            )
         r.raise_for_status()
+        logger.debug(
+            f"Exiting download_chunk. chunk_id: {chunk_id}/{self.num_of_chunks}, url: {url}"
+        )

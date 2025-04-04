@@ -560,8 +560,14 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 ignore_content_encoding=True,
             )
             if response.status_code == 200:
+                logger.debug(
+                    f"Writing downloaded chunk. chunk_id: {chunk_id}/{self.num_of_chunks}, url: {url}"
+                )
                 self.write_downloaded_chunk(0, response.content)
                 self.meta.result_status = ResultStatus.DOWNLOADED
+                logger.debug(
+                    f"Writing downloaded chunk. chunk_id: {chunk_id}/{self.num_of_chunks}, url: {url}"
+                )
             response.raise_for_status()
         else:
             chunk_size = self.chunk_size
@@ -577,8 +583,17 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 headers={"Range": f"bytes={_range}"},
             )
             if response.status_code in (200, 206):
+                logger.debug(
+                    f"Writing downloaded chunk. chunk_id: {chunk_id}/{self.num_of_chunks}, url: {url}"
+                )
                 self.write_downloaded_chunk(chunk_id, response.content)
+                logger.debug(
+                    f"Wrote downloaded chunk. chunk_id: {chunk_id}/{self.num_of_chunks}, url: {url}"
+                )
             response.raise_for_status()
+            logger.debug(
+                f"Exiting download_chunk. chunk_id: {chunk_id}/{self.num_of_chunks}, url: {url}"
+            )
 
     def _get_bucket_accelerate_config(self, bucket_name: str) -> bool:
         query_parts = (("accelerate", ""),)
