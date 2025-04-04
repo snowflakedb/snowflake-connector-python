@@ -15,6 +15,7 @@ from snowflake.connector.file_transfer_agent import (
     SnowflakeAzureProgressPercentage,
     SnowflakeProgressPercentage,
 )
+from snowflake.connector.secret_detector import SecretDetector
 
 try:
     from snowflake.connector.util_text import random_string
@@ -82,10 +83,13 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
                     file_stream.close()
                 csr.execute(f"drop table {table_name}")
 
+    expected_token_prefix = "sig="
+    print("\n\nPRINTING A LOT: caplog.text.splitlines()")
+    print(caplog.text.splitlines())
     for line in caplog.text.splitlines():
-        if "blob.core.windows.net" in line:
+        if "blob.core.windows.net" in line and expected_token_prefix in line:
             assert (
-                "sig=" not in line
+                expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR in line
             ), "connectionpool logger is leaking sensitive information"
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
