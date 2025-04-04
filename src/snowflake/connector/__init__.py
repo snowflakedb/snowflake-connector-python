@@ -12,7 +12,7 @@ paramstyle = "pyformat"
 import logging
 from logging import NullHandler
 
-from externals_utils.externals_setup import setup_external_libraries
+from snowflake.connector.externals_utils.externals_setup import setup_external_libraries
 
 from .connection import SnowflakeConnection
 from .cursor import DictCursor
