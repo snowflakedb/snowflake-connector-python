@@ -50,6 +50,7 @@ from .util.timeout import Timeout
 from .util.url import Url, _encode_target
 from .util.url import _normalize_host as normalize_host
 from .util.url import get_host, parse_url
+from snowflake.connector.secret_detector import SecretDetector
 
 try:  # Platform-specific: Python 3
     import weakref
@@ -471,12 +472,14 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
 
         # AppEngine doesn't have a version attr.
         http_version = getattr(conn, "_http_vsn_str", "HTTP/?")
+        log.error(f"__name__= {__name__}, logger: {log.__str__()}, handlers: {list(map(lambda h: (str(h), h.formatter._fmt, h is SecretDetector), log.handlers))}")
         log.debug(
             '%s://%s:%s "%s %s %s" %s %s',
             self.scheme,
             self.host,
             self.port,
             method,
+            # SecretDetector.mask_secrets(url),
             url,
             http_version,
             httplib_response.status,
@@ -488,6 +491,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
         except (HeaderParsingError, TypeError) as hpe:  # Platform-specific: Python 3
             log.warning(
                 "Failed to parse headers (url=%s): %s",
+                # self._absolute_url(SecretDetector.mask_secrets(url)),
                 self._absolute_url(url),
                 hpe,
                 exc_info=True,
@@ -822,6 +826,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
         if not conn:
             # Try again
             log.warning(
+                # "Retrying (%r) after connection broken by '%r': %s", retries, err, SecretDetector.mask_secrets(url)
                 "Retrying (%r) after connection broken by '%r': %s", retries, err, url
             )
             return self.urlopen(
@@ -860,6 +865,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
 
             response.drain_conn()
             retries.sleep_for_retry(response)
+            # log.debug("Redirecting %s -> %s", SecretDetector.mask_secrets(url), SecretDetector.mask_secrets(redirect_location))
             log.debug("Redirecting %s -> %s", url, redirect_location)
             return self.urlopen(
                 method,
