@@ -7,6 +7,7 @@ import logging
 import os
 import pickle
 import time
+import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
@@ -1964,3 +1965,37 @@ def test_nanoarrow_usage_deprecation():
             and "snowflake.connector.cursor.NanoarrowUsage has been deprecated"
             in str(record[2].message)
         )
+
+
+@pytest.mark.parametrize(
+    "request_id",
+    [
+        "THIS IS NOT VALID",
+        uuid.uuid1(),
+        uuid.uuid3(uuid.NAMESPACE_URL, "www.snowflake.com"),
+        uuid.uuid5(uuid.NAMESPACE_URL, "www.snowflake.com"),
+    ],
+)
+def test_custom_request_id_negative(request_id, conn_cnx):
+
+    # Ensure that invalid request_ids (non uuid4) do not compromise interface.
+    with pytest.raises(ValueError, match="requestId"):
+        with conn_cnx() as con:
+            with con.cursor() as cur:
+                cur.execute(
+                    "select seq4() as foo from table(generator(rowcount=>5))",
+                    _statement_params={"requestId": request_id},
+                )
+
+
+def test_custom_request_id(conn_cnx):
+    request_id = uuid.uuid4()
+
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute(
+                "select seq4() as foo from table(generator(rowcount=>5))",
+                _statement_params={"requestId": request_id},
+            )
+
+            assert cur._sfqid is not None, "Query must execute successfully."
