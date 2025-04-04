@@ -10,9 +10,16 @@ from __future__ import annotations
 import logging
 import os
 import re
+from typing import NamedTuple
 
 MIN_TOKEN_LEN = os.getenv("MIN_TOKEN_LEN", 32)
 MIN_PWD_LEN = os.getenv("MIN_PWD_LEN", 8)
+
+
+class MaskedMessageData(NamedTuple):
+    is_masked: bool = False
+    masked_text: str | None = None
+    error_str: str | None = None
 
 
 class SecretDetector(logging.Formatter):
@@ -81,17 +88,17 @@ class SecretDetector(logging.Formatter):
         )
 
     @staticmethod
-    def mask_secrets(text: str) -> tuple[bool, str, str | None]:
+    def mask_secrets(text: str) -> MaskedMessageData:
         """Masks any secrets. This is the method that should be used by outside classes.
 
         Args:
             text: A string which may contain a secret.
 
         Returns:
-            The masked string.
+            The masked string data in MaskedMessageData.
         """
         if text is None:
-            return (False, None, None)
+            return MaskedMessageData()
 
         masked = False
         err_str = None
@@ -119,7 +126,7 @@ class SecretDetector(logging.Formatter):
             masked_text = str(ex)
             err_str = str(ex)
 
-        return masked, masked_text, err_str
+        return MaskedMessageData(masked, masked_text, err_str)
 
     def format(self, record: logging.LogRecord) -> str:
         """Wrapper around logging module's formatter.
@@ -134,9 +141,11 @@ class SecretDetector(logging.Formatter):
         """
         try:
             unsanitized_log = super().format(record)
-            masked, sanitized_log, err_str = SecretDetector.mask_secrets(
+            masked, optional_sanitized_log, err_str = SecretDetector.mask_secrets(
                 unsanitized_log
             )
+            sanitized_log = optional_sanitized_log or ""
+
             if masked and err_str is not None:
                 sanitized_log = "{} - {} {} - {} - {} - {}".format(
                     record.asctime,
