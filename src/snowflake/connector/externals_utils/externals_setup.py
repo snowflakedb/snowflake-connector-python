@@ -10,6 +10,9 @@ URLLIB3_MODULES_NAMES = ["snowflake.connector.vendored.urllib3"]
 
 
 def add_formatters_to_urllib3_loggers():
+    # Import to make sure the logger of urllib3 was set up already and handlers were added
+    import snowflake.connector.vendored.urllib3  # noqa: F401
+
     for module_name in URLLIB3_MODULES_NAMES:
         logger = getLogger(module_name)
         logger.addFilter(SecretMaskingFilter)

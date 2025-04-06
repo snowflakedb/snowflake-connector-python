@@ -8,6 +8,7 @@ import os
 import pytest
 
 from snowflake.connector.constants import UTF8
+from snowflake.connector.secret_detector import SecretDetector
 
 try:  # pragma: no cover
     from snowflake.connector.vendored import requests
@@ -80,6 +81,13 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path):
                 csr.execute(f"drop table {table_name}")
                 if file_stream:
                     file_stream.close()
+
+    expected_token_prefix = "X-Amz-Signature="
+    for line in caplog.text.splitlines():
+        if ".amazonaws.com" in line and expected_token_prefix in line:
+            assert (
+                expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR in line
+            ), "connectionpool logger is leaking sensitive information"
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:
