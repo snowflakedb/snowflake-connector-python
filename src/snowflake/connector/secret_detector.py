@@ -139,6 +139,19 @@ class SecretDetector(logging.Formatter):
 
         return MaskedMessageData(masked, masked_text, err_str)
 
+    @staticmethod
+    def create_formatting_error_log(
+        original_record: logging.LogRecord, error_message: str
+    ) -> str:
+        return "{} - {} {} - {} - {} - {}".format(
+            original_record.asctime,
+            original_record.threadName,
+            "secret_detector.py",
+            "sanitize_log_str",
+            original_record.levelname,
+            error_message,
+        )
+
     def format(self, record: logging.LogRecord) -> str:
         """Wrapper around logging module's formatter.
 
@@ -155,24 +168,15 @@ class SecretDetector(logging.Formatter):
             masked, optional_sanitized_log, err_str = SecretDetector.mask_secrets(
                 unsanitized_log
             )
+            # Added to comply with type hints (Optional[str] is not accepted for str)
             sanitized_log = optional_sanitized_log or ""
 
             if masked and err_str is not None:
-                sanitized_log = "{} - {} {} - {} - {} - {}".format(
-                    record.asctime,
-                    record.threadName,
-                    "secret_detector.py",
-                    "sanitize_log_str",
-                    record.levelname,
-                    err_str,
-                )
+                sanitized_log = self.create_formatting_error_log(record, err_str)
+
         except Exception as ex:
-            sanitized_log = "{} - {} {} - {} - {} - {}".format(
-                record.asctime,
-                record.threadName,
-                "secret_detector.py",
-                "sanitize_log_str",
-                record.levelname,
-                "EXCEPTION - " + str(ex),
+            sanitized_log = self.create_formatting_error_log(
+                record, "EXCEPTION - " + str(ex)
             )
+
         return sanitized_log
