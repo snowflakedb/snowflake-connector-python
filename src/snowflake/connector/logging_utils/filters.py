@@ -19,6 +19,7 @@ class SecretMaskingFilter(logging.Filter):
         try:
             # Format the message as it would be
             message = record.getMessage()
+            print(f"\n\nFILTER RUN: {message} Record: {record}")
 
             # Run masking on the whole message
             masked_data = SecretDetector.mask_secrets(message)

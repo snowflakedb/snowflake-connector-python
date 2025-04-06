@@ -16,6 +16,7 @@ def add_formatters_to_urllib3_loggers():
     for module_name in URLLIB3_MODULES_NAMES:
         logger = getLogger(module_name)
         logger.addFilter(SecretMaskingFilter)
+        logger.propagate = True
 
 
 def setup_external_libraries():
