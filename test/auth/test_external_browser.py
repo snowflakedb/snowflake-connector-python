@@ -86,7 +86,7 @@ def test_external_browser_timeout():
     test_helper = AuthorizationTestHelper(connection_parameters)
     connection_parameters["external_browser_timeout"] = 1
     assert (
-        test_helper.connect_and_execute_simple_query() == False
+        not test_helper.connect_and_execute_simple_query()
     ), "Connection should not be established"
     assert (
         "Unable to receive the OAuth message within a given timeout"
