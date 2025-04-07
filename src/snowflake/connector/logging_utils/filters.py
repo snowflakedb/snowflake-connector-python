@@ -5,6 +5,27 @@ import logging
 from snowflake.connector.secret_detector import SecretDetector
 
 
+def add_filter_to_logger_and_children(
+    base_logger_name: str, filter_instance: logging.Filter
+) -> None:
+    # Ensure the base logger exists and apply filter
+    base_logger = logging.getLogger(base_logger_name)
+    if filter_instance not in base_logger.filters:
+        base_logger.addFilter(filter_instance)
+
+    all_loggers_dict = logging.root.manager.loggerDict.items()
+    child_loggers_gen = filter(
+        lambda name_logger_pair: name_logger_pair[0].startswith(base_logger_name + "."),
+        all_loggers_dict,
+    )
+    for _, obj in child_loggers_gen:
+        if not isinstance(obj, logging.Logger):
+            continue  # Skip placeholders
+
+        if filter_instance not in obj.filters:
+            obj.addFilter(filter_instance)
+
+
 class SecretMaskingFilter(logging.Filter):
     """
     Another way to do it was using SecretDetector as Formatter for handlers of the external library.
@@ -19,7 +40,6 @@ class SecretMaskingFilter(logging.Filter):
         try:
             # Format the message as it would be
             message = record.getMessage()
-            print(f"\n\nFILTER RUN: {message} Record: {record}")
 
             # Run masking on the whole message
             masked_data = SecretDetector.mask_secrets(message)

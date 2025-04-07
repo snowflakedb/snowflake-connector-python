@@ -39,7 +39,7 @@ pytestmark = pytest.mark.aws
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
-def test_put_get_with_aws(tmpdir, conn_cnx, from_path):
+def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
     """[s3] Puts and Gets a small text using AWS S3."""
     # create a data file
     fname = str(tmpdir.join("test_put_get_with_aws_token.txt.gz"))
