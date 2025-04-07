@@ -72,7 +72,8 @@ def test_okta_authorization_code_timeout():
         test_helper.connect_and_execute_simple_query() is False
     ), "Connection should not be established"
     assert (
-        "Unable to receive the OAuth message within a given timeout" in test_helper.get_error_msg()
+        "Unable to receive the OAuth message within a given timeout"
+        in test_helper.get_error_msg()
     )
 
 

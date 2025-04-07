@@ -69,11 +69,13 @@ def test_snowflake_authorization_code_timeout():
     test_helper = AuthorizationTestHelper(connection_parameters)
     connection_parameters["external_browser_timeout"] = 1
 
-
     assert (
         test_helper.connect_and_execute_simple_query() is False
     ), "Connection should not be established"
-    assert "Unable to receive the OAuth message within a given timeout" in test_helper.get_error_msg()
+    assert (
+        "Unable to receive the OAuth message within a given timeout"
+        in test_helper.get_error_msg()
+    )
 
 
 @pytest.mark.auth
@@ -98,8 +100,7 @@ def test_snowflake_authorization_code_with_token_cache():
     assert test_helper.get_error_msg() == "", "Error message should be empty"
 
 
-@pytest.mark.auth# @pytest.mark.skip(reason="SNOW-1852279 implement error handling for invalid URL")
-
+@pytest.mark.auth  # @pytest.mark.skip(reason="SNOW-1852279 implement error handling for invalid URL")
 def test_snowflake_authorization_code_without_token_cache():
     connection_parameters = (
         AuthConnectionParameters().get_snowflake_authorization_code_connection_parameters()
@@ -120,5 +121,6 @@ def test_snowflake_authorization_code_without_token_cache():
     ), "Connection should be established"
 
     assert (
-        "Unable to receive the OAuth message within a given timeout" in test_helper.get_error_msg()
+        "Unable to receive the OAuth message within a given timeout"
+        in test_helper.get_error_msg()
     ), "Error message should contain timeout"

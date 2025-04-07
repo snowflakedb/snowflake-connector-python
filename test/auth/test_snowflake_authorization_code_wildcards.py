@@ -60,6 +60,7 @@ def test_snowflake_authorization_code_wildcards_mismatched_user():
         in test_helper.get_error_msg()
     )
 
+
 @pytest.mark.auth
 def test_snowflake_authorization_code_wildcards_timeout():
     connection_parameters = (
@@ -71,7 +72,10 @@ def test_snowflake_authorization_code_wildcards_timeout():
     assert (
         test_helper.connect_and_execute_simple_query() is False
     ), "Connection should not be established"
-    assert "Unable to receive the OAuth message within a given timeout" in test_helper.get_error_msg()
+    assert (
+        "Unable to receive the OAuth message within a given timeout"
+        in test_helper.get_error_msg()
+    )
 
 
 @pytest.mark.auth
@@ -116,5 +120,6 @@ def test_snowflake_authorization_code_wildcards_without_token_cache():
         test_helper.connect_and_execute_simple_query() is False
     ), "Connection should be established"
     assert (
-        "Unable to receive the OAuth message within a given timeout" in test_helper.get_error_msg()
+        "Unable to receive the OAuth message within a given timeout"
+        in test_helper.get_error_msg()
     ), "Error message should contain timeout"

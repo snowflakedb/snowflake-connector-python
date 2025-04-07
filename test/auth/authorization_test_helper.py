@@ -52,7 +52,6 @@ def get_access_token_oauth(cfg):
         raise
 
 
-
 def clean_browser_processes():
     if os.getenv("RUN_AUTH_TESTS_MANUALLY") != "true":
         try:

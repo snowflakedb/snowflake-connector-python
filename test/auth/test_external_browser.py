@@ -57,22 +57,38 @@ def test_external_browser_mismatched_user():
         in test_helper.get_error_msg()
     )
 
+
 @pytest.mark.auth
 @pytest.mark.skip(reason="SNOW-2007651 Adding custom browser timeout")
 def test_external_browser_wrong_credentials():
-    connection_parameters = AuthConnectionParameters().get_external_browser_connection_parameters()
+    connection_parameters = (
+        AuthConnectionParameters().get_external_browser_connection_parameters()
+    )
     browser_login, browser_password = "invalidUser", "invalidPassword"
     connection_parameters["external_browser_timeout"] = 10
     test_helper = AuthorizationTestHelper(connection_parameters)
-    test_helper.connect_and_provide_credentials(Scenario.FAIL, browser_login, browser_password)
+    test_helper.connect_and_provide_credentials(
+        Scenario.FAIL, browser_login, browser_password
+    )
 
-    assert "Unable to receive the OAuth message within a given timeout" in test_helper.get_error_msg()
+    assert (
+        "Unable to receive the OAuth message within a given timeout"
+        in test_helper.get_error_msg()
+    )
+
 
 @pytest.mark.auth
 @pytest.mark.skip(reason="SNOW-2007651 Adding custom browser timeout")
 def test_external_browser_timeout():
-    connection_parameters = AuthConnectionParameters().get_external_browser_connection_parameters()
+    connection_parameters = (
+        AuthConnectionParameters().get_external_browser_connection_parameters()
+    )
     test_helper = AuthorizationTestHelper(connection_parameters)
     connection_parameters["external_browser_timeout"] = 1
-    assert test_helper.connect_and_execute_simple_query() == False, "Connection should not be established"
-    assert "Unable to receive the OAuth message within a given timeout" in test_helper.get_error_msg()
+    assert (
+        test_helper.connect_and_execute_simple_query() == False
+    ), "Connection should not be established"
+    assert (
+        "Unable to receive the OAuth message within a given timeout"
+        in test_helper.get_error_msg()
+    )

@@ -56,4 +56,7 @@ def test_okta_wrong_url_2():
     assert (
         not test_helper.connect_and_execute_simple_query()
     ), "Connection to Snowflake should not be established"
-    assert "The specified authenticator is not accepted by your Snowflake account configuration" in test_helper.get_error_msg()
+    assert (
+        "The specified authenticator is not accepted by your Snowflake account configuration"
+        in test_helper.get_error_msg()
+    )
