@@ -83,12 +83,19 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
                     file_stream.close()
                 csr.execute(f"drop table {table_name}")
 
+    connection_pool_used = False
     expected_token_prefix = "sig="
     for line in caplog.text.splitlines():
         if "blob.core.windows.net" in line and expected_token_prefix in line:
+            connection_pool_used = True
             assert (
                 expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR in line
             ), "connectionpool logger is leaking sensitive information"
+
+    # Connection pool is used on GitHub actions, but not always locally
+    assert (
+        connection_pool_used
+    ), "Connection pool was not used, so it can't be assumed that no leaks happened"
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:

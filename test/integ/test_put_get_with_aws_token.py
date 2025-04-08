@@ -82,12 +82,19 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
                 if file_stream:
                     file_stream.close()
 
+    connection_pool_used = False
     expected_token_prefix = "X-Amz-Signature="
     for line in caplog.text.splitlines():
         if ".amazonaws.com" in line and expected_token_prefix in line:
+            connection_pool_used = True
             assert (
                 expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR in line
             ), "connectionpool logger is leaking sensitive information"
+
+    # Connection pool is used on GitHub actions, but not always locally
+    assert (
+        connection_pool_used
+    ), "Connection pool was not used, so it can't be assumed that no leaks happened"
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:
