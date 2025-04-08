@@ -1917,6 +1917,7 @@ def test_nanoarrow_usage_deprecation():
         )
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "request_id",
     [
@@ -1938,6 +1939,7 @@ def test_custom_request_id_negative(request_id, conn_cnx):
                 )
 
 
+@pytest.mark.skipolddriver
 def test_custom_request_id(conn_cnx):
     request_id = uuid.uuid4()
 
