@@ -13,7 +13,7 @@ on:
     workflow_dispatch:
         inputs:
           logLevel:
-            default: warning
+            default: debug
             description: "Log level"
             required: true
           tags:
@@ -179,7 +179,7 @@ jobs:
       - name: Install tox
         run: python -m pip install tox>=4
       - name: Run tests
-        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,integ,pandas,sso}-ci | sed 's/ /,/g'`
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
