@@ -28,12 +28,31 @@ def add_filter_to_logger_and_children(
 
 class SecretMaskingFilter(logging.Filter):
     """
-    Another way to do it was using SecretDetector as Formatter for handlers of the external library.
-    The problem occurs when no handlers are assigned - all logs are propagated to the top level handlers.
-    We do not want to add SecretDetector as formatter to them (all logs) as it would incur unnecessary computational costs
-    for the code we have full control over and can add this masking explicitly.
+    A logging filter that masks sensitive information in log messages using the SecretDetector utility.
 
-    Also we cannot just add handlers at the library level, as they may be incompatible with the settings user
+    This filter is designed for scenarios where you want to avoid applying SecretDetector globally
+    as a formatter on all logging handlers. Global masking can introduce unnecessary computational
+    overhead, particularly for internal logs where secrets are already handled explicitly.
+    It would be also easy to bypass unintentionally by simply adding a neighbouring handler to a logger
+    - without SecretDetector set as a formatter.
+
+    On the other hand, libraries or submodules often do not have any handler attached, so formatting can't be
+    configured on those level, while attaching new handler for that can cause unintended log output or its duplication.
+
+    ⚠ Important:
+        - Logging filters do **not** propagate down the logger hierarchy.
+          To apply this filter across a hierarchy, use the `add_filter_to_logger_and_children` utility.
+        - This filter causes **early formatting** of the log message (`record.getMessage()`),
+          meaning `record.args` are merged into `record.msg` prematurely.
+          If you rely on `record.args`, ensure this is the **last** filter in the chain.
+
+    Notes:
+        - The filter directly modifies `record.msg` with the masked version of the message.
+        - It clears `record.args` to prevent re-formatting and ensure safe message output.
+
+    Example:
+        logger.addFilter(SecretMaskingFilter())
+        handler.addFilter(SecretMaskingFilter())
     """
 
     def filter(self, record: logging.LogRecord) -> bool:

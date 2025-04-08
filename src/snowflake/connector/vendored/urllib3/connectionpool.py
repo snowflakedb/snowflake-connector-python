@@ -471,8 +471,6 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
 
         # AppEngine doesn't have a version attr.
         http_version = getattr(conn, "_http_vsn_str", "HTTP/?")
-        log.error(f"__name__= {__name__}, logger: {log.__str__()}, filters: {log.filters}")
-        log.error(f"logger-parent: {log.parent.__str__()}, filters: {log.parent.filters}")
         log.debug(
             '%s://%s:%s "%s %s %s" %s %s',
             self.scheme,
