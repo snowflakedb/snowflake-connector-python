@@ -8,6 +8,7 @@ import os
 import pytest
 
 from snowflake.connector.constants import UTF8
+from snowflake.connector.file_transfer_agent import SnowflakeS3ProgressPercentage
 from snowflake.connector.secret_detector import SecretDetector
 
 try:  # pragma: no cover
@@ -51,8 +52,8 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
+            csr.execute(f"create or replace table {table_name} (a int, b string)")
             try:
-                csr.execute(f"create or replace table {table_name} (a int, b string)")
                 file_stream = None if from_path else open(fname, "rb")
                 put(
                     csr,
@@ -60,6 +61,8 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
                     f"%{table_name}",
                     from_path,
                     sql_options=" auto_compress=true parallel=30",
+                    _put_callback=SnowflakeS3ProgressPercentage,
+                    _get_callback=SnowflakeS3ProgressPercentage,
                     file_stream=file_stream,
                 )
                 rec = csr.fetchone()
@@ -71,14 +74,18 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
                     f"copy into @%{table_name} from {table_name} "
                     "file_format=(type=csv compression='gzip')"
                 )
-                csr.execute(f"get @%{table_name} file://{tmp_dir}")
+                csr.execute(
+                    f"get @%{table_name} file://{tmp_dir}",
+                    _put_callback=SnowflakeS3ProgressPercentage,
+                    _get_callback=SnowflakeS3ProgressPercentage,
+                )
                 rec = csr.fetchone()
                 assert rec[0].startswith("data_"), "A file downloaded by GET"
                 assert rec[1] == 36, "Return right file size"
                 assert rec[2] == "DOWNLOADED", "Return DOWNLOADED status"
                 assert rec[3] == "", "Return no error message"
             finally:
-                csr.execute(f"drop table {table_name}")
+                csr.execute(f"drop table if exists {table_name}")
                 if file_stream:
                     file_stream.close()
 

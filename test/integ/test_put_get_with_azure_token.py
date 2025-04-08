@@ -81,7 +81,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
             finally:
                 if file_stream:
                     file_stream.close()
-                csr.execute(f"drop table {table_name}")
+                csr.execute(f"drop table if exists {table_name}")
 
     connection_pool_used = False
     expected_token_prefix = "sig="
