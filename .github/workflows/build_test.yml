@@ -191,6 +191,9 @@ jobs:
           TOX_PARALLEL_NO_SPINNER: 1
           cloud_provider: [aws]
 
+      - name: Read logs
+        run: cat ./log_aws.log
+
       - name: Run tests
         run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,integ,pandas,sso}-ci | sed 's/ /,/g'`
         env:
