@@ -95,7 +95,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
     # Connection pool is used on GitHub actions, but not always locally
     assert (
         azure_request_present
-    ), "Connection pool was not used, so it can't be assumed that no leaks happened"
+    ), "Azure URL was not found in logs, so it can't be assumed that no leaks happened in it"
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:

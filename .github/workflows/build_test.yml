@@ -178,6 +178,19 @@ jobs:
         run: python -m pip install -U setuptools pip wheel
       - name: Install tox
         run: python -m pip install tox>=4
+
+      - name: Show log level
+        run: |
+          echo "Log level: ${{ github.event.inputs.logLevel }}"
+
+      - name: Run only the selected test
+        run: python -m tox run -e py39-integ
+        env:
+          PYTEST_ADDOPTS: "test/integ/test_a_put_get_with_aws_token.py::test_put_get_with_aws"
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          TOX_PARALLEL_NO_SPINNER: 1
+          cloud_provider: [aws]
+
       - name: Run tests
         run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,integ,pandas,sso}-ci | sed 's/ /,/g'`
         env:
