@@ -190,6 +190,7 @@ jobs:
           PYTHON_VERSION: ${{ matrix.python-version }}
           TOX_PARALLEL_NO_SPINNER: 1
           cloud_provider: [aws]
+        shell: bash
 
       - name: Read logs
         run: cat ./log_aws.log
