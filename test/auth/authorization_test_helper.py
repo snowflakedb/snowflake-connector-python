@@ -53,7 +53,7 @@ def get_access_token_oauth(cfg):
 
 
 def clean_browser_processes():
-    if os.getenv("RUN_AUTH_TESTS_MANUALLY") != "true":
+    if os.getenv("AUTHENTICATION_TESTS_ENV") == "docker":
         try:
             clean_browser_processes_path = "/externalbrowser/cleanBrowserProcesses.js"
             process = subprocess.run(["node", clean_browser_processes_path], timeout=15)
@@ -64,7 +64,7 @@ def clean_browser_processes():
 
 class AuthorizationTestHelper:
     def __init__(self, configuration: dict):
-        self.run_auth_test_manually = os.getenv("RUN_AUTH_TESTS_MANUALLY")
+        self.auth_test_env = os.getenv("AUTHENTICATION_TESTS_ENV")
         self.configuration = configuration
         self.error_msg = ""
 
@@ -77,14 +77,12 @@ class AuthorizationTestHelper:
         try:
             connect = threading.Thread(target=self.connect_and_execute_simple_query)
             connect.start()
-
-            if self.run_auth_test_manually != "true":
+            if self.auth_test_env == "docker":
                 browser = threading.Thread(
                     target=self._provide_credentials, args=(scenario, login, password)
                 )
                 browser.start()
                 browser.join()
-
             connect.join()
 
         except Exception as e:

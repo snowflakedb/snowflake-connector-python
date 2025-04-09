@@ -16,6 +16,7 @@ export SNOWFLAKE_AUTH_TEST_INVALID_PRIVATE_KEY_PATH=./.github/workflows/paramete
 export SF_OCSP_TEST_MODE=true
 export SF_ENABLE_EXPERIMENTAL_AUTHENTICATION=false
 export RUN_AUTH_TESTS=true
+export AUTHENTICATION_TESTS_ENV="docker"
 export PYTHONPATH=$SOURCE_ROOT
 
 python3 -m pip install --break-system-packages -e .
