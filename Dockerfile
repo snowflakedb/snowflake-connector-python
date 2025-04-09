@@ -12,7 +12,8 @@ RUN powershell -Command " \
 "
 
 # Upgrade pip and install required Python packages
-RUN cmd /S /C "pip install --upgrade pip && pip install pyarrow snowflake-connector-python"
+RUN cmd /S /C "python -m pip install --upgrade pip"
+RUN cmd /S /C "pip install pyarrow snowflake-connector-python"
     # pip install pyarrow=1.19.0 snowflake-connector-python=3.12.4
 
 # Create application directory
