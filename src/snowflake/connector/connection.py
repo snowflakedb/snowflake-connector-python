@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import atexit
 import collections.abc
+import json
 import logging
 import os
 import pathlib
@@ -1783,31 +1784,94 @@ class SnowflakeConnection:
         self,
         params: Sequence | None,
         cursor: SnowflakeCursor | None = None,
+        snowflake_type: str | None = None,
     ) -> dict[str, dict[str, str]] | None:
         if not params:
             return None
         processed_params = {}
 
-        get_type_and_binding = partial(self._get_snowflake_type_and_binding, cursor)
+        if snowflake_type == "OBJECT":
+            for idx, v in enumerate(params):
+                if isinstance(v, dict):
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "fmt": "json",
+                        "value": json.dumps(v),
+                    }
+                elif isinstance(v, str):
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "fmt": "json",
+                        "value": v,
+                    }
+                else:
+                    raise ValueError()
+        elif snowflake_type == "ARRAY":
+            for idx, v in enumerate(params):
+                if isinstance(v, (tuple, list)):
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "fmt": "json",
+                        "value": json.dumps(v),
+                    }
+                elif isinstance(v, str):
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "fmt": "json",
+                        "value": v,
+                    }
+                else:
+                    raise ValueError()
+        elif snowflake_type == "VARIANT":
+            for idx, v in enumerate(params):
+                # TODO: handle None values
+                if isinstance(v, str):
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "fmt": "json",
+                        "value": v,
+                    }
+                else:
+                    try:
+                        value = json.dumps(v)
+                    except TypeError:
+                        raise ValueError()
 
-        for idx, v in enumerate(params):
-            if isinstance(v, list):
-                snowflake_type = self.converter.snowflake_type(v)
-                all_param_data = list(map(get_type_and_binding, v))
-                first_type = all_param_data[0].type
-                # if all elements have the same snowflake type, update snowflake_type
-                if all(param_data.type == first_type for param_data in all_param_data):
-                    snowflake_type = first_type
-                processed_params[str(idx + 1)] = {
-                    "type": snowflake_type,
-                    "value": [param_data.binding for param_data in all_param_data],
-                }
-            else:
-                snowflake_type, snowflake_binding = get_type_and_binding(v)
-                processed_params[str(idx + 1)] = {
-                    "type": snowflake_type,
-                    "value": snowflake_binding,
-                }
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "fmt": "json",
+                        "value": value,
+                    }
+        else:
+            get_type_and_binding = partial(self._get_snowflake_type_and_binding, cursor)
+
+            for idx, v in enumerate(params):
+                if isinstance(v, list):
+                    inferred_snowflake_type = self.converter.snowflake_type(v)
+                    all_param_data = list(map(get_type_and_binding, v))
+                    first_type = all_param_data[0].type
+                    # if all elements have the same snowflake type, update snowflake_type
+                    if all(
+                        param_data.type == first_type for param_data in all_param_data
+                    ):
+                        inferred_snowflake_type = first_type
+                    if inferred_snowflake_type != snowflake_type:
+                        logger.warning(
+                            "Inferred snowflake type: {} is different than provided: {}. Proceeding with provided one. Omit this parameter in order to proceed with inferred type",
+                            inferred_snowflake_type,
+                            snowflake_type,
+                        )
+                        snowflake_type = inferred_snowflake_type
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "value": [param_data.binding for param_data in all_param_data],
+                    }
+                else:
+                    snowflake_type, snowflake_binding = get_type_and_binding(v)
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "value": snowflake_binding,
+                    }
         if logger.getEffectiveLevel() <= logging.DEBUG:
             for k, v in processed_params.items():
                 logger.debug("idx: %s, type: %s", k, v.get("type"))
