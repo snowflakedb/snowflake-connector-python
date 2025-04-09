@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import calendar
+import json
 import tempfile
 import time
 from datetime import date, datetime
@@ -487,6 +488,99 @@ def test_binding_insert_date(conn_cnx, db_parameters):
         ]
         # the second sql returns None because 2016-04-10 doesn't comply with the format DD-MON-YYYY
         assert cursor.execute(bind_query, bind_variables_2).fetchall() == [(None,)]
+
+
+@pytest.mark.skipolddriver
+def test_binding_variant(conn_cnx):
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        snowflake_type = "VARIANT"
+        cursor.execute(f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
+        cursor.execute(bind_query, params=(None,), snowflake_type=snowflake_type)
+        cursor.execute(bind_query, params=("",), snowflake_type=snowflake_type)
+        cursor.execute(bind_query, params=([1, 2, 3],), snowflake_type=snowflake_type)
+        cursor.execute(
+            bind_query,
+            params=("{'a': 1, 'b': 2, 'c': 3}",),
+            snowflake_type=snowflake_type,
+        )
+        cursor.execute(
+            bind_query,
+            params=({"a": 1, "b": 2, "c": 3},),
+            snowflake_type=snowflake_type,
+        )
+
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
+
+        assert results[0][0] is None
+        assert results[1][0] is None
+        assert json.loads(results[2][0]) == [1, 2, 3]
+        assert json.loads(results[3][0]) == {"a": 1, "b": 2, "c": 3}
+        assert json.loads(results[4][0]) == {"a": 1, "b": 2, "c": 3}
+
+
+@pytest.mark.skipolddriver
+def test_binding_array_without_schema(conn_cnx):
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        snowflake_type = "ARRAY"
+        cursor.execute(f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
+        cursor.execute(bind_query, params=(None,), snowflake_type=snowflake_type)
+        cursor.execute(bind_query, params=("",), snowflake_type=snowflake_type)
+        cursor.execute(bind_query, params=("[1, 2, 3]",), snowflake_type=snowflake_type)
+        cursor.execute(bind_query, params=([1, 2, 3],), snowflake_type=snowflake_type)
+        cursor.execute(
+            bind_query, params=(["a", "b", "c"],), snowflake_type=snowflake_type
+        )
+        cursor.execute(bind_query, params=([1, "2", 3],), snowflake_type=snowflake_type)
+
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
+
+        assert results[0][0] is None
+        assert results[1][0] is None
+        assert json.loads(results[2][0]) == [1, 2, 3]
+        assert json.loads(results[3][0]) == [1, 2, 3]
+        assert json.loads(results[4][0]) == ["a", "b", "c"]
+        assert json.loads(results[5][0]) == [1, "2", 3]
+
+
+@pytest.mark.skipolddriver
+def test_binding_object_without_schema(conn_cnx):
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        snowflake_type = "OBJECT"
+        cursor.execute(f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
+        cursor.execute(bind_query, params=(None,), snowflake_type=snowflake_type)
+        cursor.execute(bind_query, params=("",), snowflake_type=snowflake_type)
+        cursor.execute(
+            bind_query,
+            params=("{'a': 1, 'b': 2, 'c': 3}",),
+            snowflake_type=snowflake_type,
+        )
+        cursor.execute(
+            bind_query,
+            params=({"a": 1, "b": 2, "c": 3},),
+            snowflake_type=snowflake_type,
+        )
+
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
+
+        assert results[0][0] is None
+        assert results[1][0] is None
+        assert json.loads(results[2][0]) == {"a": 1, "b": 2, "c": 3}
+        assert json.loads(results[3][0]) == {"a": 1, "b": 2, "c": 3}
+
+
+@pytest.mark.skipolddriver
+def test_binding_of_primitives(conn_cnx):
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="numeric") as cnx, cnx.cursor() as cursor:
+        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 ARRAY); ")
+        cursor.execute(bind_query, params=([1, 2, 3],))
+
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
+
+        assert json.loads(results[0][0]) == 1
 
 
 @pytest.mark.skipolddriver
