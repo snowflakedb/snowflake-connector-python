@@ -493,6 +493,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
                 exc_info=True,
             )
 
+        log.debug(f'Returning from _make_request(). {self.scheme}://{self.host}:{self.port} "{method} {url} {http_version}')
         return httplib_response
 
     def _absolute_url(self, path):
@@ -743,10 +744,13 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
             # Everything went great!
             clean_exit = True
 
+            log.debug(f"Clean exit from urlopen(). Method: {method}, url: {url}")
+
         except EmptyPoolError:
             # Didn't get a connection from the pool, no need to clean up
             clean_exit = True
             release_this_conn = False
+            log.debug(f"EmptyPoolError from urlopen(). Method: {method}, url: {url}")
             raise
 
         except (
@@ -803,6 +807,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
 
             # Keep track of the error for the retry warning.
             err = e
+            log.debug(f"Connection failures from urlopen(). Method: {method}, url: {url}")
 
         finally:
             if not clean_exit:
@@ -907,6 +912,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
                 **response_kw
             )
 
+        log.debug(f"Exiting urlopen(). Method: {method}, url: {url}, response: {response}")
         return response
 
 

@@ -290,6 +290,7 @@ class SnowflakeStorageClient(ABC):
                     with conn._rest._use_requests_session(url) as session:
                         logger.debug(f"storage client request with session {session}")
                         response = session.request(verb, url, **rest_kwargs)
+                        logger.debug(f"storage client response: {response}")
                 else:
                     logger.debug("storage client request with new session")
                     response = rest_call(url, **rest_kwargs)
@@ -299,6 +300,7 @@ class SnowflakeStorageClient(ABC):
                 else:
                     self.last_err_is_presigned_url = False
                     if response.status_code in self.TRANSIENT_HTTP_ERR:
+                        logger.debug(f"transient http error before sleep: {response}")
                         time.sleep(
                             min(
                                 # TODO should SLEEP_UNIT come from the parent
@@ -307,10 +309,16 @@ class SnowflakeStorageClient(ABC):
                                 self.SLEEP_MAX,
                             )
                         )
+                        logger.debug(f"transient http error after sleep: {response}")
                         self.retry_count[retry_id] += 1
                     elif self._has_expired_token(response):
+                        logger.debug(f"expired token: {response}")
                         self.credentials.update(cur_timestamp)
+                        logger.debug(f"updated expired token: {response}")
                     else:
+                        logger.debug(
+                            f"Exiting storage_client._send_request_with_retry(): {response}"
+                        )
                         return response
             except self.TRANSIENT_ERRORS as e:
                 self.last_err_is_presigned_url = False
