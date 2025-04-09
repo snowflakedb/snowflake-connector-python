@@ -88,11 +88,13 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
     for line in caplog.text.splitlines():
         if "blob.core.windows.net" in line and expected_token_prefix in line:
             azure_request_present = True
+            # getattr is used to stay compatible with old driver - before SECRET_STARRED_MASK_STR was added
             assert (
-                expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR in line
+                expected_token_prefix
+                + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
+                in line
             ), "connectionpool logger is leaking sensitive information"
 
-    # Connection pool is used on GitHub actions, but not always locally
     assert (
         azure_request_present
     ), "Azure URL was not found in logs, so it can't be assumed that no leaks happened in it"
