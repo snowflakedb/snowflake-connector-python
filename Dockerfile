@@ -2,7 +2,12 @@
 FROM mcr.microsoft.com/windows/servercore:ltsc2022
 
 # Install the Microsoft Visual C++ Redistributable 2015–2022
-ADD https://aka.ms/vs/17/release/vc_redist.x64.exe C:\vc_redist.x64.exe
+RUN powershell -Command " \
+  Invoke-WebRequest -Uri https://aka.ms/vs/17/release/vc_redist.x64.exe -OutFile C:\\vc_redist.x64.exe; \
+  Start-Process -Wait -FilePath C:\\vc_redist.x64.exe -ArgumentList '/install', '/quiet', '/norestart'; \
+  Remove-Item C:\\vc_redist.x64.exe -Force \
+"
+
 RUN C:\vc_redist.x64.exe /install /quiet /norestart && del C:\vc_redist.x64.exe
 
 # Download and install Python
