@@ -1208,7 +1208,8 @@ class SnowflakeCursor:
         self._result_set = ResultSet(
             self,
             result_chunks,
-            self._connection.client_prefetch_threads,
+            self._connection.client_fetch_threads
+            or self._connection.client_prefetch_threads,
         )
         self._rownumber = -1
         self._result_state = ResultState.VALID
