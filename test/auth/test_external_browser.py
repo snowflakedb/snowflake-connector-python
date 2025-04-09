@@ -11,6 +11,7 @@ from authorization_test_helper import (
     clean_browser_processes,
 )
 
+
 @pytest.fixture(autouse=True)
 def setup_and_teardown():
     logging.info("Cleanup before test")
