@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from test.auth.authorization_parameters import (
     AuthConnectionParameters,
     get_oauth_token_parameters,

@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 import logging
 from test.auth.authorization_parameters import (
     AuthConnectionParameters,
@@ -14,7 +10,6 @@ from authorization_test_helper import (
     Scenario,
     clean_browser_processes,
 )
-
 
 @pytest.fixture(autouse=True)
 def setup_and_teardown():
