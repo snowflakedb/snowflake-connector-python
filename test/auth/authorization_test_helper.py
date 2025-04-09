@@ -1,14 +1,15 @@
+import logging.config
+import os
+import subprocess
+import threading
+import webbrowser
+from enum import Enum
+
+import requests
+
+import snowflake.connector
+
 try:
-    import logging.config
-    import os
-    import subprocess
-    import threading
-    import webbrowser
-    from enum import Enum
-
-    import requests
-
-    import snowflake.connector
     from src.snowflake.connector.vendored.requests.auth import HTTPBasicAuth
 except ImportError:
     pass

@@ -144,6 +144,6 @@ def pytest_runtest_setup(item) -> None:
         pytest.skip("cannot run this test on private Snowflake deployment")
 
     if "auth" in test_tags:
-        item.add_marker("skipolddriver")
+        # item.add_marker("skipolddriver")
         if os.getenv("RUN_AUTH_TESTS") != "true":
             pytest.skip("Skipping auth test in current environment")
