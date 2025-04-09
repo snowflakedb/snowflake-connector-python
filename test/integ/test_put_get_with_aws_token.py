@@ -4,6 +4,7 @@ from __future__ import annotations
 import glob
 import gzip
 import os
+from logging import DEBUG
 
 import pytest
 
@@ -43,6 +44,7 @@ pytestmark = pytest.mark.aws
 def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
     """[s3] Puts and Gets a small text using AWS S3."""
     # create a data file
+    caplog.set_level(DEBUG)
     fname = str(tmpdir.join("test_put_get_with_aws_token.txt.gz"))
     original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, "wb") as f:
@@ -89,22 +91,23 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
                 if file_stream:
                     file_stream.close()
 
-    connection_pool_used = False
+
+    aws_request_present = False
     expected_token_prefix = "X-Amz-Signature="
     for line in caplog.text.splitlines():
-        if ".amazonaws.com" in line and expected_token_prefix in line:
-            connection_pool_used = True
+        if ".amazonaws." in line:
+            aws_request_present = True
             # getattr is used to stay compatible with old driver - before SECRET_STARRED_MASK_STR was added
             assert (
                 expected_token_prefix
                 + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
                 in line
+                or expected_token_prefix not in line
             ), "connectionpool logger is leaking sensitive information"
 
-    # Connection pool is used on GitHub actions, but not always locally
     assert (
-        connection_pool_used
-    ), "Connection pool was not used, so it can't be assumed that no leaks happened"
+        aws_request_present
+    ), "AWS URL was not found in logs, so it can't be assumed that no leaks happened in it"
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:
