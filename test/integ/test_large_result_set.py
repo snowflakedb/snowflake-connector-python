@@ -170,8 +170,10 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, caplog):
         for line in caplog.text.splitlines():
             if expected_token_prefix in line:
                 aws_request_present = True
+                # getattr is used to stay compatible with old driver - before SECRET_STARRED_MASK_STR was added
                 assert (
-                    expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR
+                    expected_token_prefix
+                    + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
                     in line
                 ), "connectionpool logger is leaking sensitive information"
 
