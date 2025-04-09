@@ -175,7 +175,6 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, caplog):
                     in line
                 ), "connectionpool logger is leaking sensitive information"
 
-        # Connection pool is used on GitHub actions, but not always locally
         assert (
             aws_request_present
         ), "AWS URL was not found in logs, so it can't be assumed that no leaks happened in it"

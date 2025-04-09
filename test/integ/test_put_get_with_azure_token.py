@@ -92,7 +92,6 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
                 expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR in line
             ), "connectionpool logger is leaking sensitive information"
 
-    # Connection pool is used on GitHub actions, but not always locally
     assert (
         azure_request_present
     ), "Azure URL was not found in logs, so it can't be assumed that no leaks happened in it"
