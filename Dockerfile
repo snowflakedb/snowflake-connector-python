@@ -8,8 +8,6 @@ RUN powershell -Command " \
   Remove-Item C:\\vc_redist.x64.exe -Force \
 "
 
-RUN C:\vc_redist.x64.exe /install /quiet /norestart && del C:\vc_redist.x64.exe
-
 # Download and install Python
 RUN powershell -Command " \
     $ErrorActionPreference = 'Stop'; \
