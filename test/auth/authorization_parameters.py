@@ -1,8 +1,11 @@
-import os
-import sys
+try:
+    import os
+    import sys
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import serialization
+except ImportError:
+    pass
 
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 

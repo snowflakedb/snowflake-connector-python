@@ -1,14 +1,17 @@
-import logging.config
-import os
-import subprocess
-import threading
-import webbrowser
-from enum import Enum
+try:
+    import logging.config
+    import os
+    import subprocess
+    import threading
+    import webbrowser
+    from enum import Enum
 
-import requests
+    import requests
 
-import snowflake.connector
-from src.snowflake.connector.vendored.requests.auth import HTTPBasicAuth
+    import snowflake.connector
+    from src.snowflake.connector.vendored.requests.auth import HTTPBasicAuth
+except:
+    pass
 
 logger = logging.getLogger(__name__)
 
