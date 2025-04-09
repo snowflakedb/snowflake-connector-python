@@ -83,6 +83,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
                     file_stream.close()
                 csr.execute(f"drop table if exists {table_name}")
 
+
     azure_request_present = False
     expected_token_prefix = "sig="
     for line in caplog.text.splitlines():
@@ -94,6 +95,7 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
                 + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
                 in line
             ), "connectionpool logger is leaking sensitive information"
+
 
     assert (
         azure_request_present
