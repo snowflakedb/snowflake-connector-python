@@ -13,7 +13,7 @@ on:
     workflow_dispatch:
         inputs:
           logLevel:
-            default: debug
+            default: warning
             description: "Log level"
             required: true
           tags:
@@ -187,9 +187,9 @@ jobs:
           TOX_PARALLEL_NO_SPINNER: 1
           cloud_provider: [aws]
         shell: bash
-
-      - name: Read logs
-        run: cat ./log_aws.log
+#
+#      - name: Read logs
+#        run: cat ./log_aws.log
 
       - name: Run tests
         run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
