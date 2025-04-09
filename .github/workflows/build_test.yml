@@ -196,7 +196,7 @@ jobs:
         run: cat ./log_aws.log
 
       - name: Run tests
-        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,integ,pandas,sso}-ci | sed 's/ /,/g'`
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
