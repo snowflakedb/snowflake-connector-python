@@ -185,7 +185,7 @@ jobs:
           PYTEST_ADDOPTS: "test/integ/test_a_put_get_with_aws_token.py::test_put_get_with_aws"
           PYTHON_VERSION: ${{ matrix.python-version }}
           TOX_PARALLEL_NO_SPINNER: 1
-          cloud_provider: [aws]
+          cloud_provider: aws
 
 #      - name: Read logs
 #        run: cat ./log_aws.log
