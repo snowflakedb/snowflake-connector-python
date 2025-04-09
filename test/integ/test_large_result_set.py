@@ -6,9 +6,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from snowflake.connector.telemetry import TelemetryField
 from snowflake.connector.secret_detector import SecretDetector
-
+from snowflake.connector.telemetry import TelemetryField
 
 NUMBER_OF_ROWS = 50000
 
@@ -172,7 +171,8 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, caplog):
             if expected_token_prefix in line:
                 aws_request_present = True
                 assert (
-                        expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR in line
+                    expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR
+                    in line
                 ), "connectionpool logger is leaking sensitive information"
 
         # Connection pool is used on GitHub actions, but not always locally

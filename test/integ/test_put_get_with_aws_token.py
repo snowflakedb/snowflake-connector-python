@@ -97,7 +97,8 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
         if ".amazonaws." in line:
             aws_request_present = True
             assert (
-                expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR in line or expected_token_prefix not in line
+                expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR in line
+                or expected_token_prefix not in line
             ), "connectionpool logger is leaking sensitive information"
 
     # Connection pool is used on GitHub actions, but not always locally
