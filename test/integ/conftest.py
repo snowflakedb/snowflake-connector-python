@@ -169,6 +169,7 @@ def init_test_schema(db_parameters) -> Generator[None]:
         user=ret["user"],
         password=ret["password"],
         host=ret["host"],
+        role=ret["role"],
         port=ret["port"],
         database=ret["database"],
         account=ret["account"],

@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import logging
 from unittest.mock import Mock
 
 import pytest
 
 from snowflake.connector.telemetry import TelemetryField
+from snowflake.connector.secret_detector import SecretDetector
+
 
 NUMBER_OF_ROWS = 50000
 
@@ -111,8 +114,9 @@ def test_query_large_result_set_n_threads(
 
 @pytest.mark.aws
 @pytest.mark.skipolddriver
-def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
+def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, caplog):
     """[s3] Gets Large Result set."""
+    caplog.set_level(logging.DEBUG)
     sql = "select * from {name} order by 1".format(name=db_parameters["name"])
     with conn_cnx() as cnx:
         telemetry_data = []
@@ -161,3 +165,17 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
                 "Expected three telemetry logs (one per query) "
                 "for log type {}".format(field.value)
             )
+
+        aws_request_present = False
+        expected_token_prefix = "X-Amz-Signature="
+        for line in caplog.text.splitlines():
+            if expected_token_prefix in line:
+                aws_request_present = True
+                assert (
+                        expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR in line
+                ), "connectionpool logger is leaking sensitive information"
+
+        # Connection pool is used on GitHub actions, but not always locally
+        assert (
+            aws_request_present
+        ), "AWS URL was not found in logs, so it can't be assumed that no leaks happened in it"
