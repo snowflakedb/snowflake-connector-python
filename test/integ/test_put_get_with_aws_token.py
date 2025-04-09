@@ -96,8 +96,11 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
     for line in caplog.text.splitlines():
         if ".amazonaws." in line:
             aws_request_present = True
+            # getattr is used to stay compatible with old driver - before SECRET_STARRED_MASK_STR was added
             assert (
-                expected_token_prefix + SecretDetector.SECRET_STARRED_MASK_STR in line
+                expected_token_prefix
+                + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
+                in line
                 or expected_token_prefix not in line
             ), "connectionpool logger is leaking sensitive information"
 
