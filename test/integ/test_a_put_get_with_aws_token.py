@@ -4,6 +4,7 @@ from __future__ import annotations
 import glob
 import gzip
 import os
+from logging import DEBUG
 
 import pytest
 
@@ -43,6 +44,7 @@ pytestmark = pytest.mark.aws
 def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
     """[s3] Puts and Gets a small text using AWS S3."""
     # create a data file
+    caplog.set_level(DEBUG)
     fname = str(tmpdir.join("test_put_get_with_aws_token.txt.gz"))
     original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, "wb") as f:
