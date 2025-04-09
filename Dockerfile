@@ -1,6 +1,10 @@
 # Use the Microsoft Windows Server 2019 image as base
 FROM mcr.microsoft.com/windows/servercore:ltsc2022
 
+# Install the Microsoft Visual C++ Redistributable 2015–2022
+ADD https://aka.ms/vs/17/release/vc_redist.x64.exe C:\vc_redist.x64.exe
+RUN C:\vc_redist.x64.exe /install /quiet /norestart && del C:\vc_redist.x64.exe
+
 # Download and install Python
 RUN powershell -Command " \
     $ErrorActionPreference = 'Stop'; \
