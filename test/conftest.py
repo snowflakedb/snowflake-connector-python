@@ -145,5 +145,4 @@ def pytest_runtest_setup(item) -> None:
 
     if "auth" in test_tags:
         if os.getenv("RUN_AUTH_TESTS") != "true":
-            pass
-            # pytest.skip("Skipping auth test in current environment")
+            pytest.skip("Skipping auth test in current environment")
