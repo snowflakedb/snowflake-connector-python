@@ -1,5 +1,5 @@
 # Use the Microsoft Windows Server 2019 image as base
-FROM mcr.microsoft.com/windows/servercore:ltsc2019
+FROM mcr.microsoft.com/windows/servercore:ltsc2022
 
 # Download and install Python
 RUN powershell -Command " \
