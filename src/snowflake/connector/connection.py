@@ -921,16 +921,16 @@ class SnowflakeConnection:
             self._cancel_heartbeat()
 
             # close telemetry first, since it needs rest to send remaining data
-            logger.info("closed")
+            logger.debug("closed")
             self._telemetry.close(send_on_close=bool(retry and self.telemetry_enabled))
             if (
                 self._all_async_queries_finished()
                 and not self._server_session_keep_alive
             ):
-                logger.info("No async queries seem to be running, deleting session")
+                logger.debug("No async queries seem to be running, deleting session")
                 self.rest.delete_session(retry=retry)
             else:
-                logger.info(
+                logger.debug(
                     "There are {} async queries still running, not deleting session".format(
                         len(self._async_sfqids)
                     )
