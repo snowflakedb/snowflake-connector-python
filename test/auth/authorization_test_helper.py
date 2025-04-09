@@ -10,7 +10,7 @@ try:
 
     import snowflake.connector
     from src.snowflake.connector.vendored.requests.auth import HTTPBasicAuth
-except:
+except ImportError:
     pass
 
 logger = logging.getLogger(__name__)
