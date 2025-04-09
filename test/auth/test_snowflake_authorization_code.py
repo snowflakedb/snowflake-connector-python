@@ -96,7 +96,7 @@ def test_snowflake_authorization_code_with_token_cache():
     assert test_helper.get_error_msg() == "", "Error message should be empty"
 
 
-@pytest.mark.auth  # @pytest.mark.skip(reason="SNOW-1852279 implement error handling for invalid URL")
+@pytest.mark.auth
 def test_snowflake_authorization_code_without_token_cache():
     connection_parameters = (
         AuthConnectionParameters().get_snowflake_authorization_code_connection_parameters()
