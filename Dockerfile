@@ -19,11 +19,11 @@ RUN cmd /S /C "pip install pyarrow snowflake-connector-python"
 # Create application directory
 RUN powershell -Command "New-Item -Path 'C:\\myapp' -ItemType Directory -Force"
 
-# Copy application files
-COPY . C:\myapp
+# Create and switch to application directory
+WORKDIR /myapp
 
-# Set the working directory
-WORKDIR C:\myapp
+# Copy local files into the container
+COPY . .
 
-# Run the Python application
+# Run the Python app
 CMD ["python", "pyarrow-hw.py"]
