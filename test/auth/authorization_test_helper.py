@@ -4,6 +4,7 @@ import subprocess
 import threading
 import webbrowser
 from enum import Enum
+from typing import Union
 
 import requests
 
@@ -125,3 +126,17 @@ class AuthorizationTestHelper:
         except Exception as e:
             self.error_msg = e
             raise RuntimeError(e)
+
+    def connect_using_okta_connection_and_execute_custom_command(self, command: str, return_token: bool = False) -> Union[bool, str]:
+        try:
+            logger.info("Setup PAT")
+            with snowflake.connector.connect(**self.configuration) as con:
+                result = con.cursor().execute(command)
+                token = result.fetchall()[0][1]
+        except Exception as e:
+            self.error_msg = e
+            logger.error(e)
+            return False
+        if return_token:
+            return token
+        return False

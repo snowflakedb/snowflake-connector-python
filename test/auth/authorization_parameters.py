@@ -1,16 +1,14 @@
-try:
-    import os
-    import sys
+import os
+import sys
+from typing import Union
 
-    from cryptography.hazmat.backends import default_backend
-    from cryptography.hazmat.primitives import serialization
-except ImportError:
-    pass
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 
-def get_oauth_token_parameters():
+def get_oauth_token_parameters() -> dict[str, str]:
     return {
         "auth_url": _get_env_variable("SNOWFLAKE_AUTH_TEST_OAUTH_URL"),
         "oauth_client_id": _get_env_variable("SNOWFLAKE_AUTH_TEST_OAUTH_CLIENT_ID"),
@@ -30,14 +28,14 @@ def _get_env_variable(name: str, required: bool = True) -> str:
     return value
 
 
-def get_okta_login_credentials():
+def get_okta_login_credentials() -> dict[str, str]:
     return {
         "login": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_USER"),
         "password": _get_env_variable("SNOWFLAKE_AUTH_TEST_OKTA_PASS"),
     }
 
 
-def get_soteria_okta_login_credentials():
+def get_soteria_okta_login_credentials() -> dict[str, str]:
     return {
         "login": _get_env_variable("SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID"),
         "password": _get_env_variable(
@@ -56,6 +54,13 @@ def get_rsa_private_key_for_key_pair(
         return private_key
 
 
+def get_pat_setup_command_variables() -> dict[str, Union[str, bool, int]]:
+    return {
+        "snowflake_user": _get_env_variable("SNOWFLAKE_AUTH_TEST_SNOWFLAKE_USER"),
+        "role": _get_env_variable("SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_ROLE")
+    }
+
+
 class AuthConnectionParameters:
     def __init__(self):
         self.basic_config = {
@@ -69,7 +74,7 @@ class AuthConnectionParameters:
             "CLIENT_STORE_TEMPORARY_CREDENTIAL": False,
         }
 
-    def get_base_connection_parameters(self):
+    def get_base_connection_parameters(self) -> dict[str, Union[str, bool, int]]:
         return self.basic_config
 
     def get_key_pair_connection_parameters(self):
@@ -79,7 +84,7 @@ class AuthConnectionParameters:
 
         return config
 
-    def get_external_browser_connection_parameters(self):
+    def get_external_browser_connection_parameters(self) -> dict[str, str]:
         config = self.basic_config.copy()
 
         config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
@@ -87,7 +92,7 @@ class AuthConnectionParameters:
 
         return config
 
-    def get_store_id_token_connection_parameters(self):
+    def get_store_id_token_connection_parameters(self) -> dict[str, str]:
         config = self.get_external_browser_connection_parameters()
 
         config["CLIENT_STORE_TEMPORARY_CREDENTIAL"] = _get_env_variable(
@@ -96,7 +101,7 @@ class AuthConnectionParameters:
 
         return config
 
-    def get_okta_connection_parameters(self):
+    def get_okta_connection_parameters(self) -> dict[str, str]:
         config = self.basic_config.copy()
 
         config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
@@ -105,7 +110,7 @@ class AuthConnectionParameters:
 
         return config
 
-    def get_oauth_connection_parameters(self, token: str):
+    def get_oauth_connection_parameters(self, token: str) -> dict[str, str]:
         config = self.basic_config.copy()
 
         config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
@@ -113,7 +118,7 @@ class AuthConnectionParameters:
         config["token"] = token
         return config
 
-    def get_oauth_external_authorization_code_connection_parameters(self):
+    def get_oauth_external_authorization_code_connection_parameters(self) -> dict[str, Union[str, bool, int]]:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
@@ -136,7 +141,7 @@ class AuthConnectionParameters:
 
         return config
 
-    def get_snowflake_authorization_code_connection_parameters(self):
+    def get_snowflake_authorization_code_connection_parameters(self) -> dict[str, Union[str, bool, int]]:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
@@ -158,7 +163,7 @@ class AuthConnectionParameters:
 
         return config
 
-    def get_snowflake_wildcard_external_authorization_code_connection_parameters(self):
+    def get_snowflake_wildcard_external_authorization_code_connection_parameters(self) -> dict[str, Union[str, bool, int]]:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
@@ -177,7 +182,7 @@ class AuthConnectionParameters:
 
         return config
 
-    def get_oauth_external_client_credential_connection_parameters(self):
+    def get_oauth_external_client_credential_connection_parameters(self) -> dict[str, str]:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_CLIENT_CREDENTIALS"
@@ -193,5 +198,13 @@ class AuthConnectionParameters:
         config["user"] = _get_env_variable(
             "SNOWFLAKE_AUTH_TEST_EXTERNAL_OAUTH_OKTA_CLIENT_ID"
         )
+
+        return config
+
+    def get_pat_connection_parameters(self) -> dict[str, str]:
+        config = self.basic_config.copy()
+
+        config["authenticator"] = "PROGRAMMATIC_ACCESS_TOKEN"
+        config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
 
         return config
