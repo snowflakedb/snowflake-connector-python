@@ -1,4 +1,6 @@
 from datetime import datetime
+from typing import Union
+
 from test.auth.authorization_parameters import (
     AuthConnectionParameters,
     get_pat_setup_command_variables,
@@ -7,31 +9,32 @@ from test.auth.authorization_parameters import (
 import pytest
 from authorization_test_helper import AuthorizationTestHelper
 
-pat_command_variables = get_pat_setup_command_variables()
-
 
 @pytest.mark.auth
 def test_authenticate_with_pat_successful():
+    pat_command_variables = get_pat_setup_command_variables()
     connection_parameters = AuthConnectionParameters().get_pat_connection_parameters()
     test_helper = AuthorizationTestHelper(connection_parameters)
     try:
-        connection_parameters["token"] = get_pat_token()
+        pat_command_variables["snowflake_user"], connection_parameters["token"] = get_pat_token(pat_command_variables).popitem()
         test_helper.connect_and_execute_simple_query()
     finally:
-        remove_pat_token()
+        remove_pat_token(pat_command_variables)
     assert test_helper.get_error_msg() == "", "Error message should be empty"
 
 
 @pytest.mark.auth
 def test_authenticate_with_pat_mismatched_user():
+    pat_command_variables = get_pat_setup_command_variables()
     connection_parameters = AuthConnectionParameters().get_pat_connection_parameters()
     connection_parameters["user"] = "differentUsername"
     test_helper = AuthorizationTestHelper(connection_parameters)
     try:
-        connection_parameters["token"] = get_pat_token()
+
+        pat_command_variables["snowflake_user"], connection_parameters["token"] = get_pat_token(pat_command_variables).popitem()
         test_helper.connect_and_execute_simple_query()
     finally:
-        remove_pat_token()
+        remove_pat_token(pat_command_variables)
 
     assert "Programmatic access token is invalid" in test_helper.get_error_msg()
 
@@ -45,7 +48,7 @@ def test_authenticate_with_pat_invalid_token():
     assert "Programmatic access token is invalid" in test_helper.get_error_msg()
 
 
-def get_pat_token():
+def get_pat_token(pat_command_variables) -> dict[str, Union[str, bool]]:
     okta_connection_parameters = (
         AuthConnectionParameters().get_okta_connection_parameters()
     )
@@ -60,10 +63,10 @@ def get_pat_token():
     token = test_helper.connect_using_okta_connection_and_execute_custom_command(
         command, True
     )
-    return token
+    return {pat_name : token}
 
 
-def remove_pat_token():
+def remove_pat_token(pat_command_variables: dict[str, Union[str, bool]]) -> None:
     okta_connection_parameters = (
         AuthConnectionParameters().get_okta_connection_parameters()
     )
