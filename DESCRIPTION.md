@@ -21,6 +21,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added `check_arrow_conversion_error_on_every_column` connection property that can be set to `False` to restore previous behaviour in which driver will ignore errors until it occurs in the last column. This flag's purpose is to unblock workflows that may be impacted by the bugfix and will be removed in later releases.
   - Lower log levels from info to debug for some of the messages to make the output easier to follow.
   - Allow the connector to inherit a UUID4 generated upstream, provided in statement parameters (field: `requestId`), rather than automatically generate a UUID4 to use for the HTTP Request ID.
+  - Fix expired S3 credentials update and increment retry when expired credentials are found.
 
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
