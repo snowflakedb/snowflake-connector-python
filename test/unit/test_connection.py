@@ -678,7 +678,7 @@ def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "")
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = snowflake.connector.connect(connections_file_path=connections_file)
         assert conn.auth_class.provider == AttestationProvider.OIDC
