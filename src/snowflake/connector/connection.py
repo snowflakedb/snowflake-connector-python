@@ -2235,13 +2235,13 @@ class SnowflakeConnection:
             return False
 
     def _check_experimental_authentication_flag(self) -> None:
-        if ENV_VAR_EXPERIMENTAL_AUTHENTICATION not in os.environ:
+        if os.getenv(ENV_VAR_EXPERIMENTAL_AUTHENTICATION, "false").lower() != "true":
             Error.errorhandler_wrapper(
                 self,
                 None,
                 ProgrammingError,
                 {
-                    "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{self._authenticator}' authenticator.",
+                    "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable true to use the '{self._authenticator}' authenticator.",
                     "errno": ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
                 },
             )

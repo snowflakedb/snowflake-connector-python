@@ -706,3 +706,24 @@ def test_auth_is_experimental(
             account="testAccount",
             authenticator=authenticator,
         )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "authenticator", ["OAUTH_AUTHORIZATION_CODE", "OAUTH_CLIENT_CREDENTIALS"]
+)
+def test_auth_experimental_when_variable_set_to_false(
+    authenticator,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "false")
+    with pytest.raises(
+        snowflake.connector.ProgrammingError,
+        match=r"SF_ENABLE_EXPERIMENTAL_AUTHENTICATION",
+    ):
+        snowflake.connector.connect(
+            user="testUser",
+            account="testAccount",
+            authenticator="OAUTH_CLIENT_CREDENTIALS",
+        )
