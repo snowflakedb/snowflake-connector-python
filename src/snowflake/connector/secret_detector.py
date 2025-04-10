@@ -10,9 +10,16 @@ from __future__ import annotations
 import logging
 import os
 import re
+from typing import NamedTuple
 
 MIN_TOKEN_LEN = os.getenv("MIN_TOKEN_LEN", 32)
 MIN_PWD_LEN = os.getenv("MIN_PWD_LEN", 8)
+
+
+class MaskedMessageData(NamedTuple):
+    is_masked: bool = False
+    masked_text: str | None = None
+    error_str: str | None = None
 
 
 class SecretDetector(logging.Formatter):
@@ -48,21 +55,32 @@ class SecretDetector(logging.Formatter):
         flags=re.IGNORECASE,
     )
 
+    SECRET_STARRED_MASK_STR = "****"
+    SECRET_STARRED_MASK_QUOTED_STR = f"'{SECRET_STARRED_MASK_STR}'"
+
     @staticmethod
     def mask_connection_token(text: str) -> str:
-        return SecretDetector.CONNECTION_TOKEN_PATTERN.sub(r"\1\2****", text)
+        return SecretDetector.CONNECTION_TOKEN_PATTERN.sub(
+            r"\1\2" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text
+        )
 
     @staticmethod
     def mask_password(text: str) -> str:
-        return SecretDetector.PASSWORD_PATTERN.sub(r"\1\2****", text)
+        return SecretDetector.PASSWORD_PATTERN.sub(
+            r"\1\2" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text
+        )
 
     @staticmethod
     def mask_aws_keys(text: str) -> str:
-        return SecretDetector.AWS_KEY_PATTERN.sub(r"\1='****'", text)
+        return SecretDetector.AWS_KEY_PATTERN.sub(
+            r"\1=" + f"{SecretDetector.SECRET_STARRED_MASK_QUOTED_STR}", text
+        )
 
     @staticmethod
     def mask_sas_tokens(text: str) -> str:
-        return SecretDetector.SAS_TOKEN_PATTERN.sub(r"\1=****", text)
+        return SecretDetector.SAS_TOKEN_PATTERN.sub(
+            r"\1=" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text
+        )
 
     @staticmethod
     def mask_aws_tokens(text: str) -> str:
@@ -81,17 +99,17 @@ class SecretDetector(logging.Formatter):
         )
 
     @staticmethod
-    def mask_secrets(text: str) -> tuple[bool, str, str | None]:
+    def mask_secrets(text: str) -> MaskedMessageData:
         """Masks any secrets. This is the method that should be used by outside classes.
 
         Args:
             text: A string which may contain a secret.
 
         Returns:
-            The masked string.
+            The masked string data in MaskedMessageData.
         """
         if text is None:
-            return (False, None, None)
+            return MaskedMessageData()
 
         masked = False
         err_str = None
@@ -119,7 +137,20 @@ class SecretDetector(logging.Formatter):
             masked_text = str(ex)
             err_str = str(ex)
 
-        return masked, masked_text, err_str
+        return MaskedMessageData(masked, masked_text, err_str)
+
+    @staticmethod
+    def create_formatting_error_log(
+        original_record: logging.LogRecord, error_message: str
+    ) -> str:
+        return "{} - {} {} - {} - {} - {}".format(
+            original_record.asctime,
+            original_record.threadName,
+            "secret_detector.py",
+            "sanitize_log_str",
+            original_record.levelname,
+            error_message,
+        )
 
     def format(self, record: logging.LogRecord) -> str:
         """Wrapper around logging module's formatter.
@@ -134,25 +165,18 @@ class SecretDetector(logging.Formatter):
         """
         try:
             unsanitized_log = super().format(record)
-            masked, sanitized_log, err_str = SecretDetector.mask_secrets(
+            masked, optional_sanitized_log, err_str = SecretDetector.mask_secrets(
                 unsanitized_log
             )
+            # Added to comply with type hints (Optional[str] is not accepted for str)
+            sanitized_log = optional_sanitized_log or ""
+
             if masked and err_str is not None:
-                sanitized_log = "{} - {} {} - {} - {} - {}".format(
-                    record.asctime,
-                    record.threadName,
-                    "secret_detector.py",
-                    "sanitize_log_str",
-                    record.levelname,
-                    err_str,
-                )
+                sanitized_log = self.create_formatting_error_log(record, err_str)
+
         except Exception as ex:
-            sanitized_log = "{} - {} {} - {} - {} - {}".format(
-                record.asctime,
-                record.threadName,
-                "secret_detector.py",
-                "sanitize_log_str",
-                record.levelname,
-                "EXCEPTION - " + str(ex),
+            sanitized_log = self.create_formatting_error_log(
+                record, "EXCEPTION - " + str(ex)
             )
+
         return sanitized_log
