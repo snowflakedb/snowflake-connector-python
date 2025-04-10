@@ -10,7 +10,7 @@ from authorization_test_helper import AuthorizationTestHelper
 
 
 @pytest.mark.auth
-def test_authenticate_with_pat_successful():
+def test_authenticate_with_pat_successful() -> None:
     pat_command_variables = get_pat_setup_command_variables()
     connection_parameters = AuthConnectionParameters().get_pat_connection_parameters()
     test_helper = AuthorizationTestHelper(connection_parameters)
@@ -25,7 +25,7 @@ def test_authenticate_with_pat_successful():
 
 
 @pytest.mark.auth
-def test_authenticate_with_pat_mismatched_user():
+def test_authenticate_with_pat_mismatched_user() -> None:
     pat_command_variables = get_pat_setup_command_variables()
     connection_parameters = AuthConnectionParameters().get_pat_connection_parameters()
     connection_parameters["user"] = "differentUsername"
@@ -43,7 +43,7 @@ def test_authenticate_with_pat_mismatched_user():
 
 
 @pytest.mark.auth
-def test_authenticate_with_pat_invalid_token():
+def test_authenticate_with_pat_invalid_token() -> None:
     connection_parameters = AuthConnectionParameters().get_pat_connection_parameters()
     connection_parameters["token"] = "invalidToken"
     test_helper = AuthorizationTestHelper(connection_parameters)
@@ -79,5 +79,5 @@ def remove_pat_token(pat_command_variables: dict[str, Union[str, bool]]) -> None
     test_helper.connect_using_okta_connection_and_execute_custom_command(command)
 
 
-def generate_random_suffix():
+def generate_random_suffix() -> str:
     return datetime.now().strftime("%Y%m%d%H%M%S%f")
