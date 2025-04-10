@@ -626,7 +626,7 @@ def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
             account="account", authenticator="WORKLOAD_IDENTITY"
         )
     assert (
-        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable to use the 'WORKLOAD_IDENTITY' authenticator"
+        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable true to use the 'WORKLOAD_IDENTITY' authenticator"
         in str(excinfo.value)
     )
 
@@ -636,7 +636,7 @@ def test_connection_params_are_plumbed_into_authbyworkloadidentity(monkeypatch):
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "")  # Can be set to anything.
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = snowflake.connector.connect(
             account="my_account_1",
