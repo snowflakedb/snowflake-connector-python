@@ -1,10 +1,9 @@
 from datetime import datetime
-from typing import Union
-
 from test.auth.authorization_parameters import (
     AuthConnectionParameters,
     get_pat_setup_command_variables,
 )
+from typing import Union
 
 import pytest
 from authorization_test_helper import AuthorizationTestHelper
