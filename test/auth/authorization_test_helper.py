@@ -127,7 +127,9 @@ class AuthorizationTestHelper:
             self.error_msg = e
             raise RuntimeError(e)
 
-    def connect_using_okta_connection_and_execute_custom_command(self, command: str, return_token: bool = False) -> Union[bool, str]:
+    def connect_using_okta_connection_and_execute_custom_command(
+        self, command: str, return_token: bool = False
+    ) -> Union[bool, str]:
         try:
             logger.info("Setup PAT")
             with snowflake.connector.connect(**self.configuration) as con:

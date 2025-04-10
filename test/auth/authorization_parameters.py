@@ -57,7 +57,7 @@ def get_rsa_private_key_for_key_pair(
 def get_pat_setup_command_variables() -> dict[str, Union[str, bool, int]]:
     return {
         "snowflake_user": _get_env_variable("SNOWFLAKE_AUTH_TEST_SNOWFLAKE_USER"),
-        "role": _get_env_variable("SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_ROLE")
+        "role": _get_env_variable("SNOWFLAKE_AUTH_TEST_INTERNAL_OAUTH_SNOWFLAKE_ROLE"),
     }
 
 
@@ -118,7 +118,9 @@ class AuthConnectionParameters:
         config["token"] = token
         return config
 
-    def get_oauth_external_authorization_code_connection_parameters(self) -> dict[str, Union[str, bool, int]]:
+    def get_oauth_external_authorization_code_connection_parameters(
+        self,
+    ) -> dict[str, Union[str, bool, int]]:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
@@ -141,7 +143,9 @@ class AuthConnectionParameters:
 
         return config
 
-    def get_snowflake_authorization_code_connection_parameters(self) -> dict[str, Union[str, bool, int]]:
+    def get_snowflake_authorization_code_connection_parameters(
+        self,
+    ) -> dict[str, Union[str, bool, int]]:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
@@ -163,7 +167,9 @@ class AuthConnectionParameters:
 
         return config
 
-    def get_snowflake_wildcard_external_authorization_code_connection_parameters(self) -> dict[str, Union[str, bool, int]]:
+    def get_snowflake_wildcard_external_authorization_code_connection_parameters(
+        self,
+    ) -> dict[str, Union[str, bool, int]]:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_AUTHORIZATION_CODE"
@@ -182,7 +188,9 @@ class AuthConnectionParameters:
 
         return config
 
-    def get_oauth_external_client_credential_connection_parameters(self) -> dict[str, str]:
+    def get_oauth_external_client_credential_connection_parameters(
+        self,
+    ) -> dict[str, str]:
         config = self.basic_config.copy()
 
         config["authenticator"] = "OAUTH_CLIENT_CREDENTIALS"
