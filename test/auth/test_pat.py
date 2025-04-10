@@ -16,7 +16,9 @@ def test_authenticate_with_pat_successful():
     connection_parameters = AuthConnectionParameters().get_pat_connection_parameters()
     test_helper = AuthorizationTestHelper(connection_parameters)
     try:
-        pat_command_variables["snowflake_user"], connection_parameters["token"] = get_pat_token(pat_command_variables).popitem()
+        pat_command_variables["snowflake_user"], connection_parameters["token"] = (
+            get_pat_token(pat_command_variables).popitem()
+        )
         test_helper.connect_and_execute_simple_query()
     finally:
         remove_pat_token(pat_command_variables)
@@ -31,7 +33,9 @@ def test_authenticate_with_pat_mismatched_user():
     test_helper = AuthorizationTestHelper(connection_parameters)
     try:
 
-        pat_command_variables["snowflake_user"], connection_parameters["token"] = get_pat_token(pat_command_variables).popitem()
+        pat_command_variables["snowflake_user"], connection_parameters["token"] = (
+            get_pat_token(pat_command_variables).popitem()
+        )
         test_helper.connect_and_execute_simple_query()
     finally:
         remove_pat_token(pat_command_variables)
@@ -63,7 +67,7 @@ def get_pat_token(pat_command_variables) -> dict[str, Union[str, bool]]:
     token = test_helper.connect_using_okta_connection_and_execute_custom_command(
         command, True
     )
-    return {pat_name : token}
+    return {pat_name: token}
 
 
 def remove_pat_token(pat_command_variables: dict[str, Union[str, bool]]) -> None:
