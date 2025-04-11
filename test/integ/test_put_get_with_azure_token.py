@@ -15,6 +15,7 @@ from snowflake.connector.file_transfer_agent import (
     SnowflakeAzureProgressPercentage,
     SnowflakeProgressPercentage,
 )
+from snowflake.connector.secret_detector import SecretDetector
 
 try:
     from snowflake.connector.util_text import random_string
@@ -80,13 +81,23 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
             finally:
                 if file_stream:
                     file_stream.close()
-                csr.execute(f"drop table {table_name}")
+                csr.execute(f"drop table if exists {table_name}")
 
+    azure_request_present = False
+    expected_token_prefix = "sig="
     for line in caplog.text.splitlines():
-        if "blob.core.windows.net" in line:
+        if "blob.core.windows.net" in line and expected_token_prefix in line:
+            azure_request_present = True
+            # getattr is used to stay compatible with old driver - before SECRET_STARRED_MASK_STR was added
             assert (
-                "sig=" not in line
+                expected_token_prefix
+                + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
+                in line
             ), "connectionpool logger is leaking sensitive information"
+
+    assert (
+        azure_request_present
+    ), "Azure URL was not found in logs, so it can't be assumed that no leaks happened in it"
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:

@@ -4,10 +4,13 @@ from __future__ import annotations
 import glob
 import gzip
 import os
+from logging import DEBUG
 
 import pytest
 
 from snowflake.connector.constants import UTF8
+from snowflake.connector.file_transfer_agent import SnowflakeS3ProgressPercentage
+from snowflake.connector.secret_detector import SecretDetector
 
 try:  # pragma: no cover
     from snowflake.connector.vendored import requests
@@ -38,9 +41,10 @@ pytestmark = pytest.mark.aws
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
-def test_put_get_with_aws(tmpdir, conn_cnx, from_path):
+def test_put_get_with_aws(tmpdir, conn_cnx, from_path, caplog):
     """[s3] Puts and Gets a small text using AWS S3."""
     # create a data file
+    caplog.set_level(DEBUG)
     fname = str(tmpdir.join("test_put_get_with_aws_token.txt.gz"))
     original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, "wb") as f:
@@ -50,8 +54,8 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path):
 
     with conn_cnx() as cnx:
         with cnx.cursor() as csr:
+            csr.execute(f"create or replace table {table_name} (a int, b string)")
             try:
-                csr.execute(f"create or replace table {table_name} (a int, b string)")
                 file_stream = None if from_path else open(fname, "rb")
                 put(
                     csr,
@@ -59,6 +63,8 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path):
                     f"%{table_name}",
                     from_path,
                     sql_options=" auto_compress=true parallel=30",
+                    _put_callback=SnowflakeS3ProgressPercentage,
+                    _get_callback=SnowflakeS3ProgressPercentage,
                     file_stream=file_stream,
                 )
                 rec = csr.fetchone()
@@ -70,16 +76,37 @@ def test_put_get_with_aws(tmpdir, conn_cnx, from_path):
                     f"copy into @%{table_name} from {table_name} "
                     "file_format=(type=csv compression='gzip')"
                 )
-                csr.execute(f"get @%{table_name} file://{tmp_dir}")
+                csr.execute(
+                    f"get @%{table_name} file://{tmp_dir}",
+                    _put_callback=SnowflakeS3ProgressPercentage,
+                    _get_callback=SnowflakeS3ProgressPercentage,
+                )
                 rec = csr.fetchone()
                 assert rec[0].startswith("data_"), "A file downloaded by GET"
                 assert rec[1] == 36, "Return right file size"
                 assert rec[2] == "DOWNLOADED", "Return DOWNLOADED status"
                 assert rec[3] == "", "Return no error message"
             finally:
-                csr.execute(f"drop table {table_name}")
+                csr.execute(f"drop table if exists {table_name}")
                 if file_stream:
                     file_stream.close()
+
+    aws_request_present = False
+    expected_token_prefix = "X-Amz-Signature="
+    for line in caplog.text.splitlines():
+        if ".amazonaws." in line:
+            aws_request_present = True
+            # getattr is used to stay compatible with old driver - before SECRET_STARRED_MASK_STR was added
+            assert (
+                expected_token_prefix
+                + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
+                in line
+                or expected_token_prefix not in line
+            ), "connectionpool logger is leaking sensitive information"
+
+    assert (
+        aws_request_present
+    ), "AWS URL was not found in logs, so it can't be assumed that no leaks happened in it"
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:
