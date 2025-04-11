@@ -60,8 +60,10 @@ def get_pat_token(pat_command_variables) -> dict[str, Union[str, bool]]:
         f"ROLE_RESTRICTION = '{pat_command_variables['role']}' DAYS_TO_EXPIRY=1;"
     )
     test_helper = AuthorizationTestHelper(okta_connection_parameters)
-    pat_command_variables["token"] = test_helper.connect_using_okta_connection_and_execute_custom_command(
-        command, True
+    pat_command_variables["token"] = (
+        test_helper.connect_using_okta_connection_and_execute_custom_command(
+            command, True
+        )
     )
     return pat_command_variables
 
