@@ -12,6 +12,7 @@ except ImportError:
 from ..wiremock.wiremock_utils import WiremockClient
 
 
+@pytest.mark.skipolddriver
 @pytest.fixture(scope="session")
 def wiremock_client() -> Generator[WiremockClient, Any, None]:
     with WiremockClient() as client:

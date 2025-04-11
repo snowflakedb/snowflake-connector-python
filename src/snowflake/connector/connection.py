@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import atexit
+import collections.abc
 import logging
 import os
 import pathlib
@@ -35,6 +36,8 @@ from .auth import (
     AuthByDefault,
     AuthByKeyPair,
     AuthByOAuth,
+    AuthByOauthCode,
+    AuthByOauthCredentials,
     AuthByOkta,
     AuthByPAT,
     AuthByPlugin,
@@ -52,6 +55,7 @@ from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
+    _OAUTH_DEFAULT_SCOPE,
     ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
@@ -81,6 +85,7 @@ from .description import (
 from .direct_file_operation_utils import FileOperationParser, StreamDownloader
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
+    ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
     ER_FAILED_TO_CONNECT_TO_DB,
@@ -88,6 +93,7 @@ from .errorcode import (
     ER_INVALID_VALUE,
     ER_INVALID_WIF_SETTINGS,
     ER_NO_ACCOUNT_NAME,
+    ER_NO_CLIENT_ID,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
     ER_NO_USER,
@@ -101,6 +107,8 @@ from .network import (
     KEY_PAIR_AUTHENTICATOR,
     NO_AUTH_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
+    OAUTH_AUTHORIZATION_CODE,
+    OAUTH_CLIENT_CREDENTIALS,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
@@ -165,13 +173,13 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "user": ("", str),  # standard
     "password": ("", str),  # standard
     "host": ("127.0.0.1", str),  # standard
-    "port": (8080, (int, str)),  # standard
+    "port": (443, (int, str)),  # standard
     "database": (None, (type(None), str)),  # standard
     "proxy_host": (None, (type(None), str)),  # snowflake
     "proxy_port": (None, (type(None), str)),  # snowflake
     "proxy_user": (None, (type(None), str)),  # snowflake
     "proxy_password": (None, (type(None), str)),  # snowflake
-    "protocol": ("http", str),  # snowflake
+    "protocol": ("https", str),  # snowflake
     "warehouse": (None, (type(None), str)),  # snowflake
     "region": (None, (type(None), str)),  # snowflake
     "account": (None, (type(None), str)),  # snowflake
@@ -184,6 +192,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), int),
     ),  # network timeout (infinite by default)
     "socket_timeout": (None, (type(None), int)),
+    "external_browser_timeout": (120, int),
     "backoff_policy": (DEFAULT_BACKOFF_POLICY, Callable),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
@@ -313,6 +322,37 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # use https://{bucket}.storage.googleapis.com instead of https://storage.googleapis.com/{bucket}
+    "oauth_client_id": (
+        None,
+        (type(None), str),
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_client_secret": (
+        None,
+        (type(None), str),
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_authorization_url": (
+        "https://{host}:{port}/oauth/authorize",
+        str,
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_token_request_url": (
+        "https://{host}:{port}/oauth/token-request",
+        str,
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_redirect_uri": ("http://127.0.0.1/", str),
+    "oauth_scope": (
+        "",
+        str,
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_security_features": (
+        ("pkce",),
+        collections.abc.Iterable,  # of strings
+        # SNOW-1825621: OAUTH PKCE
+    ),
     "check_arrow_conversion_error_on_every_column": (
         True,
         bool,
@@ -546,8 +586,8 @@ class SnowflakeConnection:
         return self._host
 
     @property
-    def port(self) -> int | str:  # TODO: shouldn't be a string
-        return self._port
+    def port(self) -> int:
+        return int(self._port)
 
     @property
     def region(self) -> str | None:
@@ -789,6 +829,21 @@ class SnowflakeConnection:
     @unsafe_file_write.setter
     def unsafe_file_write(self, value: bool) -> None:
         self._unsafe_file_write = value
+
+    class _OAuthSecurityFeatures(NamedTuple):
+        pkce_enabled: bool
+        refresh_token_enabled: bool
+
+    @property
+    def oauth_security_features(self) -> _OAuthSecurityFeatures:
+        features = self._oauth_security_features
+        if isinstance(features, str):
+            features = features.split(" ")
+        features = [feat.lower() for feat in features]
+        return self._OAuthSecurityFeatures(
+            pkce_enabled="pkce" in features,
+            refresh_token_enabled="refresh_token" in features,
+        )
 
     @property
     def gcs_use_virtual_endpoints(self) -> bool:
@@ -1118,7 +1173,7 @@ class SnowflakeConnection:
                     self.auth_class = AuthByWebBrowser(
                         application=self.application,
                         protocol=self._protocol,
-                        host=self.host,
+                        host=self.host,  # TODO: delete this?
                         port=self.port,
                         timeout=self.login_timeout,
                         backoff_generator=self._backoff_generator,
@@ -1154,6 +1209,56 @@ class SnowflakeConnection:
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
+            elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
+                self._check_experimental_authentication_flag()
+                self._check_oauth_required_parameters()
+                features = self.oauth_security_features
+                if self._role and (self._oauth_scope == ""):
+                    # if role is known then let's inject it into scope
+                    self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
+                self.auth_class = AuthByOauthCode(
+                    application=self.application,
+                    client_id=self._oauth_client_id,
+                    client_secret=self._oauth_client_secret,
+                    authentication_url=self._oauth_authorization_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    token_request_url=self._oauth_token_request_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    redirect_uri=self._oauth_redirect_uri,
+                    scope=self._oauth_scope,
+                    pkce_enabled=features.pkce_enabled,
+                    token_cache=(
+                        auth.get_token_cache()
+                        if self._client_store_temporary_credential
+                        else None
+                    ),
+                    refresh_token_enabled=features.refresh_token_enabled,
+                    external_browser_timeout=self._external_browser_timeout,
+                )
+            elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
+                self._check_experimental_authentication_flag()
+                self._check_oauth_required_parameters()
+                features = self.oauth_security_features
+                if self._role and (self._oauth_scope == ""):
+                    # if role is known then let's inject it into scope
+                    self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
+                self.auth_class = AuthByOauthCredentials(
+                    application=self.application,
+                    client_id=self._oauth_client_id,
+                    client_secret=self._oauth_client_secret,
+                    token_request_url=self._oauth_token_request_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    scope=self._oauth_scope,
+                    token_cache=(
+                        auth.get_token_cache()
+                        if self._client_store_temporary_credential
+                        else None
+                    ),
+                    refresh_token_enabled=features.refresh_token_enabled,
+                )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                     self._client_request_mfa_token if IS_LINUX else True
@@ -1173,16 +1278,7 @@ class SnowflakeConnection:
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
                 self.auth_class = AuthByPAT(self._token)
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
-                if ENV_VAR_EXPERIMENTAL_AUTHENTICATION not in os.environ:
-                    Error.errorhandler_wrapper(
-                        self,
-                        None,
-                        ProgrammingError,
-                        {
-                            "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{WORKLOAD_IDENTITY_AUTHENTICATOR}' authenticator.",
-                            "errno": ER_INVALID_WIF_SETTINGS,
-                        },
-                    )
+                self._check_experimental_authentication_flag()
                 # Standardize the provider enum.
                 if self._workload_identity_provider and isinstance(
                     self._workload_identity_provider, str
@@ -1295,10 +1391,6 @@ class SnowflakeConnection:
         if "account" in kwargs:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
-            if "port" not in kwargs:
-                self._port = "443"
-            if "protocol" not in kwargs:
-                self._protocol = "https"
 
         if "unsafe_file_write" in kwargs:
             self._unsafe_file_write = kwargs["unsafe_file_write"]
@@ -1382,6 +1474,8 @@ class SnowflakeConnection:
                 not in (
                     EXTERNAL_BROWSER_AUTHENTICATOR,
                     OAUTH_AUTHENTICATOR,
+                    OAUTH_AUTHORIZATION_CODE,
+                    OAUTH_CLIENT_CREDENTIALS,
                     KEY_PAIR_AUTHENTICATOR,
                     PROGRAMMATIC_ACCESS_TOKEN,
                     WORKLOAD_IDENTITY_AUTHENTICATOR,
@@ -1531,9 +1625,13 @@ class SnowflakeConnection:
         except ReauthenticationRequest as ex:
             # cached id_token expiration error, we have cleaned id_token and try to authenticate again
             logger.debug("ID token expired. Reauthenticating...: %s", ex)
-            if isinstance(auth_instance, AuthByIdToken):
-                # Note: SNOW-733835 IDToken auth needs to authenticate through
-                #  SSO if it has expired
+            if type(auth_instance) in (
+                AuthByIdToken,
+                AuthByOauthCode,
+                AuthByOauthCredentials,
+            ):
+                # IDToken and OAuth auth need to authenticate through
+                # SSO if its credential has expired
                 self._reauthenticate()
             else:
                 self._authenticate(auth_instance)
@@ -2134,3 +2232,37 @@ class SnowflakeConnection:
         except Exception as e:
             logger.debug("session could not be validated due to exception: %s", e)
             return False
+
+    def _check_experimental_authentication_flag(self) -> None:
+        if os.getenv(ENV_VAR_EXPERIMENTAL_AUTHENTICATION, "false").lower() != "true":
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable true to use the '{self._authenticator}' authenticator.",
+                    "errno": ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
+                },
+            )
+
+    def _check_oauth_required_parameters(self) -> None:
+        if self._oauth_client_id is None:
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Oauth code flow requirement 'client_id' is empty",
+                    "errno": ER_NO_CLIENT_ID,
+                },
+            )
+        if self._oauth_client_secret is None:
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Oauth code flow requirement 'client_secret' is empty",
+                    "errno": ER_NO_CLIENT_ID,
+                },
+            )
