@@ -492,6 +492,7 @@ def test_binding_insert_date(conn_cnx, db_parameters):
 
 @pytest.mark.skipolddriver
 def test_binding_variant(conn_cnx):
+    pytest.skip("Server side binding of VARIANT type is not supported")
     bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
         snowflake_type = "VARIANT"

@@ -1782,8 +1782,10 @@ class SnowflakeConnection:
         )
 
     @staticmethod
-    def _is_semi_structured_type(snowflake_type: str):
-        return snowflake_type in ("OBJECT", "ARRAY", "VARIANT")
+    def _server_side_binding_supported(snowflake_type: str):
+        if snowflake_type == "VARIANT":
+            logger.warning("Server side binding for VARIANT type is not supported.")
+        return snowflake_type in ("OBJECT", "ARRAY")
 
     def _process_server_side_semi_structured_bindings(
         self, cursor: SnowflakeCursor | None, params: Sequence, snowflake_type: str
@@ -1838,38 +1840,6 @@ class SnowflakeConnection:
                             "errno": ER_NOT_SUPPORT_DATA_TYPE,
                         },
                     )
-        elif snowflake_type == "VARIANT":
-            snowflake_type = "TEXT"
-            for idx, v in enumerate(params):
-                if isinstance(v, str) or v is None:
-                    processed_params[str(idx + 1)] = {
-                        "type": snowflake_type,
-                        "fmt": "json",
-                        "value": v,
-                    }
-                else:
-                    value = None
-                    try:
-                        value = json.dumps(v)
-                    except TypeError:
-                        Error.errorhandler_wrapper(
-                            self,
-                            cursor,
-                            ProgrammingError,
-                            {
-                                "msg": "Attempted to insert value {} as {} but the it's of an unsupported type: {}.".format(
-                                    v, snowflake_type, type(v)
-                                ),
-                                "errno": ER_NOT_SUPPORT_DATA_TYPE,
-                            },
-                        )
-
-                    if value is not None:
-                        processed_params[str(idx + 1)] = {
-                            "type": snowflake_type,
-                            "fmt": "json",
-                            "value": value,
-                        }
 
         return processed_params
 
@@ -1884,7 +1854,7 @@ class SnowflakeConnection:
             return None
         processed_params = {}
 
-        if self._is_semi_structured_type(snowflake_type):
+        if self._server_side_binding_supported(snowflake_type):
             processed_params = self._process_server_side_semi_structured_bindings(
                 cursor, params, snowflake_type
             )
