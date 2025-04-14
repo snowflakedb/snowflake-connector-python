@@ -21,7 +21,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Lower log levels from info to debug for some of the messages to make the output easier to follow.
   - Allow the connector to inherit a UUID4 generated upstream, provided in statement parameters (field: `requestId`), rather than automatically generate a UUID4 to use for the HTTP Request ID.
   - Fix expired S3 credentials update and increment retry when expired credentials are found.
-  - Added `client_fetch_threads` parameter to better utilize threads for fetching query results
+  - Added `client_fetch_threads` experimental parameter to better utilize threads for fetching query results.
 
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
