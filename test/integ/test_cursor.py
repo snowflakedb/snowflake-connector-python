@@ -11,7 +11,6 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
-from unittest.mock import MagicMock
 
 import pytest
 import pytz
@@ -843,10 +842,11 @@ def test_timeout_query(conn_cnx):
                 # we can not precisely control the timing to send cancel query request right after server
                 # executes the query but before returning the results back to client
                 # it depends on python scheduling and server processing speed, so we mock here
-                with mock.patch.object(
-                    c, "_timebomb", new_callable=MagicMock
-                ) as mock_timerbomb:
-                    mock_timerbomb.executed = True
+                with mock.patch(
+                    "snowflake.connector.cursor._TrackedQueryCancellationTimer",
+                    autospec=True,
+                ) as mock_timebomb:
+                    mock_timebomb.return_value.executed = True
                     c.execute(
                         "select 123'",
                         timeout=0.1,
