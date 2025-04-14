@@ -572,15 +572,15 @@ def test_binding_object_without_schema(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_binding_of_primitives(conn_cnx):
+@pytest.mark.parametrize("snowflake_type", ("ARRAY", "OBJECT"))
+def test_semi_structured_binding_fails_when_invalid_type(conn_cnx, snowflake_type):
     bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
-    with conn_cnx(paramstyle="numeric") as cnx, cnx.cursor() as cursor:
-        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 ARRAY); ")
-        cursor.execute(bind_query, params=([1, 2, 3],))
-
-        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
-
-        assert json.loads(results[0][0]) == 1
+    with pytest.raises(ProgrammingError, match=r"Attempted to insert value"):
+        with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+            cursor.execute(
+                f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});"
+            )
+            cursor.execute(bind_query, params=({1},), snowflake_type=snowflake_type)
 
 
 @pytest.mark.skipolddriver

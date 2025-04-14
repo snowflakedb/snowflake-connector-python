@@ -29,6 +29,8 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
+from snowflake.connector.errorcode import ER_NOT_SUPPORT_DATA_TYPE
+
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
 from .auth import (
@@ -1779,6 +1781,98 @@ class SnowflakeConnection:
             self.converter.to_snowflake_bindings(snowflake_type, v),
         )
 
+    @staticmethod
+    def _is_semi_structured_type(snowflake_type: str):
+        return snowflake_type in ("OBJECT", "ARRAY", "VARIANT")
+
+    def _process_server_side_semi_structured_bindings(
+        self, cursor: SnowflakeCursor | None, params: Sequence, snowflake_type: str
+    ) -> dict[str, dict[str, str]]:
+        processed_params = {}
+
+        if snowflake_type == "OBJECT":
+            for idx, v in enumerate(params):
+                if isinstance(v, dict):
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "fmt": "json",
+                        "value": json.dumps(v),
+                    }
+                elif isinstance(v, str) or v is None:
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "fmt": "json",
+                        "value": v,
+                    }
+                else:
+                    Error.errorhandler_wrapper(
+                        self,
+                        cursor,
+                        ProgrammingError,
+                        {
+                            "msg": f"Attempted to insert value {v} as {snowflake_type} but it's of an unsupported type: {type(v)}.",
+                            "errno": ER_NOT_SUPPORT_DATA_TYPE,
+                        },
+                    )
+        elif snowflake_type == "ARRAY":
+            for idx, v in enumerate(params):
+                if isinstance(v, (tuple, list)):
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "fmt": "json",
+                        "value": json.dumps(v),
+                    }
+                elif isinstance(v, str) or v is None:
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "fmt": "json",
+                        "value": v,
+                    }
+                else:
+                    Error.errorhandler_wrapper(
+                        self,
+                        cursor,
+                        ProgrammingError,
+                        {
+                            "msg": f"Attempted to insert value {v} as {snowflake_type} but it's of an unsupported type: {type(v)}.",
+                            "errno": ER_NOT_SUPPORT_DATA_TYPE,
+                        },
+                    )
+        elif snowflake_type == "VARIANT":
+            snowflake_type = "TEXT"
+            for idx, v in enumerate(params):
+                if isinstance(v, str) or v is None:
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "fmt": "json",
+                        "value": v,
+                    }
+                else:
+                    value = None
+                    try:
+                        value = json.dumps(v)
+                    except TypeError:
+                        Error.errorhandler_wrapper(
+                            self,
+                            cursor,
+                            ProgrammingError,
+                            {
+                                "msg": "Attempted to insert value {} as {} but the it's of an unsupported type: {}.".format(
+                                    v, snowflake_type, type(v)
+                                ),
+                                "errno": ER_NOT_SUPPORT_DATA_TYPE,
+                            },
+                        )
+
+                    if value is not None:
+                        processed_params[str(idx + 1)] = {
+                            "type": snowflake_type,
+                            "fmt": "json",
+                            "value": value,
+                        }
+
+        return processed_params
+
     # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
     def _process_params_qmarks(
         self,
@@ -1790,58 +1884,11 @@ class SnowflakeConnection:
             return None
         processed_params = {}
 
-        if snowflake_type == "OBJECT":
-            for idx, v in enumerate(params):
-                if isinstance(v, dict):
-                    processed_params[str(idx + 1)] = {
-                        "type": snowflake_type,
-                        "fmt": "json",
-                        "value": json.dumps(v),
-                    }
-                elif isinstance(v, str):
-                    processed_params[str(idx + 1)] = {
-                        "type": snowflake_type,
-                        "fmt": "json",
-                        "value": v,
-                    }
-                else:
-                    raise ValueError()
-        elif snowflake_type == "ARRAY":
-            for idx, v in enumerate(params):
-                if isinstance(v, (tuple, list)):
-                    processed_params[str(idx + 1)] = {
-                        "type": snowflake_type,
-                        "fmt": "json",
-                        "value": json.dumps(v),
-                    }
-                elif isinstance(v, str):
-                    processed_params[str(idx + 1)] = {
-                        "type": snowflake_type,
-                        "fmt": "json",
-                        "value": v,
-                    }
-                else:
-                    raise ValueError()
-        elif snowflake_type == "VARIANT":
-            for idx, v in enumerate(params):
-                # TODO: handle None values
-                if isinstance(v, str):
-                    processed_params[str(idx + 1)] = {
-                        "type": snowflake_type,
-                        "fmt": "json",
-                        "value": v,
-                    }
-                else:
-                    try:
-                        value = json.dumps(v)
-                    except TypeError:
-                        raise ValueError()
+        if self._is_semi_structured_type(snowflake_type):
+            processed_params = self._process_server_side_semi_structured_bindings(
+                cursor, params, snowflake_type
+            )
 
-                    processed_params[str(idx + 1)] = {
-                        "type": snowflake_type,
-                        "fmt": "json",
-                        "value": value,
-                    }
         else:
             get_type_and_binding = partial(self._get_snowflake_type_and_binding, cursor)
 
@@ -1855,21 +1902,19 @@ class SnowflakeConnection:
                         param_data.type == first_type for param_data in all_param_data
                     ):
                         inferred_snowflake_type = first_type
-                    if inferred_snowflake_type != snowflake_type:
+                    if snowflake_type and inferred_snowflake_type != snowflake_type:
                         logger.warning(
-                            "Inferred snowflake type: {} is different than provided: {}. Proceeding with provided one. Omit this parameter in order to proceed with inferred type",
-                            inferred_snowflake_type,
-                            snowflake_type,
+                            f"Inferred snowflake type: {inferred_snowflake_type} is different than provided: {snowflake_type}. Proceeding with provided one. Omit this parameter in order to proceed with inferred type",
                         )
-                        snowflake_type = inferred_snowflake_type
+                    target_type = inferred_snowflake_type
                     processed_params[str(idx + 1)] = {
-                        "type": snowflake_type,
+                        "type": target_type,
                         "value": [param_data.binding for param_data in all_param_data],
                     }
                 else:
-                    snowflake_type, snowflake_binding = get_type_and_binding(v)
+                    target_type, snowflake_binding = get_type_and_binding(v)
                     processed_params[str(idx + 1)] = {
-                        "type": snowflake_type,
+                        "type": target_type,
                         "value": snowflake_binding,
                     }
         if logger.getEffectiveLevel() <= logging.DEBUG:
