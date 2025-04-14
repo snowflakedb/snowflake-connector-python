@@ -1,0 +1,48 @@
+{
+  "mappings": [
+    {
+      "scenarioName": "Refresh expired access token",
+      "requiredScenarioState": "Started",
+      "newScenarioState": "Expired access token",
+      "request": {
+        "urlPathPattern": "/session/v1/login-request",
+        "method": "POST",
+	"queryParameters": {
+	  "request_id": {
+            "matches": ".*"
+	  },
+          "roleName": {
+            "equalTo": "ANALYST"
+          }
+        },
+        "headers": {
+          "Content-Type": {
+            "contains": "application/json"
+          }
+        },
+        "bodyPatterns": [
+          {
+            "matchesJsonPath": "$.data"
+          },
+          {
+            "matchesJsonPath": "$[?(@.data.TOKEN==\"expired-access-token-123\")]"
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "jsonBody": {
+          "data": {
+            "nextAction": "RETRY_LOGIN",
+            "authnMethod": "OAUTH",
+            "signInOptions": {}
+          },
+          "code": "390318",
+          "message": "OAuth access token expired. [1172527951366]",
+          "success": false,
+          "headers": null
+        }
+      }
+    }
+  ]
+}

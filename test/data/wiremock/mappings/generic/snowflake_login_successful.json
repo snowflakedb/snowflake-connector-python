@@ -1,0 +1,64 @@
+{
+  "requiredScenarioState": "Acquired access token",
+  "newScenarioState": "Connected",
+  "request": {
+    "urlPathPattern": "/session/v1/login-request",
+    "method": "POST",
+    "queryParameters": {
+      "request_id": {
+        "matches": ".*"
+      },
+      "roleName": {
+        "equalTo": "ANALYST"
+      }
+    },
+    "headers": {
+      "Content-Type": {
+        "contains": "application/json"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.data"
+      },
+      {
+        "matchesJsonPath": "$[?(@.data.TOKEN==\"access-token-123\")]"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "fixedDelayMilliseconds": "1000",
+    "jsonBody": {
+      "data": {
+        "masterToken": "token-m1",
+        "token": "token-t1",
+        "validityInSeconds": 3599,
+        "masterValidityInSeconds": 14400,
+        "displayUserName": "***",
+        "serverVersion": "***",
+        "firstLogin": false,
+        "remMeToken": null,
+        "remMeValidityInSeconds": 0,
+        "healthCheckInterval": 45,
+        "newClientForUpgrade": null,
+        "sessionId": 1313,
+        "parameters": [],
+        "sessionInfo": {
+          "databaseName": null,
+          "schemaName": null,
+          "warehouseName": "TEST",
+          "roleName": "ACCOUNTADMIN"
+        },
+        "idToken": null,
+        "idTokenValidityInSeconds": 0,
+        "responseData": null,
+        "mfaToken": null,
+        "mfaTokenValidityInSeconds": 0
+      },
+      "code": null,
+      "message": null,
+      "success": true
+    }
+  }
+}
