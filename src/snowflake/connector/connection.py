@@ -1276,8 +1276,6 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
-                if not self._token and self._password:
-                    self._token = self._password
                 self.auth_class = AuthByPAT(self._token)
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
                 self._check_experimental_authentication_flag()
@@ -1432,6 +1430,7 @@ class SnowflakeConnection:
             OAUTH_AUTHENTICATOR,
             NO_AUTH_AUTHENTICATOR,
             WORKLOAD_IDENTITY_AUTHENTICATOR,
+            PROGRAMMATIC_ACCESS_TOKEN,
         }
 
         if not (self._master_token and self._session_token):
