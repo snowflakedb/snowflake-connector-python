@@ -13,6 +13,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Dropped support for Python 3.8.
   - Basic decimal floating-point type support.
   - Added handling of PAT provided in `password` field.
+  - Added experimental support for OAuth authorization code and client credentials flows.
   - Improved error message for client-side query cancellations due to timeouts.
   - Added support of GCS regional endpoints.
   - Added `gcs_use_virtual_endpoints` connection property that forces the usage of the virtual GCS usage. Thanks to this it should be possible to set up private DNS entry for the GCS endpoint. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
