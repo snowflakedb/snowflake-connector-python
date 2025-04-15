@@ -10,8 +10,9 @@ MODULES_TO_MASK_LOGS_NAMES = [
     "botocore",
     "boto3",
 ]
-# TODO: after migration to the external urllib3 from the vendored one, we should change filters here immediately to the below module's logger:
-# MODULES_TO_MASK_LOGS_NAMES = [ "urllib3", ... ]
+# TODO: after migration to the external urllib3 from the vendored one (SNOW-2041970),
+#  we should change filters here immediately to the below module's logger:
+#  MODULES_TO_MASK_LOGS_NAMES = [ "urllib3", ... ]
 
 
 def add_filters_to_external_loggers():

@@ -13,12 +13,11 @@ def add_filter_to_logger_and_children(
     if filter_instance not in base_logger.filters:
         base_logger.addFilter(filter_instance)
 
-    all_loggers_dict = logging.root.manager.loggerDict.items()
-    child_loggers_gen = filter(
-        lambda name_logger_pair: name_logger_pair[0].startswith(base_logger_name + "."),
-        all_loggers_dict,
-    )
-    for _, obj in child_loggers_gen:
+    all_loggers_pairs = logging.root.manager.loggerDict.items()
+    for name, obj in all_loggers_pairs:
+        if not name.startswith(base_logger_name + "."):
+            continue
+
         if not isinstance(obj, logging.Logger):
             continue  # Skip placeholders
 

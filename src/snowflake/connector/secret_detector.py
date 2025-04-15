@@ -56,7 +56,6 @@ class SecretDetector(logging.Formatter):
     )
 
     SECRET_STARRED_MASK_STR = "****"
-    SECRET_STARRED_MASK_QUOTED_STR = f"'{SECRET_STARRED_MASK_STR}'"
 
     @staticmethod
     def mask_connection_token(text: str) -> str:
@@ -73,7 +72,7 @@ class SecretDetector(logging.Formatter):
     @staticmethod
     def mask_aws_keys(text: str) -> str:
         return SecretDetector.AWS_KEY_PATTERN.sub(
-            r"\1=" + f"{SecretDetector.SECRET_STARRED_MASK_QUOTED_STR}", text
+            r"\1=" + f"'{SecretDetector.SECRET_STARRED_MASK_STR}'", text
         )
 
     @staticmethod
