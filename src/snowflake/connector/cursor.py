@@ -910,8 +910,8 @@ class SnowflakeCursor:
             _exec_async: Whether to execute this query asynchronously.
             _no_retry: Whether or not to retry on known errors.
             _do_reset: Whether or not the result set needs to be reset before executing query.
-            _put_callback: Function to which GET command should call back to.
-            _put_azure_callback: Function to which an Azure GET command should call back to.
+            _put_callback: Function to which PUT command should call back to.
+            _put_azure_callback: Function to which an Azure PUT command should call back to.
             _put_callback_output_stream: The output stream a PUT command's callback should report on.
             _get_callback: Function to which GET command should call back to.
             _get_azure_callback: Function to which an Azure GET command should call back to.
