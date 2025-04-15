@@ -125,6 +125,7 @@ from .wif_util import AttestationProvider
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
+MAX_CLIENT_FETCH_THREADS = 1024
 DEFAULT_BACKOFF_POLICY = exponential_backoff()
 
 
@@ -228,6 +229,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), int),
     ),  # snowflake
     "client_prefetch_threads": (4, int),  # snowflake
+    "client_fetch_threads": (None, (type(None), int)),
     "numpy": (False, bool),  # snowflake
     "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
@@ -417,6 +419,7 @@ class SnowflakeConnection:
             See the backoff_policies module for details and implementation examples.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
+        client_fetch_threads: Number of threads to fetch staged query results.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
         application: Application name to communicate with Snowflake as. By default, this is "PythonConnector".
         errorhandler: Handler used with errors. By default, an exception will be raised on error.
@@ -680,6 +683,16 @@ class SnowflakeConnection:
     def client_prefetch_threads(self, value) -> None:
         self._client_prefetch_threads = value
         self._validate_client_prefetch_threads()
+
+    @property
+    def client_fetch_threads(self) -> int | None:
+        return self._client_fetch_threads
+
+    @client_fetch_threads.setter
+    def client_fetch_threads(self, value: None | int) -> None:
+        if value is not None:
+            value = min(max(1, value), MAX_CLIENT_FETCH_THREADS)
+        self._client_fetch_threads = value
 
     @property
     def rest(self) -> SnowflakeRestful | None:
