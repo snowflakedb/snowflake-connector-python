@@ -21,11 +21,6 @@ mkdir -p ${DIST_DIR}
 # Should be kept in sync with .github/worklfows/build_test.yml
 export MACOSX_DEPLOYMENT_TARGET="10.14"
 for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
-    # Our dependencies rely on the Rust toolchain being available in the build-time environment
-    if [[ "${PYTHON_VERSION}" == "3.13" ]]; then
-      curl https://sh.rustup.rs -sSf | sh
-    fi
-
     # Constants and setup
     PYTHON="python${PYTHON_VERSION}"
     VENV_DIR="${CONNECTOR_DIR}/venv-${PYTHON_VERSION}"
