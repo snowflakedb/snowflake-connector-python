@@ -350,7 +350,7 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "region,return_url,use_regional_url,endpoint,gcs_use_virtual_endpoints",
+    "region,return_url,use_regional_url,endpoint,use_virtual_url",
     [
         (
             "US-CENTRAL1",
@@ -407,13 +407,13 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
         ),
     ],
 )
-def test_url(region, return_url, use_regional_url, endpoint, gcs_use_virtual_endpoints):
+def test_url(region, return_url, use_regional_url, endpoint, use_virtual_url):
     gcs_location = SnowflakeGCSRestClient.get_location(
         stage_location="location",
         use_regional_url=use_regional_url,
         region=region,
         endpoint=endpoint,
-        use_virtual_endpoints=gcs_use_virtual_endpoints,
+        use_virtual_url=use_virtual_url,
     )
     assert gcs_location.endpoint == return_url
 
@@ -446,3 +446,28 @@ def test_use_regional_url(region, use_regional_url, return_value):
     )
 
     assert client.use_regional_url == return_value
+
+
+@pytest.mark.parametrize(
+    "use_virtual_url,return_value",
+    [(False, False), (True, True), (None, False)],
+)
+def test_stage_info_use_virtual_url(use_virtual_url, return_value):
+    meta = SnowflakeFileMeta(
+        name="path/some_file",
+        src_file_name="path/some_file",
+        stage_location_type="GCS",
+        presigned_url="www.example.com",
+    )
+    storage_credentials = Mock()
+    storage_credentials.creds = {}
+    stage_info: dict[str, any] = dict()
+    if use_virtual_url is not None:
+        stage_info["useVirtualUrl"] = use_virtual_url
+    connection = Mock()
+
+    client = SnowflakeGCSRestClient(
+        meta, storage_credentials, stage_info, connection, ""
+    )
+
+    assert client.use_virtual_url == return_value
