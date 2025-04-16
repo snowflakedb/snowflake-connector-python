@@ -440,7 +440,7 @@ def write_pandas(
             # Upload parquet file
             upload_sql = (
                 "PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                "'file://{path}' ? PARALLEL={parallel}"
+                "'file://{path}' '?' PARALLEL={parallel}"
             ).format(
                 path=chunk_path.replace("\\", "\\\\").replace("'", "\\'"),
                 parallel=parallel,
