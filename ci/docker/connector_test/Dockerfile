@@ -3,7 +3,7 @@ FROM $BASE_IMAGE
 
 RUN yum install -y java-11-openjdk
 
-# TODO(SNOW-2043523): When there are prebuilt wheels accessible for our dependencies (i.e. numpy)
+# TODO: When there are prebuilt wheels accessible for our dependencies (i.e. numpy)
 # for Python 3.13 this rust cargo install command can be removed.
 RUN yum -y install rust cargo
 
