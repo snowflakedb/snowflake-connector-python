@@ -410,7 +410,7 @@ class SnowflakeConnectionConfig(TypedDict):
     login_timeout: int
     network_timeout: int
     socket_timeout: int
-    backoff_policy: Callable
+    backoff_policy: Callable[[], Generator[int]]
     client_session_keep_alive_heartbeat_frequency: int
     client_prefetch_threads: int
     client_fetch_threads: int
@@ -708,7 +708,7 @@ class SnowflakeConnection:
         return int(self._socket_timeout) if self._socket_timeout is not None else None
 
     @property
-    def _backoff_generator(self) -> Iterator:
+    def _backoff_generator(self) -> Generator[int]:
         return self._backoff_policy()
 
     @property
