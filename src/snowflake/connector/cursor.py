@@ -839,6 +839,7 @@ class SnowflakeCursor:
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
         _dataframe_ast: str | None = None,
+        snowflake_type: str | None = None,
     ) -> Self | None: ...
 
     @overload
@@ -869,6 +870,7 @@ class SnowflakeCursor:
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
         _dataframe_ast: str | None = None,
+        snowflake_type: str | None = None,
     ) -> dict[str, Any] | None: ...
 
     def execute(
@@ -899,6 +901,7 @@ class SnowflakeCursor:
         num_statements: int | None = None,
         _force_qmark_paramstyle: bool = False,
         _dataframe_ast: str | None = None,
+        snowflake_type: str | None = None,
     ) -> Self | dict[str, Any] | None:
         """Executes a command/query.
 
@@ -935,6 +938,7 @@ class SnowflakeCursor:
             statements being submitted (or 0 if submitting an uncounted number) when using a multi-statement query.
             _force_qmark_paramstyle: Force the use of qmark paramstyle regardless of the connection's paramstyle.
             _dataframe_ast: Base64-encoded dataframe request abstract syntax tree.
+            snowflake_type: Type for parameter binding. Enables server-side semi-structured types binding if set to ARRAY, OBJECT or VARIANT.
 
         Returns:
             The cursor itself, or None if some error happened, or the response returned
@@ -1000,7 +1004,7 @@ class SnowflakeCursor:
                     )
 
                 kwargs["binding_params"] = self._connection._process_params_qmarks(
-                    params, self
+                    params, self, snowflake_type=snowflake_type
                 )
 
         m = DESC_TABLE_RE.match(query)

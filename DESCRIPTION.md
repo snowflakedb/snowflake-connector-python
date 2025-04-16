@@ -24,6 +24,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Improved logging in urllib3, boto3, botocore - assured data masking even after migration to the external owned library in the future.
   - Fix expired S3 credentials update and increment retry when expired credentials are found.
   - Added `client_fetch_threads` experimental parameter to better utilize threads for fetching query results.
+  - Add `snowflake_type` parameter to execute method of a cursor. When set to `OBJECT` or `ARRAY` it allows binding of these semi-structured types.
 
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
