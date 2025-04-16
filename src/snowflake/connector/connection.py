@@ -320,10 +320,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # SNOW-1817982: limit iobound TPE sizes when executing PUT/GET
-    "gcs_use_virtual_endpoints": (
-        False,
-        bool,
-    ),  # use https://{bucket}.storage.googleapis.com instead of https://storage.googleapis.com/{bucket}
     "oauth_client_id": (
         None,
         (type(None), str),
@@ -439,7 +435,6 @@ class SnowflakeConnection:
           before the connector shuts down. Default value is false.
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
         unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
-        gcs_use_virtual_endpoints: When true, the virtual endpoint url is used, see: https://cloud.google.com/storage/docs/request-endpoints#xml-api
         check_arrow_conversion_error_on_every_column: When true, the error check after the conversion from arrow to python types will happen for every column in the row. This is a new behaviour which fixes the bug that caused the type errors to trigger silently when occurring at any place other than last column in a row. To revert the previous (faulty) behaviour, please set this flag to false.
     """
 
@@ -857,14 +852,6 @@ class SnowflakeConnection:
             pkce_enabled="pkce" in features,
             refresh_token_enabled="refresh_token" in features,
         )
-
-    @property
-    def gcs_use_virtual_endpoints(self) -> bool:
-        return self._gcs_use_virtual_endpoints
-
-    @gcs_use_virtual_endpoints.setter
-    def gcs_use_virtual_endpoints(self, value: bool) -> None:
-        self._gcs_use_virtual_endpoints = value
 
     @property
     def check_arrow_conversion_error_on_every_column(self) -> bool:
