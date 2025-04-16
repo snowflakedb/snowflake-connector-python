@@ -22,6 +22,7 @@ from logging import getLogger
 from threading import Lock
 from types import TracebackType
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Generator,
@@ -132,6 +133,10 @@ from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
 from .wif_util import AttestationProvider
+
+if TYPE_CHECKING:
+    from os import PathLike
+
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -423,12 +428,12 @@ class SnowflakeConnectionConfig(TypedDict):
     consent_cache_id_token: str
     enable_stage_s3_privatelink_for_us_east_1: bool
     enable_connection_diag: bool
-    connection_diag_log_path: str
-    connection_diag_whitelist_path: str
-    connection_diag_allowlist_path: str
+    connection_diag_log_path: PathLike[str] | str
+    connection_diag_whitelist_path: PathLike[str] | str
+    connection_diag_allowlist_path: PathLike[str] | str
     json_result_force_utf8_decoding: bool
     server_session_keep_alive: bool
-    token_file_path: str
+    token_file_path: PathLike[str] | str
     unsafe_file_write: bool
     gcs_use_virtual_endpoints: bool
     check_arrow_conversion_error_on_every_column: bool
@@ -1231,7 +1236,7 @@ class SnowflakeConnection:
             elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
                 self._session_parameters[
                     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL
-                ] = self._client_store_temporary_credential if IS_LINUX else True
+                ] = (self._client_store_temporary_credential if IS_LINUX else True)
                 auth.read_temporary_credentials(
                     self.host,
                     self.user,

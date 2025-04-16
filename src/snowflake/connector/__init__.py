@@ -3,7 +3,6 @@
 #
 from __future__ import annotations
 
-import pathlib
 from functools import wraps
 
 apilevel = "2.0"
@@ -50,6 +49,8 @@ from .log_configuration import EasyLoggingConfigPython
 from .version import VERSION
 
 if TYPE_CHECKING:
+    from os import PathLike
+
     from .connection import SnowflakeConnectionConfig
 
 logging.getLogger(__name__).addHandler(NullHandler())
@@ -59,7 +60,7 @@ setup_external_libraries()
 @wraps(SnowflakeConnection.__init__)
 def Connect(
     connection_name: str | None = None,
-    connections_file_path: pathlib.Path | None = None,
+    connections_file_path: PathLike[str] | str | None = None,
     **kwargs: Unpack[SnowflakeConnectionConfig],
 ) -> SnowflakeConnection:
     return SnowflakeConnection(
