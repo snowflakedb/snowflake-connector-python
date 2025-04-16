@@ -7,23 +7,27 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.14.1(TBD)
+- v3.15(TBD)
+  -
+
+- v3.14.1(April 17, 2025)
   - Added support for Python 3.13.
     - NOTE: Windows 64 support is still experimental and should not yet be used for production environments.
   - Dropped support for Python 3.8.
-  - Basic decimal floating-point type support.
+  - Added basic decimal floating-point type support.
   - Added handling of PAT provided in `password` field.
-  - Added experimental support for OAuth authorization code and client credentials flows.
-  - Improved error message for client-side query cancellations due to timeouts.
+  - Added experimental authentication methods.
   - Added support of GCS regional endpoints.
-  - Fixed a bug that caused driver to fail silently on `TO_DATE` arrow to python conversion when invalid date was followed by the correct one.
-  - Added `check_arrow_conversion_error_on_every_column` connection property that can be set to `False` to restore previous behaviour in which driver will ignore errors until it occurs in the last column. This flag's purpose is to unblock workflows that may be impacted by the bugfix and will be removed in later releases.
-  - Lower log levels from info to debug for some of the messages to make the output easier to follow.
-  - Allow the connector to inherit a UUID4 generated upstream, provided in statement parameters (field: `requestId`), rather than automatically generate a UUID4 to use for the HTTP Request ID.
-  - Improved logging in urllib3, boto3, botocore - assured data masking even after migration to the external owned library in the future.
-  - Fix expired S3 credentials update and increment retry when expired credentials are found.
-  - Added `client_fetch_threads` experimental parameter to better utilize threads for fetching query results.
   - Added support of GCS virtual urls. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
+  - Added `client_fetch_threads` experimental parameter to better utilize threads for fetching query results.
+  - Added `check_arrow_conversion_error_on_every_column` connection property that can be set to `False` to restore previous behaviour in which driver will ignore errors until it occurs in the last column. This flag's purpose is to unblock workflows that may be impacted by the bugfix and will be removed in later releases.
+  - Lowered log levels from info to debug for some of the messages to make the output easier to follow.
+  - Allowed the connector to inherit a UUID4 generated upstream, provided in statement parameters (field: `requestId`), rather than automatically generate a UUID4 to use for the HTTP Request ID.
+  - Improved logging in urllib3, boto3, botocore - assured data masking even after migration to the external owned library in the future.
+  - Improved error message for client-side query cancellations due to timeouts.
+  - Improved security and robustness for the temporary credentials cache storage.
+  - Fixed a bug that caused driver to fail silently on `TO_DATE` arrow to python conversion when invalid date was followed by the correct one.
+  - Fixed expired S3 credentials update and increment retry when expired credentials are found.
 
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
