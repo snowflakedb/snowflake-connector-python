@@ -14,7 +14,6 @@ def test_abc(conn_cnx, tmpdir, db_parameters):
         f.write("test1,test2")
         f.write("test3,test4")
 
-    assert os.path.exists(tmp_dir), f"Temporary directory {tmp_dir} does not exist."
     assert os.path.exists(test_data), f"Test data {test_data} does not exist."
 
     fileURI = pathlib.Path(test_data).as_uri()

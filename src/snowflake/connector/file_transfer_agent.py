@@ -14,6 +14,8 @@ from functools import partial
 from logging import getLogger
 from time import time
 from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import GET_CWD, IS_WINDOWS
@@ -837,10 +839,13 @@ class SnowflakeFileTransferAgent:
     def _expand_filenames(self, locations: list[str]) -> list[str]:
         canonical_locations = []
         for file_name in locations:
+            # TODO: Since python 3.13 os.path.isabs returns other values for URI ... comment to be finished
+            parsed = urlparse(file_name)
+            if parsed.scheme == "file":
+                file_name = url2pathname(parsed.path)
+
             if self._command_type == CMD_TYPE_UPLOAD:
                 file_name = os.path.expanduser(file_name)
-                if not os.path.isabs(file_name):
-                    file_name = os.path.join(GET_CWD(), file_name)
                 if (
                     IS_WINDOWS
                     and len(file_name) > 2
@@ -850,6 +855,10 @@ class SnowflakeFileTransferAgent:
                     # Windows path: /C:/data/file1.txt where it starts with slash
                     # followed by a drive letter and colon.
                     file_name = file_name[1:]
+
+                if not os.path.isabs(file_name):
+                    file_name = os.path.join(GET_CWD(), file_name)
+
                 files = glob.glob(file_name)
                 canonical_locations += files
             else:
