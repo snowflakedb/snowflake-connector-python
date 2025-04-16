@@ -41,6 +41,9 @@ if %errorlevel% neq 0 goto :error
 
 cd %CONNECTOR_DIR%
 
+:: Fetch wiremock
+curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output %CONNECTOR_DIR%\.wiremock\wiremock-standalone.jar
+
 set JUNIT_REPORT_DIR=%workspace%
 set COV_REPORT_DIR=%workspace%
 
