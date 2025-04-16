@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 import json
 import logging
 import pathlib
@@ -35,11 +31,12 @@ def _get_mapping_str(mapping: Union[str, dict, pathlib.Path]) -> str:
 
 
 class WiremockClient:
-    def __init__(self):
+    def __init__(self, forbidden_ports: Optional[List[int]] = None) -> None:
         self.wiremock_filename = "wiremock-standalone.jar"
         self.wiremock_host = "localhost"
         self.wiremock_http_port = None
         self.wiremock_https_port = None
+        self.forbidden_ports = forbidden_ports if forbidden_ports is not None else []
 
         self.wiremock_dir = pathlib.Path(__file__).parent.parent.parent / ".wiremock"
         assert self.wiremock_dir.exists(), f"{self.wiremock_dir} does not exist"
@@ -50,9 +47,11 @@ class WiremockClient:
         ), f"{self.wiremock_jar_path} does not exist"
 
     def _start_wiremock(self):
-        self.wiremock_http_port = self._find_free_port()
+        self.wiremock_http_port = self._find_free_port(
+            forbidden_ports=self.forbidden_ports,
+        )
         self.wiremock_https_port = self._find_free_port(
-            forbidden_ports=[self.wiremock_http_port]
+            forbidden_ports=self.forbidden_ports + [self.wiremock_http_port]
         )
         self.wiremock_process = subprocess.Popen(
             [
@@ -123,6 +122,10 @@ class WiremockClient:
         return True
 
     def _reset_wiremock(self):
+        clean_journal_endpoint = (
+            f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/requests"
+        )
+        requests.delete(clean_journal_endpoint)
         reset_endpoint = (
             f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/reset"
         )

@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import decimal
@@ -11,10 +7,10 @@ import logging
 import os
 import pickle
 import time
+import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
-from unittest.mock import MagicMock
 
 import pytest
 import pytz
@@ -846,10 +842,11 @@ def test_timeout_query(conn_cnx):
                 # we can not precisely control the timing to send cancel query request right after server
                 # executes the query but before returning the results back to client
                 # it depends on python scheduling and server processing speed, so we mock here
-                with mock.patch.object(
-                    c, "_timebomb", new_callable=MagicMock
-                ) as mock_timerbomb:
-                    mock_timerbomb.executed = True
+                with mock.patch(
+                    "snowflake.connector.cursor._TrackedQueryCancellationTimer",
+                    autospec=True,
+                ) as mock_timebomb:
+                    mock_timebomb.return_value.executed = True
                     c.execute(
                         "select 123'",
                         timeout=0.1,
@@ -1791,6 +1788,24 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.parametrize("result_format", ("json", "arrow"))
+def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
+    """Tests whether the year 10000 is out of range exception is raised as expected."""
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: result_format
+        }
+    ) as con:
+        with con.cursor() as cur:
+            cur.execute("select TO_DATE('10000-01-01'), TO_DATE('9999-01-01')")
+            with pytest.raises(
+                InterfaceError,
+                match="out of range",
+            ):
+                cur.fetchall()
+
+
+@pytest.mark.skipolddriver
 def test_describe(conn_cnx):
     with conn_cnx() as con:
         with con.cursor() as cur:
@@ -1950,3 +1965,39 @@ def test_nanoarrow_usage_deprecation():
             and "snowflake.connector.cursor.NanoarrowUsage has been deprecated"
             in str(record[2].message)
         )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "request_id",
+    [
+        "THIS IS NOT VALID",
+        uuid.uuid1(),
+        uuid.uuid3(uuid.NAMESPACE_URL, "www.snowflake.com"),
+        uuid.uuid5(uuid.NAMESPACE_URL, "www.snowflake.com"),
+    ],
+)
+def test_custom_request_id_negative(request_id, conn_cnx):
+
+    # Ensure that invalid request_ids (non uuid4) do not compromise interface.
+    with pytest.raises(ValueError, match="requestId"):
+        with conn_cnx() as con:
+            with con.cursor() as cur:
+                cur.execute(
+                    "select seq4() as foo from table(generator(rowcount=>5))",
+                    _statement_params={"requestId": request_id},
+                )
+
+
+@pytest.mark.skipolddriver
+def test_custom_request_id(conn_cnx):
+    request_id = uuid.uuid4()
+
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute(
+                "select seq4() as foo from table(generator(rowcount=>5))",
+                _statement_params={"requestId": request_id},
+            )
+
+            assert cur._sfqid is not None, "Query must execute successfully."

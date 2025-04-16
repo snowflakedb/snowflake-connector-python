@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from typing import Any, Generator
 
 import pytest
@@ -16,6 +12,7 @@ except ImportError:
 from ..wiremock.wiremock_utils import WiremockClient
 
 
+@pytest.mark.skipolddriver
 @pytest.fixture(scope="session")
 def wiremock_client() -> Generator[WiremockClient, Any, None]:
     with WiremockClient() as client:

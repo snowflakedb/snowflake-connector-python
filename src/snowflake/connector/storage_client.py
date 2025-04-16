@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import os
@@ -286,6 +282,7 @@ class SnowflakeStorageClient(ABC):
             conn = self.meta.sfagent._cursor.connection
 
         while self.retry_count[retry_id] < self.max_retry:
+            logger.debug(f"retry #{self.retry_count[retry_id]}")
             cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
             rest_kwargs["timeout"] = (REQUEST_CONNECTION_TIMEOUT, REQUEST_READ_TIMEOUT)
@@ -299,10 +296,14 @@ class SnowflakeStorageClient(ABC):
                     response = rest_call(url, **rest_kwargs)
 
                 if self._has_expired_presigned_url(response):
+                    logger.debug(
+                        "presigned url expired. trying to update presigned url."
+                    )
                     self._update_presigned_url()
                 else:
                     self.last_err_is_presigned_url = False
                     if response.status_code in self.TRANSIENT_HTTP_ERR:
+                        logger.debug(f"transient error: {response.status_code}")
                         time.sleep(
                             min(
                                 # TODO should SLEEP_UNIT come from the parent
@@ -313,7 +314,9 @@ class SnowflakeStorageClient(ABC):
                         )
                         self.retry_count[retry_id] += 1
                     elif self._has_expired_token(response):
+                        logger.debug("token is expired. trying to update token")
                         self.credentials.update(cur_timestamp)
+                        self.retry_count[retry_id] += 1
                     else:
                         return response
             except self.TRANSIENT_ERRORS as e:

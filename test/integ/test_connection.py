@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import gc
@@ -1143,6 +1139,15 @@ def test_client_prefetch_threads_setting(conn_cnx):
             cur.execute(f"alter session set client_prefetch_threads={new_thread_count}")
             assert cur._result_set.prefetch_thread_num == new_thread_count
         assert conn.client_prefetch_threads == new_thread_count
+
+
+@pytest.mark.skipolddriver
+def test_client_fetch_threads_setting(conn_cnx):
+    """Tests whether client_fetch_threads is None by default and setting the parameter has effect."""
+    with conn_cnx() as conn:
+        assert conn.client_fetch_threads is None
+        conn.client_fetch_threads = 32
+        assert conn.client_fetch_threads == 32
 
 
 @pytest.mark.external

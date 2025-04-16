@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import collections
@@ -142,6 +138,7 @@ MASTER_TOKEN_EXPIRED_GS_CODE = "390114"
 MASTER_TOKEN_INVALD_GS_CODE = "390115"
 ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE = "390195"
 BAD_REQUEST_GS_CODE = "390400"
+OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE = "390318"
 
 # other constants
 CONTENT_TYPE_APPLICATION_JSON = "application/json"
@@ -185,6 +182,8 @@ DEFAULT_AUTHENTICATOR = "SNOWFLAKE"  # default authenticator name
 EXTERNAL_BROWSER_AUTHENTICATOR = "EXTERNALBROWSER"
 KEY_PAIR_AUTHENTICATOR = "SNOWFLAKE_JWT"
 OAUTH_AUTHENTICATOR = "OAUTH"
+OAUTH_AUTHORIZATION_CODE = "OAUTH_AUTHORIZATION_CODE"
+OAUTH_CLIENT_CREDENTIALS = "OAUTH_CLIENT_CREDENTIALS"
 ID_TOKEN_AUTHENTICATOR = "ID_TOKEN"
 USR_PWD_MFA_AUTHENTICATOR = "USERNAME_PASSWORD_MFA"
 PROGRAMMATIC_ACCESS_TOKEN = "PROGRAMMATIC_ACCESS_TOKEN"
@@ -357,6 +356,15 @@ class SessionPool:
         self._idle_sessions.clear()
 
 
+# Customizable JSONEncoder to support additional types.
+class SnowflakeRestfulJsonEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, uuid.UUID):
+            return str(o)
+
+        return super().default(o)
+
+
 class SnowflakeRestful:
     """Snowflake Restful class."""
 
@@ -503,7 +511,7 @@ class SnowflakeRestful:
             return self._post_request(
                 url,
                 headers,
-                json.dumps(body),
+                json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
                 token=self.token,
                 _no_results=_no_results,
                 timeout=timeout,
@@ -565,7 +573,7 @@ class SnowflakeRestful:
         ret = self._post_request(
             url,
             headers,
-            json.dumps(body),
+            json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
             token=header_token,
         )
         if ret.get("success") and ret.get("data", {}).get("sessionToken"):
@@ -663,7 +671,7 @@ class SnowflakeRestful:
                 ret = self._post_request(
                     url,
                     headers,
-                    json.dumps(body),
+                    json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
                     token=self.token,
                     timeout=5,
                     no_retry=True,

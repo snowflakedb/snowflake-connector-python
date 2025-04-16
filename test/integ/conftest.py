@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import os
@@ -168,16 +164,22 @@ def init_test_schema(db_parameters) -> Generator[None]:
 
     This is automatically called per test session.
     """
-    ret = db_parameters
-    with snowflake.connector.connect(
-        user=ret["user"],
-        password=ret["password"],
-        host=ret["host"],
-        port=ret["port"],
-        database=ret["database"],
-        account=ret["account"],
-        protocol=ret["protocol"],
-    ) as con:
+    connection_params = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "database": db_parameters["database"],
+        "account": db_parameters["account"],
+        "protocol": db_parameters["protocol"],
+    }
+
+    # Role may be needed when running on preprod, but is not present on Jenkins jobs
+    optional_role = db_parameters.get("role")
+    if optional_role is not None:
+        connection_params.update(role=optional_role)
+
+    with snowflake.connector.connect(**connection_params) as con:
         con.cursor().execute(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}")
         yield
         con.cursor().execute(f"DROP SCHEMA IF EXISTS {TEST_SCHEMA}")

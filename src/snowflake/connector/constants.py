@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 from collections import defaultdict
@@ -325,7 +321,7 @@ PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED = "CLIENT_OUT_OF_BAND_TELEMETRY_ENABLED"
 PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL = "CLIENT_STORE_TEMPORARY_CREDENTIAL"
 PARAMETER_CLIENT_REQUEST_MFA_TOKEN = "CLIENT_REQUEST_MFA_TOKEN"
 PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL = (
-    "CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTAIL"
+    "CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL"
 )
 PARAMETER_QUERY_CONTEXT_CACHE_SIZE = "QUERY_CONTEXT_CACHE_SIZE"
 PARAMETER_TIMEZONE = "TIMEZONE"
@@ -440,3 +436,7 @@ _CONNECTIVITY_ERR_MSG = (
     "\nTo further troubleshoot your connection you may reference the following article: "
     "https://docs.snowflake.com/en/user-guide/client-connectivity-troubleshooting/overview."
 )
+
+_OAUTH_DEFAULT_SCOPE = "session:role:{role}"
+OAUTH_TYPE_AUTHORIZATION_CODE = "authorization_code"
+OAUTH_TYPE_CLIENT_CREDENTIALS = "client_credentials"

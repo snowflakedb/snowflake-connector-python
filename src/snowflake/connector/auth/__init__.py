@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 from ._auth import Auth, get_public_key_fingerprint, get_token_from_private_key
@@ -11,6 +7,8 @@ from .idtoken import AuthByIdToken
 from .keypair import AuthByKeyPair
 from .no_auth import AuthNoAuth
 from .oauth import AuthByOAuth
+from .oauth_code import AuthByOauthCode
+from .oauth_credentials import AuthByOauthCredentials
 from .okta import AuthByOkta
 from .pat import AuthByPAT
 from .usrpwdmfa import AuthByUsrPwdMfa
@@ -22,6 +20,8 @@ FIRST_PARTY_AUTHENTICATORS = frozenset(
         AuthByDefault,
         AuthByKeyPair,
         AuthByOAuth,
+        AuthByOauthCode,
+        AuthByOauthCredentials,
         AuthByOkta,
         AuthByUsrPwdMfa,
         AuthByWebBrowser,
@@ -38,6 +38,8 @@ __all__ = [
     "AuthByKeyPair",
     "AuthByPAT",
     "AuthByOAuth",
+    "AuthByOauthCode",
+    "AuthByOauthCredentials",
     "AuthByOkta",
     "AuthByUsrPwdMfa",
     "AuthByWebBrowser",

@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import copy
@@ -51,6 +47,7 @@ from ..network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
+    OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
@@ -90,7 +87,7 @@ class Auth:
 
     def __init__(self, rest) -> None:
         self._rest = rest
-        self.token_cache = TokenCache.make()
+        self._token_cache: TokenCache | None = None
 
     @staticmethod
     def base_auth_data(
@@ -354,9 +351,17 @@ class Auth:
                 # clear stored id_token if failed to connect because of id_token
                 # raise an exception for reauth without id_token
                 self._rest.id_token = None
-                self.delete_temporary_credential(
+                self._delete_temporary_credential(
                     self._rest._host, user, TokenType.ID_TOKEN
                 )
+                raise ReauthenticationRequest(
+                    ProgrammingError(
+                        msg=ret["message"],
+                        errno=int(errno),
+                        sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                    )
+                )
+            elif errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE:
                 raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=ret["message"],
@@ -378,7 +383,7 @@ class Auth:
             from . import AuthByUsrPwdMfa
 
             if isinstance(auth_instance, AuthByUsrPwdMfa):
-                self.delete_temporary_credential(
+                self._delete_temporary_credential(
                     self._rest._host, user, TokenType.MFA_TOKEN
                 )
             Error.errorhandler_wrapper(
@@ -470,7 +475,7 @@ class Auth:
         user: str,
         cred_type: TokenType,
     ) -> str | None:
-        return self.token_cache.retrieve(TokenKey(host, user, cred_type))
+        return self.get_token_cache().retrieve(TokenKey(host, user, cred_type))
 
     def read_temporary_credentials(
         self,
@@ -504,7 +509,7 @@ class Auth:
                 "no credential is given when try to store temporary credential"
             )
             return
-        self.token_cache.store(TokenKey(host, user, cred_type), cred)
+        self.get_token_cache().store(TokenKey(host, user, cred_type), cred)
 
     def write_temporary_credentials(
         self,
@@ -528,10 +533,15 @@ class Auth:
                 host, user, TokenType.MFA_TOKEN, response["data"].get("mfaToken")
             )
 
-    def delete_temporary_credential(
+    def _delete_temporary_credential(
         self, host: str, user: str, cred_type: TokenType
     ) -> None:
-        self.token_cache.remove(TokenKey(host, user, cred_type))
+        self.get_token_cache().remove(TokenKey(host, user, cred_type))
+
+    def get_token_cache(self) -> TokenCache:
+        if self._token_cache is None:
+            self._token_cache = TokenCache.make()
+        return self._token_cache
 
 
 def get_token_from_private_key(
