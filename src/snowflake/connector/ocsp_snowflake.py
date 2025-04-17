@@ -227,6 +227,7 @@ try:
         OCSPResponseValidationResult,
     ] = _OCSPResponseValidationResultCache(
         entry_lifetime=constants.DAY_IN_SECONDS,
+        file_timeout=1.0,
         file_path={
             "linux": os.path.join(
                 "~", ".cache", "snowflake", "ocsp_response_validation_cache.json"

@@ -385,7 +385,7 @@ class SFDictFileCache(SFDictCache):
         file_path: str | dict[str, str],
         entry_lifetime: int = constants.DAY_IN_SECONDS,
         file_timeout: int = 0,
-        load_if_file_exists: bool = False,
+        load_if_file_exists: bool = True,
     ) -> None:
         """Inits an SFDictFileCache with path, lifetime.
 
