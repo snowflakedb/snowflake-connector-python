@@ -15,7 +15,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
     - NOTE: Windows 64 support is still experimental and should not yet be used for production environments.
   - Dropped support for Python 3.8.
   - Added basic decimal floating-point type support.
-  - Added handling of PAT provided in `password` field.
   - Added experimental authentication methods.
   - Added support of GCS regional endpoints.
   - Added support of GCS virtual urls. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
