@@ -60,7 +60,7 @@ setup_external_libraries()
 @wraps(SnowflakeConnection.__init__)
 def Connect(
     connection_name: str | None = None,
-    connections_file_path: PathLike[str] | str | None = None,
+    connections_file_path: PathLike[str] | None = None,
     **kwargs: Unpack[SnowflakeConnectionConfig],
 ) -> SnowflakeConnection:
     return SnowflakeConnection(

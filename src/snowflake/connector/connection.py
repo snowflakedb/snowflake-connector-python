@@ -505,7 +505,7 @@ class SnowflakeConnection:
     def __init__(
         self,
         connection_name: str | None = None,
-        connections_file_path: pathlib.Path | None = None,
+        connections_file_path: PathLike[str] | None = None,
         **kwargs: Unpack[SnowflakeConnectionConfig],
     ) -> None:
         """Create a new SnowflakeConnection.
@@ -1223,7 +1223,7 @@ class SnowflakeConnection:
             elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
                 self._session_parameters[
                     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL
-                ] = (self._client_store_temporary_credential if IS_LINUX else True)
+                ] = self._client_store_temporary_credential if IS_LINUX else True
                 auth.read_temporary_credentials(
                     self.host,
                     self.user,
