@@ -20,7 +20,7 @@ on:
             description: "Test scenario tags"
 
 concurrency:
-  # older builds for the same pull request numer or branch should be cancelled
+  # older builds for the same pull request number or branch should be cancelled
   cancel-in-progress: true
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 
@@ -207,7 +207,7 @@ jobs:
         os:
          # Because old the version 3.0.2 of snowflake-connector-python depends on oscrypto which causes conflicts with higher versions of libssl
          # TODO: It can be changed to ubuntu-latest, when python sf connector version in tox is above 3.4.0
-         - image_name: ubuntu-20.04
+         - image_name: ubuntu-22.04
            download_name: linux
         python-version: [3.9]
         cloud-provider: [aws]

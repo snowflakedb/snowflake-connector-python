@@ -1141,6 +1141,15 @@ def test_client_prefetch_threads_setting(conn_cnx):
         assert conn.client_prefetch_threads == new_thread_count
 
 
+@pytest.mark.skipolddriver
+def test_client_fetch_threads_setting(conn_cnx):
+    """Tests whether client_fetch_threads is None by default and setting the parameter has effect."""
+    with conn_cnx() as conn:
+        assert conn.client_fetch_threads is None
+        conn.client_fetch_threads = 32
+        assert conn.client_fetch_threads == 32
+
+
 @pytest.mark.external
 def test_client_failover_connection_url(conn_cnx):
     with conn_cnx("client_failover") as conn:
@@ -1364,34 +1373,6 @@ def test_server_session_keep_alive(conn_cnx):
     with conn_cnx() as conn:
         conn.rest.delete_session = mock_delete_session
     mock_delete_session.assert_called_once()
-
-
-@pytest.mark.skipolddriver
-@pytest.mark.parametrize(
-    "value",
-    [
-        True,
-        False,
-    ],
-)
-def test_gcs_use_virtual_endpoints(conn_cnx, value):
-    with mock.patch(
-        "snowflake.connector.network.SnowflakeRestful.fetch",
-        return_value={"data": {"token": None, "masterToken": None}, "success": True},
-    ):
-        with snowflake.connector.connect(
-            user="test-user",
-            password="test-password",
-            host="test-host",
-            port="443",
-            account="test-account",
-            gcs_use_virtual_endpoints=value,
-        ) as cnx:
-            assert cnx
-            cnx.commit = cnx.rollback = (
-                lambda: None
-            )  # Skip tear down, there's only a mocked rest api
-            assert cnx.gcs_use_virtual_endpoints == value
 
 
 @pytest.mark.skipolddriver

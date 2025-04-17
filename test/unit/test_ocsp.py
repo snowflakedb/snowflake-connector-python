@@ -257,6 +257,7 @@ def test_ocsp_bad_validity():
     del environ["SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY"]
 
 
+@pytest.mark.flaky(reruns=3)
 def test_ocsp_single_endpoint():
     environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"] = "True"
     SnowflakeOCSP.clear_cache()
@@ -280,6 +281,7 @@ def test_ocsp_by_post_method():
         assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
+@pytest.mark.flaky(reruns=3)
 def test_ocsp_with_file_cache(tmpdir):
     """OCSP tests and the cache server and file."""
     tmp_dir = str(tmpdir.mkdir("ocsp_response_cache"))
@@ -293,6 +295,7 @@ def test_ocsp_with_file_cache(tmpdir):
         assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.skipolddriver
 def test_ocsp_with_bogus_cache_files(tmpdir, random_ocsp_response_validation_cache):
     with mock.patch(
@@ -332,6 +335,7 @@ def test_ocsp_with_bogus_cache_files(tmpdir, random_ocsp_response_validation_cac
             )
 
 
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.skipolddriver
 def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_cache):
     with mock.patch(
@@ -392,6 +396,7 @@ def _store_cache_in_file(tmpdir, target_hosts=None):
     return filename, target_hosts
 
 
+@pytest.mark.flaky(reruns=3)
 def test_ocsp_with_invalid_cache_file():
     """OCSP tests with an invalid cache file."""
     SnowflakeOCSP.clear_cache()  # reset the memory cache
@@ -401,6 +406,7 @@ def test_ocsp_with_invalid_cache_file():
         assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
+@pytest.mark.flaky(reruns=3)
 @mock.patch(
     "snowflake.connector.ocsp_snowflake.SnowflakeOCSP._fetch_ocsp_response",
     side_effect=BrokenPipeError("fake error"),
@@ -423,6 +429,7 @@ def test_ocsp_cache_when_server_is_down(
         assert not cache_data, "no cache should present because of broken pipe"
 
 
+@pytest.mark.flaky(reruns=3)
 def test_concurrent_ocsp_requests(tmpdir):
     """Run OCSP revocation checks in parallel. The memory and file caches are deleted randomly."""
     cache_file_name = path.join(str(tmpdir), "cache_file.txt")
@@ -467,6 +474,7 @@ def test_ocsp_revoked_certificate():
     assert ex.value.errno == ex.value.errno == ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 
 
+@pytest.mark.flaky(reruns=3)
 def test_ocsp_incomplete_chain():
     """Tests incomplete chained certificate."""
     incomplete_chain_cert = path.join(

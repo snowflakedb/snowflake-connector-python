@@ -279,7 +279,7 @@ def test_explicit_azure_uses_default_entra_resource_if_unspecified(
     token = fake_azure_metadata_service.token
     parsed = jwt.decode(token, options={"verify_signature": False})
     assert (
-        parsed["aud"] == "NOT REAL - WILL BREAK"
+        parsed["aud"] == "api://fd3f753b-eed3-462c-b6a7-a4b5bb650aad"
     )  # the default entra resource defined in wif_util.py.
 
 
