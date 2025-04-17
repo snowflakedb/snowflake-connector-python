@@ -9,7 +9,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v3.14.1(TBD)
   - Added support for Python 3.13.
-    - NOTE: Windows 64 support is still experimental and should not yet be used for production environments.
   - Dropped support for Python 3.8.
   - Basic decimal floating-point type support.
   - Added handling of PAT provided in `password` field.
@@ -24,6 +23,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fix expired S3 credentials update and increment retry when expired credentials are found.
   - Added `client_fetch_threads` experimental parameter to better utilize threads for fetching query results.
   - Added support of GCS virtual urls. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
+  - Bumped numpy dependency from <2.1.0 to <2.2.4
 
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
