@@ -234,7 +234,10 @@ def create_azure_attestation(
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     if not issuer or not subject:
         return None
-    if not (issuer.startswith("https://sts.windows.net/") or issuer.startswith("https://login.microsoftonline.com/")):
+    if not (
+        issuer.startswith("https://sts.windows.net/")
+        or issuer.startswith("https://login.microsoftonline.com/")
+    ):
         # This might happen if we're running on a different platform that responds to the same metadata request signature as Azure.
         logger.debug("Unexpected Azure token issuer '%s'", issuer)
         return None
