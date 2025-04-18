@@ -77,7 +77,7 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
         FEATURE_OCSP_MODE.name,
         FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
     )
-    if FEATURE_OCSP_MODE != OCSPMode.DISABLE_OCSP_CHECKS:
+    if FEATURE_OCSP_MODE != OCSPMode.INSECURE:
         from .ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 
         v = SFOCSP(
@@ -94,9 +94,11 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
                 errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
             )
     else:
-        log.debug(
-            "This connection does not perform OCSP checks. "
-            "Revocation status of the certificate will not be checked against OCSP Responder."
+        log.info(
+            "THIS CONNECTION IS IN INSECURE "
+            "MODE. IT MEANS THE CERTIFICATE WILL BE "
+            "VALIDATED BUT THE CERTIFICATE REVOCATION "
+            "STATUS WILL NOT BE CHECKED."
         )
 
     return ret
