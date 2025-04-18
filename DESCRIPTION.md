@@ -10,6 +10,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.15(TBD)
   -
 
+- v3.14.1(April 21,2025)
+
+   -N/A
+
+
 - v3.14.1(April 18, 2025)
   - Added support for Python 3.13.
     - NOTE: Windows 64 support is still experimental and should not yet be used for production environments.
