@@ -8,16 +8,15 @@ from unittest.mock import Mock, patch
 import pytest
 
 import snowflake.connector
+from snowflake.connector.compat import IS_LINUX
 from snowflake.connector.errors import DatabaseError
 
 try:
-    from snowflake.connector.compat import IS_LINUX, IS_MACOS, IS_WINDOWS
+    from snowflake.connector.compat import IS_MACOS
 except ImportError:
     import platform
 
     IS_MACOS = platform.system() == "Darwin"
-    IS_LINUX = platform.system() == "Linux"
-    IS_WINDOWS = platform.system() == "Windows"
 
 
 # Although this is an unit test, we put it under test/integ/sso, since it needs keyring package installed
@@ -163,7 +162,7 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     if IS_LINUX:
         conn_cfg["client_request_mfa_token"] = True
 
-    if IS_MACOS or IS_WINDOWS:
+    if IS_MACOS:
         with patch(
             "keyring.delete_password", Mock(side_effect=mock_del_password)
         ), patch("keyring.set_password", Mock(side_effect=mock_set_password)), patch(
