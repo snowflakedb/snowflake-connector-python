@@ -1,8 +1,7 @@
-# Generated on: Python 3.11.11
+# Generated on: Python 3.11.12
 asn1crypto==1.5.1
-boto3==1.37.37
-botocore==1.37.37
-build==1.2.2.post1
+boto3==1.37.38
+botocore==1.37.38
 certifi==2025.1.31
 cffi==1.17.1
 charset-normalizer==3.4.1
@@ -10,12 +9,11 @@ cryptography==44.0.2
 filelock==3.18.0
 idna==3.10
 jmespath==1.0.1
-packaging==24.2
+packaging==25.0
 platformdirs==4.3.7
 pycparser==2.22
 PyJWT==2.10.1
 pyOpenSSL==25.0.0
-pyproject_hooks==1.2.0
 python-dateutil==2.9.0.post0
 pytz==2025.2
 requests==2.32.3
