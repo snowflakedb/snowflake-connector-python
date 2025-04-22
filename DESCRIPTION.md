@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v3.15(TBD)
-  -
+  - Added `use_vectorized_scanner` parameter on `write_pandas` to leverage vectorized scanner.
 
 - v3.14.1(April 21, 2025)
   - Added support for Python 3.13.
