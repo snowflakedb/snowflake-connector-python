@@ -8,7 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v3.15(TBD)
-  -
+  - Bumped up min boto and botocore version to 1.24
 
 - v3.14.1(April 21, 2025)
   - Added support for Python 3.13.
