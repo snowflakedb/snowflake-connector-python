@@ -359,7 +359,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "enable_single_use_refresh_tokens": (
         False,
         bool,
-    )
+    ),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")

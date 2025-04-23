@@ -690,7 +690,9 @@ def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
 
 
 @pytest.mark.parametrize("rtr_enabled", [True, False])
-def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(monkeypatch, rtr_enabled: bool):
+def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
+    monkeypatch, rtr_enabled: bool
+):
     with monkeypatch.context() as m:
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
