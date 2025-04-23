@@ -351,6 +351,11 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         collections.abc.Iterable,  # of strings
         # SNOW-1825621: OAUTH PKCE
     ),
+    # Client-side opt-in to single-use refresh tokens.
+    "oauth_enable_single_use_refresh_tokens": (
+        False,
+        bool,
+    ),
     "check_arrow_conversion_error_on_every_column": (
         True,
         bool,
@@ -1239,6 +1244,7 @@ class SnowflakeConnection:
                     ),
                     refresh_token_enabled=features.refresh_token_enabled,
                     external_browser_timeout=self._external_browser_timeout,
+                    enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
                 self._check_experimental_authentication_flag()
