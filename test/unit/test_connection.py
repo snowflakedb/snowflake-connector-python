@@ -705,6 +705,6 @@ def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
             oauth_client_id="client_id",
             oauth_client_secret="client_secret",
             authenticator="OAUTH_AUTHORIZATION_CODE",
-            enable_single_use_refresh_tokens=rtr_enabled,
+            oauth_enable_single_use_refresh_tokens=rtr_enabled,
         )
         assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled
