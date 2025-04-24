@@ -81,6 +81,8 @@ PYTHON_TO_SNOWFLAKE_TYPE = {
 # Type alias
 SnowflakeConverterType = Callable[[Any], Any]
 
+JSON_FORMAT_STR = "json"
+
 
 def convert_datetime_to_epoch(dt: datetime) -> float:
     """Converts datetime to epoch time in seconds.
@@ -370,9 +372,31 @@ class SnowflakeConverter:
             snowflake_type, value
         )
 
+    def to_snowflake_bindings_dict(
+        self, snowflake_type: str, value: Any
+    ) -> dict[str, Any]:
+        """Converts Python data to snowflake bindings dict dor qmark and numeric parameter style.
+
+        The output is bound in a query in the server side.
+        """
+        type_name = value.__class__.__name__.lower()
+        return getattr(self, f"_{type_name}_to_snowflake_bindings_dict")(
+            snowflake_type, value
+        )
+
     def _str_to_snowflake_bindings(self, _, value: str) -> str:
         # NOTE: str type is always taken as a text data and never binary
         return str(value)
+
+    def _str_to_snowflake_bindings_dict(
+        self, snowflake_type: str, value: str
+    ) -> dict[str, Any]:
+        return {
+            "type": snowflake_type,
+            "value": str(value),
+            "schema": None,
+            "fmt": JSON_FORMAT_STR,
+        }
 
     def _date_to_snowflake_bindings_in_bulk_insertion(self, value: date) -> str:
         # notes: this is for date type bulk insertion, it's different from non-bulk date type insertion flow
@@ -402,6 +426,14 @@ class SnowflakeConverter:
 
     def _nonetype_to_snowflake_bindings(self, *_) -> None:
         return None
+
+    def _nonetype_to_snowflake_bindings_dict(self, *_) -> dict[str, Any]:
+        return {
+            "type": "ANY",
+            "value": None,
+            "schema": None,
+            "format": JSON_FORMAT_STR,
+        }
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
         # this is for date type non-bulk insertion, it's different from bulk date type insertion flow
@@ -473,6 +505,82 @@ class SnowflakeConverter:
         return (
             str(hours * 3600 + mins * 60 + secs) + f"{value.microseconds:06d}" + "000"
         )
+
+    def _list_to_snowflake_bindings_dict(
+        self, snowflake_type: str, value: list
+    ) -> dict[str, Any]:
+        snowflake_type = snowflake_type.upper()
+        if snowflake_type != "ARRAY":
+            raise ProgrammingError(
+                msg="Binding list with Snowflake data type {} is "
+                "not supported.".format(snowflake_type),
+                errno=ER_NOT_SUPPORT_DATA_TYPE,
+            )
+        if not value:
+            return {
+                "type": snowflake_type,
+                "value": "[]",
+                "schema": None,
+                "fmt": JSON_FORMAT_STR,
+            }
+
+        inner_snowflake_type = self.snowflake_type(value[0])
+        if inner_snowflake_type == "BINARY":
+            field_metadata = {"type": "binary", "nullable": True}
+            schema = {"type": "array", "fields": [field_metadata], "nullable": True}
+            encoded_bytes = [
+                self._bytearray_to_snowflake_bindings(inner_snowflake_type, v)
+                for v in value
+            ]
+            return {
+                "type": snowflake_type,
+                "value": json.dumps(encoded_bytes),
+                "schema": schema,
+                "fmt": JSON_FORMAT_STR,
+            }
+        elif inner_snowflake_type in ("TIMESTAMP_TZ", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ"):
+            field_metadata = {"type": inner_snowflake_type, "nullable": True}
+            schema = {"type": "array", "fields": [field_metadata], "nullable": True}
+            encoded_values = [
+                self.to_snowflake_bindings(inner_snowflake_type, v) for v in value
+            ]
+
+            return {
+                "type": snowflake_type,
+                "value": encoded_values,
+                "schema": schema,
+                "fmt": JSON_FORMAT_STR,
+            }
+        # elif array of structs
+        elif inner_snowflake_type == "ARRAY":
+            raise ProgrammingError(msg="Binding array of arrays is not supported.")
+
+        try:
+            json_str = json.dumps(value)
+            return {
+                "type": snowflake_type,
+                "value": json_str,
+                "schema": None,
+                "fmt": JSON_FORMAT_STR,
+            }
+        except Exception as e:
+            raise ProgrammingError(
+                msg="Binding list with Snowflake data type {} is "
+                "not supported. Error: {}".format(snowflake_type, e),
+                errno=ER_NOT_SUPPORT_DATA_TYPE,
+            )
+
+    _tuple_to_snowflake_bindings_dict = _list_to_snowflake_bindings_dict
+
+    def _dict_to_snowflake_bindings_dict(
+        self, snowflake_type: str, value: dict
+    ) -> dict[str, Any]:
+        return {
+            "type": snowflake_type,
+            "value": json.dumps(value),
+            "schema": None,
+            "fmt": JSON_FORMAT_STR,
+        }
 
     def to_snowflake(self, value: Any) -> Any:
         """Converts Python data to Snowflake data for pyformat/format style.

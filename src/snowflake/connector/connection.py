@@ -1771,36 +1771,49 @@ class SnowflakeConnection:
             self.converter.to_snowflake_bindings(snowflake_type, v),
         )
 
+    def _is_complex_type(self, snowflake_type: str):
+        return snowflake_type in ("VARIANT", "OBJECT", "ARRAY", "MAP")
+
     # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
     def _process_params_qmarks(
         self,
         params: Sequence | None,
         cursor: SnowflakeCursor | None = None,
+        snowflake_type: str | None = None,
     ) -> dict[str, dict[str, str]] | None:
         if not params:
             return None
         processed_params = {}
 
-        get_type_and_binding = partial(self._get_snowflake_type_and_binding, cursor)
+        if self._is_complex_type(snowflake_type):
+            for idx, v in enumerate(params):
+                processed_params[str(idx + 1)] = (
+                    self.converter.to_snowflake_bindings_dict(snowflake_type, v)
+                )
 
-        for idx, v in enumerate(params):
-            if isinstance(v, list):
-                snowflake_type = self.converter.snowflake_type(v)
-                all_param_data = list(map(get_type_and_binding, v))
-                first_type = all_param_data[0].type
-                # if all elements have the same snowflake type, update snowflake_type
-                if all(param_data.type == first_type for param_data in all_param_data):
-                    snowflake_type = first_type
-                processed_params[str(idx + 1)] = {
-                    "type": snowflake_type,
-                    "value": [param_data.binding for param_data in all_param_data],
-                }
-            else:
-                snowflake_type, snowflake_binding = get_type_and_binding(v)
-                processed_params[str(idx + 1)] = {
-                    "type": snowflake_type,
-                    "value": snowflake_binding,
-                }
+        else:
+            get_type_and_binding = partial(self._get_snowflake_type_and_binding, cursor)
+
+            for idx, v in enumerate(params):
+                if isinstance(v, list):
+                    snowflake_type = self.converter.snowflake_type(v)
+                    all_param_data = list(map(get_type_and_binding, v))
+                    first_type = all_param_data[0].type
+                    # if all elements have the same snowflake type, update snowflake_type
+                    if all(
+                        param_data.type == first_type for param_data in all_param_data
+                    ):
+                        snowflake_type = first_type
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "value": [param_data.binding for param_data in all_param_data],
+                    }
+                else:
+                    snowflake_type, snowflake_binding = get_type_and_binding(v)
+                    processed_params[str(idx + 1)] = {
+                        "type": snowflake_type,
+                        "value": snowflake_binding,
+                    }
         if logger.getEffectiveLevel() <= logging.DEBUG:
             for k, v in processed_params.items():
                 logger.debug("idx: %s, type: %s", k, v.get("type"))

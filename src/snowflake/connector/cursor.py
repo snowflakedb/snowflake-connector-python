@@ -899,6 +899,7 @@ class SnowflakeCursor:
         num_statements: int | None = None,
         _force_qmark_paramstyle: bool = False,
         _dataframe_ast: str | None = None,
+        snowflake_type: str | None = None,
     ) -> Self | dict[str, Any] | None:
         """Executes a command/query.
 
@@ -1000,7 +1001,7 @@ class SnowflakeCursor:
                     )
 
                 kwargs["binding_params"] = self._connection._process_params_qmarks(
-                    params, self
+                    params, self, snowflake_type=snowflake_type
                 )
 
         m = DESC_TABLE_RE.match(query)
