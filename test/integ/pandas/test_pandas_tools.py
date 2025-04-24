@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Generator
 from unittest import mock
+from unittest.mock import MagicMock
 
 import numpy.random
 import pytest
@@ -543,7 +544,10 @@ def test_table_location_building(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
                 sf_connector_version_df.get(),
@@ -557,6 +561,7 @@ def test_table_location_building(
             )
 
 
+# @pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "database,schema,quote_identifiers,expected_db_schema",
     [
@@ -591,7 +596,10 @@ def test_stage_location_building(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
                 sf_connector_version_df.get(),
@@ -643,7 +651,10 @@ def test_use_scoped_object(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             cnx._update_parameters({"PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS": True})
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
@@ -701,7 +712,10 @@ def test_file_format_location_building(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
                 sf_connector_version_df.get(),

@@ -383,6 +383,10 @@ def write_pandas(
             "Unsupported table type. Expected table types: temp/temporary, transient"
         )
 
+    if table_type.lower() in ["temp", "temporary"]:
+        # Add scoped keyword when applicable.
+        table_type = get_temp_type_for_object(_use_scoped_temp_object).lower()
+
     if chunk_size is None:
         chunk_size = len(df)
 
@@ -438,22 +442,13 @@ def write_pandas(
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression, **kwargs)
             # Upload parquet file
-            upload_sql = (
-                "PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                "'file://{path}' ? PARALLEL={parallel}"
-            ).format(
-                path=chunk_path.replace("\\", "\\\\").replace("'", "\\'"),
-                parallel=parallel,
+            path = chunk_path.replace("\\", "\\\\").replace("'", "\\'")
+            cursor._upload(
+                local_file_name="file://" + path,
+                stage_location="@" + stage_location,
+                options={"parallel": parallel},
             )
-            params = ("@" + stage_location,)
-            logger.debug(f"uploading files with '{upload_sql}', params: %s", params)
-            cursor.execute(
-                upload_sql,
-                _is_internal=True,
-                _force_qmark_paramstyle=True,
-                params=params,
-                num_statements=1,
-            )
+
             # Remove chunk file
             os.remove(chunk_path)
 
@@ -516,7 +511,11 @@ def write_pandas(
         target_table_location = build_location_helper(
             database,
             schema,
-            random_string() if (overwrite and auto_create_table) else table_name,
+            (
+                random_name_for_temp_object(TempObjectType.TABLE)
+                if (overwrite and auto_create_table)
+                else table_name
+            ),
             quote_identifiers,
         )
 
