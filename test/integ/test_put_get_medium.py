@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import datetime
@@ -359,7 +355,7 @@ field_delimiter = '|'
 error_on_column_count_mismatch=false);
 """,
         )
-        current_time = datetime.datetime.utcnow()
+        current_time = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         current_time = current_time.replace(tzinfo=pytz.timezone("America/Los_Angeles"))
         current_date = datetime.date.today()
         other_time = current_time.replace(tzinfo=pytz.timezone("Asia/Tokyo"))

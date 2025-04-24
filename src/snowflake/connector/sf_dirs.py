@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import os
@@ -14,8 +10,7 @@ from platformdirs import PlatformDirs
 
 class PlatformDirsProto(Protocol):
     @property
-    def user_config_path(self) -> pathlib.Path:
-        ...
+    def user_config_path(self) -> pathlib.Path: ...
 
 
 def _resolve_platform_dirs() -> PlatformDirsProto:
@@ -32,12 +27,12 @@ def _resolve_platform_dirs() -> PlatformDirsProto:
         "appname": "snowflake",
         "appauthor": False,
     }
-    snowflake_home = os.path.expanduser(
+    snowflake_home = pathlib.Path(
         os.environ.get("SNOWFLAKE_HOME", "~/.snowflake/"),
-    )
-    if os.path.exists(snowflake_home):
+    ).expanduser()
+    if snowflake_home.exists():
         return SFPlatformDirs(
-            snowflake_home,
+            str(snowflake_home),
             **platformdir_kwargs,
         )
     else:

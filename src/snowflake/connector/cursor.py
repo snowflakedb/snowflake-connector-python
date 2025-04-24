@@ -1,20 +1,18 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import collections
 import logging
+import os
 import re
 import signal
 import sys
 import time
 import uuid
+import warnings
 from enum import Enum
 from logging import getLogger
-from threading import Lock, Timer
+from threading import Lock
 from types import TracebackType
 from typing import (
     IO,
@@ -37,8 +35,15 @@ from snowflake.connector.result_set import ResultSet
 
 from . import compat
 from ._sql_util import get_file_transfer_type
+from ._utils import (
+    REQUEST_ID_STATEMENT_PARAM_NAME,
+    _TrackedQueryCancellationTimer,
+    is_uuid4,
+)
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .constants import (
+    CMD_TYPE_DOWNLOAD,
+    CMD_TYPE_UPLOAD,
     FIELD_NAME_TO_ID,
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     FileTransferType,
@@ -70,6 +75,7 @@ from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
     from pandas import DataFrame
+    from pyarrow import Table
 
     from .connection import SnowflakeConnection
     from .file_transfer_agent import SnowflakeProgressPercentage
@@ -79,14 +85,17 @@ T = TypeVar("T", bound=collections.abc.Sequence)
 
 logger = getLogger(__name__)
 
-if installed_pandas:
-    from pyarrow import Table
-else:
-    logger.debug("Failed to import pyarrow. Cannot use pandas fetch API")
-    Table = None
+
+if not installed_pandas:
+    logger.debug(
+        "Failed to import pyarrow or pandas. Cannot use pandas fetch API. Please "
+        "install snowflake-connector-python with the `pandas` extra to use these "
+        "features."
+    )
+
 
 try:
-    from .arrow_iterator import PyArrowIterator  # NOQA
+    from .nanoarrow_arrow_iterator import PyArrowIterator  # NOQA
 
     CAN_USE_ARROW_RESULT_FORMAT = True
 except ImportError as e:  # pragma: no cover
@@ -121,6 +130,15 @@ ASYNC_NO_DATA_MAX_RETRY = 24
 ASYNC_RETRY_PATTERN = [1, 1, 2, 3, 4, 8, 10]
 
 
+class _NanoarrowUsage(str, Enum):
+    # follow the session parameter to use nanoarrow converter or not
+    FOLLOW_SESSION_PARAMETER = "follow_session_parameter"
+    # ignore the session parameter, use nanoarrow converter
+    ENABLE_NANOARROW = "enable_nanoarrow"
+    # ignore the session parameter, do not use nanoarrow converter
+    DISABLE_NANOARROW = "disable_nanoarrow"
+
+
 class ResultMetadata(NamedTuple):
     name: str
     type_code: int
@@ -133,19 +151,168 @@ class ResultMetadata(NamedTuple):
     @classmethod
     def from_column(cls, col: dict[str, Any]):
         """Initializes a ResultMetadata object from the column description in the query response."""
-        return cls(
-            col["name"],
-            FIELD_NAME_TO_ID[
+        type_code = FIELD_NAME_TO_ID[
+            (
                 col["extTypeName"].upper()
                 if col.get("extTypeName")
                 else col["type"].upper()
-            ],
+            )
+        ]
+
+        return cls(
+            col["name"],
+            type_code,
             None,
             col["length"],
             col["precision"],
             col["scale"],
             col["nullable"],
         )
+
+
+class ResultMetadataV2:
+    """ResultMetadataV2 represents the type information of a single column.
+
+    It is a replacement for ResultMetadata that contains additional attributes, currently
+    `vector_dimension` and `fields`. This class will be unified with ResultMetadata in the
+    near future.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        type_code: int,
+        is_nullable: bool,
+        display_size: int | None = None,
+        internal_size: int | None = None,
+        precision: int | None = None,
+        scale: int | None = None,
+        vector_dimension: int | None = None,
+        fields: list[ResultMetadataV2] | None = None,
+    ):
+        self._name = name
+        self._type_code = type_code
+        self._is_nullable = is_nullable
+        self._display_size = display_size
+        self._internal_size = internal_size
+        self._precision = precision
+        self._scale = scale
+        self._vector_dimension = vector_dimension
+        self._fields = fields
+
+    @classmethod
+    def from_column(cls, col: dict[str, Any]) -> ResultMetadataV2:
+        """Initializes a ResultMetadataV2 object from the column description in the query response.
+        This differs from ResultMetadata in that it has newly-added fields which cannot be added to
+        ResultMetadata since it is a named tuple.
+        """
+        col_type = (
+            col["extTypeName"].upper()
+            if col.get("extTypeName")
+            else col["type"].upper()
+        )
+
+        fields = col.get("fields")
+        processed_fields: Optional[List[ResultMetadataV2]] = None
+        if fields is not None:
+            if col_type in {"VECTOR", "ARRAY", "OBJECT", "MAP"}:
+                processed_fields = [
+                    ResultMetadataV2.from_column({"name": None, **f})
+                    for f in col["fields"]
+                ]
+            else:
+                raise ValueError(
+                    f"Field parsing is not supported for columns of type {col_type}."
+                )
+
+        return cls(
+            col["name"],
+            FIELD_NAME_TO_ID[col_type],
+            col["nullable"],
+            None,
+            col["length"],
+            col["precision"],
+            col["scale"],
+            col.get("vectorDimension"),
+            processed_fields,
+        )
+
+    def _to_result_metadata_v1(self):
+        """Initializes a ResultMetadata object from a ResultMetadataV2 object.
+
+        This method is for internal use only.
+        """
+
+        return ResultMetadata(
+            self._name,
+            self._type_code,
+            self._display_size,
+            self._internal_size,
+            self._precision,
+            self._scale,
+            self._is_nullable,
+        )
+
+    def __str__(self) -> str:
+        return (
+            f"ResultMetadataV2(name={self._name},type_code={self._type_code},"
+            + f"is_nullable={self._is_nullable},display_size={self._display_size},"
+            + "internal_size={self._internal_size},precision={self._precision},"
+            + "scale={self._scale},vector_dimension={self._vector_dimension},"
+            + "fields={self.fields})"
+        )
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, self.__class__):
+            return False
+
+        return (
+            self._name == other._name
+            and self._type_code == other._type_code
+            and self._is_nullable == other._is_nullable
+            and self._display_size == other._display_size
+            and self._internal_size == other._internal_size
+            and self._precision == other._precision
+            and self._scale == other._scale
+            and self._vector_dimension == other._vector_dimension
+            and self._fields == other._fields
+        )
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def type_code(self) -> int:
+        return self._type_code
+
+    @property
+    def is_nullable(self) -> bool:
+        return self._is_nullable
+
+    @property
+    def internal_size(self) -> int | None:
+        return self._internal_size
+
+    @property
+    def display_size(self) -> int | None:
+        return self._display_size
+
+    @property
+    def precision(self) -> int | None:
+        return self._precision
+
+    @property
+    def scale(self) -> int | None:
+        return self._scale
+
+    @property
+    def vector_dimension(self) -> int | None:
+        return self._vector_dimension
+
+    @property
+    def fields(self) -> list[ResultMetadataV2] | None:
+        return self._fields
 
 
 def exit_handler(*_) -> NoReturn:
@@ -228,8 +395,10 @@ class SnowflakeCursor:
         self.messages: list[
             tuple[type[Error] | type[Exception], dict[str, str | bool]]
         ] = []
-        self._timebomb: Timer | None = None  # must be here for abort_exit method
-        self._description: list[ResultMetadata] | None = None
+        self._timebomb: _TrackedQueryCancellationTimer | None = (
+            None  # must be here for abort_exit method
+        )
+        self._description: list[ResultMetadataV2] | None = None
         self._sfqid: str | None = None
         self._sqlstate = None
         self._total_rowcount = -1
@@ -277,6 +446,17 @@ class SnowflakeCursor:
 
     @property
     def description(self) -> list[ResultMetadata]:
+        if self._description is None:
+            return None
+
+        return [meta._to_result_metadata_v1() for meta in self._description]
+
+    @property
+    def _description_internal(self) -> list[ResultMetadataV2]:
+        """Return the new format of result metadata for a query.
+
+        This method is for internal use only.
+        """
         return self._description
 
     @property
@@ -373,12 +553,10 @@ class SnowflakeCursor:
         return None
 
     @overload
-    def callproc(self, procname: str) -> tuple:
-        ...
+    def callproc(self, procname: str) -> tuple: ...
 
     @overload
-    def callproc(self, procname: str, args: T) -> T:
-        ...
+    def callproc(self, procname: str, args: T) -> T: ...
 
     def callproc(self, procname: str, args=tuple()):
         """Call a stored procedure.
@@ -428,6 +606,7 @@ class SnowflakeCursor:
         _no_results: bool = False,
         _is_put_get=None,
         _no_retry: bool = False,
+        dataframe_ast: str | None = None,
     ) -> dict[str, Any]:
         del self.messages[:]
 
@@ -457,12 +636,32 @@ class SnowflakeCursor:
                 if str(result_format_val).upper() == "ARROW":
                     self.check_can_use_arrow_resultset()
                 elif result_format_val is None:
-                    statement_params[
-                        PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT
-                    ] = "JSON"
+                    statement_params[PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT] = (
+                        "JSON"
+                    )
 
         self._sequence_counter = self._connection._next_sequence_counter()
-        self._request_id = uuid.uuid4()
+
+        # If requestId is contained in statement parameters, use it to set request id. Verify here it is a valid uuid4
+        # identifier.
+        if (
+            statement_params is not None
+            and REQUEST_ID_STATEMENT_PARAM_NAME in statement_params
+        ):
+            request_id = statement_params[REQUEST_ID_STATEMENT_PARAM_NAME]
+
+            if not is_uuid4(request_id):
+                # uuid.UUID will throw an error if invalid, but we explicitly check and throw here.
+                raise ValueError(f"requestId {request_id} is not a valid UUID4.")
+            self._request_id = uuid.UUID(str(request_id), version=4)
+
+            # Create a (deep copy) and remove the statement param, there is no need to encode it as extra parameter
+            # one more time.
+            statement_params = statement_params.copy()
+            statement_params.pop(REQUEST_ID_STATEMENT_PARAM_NAME)
+        else:
+            # Generate UUID for query.
+            self._request_id = uuid.uuid4()
 
         logger.debug(f"Request id: {self._request_id}")
 
@@ -480,7 +679,9 @@ class SnowflakeCursor:
         )
 
         if real_timeout is not None:
-            self._timebomb = Timer(real_timeout, self.__cancel_query, [query])
+            self._timebomb = _TrackedQueryCancellationTimer(
+                real_timeout, self.__cancel_query, [query]
+            )
             self._timebomb.start()
             logger.debug("started timebomb in %ss", real_timeout)
         else:
@@ -530,6 +731,8 @@ class SnowflakeCursor:
                 describe_only=describe_only,
                 _no_results=_no_results,
                 _no_retry=_no_retry,
+                timeout=real_timeout,
+                dataframe_ast=dataframe_ast,
             )
         finally:
             try:
@@ -584,9 +787,11 @@ class SnowflakeCursor:
         if params is not None and len(params) == 0:
             self._log_telemetry_job_data(
                 TelemetryField.EMPTY_SEQ_INTERPOLATION,
-                TelemetryData.TRUE
-                if self.connection._interpolate_empty_sequences
-                else TelemetryData.FALSE,
+                (
+                    TelemetryData.TRUE
+                    if self.connection._interpolate_empty_sequences
+                    else TelemetryData.FALSE
+                ),
             )
         if logger.getEffectiveLevel() <= logging.DEBUG:
             logger.debug(
@@ -633,8 +838,8 @@ class SnowflakeCursor:
         _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
-    ) -> Self | None:
-        ...
+        _dataframe_ast: str | None = None,
+    ) -> Self | None: ...
 
     @overload
     def execute(
@@ -663,8 +868,8 @@ class SnowflakeCursor:
         _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
-    ) -> dict[str, Any] | None:
-        ...
+        _dataframe_ast: str | None = None,
+    ) -> dict[str, Any] | None: ...
 
     def execute(
         self,
@@ -692,6 +897,8 @@ class SnowflakeCursor:
         _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
+        _force_qmark_paramstyle: bool = False,
+        _dataframe_ast: str | None = None,
     ) -> Self | dict[str, Any] | None:
         """Executes a command/query.
 
@@ -703,8 +910,8 @@ class SnowflakeCursor:
             _exec_async: Whether to execute this query asynchronously.
             _no_retry: Whether or not to retry on known errors.
             _do_reset: Whether or not the result set needs to be reset before executing query.
-            _put_callback: Function to which GET command should call back to.
-            _put_azure_callback: Function to which an Azure GET command should call back to.
+            _put_callback: Function to which PUT command should call back to.
+            _put_azure_callback: Function to which an Azure PUT command should call back to.
             _put_callback_output_stream: The output stream a PUT command's callback should report on.
             _get_callback: Function to which GET command should call back to.
             _get_azure_callback: Function to which an Azure GET command should call back to.
@@ -726,6 +933,8 @@ class SnowflakeCursor:
             file_stream: File-like object to be uploaded with PUT
             num_statements: Query level parameter submitted in _statement_params constraining exact number of
             statements being submitted (or 0 if submitting an uncounted number) when using a multi-statement query.
+            _force_qmark_paramstyle: Force the use of qmark paramstyle regardless of the connection's paramstyle.
+            _dataframe_ast: Base64-encoded dataframe request abstract syntax tree.
 
         Returns:
             The cursor itself, or None if some error happened, or the response returned
@@ -744,11 +953,15 @@ class SnowflakeCursor:
 
         if _do_reset:
             self.reset()
-        command = command.strip(" \t\n\r") if command else None
+        command = command.strip(" \t\n\r") if command else ""
         if not command:
-            logger.warning("execute: no query is given to execute")
-            return None
+            if _dataframe_ast:
+                logger.debug("dataframe ast: [%s]", _dataframe_ast)
+            else:
+                logger.warning("execute: no query is given to execute")
+                return None
 
+        logger.debug("query: [%s]", self._format_query_for_log(command))
         _statement_params = _statement_params or dict()
         # If we need to add another parameter, please consider introducing a dict for all extra params
         # See discussion in https://github.com/snowflakedb/snowflake-connector-python/pull/1524#discussion_r1174061775
@@ -766,9 +979,10 @@ class SnowflakeCursor:
             "_no_results": _no_results,
             "_is_put_get": _is_put_get,
             "_no_retry": _no_retry,
+            "dataframe_ast": _dataframe_ast,
         }
 
-        if self._connection.is_pyformat:
+        if self._connection.is_pyformat and not _force_qmark_paramstyle:
             query = self._preprocess_pyformat_query(command, params)
         else:
             # qmark and numeric paramstyle
@@ -792,16 +1006,13 @@ class SnowflakeCursor:
         m = DESC_TABLE_RE.match(query)
         if m:
             query1 = f"describe table {m.group(1)}"
-            if logger.getEffectiveLevel() <= logging.WARNING:
-                logger.info(
-                    "query was rewritten: org=%s, new=%s",
-                    " ".join(line.strip() for line in query.split("\n")),
-                    query1,
-                )
+            logger.debug(
+                "query was rewritten: org=%s, new=%s",
+                " ".join(line.strip() for line in query.split("\n")),
+                query1,
+            )
             query = query1
 
-        if logger.getEffectiveLevel() <= logging.INFO:
-            logger.info("query: [%s]", self._format_query_for_log(query))
         ret = self._execute_helper(query, **kwargs)
         self._sfqid = (
             ret["data"]["queryId"]
@@ -814,7 +1025,7 @@ class SnowflakeCursor:
             if "data" in ret and "sqlState" in ret["data"]
             else None
         )
-        logger.info("query execution done")
+        logger.debug("query execution done")
 
         self._first_chunk_time = get_time_millis()
 
@@ -870,6 +1081,8 @@ class SnowflakeCursor:
                     source_from_stream=file_stream,
                     multipart_threshold=data.get("threshold"),
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
+                    iobound_tpe_limit=self._connection.iobound_tpe_limit,
+                    unsafe_file_write=self._connection.unsafe_file_write,
                 )
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
@@ -892,6 +1105,19 @@ class SnowflakeCursor:
             logger.debug(ret)
             err = ret["message"]
             code = ret.get("code", -1)
+            if (
+                self._timebomb
+                and self._timebomb.executed
+                and "SQL execution canceled" in err
+            ):
+                # Modify the error message only if the server error response indicates the query was canceled.
+                # If the error occurs before the cancellation request reaches the backend
+                # (e.g., due to a very short timeout), we retain the original error message
+                # as the query might have encountered an issue prior to cancellation.
+                err = (
+                    f"SQL execution was cancelled by the client due to a timeout. "
+                    f"Error message received from the server: {err}"
+                )
             if "data" in ret:
                 err += ret["data"].get("errorMessage", "")
             errvalue = {
@@ -928,6 +1154,24 @@ class SnowflakeCursor:
         """
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
         self.execute(*args, **kwargs)
+
+        if self._description is None:
+            return None
+        return [meta._to_result_metadata_v1() for meta in self._description]
+
+    def _describe_internal(self, *args: Any, **kwargs: Any) -> list[ResultMetadataV2]:
+        """Obtain the schema of the result without executing the query.
+
+        This function takes the same arguments as execute, please refer to that function
+        for documentation.
+
+        This function is for internal use only
+
+        Returns:
+            The schema of the result, in the new result metadata format.
+        """
+        kwargs["_describe_only"] = kwargs["_is_internal"] = True
+        self.execute(*args, **kwargs)
         return self._description
 
     def _format_query_for_log(self, query: str) -> str:
@@ -947,8 +1191,8 @@ class SnowflakeCursor:
         if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
             self._total_rowcount = data["total"]
 
-        self._description: list[ResultMetadata] = [
-            ResultMetadata.from_column(col) for col in data["rowtype"]
+        self._description: list[ResultMetadataV2] = [
+            ResultMetadataV2.from_column(col) for col in data["rowtype"]
         ]
 
         result_chunks = create_batches_from_response(
@@ -956,14 +1200,15 @@ class SnowflakeCursor:
         )
 
         if not (is_dml or self.is_file_transfer):
-            logger.info(
+            logger.debug(
                 "Number of results in first chunk: %s", result_chunks[0].rowcount
             )
 
         self._result_set = ResultSet(
             self,
             result_chunks,
-            self._connection.client_prefetch_threads,
+            self._connection.client_fetch_threads
+            or self._connection.client_prefetch_threads,
         )
         self._rownumber = -1
         self._result_state = ResultState.VALID
@@ -972,11 +1217,11 @@ class SnowflakeCursor:
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
             updated_rows = 0
             for idx, desc in enumerate(self._description):
-                if desc[0] in (
+                if desc.name in (
                     "number of rows updated",
                     "number of multi-joined rows updated",
                     "number of rows deleted",
-                ) or desc[0].startswith("number of rows inserted"):
+                ) or desc.name.startswith("number of rows inserted"):
                     updated_rows += int(data["rowset"][0][idx])
             if self._total_rowcount == -1:
                 self._total_rowcount = updated_rows
@@ -1041,6 +1286,7 @@ class SnowflakeCursor:
             )
 
     def query_result(self, qid: str) -> SnowflakeCursor:
+        """Query the result of a previously executed query."""
         url = f"/queries/{qid}/result"
         ret = self._connection.rest.request(url=url, method="get")
         self._sfqid = (
@@ -1059,7 +1305,7 @@ class SnowflakeCursor:
             data = ret.get("data")
             self._init_result_and_meta(data)
         else:
-            logger.info("failed")
+            logger.debug("failed")
             logger.debug(ret)
             err = ret["message"]
             code = ret.get("code", -1)
@@ -1087,14 +1333,27 @@ class SnowflakeCursor:
         )
         return self._result_set._fetch_arrow_batches()
 
-    def fetch_arrow_all(self) -> Table | None:
+    @overload
+    def fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None: ...
+
+    @overload
+    def fetch_arrow_all(self, force_return_table: Literal[True]) -> Table: ...
+
+    def fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
+        """
+        Args:
+            force_return_table: Set to True so that when the query returns zero rows,
+                an empty pyarrow table will be returned with schema using the highest bit length for each column.
+                Default value is False in which case None is returned in case of zero rows.
+        """
         self.check_can_use_arrow_resultset()
+
         if self._prefetch_hook is not None:
             self._prefetch_hook()
         if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
-        return self._result_set._fetch_arrow_all()
+        return self._result_set._fetch_arrow_all(force_return_table=force_return_table)
 
     def fetch_pandas_batches(self, **kwargs: Any) -> Iterator[DataFrame]:
         """Fetches a single Arrow Table."""
@@ -1109,7 +1368,17 @@ class SnowflakeCursor:
         return self._result_set._fetch_pandas_batches(**kwargs)
 
     def fetch_pandas_all(self, **kwargs: Any) -> DataFrame:
-        """Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk."""
+        """
+        Fetch Pandas dataframes in batches, where 'batch' refers to Snowflake Chunk.
+
+        Returns:
+            A pandas dataframe containing the cursors query results.
+
+        Note:
+            Timestamp types that are nested in structured types may not be accurately represented
+            due to a limitation in the pyarrow to pandas conversion.
+            See here for more information: https://github.com/apache/arrow/issues/4116
+        """
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
             self._prefetch_hook()
@@ -1145,7 +1414,7 @@ class SnowflakeCursor:
             "num_statements" not in kwargs or kwargs.get("num_statements") == 1
         ):
             if self._connection.is_pyformat:
-                # TODO - utilize multi-statement instead of rewriting the query and
+                # TODO(SNOW-940692) - utilize multi-statement instead of rewriting the query and
                 #  accumulate results to mock the result from a single insert statement as formatted below
                 logger.debug("rewriting INSERT query")
                 command_wo_comments = re.sub(self.COMMENT_SQL_RE, "", command)
@@ -1223,7 +1492,9 @@ class SnowflakeCursor:
         else:
             if re.search(";/s*$", command) is None:
                 command = command + "; "
-            if self._connection.is_pyformat:
+            if self._connection.is_pyformat and not kwargs.get(
+                "_force_qmark_paramstyle", False
+            ):
                 processed_queries = [
                     self._preprocess_pyformat_query(command, params)
                     for params in seqparams
@@ -1411,14 +1682,17 @@ class SnowflakeCursor:
         self.close()
 
     def get_results_from_sfqid(self, sfqid: str) -> None:
-        """Gets the results from previously ran query."""
+        """Gets the results from previously ran query. This methods differs from ``SnowflakeCursor.query_result``
+        in that it monitors the ``sfqid`` until it is no longer running, and then retrieves the results.
+        """
 
         def wait_until_ready() -> None:
             """Makes sure query has finished executing and once it has retrieves results."""
             no_data_counter = 0
             retry_pattern_pos = 0
             while True:
-                status = self.connection.get_query_status(sfqid)
+                status, status_resp = self.connection._get_query_status(sfqid)
+                self.connection._cache_query_status(sfqid, status)
                 if not self.connection.is_still_running(status):
                     break
                 if status == QueryStatus.NO_DATA:  # pragma: no cover
@@ -1435,10 +1709,12 @@ class SnowflakeCursor:
                 if retry_pattern_pos < (len(ASYNC_RETRY_PATTERN) - 1):
                     retry_pattern_pos += 1
             if status != QueryStatus.SUCCESS:
-                raise DatabaseError(
-                    "Status of query '{}' is {}, results are unavailable".format(
-                        sfqid, status.name
-                    )
+                logger.info(f"Status of query '{sfqid}' is {status.name}")
+                self.connection._process_error_query_status(
+                    sfqid,
+                    status_resp,
+                    error_message=f"Status of query '{sfqid}' is {status.name}, results are unavailable",
+                    error_cls=DatabaseError,
                 )
             self._inner_cursor.execute(f"select * from table(result_scan('{sfqid}'))")
             self._result = self._inner_cursor._result
@@ -1485,6 +1761,153 @@ class SnowflakeCursor:
         )
         return self._result_set.batches
 
+    def _download(
+        self,
+        stage_location: str,
+        target_directory: str,
+        options: dict[str, Any],
+        _do_reset: bool = True,
+    ) -> None:
+        """Downloads from the stage location to the target directory.
+
+        Args:
+            stage_location (str): The location of the stage to download from.
+            target_directory (str): The destination directory to download into.
+            options (dict[str, Any]): The download options.
+            _do_reset (bool, optional): Whether to reset the cursor before
+                downloading, by default we will reset the cursor.
+        """
+        from .file_transfer_agent import SnowflakeFileTransferAgent
+
+        if _do_reset:
+            self.reset()
+
+        # Interpret the file operation.
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name=None,
+            target_directory=target_directory,
+            command_type=CMD_TYPE_DOWNLOAD,
+            options=options,
+        )
+
+        # Execute the file operation based on the interpretation above.
+        file_transfer_agent = SnowflakeFileTransferAgent(
+            self,
+            "",  # empty command because it is triggered by directly calling this util not by a SQL query
+            ret,
+        )
+        file_transfer_agent.execute()
+        self._init_result_and_meta(file_transfer_agent.result())
+
+    def _upload(
+        self,
+        local_file_name: str,
+        stage_location: str,
+        options: dict[str, Any],
+        _do_reset: bool = True,
+    ) -> None:
+        """Uploads the local file to the stage location.
+
+        Args:
+            local_file_name (str): The local file to be uploaded.
+            stage_location (str): The stage location to upload the local file to.
+            options (dict[str, Any]): The upload options.
+            _do_reset (bool, optional): Whether to reset the cursor before
+                uploading, by default we will reset the cursor.
+        """
+        from .file_transfer_agent import SnowflakeFileTransferAgent
+
+        if _do_reset:
+            self.reset()
+
+        # Interpret the file operation.
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name=local_file_name,
+            target_directory=None,
+            command_type=CMD_TYPE_UPLOAD,
+            options=options,
+        )
+
+        # Execute the file operation based on the interpretation above.
+        file_transfer_agent = SnowflakeFileTransferAgent(
+            self,
+            "",  # empty command because it is triggered by directly calling this util not by a SQL query
+            ret,
+            force_put_overwrite=False,  # _upload should respect user decision on overwriting
+        )
+        file_transfer_agent.execute()
+        self._init_result_and_meta(file_transfer_agent.result())
+
+    def _download_stream(
+        self, stage_location: str, decompress: bool = False
+    ) -> IO[bytes]:
+        """Downloads from the stage location as a stream.
+
+        Args:
+            stage_location (str): The location of the stage to download from.
+            decompress (bool, optional): Whether to decompress the file, by
+                default we do not decompress.
+
+        Returns:
+            IO[bytes]: A stream to read from.
+        """
+        # Interpret the file operation.
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name=None,
+            target_directory=None,
+            command_type=CMD_TYPE_DOWNLOAD,
+            options=None,
+            has_source_from_stream=True,
+        )
+
+        # Set up stream downloading based on the interpretation and return the stream for reading.
+        return self.connection._stream_downloader.download_as_stream(ret, decompress)
+
+    def _upload_stream(
+        self,
+        input_stream: IO[bytes],
+        stage_location: str,
+        options: dict[str, Any],
+        _do_reset: bool = True,
+    ) -> None:
+        """Uploads content in the input stream to the stage location.
+
+        Args:
+            input_stream (IO[bytes]): A stream to read from.
+            stage_location (str): The location of the stage to upload to.
+            options (dict[str, Any]): The upload options.
+            _do_reset (bool, optional): Whether to reset the cursor before
+                uploading, by default we will reset the cursor.
+        """
+        from .file_transfer_agent import SnowflakeFileTransferAgent
+
+        if _do_reset:
+            self.reset()
+
+        # Interpret the file operation.
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name=None,
+            target_directory=None,
+            command_type=CMD_TYPE_UPLOAD,
+            options=options,
+            has_source_from_stream=input_stream,
+        )
+
+        # Execute the file operation based on the interpretation above.
+        file_transfer_agent = SnowflakeFileTransferAgent(
+            self,
+            "",  # empty command because it is triggered by directly calling this util not by a SQL query
+            ret,
+            source_from_stream=input_stream,
+            force_put_overwrite=False,  # _upload_stream should respect user decision on overwriting
+        )
+        file_transfer_agent.execute()
+        self._init_result_and_meta(file_transfer_agent.result())
+
 
 class DictCursor(SnowflakeCursor):
     """Cursor returning results in a dictionary."""
@@ -1494,3 +1917,31 @@ class DictCursor(SnowflakeCursor):
             connection,
             use_dict_result=True,
         )
+
+
+def __getattr__(name):
+    if name == "NanoarrowUsage":
+        warnings.warn(
+            "snowflake.connector.cursor.NanoarrowUsage has been deprecated and will be removed in the future, "
+            "please stop using the class.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _NanoarrowUsage
+    if name == "NANOARROW_USAGE":
+        if "NANOARROW_USAGE" in os.environ:
+            warnings.warn(
+                "Environment variable NANOARROW_USAGE has been deprecated and will be removed in the future, "
+                "please stop setting the variable.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        warnings.warn(
+            "snowflake.connector.cursor.NANOARROW_USAGE has been deprecated and will be removed in the future, "
+            "please stop using the variable.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

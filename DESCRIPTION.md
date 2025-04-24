@@ -7,13 +7,223 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.15(TBD)
+  - Bumped up min boto and botocore version to 1.24
 
-- v3.2.1(TBD)
+- v3.14.1(April 21, 2025)
+  - Added support for Python 3.13.
+    - NOTE: Windows 64 support is still experimental and should not yet be used for production environments.
+  - Dropped support for Python 3.8.
+  - Added basic decimal floating-point type support.
+  - Added experimental authentication methods.
+  - Added support of GCS regional endpoints.
+  - Added support of GCS virtual urls. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
+  - Added `client_fetch_threads` experimental parameter to better utilize threads for fetching query results.
+  - Added `check_arrow_conversion_error_on_every_column` connection property that can be set to `False` to restore previous behaviour in which driver will ignore errors until it occurs in the last column. This flag's purpose is to unblock workflows that may be impacted by the bugfix and will be removed in later releases.
+  - Lowered log levels from info to debug for some of the messages to make the output easier to follow.
+  - Allowed the connector to inherit a UUID4 generated upstream, provided in statement parameters (field: `requestId`), rather than automatically generate a UUID4 to use for the HTTP Request ID.
+  - Improved logging in urllib3, boto3, botocore - assured data masking even after migration to the external owned library in the future.
+  - Improved error message for client-side query cancellations due to timeouts.
+  - Improved security and robustness for the temporary credentials cache storage.
+  - Fixed a bug that caused driver to fail silently on `TO_DATE` arrow to python conversion when invalid date was followed by the correct one.
+  - Fixed expired S3 credentials update and increment retry when expired credentials are found.
+  - Deprecated `insecure_mode` connection property and replaced it with `disable_ocsp_checks` with the same behavior as the former property.
 
-  - Fixed a bug where url port and path were ignore in private link oscp retry.
+- v3.14.0(March 03, 2025)
+  - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
+  - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
+  - Optimized distribution package lookup to speed up import.
+  - Fixed a bug where privatelink OCSP Cache url could not be determined if privatelink account name was specified in uppercase.
+  - Added support for iceberg tables to `write_pandas`.
+  - Fixed base64 encoded private key tests.
+  - Fixed a bug where file permission check happened on Windows.
+  - Added support for File types.
+  - Added `unsafe_file_write` connection parameter that restores the previous behaviour of saving files downloaded with GET with 644 permissions.
+
+- v3.13.2(January 29, 2025)
+  - Changed not to use scoped temporary objects.
+
+- v3.13.1(January 29, 2025)
+  - Remedied SQL injection vulnerability in snowflake.connector.pandas_tools.write_pandas. See more https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-2vpq-fh52-j3wv
+  - Remedied vulnerability in deserialization of the OCSP response cache. See more: https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-m4f6-vcj4-w5mx
+  - Remedied vulnerability connected to cache files permissions. See more: https://github.com/snowflakedb/snowflake-connector-python/security/advisories/GHSA-r2x6-cjg7-8r43
+
+- v3.13.0(January 23,2025)
+  - Added a feature to limit the sizes of IO-bound ThreadPoolExecutors during PUT and GET commands.
+  - Updated README.md to include instructions on how to verify package signatures using `cosign`.
+  - Updated the log level for cursor's chunk rowcount from INFO to DEBUG.
+  - Added a feature to verify if the connection is still good enough to send queries over.
+  - Added support for base64-encoded DER private key strings in the `private_key` authentication type.
+
+- v3.12.4(December 3,2024)
+  - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
+  - Fixed a bug where OpenTelemetry header injection would sometimes cause Exceptions to be thrown.
+  - Fixed a bug where OCSP checks would throw TypeError and make mainly GCP blob storage unreachable.
+  - Bumped pyOpenSSL dependency from >=16.2.0,<25.0.0 to >=22.0.0,<25.0.0.
+
+- v3.12.3(October 25,2024)
+  - Improved the error message for SSL-related issues to provide clearer guidance when an SSL error occurs.
+  - Improved error message for SQL execution cancellations caused by timeout.
+
+- v3.12.2(September 11,2024)
+  - Improved error handling for asynchronous queries, providing more detailed and informative error messages when an async query fails.
+  - Improved inference of top-level domains for accounts specifying a region in China, now defaulting to snowflakecomputing.cn.
+  - Improved implementation of the `snowflake.connector.util_text.random_string` to reduce the likelihood of collisions.
+  - Updated the log level for OCSP fail-open warning messages from ERROR to WARNING.
+
+- v3.12.1(August 20,2024)
+  - Fixed a bug that logged the session token when renewing a session.
+  - Fixed a bug where disabling client telemetry did not work.
+  - Fixed a bug where passing `login_timeout` as a string raised a `TypeError` during the login retry step.
+  - Use `pathlib` instead of `os` for default config file location resolution.
+  - Removed upper `cryptogaphy` version pin.
+  - Removed reference to script `snowflake-export-certs` (its backing module was already removed long ago)
+  - Enhanced retry mechanism for handling transient network failures during query result polling when no server response is received.
+
+- v3.12.0(July 24,2024)
+  - Set default connection timeout of 10 seconds and socket read timeout of 10 minutes for HTTP calls in file transfer.
+  - Optimized `to_pandas()` performance by fully parallel downloading logic.
+  - Fixed a bug that specifying client_session_keep_alive_heartbeat_frequency in snowflake-sqlalchemy could crash the connector.
+  - Fixed incorrect type hint of connection parameter `private_key`.
+  - Added support for connectivity to multiple domains.
+  - Bumped keyring dependency from >=23.1.0,<25.0.0 to >=23.1.0,<26.0.0.
+  - Disabled OOB Telemetry.
+
+- v3.11.0(June 17,2024)
+  - Added support for `token_file_path` connection parameter to read an OAuth token from a file when connecting to Snowflake.
+  - Added support for `debug_arrow_chunk` connection parameter to allow debugging raw arrow data in case of arrow data parsing failure.
+  - Added support for `disable_saml_url_check` connection parameter to disable SAML URL check in OKTA authentication.
+  - Fixed a bug that OCSP certificate signed using SHA384 algorithm cannot be verified.
+  - Fixed a bug that status code shown as uploaded when PUT command failed with 400 error.
+  - Fixed a bug that a PermissionError was raised when the current user does not have the right permission on parent directory of config file path.
+  - Fixed a bug that OCSP GET url is not encoded correctly when it contains a slash.
+  - Fixed a bug that an SSO URL didn't accept `:` in a query parameter, for instance, `https://sso.abc.com/idp/startSSO.ping?PartnerSpId=https://xyz.snowflakecomputing.com/`.
+
+- v3.10.1(May 21, 2024)
+
+  - Removed an incorrect error log message that could occur during arrow data conversion.
+
+- v3.10.0(April 29,2024)
+
+  - Added support for structured types to fetch_pandas_all.
+  - Fixed an issue relating to incorrectly formed China S3 endpoints.
+
+- v3.9.1(April 22,2024)
+
+  - Fixed an issue that caused a HTTP 400 error when connecting to a China endpoint.
+
+- v3.9.0(April 20,2024)
+
+  - Added easy logging configuration so that users can easily generate log file by setup log config in `$SNOWFLAKE_HOME/config.toml`.
+  - Improved s3 acceleration logic when connecting to China endpoint.
+
+- v3.8.1(April 09, 2024)
+
+  - Reverted the change "Updated `write_pandas` to skip TABLE IF NOT EXISTS in truncate mode." introduced in v3.8.0 (yanked) as it's a breaking change. `write_pandas` will be fixed in the future in a non-breaking way.
+
+- v3.8.0(April 04,2024)
+
+  - Improved `externalbrowser` auth in containerized environments
+    - Instruct browser to not fetch `/favicon` on success page
+    - Simple retry strategy on empty socket.recv
+    - Add `SNOWFLAKE_AUTH_SOCKET_REUSE_PORT` flag (usage: `SNOWFLAKE_AUTH_SOCKET_REUSE_PORT=true`) to set the underlying socket's `SO_REUSEPORT` flag (described in the [socket man page](https://man7.org/linux/man-pages/man7/socket.7.html))
+      - Useful when the randomized port used in the localhost callback url is being followed before the container engine completes port forwarding to host
+      - Statically map a port between your host and container and allow that port to be reused in rapid succession with:
+         `SF_AUTH_SOCKET_PORT=3037 SNOWFLAKE_AUTH_SOCKET_REUSE_PORT=true poetry run python somescript.py`
+    - Add `SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT` flag (usage: `SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT=true`) to make a non-blocking socket.recv call and retry on Error
+      - Consider using this if running in a containerized environment and externalbrowser auth frequently hangs while waiting for callback
+      - NOTE: this has not been tested extensively, but has been shown to improve the experience when using WSL
+  - Added support for parsing structured type information in schema queries.
+  - Bumped platformdirs from >=2.6.0,<4.0.0 to >=2.6.0,<5.0.0
+  - Updated diagnostics to use system$allowlist instead of system$whitelist.
+  - Updated `write_pandas` to skip TABLE IF NOT EXISTS in truncate mode.
+  - Improved cleanup logic for connection to rely on interpreter shutdown instead of the `__del__` method.
+  - Updated the logging level from INFO to DEBUG when logging the executed query using `SnowflakeCursor.execute`.
+  - Fixed a bug that the truncated password in log is not masked.
+
+- v3.7.1(February 21, 2024)
+
+  - Bumped pandas dependency from >=1.0.0,<2.2.0 to >=1.0.0,<3.0.0.
+  - Bumped cryptography dependency from <42.0.0,>=3.1.0 to >=3.1.0,<43.0.0.
+  - Bumped pyOpenSSL dependency from >=16.2.0,<24.0.0 to >=16.2.0,<25.0.0.
+  - Fixed a memory leak in decimal data conversion.
+  - Fixed a bug where `write_pandas` wasn't truncating the target table.
+  - Bumped keyring dependency lower bound to 23.1.0 to address security vulnerability.
+
+- v3.7.0(January 25,2024)
+
+  - Added a new boolean parameter `force_return_table` to `SnowflakeCursor.fetch_arrow_all` to force returning `pyarrow.Table` in case of zero rows.
+  - Cleanup some C++ code warnings and performance issues.
+  - Added support for Python 3.12
+  - Make local testing more robust against implicit assumptions.
+  - Fixed PyArrow Table type hinting
+  - Added support for connecting using an existing connection via the session and master token.
+  - Added support for connecting to Snowflake by authenticating with multiple SAML IDP using external browser.
+  - Added support for structured types (OBJECT, MAP, ARRAY) to nanoarrow converters.
+  - Fixed compilation issue due to missing cstdint header on gcc13.
+  - Improved config permissions warning message.
+
+- v3.6.0(December 09,2023)
+
+  - Added support for Vector types
+  - Changed urllib3 version pin to only affect Python versions < 3.10.
+  - Support for `private_key_file` and `private_key_file_pwd` connection parameters
+  - Added a new flag `expired` to `SnowflakeConnection` class, that keeps track of whether the connection's master token has expired.
+  - Fixed a bug where date insertion failed when date format is set and qmark style binding is used.
+
+- v3.5.0(November 13,2023)
+
+  - Version 3.5.0 is the snowflake-connector-python purely built upon apache arrow-nanoarrow project.
+    - Reduced the wheel size to ~1MB and installation size to ~5MB.
+    - Removed a hard dependency on a specific version of pyarrow.
+  - Deprecated the usage of the following class/variable/environment variable for the sake of pure nanoarrow converter:
+    - Deprecated class `snowflake.connector.cursor.NanoarrowUsage`.
+    - Deprecated environment variable `NANOARROW_USAGE`.
+    - Deprecated module variable `snowflake.connector.cursor.NANOARROW_USAGE`.
+
+- v3.4.1(November 08,2023)
+
+  - Bumped vendored `urllib3` to 1.26.18
+  - Bumped vendored `requests` to 2.31.0
+
+- v3.4.0(November 03,2023)
+
+  - Added support for `use_logical_type` in `write_pandas`.
+  - Removed dependencies on pycryptodomex and oscrypto. All connections now go through OpenSSL via the cryptography library, which was already a dependency.
+  - Fixed issue with ingesting files over 80 GB to S3.
+  - Added the `backoff_policy` argument to `snowflake.connector.connect` allowing for configurable backoff policy between retries of failed requests. See available implementations in the `backoff_policies` module.
+  - Added the `socket_timeout` argument to `snowflake.connector.connect` specifying socket read and connect timeout.
+  - Fixed `login_timeout` and `network_timeout` behaviour. Retries of login and network requests are now properly halted after these timeouts expire.
+  - Fixed bug for issue https://github.com/urllib3/urllib3/issues/1878 in vendored `urllib`.
+  - Add User-Agent header for diagnostic report for tracking.
+
+- v3.3.1(October 16,2023)
+
+  - Added for non-Windows platforms command suggestions (chown/chmod) for insufficient file permissions of config files.
+  - Fixed issue with connection diagnostics failing to complete certificate checks.
+  - Fixed issue that arrow iterator causes `ImportError` when the c extensions are not compiled.
+
+- v3.3.0(October 10,2023)
+
+  - Updated to Apache arrow-nanoarrow project for result arrow data conversion.
+  - Introduced the `NANOARROW_USAGE` environment variable to allows switching between the nanoarrow converter and the arrow converter. Valid values include:
+    - `FOLLOW_SESSION_PARAMETER`, which uses the converter configured in the server.
+    - `DISABLE_NANOARROW`, which uses arrow converter, overriding the server setting.
+    - `ENABLE_NANOARROW`, which uses the nanoarrow converter, overriding the server setting.
+  - Introduced the `snowflake.connector.cursor.NanoarrowUsage` enum, whose members include:
+    - `NanoarrowUsage.FOLLOW_SESSION_PARAMETER`, which uses the converter configured in the server.
+    - `NanoarrowUsage.DISABLE_NANOARROW`, which uses arrow converter, overriding the server setting.
+    - `NanoarrowUsage.ENABLE_NANOARROW`, which uses the nanoarrow converter, overriding the server setting.
+  - Introduced the `snowflake.connector.cursor.NANOARROW_USAGE` module variable to allow switching between the nanoarrow converter and the arrow converter. It works in conjunction with the `snowflake.connector.cursor.NanoarrowUsage` enum.
+  - The newly-introduced environment variable, enum, and module variable are temporary. They will be removed in a future release when switch from arrow to nanoarrow for data conversion is complete.
+
+- v3.2.1(September 26,2023)
+
+  - Fixed a bug where url port and path were ignored in private link oscp retry.
   - Added thread safety in telemetry when instantiating multiple connections concurrently.
   - Bumped platformdirs dependency from >=2.6.0,<3.9.0 to >=2.6.0,<4.0.0.0 and made necessary changes to allow this.
   - Removed the deprecation warning from the vendored urllib3 about urllib3.contrib.pyopenssl deprecation.
+  - Improved robustness in handling authentication response.
 
 - v3.2.0(September 06,2023)
 

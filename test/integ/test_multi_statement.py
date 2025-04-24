@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 import pytest
 
 from snowflake.connector.version import VERSION
@@ -121,9 +117,11 @@ def test_insert_select_multi(conn_cnx, db_parameters, skip_to_last_set: bool):
                 "select aa from {name} order by aa;\n"
                 "drop table {name};".format(
                     db=db_parameters["database"],
-                    schema=db_parameters["schema"]
-                    if "schema" in db_parameters
-                    else "PUBLIC",
+                    schema=(
+                        db_parameters["schema"]
+                        if "schema" in db_parameters
+                        else "PUBLIC"
+                    ),
                     name=table_name,
                 )
             )

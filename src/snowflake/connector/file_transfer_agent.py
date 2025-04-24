@@ -1,12 +1,9 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import binascii
 import glob
+import math
 import mimetypes
 import os
 import sys
@@ -21,12 +18,17 @@ from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import GET_CWD, IS_WINDOWS
 from .constants import (
+    AZURE_CHUNK_SIZE,
     AZURE_FS,
     CMD_TYPE_DOWNLOAD,
     CMD_TYPE_UPLOAD,
     GCS_FS,
     LOCAL_FS,
+    S3_DEFAULT_CHUNK_SIZE,
     S3_FS,
+    S3_MAX_OBJECT_SIZE,
+    S3_MAX_PARTS,
+    S3_MIN_PART_SIZE,
     ResultStatus,
     megabyte,
 )
@@ -183,6 +185,28 @@ def _update_progress(
     return progress == 1.0
 
 
+def _chunk_size_calculator(file_size: int) -> int:
+    # S3 has limitation on the num of parts to be uploaded, this helper method recalculate the num of parts
+    if file_size > S3_MAX_OBJECT_SIZE:
+        # check if we don't exceed the allowed S3 max file size 5 TiB
+        raise ValueError(
+            f"File size {file_size} exceeds the maximum file size {S3_MAX_OBJECT_SIZE} allowed in S3."
+        )
+
+    # num_parts = math.ceil(file_size / default_chunk_size)
+    # if num_parts is greater than the allowed S3_MAX_PARTS, we update our chunk_size, otherwise we use the default one
+    calculated_chunk_size = (
+        max(math.ceil(file_size / S3_MAX_PARTS), S3_MIN_PART_SIZE)
+        if math.ceil(file_size / S3_DEFAULT_CHUNK_SIZE) > S3_MAX_PARTS
+        else S3_DEFAULT_CHUNK_SIZE
+    )
+    if calculated_chunk_size != S3_DEFAULT_CHUNK_SIZE:
+        logger.debug(
+            f"Setting chunksize to {calculated_chunk_size} instead of the default {S3_DEFAULT_CHUNK_SIZE}."
+        )
+    return calculated_chunk_size
+
+
 def percent(seen_so_far: int, size: float) -> float:
     return 1.0 if seen_so_far >= size or size <= 0 else float(seen_so_far / size)
 
@@ -291,6 +315,9 @@ class StorageCredential:
     def update(self, cur_timestamp) -> None:
         with self.lock:
             if cur_timestamp < self.timestamp:
+                logger.debug(
+                    "Omitting renewal of storage token, as it already happened."
+                )
                 return
             logger.debug("Renewing expired storage token.")
             ret = self.connection.cursor()._execute_helper(self._command)
@@ -326,6 +353,8 @@ class SnowflakeFileTransferAgent:
         multipart_threshold: int | None = None,
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
+        iobound_tpe_limit: int | None = None,
+        unsafe_file_write: bool = False,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -356,6 +385,8 @@ class SnowflakeFileTransferAgent:
         self._multipart_threshold = multipart_threshold or 67108864  # Historical value
         self._use_s3_regional_url = use_s3_regional_url
         self._credentials: StorageCredential | None = None
+        self._iobound_tpe_limit = iobound_tpe_limit
+        self._unsafe_file_write = unsafe_file_write
 
     def execute(self) -> None:
         self._parse_command()
@@ -412,10 +443,15 @@ class SnowflakeFileTransferAgent:
             result.result_status = result.result_status.value
 
     def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
+        iobound_tpe_limit = min(len(metas), os.cpu_count())
+        logger.debug("Decided IO-bound TPE size: %d", iobound_tpe_limit)
+        if self._iobound_tpe_limit is not None:
+            logger.debug("IO-bound TPE size is limited to: %d", self._iobound_tpe_limit)
+            iobound_tpe_limit = min(iobound_tpe_limit, self._iobound_tpe_limit)
         max_concurrency = self._parallel
         network_tpe = ThreadPoolExecutor(max_concurrency)
-        preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
-        postprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
+        preprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
+        postprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
         logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
         cv_main_thread = threading.Condition()  # to signal the main thread
         cv_chunk_process = (
@@ -426,6 +462,9 @@ class SnowflakeFileTransferAgent:
         transfer_metadata = TransferMetadata()  # this is protected by cv_chunk_process
         is_upload = self._command_type == CMD_TYPE_UPLOAD
         exception_caught_in_callback: Exception | None = None
+        logger.debug(
+            "Going to %sload %d files", "up" if is_upload else "down", len(metas)
+        )
 
         def notify_file_completed() -> None:
             # Increment the number of completed files, then notify the main thread.
@@ -498,7 +537,7 @@ class SnowflakeFileTransferAgent:
         ) -> None:
             # Note: chunk_id is 0 based while num_of_chunks is count
             logger.debug(
-                f"Chunk {chunk_id}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
+                f"Chunk(id: {chunk_id}) {chunk_id+1}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
             )
             with cv_chunk_process:
                 transfer_metadata.chunks_in_queue -= 1
@@ -630,13 +669,12 @@ class SnowflakeFileTransferAgent:
     def _create_file_transfer_client(
         self, meta: SnowflakeFileMeta
     ) -> SnowflakeStorageClient:
-        from .constants import AZURE_CHUNK_SIZE, S3_CHUNK_SIZE
-
         if self._stage_location_type == LOCAL_FS:
             return SnowflakeLocalStorageClient(
                 meta,
                 self._stage_info,
                 4 * megabyte,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == AZURE_FS:
             return SnowflakeAzureRestClient(
@@ -644,16 +682,17 @@ class SnowflakeFileTransferAgent:
                 self._credentials,
                 AZURE_CHUNK_SIZE,
                 self._stage_info,
-                use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == S3_FS:
             return SnowflakeS3RestClient(
                 meta,
                 self._credentials,
                 self._stage_info,
-                S3_CHUNK_SIZE,
+                _chunk_size_calculator(meta.src_file_size),
                 use_accelerate_endpoint=self._use_accelerate_endpoint,
                 use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == GCS_FS:
             return SnowflakeGCSRestClient(
@@ -662,7 +701,7 @@ class SnowflakeFileTransferAgent:
                 self._stage_info,
                 self._cursor._connection,
                 self._command,
-                use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 
@@ -915,9 +954,9 @@ class SnowflakeFileTransferAgent:
             if len(response["src_locations"]) == len(self._encryption_material):
                 for idx, src_file in enumerate(self._src_files):
                     logger.debug(src_file)
-                    self._src_file_to_encryption_material[
-                        src_file
-                    ] = self._encryption_material[idx]
+                    self._src_file_to_encryption_material[src_file] = (
+                        self._encryption_material[idx]
+                    )
             elif len(self._encryption_material) != 0:
                 # some encryption material exists. Zero means no encryption
                 Error.errorhandler_wrapper(
@@ -974,9 +1013,11 @@ class SnowflakeFileTransferAgent:
                         intermediate_stream=self._source_from_stream,
                         src_file_size=self._source_from_stream.seek(0, os.SEEK_END),
                         stage_location_type=self._stage_location_type,
-                        encryption_material=self._encryption_material[0]
-                        if len(self._encryption_material) > 0
-                        else None,
+                        encryption_material=(
+                            self._encryption_material[0]
+                            if len(self._encryption_material) > 0
+                            else None
+                        ),
                     )
                 )
                 self._source_from_stream.seek(0)
@@ -1009,9 +1050,11 @@ class SnowflakeFileTransferAgent:
                             src_file_name=file_name,
                             src_file_size=statinfo.st_size,
                             stage_location_type=self._stage_location_type,
-                            encryption_material=self._encryption_material[0]
-                            if len(self._encryption_material) > 0
-                            else None,
+                            encryption_material=(
+                                self._encryption_material[0]
+                                if len(self._encryption_material) > 0
+                                else None
+                            ),
                         )
                     )
         elif self._command_type == CMD_TYPE_DOWNLOAD:
@@ -1040,11 +1083,11 @@ class SnowflakeFileTransferAgent:
                         stage_location_type=self._stage_location_type,
                         local_location=self._local_location,
                         presigned_url=url,
-                        encryption_material=self._src_file_to_encryption_material[
-                            file_name
-                        ]
-                        if file_name in self._src_file_to_encryption_material
-                        else None,
+                        encryption_material=(
+                            self._src_file_to_encryption_material[file_name]
+                            if file_name in self._src_file_to_encryption_material
+                            else None
+                        ),
                     )
                 )
 

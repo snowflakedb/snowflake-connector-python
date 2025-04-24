@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import gc
@@ -10,6 +6,8 @@ import logging
 import os
 import pathlib
 import queue
+import stat
+import tempfile
 import threading
 import warnings
 import weakref
@@ -32,12 +30,13 @@ from snowflake.connector.errorcode import (
     ER_NO_ACCOUNT_NAME,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from snowflake.connector.errors import Error, ForbiddenError
+from snowflake.connector.errors import Error, InterfaceError
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
 from ..randomize import random_string
+from .conftest import RUNNING_ON_GH, create_connection
 
 try:  # pragma: no cover
     from ..parameters import CONNECTION_PARAMETERS_ADMIN
@@ -131,6 +130,60 @@ def test_with_config(db_parameters):
         cnx.close()
 
 
+@pytest.mark.skipolddriver
+def test_with_tokens(conn_cnx, db_parameters):
+    """Creates a connection using session and master token."""
+    try:
+        with conn_cnx(
+            timezone="UTC",
+        ) as initial_cnx:
+            assert initial_cnx, "invalid initial cnx"
+            master_token = initial_cnx.rest._master_token
+            session_token = initial_cnx.rest._token
+            with snowflake.connector.connect(
+                account=db_parameters["account"],
+                host=db_parameters["host"],
+                port=db_parameters["port"],
+                protocol=db_parameters["protocol"],
+                session_token=session_token,
+                master_token=master_token,
+            ) as token_cnx:
+                assert token_cnx, "invalid second cnx"
+    except Exception:
+        # This is my way of guaranteeing that we'll not expose the
+        # sensitive information that this test needs to handle.
+        # db_parameter contains passwords.
+        pytest.fail("something failed", pytrace=False)
+
+
+@pytest.mark.skipolddriver
+def test_with_tokens_expired(conn_cnx, db_parameters):
+    """Creates a connection using session and master token."""
+    try:
+        with conn_cnx(
+            timezone="UTC",
+        ) as initial_cnx:
+            assert initial_cnx, "invalid initial cnx"
+            master_token = initial_cnx._rest._master_token
+            session_token = initial_cnx._rest._token
+
+        with pytest.raises(ProgrammingError):
+            token_cnx = snowflake.connector.connect(
+                account=db_parameters["account"],
+                host=db_parameters["host"],
+                port=db_parameters["port"],
+                protocol=db_parameters["protocol"],
+                session_token=session_token,
+                master_token=master_token,
+            )
+            token_cnx.close()
+    except Exception:
+        # This is my way of guaranteeing that we'll not expose the
+        # sensitive information that this test needs to handle.
+        # db_parameter contains passwords.
+        pytest.fail("something failed", pytrace=False)
+
+
 def test_keep_alive_true(db_parameters):
     """Creates a connection with client_session_keep_alive parameter."""
     config = {
@@ -178,10 +231,12 @@ def test_keep_alive_heartbeat_frequency(db_parameters):
         cnx.close()
 
 
+@pytest.mark.skipolddriver
 def test_keep_alive_heartbeat_frequency_min(db_parameters):
     """Tests heartbeat setting with custom frequency.
 
     Creates a connection with client_session_keep_alive_heartbeat_frequency parameter and set the minimum frequency.
+    Also if a value comes as string, should be properly converted to int and not fail assertion.
     """
     config = {
         "user": db_parameters["user"],
@@ -194,7 +249,7 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
         "protocol": db_parameters["protocol"],
         "timezone": "UTC",
         "client_session_keep_alive": True,
-        "client_session_keep_alive_heartbeat_frequency": 10,
+        "client_session_keep_alive_heartbeat_frequency": "10",
     }
     cnx = snowflake.connector.connect(**config)
     try:
@@ -220,6 +275,26 @@ def test_bad_db(db_parameters):
     cnx.close()
 
 
+def test_with_string_login_timeout(db_parameters):
+    """Test that login_timeout when passed as string does not raise TypeError.
+
+    In this test, we pass bad login credentials to raise error and trigger login
+    timeout calculation. We expect to see DatabaseError instead of TypeError that
+    comes from str - int arithmetic.
+    """
+    with pytest.raises(DatabaseError):
+        snowflake.connector.connect(
+            protocol="http",
+            user="bogus",
+            password="bogus",
+            host=db_parameters["host"],
+            port=db_parameters["port"],
+            account=db_parameters["account"],
+            login_timeout="5",
+        )
+
+
+@pytest.mark.skip(reason="the test is affected by CI breaking change")
 def test_bogus(db_parameters):
     """Attempts to login with invalid user name and password.
 
@@ -246,7 +321,7 @@ def test_bogus(db_parameters):
             host=db_parameters["host"],
             port=db_parameters["port"],
             login_timeout=5,
-            insecure_mode=True,
+            disable_ocsp_checks=True,
         )
 
     with pytest.raises(DatabaseError):
@@ -436,8 +511,9 @@ def test_drop_create_user(conn_cnx, db_parameters):
 
 
 @pytest.mark.timeout(15)
+@pytest.mark.skipolddriver
 def test_invalid_account_timeout():
-    with pytest.raises(ForbiddenError):
+    with pytest.raises(InterfaceError):
         snowflake.connector.connect(
             account="bogus", user="test", password="test", login_timeout=5
         )
@@ -463,6 +539,7 @@ def test_invalid_proxy(db_parameters):
 
 
 @pytest.mark.timeout(15)
+@pytest.mark.skipolddriver
 def test_eu_connection(tmpdir):
     """Tests setting custom region.
 
@@ -475,7 +552,7 @@ def test_eu_connection(tmpdir):
     import os
 
     os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED"] = "true"
-    with pytest.raises(ForbiddenError):
+    with pytest.raises(InterfaceError):
         # must reach Snowflake
         snowflake.connector.connect(
             account="testaccount1234",
@@ -489,6 +566,7 @@ def test_eu_connection(tmpdir):
         )
 
 
+@pytest.mark.skipolddriver
 def test_us_west_connection(tmpdir):
     """Tests default region setting.
 
@@ -498,7 +576,7 @@ def test_us_west_connection(tmpdir):
     Notes:
         Region is deprecated.
     """
-    with pytest.raises(ForbiddenError):
+    with pytest.raises(InterfaceError):
         # must reach Snowflake
         snowflake.connector.connect(
             account="testaccount1234",
@@ -582,6 +660,19 @@ def test_privatelink_ocsp_url_creation():
     )
 
     del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
+
+    SnowflakeConnection.setup_ocsp_privatelink(CLIENT_NAME, hostname)
+    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
+    assert (
+        ocsp_cache_server
+        == "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
+    )
+
+
+@pytest.mark.skipolddriver
+def test_uppercase_privatelink_ocsp_url_creation():
+    account = "TESTACCOUNT.US-EAST-1.PRIVATELINK"
+    hostname = account + ".snowflakecomputing.com"
 
     SnowflakeConnection.setup_ocsp_privatelink(CLIENT_NAME, hostname)
     ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
@@ -681,35 +772,6 @@ def test_okta_url(conn_cnx):
         assert cnx
 
 
-@pytest.mark.skipolddriver
-def test_use_openssl_only(db_parameters):
-    cnx = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        use_openssl_only=True,
-    )
-    assert cnx
-    assert "SF_USE_OPENSSL_ONLY" in os.environ
-    # Note during testing conftest will default this value to False, so if testing this we need to manually clear it
-    # Let's test it again, after clearing it
-    del os.environ["SF_USE_OPENSSL_ONLY"]
-    cnx = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        use_openssl_only=True,
-    )
-    assert cnx
-    assert os.environ["SF_USE_OPENSSL_ONLY"] == "True"
-
-
 def test_dashed_url(db_parameters):
     """Test whether dashed URLs get created correctly."""
     with mock.patch(
@@ -724,9 +786,9 @@ def test_dashed_url(db_parameters):
             account="test-account",
         ) as cnx:
             assert cnx
-            cnx.commit = (
-                cnx.rollback
-            ) = lambda: None  # Skip tear down, there's only a mocked rest api
+            cnx.commit = cnx.rollback = (
+                lambda: None
+            )  # Skip tear down, there's only a mocked rest api
             assert any(
                 [
                     c[0][1].startswith("https://test-host:443")
@@ -748,9 +810,9 @@ def test_dashed_url_account_name(db_parameters):
             account="test-account",
         ) as cnx:
             assert cnx
-            cnx.commit = (
-                cnx.rollback
-            ) = lambda: None  # Skip tear down, there's only a mocked rest api
+            cnx.commit = cnx.rollback = (
+                lambda: None
+            )  # Skip tear down, there's only a mocked rest api
             assert any(
                 [
                     c[0][1].startswith(
@@ -973,6 +1035,7 @@ def test_authenticate_error(conn_cnx, caplog):
     mock_auth = mock.Mock(spec=AuthByPlugin, unsafe=True)
     mock_auth.prepare.return_value = mock_auth
     mock_auth.update_body.side_effect = ReauthenticationRequest(None)
+    mock_auth._retry_ctx = mock.MagicMock()
     with conn_cnx() as conn:
         caplog.set_level(logging.DEBUG, "snowflake.connector")
         with pytest.raises(ReauthenticationRequest):
@@ -1076,6 +1139,15 @@ def test_client_prefetch_threads_setting(conn_cnx):
             cur.execute(f"alter session set client_prefetch_threads={new_thread_count}")
             assert cur._result_set.prefetch_thread_num == new_thread_count
         assert conn.client_prefetch_threads == new_thread_count
+
+
+@pytest.mark.skipolddriver
+def test_client_fetch_threads_setting(conn_cnx):
+    """Tests whether client_fetch_threads is None by default and setting the parameter has effect."""
+    with conn_cnx() as conn:
+        assert conn.client_fetch_threads is None
+        conn.client_fetch_threads = 32
+        assert conn.client_fetch_threads == 32
 
 
 @pytest.mark.external
@@ -1238,6 +1310,7 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
             else:
                 tmp_connections_file = tmp_path / "connections.toml"
                 tmp_connections_file.write_text(tomlkit.dumps(doc))
+                tmp_connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
             with snowflake.connector.connect(
                 connection_name="default",
                 connections_file_path=tmp_connections_file,
@@ -1303,9 +1376,9 @@ def test_server_session_keep_alive(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_mode_insecure(conn_cnx, is_public_test, caplog):
+def test_ocsp_mode_disable_ocsp_checks(conn_cnx, is_public_test, caplog):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
-    with conn_cnx(insecure_mode=True) as conn, conn.cursor() as cur:
+    with conn_cnx(disable_ocsp_checks=True) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
         assert "snowflake.connector.ocsp_snowflake" not in caplog.text
         caplog.clear()
@@ -1314,5 +1387,227 @@ def test_ocsp_mode_insecure(conn_cnx, is_public_test, caplog):
         assert cur.execute("select 1").fetchall() == [(1,)]
         if is_public_test:
             assert "snowflake.connector.ocsp_snowflake" in caplog.text
+            assert "This connection does not perform OCSP checks." not in caplog.text
         else:
             assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure_mode(conn_cnx, is_public_test, caplog):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
+    with conn_cnx(insecure_mode=True) as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+            assert "This connection does not perform OCSP checks." in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_match(
+    conn_cnx, is_public_test, caplog
+):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
+    with conn_cnx(
+        insecure_mode=True, disable_ocsp_checks=True
+    ) as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+            assert (
+                "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                "Using the value of 'disable_ocsp_checks."
+            ) not in caplog.text
+            assert "This connection does not perform OCSP checks." in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_disabled(
+    conn_cnx, is_public_test, caplog
+):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
+    with conn_cnx(
+        insecure_mode=False, disable_ocsp_checks=True
+    ) as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+            assert (
+                "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                "Using the value of 'disable_ocsp_checks."
+            ) in caplog.text
+            assert "This connection does not perform OCSP checks." in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
+    conn_cnx, is_public_test, caplog
+):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
+    with conn_cnx(
+        insecure_mode=True, disable_ocsp_checks=False
+    ) as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" in caplog.text
+            assert (
+                "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                "Using the value of 'disable_ocsp_checks."
+            ) in caplog.text
+            assert "This connection does not perform OCSP checks." not in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure_mode_deprecation_warning(conn_cnx):
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("ignore")
+        warnings.filterwarnings(
+            "always", category=DeprecationWarning, message=".*insecure_mode"
+        )
+        with conn_cnx(insecure_mode=True):
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "The 'insecure_mode' connection property is deprecated." in str(
+                w[0].message
+            )
+
+
+@pytest.mark.skipolddriver
+def test_connection_atexit_close(conn_cnx):
+    """Basic Connection test without schema."""
+    with conn_cnx() as conn:
+        conn._close_at_exit()
+        assert conn.is_closed()
+
+
+@pytest.mark.skipolddriver
+def test_token_file_path(tmp_path, db_parameters):
+    fake_token = "some token"
+    token_file_path = tmp_path / "token"
+    with open(token_file_path, "w") as f:
+        f.write(fake_token)
+
+    conn = snowflake.connector.connect(**db_parameters, token=fake_token)
+    assert conn._token == fake_token
+    conn = snowflake.connector.connect(**db_parameters, token_file_path=token_file_path)
+    assert conn._token == fake_token
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(not RUNNING_ON_GH, reason="no ocsp in the environment")
+def test_mock_non_existing_server(conn_cnx, caplog):
+    from snowflake.connector.cache import SFDictCache
+
+    # disabling local cache and pointing ocsp cache server to a non-existing url
+    # connection should still work as it will directly validate the certs against CA servers
+    with tempfile.NamedTemporaryFile() as tmp, caplog.at_level(logging.DEBUG):
+        with mock.patch(
+            "snowflake.connector.url_util.extract_top_level_domain_from_hostname",
+            return_value="nonexistingtopleveldomain",
+        ):
+            with mock.patch(
+                "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
+                SFDictCache(),
+            ):
+                with mock.patch(
+                    "snowflake.connector.ocsp_snowflake.OCSPCache.OCSP_RESPONSE_CACHE_FILE_NAME",
+                    tmp.name,
+                ):
+                    with conn_cnx():
+                        pass
+        assert all(
+            s in caplog.text
+            for s in [
+                "Failed to read OCSP response cache file",
+                "It will validate with OCSP server.",
+                "writing OCSP response cache file to",
+            ]
+        )
+
+
+@pytest.mark.skipolddriver
+def test_disable_telemetry(conn_cnx, caplog):
+    # default behavior, closing connection, it will send telemetry
+    with caplog.at_level(logging.DEBUG):
+        with conn_cnx() as conn:
+            with conn.cursor() as cur:
+                cur.execute("select 1").fetchall()
+            assert (
+                len(conn._telemetry._log_batch) == 3
+            )  # 3 events are import package, fetch first, fetch last
+    assert "POST /telemetry/send" in caplog.text
+    caplog.clear()
+
+    # set session parameters to false
+    with caplog.at_level(logging.DEBUG):
+        with conn_cnx(
+            session_parameters={"CLIENT_TELEMETRY_ENABLED": False}
+        ) as conn, conn.cursor() as cur:
+            cur.execute("select 1").fetchall()
+            assert not conn.telemetry_enabled and not conn._telemetry._log_batch
+            # this enable won't work as the session parameter is set to false
+            conn.telemetry_enabled = True
+            cur.execute("select 1").fetchall()
+            assert not conn.telemetry_enabled and not conn._telemetry._log_batch
+
+    assert "POST /telemetry/send" not in caplog.text
+    caplog.clear()
+
+    # test disable telemetry in the client
+    with caplog.at_level(logging.DEBUG):
+        with conn_cnx() as conn:
+            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 1
+            conn.telemetry_enabled = False
+            with conn.cursor() as cur:
+                cur.execute("select 1").fetchall()
+            assert not conn.telemetry_enabled
+    assert "POST /telemetry/send" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_is_valid(conn_cnx):
+    """Tests whether connection and session validation happens."""
+    with conn_cnx() as conn:
+        assert conn
+        assert conn.is_valid() is True
+    assert conn.is_valid() is False
+
+
+@pytest.mark.skipolddriver
+def test_no_auth_connection_negative_case():
+    # AuthNoAuth does not exist in old drivers, so we import at test level to
+    # skip importing it for old driver tests.
+    from snowflake.connector.auth.no_auth import AuthNoAuth
+
+    no_auth = AuthNoAuth()
+
+    # Create a no-auth connection in an invalid way.
+    # We do not fail connection establishment because there is no validated way
+    # to tell whether the no-auth is a valid use case or not. But it is
+    # effectively protected because invalid no-auth will fail to run any query.
+    conn = create_connection("default", auth_class=no_auth)
+
+    # Make sure we are indeed passing the no-auth configuration to the
+    # connection.
+    assert isinstance(conn.auth_class, AuthNoAuth)
+
+    # We expect a failure here when executing queries, because invalid no-auth
+    # connection is not able to run any query
+    with pytest.raises(DatabaseError, match="Connection is closed"):
+        conn.execute_string("select 1")
+
+
+# _file_operation_parser and _stream_downloader are newly introduced and
+# therefore should not be tested on old drivers.
+@pytest.mark.skipolddriver
+def test_file_utils_sanity_check():
+    conn = create_connection("default")
+    assert hasattr(conn._file_operation_parser, "parse_file_operation")
+    assert hasattr(conn._stream_downloader, "download_as_stream")

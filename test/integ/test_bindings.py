@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import calendar
@@ -10,7 +6,7 @@ import tempfile
 import time
 from datetime import date, datetime
 from datetime import time as datetime_time
-from datetime import timedelta
+from datetime import timedelta, timezone
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -86,7 +82,7 @@ insert into {name} values(
 """
     with conn_cnx(paramstyle="qmark") as cnx:
         cnx.cursor().execute(CREATE_TABLE.format(name=db_parameters["name"]))
-    current_utctime = datetime.utcnow()
+    current_utctime = datetime.now(timezone.utc).replace(tzinfo=None)
     current_localtime = pytz.utc.localize(current_utctime, is_dst=False).astimezone(
         pytz.timezone(PST_TZ)
     )
@@ -450,7 +446,7 @@ create or replace table {name} (
             cnx._session_parameters[CLIENT_STAGE_ARRAY_BINDING_THRESHOLD] = 1
             dates = [
                 [date.fromisoformat("1750-05-09")],
-                [date.fromisoformat("1969-12-31")],
+                [date.fromisoformat("1969-01-01")],
                 [date.fromisoformat("1970-01-01")],
                 [date.fromisoformat("2023-05-12")],
                 [date.fromisoformat("2999-12-31")],
@@ -462,7 +458,7 @@ create or replace table {name} (
             ret = c.execute(f'SELECT c1 from {db_parameters["name"]}').fetchall()
             assert ret == [
                 (date(1750, 5, 9),),
-                (date(1969, 12, 31),),
+                (date(1969, 1, 1),),
                 (date(1970, 1, 1),),
                 (date(2023, 5, 12),),
                 (date(2999, 12, 31),),
@@ -478,6 +474,19 @@ drop table if exists {name}
                     name=db_parameters["name"]
                 )
             )
+
+
+@pytest.mark.skipolddriver
+def test_binding_insert_date(conn_cnx, db_parameters):
+    bind_query = "SELECT TRY_TO_DATE(TO_CHAR(?,?),?)"
+    bind_variables = (date(2016, 4, 10), "YYYY-MM-DD", "YYYY-MM-DD")
+    bind_variables_2 = (date(2016, 4, 10), "YYYY-MM-DD", "DD-MON-YYYY")
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        assert cursor.execute(bind_query, bind_variables).fetchall() == [
+            (date(2016, 4, 10),)
+        ]
+        # the second sql returns None because 2016-04-10 doesn't comply with the format DD-MON-YYYY
+        assert cursor.execute(bind_query, bind_variables_2).fetchall() == [(None,)]
 
 
 @pytest.mark.skipolddriver
@@ -604,3 +613,85 @@ drop table if exists identifier(?)
 """,
                 (db_parameters["name"],),
             )
+
+
+def create_or_replace_table(cur, table_name: str, columns):
+    sql = f"CREATE OR REPLACE TEMP TABLE {table_name} ({','.join(columns)})"
+    cur.execute(sql)
+
+
+def insert_multiple_records(
+    cur,
+    table_name: str,
+    ts: str,
+    row_count: int,
+    should_bind: bool,
+):
+    sql = f"INSERT INTO {table_name} values (?)"
+    dates = [[ts] for _ in range(row_count)]
+    cur.executemany(sql, dates)
+    is_bind_sql_scoped = "SHOW stages like 'SNOWPARK_TEMP_STAGE_BIND'"
+    is_bind_sql_non_scoped = "SHOW stages like 'SYSTEMBIND'"
+    res1 = cur.execute(is_bind_sql_scoped).fetchall()
+    res2 = cur.execute(is_bind_sql_non_scoped).fetchall()
+    if should_bind:
+        assert len(res1) != 0 or len(res2) != 0
+    else:
+        assert len(res1) == 0 and len(res2) == 0
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "timestamp_type, timestamp_precision, timestamp, expected_style",
+    [
+        ("TIMESTAMPTZ", 6, "2023-03-15 13:17:29.207 +05:00", "%Y-%m-%d %H:%M:%S.%f %z"),
+        ("TIMESTAMP", 6, "2023-03-15 13:17:29.207", "%Y-%m-%d %H:%M:%S.%f"),
+        (
+            "TIMESTAMPLTZ",
+            6,
+            "2023-03-15 13:17:29.207 +05:00",
+            "%Y-%m-%d %H:%M:%S.%f %z",
+        ),
+        (
+            "TIMESTAMPTZ",
+            None,
+            "2023-03-15 13:17:29.207 +05:00",
+            "%Y-%m-%d %H:%M:%S.%f %z",
+        ),
+        ("TIMESTAMP", None, "2023-03-15 13:17:29.207", "%Y-%m-%d %H:%M:%S.%f"),
+        (
+            "TIMESTAMPLTZ",
+            None,
+            "2023-03-15 13:17:29.207 +05:00",
+            "%Y-%m-%d %H:%M:%S.%f %z",
+        ),
+        ("TIMESTAMPNTZ", 6, "2023-03-15 13:17:29.207", "%Y-%m-%d %H:%M:%S.%f"),
+        ("TIMESTAMPNTZ", None, "2023-03-15 13:17:29.207", "%Y-%m-%d %H:%M:%S.%f"),
+    ],
+)
+def test_timestamp_bindings(
+    conn_cnx, timestamp_type, timestamp_precision, timestamp, expected_style
+):
+    column_name = (
+        f"ts {timestamp_type}({timestamp_precision})"
+        if timestamp_precision is not None
+        else f"ts {timestamp_type}"
+    )
+    table_name = f"TEST_TIMESTAMP_BINDING_{random_string(10)}"
+    binding_threshold = 65280
+
+    with conn_cnx(paramstyle="qmark") as cnx:
+        with cnx.cursor() as cur:
+            create_or_replace_table(cur, table_name, [column_name])
+            insert_multiple_records(cur, table_name, timestamp, 2, False)
+            insert_multiple_records(
+                cur, table_name, timestamp, binding_threshold + 1, True
+            )
+            res = cur.execute(f"select ts from {table_name}").fetchall()
+            expected = datetime.strptime(timestamp, expected_style)
+            assert len(res) == 65283
+            for r in res:
+                if timestamp_type == "TIMESTAMP":
+                    assert r[0].replace(tzinfo=None) == expected.replace(tzinfo=None)
+                else:
+                    assert r[0] == expected

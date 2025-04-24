@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 """Script to test database capabilities and the DB-API interface for functionality and data integrity.
 
 Adapted from a script by M-A Lemburg and taken from the MySQL python driver.
@@ -575,7 +571,7 @@ def test_description2(conn_local):
                 ("COL10", 10, None, None, None, None, True),
                 # array
                 #                ('col11', 11, ... # binary
-                ("COL12", 12, None, None, 0, 9, True)
+                ("COL12", 12, None, None, 0, 9, True),
                 # time
                 #                ('col13', 13, ... # boolean
             ]

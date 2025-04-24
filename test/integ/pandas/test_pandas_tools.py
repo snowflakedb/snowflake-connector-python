@@ -1,12 +1,9 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+import re
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Generator
 from unittest import mock
 
@@ -26,10 +23,14 @@ from ...lazy_var import LazyVar
 
 try:
     from snowflake.connector.options import pandas
-    from snowflake.connector.pandas_tools import write_pandas
+    from snowflake.connector.pandas_tools import (
+        _iceberg_config_statement_helper,
+        write_pandas,
+    )
 except ImportError:
     pandas = None
     write_pandas = None
+    _iceberg_config_statement_helper = None
 
 if TYPE_CHECKING:
     from snowflake.connector import SnowflakeConnection
@@ -64,7 +65,7 @@ def assert_result_equals(
 
 
 def test_fix_snow_746341(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]]
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
 ):
     cat = '"cat"'
     df = pandas.DataFrame([[1], [2]], columns=[f"col_'{cat}'"])
@@ -83,7 +84,7 @@ def test_fix_snow_746341(
 @pytest.mark.parametrize("auto_create_table", [True, False])
 @pytest.mark.parametrize("index", [False])
 def test_write_pandas_with_overwrite(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
     quote_identifiers: bool,
     auto_create_table: bool,
     index: bool,
@@ -170,6 +171,23 @@ def test_write_pandas_with_overwrite(
                     if quote_identifiers
                     else "YEAR" in [col.name for col in result[0].description]
                 )
+            else:
+                # Should fail because the table will be truncated and df3 schema doesn't match
+                # (since df3 should at least have a subset of the columns of the target table)
+                with pytest.raises(ProgrammingError, match="invalid identifier"):
+                    write_pandas(
+                        cnx,
+                        df3,
+                        random_table_name,
+                        quote_identifiers=quote_identifiers,
+                        auto_create_table=auto_create_table,
+                        overwrite=True,
+                        index=index,
+                    )
+
+                # Check that we have truncated the table but not dropped it in case or error.
+                result = cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
+                assert result["COUNT(*)"] == 0
 
             if not quote_identifiers:
                 original_result = (
@@ -208,7 +226,7 @@ def test_write_pandas_with_overwrite(
 @pytest.mark.parametrize("create_temp_table", [True, False])
 @pytest.mark.parametrize("index", [False])
 def test_write_pandas(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
     db_parameters: dict[str, str],
     compression: str,
     chunk_size: int,
@@ -279,7 +297,7 @@ def test_write_pandas(
 
 
 def test_write_non_range_index_pandas(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
     db_parameters: dict[str, str],
 ):
     compression = "gzip"
@@ -359,7 +377,7 @@ def test_write_non_range_index_pandas(
 
 @pytest.mark.parametrize("table_type", ["", "temp", "temporary", "transient"])
 def test_write_pandas_table_type(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
     table_type: str,
 ):
     with conn_cnx() as cnx:
@@ -391,7 +409,7 @@ def test_write_pandas_table_type(
 
 
 def test_write_pandas_create_temp_table_deprecation_warning(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
 ):
     with conn_cnx() as cnx:
         table_name = random_string(5, "driver_versions_")
@@ -417,8 +435,56 @@ def test_write_pandas_create_temp_table_deprecation_warning(
             cnx.execute_string(drop_sql)
 
 
+@pytest.mark.parametrize("use_logical_type", [None, True, False])
+def test_write_pandas_use_logical_type(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
+    use_logical_type: bool | None,
+):
+    table_name = random_string(5, "USE_LOCAL_TYPE_").upper()
+    col_name = "DT"
+    create_sql = f"CREATE OR REPLACE TABLE {table_name} ({col_name} TIMESTAMP_TZ)"
+    select_sql = f"SELECT * FROM {table_name}"
+    drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+    timestamp = datetime(
+        year=2020,
+        month=1,
+        day=2,
+        hour=3,
+        minute=4,
+        second=5,
+        microsecond=6,
+        tzinfo=timezone(timedelta(hours=2)),
+    )
+    df_write = pandas.DataFrame({col_name: [timestamp]})
+
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        cnx.cursor().execute(create_sql).fetchall()
+
+        write_pandas_kwargs = dict(
+            conn=cnx,
+            df=df_write,
+            use_logical_type=use_logical_type,
+            auto_create_table=False,
+            table_name=table_name,
+        )
+
+        try:
+            # When use_logical_type = True, datetimes with timestamps should be
+            # correctly written to Snowflake.
+            if use_logical_type:
+                write_pandas(**write_pandas_kwargs)
+                df_read = cnx.cursor().execute(select_sql).fetch_pandas_all()
+                assert all(df_write == df_read)
+            # For other use_logical_type values, a UserWarning should be displayed.
+            else:
+                with pytest.warns(UserWarning, match="Dataframe contains a datetime.*"):
+                    write_pandas(**write_pandas_kwargs)
+        finally:
+            cnx.execute_string(drop_sql)
+
+
 def test_invalid_table_type_write_pandas(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
 ):
     with conn_cnx() as cnx:
         with pytest.raises(ValueError, match="Unsupported table type"):
@@ -431,7 +497,7 @@ def test_invalid_table_type_write_pandas(
 
 
 def test_empty_dataframe_write_pandas(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
 ):
     table_name = random_string(5, "empty_dataframe_")
     df = pandas.DataFrame([], columns=["name", "balance"])
@@ -469,8 +535,7 @@ def test_table_location_building(
 
         def mocked_execute(*args, **kwargs):
             if len(args) >= 1 and args[0].startswith("COPY INTO"):
-                location = args[0].split(" ")[2]
-                assert location == expected_location
+                assert kwargs["params"][0] == expected_location
             cur = SnowflakeCursor(cnx)
             cur._result = iter([])
             return cur
@@ -537,7 +602,60 @@ def test_stage_location_building(
             )
             assert m_execute.called and any(
                 map(
-                    lambda e: "CREATE TEMP STAGE" in str(e[0]),
+                    lambda e: ("CREATE TEMP STAGE" in str(e[0])),
+                    m_execute.call_args_list,
+                )
+            )
+
+
+@pytest.mark.skip("scoped object isn't used yet.")
+@pytest.mark.parametrize(
+    "database,schema,quote_identifiers,expected_db_schema",
+    [
+        ("database", "schema", True, '"database"."schema"'),
+        ("database", "schema", False, "database.schema"),
+        (None, "schema", True, '"schema"'),
+        (None, "schema", False, "schema"),
+        (None, None, True, ""),
+        (None, None, False, ""),
+    ],
+)
+def test_use_scoped_object(
+    conn_cnx,
+    database: str | None,
+    schema: str | None,
+    quote_identifiers: bool,
+    expected_db_schema: str,
+):
+    """This tests that write_pandas constructs stage location correctly with database and schema."""
+    from snowflake.connector.cursor import SnowflakeCursor
+
+    with conn_cnx() as cnx:
+
+        def mocked_execute(*args, **kwargs):
+            if len(args) >= 1 and args[0].startswith("create temporary stage"):
+                db_schema = ".".join(args[0].split(" ")[-1].split(".")[:-1])
+                assert db_schema == expected_db_schema
+            cur = SnowflakeCursor(cnx)
+            cur._result = iter([])
+            return cur
+
+        with mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor.execute",
+            side_effect=mocked_execute,
+        ) as m_execute:
+            cnx._update_parameters({"PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS": True})
+            success, nchunks, nrows, _ = write_pandas(
+                cnx,
+                sf_connector_version_df.get(),
+                "table",
+                database=database,
+                schema=schema,
+                quote_identifiers=quote_identifiers,
+            )
+            assert m_execute.called and any(
+                map(
+                    lambda e: ("CREATE SCOPED TEMPORARY STAGE" in str(e[0])),
                     m_execute.call_args_list,
                 )
             )
@@ -595,7 +713,7 @@ def test_file_format_location_building(
             )
             assert m_execute.called and any(
                 map(
-                    lambda e: "CREATE TEMP FILE FORMAT" in str(e[0]),
+                    lambda e: ("CREATE TEMP FILE FORMAT" in str(e[0])),
                     m_execute.call_args_list,
                 )
             )
@@ -603,7 +721,7 @@ def test_file_format_location_building(
 
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 def test_default_value_insertion(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
     quote_identifiers: bool,
 ):
     """Tests whether default values can be successfully inserted with the pandas writeback."""
@@ -657,7 +775,7 @@ def test_default_value_insertion(
 
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 def test_autoincrement_insertion(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
     quote_identifiers: bool,
 ):
     """Tests whether default values can be successfully inserted with the pandas writeback."""
@@ -703,10 +821,15 @@ def test_autoincrement_insertion(
 @pytest.mark.parametrize("auto_create_table", [True, False])
 @pytest.mark.parametrize(
     "column_names",
-    [["00 name", "bAl_ance"], ['c""ol', '"col"'], ["c''ol", "'col'"], ["チリヌル", "熊猫"]],
+    [
+        ["00 name", "bAl_ance"],
+        ['c""ol', '"col"'],
+        ["c''ol", "'col'"],
+        ["チリヌル", "熊猫"],
+    ],
 )
 def test_special_name_quoting(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
     auto_create_table: bool,
     column_names: list[str],
 ):
@@ -753,7 +876,7 @@ def test_special_name_quoting(
 
 
 def test_auto_create_table_similar_column_names(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
 ):
     """Tests whether similar names do not cause issues when auto-creating a table as expected."""
     table_name = random_string(5, "numbas_")
@@ -784,7 +907,7 @@ def test_auto_create_table_similar_column_names(
 
 
 def test_all_pandas_types(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]]
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
 ):
     table_name = random_string(5, "all_types_")
     datetime_with_tz = datetime(1997, 6, 3, 14, 21, 32, 00, tzinfo=timezone.utc)
@@ -857,7 +980,7 @@ def test_all_pandas_types(
 
 @pytest.mark.parametrize("object_type", ["STAGE", "FILE FORMAT"])
 def test_no_create_internal_object_privilege_in_target_schema(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection, None, None]],
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
     caplog,
     object_type,
 ):
@@ -875,7 +998,7 @@ def test_no_create_internal_object_privilege_in_target_schema(
             def mock_execute(*args, **kwargs):
                 if (
                     f"CREATE TEMP {object_type}" in args[0]
-                    and "target_schema_no_create_" in args[0]
+                    and "target_schema_no_create_" in kwargs["params"][0]
                 ):
                     raise ProgrammingError("Cannot create temp object in target schema")
                 cursor = cnx.cursor()
@@ -905,3 +1028,76 @@ def test_no_create_internal_object_privilege_in_target_schema(
         finally:
             cnx.execute_string(f"drop schema if exists {source_schema}")
             cnx.execute_string(f"drop schema if exists {target_schema}")
+
+
+def test__iceberg_config_statement_helper():
+    config = {
+        "EXTERNAL_VOLUME": "vol",
+        "CATALOG": "'SNOWFLAKE'",
+        "BASE_LOCATION": "/root",
+        "CATALOG_SYNC": "foo",
+        "STORAGE_SERIALIZATION_POLICY": "bar",
+    }
+    assert (
+        _iceberg_config_statement_helper(config)
+        == "EXTERNAL_VOLUME='vol' CATALOG='SNOWFLAKE' BASE_LOCATION='/root' CATALOG_SYNC='foo' STORAGE_SERIALIZATION_POLICY='bar'"
+    )
+
+    config["STORAGE_SERIALIZATION_POLICY"] = None
+    assert (
+        _iceberg_config_statement_helper(config)
+        == "EXTERNAL_VOLUME='vol' CATALOG='SNOWFLAKE' BASE_LOCATION='/root' CATALOG_SYNC='foo'"
+    )
+
+    config["foo"] = True
+    config["bar"] = True
+    with pytest.raises(
+        ProgrammingError,
+        match=re.escape("Invalid iceberg configurations option(s) provided BAR, FOO"),
+    ):
+        _iceberg_config_statement_helper(config)
+
+
+def test_write_pandas_with_on_error(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
+):
+    """Tests whether overwriting table using a Pandas DataFrame works as expected."""
+    random_table_name = random_string(5, "userspoints_")
+    df_data = [("Dash", 50)]
+    df = pandas.DataFrame(df_data, columns=["name", "points"])
+
+    table_name = random_table_name
+    col_id = "id"
+    col_name = "name"
+    col_points = "points"
+
+    create_sql = (
+        f"CREATE OR REPLACE TABLE {table_name}"
+        f"({col_name} STRING, {col_points} INT, {col_id} INT AUTOINCREMENT)"
+    )
+
+    select_count_sql = f"SELECT count(*) FROM {table_name}"
+    drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        cnx.execute_string(create_sql)
+        try:
+            # Write dataframe with 1 row
+            success, nchunks, nrows, _ = write_pandas(
+                cnx,
+                df,
+                random_table_name,
+                quote_identifiers=False,
+                auto_create_table=False,
+                overwrite=True,
+                index=True,
+                on_error="continue",
+            )
+            # Check write_pandas output
+            assert success
+            assert nchunks == 1
+            assert nrows == 1
+            result = cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
+            # Check number of rows
+            assert result["COUNT(*)"] == 1
+        finally:
+            cnx.execute_string(drop_sql)

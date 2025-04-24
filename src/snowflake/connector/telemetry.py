@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import logging
@@ -239,9 +235,9 @@ def generate_telemetry_data_dict(
         {
             TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
             TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
-            TelemetryField.KEY_SOURCE.value: connection.application
-            if connection
-            else CLIENT_NAME,
+            TelemetryField.KEY_SOURCE.value: (
+                connection.application if connection else CLIENT_NAME
+            ),
             **from_dict,
         }
         if not is_oob_telemetry

@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 import datetime
 import random
 from typing import Callable
@@ -14,7 +10,7 @@ except ImportError:
     installed_pandas = False
 
 try:
-    import snowflake.connector.arrow_iterator  # NOQA
+    import snowflake.connector.nanoarrow_arrow_iterator  # NOQA
 
     no_arrow_iterator_ext = False
 except ImportError:

@@ -1,18 +1,16 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import logging
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
+
+from .mock_utils import mock_connection
 
 try:  # pragma: no cover
     import snowflake.connector.vendored.requests.sessions
@@ -246,7 +244,8 @@ def test_auth_okta_step4_negative(caplog):
         assert not rest._connection.errorhandler.called
 
 
-def test_auth_okta_step5_negative():
+@pytest.mark.parametrize("disable_saml_url_check", [True, False])
+def test_auth_okta_step5_negative(disable_saml_url_check):
     """Authentication by OKTA step5 negative test case."""
     authenticator = "https://testsso.snowflake.net/"
     application = "testapplication"
@@ -257,7 +256,9 @@ def test_auth_okta_step5_negative():
 
     ref_sso_url = "https://testsso.snowflake.net/sso"
     ref_token_url = "https://testsso.snowflake.net/token"
-    rest = _init_rest(ref_sso_url, ref_token_url)
+    rest = _init_rest(
+        ref_sso_url, ref_token_url, disable_saml_url_check=disable_saml_url_check
+    )
 
     auth = AuthByOkta(application)
     # step 1
@@ -304,10 +305,12 @@ def test_auth_okta_step5_negative():
     rest._host = f"{account}.snowflakecomputing.com"
     rest._port = 443
     auth._step5(rest._connection, ref_response_html)
-    assert rest._connection.errorhandler.called  # error
+    assert disable_saml_url_check ^ rest._connection.errorhandler.called  # error
 
 
-def _init_rest(ref_sso_url, ref_token_url, success=True, message=None):
+def _init_rest(
+    ref_sso_url, ref_token_url, success=True, message=None, disable_saml_url_check=False
+):
     def post_request(url, headers, body, **kwargs):
         _ = url
         _ = headers
@@ -322,10 +325,7 @@ def _init_rest(ref_sso_url, ref_token_url, success=True, message=None):
             },
         }
 
-    connection = MagicMock()
-    connection.login_timeout = 120
-    connection._login_timeout = 120
-    connection._network_timeout = None
+    connection = mock_connection(disable_saml_url_check=disable_saml_url_check)
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=CLIENT_NAME)

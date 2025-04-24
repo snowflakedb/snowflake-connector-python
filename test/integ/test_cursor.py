@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import decimal
@@ -11,7 +7,8 @@ import logging
 import os
 import pickle
 import time
-from datetime import date, datetime
+import uuid
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
 
@@ -130,6 +127,31 @@ b binary)
     return conn_cnx
 
 
+class LobBackendParams(NamedTuple):
+    max_lob_size_in_memory: int
+
+
+@pytest.fixture()
+def lob_params(conn_cnx) -> LobBackendParams:
+    with conn_cnx() as cnx:
+        (max_lob_size_in_memory_feat, max_lob_size_in_memory) = (
+            (cnx.cursor().execute(f"show parameters like '{lob_param}'").fetchone())
+            for lob_param in (
+                "FEATURE_INCREASED_MAX_LOB_SIZE_IN_MEMORY",
+                "MAX_LOB_SIZE_IN_MEMORY",
+            )
+        )
+        max_lob_size_in_memory_feat = (
+            max_lob_size_in_memory_feat and max_lob_size_in_memory_feat[1] == "ENABLED"
+        )
+        max_lob_size_in_memory = (
+            int(max_lob_size_in_memory[1])
+            if (max_lob_size_in_memory_feat and max_lob_size_in_memory)
+            else 2**24
+        )
+        return LobBackendParams(max_lob_size_in_memory)
+
+
 def _check_results(cursor, results):
     assert cursor.sfqid, "Snowflake query id is None"
     assert cursor.rowcount == 3, "the number of records"
@@ -138,8 +160,23 @@ def _check_results(cursor, results):
     assert results[2] == 123456, "the third result was wrong"
 
 
+def _name_from_description(named_access: bool):
+    if named_access:
+        return lambda meta: meta.name
+    else:
+        return lambda meta: meta[0]
+
+
+def _type_from_description(named_access: bool):
+    if named_access:
+        return lambda meta: meta.type_code
+    else:
+        return lambda meta: meta[1]
+
+
 @pytest.mark.skipolddriver
 def test_insert_select(conn, db_parameters, caplog):
+    caplog.set_level(logging.DEBUG)
     """Inserts and selects integer data."""
     with conn() as cnx:
         c = cnx.cursor()
@@ -184,6 +221,7 @@ def test_insert_select(conn, db_parameters, caplog):
 
 @pytest.mark.skipolddriver
 def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
+    caplog.set_level(logging.DEBUG)
     """Inserts a record and select it by a separate connection."""
     with conn() as cnx:
         result = cnx.cursor().execute(
@@ -240,7 +278,7 @@ def test_insert_timestamp_select(conn, db_parameters):
     """
     PST_TZ = "America/Los_Angeles"
     JST_TZ = "Asia/Tokyo"
-    current_timestamp = datetime.utcnow()
+    current_timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
     current_timestamp = current_timestamp.replace(tzinfo=pytz.timezone(PST_TZ))
     current_date = current_timestamp.date()
     current_time = current_timestamp.time()
@@ -330,28 +368,42 @@ def test_insert_timestamp_select(conn, db_parameters):
 
         assert current_time == result_time_value[0], "the time result was wrong"
 
-        desc = c.description
-        assert len(desc) == 6, "invalid number of column meta data"
-        assert desc[0][0].upper() == "AA", "invalid column name"
-        assert desc[1][0].upper() == "TSLTZ", "invalid column name"
-        assert desc[2][0].upper() == "TSTZ", "invalid column name"
-        assert desc[3][0].upper() == "TSNTZ", "invalid column name"
-        assert desc[4][0].upper() == "DT", "invalid column name"
-        assert desc[5][0].upper() == "TM", "invalid column name"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[0][1]] == "FIXED"
-        ), f"invalid column name: {constants.FIELD_ID_TO_NAME[desc[0][1]]}"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[1][1]] == "TIMESTAMP_LTZ"
-        ), "invalid column name"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[2][1]] == "TIMESTAMP_TZ"
-        ), "invalid column name"
-        assert (
-            constants.FIELD_ID_TO_NAME[desc[3][1]] == "TIMESTAMP_NTZ"
-        ), "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[4][1]] == "DATE", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[5][1]] == "TIME", "invalid column name"
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
+            assert len(desc) == 6, "invalid number of column meta data"
+            assert name(desc[0]).upper() == "AA", "invalid column name"
+            assert name(desc[1]).upper() == "TSLTZ", "invalid column name"
+            assert name(desc[2]).upper() == "TSTZ", "invalid column name"
+            assert name(desc[3]).upper() == "TSNTZ", "invalid column name"
+            assert name(desc[4]).upper() == "DT", "invalid column name"
+            assert name(desc[5]).upper() == "TM", "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "FIXED"
+            ), f"invalid column name: {constants.FIELD_ID_TO_NAME[desc[0][1]]}"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[1])] == "TIMESTAMP_LTZ"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[2])] == "TIMESTAMP_TZ"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[3])] == "TIMESTAMP_NTZ"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[4])] == "DATE"
+            ), "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[5])] == "TIME"
+            ), "invalid column name"
     finally:
         cnx2.close()
 
@@ -483,10 +535,22 @@ def test_insert_binary_select(conn, db_parameters):
         results = [b for (b,) in c]
         assert value == results[0], "the binary result was wrong"
 
-        desc = c.description
-        assert len(desc) == 1, "invalid number of column meta data"
-        assert desc[0][0].upper() == "B", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[0][1]] == "BINARY", "invalid column name"
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
+            assert len(desc) == 1, "invalid number of column meta data"
+            assert name(desc[0]).upper() == "B", "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
+            ), "invalid column name"
     finally:
         cnx2.close()
 
@@ -523,10 +587,22 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
         results = [b for (b,) in c]
         assert bytes(value) == results[0], "the binary result was wrong"
 
-        desc = c.description
-        assert len(desc) == 1, "invalid number of column meta data"
-        assert desc[0][0].upper() == "B", "invalid column name"
-        assert constants.FIELD_ID_TO_NAME[desc[0][1]] == "BINARY", "invalid column name"
+        name = _name_from_description(False)
+        type_code = _type_from_description(False)
+        descriptions = [c.description]
+        if hasattr(c, "_description_internal"):
+            # If _description_internal is defined, even the old description attribute will
+            # return ResultMetadata (v1) and not a plain tuple. This indirection is needed
+            # to support old-driver tests
+            name = _name_from_description(True)
+            type_code = _type_from_description(True)
+            descriptions.append(c._description_internal)
+        for desc in descriptions:
+            assert len(desc) == 1, "invalid number of column meta data"
+            assert name(desc[0]).upper() == "B", "invalid column name"
+            assert (
+                constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
+            ), "invalid column name"
     finally:
         cnx2.close()
 
@@ -607,8 +683,8 @@ def test_geography(conn_cnx):
         with cnx.cursor() as cur:
             # Test with GEOGRAPHY return type
             result = cur.execute(f"select * from {name_geo}")
-            metadata = result.description
-            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOGRAPHY"
             data = result.fetchall()
             for raw_data in data:
                 row = json.loads(raw_data[0])
@@ -637,12 +713,107 @@ def test_geometry(conn_cnx):
         with cnx.cursor() as cur:
             # Test with GEOMETRY return type
             result = cur.execute(f"select * from {name_geo}")
-            metadata = result.description
-            assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOMETRY"
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "GEOMETRY"
             data = result.fetchall()
             for raw_data in data:
                 row = json.loads(raw_data[0])
                 assert row in expected_data
+
+
+@pytest.mark.skipolddriver
+def test_file(conn_cnx):
+    """Variant including JSON object."""
+    name_file = random_string(5, "test_file_")
+    with conn_cnx(
+        session_parameters={
+            "ENABLE_FILE_DATA_TYPE": True,
+        },
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(
+                f"create temporary table {name_file} as select "
+                f"TO_FILE(OBJECT_CONSTRUCT('RELATIVE_PATH', 'some_new_file.jpeg', 'STAGE', '@myStage', "
+                f"'STAGE_FILE_URL', 'some_new_file.jpeg', 'SIZE', 123, 'ETAG', 'xxx', 'CONTENT_TYPE', 'image/jpeg', "
+                f"'LAST_MODIFIED', '2025-01-01')) as file_col"
+            )
+
+            expected_data = [
+                {
+                    "RELATIVE_PATH": "some_new_file.jpeg",
+                    "STAGE": "@myStage",
+                    "STAGE_FILE_URL": "some_new_file.jpeg",
+                    "SIZE": 123,
+                    "ETAG": "xxx",
+                    "CONTENT_TYPE": "image/jpeg",
+                    "LAST_MODIFIED": "2025-01-01",
+                }
+            ]
+
+        with cnx.cursor() as cur:
+            # Test with FILE return type
+            result = cur.execute(f"select * from {name_file}")
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "FILE"
+            data = result.fetchall()
+            for raw_data in data:
+                row = json.loads(raw_data[0])
+                assert row in expected_data
+
+
+@pytest.mark.skipolddriver
+def test_vector(conn_cnx, is_public_test):
+    if is_public_test:
+        pytest.xfail(
+            reason="This feature hasn't been rolled out for public Snowflake deployments yet."
+        )
+    name_vectors = random_string(5, "test_vector_")
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            # Seed test data
+            expected_data_ints = [[1, 3, -5], [40, 1234567, 1], "NULL"]
+            expected_data_floats = [
+                [1.8, -3.4, 6.7, 0, 2.3],
+                [4.121212121, 31234567.4, 7, -2.123, 1],
+                "NULL",
+            ]
+            cur.execute(
+                f"create temporary table {name_vectors} (int_vec VECTOR(INT,3), float_vec VECTOR(FLOAT,5))"
+            )
+            for i in range(len(expected_data_ints)):
+                cur.execute(
+                    f"insert into {name_vectors} select {expected_data_ints[i]}::VECTOR(INT,3), {expected_data_floats[i]}::VECTOR(FLOAT,5)"
+                )
+
+        with cnx.cursor() as cur:
+            # Test a basic fetch
+            cur.execute(
+                f"select int_vec, float_vec from {name_vectors} order by float_vec"
+            )
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
+                assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
+            data = cur.fetchall()
+            for i, row in enumerate(data):
+                if expected_data_floats[i] == "NULL":
+                    assert row[0] is None
+                else:
+                    assert row[0] == expected_data_ints[i]
+
+                if expected_data_ints[i] == "NULL":
+                    assert row[1] is None
+                else:
+                    assert row[1] == pytest.approx(expected_data_floats[i])
+
+            # Test an empty result set
+            cur.execute(
+                f"select int_vec, float_vec from {name_vectors} where int_vec = [1,2,3]::VECTOR(int,3)"
+            )
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "VECTOR"
+                assert FIELD_ID_TO_NAME[metadata[1].type_code] == "VECTOR"
+            data = cur.fetchall()
+            assert len(data) == 0
 
 
 def test_invalid_bind_data_type(conn_cnx):
@@ -652,6 +823,7 @@ def test_invalid_bind_data_type(conn_cnx):
             cnx.cursor().execute("select 1 from dual where 1=%s", ([1, 2, 3],))
 
 
+@pytest.mark.skipolddriver
 def test_timeout_query(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as c:
@@ -660,7 +832,32 @@ def test_timeout_query(conn_cnx):
                     "select seq8() as c1 from table(generator(timeLimit => 60))",
                     timeout=5,
                 )
-            assert err.value.errno == 604, "Invalid error code"
+            assert err.value.errno == 604, (
+                "Invalid error code"
+                and "SQL execution was cancelled by the client due to a timeout. Error message received from the server: SQL execution canceled"
+                in err.value.msg
+            )
+
+            with pytest.raises(errors.ProgrammingError) as err:
+                # we can not precisely control the timing to send cancel query request right after server
+                # executes the query but before returning the results back to client
+                # it depends on python scheduling and server processing speed, so we mock here
+                with mock.patch(
+                    "snowflake.connector.cursor._TrackedQueryCancellationTimer",
+                    autospec=True,
+                ) as mock_timebomb:
+                    mock_timebomb.return_value.executed = True
+                    c.execute(
+                        "select 123'",
+                        timeout=0.1,
+                    )
+            assert c._timebomb.executed is True and err.value.errno == 1003, (
+                "Invalid error code"
+                and "SQL compilation error:\nsyntax error line 1 at position 10 unexpected '''."
+                in err.value.msg
+                and "SQL execution was cancelled by the client due to a timeout"
+                not in err.value.msg
+            )
 
 
 def test_executemany(conn, db_parameters):
@@ -709,7 +906,12 @@ def test_executemany_qmark_types(conn, db_parameters):
             cur.execute(f"create temp table {table_name} (birth_date date)")
 
             insert_qy = f"INSERT INTO {table_name} (birth_date) values (?)"
-            date_1, date_2 = date(1969, 2, 7), date(1969, 1, 1)
+            date_1, date_2, date_3, date_4 = (
+                date(1969, 2, 7),
+                date(1969, 1, 1),
+                date(2999, 12, 31),
+                date(9999, 1, 1),
+            )
 
             # insert two dates, one in tuple format which specifies
             # the snowflake type similar to how we support it in this
@@ -717,7 +919,7 @@ def test_executemany_qmark_types(conn, db_parameters):
             # https://docs.snowflake.com/en/user-guide/python-connector-example.html#using-qmark-or-numeric-binding-with-datetime-objects
             cur.executemany(
                 insert_qy,
-                [[date_1], [("DATE", date_2)]],
+                [[date_1], [("DATE", date_2)], [date_3], [date_4]],
                 # test that kwargs get passed through executemany properly
                 _statement_params={
                     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: "json"
@@ -728,7 +930,7 @@ def test_executemany_qmark_types(conn, db_parameters):
             )
 
             cur.execute(f"select * from {table_name}")
-            assert {row[0] for row in cur} == {date_1, date_2}
+            assert {row[0] for row in cur} == {date_1, date_2, date_3, date_4}
 
 
 @pytest.mark.skipolddriver
@@ -817,6 +1019,7 @@ def test_fetchmany(conn, db_parameters, caplog):
             assert c.rowcount == 6, "number of records"
 
         with cnx.cursor() as c:
+            caplog.set_level(logging.DEBUG)
             c.execute(f"select aa from {table_name} order by aa desc")
             assert "Number of results in first chunk: 6" in caplog.text
 
@@ -1152,6 +1355,7 @@ def test_execute_helper_params_error(conn_testaccount):
             cur._execute_helper("select %()s", statement_params="1")
 
 
+@pytest.mark.skipolddriver
 def test_desc_rewrite(conn, caplog):
     """Tests whether describe queries are rewritten as expected and this action is logged."""
     with conn() as cnx:
@@ -1163,7 +1367,7 @@ def test_desc_rewrite(conn, caplog):
                 cur.execute(f"desc {table_name}")
                 assert (
                     "snowflake.connector.cursor",
-                    20,
+                    10,
                     "query was rewritten: org=desc {table_name}, new=describe table {table_name}".format(
                         table_name=table_name
                     ),
@@ -1244,9 +1448,11 @@ def test_check_cannot_use_arrow_resultset(conn_cnx, caplog, snowsql):
             ):
                 with pytest.raises(
                     ProgrammingError,
-                    match="Currently SnowSQL doesn't support the result set in Apache Arrow format."
-                    if snowsql
-                    else "The result set in Apache Arrow format is not supported for the platform.",
+                    match=(
+                        "Currently SnowSQL doesn't support the result set in Apache Arrow format."
+                        if snowsql
+                        else "The result set in Apache Arrow format is not supported for the platform."
+                    ),
                 ) as pe:
                     cur.check_can_use_arrow_resultset()
                     assert pe.errno == (
@@ -1445,7 +1651,9 @@ def test_resultbatch(
         ("arrow", "snowflake.connector.result_batch.ArrowResultBatch.create_iter"),
     ),
 )
-def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_path):
+def test_resultbatch_lazy_fetching_and_schemas(
+    conn_cnx, result_format, patch_path, lob_params
+):
     """Tests whether pre-fetching results chunks fetches the right amount of them."""
     rowcount = 1000000  # We need at least 5 chunks for this test
     with conn_cnx(
@@ -1473,7 +1681,17 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
                     # all batches should have the same schema
                     assert schema == [
                         ResultMetadata("C1", 0, None, None, 10, 0, False),
-                        ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                        ResultMetadata(
+                            "C2",
+                            2,
+                            None,
+                            schema[
+                                1
+                            ].internal_size,  # TODO: lob_params.max_lob_size_in_memory,
+                            None,
+                            None,
+                            False,
+                        ),
                     ]
                 assert patched_download.call_count == 0
                 assert len(result_batches) > 5
@@ -1494,7 +1712,7 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
 
 @pytest.mark.skipolddriver(reason="new feature in v2.5.0")
 @pytest.mark.parametrize("result_format", ["json", "arrow"])
-def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
+def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format, lob_params):
     with conn_cnx(
         session_parameters={"python_connector_query_result_format": result_format}
     ) as con:
@@ -1510,7 +1728,15 @@ def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
             schema = result_batches[0].schema
             assert schema == [
                 ResultMetadata("C1", 0, None, None, 10, 0, False),
-                ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                ResultMetadata(
+                    "C2",
+                    2,
+                    None,
+                    schema[1].internal_size,  # TODO: lob_params.max_lob_size_in_memory,
+                    None,
+                    None,
+                    False,
+                ),
             ]
 
 
@@ -1552,42 +1778,63 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
             fetch_next_fn()
             with pytest.raises(
                 InterfaceError,
-                match="date value out of range"
-                if IS_WINDOWS
-                else "year 10000 is out of range",
+                match=(
+                    "date value out of range"
+                    if IS_WINDOWS
+                    else "year 10000 is out of range"
+                ),
             ):
                 fetch_next_fn()
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("result_format", ("json", "arrow"))
+def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
+    """Tests whether the year 10000 is out of range exception is raised as expected."""
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: result_format
+        }
+    ) as con:
+        with con.cursor() as cur:
+            cur.execute("select TO_DATE('10000-01-01'), TO_DATE('9999-01-01')")
+            with pytest.raises(
+                InterfaceError,
+                match="out of range",
+            ):
+                cur.fetchall()
 
 
 @pytest.mark.skipolddriver
 def test_describe(conn_cnx):
     with conn_cnx() as con:
         with con.cursor() as cur:
-            table_name = random_string(5, "test_describe_")
-            # test select
-            description = cur.describe(
-                "select * from VALUES(1, 3.1415926, 'snow', TO_TIMESTAMP('2021-01-01 00:00:00'))"
-            )
-            assert description is not None
-            column_types = [column[1] for column in description]
-            assert constants.FIELD_ID_TO_NAME[column_types[0]] == "FIXED"
-            assert constants.FIELD_ID_TO_NAME[column_types[1]] == "FIXED"
-            assert constants.FIELD_ID_TO_NAME[column_types[2]] == "TEXT"
-            assert "TIMESTAMP" in constants.FIELD_ID_TO_NAME[column_types[3]]
-            assert len(cur.fetchall()) == 0
-
-            # test insert
-            cur.execute(f"create table {table_name} (aa int)")
-            try:
-                description = cur.describe(
-                    "insert into {name}(aa) values({value})".format(
-                        name=table_name, value="1234"
-                    )
+            for describe in [cur.describe, cur._describe_internal]:
+                table_name = random_string(5, "test_describe_")
+                # test select
+                description = describe(
+                    "select * from VALUES(1, 3.1415926, 'snow', TO_TIMESTAMP('2021-01-01 00:00:00'))"
                 )
-                assert description[0][0] == "number of rows inserted"
-                assert cur.rowcount is None
-            finally:
-                cur.execute(f"drop table if exists {table_name}")
+                assert description is not None
+                column_types = [column.type_code for column in description]
+                assert constants.FIELD_ID_TO_NAME[column_types[0]] == "FIXED"
+                assert constants.FIELD_ID_TO_NAME[column_types[1]] == "FIXED"
+                assert constants.FIELD_ID_TO_NAME[column_types[2]] == "TEXT"
+                assert "TIMESTAMP" in constants.FIELD_ID_TO_NAME[column_types[3]]
+                assert len(cur.fetchall()) == 0
+
+                # test insert
+                cur.execute(f"create table {table_name} (aa int)")
+                try:
+                    description = describe(
+                        "insert into {name}(aa) values({value})".format(
+                            name=table_name, value="1234"
+                        )
+                    )
+                    assert description[0].name == "number of rows inserted"
+                    assert cur.rowcount is None
+                finally:
+                    cur.execute(f"drop table if exists {table_name}")
 
 
 @pytest.mark.skipolddriver
@@ -1613,6 +1860,7 @@ def test_fetch_batches_with_sessions(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_null_connection(conn_cnx):
+    retries = 15
     with conn_cnx() as con:
         with con.cursor() as cur:
             cur.execute_async(
@@ -1620,6 +1868,13 @@ def test_null_connection(conn_cnx):
             )
             con.rest.delete_session()
             status = con.get_query_status(cur.sfqid)
+            for _ in range(retries):
+                if status not in (QueryStatus.RUNNING,):
+                    break
+                time.sleep(1)
+                status = con.get_query_status(cur.sfqid)
+            else:
+                pytest.fail(f"query is still running after {retries} retries")
             assert status == QueryStatus.FAILED_WITH_ERROR
             assert con.is_an_error(status)
 
@@ -1690,3 +1945,59 @@ def test_decoding_utf8_for_json_result(conn_cnx):
     mock_resp.content = "À".encode("latin1")
     with pytest.raises(Error):
         result_batch._load(mock_resp)
+
+
+@pytest.mark.skipolddriver
+def test_nanoarrow_usage_deprecation():
+    with pytest.warns() as record:
+        import snowflake.connector.cursor
+
+        os.environ["NANOARROW_USAGE"] = "abc"
+        _ = snowflake.connector.cursor.NANOARROW_USAGE
+        _ = snowflake.connector.cursor.NanoarrowUsage
+        del os.environ["NANOARROW_USAGE"]
+        assert len(record) == 3
+        assert (
+            "Environment variable NANOARROW_USAGE has been deprecated"
+            in str(record[0].message)
+            and "snowflake.connector.cursor.NANOARROW_USAGE has been deprecated"
+            in str(record[1].message)
+            and "snowflake.connector.cursor.NanoarrowUsage has been deprecated"
+            in str(record[2].message)
+        )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "request_id",
+    [
+        "THIS IS NOT VALID",
+        uuid.uuid1(),
+        uuid.uuid3(uuid.NAMESPACE_URL, "www.snowflake.com"),
+        uuid.uuid5(uuid.NAMESPACE_URL, "www.snowflake.com"),
+    ],
+)
+def test_custom_request_id_negative(request_id, conn_cnx):
+
+    # Ensure that invalid request_ids (non uuid4) do not compromise interface.
+    with pytest.raises(ValueError, match="requestId"):
+        with conn_cnx() as con:
+            with con.cursor() as cur:
+                cur.execute(
+                    "select seq4() as foo from table(generator(rowcount=>5))",
+                    _statement_params={"requestId": request_id},
+                )
+
+
+@pytest.mark.skipolddriver
+def test_custom_request_id(conn_cnx):
+    request_id = uuid.uuid4()
+
+    with conn_cnx() as con:
+        with con.cursor() as cur:
+            cur.execute(
+                "select seq4() as foo from table(generator(rowcount=>5))",
+                _statement_params={"requestId": request_id},
+            )
+
+            assert cur._sfqid is not None, "Query must execute successfully."

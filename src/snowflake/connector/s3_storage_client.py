@@ -1,13 +1,9 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import binascii
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 from io import IOBase
 from logging import getLogger
 from operator import itemgetter
@@ -61,13 +57,20 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
         chunk_size: int,
         use_accelerate_endpoint: bool | None = None,
         use_s3_regional_url: bool = False,
+        unsafe_file_write: bool = False,
     ) -> None:
         """Rest client for S3 storage.
 
         Args:
             stage_info:
         """
-        super().__init__(meta, stage_info, chunk_size, credentials=credentials)
+        super().__init__(
+            meta,
+            stage_info,
+            chunk_size,
+            credentials=credentials,
+            unsafe_file_write=unsafe_file_write,
+        )
         # Signature version V4
         # Addressing style Virtual Host
         self.region_name: str = stage_info["region"]
@@ -79,7 +82,14 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 self.stage_info["location"]
             )
         )
-        self.use_s3_regional_url = use_s3_regional_url
+        self.use_s3_regional_url = (
+            use_s3_regional_url
+            or "useS3RegionalUrl" in stage_info
+            and stage_info["useS3RegionalUrl"]
+            or "useRegionalUrl" in stage_info
+            and stage_info["useRegionalUrl"]
+        )
+        self.location_type = stage_info.get("locationType")
 
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
         self.endpoint: str | None = None
@@ -92,6 +102,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
     def transfer_accelerate_config(
         self, use_accelerate_endpoint: bool | None = None
     ) -> bool:
+        # accelerate cannot be used in China and us government
+        if self.region_name and self.region_name.startswith("cn-"):
+            self.endpoint = (
+                f"https://{self.s3location.bucket_name}."
+                f"s3.{self.region_name}.amazonaws.com.cn"
+            )
+            return False
         # if self.endpoint has been set, e.g. by metadata, no more config is needed.
         if self.endpoint is not None:
             return self.endpoint.find("s3-accelerate.amazonaws.com") >= 0
@@ -308,10 +325,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
 
         def generate_authenticated_url_and_args_v4() -> tuple[bytes, dict[str, bytes]]:
-            t = datetime.utcnow()
+            t = datetime.now(timezone.utc).replace(tzinfo=None)
             amzdate = t.strftime("%Y%m%dT%H%M%SZ")
             short_amzdate = amzdate[:8]
             x_amz_headers["x-amz-date"] = amzdate
+            x_amz_headers["x-amz-security-token"] = self.credentials.creds.get(
+                "AWS_TOKEN", ""
+            )
 
             (
                 canonical_request,

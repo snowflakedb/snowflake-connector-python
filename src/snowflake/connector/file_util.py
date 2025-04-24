@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -13,13 +9,16 @@ from io import BytesIO
 from logging import getLogger
 from typing import IO
 
-from Cryptodome.Hash import SHA256
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 
 from .constants import UTF8, kilobyte
 
 logger = getLogger(__name__)
+
+
+def owner_rw_opener(path, flags) -> int:
+    return os.open(path, flags, mode=0o600)
 
 
 class SnowflakeFileUtil:
@@ -33,27 +32,17 @@ class SnowflakeFileUtil:
         Returns:
             Tuple of src's digest and src's size in bytes.
         """
-        use_openssl_only = os.getenv("SF_USE_OPENSSL_ONLY", "False") == "True"
         CHUNK_SIZE = 64 * kilobyte
-        if not use_openssl_only:
-            m = SHA256.new()
-        else:
-            backend = default_backend()
-            chosen_hash = hashes.SHA256()
-            hasher = hashes.Hash(chosen_hash, backend)
+        backend = default_backend()
+        chosen_hash = hashes.SHA256()
+        hasher = hashes.Hash(chosen_hash, backend)
         while True:
             chunk = src.read(CHUNK_SIZE)
             if chunk == b"":
                 break
-            if not use_openssl_only:
-                m.update(chunk)
-            else:
-                hasher.update(chunk)
+            hasher.update(chunk)
 
-        if not use_openssl_only:
-            digest = base64.standard_b64encode(m.digest()).decode(UTF8)
-        else:
-            digest = base64.standard_b64encode(hasher.finalize()).decode(UTF8)
+        digest = base64.standard_b64encode(hasher.finalize()).decode(UTF8)
 
         size = src.tell()
         src.seek(0)

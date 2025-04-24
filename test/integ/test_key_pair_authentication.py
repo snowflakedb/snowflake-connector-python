@@ -1,12 +1,9 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import base64
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from os import path
 
 import jwt
@@ -57,12 +54,12 @@ def test_get_token_from_private_key(input_account, expected_account):
         == decoded_token.get("iss").upper()
     )
     # Token should be valid for 24 hours. Assert that the token's expiration time is between 23 and 24 hours from now.
-    assert datetime.utcnow() + timedelta(minutes=1360) < datetime.fromtimestamp(
-        decoded_token.get("exp")
-    )
-    assert datetime.utcnow() + timedelta(minutes=1441) > datetime.fromtimestamp(
-        decoded_token.get("exp")
-    )
+    assert datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+        minutes=1360
+    ) < datetime.fromtimestamp(decoded_token.get("exp"))
+    assert datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+        minutes=1441
+    ) > datetime.fromtimestamp(decoded_token.get("exp"))
 
 
 @pytest.mark.skipolddriver
@@ -123,6 +120,11 @@ def test_different_key_length(is_public_test, request, conn_cnx, db_parameters):
             )
 
             db_config["private_key"] = private_key_der
+            with snowflake.connector.connect(**db_config) as _:
+                pass
+
+            # Ensure the base64-encoded version also works
+            db_config["private_key"] = base64.b64encode(private_key_der).decode()
             with snowflake.connector.connect(**db_config) as _:
                 pass
 

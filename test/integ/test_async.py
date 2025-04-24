@@ -1,15 +1,12 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import logging
 import time
 
 import pytest
 
-from snowflake.connector import ProgrammingError
+from snowflake.connector import DatabaseError, ProgrammingError
 
 # Mark all tests in this file to time out after 2 minutes to prevent hanging forever
 pytestmark = [pytest.mark.timeout(120), pytest.mark.skipolddriver]
@@ -91,7 +88,7 @@ def test_async_exec(conn_cnx):
             assert len(cur.fetchall()) == 1
 
 
-def test_async_error(conn_cnx):
+def test_async_error(conn_cnx, caplog):
     """Tests whether simple async query error retrieval works.
 
     Runs a query that will fail to execute and then tests that if we tried to get results for the query
@@ -115,6 +112,19 @@ def test_async_error(conn_cnx):
             with pytest.raises(ProgrammingError) as e2:
                 cur.get_results_from_sfqid(q_id)
             assert e1.value.errno == e2.value.errno == sync_error.value.errno
+
+            sfqid = cur.execute_async("SELECT SYSTEM$WAIT(2)")["queryId"]
+            cur.get_results_from_sfqid(sfqid)
+            with con.cursor() as cancel_cursor:
+                # use separate cursor to cancel as execute will overwrite the previous query status
+                cancel_cursor.execute(f"SELECT SYSTEM$CANCEL_QUERY('{sfqid}')")
+            with pytest.raises(DatabaseError) as e3, caplog.at_level(logging.INFO):
+                cur.fetchall()
+            assert (
+                "SQL execution canceled" in e3.value.msg
+                and f"Status of query '{sfqid}' is {QueryStatus.FAILED_WITH_ERROR.name}"
+                in caplog.text
+            )
 
 
 def test_mix_sync_async(conn_cnx):

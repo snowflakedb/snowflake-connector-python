@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import json
@@ -72,8 +68,8 @@ def _get_post_back_url_from_html(html):
 class AuthByOkta(AuthByPlugin):
     """Authenticate user by OKTA."""
 
-    def __init__(self, application: str) -> None:
-        super().__init__()
+    def __init__(self, application: str, **kwargs) -> None:
+        super().__init__(**kwargs)
         self._saml_response = None
         self._application = application
 
@@ -170,7 +166,7 @@ class AuthByOkta(AuthByPlugin):
             conn._internal_application_name,
             conn._internal_application_version,
             conn._ocsp_mode(),
-            conn._login_timeout,
+            conn.login_timeout,
             conn._network_timeout,
         )
 
@@ -315,7 +311,9 @@ class AuthByOkta(AuthByPlugin):
             host=conn._rest._host,
             port=conn._rest._port,
         )
-        if not _is_prefix_equal(post_back_url, full_url):
+        if not getattr(conn, "_disable_saml_url_check", False) and not _is_prefix_equal(
+            post_back_url, full_url
+        ):
             Error.errorhandler_wrapper(
                 conn._rest._connection,
                 None,

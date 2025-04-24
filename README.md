@@ -15,7 +15,7 @@ using the Snowflake JDBC or ODBC drivers.
 
 The connector has **no** dependencies on JDBC or ODBC.
 It can be installed using ``pip`` on Linux, Mac OSX, and Windows platforms
-where Python 3.8.0 (or higher) is installed.
+where Python 3.9.0 (or higher) is installed.
 
 Snowflake Documentation is available at:
 https://docs.snowflake.com/
@@ -27,7 +27,7 @@ https://community.snowflake.com/s/article/How-To-Submit-a-Support-Case-in-Snowfl
 
 ### Locally
 
-Install Python 3.8.0 or higher. Clone the Snowflake Connector for Python repository, then run the following commands
+Install a supported Python version. Clone the Snowflake Connector for Python repository, then run the following commands
 to create a wheel package using PEP-517 build:
 
 ```shell
@@ -42,7 +42,7 @@ Find the `snowflake_connector_python*.whl` package in the `./dist` directory.
 ### In Docker
 Or use our Dockerized build script `ci/build_docker.sh` and find the built wheel files in `dist/repaired_wheels`.
 
-Note: `ci/build_docker.sh` can be used to compile only certain versions, like this: `ci/build_docker.sh "3.8 3.9"`
+Note: `ci/build_docker.sh` can be used to compile only certain versions, like this: `ci/build_docker.sh "3.9 3.10"`
 
 ## Code hygiene and other utilities
 These tools are integrated into `tox` to allow us to easily set them up universally on any computer.
@@ -52,3 +52,57 @@ These tools are integrated into `tox` to allow us to easily set them up universa
 * **coverage**: Runs `coverage.py` to combine generated coverage data files. Useful when multiple categories were run
   and we would like to have an overall coverage data file created for them.
 * **flake8**: (Deprecated) Similar to `fix_lint`, but only runs `flake8` checks.
+
+## Disable telemetry
+
+By default, the Snowflake Connector for Python collects telemetry data to improve the product.
+You can disable the telemetry data collection by setting the session parameter `CLIENT_TELEMETRY_ENABLED` to `False`
+when connecting to Snowflake:
+```python
+import snowflake.connector
+conn = snowflake.connector.connect(
+    user='XXXX',
+    password='XXXX',
+    account='XXXX',
+    session_parameters={
+      "CLIENT_TELEMETRY_ENABLED": False,
+    }
+)
+```
+
+Alternatively, you can disable the telemetry data collection
+by setting the `telemetry_enabled` property to `False` on the `SnowflakeConnection` object:
+```python
+import snowflake.connector
+conn = snowflake.connector.connect(
+    user='XXXX',
+    password='XXXX',
+    account='XXXX',
+)
+conn.telemetry_enabled = False
+```
+
+## Verifying Package Signatures
+
+To ensure the authenticity and integrity of the Python package, follow the steps below to verify the package signature using `cosign`.
+
+**Steps to verify the signature:**
+- Install cosign:
+  - This example is using golang installation: [installing-cosign-with-go](https://edu.chainguard.dev/open-source/sigstore/cosign/how-to-install-cosign/#installing-cosign-with-go)
+- Download the file from the repository like pypi:
+  - https://pypi.org/project/snowflake-connector-python/#files
+- Download the signature files from the release tag, replace the version number with the version you are verifying:
+  - https://github.com/snowflakedb/snowflake-connector-python/releases/tag/v3.12.2
+- Verify signature:
+  ````bash
+  # replace the version number with the version you are verifying
+  ./cosign verify-blob snowflake_connector_python-3.12.2.tar.gz \
+  --key snowflake-connector-python-v3.12.2.pub \
+  --signature resources.linux.snowflake_connector_python-3.12.2.tar.gz.sig
+
+  Verified OK
+  ````
+
+## NOTE
+
+This library currently does not support GCP regional endpoints.  Please ensure that any workloads using through this library do not require support for regional endpoints on GCP.  If you have questions about this, please contact [Snowflake Support](https://community.snowflake.com/s/article/How-To-Submit-a-Support-Case-in-Snowflake-Lodge).

@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 from typing import Any
@@ -22,13 +18,13 @@ class AuthByOAuth(AuthByPlugin):
         return AuthType.OAUTH
 
     @property
-    def assertion_content(self) -> str:
+    def assertion_content(self) -> str | None:
         """Returns the token."""
         return self._oauth_token
 
-    def __init__(self, oauth_token: str) -> None:
+    def __init__(self, oauth_token: str, **kwargs) -> None:
         """Initializes an instance with an OAuth Token."""
-        super().__init__()
+        super().__init__(**kwargs)
         self._oauth_token: str | None = oauth_token
 
     def reset_secrets(self) -> None:

@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import logging
@@ -12,10 +8,8 @@ import traceback
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
-from .compat import BASE_EXCEPTION_CLASS
 from .secret_detector import SecretDetector
 from .telemetry import TelemetryData, TelemetryField
-from .telemetry_oob import TelemetryService
 from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -29,7 +23,7 @@ connector_base_path = os.path.join("snowflake", "connector")
 RE_FORMATTED_ERROR = re.compile(r"^(\d{6,})(?: \((\S+)\))?:")
 
 
-class Error(BASE_EXCEPTION_CLASS):
+class Error(Exception):
     """Base Snowflake exception class."""
 
     def __init__(
@@ -153,9 +147,9 @@ class Error(BASE_EXCEPTION_CLASS):
             and not connection._telemetry.is_closed
         ):
             # Send with in-band telemetry
-            telemetry_data[
-                TelemetryField.KEY_TYPE.value
-            ] = TelemetryField.SQL_EXCEPTION.value
+            telemetry_data[TelemetryField.KEY_TYPE.value] = (
+                TelemetryField.SQL_EXCEPTION.value
+            )
             telemetry_data[TelemetryField.KEY_SOURCE.value] = connection.application
             telemetry_data[TelemetryField.KEY_EXCEPTION.value] = self.__class__.__name__
             ts = get_time_millis()
@@ -167,11 +161,6 @@ class Error(BASE_EXCEPTION_CLASS):
                 )
             except AttributeError:
                 logger.debug("Cursor failed to log to telemetry.", exc_info=True)
-        elif connection is None:
-            # Send with out-of-band telemetry
-
-            telemetry_oob = TelemetryService.get_instance()
-            telemetry_oob.log_general_exception(self.__class__.__name__, telemetry_data)
 
     def exception_telemetry(
         self,
@@ -367,7 +356,7 @@ class Error(BASE_EXCEPTION_CLASS):
         return error_class(error_value)
 
 
-class _Warning(BASE_EXCEPTION_CLASS):
+class _Warning(Exception):
     """Exception for important warnings."""
 
     pass

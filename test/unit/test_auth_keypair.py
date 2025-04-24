@@ -1,11 +1,7 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
-from unittest.mock import MagicMock, Mock, PropertyMock
+from unittest.mock import Mock, PropertyMock, patch
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -18,6 +14,8 @@ from snowflake.connector.auth import Auth
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
+
+from .mock_utils import mock_connection
 
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByKeyPair
@@ -45,6 +43,7 @@ def test_auth_keypair():
     account = "testaccount"
     user = "testuser"
     auth_instance = AuthByKeyPair(private_key=private_key_der)
+    auth_instance._retry_ctx.set_start_time()
     auth_instance.handle_timeout(
         authenticator="SNOWFLAKE_JWT",
         service_name=None,
@@ -78,6 +77,7 @@ def test_auth_keypair_abc():
     assert isinstance(private_key, RSAPrivateKey)
 
     auth_instance = AuthByKeyPair(private_key=private_key)
+    auth_instance._retry_ctx.set_start_time()
     auth_instance.handle_timeout(
         authenticator="SNOWFLAKE_JWT",
         service_name=None,
@@ -103,24 +103,37 @@ def test_auth_keypair_bad_type():
     class Bad:
         pass
 
-    for bad_private_key in ("abcd", 1234, Bad()):
+    for bad_private_key in (1234, Bad()):
         auth_instance = AuthByKeyPair(private_key=bad_private_key)
         with raises(TypeError) as ex:
-            auth_instance.handle_timeout(
-                authenticator="SNOWFLAKE_JWT",
-                service_name=None,
-                account=account,
-                user=user,
-                password=None,
-            )
+            auth_instance.prepare(account=account, user=user)
         assert str(type(bad_private_key)) in str(ex)
 
 
+@patch("snowflake.connector.auth.keypair.AuthByKeyPair.prepare")
+def test_renew_token(mockPrepare):
+    private_key_der, _ = generate_key_pair(2048)
+    auth_instance = AuthByKeyPair(private_key=private_key_der)
+
+    # force renew condition to be met
+    auth_instance._retry_ctx.set_start_time()
+    auth_instance._jwt_timeout = 0
+    account = "testaccount"
+    user = "testuser"
+
+    auth_instance.handle_timeout(
+        authenticator="SNOWFLAKE_JWT",
+        service_name=None,
+        account=account,
+        user=user,
+        password=None,
+    )
+
+    assert mockPrepare.called
+
+
 def _init_rest(application, post_requset):
-    connection = MagicMock()
-    connection._login_timeout = 120
-    connection.login_timeout = 120
-    connection._network_timeout = None
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=application)

@@ -1,10 +1,8 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import base64
+import hashlib
 import logging
 import random
 import re
@@ -235,14 +233,24 @@ def _concatenate_statements(
 
 def construct_hostname(region: str | None, account: str) -> str:
     """Constructs hostname from region and account."""
+
+    def _is_china_region(r: str) -> bool:
+        # This is consistent with the Go driver:
+        # https://github.com/snowflakedb/gosnowflake/blob/f20a46475dce322f3f6b97b4a72f2807571e750b/dsn.go#L535
+        return r.lower().startswith("cn-")
+
     if region == "us-west-2":
         region = ""
     if region:
         if account.find(".") > 0:
             account = account[0 : account.find(".")]
-        host = f"{account}.{region}.snowflakecomputing.com"
+        top_level_domain = "cn" if _is_china_region(region) else "com"
+        host = f"{account}.{region}.snowflakecomputing.{top_level_domain}"
     else:
-        host = f"{account}.snowflakecomputing.com"
+        top_level_domain = "com"
+        if account.find(".") > 0 and _is_china_region(account.split(".")[1]):
+            top_level_domain = "cn"
+        host = f"{account}.snowflakecomputing.{top_level_domain}"
     return host
 
 
@@ -277,5 +285,17 @@ def random_string(
         suffix: Suffix to add to random string generated.
         choices: A generator of things to choose from.
     """
-    random_part = "".join([random.choice(choices) for _ in range(length)])
+    random_part = "".join([random.Random().choice(choices) for _ in range(length)])
     return "".join([prefix, random_part, suffix])
+
+
+def _base64_bytes_to_str(x) -> str | None:
+    return base64.b64encode(x).decode("utf-8") if x else None
+
+
+def get_md5(text: str | bytes) -> bytes:
+    if isinstance(text, str):
+        text = text.encode("utf-8")
+    md5 = hashlib.md5()
+    md5.update(text)
+    return md5.digest()

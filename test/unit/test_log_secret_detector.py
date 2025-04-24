@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import logging
@@ -92,6 +88,31 @@ def test_mask_token():
         "XdJYuI8vhg=f0bKSq7AhQ2Bh"
     )
 
+    rsa_key = (
+        "-----BEGIN RSA PRIVATE KEY-----\n"
+        "MIIBVAIBADANBgkqhkiG9w0BAQEFAASCAT4wggE6AgEAAkEA0pCa0rw1n4GBjylx\n"
+        "sBJPVCrsKO7SowkgJ52Lc8K3hMHNKXvYiqwgizbXFBQA27kvpEVSeRQVC3FAPRU5\n"
+        "gjtLRwIDAQABAkBHZbz5o9PS6AjUUEs6VpsLgRpersxBeACtLiBw+h9cJfUerR//\n"
+        "tTmNsQ9LlamMu2lOlfbO3R2J45ybF7z94A+hAiEA8piucvAlo9YJ4VViQGRTVvr+\n"
+        "xZKekSEYRJBn2czeP+kCIQDeMt1PVk/p0NEcNvQMbO0vJ3+U+lITJRwmtJ9Fs1Lj\n"
+        "rwIgJeTdkwyaBI6BepY4w7AoKHUKaNgvNqJBxSv9XNMYgEkCIG2rl1YgWOMkAQI3\n"
+        "EW/Ml6jtiugiQT5X07Q69F33q5LbAiEArZM7htafpt0RVia+nC9aY+73wpW0Be9e\n"
+        "pDz0yVv8s/Q=\n"
+        "-----END RSA PRIVATE KEY-----\n"
+    )
+
+    json_token = (
+        "{'TOKEN': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFt"
+        "ZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'}"
+    )
+
+    masked, masked_str, err_str = SecretDetector.mask_secrets(rsa_key)
+    assert masked
+    assert err_str is None
+    assert (
+        masked_str == "-----BEGIN PRIVATE KEY-----\\nXXXX\\n-----END PRIVATE KEY-----\n"
+    )
+
     token_str_w_prefix = "Token =" + long_token
     masked, masked_str, err_str = SecretDetector.mask_secrets(token_str_w_prefix)
     assert masked
@@ -121,6 +142,11 @@ def test_mask_token():
     assert masked
     assert err_str is None
     assert masked_str == "assertion content:****"
+
+    masked, masked_str, err_str = SecretDetector.mask_secrets(json_token)
+    assert masked
+    assert err_str is None
+    assert masked_str == "{'TOKEN': '****'}"
 
 
 def test_token_false_positives():
@@ -170,6 +196,12 @@ def test_password():
     assert masked
     assert err_str is None
     assert masked_str == "pwd:****"
+
+    random_password_truncated = "password=Afs..."
+    masked, masked_str, err_str = SecretDetector.mask_secrets(random_password_truncated)
+    assert masked
+    assert err_str is None
+    assert masked_str == "password=****"
 
 
 def test_token_password():

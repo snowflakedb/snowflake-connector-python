@@ -1,14 +1,11 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import decimal
 import time
-from datetime import datetime, timedelta, tzinfo
+from datetime import datetime, timedelta, timezone, tzinfo
 from logging import getLogger
+from sys import byteorder
 from typing import TYPE_CHECKING
 
 import pytz
@@ -32,7 +29,7 @@ try:
 except ImportError:
     tzlocal = None
 
-ZERO_EPOCH = datetime.utcfromtimestamp(0)
+ZERO_EPOCH = datetime.fromtimestamp(0, timezone.utc).replace(tzinfo=None)
 
 logger = getLogger(__name__)
 
@@ -98,7 +95,9 @@ class ArrowConverterContext:
         return t.replace(tzinfo=tzinfo)
 
     def TIMESTAMP_NTZ_to_python(self, epoch: int, microseconds: int) -> datetime:
-        return datetime.utcfromtimestamp(epoch) + timedelta(microseconds=microseconds)
+        return datetime.fromtimestamp(epoch, timezone.utc).replace(
+            tzinfo=None
+        ) + timedelta(microseconds=microseconds)
 
     def TIMESTAMP_NTZ_to_python_windows(
         self, epoch: int, microseconds: int
@@ -148,3 +147,19 @@ class ArrowConverterContext:
     ) -> datetime64:
         nanoseconds = int(decimal.Decimal(epoch).scaleb(9) + decimal.Decimal(fraction))
         return numpy.datetime64(nanoseconds, "ns")
+
+    def DECIMAL128_to_decimal(self, int128_bytes: bytes, scale: int) -> decimal.Decimal:
+        int128 = int.from_bytes(int128_bytes, byteorder=byteorder, signed=True)
+        if scale == 0:
+            return int128
+        digits = [int(digit) for digit in str(int128) if digit != "-"]
+        sign = int128 < 0
+        return decimal.Decimal((sign, digits, -scale))
+
+    def DECFLOAT_to_decimal(self, exponent: int, significand: bytes) -> decimal.Decimal:
+        # significand is two's complement big endian.
+        significand = int.from_bytes(significand, byteorder="big", signed=True)
+        return decimal.Decimal(significand).scaleb(exponent)
+
+    def DECFLOAT_to_numpy_float64(self, exponent: int, significand: bytes) -> float64:
+        return numpy.float64(self.DECFLOAT_to_decimal(exponent, significand))

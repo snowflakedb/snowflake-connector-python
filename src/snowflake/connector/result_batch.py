@@ -1,19 +1,15 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import abc
-import io
 import json
 import time
 from base64 import b64decode
 from enum import Enum, unique
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Iterator, NamedTuple, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
 
 from .arrow_context import ArrowConverterContext
+from .backoff_policies import exponential_backoff
 from .compat import OK, UNAUTHORIZED, urlparse
 from .constants import FIELD_TYPES, IterUnit
 from .errorcode import ER_FAILED_TO_CONVERT_ROW_TO_PYTHON_TYPE, ER_NO_PYARROW
@@ -28,7 +24,7 @@ from .network import (
 from .options import installed_pandas
 from .options import pyarrow as pa
 from .secret_detector import SecretDetector
-from .time_util import DecorrelateJitterBackoff, TimerContextManager
+from .time_util import TimerContextManager
 from .vendored import requests
 
 logger = getLogger(__name__)
@@ -42,17 +38,52 @@ if TYPE_CHECKING:  # pragma: no cover
 
     from .connection import SnowflakeConnection
     from .converter import SnowflakeConverterType
-    from .cursor import ResultMetadata, SnowflakeCursor
+    from .cursor import ResultMetadataV2, SnowflakeCursor
     from .vendored.requests import Response
 
 
 # emtpy pyarrow type array corresponding to FIELD_TYPES
-FIELD_TYPE_TO_PA_TYPE: list[DataType] = []
+FIELD_TYPE_TO_PA_TYPE: list[Callable[[ResultMetadataV2], DataType]] = []
 
 # qrmk related constants
 SSE_C_ALGORITHM = "x-amz-server-side-encryption-customer-algorithm"
 SSE_C_KEY = "x-amz-server-side-encryption-customer-key"
 SSE_C_AES = "AES256"
+
+
+def _create_nanoarrow_iterator(
+    data: bytes,
+    context: ArrowConverterContext,
+    use_dict_result: bool,
+    numpy: bool,
+    number_to_decimal: bool,
+    row_unit: IterUnit,
+    check_error_on_every_column: bool = True,
+):
+    from .nanoarrow_arrow_iterator import PyArrowRowIterator, PyArrowTableIterator
+
+    logger.debug("Using nanoarrow as the arrow data converter")
+    return (
+        PyArrowRowIterator(
+            None,
+            data,
+            context,
+            use_dict_result,
+            numpy,
+            number_to_decimal,
+            check_error_on_every_column,
+        )
+        if row_unit == IterUnit.ROW_UNIT
+        else PyArrowTableIterator(
+            None,
+            data,
+            context,
+            use_dict_result,
+            numpy,
+            number_to_decimal,
+            check_error_on_every_column,
+        )
+    )
 
 
 @unique
@@ -76,7 +107,7 @@ def create_batches_from_response(
     cursor: SnowflakeCursor,
     _format: str,
     data: dict[str, Any],
-    schema: Sequence[ResultMetadata],
+    schema: Sequence[ResultMetadataV2],
 ) -> list[ResultBatch]:
     column_converters: list[tuple[str, SnowflakeConverterType]] = []
     arrow_context: ArrowConverterContext | None = None
@@ -211,13 +242,16 @@ class ResultBatch(abc.ABC):
         rowcount: int,
         chunk_headers: dict[str, str] | None,
         remote_chunk_info: RemoteChunkInfo | None,
-        schema: Sequence[ResultMetadata],
+        schema: Sequence[ResultMetadataV2],
         use_dict_result: bool,
     ) -> None:
         self.rowcount = rowcount
         self._chunk_headers = chunk_headers
         self._remote_chunk_info = remote_chunk_info
-        self.schema = schema
+        self._schema = schema
+        self.schema = (
+            [s._to_result_metadata_v1() for s in schema] if schema is not None else None
+        )
         self._use_dict_result = use_dict_result
         self._metrics: dict[str, int] = {}
         self._data: str | list[tuple[Any, ...]] | None = None
@@ -255,7 +289,7 @@ class ResultBatch(abc.ABC):
 
     @property
     def column_names(self) -> list[str]:
-        return [col.name for col in self.schema]
+        return [col.name for col in self._schema]
 
     def __iter__(
         self,
@@ -273,7 +307,11 @@ class ResultBatch(abc.ABC):
     ) -> Response:
         """Downloads the data that the ``ResultBatch`` is pointing at."""
         sleep_timer = 1
-        backoff = DecorrelateJitterBackoff(1, 16)
+        backoff = (
+            connection._backoff_generator
+            if connection is not None
+            else exponential_backoff()()
+        )
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:
                 with TimerContextManager() as download_metric:
@@ -319,7 +357,7 @@ class ResultBatch(abc.ABC):
                     # Re-throw if we failed on the last retry
                     e = e.args[0] if isinstance(e, RetryRequest) else e
                     raise e
-                sleep_timer = backoff.next_sleep(1, sleep_timer)
+                sleep_timer = next(backoff)
                 logger.exception(
                     f"Failed to fetch the large result set batch "
                     f"{self.id} for the {retry + 1} th time, "
@@ -327,9 +365,9 @@ class ResultBatch(abc.ABC):
                 )
                 time.sleep(sleep_timer)
 
-        self._metrics[
-            DownloadMetrics.download.value
-        ] = download_metric.get_timing_millis()
+        self._metrics[DownloadMetrics.download.value] = (
+            download_metric.get_timing_millis()
+        )
         return response
 
     @abc.abstractmethod
@@ -382,7 +420,7 @@ class JSONResultBatch(ResultBatch):
         rowcount: int,
         chunk_headers: dict[str, str] | None,
         remote_chunk_info: RemoteChunkInfo | None,
-        schema: Sequence[ResultMetadata],
+        schema: Sequence[ResultMetadataV2],
         column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
         *,
@@ -403,7 +441,7 @@ class JSONResultBatch(ResultBatch):
         cls,
         data: Sequence[Sequence[Any]],
         data_len: int,
-        schema: Sequence[ResultMetadata],
+        schema: Sequence[ResultMetadataV2],
         column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
     ):
@@ -454,7 +492,7 @@ class JSONResultBatch(ResultBatch):
                     for (_t, c), v, col in zip(
                         self.column_converters,
                         row,
-                        self.schema,
+                        self._schema,
                     ):
                         row_result[col.name] = v if c is None or v is None else c(v)
                     result_list.append(row_result)
@@ -472,13 +510,13 @@ class JSONResultBatch(ResultBatch):
                     )
         else:
             for row in downloaded_data:
-                row_result = [None] * len(self.schema)
+                row_result = [None] * len(self._schema)
                 try:
                     idx = 0
                     for (_t, c), v, _col in zip(
                         self.column_converters,
                         row,
-                        self.schema,
+                        self._schema,
                     ):
                         row_result[idx] = v if c is None or v is None else c(v)
                         idx += 1
@@ -540,7 +578,7 @@ class ArrowResultBatch(ResultBatch):
         context: ArrowConverterContext,
         use_dict_result: bool,
         numpy: bool,
-        schema: Sequence[ResultMetadata],
+        schema: Sequence[ResultMetadataV2],
         number_to_decimal: bool,
     ) -> None:
         super().__init__(
@@ -565,47 +603,35 @@ class ArrowResultBatch(ResultBatch):
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        from .arrow_iterator import PyArrowIterator
-
-        iter = PyArrowIterator(
-            None,
-            io.BytesIO(response.content),
+        return _create_nanoarrow_iterator(
+            response.content,
             self._context,
             self._use_dict_result,
             self._numpy,
             self._number_to_decimal,
+            row_unit,
         )
-        if row_unit == IterUnit.TABLE_UNIT:
-            iter.init_table_unit()
-
-        return iter
 
     def _from_data(
-        self, data: str, iter_unit: IterUnit
+        self, data: str, iter_unit: IterUnit, check_error_on_every_column: bool = True
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` files from a str.
 
         This is used to iterate through results in different ways depending on which
         mode that ``PyArrowIterator`` is in.
         """
-        from .arrow_iterator import PyArrowIterator
-
         if len(data) == 0:
             return iter([])
 
-        _iter = PyArrowIterator(
-            None,
-            io.BytesIO(b64decode(data)),
+        return _create_nanoarrow_iterator(
+            b64decode(data),
             self._context,
             self._use_dict_result,
             self._numpy,
             self._number_to_decimal,
+            iter_unit,
+            check_error_on_every_column,
         )
-        if iter_unit == IterUnit.TABLE_UNIT:
-            _iter.init_table_unit()
-        else:
-            _iter.init_row_unit()
-        return _iter
 
     @classmethod
     def from_data(
@@ -615,7 +641,7 @@ class ArrowResultBatch(ResultBatch):
         context: ArrowConverterContext,
         use_dict_result: bool,
         numpy: bool,
-        schema: Sequence[ResultMetadata],
+        schema: Sequence[ResultMetadataV2],
         number_to_decimal: bool,
     ):
         """Initializes an ``ArrowResultBatch`` from static, local data."""
@@ -638,11 +664,29 @@ class ArrowResultBatch(ResultBatch):
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]:
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
         if self._local:
-            return self._from_data(self._data, iter_unit)
+            try:
+                return self._from_data(
+                    self._data,
+                    iter_unit,
+                    (
+                        connection.check_arrow_conversion_error_on_every_column
+                        if connection
+                        else None
+                    ),
+                )
+            except Exception:
+                if connection and getattr(connection, "_debug_arrow_chunk", False):
+                    logger.debug(f"arrow data can not be parsed: {self._data}")
+                raise
         response = self._download(connection=connection)
         logger.debug(f"started loading result batch id: {self.id}")
         with TimerContextManager() as load_metric:
-            loaded_data = self._load(response, iter_unit)
+            try:
+                loaded_data = self._load(response, iter_unit)
+            except Exception:
+                if connection and getattr(connection, "_debug_arrow_chunk", False):
+                    logger.debug(f"arrow data can not be parsed: {response}")
+                raise
         logger.debug(f"finished loading result batch id: {self.id}")
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         return loaded_data
@@ -657,9 +701,10 @@ class ArrowResultBatch(ResultBatch):
         """Returns empty Arrow table based on schema"""
         if installed_pandas:
             # initialize pyarrow type array corresponding to FIELD_TYPES
-            FIELD_TYPE_TO_PA_TYPE = [e.pa_type() for e in FIELD_TYPES]
+            FIELD_TYPE_TO_PA_TYPE = [e.pa_type for e in FIELD_TYPES]
         fields = [
-            pa.field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code]) for s in self.schema
+            pa.field(s.name, FIELD_TYPE_TO_PA_TYPE[s.type_code](s))
+            for s in self._schema
         ]
         return pa.schema(fields).empty_table()
 

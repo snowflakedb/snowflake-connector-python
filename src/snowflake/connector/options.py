@@ -1,12 +1,9 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import importlib
+import os
 import warnings
-from importlib.metadata import distributions
+from importlib.metadata import PackageNotFoundError, distribution
 from logging import getLogger
 from types import ModuleType
 from typing import Union
@@ -79,14 +76,18 @@ def _import_or_missing_pandas_option() -> (
 
         pyarrow = importlib.import_module("pyarrow")
 
+        # set default memory pool to system for pyarrow to_pandas conversion
+        if "ARROW_DEFAULT_MEMORY_POOL" not in os.environ:
+            os.environ["ARROW_DEFAULT_MEMORY_POOL"] = "system"
+
         # Check whether we have the currently supported pyarrow installed
-        installed_packages = {
-            package.metadata["Name"]: package for package in distributions()
-        }
-        if {"pyarrow", "snowflake-connector-python"} <= installed_packages.keys():
-            dependencies = installed_packages[
-                "snowflake-connector-python"
-            ].metadata.get_all("Requires-Dist", [])
+        try:
+            pyarrow_dist = distribution("pyarrow")
+            snowflake_connector_dist = distribution("snowflake-connector-python")
+
+            dependencies = snowflake_connector_dist.metadata.get_all(
+                "Requires-Dist", []
+            )
             pandas_pyarrow_extra = None
             for dependency in dependencies:
                 dep = Requirement(dependency)
@@ -98,16 +99,15 @@ def _import_or_missing_pandas_option() -> (
                     pandas_pyarrow_extra = dep
                     break
 
-            installed_pyarrow_version = installed_packages["pyarrow"].version
+            installed_pyarrow_version = pyarrow_dist.version
             if not pandas_pyarrow_extra.specifier.contains(installed_pyarrow_version):
                 warn_incompatible_dep(
                     "pyarrow", installed_pyarrow_version, pandas_pyarrow_extra
                 )
 
-        else:
+        except PackageNotFoundError as e:
             logger.info(
-                "Cannot determine if compatible pyarrow is installed because of missing package(s) from "
-                "{}".format(list(installed_packages.keys()))
+                f"Cannot determine if compatible pyarrow is installed because of missing package(s): {e}"
             )
         return pandas, pyarrow, True
     except ImportError:

@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import logging
@@ -448,3 +444,54 @@ def test_download_retry_exceeded_error():
                 match=r"GET with url .* failed for exceeding maximum retries",
             ):
                 rest_client.download_chunk(0)
+
+
+def test_accelerate_in_china_endpoint():
+    meta_info = {
+        "name": "data1.txt.gz",
+        "stage_location_type": "S3",
+        "no_sleeping_time": True,
+        "put_callback": None,
+        "put_callback_output_stream": None,
+        SHA256_DIGEST: "123456789abcdef",
+        "dst_file_name": "data1.txt.gz",
+        "src_file_name": "path/to/put_get_1.txt",
+        "overwrite": True,
+    }
+    meta = SnowflakeFileMeta(**meta_info)
+    creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
+    rest_client = SnowflakeS3RestClient(
+        meta,
+        StorageCredential(
+            creds,
+            MagicMock(autospec=SnowflakeConnection),
+            "GET file:/tmp/file.txt @~",
+        ),
+        {
+            "locationType": "S3China",
+            "location": "bucket/path",
+            "creds": creds,
+            "region": "test",
+            "endPoint": None,
+        },
+        8 * megabyte,
+    )
+    assert not rest_client.transfer_accelerate_config()
+
+    rest_client = SnowflakeS3RestClient(
+        meta,
+        StorageCredential(
+            creds,
+            MagicMock(autospec=SnowflakeConnection),
+            "GET file:/tmp/file.txt @~",
+        ),
+        {
+            "locationType": "S3",
+            "location": "bucket/path",
+            "creds": creds,
+            "region": "cn-north-1",
+            "endPoint": None,
+        },
+        8 * megabyte,
+    )
+    assert not rest_client.transfer_accelerate_config()

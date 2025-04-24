@@ -1,20 +1,19 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
+import secrets
+import select
 import socket
 import time
 import webbrowser
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
-from ..compat import parse_qs, urlparse, urlsplit
+from ..compat import IS_WINDOWS, parse_qs, urlencode, urlparse, urlsplit
 from ..constants import (
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
@@ -60,8 +59,9 @@ class AuthByWebBrowser(AuthByPlugin):
         protocol: str | None = None,
         host: str | None = None,
         port: str | None = None,
+        **kwargs,
     ) -> None:
-        super().__init__()
+        super().__init__(**kwargs)
         self.consent_cache_id_token = True
         self._token: str | None = None
         self._application = application
@@ -112,7 +112,17 @@ class AuthByWebBrowser(AuthByPlugin):
         """Web Browser based Authentication."""
         logger.debug("authenticating by Web Browser")
 
+        # TODO: switch to the new AuthHttpServer class instead of doing this manually
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
+            if IS_WINDOWS:
+                logger.warning(
+                    "Configuration SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not available in Windows. Ignoring."
+                )
+            else:
+                socket_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+
         try:
             try:
                 socket_connection.bind(
@@ -133,10 +143,14 @@ class AuthByWebBrowser(AuthByPlugin):
             socket_connection.listen(0)  # no backlog
             callback_port = socket_connection.getsockname()[1]
 
-            logger.debug("step 1: query GS to obtain SSO url")
-            sso_url = self._get_sso_url(
-                conn, authenticator, service_name, account, callback_port, user
-            )
+            if conn._disable_console_login:
+                logger.debug("step 1: query GS to obtain SSO url")
+                sso_url = self._get_sso_url(
+                    conn, authenticator, service_name, account, callback_port, user
+                )
+            else:
+                logger.debug("step 1: constructing console login url")
+                sso_url = self._get_console_login_url(conn, callback_port, user)
 
             logger.debug("Validate SSO URL")
             if not is_valid_url(sso_url):
@@ -198,14 +212,68 @@ class AuthByWebBrowser(AuthByPlugin):
     def _receive_saml_token(self, conn: SnowflakeConnection, socket_connection) -> None:
         """Receives SAML token from web browser."""
         while True:
-            socket_client, _ = socket_connection.accept()
             try:
-                # Receive the data in small chunks and retransmit it
-                data = socket_client.recv(BUF_SIZE).decode("utf-8").split("\r\n")
+                attempts = 0
+                raw_data = bytearray()
+                socket_client = None
+                max_attempts = 15
+
+                msg_dont_wait = (
+                    os.getenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "false").lower()
+                    == "true"
+                )
+                if IS_WINDOWS:
+                    if msg_dont_wait:
+                        logger.warning(
+                            "Configuration SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT is not available in Windows. Ignoring."
+                        )
+                    msg_dont_wait = False
+
+                # when running in a containerized environment, socket_client.recv ocassionally returns an empty byte array
+                #   an immediate successive call to socket_client.recv gets the actual data
+                while len(raw_data) == 0 and attempts < max_attempts:
+                    attempts += 1
+                    read_sockets, _write_sockets, _exception_sockets = select.select(
+                        [socket_connection], [], []
+                    )
+
+                    if read_sockets[0] is not None:
+                        # Receive the data in small chunks and retransmit it
+                        socket_client, _ = socket_connection.accept()
+
+                        try:
+                            if msg_dont_wait:
+                                # WSL containerized environment sometimes causes socket_client.recv to hang indefinetly
+                                #   To avoid this, passing the socket.MSG_DONTWAIT flag which raises BlockingIOError if
+                                #   operation would block
+                                logger.debug(
+                                    "Calling socket_client.recv with MSG_DONTWAIT flag due to SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT env var"
+                                )
+                                raw_data = socket_client.recv(
+                                    BUF_SIZE, socket.MSG_DONTWAIT
+                                )
+                            else:
+                                raw_data = socket_client.recv(BUF_SIZE)
+
+                        except BlockingIOError:
+                            logger.debug(
+                                "BlockingIOError raised from socket.recv while attempting to retrieve callback token request"
+                            )
+                            if attempts < max_attempts:
+                                sleep_time = 0.25
+                                logger.debug(
+                                    f"Waiting {sleep_time} seconds before trying again"
+                                )
+                                time.sleep(sleep_time)
+                            else:
+                                logger.debug("Exceeded retry count")
+
+                data = raw_data.decode("utf-8").split("\r\n")
 
                 if not self._process_options(data, socket_client):
                     self._process_receive_saml_token(conn, data, socket_client)
                     break
+
             finally:
                 socket_client.shutdown(socket.SHUT_RDWR)
                 socket_client.close()
@@ -273,15 +341,14 @@ class AuthByWebBrowser(AuthByPlugin):
             content.append(f"Access-Control-Allow-Origin: {self._origin}")
             content.append("Vary: Accept-Encoding, Origin")
         else:
-            msg = """
+            msg = f"""
 <!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<link rel="icon" href="data:,">
 <title>SAML Response for Snowflake</title></head>
 <body>
-Your identity was confirmed and propagated to Snowflake {}.
+Your identity was confirmed and propagated to Snowflake {self._application}.
 You can close this window now and go back where you started from.
-</body></html>""".format(
-                self._application
-            )
+</body></html>"""
         content.append(f"Content-Length: {len(msg)}")
         content.append("")
         content.append(msg)
@@ -392,7 +459,7 @@ You can close this window now and go back where you started from.
             conn._rest._connection._internal_application_name,
             conn._rest._connection._internal_application_version,
             conn._rest._connection._ocsp_mode(),
-            conn._rest._connection._login_timeout,
+            conn._rest._connection.login_timeout,
             conn._rest._connection._network_timeout,
         )
 
@@ -414,3 +481,21 @@ You can close this window now and go back where you started from.
         sso_url = data["ssoUrl"]
         self._proof_key = data["proofKey"]
         return sso_url
+
+    def _get_console_login_url(
+        self, conn: SnowflakeConnection, port: int, user: str
+    ) -> str:
+        self._proof_key = base64.b64encode(secrets.token_bytes(32)).decode("ascii")
+        url = (
+            conn._rest.server_url
+            + "/console/login?"
+            + urlencode(
+                {
+                    "login_name": user,
+                    "browser_mode_redirect_port": port,
+                    "proof_key": self._proof_key,
+                }
+            )
+        )
+        logger.debug(f"Console Log In URL: {url}")
+        return url

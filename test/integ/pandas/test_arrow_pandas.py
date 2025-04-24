@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import decimal
@@ -39,7 +35,7 @@ except ImportError:
     pyarrow = None
 
 try:
-    from snowflake.connector.arrow_iterator import PyArrowIterator  # NOQA
+    from snowflake.connector.nanoarrow_arrow_iterator import PyArrowIterator  # NOQA
 
     no_arrow_iterator_ext = False
 except ImportError:
@@ -583,6 +579,56 @@ def test_timestampltz(conn_cnx, scale, timezone):
         finish(conn, table)
 
 
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.",
+)
+def test_vector(conn_cnx, is_public_test):
+    if is_public_test:
+        pytest.xfail(
+            reason="This feature hasn't been rolled out for public Snowflake deployments yet."
+        )
+    tests = [
+        (
+            "vector(int,3)",
+            [
+                "NULL",
+                "[1,2,3]::vector(int,3)",
+            ],
+            ["NULL", numpy.array([1, 2, 3])],
+        ),
+        (
+            "vector(float,3)",
+            [
+                "NULL",
+                "[1.3,2.4,3.5]::vector(float,3)",
+            ],
+            ["NULL", numpy.array([1.3, 2.4, 3.5], dtype=numpy.float32)],
+        ),
+    ]
+    for vector_type, cases, typed_cases in tests:
+        table = "test_arrow_vector"
+        column = f"(a {vector_type})"
+        values = [f"{i}, {c}" for i, c in enumerate(cases)]
+        with conn_cnx() as conn:
+            init_with_insert_select(conn, table, column, values)
+            # Test general fetches
+            sql_text = f"select a from {table} order by s"
+            validate_pandas(
+                conn, sql_text, typed_cases, 1, method="one", data_type=vector_type
+            )
+
+            # Test empty result sets
+            cur = conn.cursor()
+            cur.execute(f"select a from {table} limit 0")
+            df = cur.fetch_pandas_all()
+            assert len(df) == 0
+            assert df.dtypes[0] == "object"
+
+            finish(conn, table)
+
+
 def validate_pandas(
     cnx_table,
     sql,
@@ -649,7 +695,7 @@ def validate_pandas(
         for i in range(row_count):
             for j in range(col_count):
                 c_new = df_new.iat[i, j]
-                if cases[i] == "NULL":
+                if type(cases[i]) is str and cases[i] == "NULL":
                     assert c_new is None or pandas.isnull(c_new), (
                         "{} row, {} column: original value is NULL, "
                         "new value is {}, values are not equal".format(i, j, c_new)
@@ -686,6 +732,12 @@ def validate_pandas(
                             "values are not equal".format(i, j, cases[i], c_new)
                         )
                         break
+                    elif data_type.startswith("vector"):
+                        assert numpy.array_equal(cases[i], c_new), (
+                            "{} row, {} column: original value is {}, new value is {}, "
+                            "values are not equal".format(i, j, cases[i], c_new)
+                        )
+                        continue
                     else:
                         c_case = cases[i]
                     if epsilon is None:
@@ -859,6 +911,16 @@ def init(json_cnx, table, column, values, timezone=None):
     column_with_seq = column[0] + "s number, " + column[1:]
     cursor_json.execute(f"create or replace table {table} {column_with_seq}")
     cursor_json.execute(f"insert into {table} values {values}")
+
+
+def init_with_insert_select(json_cnx, table, column, rows, timezone=None):
+    cursor_json = json_cnx.cursor()
+    if timezone is not None:
+        cursor_json.execute(f"ALTER SESSION SET TIMEZONE = '{timezone}'")
+    column_with_seq = column[0] + "s number, " + column[1:]
+    cursor_json.execute(f"create or replace table {table} {column_with_seq}")
+    for row in rows:
+        cursor_json.execute(f"insert into {table} select {row}")
 
 
 def finish(json_cnx, table):
@@ -1124,16 +1186,103 @@ def test_batch_to_pandas_arrow(conn_cnx, result_format):
             # check that size, columns, and FOO column data is correct
             if result_format == "pandas":
                 df = batch.to_pandas()
-                assert type(df) == pandas.DataFrame
+                assert type(df) is pandas.DataFrame
                 assert df.shape == (10, 2)
                 assert all(df.columns == ["FOO", "BAR"])
                 assert list(df.FOO) == list(range(rowcount))
             elif result_format == "arrow":
                 arrow_table = batch.to_arrow()
-                assert type(arrow_table) == pyarrow.Table
+                assert type(arrow_table) is pyarrow.Table
                 assert arrow_table.shape == (10, 2)
                 assert arrow_table.column_names == ["FOO", "BAR"]
                 assert arrow_table.to_pydict()["FOO"] == list(range(rowcount))
+
+
+@pytest.mark.internal
+@pytest.mark.parametrize("enable_structured_types", [True, False])
+def test_to_arrow_datatypes(enable_structured_types, conn_cnx):
+    expected_types = (
+        pyarrow.int64(),
+        pyarrow.float64(),
+        pyarrow.string(),
+        pyarrow.date64(),
+        pyarrow.timestamp("ns"),
+        pyarrow.string(),
+        pyarrow.timestamp("ns"),
+        pyarrow.timestamp("ns"),
+        pyarrow.timestamp("ns"),
+        pyarrow.binary(),
+        pyarrow.time64("ns"),
+        pyarrow.bool_(),
+        pyarrow.string(),
+        pyarrow.string(),
+        pyarrow.list_(pyarrow.float64(), 5),
+    )
+
+    query = """
+    select
+    1 :: INTEGER as FIXED_type,
+    2.0 :: FLOAT as REAL_type,
+    'test' :: TEXT as TEXT_type,
+    '2024-02-28' :: DATE as DATE_type,
+    '2020-03-12 01:02:03.123456789' :: TIMESTAMP as TIMESTAMP_type,
+    '{"foo": "bar"}' :: VARIANT as VARIANT_type,
+    '2020-03-12 01:02:03.123456789' :: TIMESTAMP_LTZ as TIMESTAMP_LTZ_type,
+    '2020-03-12 01:02:03.123456789' :: TIMESTAMP_TZ as TIMESTAMP_TZ_type,
+    '2020-03-12 01:02:03.123456789' :: TIMESTAMP_NTZ as TIMESTAMP_NTZ_type,
+    '0xAAAA' :: BINARY as BINARY_type,
+    '01:02:03.123456789' :: TIME as TIME_type,
+    true :: BOOLEAN as BOOLEAN_type,
+    TO_GEOGRAPHY('LINESTRING(13.4814 52.5015, -121.8212 36.8252)') as GEOGRAPHY_type,
+    TO_GEOMETRY('LINESTRING(13.4814 52.5015, -121.8212 36.8252)') as GEOMETRY_type,
+    [1,2,3,4,5] :: vector(float, 5) as VECTOR_type,
+    object_construct('k1', 1, 'k2', 2, 'k3', 3, 'k4', 4, 'k5', 5) :: map(varchar, int) as MAP_type,
+    object_construct('city', 'san jose', 'population', 0.05) :: object(city varchar, population float) as OBJECT_type,
+    [1.0, 3.1, 4.5] :: array(float) as ARRAY_type
+    WHERE 1=0
+    """
+
+    structured_params = {
+        "ENABLE_STRUCTURED_TYPES_IN_CLIENT_RESPONSE",
+        "IGNORE_CLIENT_VESRION_IN_STRUCTURED_TYPES_RESPONSE",
+        "FORCE_ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT",
+    }
+
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(SQL_ENABLE_ARROW)
+            try:
+                if enable_structured_types:
+                    for param in structured_params:
+                        cur.execute(f"alter session set {param}=true")
+                    expected_types += (
+                        pyarrow.map_(pyarrow.string(), pyarrow.int64()),
+                        pyarrow.struct(
+                            {"city": pyarrow.string(), "population": pyarrow.float64()}
+                        ),
+                        pyarrow.list_(pyarrow.float64()),
+                    )
+                else:
+                    expected_types += (
+                        pyarrow.string(),
+                        pyarrow.string(),
+                        pyarrow.string(),
+                    )
+                # Ensure an empty batch to use default typing
+                # Otherwise arrow will resize types to save space
+                cur.execute(query)
+                batches = cur.get_result_batches()
+                assert len(batches) == 1
+                batch = batches[0]
+                arrow_table = batch.to_arrow()
+                for actual, expected in zip(arrow_table.schema, expected_types):
+                    assert (
+                        actual.type == expected
+                    ), f"Expected {actual.name} :: {actual.type} column to be of type {expected}"
+            finally:
+                if enable_structured_types:
+                    for param in structured_params:
+                        cur.execute(f"alter session unset {param}")
 
 
 def test_simple_arrow_fetch(conn_cnx):
@@ -1156,7 +1305,7 @@ def test_simple_arrow_fetch(conn_cnx):
             # the start and end points of each batch
             lo, hi = 0, 0
             for table in cur.fetch_arrow_batches():
-                assert type(table) == pyarrow.Table  # sanity type check
+                assert type(table) is pyarrow.Table  # sanity type check
 
                 # check that data is correct
                 length = len(table)
@@ -1165,6 +1314,20 @@ def test_simple_arrow_fetch(conn_cnx):
                 lo += length
 
             assert lo == rowcount
+
+
+def test_arrow_zero_rows(conn_cnx):
+    with conn_cnx() as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(SQL_ENABLE_ARROW)
+            cur.execute("select 1::NUMBER(38,0) limit 0")
+            table = cur.fetch_arrow_all(force_return_table=True)
+            # Snowflake will return an integer dtype with maximum bit-length if
+            # no rows are returned
+            assert table.schema[0].type == pyarrow.int64()
+            cur.execute("select 1::NUMBER(38,0) limit 0")
+            # test default behavior
+            assert cur.fetch_arrow_all(force_return_table=False) is None
 
 
 @pytest.mark.parametrize("fetch_fn_name", ["to_arrow", "to_pandas", "create_iter"])

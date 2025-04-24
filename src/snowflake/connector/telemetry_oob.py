@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import datetime
@@ -97,7 +93,9 @@ class TelemetryEvent(TelemetryEventBase):
         event.update(
             {
                 "UUID": str(uuid.uuid4()),
-                "Created_On": datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                "Created_On": datetime.datetime.now(datetime.timezone.utc)
+                .replace(tzinfo=None)
+                .strftime("%Y-%m-%d %H:%M:%S"),
                 "Type": self.get_type(),
                 "SchemaVersion": 1,
             }
@@ -127,12 +125,12 @@ class TelemetryEvent(TelemetryEventBase):
         # Add telemetry service generated tags
         tags[TelemetryField.KEY_OOB_DRIVER.value] = CLIENT_NAME
         tags[TelemetryField.KEY_OOB_VERSION.value] = str(SNOWFLAKE_CONNECTOR_VERSION)
-        tags[
-            TelemetryField.KEY_OOB_TELEMETRY_SERVER_DEPLOYMENT.value
-        ] = telemetry.deployment.name
-        tags[
-            TelemetryField.KEY_OOB_CONNECTION_STRING.value
-        ] = telemetry.get_connection_string()
+        tags[TelemetryField.KEY_OOB_TELEMETRY_SERVER_DEPLOYMENT.value] = (
+            telemetry.deployment.name
+        )
+        tags[TelemetryField.KEY_OOB_CONNECTION_STRING.value] = (
+            telemetry.get_connection_string()
+        )
         if telemetry.context and len(telemetry.context) > 0:
             for k, v in telemetry.context.items():
                 if v is not None:
@@ -170,7 +168,7 @@ class TelemetryService:
             raise Exception("This class is a singleton!")
         else:
             TelemetryService.__instance = self
-        self._enabled = True
+        self._enabled = False
         self._queue = Queue()
         self.batch_size = DEFAULT_BATCH_SIZE
         self.num_of_retry_to_trigger_telemetry = (
@@ -190,11 +188,11 @@ class TelemetryService:
     @property
     def enabled(self) -> bool:
         """Whether the Telemetry service is enabled or not."""
-        return self._enabled
+        return False
 
     def enable(self) -> None:
         """Enable Telemetry Service."""
-        self._enabled = True
+        self._enabled = False
 
     def disable(self) -> None:
         """Disable Telemetry Service."""
@@ -349,9 +347,9 @@ class TelemetryService:
             if self.enabled:
                 event_name = "OCSPException"
                 if exception is not None:
-                    telemetry_data[
-                        TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value
-                    ] = str(exception)
+                    telemetry_data[TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value] = (
+                        str(exception)
+                    )
                 if stack_trace is not None:
                     telemetry_data[
                         TelemetryField.KEY_OOB_EXCEPTION_STACK_TRACE.value
@@ -402,9 +400,9 @@ class TelemetryService:
                     is_oob_telemetry=True,
                 )
                 if response:
-                    telemetry_data[
-                        TelemetryField.KEY_OOB_RESPONSE.value
-                    ] = response.json()
+                    telemetry_data[TelemetryField.KEY_OOB_RESPONSE.value] = (
+                        response.json()
+                    )
                     telemetry_data[
                         TelemetryField.KEY_OOB_RESPONSE_STATUS_LINE.value
                     ] = str(response.reason)
@@ -422,9 +420,9 @@ class TelemetryService:
                         retry_count
                     )
                 if exception:
-                    telemetry_data[
-                        TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value
-                    ] = str(exception)
+                    telemetry_data[TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value] = (
+                        str(exception)
+                    )
                 if stack_trace:
                     telemetry_data[
                         TelemetryField.KEY_OOB_EXCEPTION_STACK_TRACE.value
@@ -433,9 +431,9 @@ class TelemetryService:
                 if tags is None:
                     tags = dict()
 
-                tags[
-                    TelemetryField.KEY_OOB_RESPONSE_STATUS_CODE.value
-                ] = response_status_code
+                tags[TelemetryField.KEY_OOB_RESPONSE_STATUS_CODE.value] = (
+                    response_status_code
+                )
                 tags[TelemetryField.KEY_OOB_SQL_STATE.value] = str(sqlstate)
                 tags[TelemetryField.KEY_OOB_ERROR_CODE.value] = errno
 

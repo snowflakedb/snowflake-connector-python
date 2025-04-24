@@ -1,6 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
 from __future__ import annotations
 
 from functools import total_ordering
@@ -165,9 +162,11 @@ class QueryContextCache:
                             "id": qce.id,
                             "timestamp": qce.read_timestamp,
                             "priority": qce.priority,
-                            "context": {"base64Data": qce.context}
-                            if qce.context is not None
-                            else {},
+                            "context": (
+                                {"base64Data": qce.context}
+                                if qce.context is not None
+                                else {}
+                            ),
                         }
                         for qce in self._tree_set
                     ]

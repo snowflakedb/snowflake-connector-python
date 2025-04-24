@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import os
@@ -32,6 +28,7 @@ if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
     from snowflake.connector import SnowflakeConnection
 
 RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
+TEST_USING_VENDORED_ARROW = os.getenv("TEST_USING_VENDORED_ARROW") == "true"
 
 if not isinstance(CONNECTION_PARAMETERS["host"], str):
     raise Exception("default host is not a string in parameters.py")
@@ -48,6 +45,12 @@ if RUNNING_ON_GH:
     TEST_SCHEMA = "GH_JOB_{}".format(str(uuid.uuid4()).replace("-", "_"))
 else:
     TEST_SCHEMA = "python_connector_tests_" + str(uuid.uuid4()).replace("-", "_")
+
+if TEST_USING_VENDORED_ARROW:
+    snowflake.connector.cursor.NANOARR_USAGE = (
+        snowflake.connector.cursor.NanoarrowUsage.DISABLE_NANOARROW
+    )
+
 
 DEFAULT_PARAMETERS: dict[str, Any] = {
     "account": "<account_name>",
@@ -156,21 +159,27 @@ def get_db_parameters(connection_name: str = "default") -> dict[str, Any]:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def init_test_schema(db_parameters) -> Generator[None, None, None]:
+def init_test_schema(db_parameters) -> Generator[None]:
     """Initializes and destroys the schema specific to this pytest session.
 
     This is automatically called per test session.
     """
-    ret = db_parameters
-    with snowflake.connector.connect(
-        user=ret["user"],
-        password=ret["password"],
-        host=ret["host"],
-        port=ret["port"],
-        database=ret["database"],
-        account=ret["account"],
-        protocol=ret["protocol"],
-    ) as con:
+    connection_params = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "database": db_parameters["database"],
+        "account": db_parameters["account"],
+        "protocol": db_parameters["protocol"],
+    }
+
+    # Role may be needed when running on preprod, but is not present on Jenkins jobs
+    optional_role = db_parameters.get("role")
+    if optional_role is not None:
+        connection_params.update(role=optional_role)
+
+    with snowflake.connector.connect(**connection_params) as con:
         con.cursor().execute(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}")
         yield
         con.cursor().execute(f"DROP SCHEMA IF EXISTS {TEST_SCHEMA}")
@@ -179,7 +188,7 @@ def init_test_schema(db_parameters) -> Generator[None, None, None]:
 def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
     """Creates a connection using the parameters defined in parameters.py.
 
-    You can select from the different connections by supplying the appropiate
+    You can select from the different connections by supplying the appropriate
     connection_name parameter and then anything else supplied will overwrite the values
     from parameters.py.
     """
@@ -193,7 +202,7 @@ def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
 def db(
     connection_name: str = "default",
     **kwargs,
-) -> Generator[SnowflakeConnection, None, None]:
+) -> Generator[SnowflakeConnection]:
     if not kwargs.get("timezone"):
         kwargs["timezone"] = "UTC"
     if not kwargs.get("converter_class"):
@@ -209,7 +218,7 @@ def db(
 def negative_db(
     connection_name: str = "default",
     **kwargs,
-) -> Generator[SnowflakeConnection, None, None]:
+) -> Generator[SnowflakeConnection]:
     if not kwargs.get("timezone"):
         kwargs["timezone"] = "UTC"
     if not kwargs.get("converter_class"):
@@ -236,6 +245,11 @@ def conn_testaccount(request) -> SnowflakeConnection:
 
 @pytest.fixture()
 def conn_cnx() -> Callable[..., ContextManager[SnowflakeConnection]]:
+    return db
+
+
+@pytest.fixture(scope="module")
+def module_conn_cnx() -> Callable[..., ContextManager[SnowflakeConnection]]:
     return db
 
 

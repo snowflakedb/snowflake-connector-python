@@ -1,19 +1,19 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import inspect
+import sys
 import time
-from unittest.mock import MagicMock, Mock, PropertyMock
+from unittest.mock import Mock, PropertyMock
 
 import pytest
 
+import snowflake.connector.errors
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
+
+from .mock_utils import mock_connection
 
 try:  # pragma: no cover
     from snowflake.connector.auth import Auth, AuthByDefault, AuthByPlugin
@@ -24,10 +24,7 @@ except ImportError:
 
 
 def _init_rest(application, post_requset):
-    connection = MagicMock()
-    connection._login_timeout = 120
-    connection.login_timeout = 120
-    connection._network_timeout = None
+    connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
     type(connection).application = PropertyMock(return_value=application)
@@ -102,7 +99,12 @@ def _mock_auth_mfa_rest_response_failure(url, headers, body, **kwargs):
                 "inFlightCtx": "inFlightCtx",
             },
         }
-
+    elif mock_cnt == 2:
+        ret = {
+            "success": True,
+            "message": None,
+            "data": None,
+        }
     mock_cnt += 1
     return ret
 
@@ -126,6 +128,12 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
     elif mock_cnt == 1:
         time.sleep(10)  # should timeout while here
         ret = {}
+    elif mock_cnt == 2:
+        ret = {
+            "success": True,
+            "message": None,
+            "data": None,
+        }
 
     mock_cnt += 1
     return ret
@@ -167,6 +175,14 @@ def test_auth_mfa(next_action: str):
     auth_instance = AuthByDefault(password)
     auth.authenticate(auth_instance, account, user, timeout=1)
     assert rest._connection.errorhandler.called  # error
+
+    # ret["data"] is none
+    with pytest.raises(snowflake.connector.errors.Error):
+        mock_cnt = 2
+        rest = _init_rest(application, _mock_auth_mfa_rest_response_timeout)
+        auth = Auth(rest)
+        auth_instance = AuthByDefault(password)
+        auth.authenticate(auth_instance, account, user)
 
 
 def _mock_auth_password_change_rest_response(url, headers, body, **kwargs):
@@ -233,42 +249,86 @@ def test_authbyplugin_abc_api():
 
     # Verify method signatures
     # update_body
-    assert inspect.isfunction(bc.update_body)
-    assert str(inspect.signature(bc.update_body).parameters) == (
-        "OrderedDict([('self', <Parameter \"self\">), "
-        "('body', <Parameter \"body: 'dict[Any, Any]'\">)])"
-    )
+    if sys.version_info < (3, 12):
+        assert inspect.isfunction(bc.update_body)
+        assert str(inspect.signature(bc.update_body).parameters) == (
+            "OrderedDict([('self', <Parameter \"self\">), "
+            "('body', <Parameter \"body: 'dict[Any, Any]'\">)])"
+        )
 
-    # authenticate
-    assert inspect.isfunction(bc.prepare)
-    assert str(inspect.signature(bc.prepare).parameters) == (
-        "OrderedDict([('self', <Parameter \"self\">), "
-        "('conn', <Parameter \"conn: 'SnowflakeConnection'\">), "
-        "('authenticator', <Parameter \"authenticator: 'str'\">), "
-        "('service_name', <Parameter \"service_name: 'str | None'\">), "
-        "('account', <Parameter \"account: 'str'\">), "
-        "('user', <Parameter \"user: 'str'\">), "
-        "('password', <Parameter \"password: 'str | None'\">), "
-        "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
-    )
+        # authenticate
+        assert inspect.isfunction(bc.prepare)
+        assert str(inspect.signature(bc.prepare).parameters) == (
+            "OrderedDict([('self', <Parameter \"self\">), "
+            "('conn', <Parameter \"conn: 'SnowflakeConnection'\">), "
+            "('authenticator', <Parameter \"authenticator: 'str'\">), "
+            "('service_name', <Parameter \"service_name: 'str | None'\">), "
+            "('account', <Parameter \"account: 'str'\">), "
+            "('user', <Parameter \"user: 'str'\">), "
+            "('password', <Parameter \"password: 'str | None'\">), "
+            "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
+        )
 
-    # handle_failure
-    assert inspect.isfunction(bc._handle_failure)
-    assert str(inspect.signature(bc._handle_failure).parameters) == (
-        "OrderedDict([('self', <Parameter \"self\">), "
-        "('conn', <Parameter \"conn: 'SnowflakeConnection'\">), "
-        "('ret', <Parameter \"ret: 'dict[Any, Any]'\">), "
-        "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
-    )
+        # handle_failure
+        assert inspect.isfunction(bc._handle_failure)
+        assert str(inspect.signature(bc._handle_failure).parameters) == (
+            "OrderedDict([('self', <Parameter \"self\">), "
+            "('conn', <Parameter \"conn: 'SnowflakeConnection'\">), "
+            "('ret', <Parameter \"ret: 'dict[Any, Any]'\">), "
+            "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
+        )
 
-    # handle_timeout
-    assert inspect.isfunction(bc.handle_timeout)
-    assert str(inspect.signature(bc.handle_timeout).parameters) == (
-        "OrderedDict([('self', <Parameter \"self\">), "
-        "('authenticator', <Parameter \"authenticator: 'str'\">), "
-        "('service_name', <Parameter \"service_name: 'str | None'\">), "
-        "('account', <Parameter \"account: 'str'\">), "
-        "('user', <Parameter \"user: 'str'\">), "
-        "('password', <Parameter \"password: 'str'\">), "
-        "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
-    )
+        # handle_timeout
+        assert inspect.isfunction(bc.handle_timeout)
+        assert str(inspect.signature(bc.handle_timeout).parameters) == (
+            "OrderedDict([('self', <Parameter \"self\">), "
+            "('authenticator', <Parameter \"authenticator: 'str'\">), "
+            "('service_name', <Parameter \"service_name: 'str | None'\">), "
+            "('account', <Parameter \"account: 'str'\">), "
+            "('user', <Parameter \"user: 'str'\">), "
+            "('password', <Parameter \"password: 'str'\">), "
+            "('kwargs', <Parameter \"**kwargs: 'Any'\">)])"
+        )
+    else:
+        # starting from python 3.12 the repr of collections.OrderedDict is changed
+        # to use regular dictionary formating instead of pairs of keys and values.
+        # see https://github.com/python/cpython/issues/101446
+        assert inspect.isfunction(bc.update_body)
+        assert str(inspect.signature(bc.update_body).parameters) == (
+            """OrderedDict({'self': <Parameter "self">, \
+'body': <Parameter "body: 'dict[Any, Any]'">})"""
+        )
+
+        # authenticate
+        assert inspect.isfunction(bc.prepare)
+        assert str(inspect.signature(bc.prepare).parameters) == (
+            """OrderedDict({'self': <Parameter "self">, \
+'conn': <Parameter "conn: 'SnowflakeConnection'">, \
+'authenticator': <Parameter "authenticator: 'str'">, \
+'service_name': <Parameter "service_name: 'str | None'">, \
+'account': <Parameter "account: 'str'">, \
+'user': <Parameter "user: 'str'">, \
+'password': <Parameter "password: 'str | None'">, \
+'kwargs': <Parameter "**kwargs: 'Any'">})"""
+        )
+
+        # handle_failure
+        assert inspect.isfunction(bc._handle_failure)
+        assert str(inspect.signature(bc._handle_failure).parameters) == (
+            """OrderedDict({'self': <Parameter "self">, \
+'conn': <Parameter "conn: 'SnowflakeConnection'">, \
+'ret': <Parameter "ret: 'dict[Any, Any]'">, \
+'kwargs': <Parameter "**kwargs: 'Any'">})"""
+        )
+
+        # handle_timeout
+        assert inspect.isfunction(bc.handle_timeout)
+        assert str(inspect.signature(bc.handle_timeout).parameters) == (
+            """OrderedDict({'self': <Parameter "self">, \
+'authenticator': <Parameter "authenticator: 'str'">, \
+'service_name': <Parameter "service_name: 'str | None'">, \
+'account': <Parameter "account: 'str'">, \
+'user': <Parameter "user: 'str'">, \
+'password': <Parameter "password: 'str'">, \
+'kwargs': <Parameter "**kwargs: 'Any'">})"""
+        )

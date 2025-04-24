@@ -1,13 +1,10 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import base64
 import json
 import os
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 from logging import getLogger
 from random import choice
 from string import hexdigits
@@ -17,6 +14,7 @@ from .compat import quote
 from .constants import FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 from .storage_client import SnowflakeStorageClient
+from .util_text import get_md5
 from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -46,9 +44,15 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         credentials: StorageCredential | None,
         chunk_size: int,
         stage_info: dict[str, Any],
-        use_s3_regional_url: bool = False,
+        unsafe_file_write: bool = False,
     ) -> None:
-        super().__init__(meta, stage_info, chunk_size, credentials=credentials)
+        super().__init__(
+            meta,
+            stage_info,
+            chunk_size,
+            credentials=credentials,
+            unsafe_file_write=unsafe_file_write,
+        )
         end_point: str = stage_info["endPoint"]
         if end_point.startswith("blob."):
             end_point = end_point[len("blob.") :]
@@ -90,7 +94,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             headers = {}
 
         def generate_authenticated_url_and_rest_args() -> tuple[bytes, dict[str, Any]]:
-            curtime = datetime.utcnow()
+            curtime = datetime.now(timezone.utc).replace(tzinfo=None)
             timestamp = curtime.strftime("YYYY-MM-DD")
             sas_token = self.credentials.creds["AZURE_SAS_TOKEN"]
             if sas_token and sas_token.startswith("?"):
@@ -133,7 +137,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
                 )
             )
             return FileHeader(
-                digest=r.headers.get("x-ms-meta-sfcdigest"),
+                digest=r.headers.get(SFCDIGEST),
                 content_length=int(r.headers.get("Content-Length")),
                 encryption_metadata=encryption_metadata,
             )
@@ -220,7 +224,27 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             part = ET.Element("Latest")
             part.text = block_id
             root.append(part)
-        headers = {"x-ms-blob-content-encoding": "utf-8"}
+        # SNOW-1778088: We need to calculate the MD5 sum of this file for Azure Blob storage
+        new_stream = not bool(self.meta.src_stream or self.meta.intermediate_stream)
+        fd = (
+            self.meta.src_stream
+            or self.meta.intermediate_stream
+            or open(self.meta.real_src_file_name, "rb")
+        )
+        try:
+            if not new_stream:
+                # Reset position in file
+                fd.seek(0)
+            file_content = fd.read()
+        finally:
+            if new_stream:
+                fd.close()
+        headers = {
+            "x-ms-blob-content-encoding": "utf-8",
+            "x-ms-blob-content-md5": base64.b64encode(get_md5(file_content)).decode(
+                "utf-8"
+            ),
+        }
         azure_metadata = self._prepare_file_metadata()
         headers.update(azure_metadata)
         retry_id = "COMPLETE"

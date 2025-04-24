@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 # Python Db API v2
 #
 from __future__ import annotations
@@ -15,6 +11,8 @@ paramstyle = "pyformat"
 
 import logging
 from logging import NullHandler
+
+from snowflake.connector.externals_utils.externals_setup import setup_external_libraries
 
 from .connection import SnowflakeConnection
 from .cursor import DictCursor
@@ -44,9 +42,11 @@ from .errors import (
     ProgrammingError,
     _Warning,
 )
+from .log_configuration import EasyLoggingConfigPython
 from .version import VERSION
 
 logging.getLogger(__name__).addHandler(NullHandler())
+setup_external_libraries()
 
 
 @wraps(SnowflakeConnection.__init__)
@@ -92,4 +92,5 @@ __all__ = [
     "DATETIME",
     "ROWID",
     # Extended data type (experimental)
+    "EasyLoggingConfigPython",
 ]

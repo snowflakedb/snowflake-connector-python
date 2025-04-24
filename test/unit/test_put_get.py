@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 from os import chmod, path
@@ -125,7 +121,6 @@ def test_percentage(tmp_path):
     func_callback(1)
 
 
-@pytest.mark.skipolddriver
 def test_upload_file_with_azure_upload_failed_error(tmp_path):
     """Tests Upload file with expired Azure storage token."""
     file1 = tmp_path / "file1"
@@ -166,3 +161,94 @@ def test_upload_file_with_azure_upload_failed_error(tmp_path):
             rest_client.execute()
             assert mock_update.called
             assert rest_client._results[0].error_details is exc
+
+
+def test_iobound_limit(tmp_path):
+    file1 = tmp_path / "file1"
+    file2 = tmp_path / "file2"
+    file3 = tmp_path / "file3"
+    file1.touch()
+    file2.touch()
+    file3.touch()
+    # Positive case
+    rest_client = SnowflakeFileTransferAgent(
+        mock.MagicMock(autospec=SnowflakeCursor),
+        "PUT some_file.txt",
+        {
+            "data": {
+                "command": "UPLOAD",
+                "src_locations": [file1, file2, file3],
+                "sourceCompression": "none",
+                "stageInfo": {
+                    "creds": {
+                        "AZURE_SAS_TOKEN": "sas_token",
+                    },
+                    "location": "some_bucket",
+                    "region": "no_region",
+                    "locationType": "AZURE",
+                    "path": "remote_loc",
+                    "endPoint": "",
+                    "storageAccount": "storage_account",
+                },
+            },
+            "success": True,
+        },
+    )
+    with mock.patch(
+        "snowflake.connector.file_transfer_agent.ThreadPoolExecutor"
+    ) as tpe:
+        with mock.patch("snowflake.connector.file_transfer_agent.threading.Condition"):
+            with mock.patch(
+                "snowflake.connector.file_transfer_agent.TransferMetadata",
+                return_value=mock.Mock(
+                    num_files_started=0,
+                    num_files_completed=3,
+                ),
+            ):
+                try:
+                    rest_client.execute()
+                except AttributeError:
+                    pass
+    # 2 IObound TPEs should be created for 3 files unlimited
+    rest_client = SnowflakeFileTransferAgent(
+        mock.MagicMock(autospec=SnowflakeCursor),
+        "PUT some_file.txt",
+        {
+            "data": {
+                "command": "UPLOAD",
+                "src_locations": [file1, file2, file3],
+                "sourceCompression": "none",
+                "stageInfo": {
+                    "creds": {
+                        "AZURE_SAS_TOKEN": "sas_token",
+                    },
+                    "location": "some_bucket",
+                    "region": "no_region",
+                    "locationType": "AZURE",
+                    "path": "remote_loc",
+                    "endPoint": "",
+                    "storageAccount": "storage_account",
+                },
+            },
+            "success": True,
+        },
+        iobound_tpe_limit=2,
+    )
+    assert len(list(filter(lambda e: e.args == (3,), tpe.call_args_list))) == 2
+    with mock.patch(
+        "snowflake.connector.file_transfer_agent.ThreadPoolExecutor"
+    ) as tpe:
+        with mock.patch("snowflake.connector.file_transfer_agent.threading.Condition"):
+            with mock.patch(
+                "snowflake.connector.file_transfer_agent.TransferMetadata",
+                return_value=mock.Mock(
+                    num_files_started=0,
+                    num_files_completed=3,
+                ),
+            ):
+                try:
+                    rest_client.execute()
+                except AttributeError:
+                    pass
+    # 2 IObound TPEs should be created for 3 files limited to 2
+    assert len(list(filter(lambda e: e.args == (2,), tpe.call_args_list))) == 2

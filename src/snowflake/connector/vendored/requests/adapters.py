@@ -25,7 +25,6 @@ from ..urllib3.poolmanager import PoolManager, proxy_from_url
 from ..urllib3.util import Timeout as TimeoutSauce
 from ..urllib3.util import parse_url
 from ..urllib3.util.retry import Retry
-
 from .auth import _basic_auth_str
 from .compat import basestring, urlparse
 from .cookies import extract_cookies_to_jar
@@ -193,7 +192,6 @@ class HTTPAdapter(BaseAdapter):
             num_pools=connections,
             maxsize=maxsize,
             block=block,
-            strict=True,
             **pool_kwargs,
         )
 

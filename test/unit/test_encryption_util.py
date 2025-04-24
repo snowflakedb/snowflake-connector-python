@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import codecs
@@ -43,10 +39,10 @@ def test_encrypt_decrypt_file(tmp_path):
             fd.write(data)
 
         (metadata, encrypted_file) = SnowflakeEncryptionUtil.encrypt_file(
-            encryption_material, input_file
+            encryption_material, input_file, tmp_dir=str(tmp_path)
         )
         decrypted_file = SnowflakeEncryptionUtil.decrypt_file(
-            metadata, encryption_material, encrypted_file
+            metadata, encryption_material, encrypted_file, tmp_dir=str(tmp_path)
         )
 
         contents = ""
@@ -98,10 +94,10 @@ def test_encrypt_decrypt_large_file(tmpdir):
                 )
 
             (metadata, encrypted_file) = SnowflakeEncryptionUtil.encrypt_file(
-                encryption_material, input_file
+                encryption_material, input_file, tmp_dir=str(tmpdir)
             )
             decrypted_file = SnowflakeEncryptionUtil.decrypt_file(
-                metadata, encryption_material, encrypted_file
+                metadata, encryption_material, encrypted_file, tmp_dir=str(tmpdir)
             )
 
             digest_dec, size_dec = SnowflakeFileUtil.get_digest_and_size_for_file(

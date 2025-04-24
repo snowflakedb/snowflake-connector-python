@@ -23,6 +23,13 @@ def is_connection_dropped(conn):  # Platform-specific
         return False
     if sock is None:  # Connection already closed (such as by httplib).
         return True
+    # See issue for more context: https://github.com/urllib3/urllib3/issues/1878
+    # the maintainers know that this issue can be resolve using the change below but
+    # they have not merged this change because they need to root-cause it. See
+    # comment: https://github.com/urllib3/urllib3/issues/1878#issuecomment-641548977
+    # adding the fix in our vendored code so our users get unblocked
+    if getattr(sock, "fileno", lambda _: None)() == -1:
+        return True
     try:
         # Returns True if readable, which here means it's been dropped
         return wait_for_read(sock, timeout=0.0)

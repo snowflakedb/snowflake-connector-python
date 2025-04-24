@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import itertools
@@ -18,6 +14,7 @@ from warnings import warn
 import tomlkit
 from tomlkit.items import Table
 
+from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.constants import CONFIG_FILE, CONNECTIONS_FILE
 from snowflake.connector.errors import (
     ConfigManagerError,
@@ -319,12 +316,20 @@ class ConfigManager:
         ):
             if sliceoptions.only_in_slice:
                 del read_config_file[section]
-            if not filep.exists():
+            try:
+                if not filep.exists():
+                    continue
+            except PermissionError:
+                LOGGER.debug(
+                    f"Fail to read configuration file from {str(filep)} due to no permission on its parent directory"
+                )
                 continue
+
             if (
-                sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
+                not IS_WINDOWS  # Skip checking on Windows
+                and sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
                 # Same check as openssh does for permissions
-                #  https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
+                # https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
                 and filep.stat().st_mode & READABLE_BY_OTHERS != 0
                 or (
                     # Windows doesn't have getuid, skip checking
@@ -333,7 +338,9 @@ class ConfigManager:
                     and filep.stat().st_uid != os.getuid()
                 )
             ):
-                warn(f"Bad owner or permissions on {str(filep)}")
+                chmod_message = f'.\n * To change owner, run `chown $USER "{str(filep)}"`.\n * To restrict permissions, run `chmod 0600 "{str(filep)}"`.\n'
+
+                warn(f"Bad owner or permissions on {str(filep)}{chmod_message}")
             LOGGER.debug(f"reading configuration file from {str(filep)}")
             try:
                 read_config_piece = tomlkit.parse(filep.read_text())

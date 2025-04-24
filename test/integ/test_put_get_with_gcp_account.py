@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import glob
@@ -57,7 +53,7 @@ logger = getLogger(__name__)
 pytestmark = pytest.mark.gcp
 
 
-@pytest.mark.parametrize("enable_gcs_downscoped", [True, False])
+@pytest.mark.parametrize("enable_gcs_downscoped", [True])
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
@@ -127,7 +123,7 @@ def test_put_get_with_gcp(
     assert original_contents == contents, "Output is different from the original file"
 
 
-@pytest.mark.parametrize("enable_gcs_downscoped", [True, False])
+@pytest.mark.parametrize("enable_gcs_downscoped", [True])
 def test_put_copy_many_files_gcp(
     tmpdir,
     conn_cnx,
@@ -192,7 +188,7 @@ def test_put_copy_many_files_gcp(
                 run(csr, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize("enable_gcs_downscoped", [True, False])
+@pytest.mark.parametrize("enable_gcs_downscoped", [True])
 def test_put_copy_duplicated_files_gcp(
     tmpdir,
     conn_cnx,
@@ -288,7 +284,7 @@ def test_put_copy_duplicated_files_gcp(
                 run(csr, "drop table if exists {name}")
 
 
-@pytest.mark.parametrize("enable_gcs_downscoped", [True, False])
+@pytest.mark.parametrize("enable_gcs_downscoped", [True])
 def test_put_get_large_files_gcp(
     tmpdir,
     conn_cnx,
@@ -414,9 +410,11 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx):
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(
-                        "snowflake.connector.vendored.requests.put"
-                        if vendored_request
-                        else "request.put",
+                        (
+                            "snowflake.connector.vendored.requests.put"
+                            if vendored_request
+                            else "request.put"
+                        ),
                         side_effect=mocked_put,
                     ):
                         csr.execute(
@@ -448,9 +446,11 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx):
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(
-                        "snowflake.connector.vendored.requests.get"
-                        if vendored_request
-                        else "request.get",
+                        (
+                            "snowflake.connector.vendored.requests.get"
+                            if vendored_request
+                            else "request.get"
+                        ),
                         side_effect=mocked_get,
                     ):
                         csr.execute(f"get @%{table_name} file://{tmp_dir}")
@@ -472,7 +472,7 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx):
     assert original_contents == contents, "Output is different from the original file"
 
 
-@pytest.mark.parametrize("enable_gcs_downscoped", [True, False])
+@pytest.mark.parametrize("enable_gcs_downscoped", [True])
 def test_auto_compress_off_gcp(
     tmpdir,
     conn_cnx,
@@ -575,15 +575,19 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(
-                        "snowflake.connector.vendored.requests.put"
-                        if vendored_request
-                        else "requests.put",
+                        (
+                            "snowflake.connector.vendored.requests.put"
+                            if vendored_request
+                            else "requests.put"
+                        ),
                         side_effect=mocked_put,
                     ):
                         with mock.patch(
-                            "snowflake.connector.vendored.requests.head"
-                            if vendored_request
-                            else "requests.head",
+                            (
+                                "snowflake.connector.vendored.requests.head"
+                                if vendored_request
+                                else "requests.head"
+                            ),
                             side_effect=mocked_head,
                         ):
                             csr.execute(
@@ -620,9 +624,11 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                     side_effect=mocked_file_agent,
                 ):
                     with mock.patch(
-                        "snowflake.connector.vendored.requests.get"
-                        if vendored_request
-                        else "requests.get",
+                        (
+                            "snowflake.connector.vendored.requests.get"
+                            if vendored_request
+                            else "requests.get"
+                        ),
                         ide_effect=mocked_get,
                     ):
                         csr.execute(f"get @%{table_name} file://{tmp_dir}")

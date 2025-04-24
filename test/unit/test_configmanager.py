@@ -1,9 +1,6 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import logging
 import os.path
 import re
 import shutil
@@ -58,6 +55,11 @@ files = Dict[str, Union[str, "files"]]
 def tmp_files(tmp_path: Path) -> Callable[[files], Path]:
     def create_tmp_files(to_create: files) -> Path:
         tmp_files_helper(tmp_path, to_create)
+        # Automatically fix file permissions
+        if "config.toml" in to_create:
+            (tmp_path / "config.toml").chmod(stat.S_IRUSR | stat.S_IWUSR)
+        if "connections.toml" in to_create:
+            (tmp_path / "connections.toml").chmod(stat.S_IRUSR | stat.S_IWUSR)
         return tmp_path
 
     return create_tmp_files
@@ -117,7 +119,7 @@ def test_simple_config_read(tmp_files):
         name="output_format",
         choices=("json", "yaml", "toml"),
     )
-    TEST_PARSER.add_subparser(settings_parser)
+    TEST_PARSER.add_submanager(settings_parser)
     assert TEST_PARSER["connections"] == {
         "snowflake": {
             "account": "snowflake",
@@ -170,7 +172,7 @@ def test_simple_config_read_sliced(tmp_files):
         name="output_format",
         choices=("json", "yaml", "toml"),
     )
-    TEST_PARSER.add_subparser(settings_parser)
+    TEST_PARSER.add_submanager(settings_parser)
     assert TEST_PARSER["connections"] == {
         "snowflake": {
             "account": "snowflake",
@@ -209,7 +211,7 @@ def test_missing_value(tmp_files):
         name="output_format",
         choices=("json", "yaml", "toml"),
     )
-    TEST_PARSER.add_subparser(settings_parser)
+    TEST_PARSER.add_submanager(settings_parser)
     assert TEST_PARSER["connections"] == {
         "snowflake": {
             "account": "snowflake",
@@ -266,7 +268,7 @@ def test_missing_value_sliced(tmp_files):
         name="output_format",
         choices=("json", "yaml", "toml"),
     )
-    TEST_PARSER.add_subparser(settings_parser)
+    TEST_PARSER.add_submanager(settings_parser)
     assert TEST_PARSER["connections"] == {
         "snowflake": {
             "account": "snowflake",
@@ -322,7 +324,7 @@ def test_only_in_slice(tmp_files):
         name="output_format",
         choices=("json", "yaml", "toml"),
     )
-    TEST_PARSER.add_subparser(settings_parser)
+    TEST_PARSER.add_submanager(settings_parser)
     with pytest.raises(
         ConfigSourceError,
         match="Configuration option 'connections' is not defined.*",
@@ -335,8 +337,8 @@ def test_simple_nesting(monkeypatch, tmp_path):
     c2 = ConfigManager(name="sb")
     c3 = ConfigManager(name="sb")
     c3.add_option(name="b", parse_str=lambda e: e.lower() == "true")
-    c2.add_subparser(c3)
-    c1.add_subparser(c2)
+    c2.add_submanager(c3)
+    c1.add_submanager(c2)
     with monkeypatch.context() as m:
         m.setenv("SNOWFLAKE_SB_SB_B", "TrUe")
         assert c1["sb"]["sb"]["b"] is True
@@ -347,7 +349,7 @@ def test_complicated_nesting(monkeypatch, tmp_path):
     c1 = ConfigManager(file_path=c_file, name="root_parser")
     c2 = ConfigManager(file_path=tmp_path / "config2.toml", name="sp")
     c2.add_option(name="b", parse_str=lambda e: e.lower() == "true")
-    c1.add_subparser(c2)
+    c1.add_submanager(c2)
     c_file.write_text(
         dedent(
             """\
@@ -361,6 +363,7 @@ def test_complicated_nesting(monkeypatch, tmp_path):
             """
         )
     )
+    c_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     assert c1["sp"]["b"] is True
 
 
@@ -381,6 +384,7 @@ def test_error_invalid_toml(tmp_path):
             """
         )
     )
+    c_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     with pytest.raises(
         ConfigSourceError,
         match=re.escape(f"An unknown error happened while loading '{str(c_file)}'"),
@@ -393,7 +397,7 @@ def test_error_invalid_toml(tmp_path):
 
 def test_error_child_conflict():
     cp = ConfigManager(name="test_parser")
-    cp.add_subparser(ConfigManager(name="b"))
+    cp.add_submanager(ConfigManager(name="b"))
     with pytest.raises(
         ConfigManagerError,
         match="'b' sub-manager, or option conflicts with a child element of 'test_parser'",
@@ -514,9 +518,11 @@ def test_sf_dirs(tmp_path, version):
 
 
 def test_config_file_resolution_sfdirs_default():
-    default_loc = os.path.expanduser("~/.snowflake")
-    existed_before = os.path.exists(default_loc)
-    os.makedirs(default_loc, exist_ok=True)
+    from pathlib import Path
+
+    default_loc = Path("~/.snowflake").expanduser()
+    existed_before = default_loc.exists()
+    default_loc.mkdir(exist_ok=True)
     try:
         assert isinstance(_resolve_platform_dirs(), SFPlatformDirs)
     finally:
@@ -530,9 +536,14 @@ def test_config_file_resolution_sfdirs_nondefault(tmp_path, monkeypatch):
         assert isinstance(_resolve_platform_dirs(), SFPlatformDirs)
 
 
-def test_config_file_resolution_non_sfdirs(monkeypatch):
+def test_config_file_resolution_non_sfdirs(tmp_path, monkeypatch):
     with monkeypatch.context() as m:
-        m.delenv("SNOWFLAKE_HOME", raising=False)
+        # 2024-01-03(bwarsaw): It's not enough to remove SNOWFLAKE_HOME from the environment, because
+        # _resolve_platform_dirs() defaults to ~/.snowflake, so if the user running the tests has this
+        # directory, the test will fail.  Instead, ensure that this environment variable points to a
+        # non-existent directory.
+        fake_home = tmp_path / ".snowflake"
+        m.setenv("SNOWFLAKE_HOME", str(fake_home))
         assert not isinstance(_resolve_platform_dirs(), SFPlatformDirs)
 
 
@@ -553,9 +564,14 @@ def test_warn_config_file_owner(tmp_path, monkeypatch):
         with warnings.catch_warnings(record=True) as c:
             assert c1["b"] is True
         assert len(c) == 1
-        assert str(c[0].message) == f"Bad owner or permissions on {str(c_file)}"
+        assert (
+            str(c[0].message)
+            == f"Bad owner or permissions on {str(c_file)}"
+            + f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n'
+        )
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
 def test_warn_config_file_permissions(tmp_path):
     c_file = tmp_path / "config.toml"
     c1 = ConfigManager(file_path=c_file, name="root_parser")
@@ -571,7 +587,56 @@ def test_warn_config_file_permissions(tmp_path):
     with warnings.catch_warnings(record=True) as c:
         assert c1["b"] is True
     assert len(c) == 1
-    assert str(c[0].message) == f"Bad owner or permissions on {str(c_file)}"
+    chmod_message = f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n'
+    assert (
+        str(c[0].message)
+        == f"Bad owner or permissions on {str(c_file)}" + chmod_message
+    )
+
+
+@pytest.mark.skipif(not IS_WINDOWS, reason="Windows specific test")
+def test_warn_config_file_permissions_windows(tmp_path):
+    c_file = tmp_path / "config.toml"
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    with warnings.catch_warnings(record=True) as c:
+        assert c1["b"] is True
+    assert len(c) == 0
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
+def test_log_debug_config_file_parent_dir_permissions(tmp_path, caplog):
+    tmp_dir = tmp_path / "tmp_dir"
+    tmp_dir.mkdir()
+    c_file = tmp_dir / "config.toml"
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    mod = tmp_dir.stat()
+    tmp_dir.chmod(0)
+
+    caplog.clear()
+
+    with caplog.at_level(logging.DEBUG):
+        c1.read_config()
+    assert not c1.conf_file_cache
+    assert "due to no permission on its parent directory" in caplog.text
+
+    tmp_dir.chmod(stat.S_IMODE(mod.st_mode))
+    shutil.rmtree(tmp_dir)
 
 
 def test_configoption_missing_root_manager():
@@ -637,7 +702,8 @@ def test_deprecationwarning_config_parser():
         str(w[-1].message)
         == "CONFIG_PARSER has been deprecated, use CONFIG_MANAGER instead"
     )
-    assert config_manager.CONFIG_MANAGER is config_manager.CONFIG_PARSER
+    with warnings.catch_warnings(record=True) as w:
+        assert config_manager.CONFIG_MANAGER is config_manager.CONFIG_PARSER
 
 
 def test_configoption_default_value(tmp_path, monkeypatch):
@@ -685,6 +751,7 @@ def test_defaultconnectionname(tmp_path, monkeypatch):
                 """
             )
         )
+        c_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
         # re-cache config file from disk
         CONFIG_MANAGER.file_path = c_file
         CONFIG_MANAGER.conf_file_cache = None

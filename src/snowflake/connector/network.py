@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import collections
@@ -11,8 +7,8 @@ import gzip
 import itertools
 import json
 import logging
+import re
 import time
-import traceback
 import uuid
 from collections import OrderedDict
 from threading import Lock
@@ -46,6 +42,8 @@ from .compat import (
     urlparse,
 )
 from .constants import (
+    _CONNECTIVITY_ERR_MSG,
+    _SNOWFLAKE_HOST_SUFFIX_REGEX,
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
@@ -67,6 +65,7 @@ from .errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_FAILED_TO_RENEW_SESSION,
     ER_FAILED_TO_REQUEST,
+    ER_RETRYABLE_CODE,
 )
 from .errors import (
     BadGatewayError,
@@ -89,12 +88,10 @@ from .sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
     SQLSTATE_CONNECTION_REJECTED,
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-    SQLSTATE_IO_ERROR,
 )
-from .telemetry_oob import TelemetryService
 from .time_util import (
     DEFAULT_MASTER_VALIDITY_IN_SECONDS,
-    DecorrelateJitterBackoff,
+    TimeoutBackoffCtx,
     get_time_millis,
 )
 from .tool.probe_connection import probe_connection
@@ -141,6 +138,7 @@ MASTER_TOKEN_EXPIRED_GS_CODE = "390114"
 MASTER_TOKEN_INVALD_GS_CODE = "390115"
 ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE = "390195"
 BAD_REQUEST_GS_CODE = "390400"
+OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE = "390318"
 
 # other constants
 CONTENT_TYPE_APPLICATION_JSON = "application/json"
@@ -154,6 +152,7 @@ HEADER_SNOWFLAKE_TOKEN = 'Snowflake Token="{token}"'
 REQUEST_ID = "requestId"
 REQUEST_GUID = "request_guid"
 SNOWFLAKE_HOST_SUFFIX = ".snowflakecomputing.com"
+
 
 SNOWFLAKE_CONNECTOR_VERSION = SNOWFLAKE_CONNECTOR_VERSION
 PYTHON_VERSION = PYTHON_VERSION
@@ -183,8 +182,13 @@ DEFAULT_AUTHENTICATOR = "SNOWFLAKE"  # default authenticator name
 EXTERNAL_BROWSER_AUTHENTICATOR = "EXTERNALBROWSER"
 KEY_PAIR_AUTHENTICATOR = "SNOWFLAKE_JWT"
 OAUTH_AUTHENTICATOR = "OAUTH"
+OAUTH_AUTHORIZATION_CODE = "OAUTH_AUTHORIZATION_CODE"
+OAUTH_CLIENT_CREDENTIALS = "OAUTH_CLIENT_CREDENTIALS"
 ID_TOKEN_AUTHENTICATOR = "ID_TOKEN"
 USR_PWD_MFA_AUTHENTICATOR = "USERNAME_PASSWORD_MFA"
+PROGRAMMATIC_ACCESS_TOKEN = "PROGRAMMATIC_ACCESS_TOKEN"
+NO_AUTH_AUTHENTICATOR = "NO_AUTH"
+WORKLOAD_IDENTITY_AUTHENTICATOR = "WORKLOAD_IDENTITY"
 
 
 def is_retryable_http_code(code: int) -> bool:
@@ -226,14 +230,6 @@ def raise_failed_request_error(
     method: str,
     response: Response,
 ) -> None:
-    TelemetryService.get_instance().log_http_request_error(
-        f"HttpError{response.status_code}",
-        url,
-        method,
-        SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-        ER_FAILED_TO_REQUEST,
-        response=response,
-    )
     Error.errorhandler_wrapper(
         connection,
         None,
@@ -247,7 +243,7 @@ def raise_failed_request_error(
 
 
 def is_login_request(url: str) -> bool:
-    return "/session/v1/login-request" in url
+    return "login-request" in parse_url(url).path
 
 
 class ProxySupportAdapter(HTTPAdapter):
@@ -360,6 +356,15 @@ class SessionPool:
         self._idle_sessions.clear()
 
 
+# Customizable JSONEncoder to support additional types.
+class SnowflakeRestfulJsonEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, uuid.UUID):
+            return str(o)
+
+        return super().default(o)
+
+
 class SnowflakeRestful:
     """Snowflake Restful class."""
 
@@ -434,6 +439,10 @@ class SnowflakeRestful:
     def mfa_token(self, value: str) -> None:
         self._mfa_token = value
 
+    @property
+    def server_url(self) -> str:
+        return f"{self._protocol}://{self._host}:{self._port}"
+
     def close(self) -> None:
         if hasattr(self, "_token"):
             del self._token
@@ -453,8 +462,8 @@ class SnowflakeRestful:
         body=None,
         method: str = "post",
         client: str = "sfsql",
+        timeout: int | None = None,
         _no_results: bool = False,
-        timeout=None,
         _include_retry_params: bool = False,
         _no_retry: bool = False,
     ):
@@ -477,21 +486,32 @@ class SnowflakeRestful:
         else:
             accept_type = CONTENT_TYPE_APPLICATION_JSON
 
-        if timeout is None:
-            timeout = self._connection.network_timeout
-
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: accept_type,
             HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
+        try:
+            # SNOW-1763555: inject OpenTelemetry headers if available specifically in WC3 format
+            #  into our request headers in case tracing is enabled. This should make sure that
+            #  our requests are accounted for properly if OpenTelemetry is used by users.
+            from opentelemetry.trace.propagation.tracecontext import (
+                TraceContextTextMapPropagator,
+            )
+
+            TraceContextTextMapPropagator().inject(headers)
+        except Exception:
+            logger.debug(
+                "Opentelemtry otel injection failed",
+                exc_info=True,
+            )
         if self._connection.service_name:
             headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
         if method == "post":
             return self._post_request(
                 url,
                 headers,
-                json.dumps(body),
+                json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
                 token=self.token,
                 _no_results=_no_results,
                 timeout=timeout,
@@ -499,7 +519,12 @@ class SnowflakeRestful:
                 no_retry=_no_retry,
             )
         else:
-            return self._get_request(url, headers, token=self.token, timeout=timeout)
+            return self._get_request(
+                url,
+                headers,
+                token=self.token,
+                timeout=timeout,
+            )
 
     def update_tokens(
         self,
@@ -548,12 +573,11 @@ class SnowflakeRestful:
         ret = self._post_request(
             url,
             headers,
-            json.dumps(body),
+            json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
             token=header_token,
-            timeout=self._connection.network_timeout,
         )
         if ret.get("success") and ret.get("data", {}).get("sessionToken"):
-            logger.debug("success: %s", ret)
+            logger.debug("success: %s", SecretDetector.mask_secrets(str(ret)))
             self.update_tokens(
                 ret["data"]["sessionToken"],
                 ret["data"].get("masterToken"),
@@ -562,7 +586,7 @@ class SnowflakeRestful:
             logger.debug("updating session completed")
             return ret
         else:
-            logger.debug("failed: %s", ret)
+            logger.debug("failed: %s", SecretDetector.mask_secrets(str(ret)))
             err = ret.get("message")
             if err is not None and ret.get("data"):
                 err += ret["data"].get("errorMessage", "")
@@ -593,7 +617,7 @@ class SnowflakeRestful:
                 },
             )
 
-    def _heartbeat(self) -> None:
+    def _heartbeat(self) -> Any | dict[Any, Any] | None:
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
@@ -609,10 +633,10 @@ class SnowflakeRestful:
             headers,
             None,
             token=self.token,
-            timeout=self._connection.network_timeout,
         )
         if not ret.get("success"):
             logger.error("Failed to heartbeat. code: %s, url: %s", ret.get("code"), url)
+        return ret
 
     def delete_session(self, retry: bool = False) -> None:
         """Deletes the session."""
@@ -647,7 +671,7 @@ class SnowflakeRestful:
                 ret = self._post_request(
                     url,
                     headers,
-                    json.dumps(body),
+                    json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
                     token=self.token,
                     timeout=5,
                     no_retry=True,
@@ -675,21 +699,21 @@ class SnowflakeRestful:
         headers: dict[str, str],
         token: str = None,
         timeout: int | None = None,
-        socket_timeout: int = DEFAULT_SOCKET_CONNECT_TIMEOUT,
+        is_fetch_query_status: bool = False,
     ) -> dict[str, Any]:
         if "Content-Encoding" in headers:
             del headers["Content-Encoding"]
         if "Content-Length" in headers:
             del headers["Content-Length"]
 
-        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
+        full_url = f"{self.server_url}{url}"
         ret = self.fetch(
             "get",
             full_url,
             headers,
             timeout=timeout,
             token=token,
-            socket_timeout=socket_timeout,
+            is_fetch_query_status=is_fetch_query_status,
         )
         if ret.get("code") == SESSION_EXPIRED_GS_CODE:
             try:
@@ -704,7 +728,12 @@ class SnowflakeRestful:
                 )
             )
             if ret.get("success"):
-                return self._get_request(url, headers, token=self.token)
+                return self._get_request(
+                    url,
+                    headers,
+                    token=self.token,
+                    is_fetch_query_status=is_fetch_query_status,
+                )
 
         return ret
 
@@ -714,13 +743,13 @@ class SnowflakeRestful:
         headers,
         body,
         token=None,
-        timeout=None,
+        timeout: int | None = None,
+        socket_timeout: int | None = None,
         _no_results: bool = False,
         no_retry: bool = False,
-        socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
         _include_retry_params: bool = False,
     ):
-        full_url = f"{self._protocol}://{self._host}:{self._port}{url}"
+        full_url = f"{self.server_url}{url}"
         if self._connection._probe_connection:
             from pprint import pprint
 
@@ -735,8 +764,8 @@ class SnowflakeRestful:
             timeout=timeout,
             token=token,
             no_retry=no_retry,
-            socket_timeout=socket_timeout,
             _include_retry_params=_include_retry_params,
+            socket_timeout=socket_timeout,
         )
         logger.debug(
             "ret[code] = {code}, after post request".format(
@@ -744,7 +773,9 @@ class SnowflakeRestful:
             )
         )
 
-        if ret.get("code") == SESSION_EXPIRED_GS_CODE:
+        if ret.get("code") == MASTER_TOKEN_EXPIRED_GS_CODE:
+            self._connection.expired = True
+        elif ret.get("code") == SESSION_EXPIRED_GS_CODE:
             try:
                 ret = self._renew_session()
             except ReauthenticationRequest as ex:
@@ -775,7 +806,13 @@ class SnowflakeRestful:
             result_url = ret["data"]["getResultUrl"]
             logger.debug("ping pong starting...")
             ret = self._get_request(
-                result_url, headers, token=self.token, timeout=timeout
+                result_url,
+                headers,
+                token=self.token,
+                timeout=timeout,
+                is_fetch_query_status=bool(
+                    re.match(r"^/queries/.+/result$", result_url)
+                ),
             )
             logger.debug("ret[code] = %s", ret.get("code", "N/A"))
             logger.debug("ping pong done")
@@ -793,47 +830,26 @@ class SnowflakeRestful:
     ) -> dict[Any, Any]:
         """Carry out API request with session management."""
 
-        class RetryCtx:
+        class RetryCtx(TimeoutBackoffCtx):
             def __init__(
                 self,
-                timeout,
                 _include_retry_params: bool = False,
                 _include_retry_reason: bool = False,
+                **kwargs,
             ) -> None:
-                self.total_timeout = timeout
-                self.timeout = timeout
-                self.cnt = 0
-                self.reason = 0
-                self.sleeping_time = 1
-                self.start_time = get_time_millis()
+                super().__init__(**kwargs)
+                self.retry_reason = 0
                 self._include_retry_params = _include_retry_params
                 self._include_retry_reason = _include_retry_reason
-                # backoff between 1 and 16 seconds
-                self._backoff = DecorrelateJitterBackoff(1, 16)
-
-            def increment_retry(self, reason: int = 0) -> None:
-                """Increment retry count and update the reason for retry
-
-                Args:
-                    reason: HTTP response code that caused retry. Defaults to 0.
-                """
-                self.cnt += 1
-                self.reason = reason
-
-            def next_sleep(self) -> int:
-                self.sleeping_time = self._backoff.next_sleep(
-                    self.cnt, self.sleeping_time
-                )
-                return self.sleeping_time
 
             def add_retry_params(self, full_url: str) -> str:
-                if self._include_retry_params and self.cnt > 0:
+                if self._include_retry_params and self.current_retry_count > 0:
                     retry_params = {
-                        "clientStartTime": self.start_time,
-                        "retryCount": self.cnt,
+                        "clientStartTime": self._start_time_millis,
+                        "retryCount": self.current_retry_count,
                     }
                     if self._include_retry_reason:
-                        retry_params.update({"retryReason": self.reason})
+                        retry_params.update({"retryReason": self.retry_reason})
                     suffix = urlencode(retry_params)
                     sep = "&" if urlparse(full_url).query else "?"
                     return full_url + sep + suffix
@@ -844,7 +860,16 @@ class SnowflakeRestful:
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
         with self._use_requests_session(full_url) as session:
-            retry_ctx = RetryCtx(timeout, include_retry_params, include_retry_reason)
+            retry_ctx = RetryCtx(
+                _include_retry_params=include_retry_params,
+                _include_retry_reason=include_retry_reason,
+                timeout=(
+                    timeout if timeout is not None else self._connection.network_timeout
+                ),
+                backoff_generator=self._connection._backoff_generator,
+            )
+
+            retry_ctx.set_start_time()
             while True:
                 ret = self._request_exec_wrapper(
                     session, method, full_url, headers, data, retry_ctx, **kwargs
@@ -856,7 +881,7 @@ class SnowflakeRestful:
     def add_request_guid(full_url: str) -> str:
         """Adds request_guid parameter for HTTP request tracing."""
         parsed_url = urlparse(full_url)
-        if not parsed_url.hostname.endswith(SNOWFLAKE_HOST_SUFFIX):
+        if not re.search(_SNOWFLAKE_HOST_SUFFIX_REGEX, parsed_url.hostname):
             return full_url
         request_guid = str(uuid.uuid4())
         suffix = urlencode({REQUEST_GUID: request_guid})
@@ -879,14 +904,22 @@ class SnowflakeRestful:
     ):
         conn = self._connection
         logger.debug(
-            "remaining request timeout: %s, retry cnt: %s",
-            retry_ctx.timeout,
-            retry_ctx.cnt + 1,
+            "remaining request timeout: %s ms, retry cnt: %s",
+            retry_ctx.remaining_time_millis if retry_ctx.timeout is not None else "N/A",
+            retry_ctx.current_retry_count + 1,
         )
 
-        start_request_thread = time.time()
         full_url = retry_ctx.add_retry_params(full_url)
         full_url = SnowflakeRestful.add_request_guid(full_url)
+        is_fetch_query_status = kwargs.pop("is_fetch_query_status", False)
+        # raise_raw_http_failure is not a public parameter and may change in the future
+        # it enables raising raw http errors that are not handled by
+        # connector, connector handles the following http error:
+        #  1. FORBIDDEN error when trying to login
+        #  2. retryable http code defined in method is_retryable_http_code
+        #  3. UNAUTHORIZED error when using okta authentication
+        # raise_raw_http_failure doesn't work for the 3 mentioned cases.
+        raise_raw_http_failure = kwargs.pop("raise_raw_http_failure", False)
         try:
             return_object = self._request_exec(
                 session=session,
@@ -895,62 +928,41 @@ class SnowflakeRestful:
                 headers=headers,
                 data=data,
                 token=token,
+                raise_raw_http_failure=raise_raw_http_failure,
                 **kwargs,
             )
             if return_object is not None:
                 return return_object
+            if is_fetch_query_status:
+                err_msg = "fetch query status failed and http request returned None, this is usually caused by transient network failures, retrying..."
+                logger.info(err_msg)
+                raise RetryRequest(err_msg)
             self._handle_unknown_error(method, full_url, headers, data, conn)
-            TelemetryService.get_instance().log_http_request_error(
-                "HttpRequestUnknownError",
-                full_url,
-                method,
-                SQLSTATE_IO_ERROR,
-                ER_FAILED_TO_REQUEST,
-                retry_timeout=retry_ctx.total_timeout,
-                retry_count=retry_ctx.cnt,
-            )
             return {}
         except RetryRequest as e:
-            if (
-                retry_ctx.cnt
-                == TelemetryService.get_instance().num_of_retry_to_trigger_telemetry
-            ):
-                TelemetryService.get_instance().log_http_request_error(
-                    "HttpRequestRetry%dTimes" % retry_ctx.cnt,
-                    full_url,
-                    method,
-                    SQLSTATE_IO_ERROR,
-                    ER_FAILED_TO_REQUEST,
-                    retry_timeout=retry_ctx.total_timeout,
-                    retry_count=retry_ctx.cnt,
-                    exception=str(e),
-                    stack_trace=traceback.format_exc(),
-                )
             cause = e.args[0]
             if no_retry:
                 self.log_and_handle_http_error_with_cause(
                     e,
                     full_url,
                     method,
-                    retry_ctx.total_timeout,
-                    retry_ctx.cnt,
+                    retry_ctx.timeout,
+                    retry_ctx.current_retry_count,
                     conn,
                     timed_out=False,
                 )
                 return {}  # required for tests
-            if retry_ctx.timeout is not None:
-                retry_ctx.timeout -= int(time.time() - start_request_thread)
-                if retry_ctx.timeout <= 0:
-                    self.log_and_handle_http_error_with_cause(
-                        e,
-                        full_url,
-                        method,
-                        retry_ctx.total_timeout,
-                        retry_ctx.cnt,
-                        conn,
-                    )
-                    return {}  # required for tests
-            sleeping_time = retry_ctx.next_sleep()
+            if not retry_ctx.should_retry:
+                self.log_and_handle_http_error_with_cause(
+                    e,
+                    full_url,
+                    method,
+                    retry_ctx.timeout,
+                    retry_ctx.current_retry_count,
+                    conn,
+                )
+                return {}  # required for tests
+
             logger.debug(
                 "retrying: errorclass=%s, "
                 "error=%s, "
@@ -958,14 +970,15 @@ class SnowflakeRestful:
                 "sleeping=%s(s)",
                 type(cause),
                 cause,
-                retry_ctx.cnt + 1,
-                sleeping_time,
+                retry_ctx.current_retry_count + 1,
+                retry_ctx.current_sleep_time,
             )
-            time.sleep(sleeping_time)
+            time.sleep(float(retry_ctx.current_sleep_time))
+            retry_ctx.increment()
+
             reason = getattr(cause, "errno", 0)
-            retry_ctx.increment_retry(reason)
-            if retry_ctx.timeout is not None:
-                retry_ctx.timeout -= sleeping_time
+            retry_ctx.retry_reason = reason
+
             if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
                 # connection is reset by the server, the underlying connection is broken and can not be reused
                 # we need a new urllib3 http(s) connection in this case.
@@ -983,7 +996,9 @@ class SnowflakeRestful:
                     )
             return None  # retry
         except Exception as e:
-            if not no_retry:
+            if (
+                raise_raw_http_failure and isinstance(e, requests.exceptions.HTTPError)
+            ) or not no_retry:
                 raise e
             logger.debug("Ignored error", exc_info=True)
             return {}
@@ -1000,17 +1015,6 @@ class SnowflakeRestful:
     ) -> None:
         cause = e.args[0]
         logger.error(cause, exc_info=True)
-        TelemetryService.get_instance().log_http_request_error(
-            "HttpRequestRetryTimeout" if timed_out else f"HttpRequestError: {cause}",
-            full_url,
-            method,
-            SQLSTATE_IO_ERROR,
-            ER_FAILED_TO_REQUEST,
-            retry_timeout=retry_timeout,
-            retry_count=retry_count,
-            exception=str(e),
-            stack_trace=traceback.format_exc(),
-        )
         if isinstance(cause, Error):
             Error.errorhandler_wrapper_from_cause(conn, cause)
         else:
@@ -1061,15 +1065,18 @@ class SnowflakeRestful:
         is_raw_text: bool = False,
         is_raw_binary: bool = False,
         binary_data_handler=None,
-        socket_timeout=DEFAULT_SOCKET_CONNECT_TIMEOUT,
+        socket_timeout: int | None = None,
         is_okta_authentication: bool = False,
+        raise_raw_http_failure: bool = False,
     ):
-        if socket_timeout > DEFAULT_SOCKET_CONNECT_TIMEOUT:
-            # socket timeout should not be more than the default.
-            # A shorter timeout may be specified for login time, but
-            # for query, it should be at least 45 seconds.
-            socket_timeout = DEFAULT_SOCKET_CONNECT_TIMEOUT
+        if socket_timeout is None:
+            if self._connection.socket_timeout is not None:
+                logger.debug("socket_timeout specified in connection")
+                socket_timeout = self._connection.socket_timeout
+            else:
+                socket_timeout = DEFAULT_SOCKET_CONNECT_TIMEOUT
         logger.debug("socket timeout: %s", socket_timeout)
+
         try:
             if not catch_okta_unauthorized_error and data and len(data) > 0:
                 headers["Content-Encoding"] = "gzip"
@@ -1110,14 +1117,25 @@ class SnowflakeRestful:
                     raise ForbiddenError
 
                 elif is_retryable_http_code(raw_ret.status_code):
-                    error = get_http_retryable_error(raw_ret.status_code)
-                    logger.debug(f"{error}. Retrying...")
+                    err = get_http_retryable_error(raw_ret.status_code)
                     # retryable server exceptions
                     if is_okta_authentication:
                         raise RefreshTokenError(
                             msg="OKTA authentication requires token refresh."
                         )
-                    raise RetryRequest(error)
+                    if is_login_request(full_url):
+                        logger.debug(
+                            "Received retryable response code while logging in. Will be handled by "
+                            f"authenticator. Ignore the following. Error stack: {err}",
+                            exc_info=True,
+                        )
+                        raise OperationalError(
+                            msg="Login request is retryable. Will be handled by authenticator",
+                            errno=ER_RETRYABLE_CODE,
+                        )
+                    else:
+                        logger.debug(f"{err}. Retrying...")
+                        raise RetryRequest(err)
 
                 elif (
                     raw_ret.status_code == UNAUTHORIZED
@@ -1127,6 +1145,8 @@ class SnowflakeRestful:
                     raise_okta_unauthorized_error(self._connection, raw_ret)
                     return None  # required for tests
                 else:
+                    if raise_raw_http_failure:
+                        raw_ret.raise_for_status()
                     raise_failed_request_error(
                         self._connection, full_url, method, raw_ret
                     )
@@ -1134,17 +1154,19 @@ class SnowflakeRestful:
             finally:
                 raw_ret.close()  # ensure response is closed
         except SSLError as se:
-            logger.debug("Hit non-retryable SSL error, %s", str(se))
-            TelemetryService.get_instance().log_http_request_error(
-                "CertificateException%s" % str(se),
-                full_url,
-                method,
-                SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                ER_FAILED_TO_REQUEST,
-                exception=se,
-                stack_trace=traceback.format_exc(),
+            msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
+            logger.debug(msg)
+            # the following code is for backward compatibility with old versions of python connector which calls
+            # self._handle_unknown_error to process SSLError
+            Error.errorhandler_wrapper(
+                self._connection,
+                None,
+                OperationalError,
+                {
+                    "msg": msg,
+                    "errno": ER_FAILED_TO_REQUEST,
+                },
             )
-
         except (
             BadStatusLine,
             ConnectionError,
@@ -1158,15 +1180,14 @@ class SnowflakeRestful:
             RuntimeError,
             AttributeError,  # json decoding error
         ) as err:
-            parsed_url = parse_url(full_url)
-            if "login-request" in parsed_url.path:
+            if is_login_request(full_url):
                 logger.debug(
                     "Hit a timeout error while logging in. Will be handled by "
                     f"authenticator. Ignore the following. Error stack: {err}",
                     exc_info=True,
                 )
                 raise OperationalError(
-                    msg="ConnectionTimeout occurred. Will be handled by authenticator",
+                    msg="ConnectionTimeout occurred during login. Will be handled by authenticator",
                     errno=ER_CONNECTION_TIMEOUT,
                 )
             else:
@@ -1177,15 +1198,6 @@ class SnowflakeRestful:
                 )
                 raise RetryRequest(err)
         except Exception as err:
-            TelemetryService.get_instance().log_http_request_error(
-                "HttpException%s" % str(err),
-                full_url,
-                method,
-                SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
-                ER_FAILED_TO_REQUEST,
-                exception=err,
-                stack_trace=traceback.format_exc(),
-            )
             raise err
 
     def make_requests_session(self) -> Session:

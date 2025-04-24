@@ -1,22 +1,35 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import json
+import logging
 import os
+import stat
 import sys
+from pathlib import Path
+from secrets import token_urlsafe
 from textwrap import dedent
-from unittest.mock import patch
+from unittest import mock
+from unittest.mock import MagicMock, patch
 
 import pytest
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
-from snowflake.connector.errors import Error
+from snowflake.connector.connection import DEFAULT_CONFIGURATION
+from snowflake.connector.errors import (
+    Error,
+    InterfaceError,
+    OperationalError,
+    ProgrammingError,
+)
+from snowflake.connector.network import SnowflakeRestful
+from snowflake.connector.wif_util import AttestationProvider
 
 from ..randomize import random_string
+from .mock_utils import mock_request_with_action, zero_backoff
 
 try:
     from snowflake.connector.auth import (
@@ -26,14 +39,16 @@ try:
         AuthByWebBrowser,
     )
 except ImportError:
-    from unittest.mock import MagicMock
-
     AuthByDefault = AuthByOkta = AuthByOAuth = AuthByWebBrowser = MagicMock
 
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByUsrPwdMfa
     from snowflake.connector.config_manager import CONFIG_MANAGER
-    from snowflake.connector.constants import ENV_VAR_PARTNER, QueryStatus
+    from snowflake.connector.constants import (
+        _CONNECTIVITY_ERR_MSG,
+        ENV_VAR_PARTNER,
+        QueryStatus,
+    )
 except ImportError:
     ENV_VAR_PARTNER = "SF_PARTNER"
     QueryStatus = CONFIG_MANAGER = None
@@ -43,13 +58,14 @@ except ImportError:
             pass
 
 
-def fake_connector() -> snowflake.connector.SnowflakeConnection:
+def fake_connector(**kwargs) -> snowflake.connector.SnowflakeConnection:
     return snowflake.connector.connect(
         user="user",
         account="account",
         password="testpassword",
         database="TESTDB",
         warehouse="TESTWH",
+        **kwargs,
     )
 
 
@@ -76,6 +92,13 @@ def mock_post_requests(monkeypatch):
     )
 
     return request_body
+
+
+def write_temp_file(file_path: Path, contents: str) -> Path:
+    """Write the given string text to the given path, chmods it to be accessible, and returns the same path."""
+    file_path.write_text(contents)
+    file_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    return file_path
 
 
 def test_connect_with_service_name(mock_post_requests):
@@ -245,6 +268,7 @@ def test_missing_default_connection_conf_file(monkeypatch, tmp_path):
             """
         )
     )
+    config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     with monkeypatch.context() as m:
         m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
         m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
@@ -271,6 +295,7 @@ def test_missing_default_connection_conn_file(monkeypatch, tmp_path):
             """
         )
     )
+    connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     with monkeypatch.context() as m:
         m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
         m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
@@ -295,6 +320,7 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             """
         )
     )
+    config_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     connections_file.write_text(
         dedent(
             """\
@@ -305,6 +331,7 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             """
         )
     )
+    connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
     with monkeypatch.context() as m:
         m.delenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", raising=False)
         m.delenv("SNOWFLAKE_CONNECTIONS", raising=False)
@@ -316,3 +343,368 @@ def test_missing_default_connection_conf_conn_file(monkeypatch, tmp_path):
             match=f"Default connection with name '{connection_name}' cannot be found, known ones are \\['con_a'\\]",
         ):
             snowflake.connector.connect(connections_file_path=connections_file)
+
+
+def test_invalid_backoff_policy():
+    with pytest.raises(ProgrammingError):
+        # zero_backoff() is a generator, not a generator function
+        _ = fake_connector(backoff_policy=zero_backoff())
+
+    with pytest.raises(ProgrammingError):
+        # passing a non-generator function should not work
+        _ = fake_connector(backoff_policy=lambda: None)
+
+    with pytest.raises(InterfaceError):
+        # passing a generator function should make it pass config and error during connection
+        _ = fake_connector(backoff_policy=zero_backoff)
+
+
+@pytest.mark.parametrize("next_action", ("RETRY", "ERROR"))
+@patch("snowflake.connector.vendored.requests.sessions.Session.request")
+def test_handle_timeout(mockSessionRequest, next_action):
+    mockSessionRequest.side_effect = mock_request_with_action(next_action, sleep=5)
+
+    with pytest.raises(OperationalError):
+        # no backoff for testing
+        _ = fake_connector(
+            login_timeout=9,
+            backoff_policy=zero_backoff,
+        )
+
+    # authenticator should be the only retry mechanism for login requests
+    # 9 seconds should be enough for authenticator to attempt twice
+    # however, loosen restrictions to avoid thread scheduling causing failure
+    assert 1 < mockSessionRequest.call_count < 4
+
+
+def test__get_private_bytes_from_file(tmp_path: Path):
+    private_key_file = tmp_path / "key.pem"
+
+    private_key = rsa.generate_private_key(
+        backend=default_backend(), public_exponent=65537, key_size=2048
+    )
+
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    pkb = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    private_key_file.write_bytes(private_key_pem)
+
+    private_key = snowflake.connector.connection._get_private_bytes_from_file(
+        private_key_file=str(private_key_file)
+    )
+
+    assert pkb == private_key
+
+
+def test_private_key_file_reading(tmp_path: Path):
+    key_file = tmp_path / "key.pem"
+
+    private_key = rsa.generate_private_key(
+        backend=default_backend(), public_exponent=65537, key_size=2048
+    )
+
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    key_file.write_bytes(private_key_pem)
+
+    pkb = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    exc_msg = "stop execution"
+
+    with mock.patch(
+        "snowflake.connector.auth.keypair.AuthByKeyPair.__init__",
+        side_effect=Exception(exc_msg),
+    ) as m:
+        with pytest.raises(
+            Exception,
+            match=exc_msg,
+        ):
+            snowflake.connector.connect(
+                account="test_account",
+                user="test_user",
+                private_key_file=str(key_file),
+            )
+    assert m.call_count == 1
+    assert m.call_args_list[0].kwargs["private_key"] == pkb
+
+
+def test_encrypted_private_key_file_reading(tmp_path: Path):
+    key_file = tmp_path / "key.pem"
+    private_key_password = token_urlsafe(25)
+    private_key = rsa.generate_private_key(
+        backend=default_backend(), public_exponent=65537, key_size=2048
+    )
+
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.BestAvailableEncryption(
+            private_key_password.encode("utf-8")
+        ),
+    )
+
+    key_file.write_bytes(private_key_pem)
+
+    pkb = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+    exc_msg = "stop execution"
+
+    with mock.patch(
+        "snowflake.connector.auth.keypair.AuthByKeyPair.__init__",
+        side_effect=Exception(exc_msg),
+    ) as m:
+        with pytest.raises(
+            Exception,
+            match=exc_msg,
+        ):
+            snowflake.connector.connect(
+                account="test_account",
+                user="test_user",
+                private_key_file=str(key_file),
+                private_key_file_pwd=private_key_password,
+            )
+    assert m.call_count == 1
+    assert m.call_args_list[0].kwargs["private_key"] == pkb
+
+
+def test_expired_detection():
+    with mock.patch(
+        "snowflake.connector.network.SnowflakeRestful._post_request",
+        return_value={
+            "data": {
+                "masterToken": "some master token",
+                "token": "some token",
+                "validityInSeconds": 3600,
+                "masterValidityInSeconds": 14400,
+                "displayUserName": "TEST_USER",
+                "serverVersion": "7.42.0",
+            },
+            "code": None,
+            "message": None,
+            "success": True,
+        },
+    ):
+        conn = fake_connector()
+    assert not conn.expired
+    with conn.cursor() as cur:
+        with mock.patch(
+            "snowflake.connector.network.SnowflakeRestful.fetch",
+            return_value={
+                "data": {
+                    "errorCode": "390114",
+                    "reAuthnMethods": ["USERNAME_PASSWORD"],
+                },
+                "code": "390114",
+                "message": "Authentication token has expired.  The user must authenticate again.",
+                "success": False,
+                "headers": None,
+            },
+        ):
+            with pytest.raises(ProgrammingError):
+                cur.execute("select 1;")
+    assert conn.expired
+
+
+@pytest.mark.skipolddriver
+def test_disable_saml_url_check_config():
+    with mock.patch(
+        "snowflake.connector.network.SnowflakeRestful._post_request",
+        return_value={
+            "data": {
+                "serverVersion": "a.b.c",
+            },
+            "code": None,
+            "message": None,
+            "success": True,
+        },
+    ):
+        conn = fake_connector()
+        assert (
+            conn._disable_saml_url_check
+            == DEFAULT_CONFIGURATION.get("disable_saml_url_check")[0]
+        )
+
+
+def test_request_guid():
+    assert (
+        SnowflakeRestful.add_request_guid(
+            "https://test.snowflakecomputing.com"
+        ).startswith("https://test.snowflakecomputing.com?request_guid=")
+        and SnowflakeRestful.add_request_guid(
+            "http://test.snowflakecomputing.cn?a=b"
+        ).startswith("http://test.snowflakecomputing.cn?a=b&request_guid=")
+        and SnowflakeRestful.add_request_guid(
+            "https://test.snowflakecomputing.com.cn"
+        ).startswith("https://test.snowflakecomputing.com.cn?request_guid=")
+        and SnowflakeRestful.add_request_guid("https://test.abc.cn?a=b")
+        == "https://test.abc.cn?a=b"
+    )
+
+
+@pytest.mark.skipolddriver
+def test_ssl_error_hint(caplog):
+    from snowflake.connector.vendored.requests.exceptions import SSLError
+
+    with mock.patch(
+        "snowflake.connector.vendored.requests.sessions.Session.request",
+        side_effect=SSLError("SSL error"),
+    ), caplog.at_level(logging.DEBUG):
+        with pytest.raises(OperationalError) as exc:
+            fake_connector()
+    assert _CONNECTIVITY_ERR_MSG in exc.value.msg and isinstance(
+        exc.value, OperationalError
+    )
+    assert "SSL error" in caplog.text and _CONNECTIVITY_ERR_MSG in caplog.text
+
+
+def test_otel_error_message(caplog, mock_post_requests):
+    """This test assumes that OpenTelemetry is not installed when tests are running."""
+    with mock.patch("snowflake.connector.network.SnowflakeRestful._post_request"):
+        with caplog.at_level(logging.DEBUG):
+            with fake_connector():
+                ...
+    assert caplog.records
+    important_records = [
+        record
+        for record in caplog.records
+        if "Opentelemtry otel injection failed" in record.message
+    ]
+    assert len(important_records) == 1
+    assert important_records[0].exc_text is not None
+
+
+@pytest.mark.parametrize(
+    "dependent_param,value",
+    [
+        ("workload_identity_provider", "AWS"),
+        (
+            "workload_identity_entra_resource",
+            "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
+        ),
+    ],
+)
+def test_cannot_set_dependent_params_without_wlid_authenticator(
+    mock_post_requests, dependent_param, value
+):
+    with pytest.raises(ProgrammingError) as excinfo:
+        snowflake.connector.connect(
+            user="user",
+            account="account",
+            password="password",
+            **{dependent_param: value},
+        )
+    assert (
+        f"{dependent_param} was set but authenticator was not set to WORKLOAD_IDENTITY"
+        in str(excinfo.value)
+    )
+
+
+def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
+    with pytest.raises(ProgrammingError) as excinfo:
+        snowflake.connector.connect(
+            account="account", authenticator="WORKLOAD_IDENTITY"
+        )
+    assert (
+        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable true to use the 'WORKLOAD_IDENTITY' authenticator"
+        in str(excinfo.value)
+    )
+
+
+def test_connection_params_are_plumbed_into_authbyworkloadidentity(monkeypatch):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
+
+        conn = snowflake.connector.connect(
+            account="my_account_1",
+            workload_identity_provider=AttestationProvider.AWS,
+            workload_identity_entra_resource="api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
+            token="my_token",
+            authenticator="WORKLOAD_IDENTITY",
+        )
+        assert conn.auth_class.provider == AttestationProvider.AWS
+        assert (
+            conn.auth_class.entra_resource
+            == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        )
+        assert conn.auth_class.token == "my_token"
+
+
+def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
+    monkeypatch, tmp_path
+):
+    token_file = write_temp_file(tmp_path / "token.txt", contents="my_token")
+    # On Windows, this path includes backslashes which will result in errors while parsing the TOML.
+    # Escape the backslashes to ensure it parses correctly.
+    token_file_path_escaped = str(token_file).replace("\\", "\\\\")
+    connections_file = write_temp_file(
+        tmp_path / "connections.toml",
+        contents=dedent(
+            f"""\
+        [default]
+        account = "my_account_1"
+        authenticator = "WORKLOAD_IDENTITY"
+        workload_identity_provider = "OIDC"
+        workload_identity_entra_resource = "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        token_file_path = "{token_file_path_escaped}"
+        """
+        ),
+    )
+
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
+
+        conn = snowflake.connector.connect(connections_file_path=connections_file)
+        assert conn.auth_class.provider == AttestationProvider.OIDC
+        assert (
+            conn.auth_class.entra_resource
+            == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        )
+        assert conn.auth_class.token == "my_token"
+
+
+@pytest.mark.parametrize("rtr_enabled", [True, False])
+def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
+    monkeypatch, rtr_enabled: bool
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
+
+        conn = snowflake.connector.connect(
+            account="my_account_1",
+            user="user",
+            oauth_client_id="client_id",
+            oauth_client_secret="client_secret",
+            authenticator="OAUTH_AUTHORIZATION_CODE",
+            oauth_enable_single_use_refresh_tokens=rtr_enabled,
+        )
+        assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled

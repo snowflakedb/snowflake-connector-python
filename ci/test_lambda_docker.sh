@@ -2,7 +2,7 @@
 
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
-PYTHON_VERSION="${1:-3.8}"
+PYTHON_VERSION="${1:-3.9}"
 PYTHON_SHORT_VERSION="$(echo "$PYTHON_VERSION" | tr -d .)"
 # In case this is not run locally and not on Jenkins
 
@@ -25,7 +25,6 @@ user_id=$(id -u $USER)
 docker run --network=host \
     -e LANG=en_US.UTF-8 \
     -e TERM=vt102 \
-    -e SF_USE_OPENSSL_ONLY=True \
     -e PIP_DISABLE_PIP_VERSION_CHECK=1 \
     -e LOCAL_USER_ID=$user_id \
     -e CRYPTOGRAPHY_ALLOW_OPENSSL_102=1 \
