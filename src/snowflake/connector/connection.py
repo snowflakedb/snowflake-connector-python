@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import atexit
-import collections.abc
 import logging
 import os
 import pathlib
@@ -346,20 +345,24 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-1825621: OAUTH implementation
     ),
-    "oauth_security_features": (
-        ("pkce",),
-        collections.abc.Iterable,  # of strings
+    "oauth_enable_pkce": (
+        True,
+        bool,
         # SNOW-1825621: OAUTH PKCE
+    ),
+    "oauth_enable_refresh_tokens": (
+        False,
+        bool,
+    ),
+    "oauth_enable_single_use_refresh_tokens": (
+        False,
+        bool,
+        # Client-side opt-in to single-use refresh tokens.
     ),
     "check_arrow_conversion_error_on_every_column": (
         True,
         bool,
     ),  # SNOW-XXXXX: remove the check_arrow_conversion_error_on_every_column flag
-    # Client-side opt-in to single-use refresh tokens.
-    "oauth_enable_single_use_refresh_tokens": (
-        False,
-        bool,
-    ),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -843,21 +846,6 @@ class SnowflakeConnection:
     def unsafe_file_write(self, value: bool) -> None:
         self._unsafe_file_write = value
 
-    class _OAuthSecurityFeatures(NamedTuple):
-        pkce_enabled: bool
-        refresh_token_enabled: bool
-
-    @property
-    def oauth_security_features(self) -> _OAuthSecurityFeatures:
-        features = self._oauth_security_features
-        if isinstance(features, str):
-            features = features.split(" ")
-        features = [feat.lower() for feat in features]
-        return self._OAuthSecurityFeatures(
-            pkce_enabled="pkce" in features,
-            refresh_token_enabled="refresh_token" in features,
-        )
-
     @property
     def check_arrow_conversion_error_on_every_column(self) -> bool:
         return self._check_arrow_conversion_error_on_every_column
@@ -1217,7 +1205,6 @@ class SnowflakeConnection:
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
                 self._check_experimental_authentication_flag()
                 self._check_oauth_required_parameters()
-                features = self.oauth_security_features
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1233,20 +1220,19 @@ class SnowflakeConnection:
                     ),
                     redirect_uri=self._oauth_redirect_uri,
                     scope=self._oauth_scope,
-                    pkce_enabled=features.pkce_enabled,
+                    pkce_enabled=self._oauth_enable_pkce,
                     token_cache=(
                         auth.get_token_cache()
                         if self._client_store_temporary_credential
                         else None
                     ),
-                    refresh_token_enabled=features.refresh_token_enabled,
+                    refresh_token_enabled=self._oauth_enable_refresh_tokens,
                     external_browser_timeout=self._external_browser_timeout,
                     enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
                 self._check_experimental_authentication_flag()
                 self._check_oauth_required_parameters()
-                features = self.oauth_security_features
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1263,7 +1249,7 @@ class SnowflakeConnection:
                         if self._client_store_temporary_credential
                         else None
                     ),
-                    refresh_token_enabled=features.refresh_token_enabled,
+                    refresh_token_enabled=self._oauth_enable_refresh_tokens,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
