@@ -346,8 +346,8 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-1825621: OAUTH implementation
     ),
-    "oauth_enable_pkce": (
-        True,
+    "oauth_disable_pkce": (
+        False,
         bool,
         # SNOW-1825621: OAUTH PKCE
     ),
@@ -1204,7 +1204,6 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
-                self._check_experimental_authentication_flag()
                 self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
@@ -1221,7 +1220,7 @@ class SnowflakeConnection:
                     ),
                     redirect_uri=self._oauth_redirect_uri,
                     scope=self._oauth_scope,
-                    pkce_enabled=self._oauth_enable_pkce,
+                    pkce_enabled=not self._oauth_disable_pkce,
                     token_cache=(
                         auth.get_token_cache()
                         if self._client_store_temporary_credential
@@ -1232,7 +1231,6 @@ class SnowflakeConnection:
                     enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
-                self._check_experimental_authentication_flag()
                 self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
