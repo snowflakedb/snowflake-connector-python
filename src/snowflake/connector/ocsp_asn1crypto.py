@@ -394,15 +394,22 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
 
         cert_map = OrderedDict()
-        logger.debug("# of certificates: %s", len(connection.get_peer_cert_chain()))
-
-        for cert_openssl in connection.get_peer_cert_chain():
+        cert_chain = connection.get_peer_cert_chain()
+        logger.debug("# of certificates: %s", len(cert_chain))
+        self._lazy_read_ca_bundle()
+        for cert_openssl in cert_chain:
             cert_der = dump_certificate(FILETYPE_ASN1, cert_openssl)
             cert = Certificate.load(cert_der)
             logger.debug(
                 "subject: %s, issuer: %s", cert.subject.native, cert.issuer.native
             )
             cert_map[cert.subject.sha256] = cert
+            if cert.issuer.sha256 in SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
+                logger.debug(
+                    "A trusted root certificate found: %s, stopping chain traversal here",
+                    cert.subject.native,
+                )
+                break
 
         return self.create_pair_issuer_subject(cert_map)
 
