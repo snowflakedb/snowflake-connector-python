@@ -7,13 +7,11 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.15(TBD)
-  - Bumped up min boto and botocore version to 1.24.
+- v3.15.1(TBD)
+  -N/A
 
 - v3.15.0(May 01,2025)
-
-   -N/A
-
+  - Bumped up min boto and botocore version to 1.24.
   - OCSP: terminate certificates chain traversal if a trusted certificate already reached.
   - Added new authentication methods support for programmatic access tokens (PATs), OAuth 2.0 Authorization Code Flow, OAuth 2.0 Client Credentials Flow, and OAuth Token caching.
     - For OAuth 2.0 Authorization Code Flow:
