@@ -818,7 +818,7 @@ class SnowflakeFileTransferAgent:
 
                     rowset.append(
                         [
-                            meta.name,
+                            meta.dst_file_name,
                             dst_file_size,
                             meta.result_status,
                             error_details,
