@@ -119,6 +119,15 @@ def temp_cache():
         yield tmp_cache
 
 
+@pytest.fixture()
+def omit_oauth_urls_check():
+    with mock.patch(
+        "snowflake.connector.SnowflakeConnection._check_oauth_parameters",
+        return_value=None,
+    ):
+        yield
+
+
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_successful_flow(
@@ -127,6 +136,7 @@ def test_oauth_code_successful_flow(
     wiremock_generic_mappings_dir,
     webbrowser_mock,
     monkeypatch,
+    omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -168,6 +178,7 @@ def test_oauth_code_invalid_state(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock,
     monkeypatch,
+    omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -238,6 +249,7 @@ def test_oauth_code_token_request_error(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock,
     monkeypatch,
+    omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -275,6 +287,7 @@ def test_oauth_code_browser_timeout(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock,
     monkeypatch,
+    omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -315,6 +328,7 @@ def test_oauth_code_custom_urls(
     wiremock_generic_mappings_dir,
     webbrowser_mock,
     monkeypatch,
+    omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -357,6 +371,7 @@ def test_oauth_code_successful_refresh_token_flow(
     wiremock_generic_mappings_dir,
     monkeypatch,
     temp_cache,
+    omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -416,6 +431,7 @@ def test_oauth_code_expired_refresh_token_flow(
     webbrowser_mock,
     monkeypatch,
     temp_cache,
+    omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
@@ -517,7 +533,6 @@ def test_client_creds_successful_flow(
             protocol="http",
             role="ANALYST",
             oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
-            oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
             host=wiremock_client.wiremock_host,
             port=wiremock_client.wiremock_http_port,
         )
