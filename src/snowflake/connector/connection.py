@@ -93,6 +93,7 @@ from .errorcode import (
     ER_INVALID_WIF_SETTINGS,
     ER_NO_ACCOUNT_NAME,
     ER_NO_CLIENT_ID,
+    ER_NO_CLIENT_SECRET,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
     ER_NO_USER,
@@ -1204,7 +1205,7 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
                 self._check_experimental_authentication_flag()
-                self._check_oauth_required_parameters()
+                self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1232,7 +1233,7 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
                 self._check_experimental_authentication_flag()
-                self._check_oauth_required_parameters()
+                self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -2237,7 +2238,7 @@ class SnowflakeConnection:
                 },
             )
 
-    def _check_oauth_required_parameters(self) -> None:
+    def _check_oauth_parameters(self) -> None:
         if self._oauth_client_id is None:
             Error.errorhandler_wrapper(
                 self,
@@ -2255,6 +2256,32 @@ class SnowflakeConnection:
                 ProgrammingError,
                 {
                     "msg": "Oauth code flow requirement 'client_secret' is empty",
-                    "errno": ER_NO_CLIENT_ID,
+                    "errno": ER_NO_CLIENT_SECRET,
+                },
+            )
+        if (
+            self._oauth_authorization_url
+            and not self._oauth_authorization_url.startswith("https://")
+        ):
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "OAuth supports only authorization urls that use 'https' scheme",
+                    "errno": ER_INVALID_VALUE,
+                },
+            )
+        if self._oauth_redirect_uri and not (
+            self._oauth_redirect_uri.startswith("http://")
+            or self._oauth_redirect_uri.startswith("https://")
+        ):
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "OAuth supports only authorization urls that use 'http(s)' scheme",
+                    "errno": ER_INVALID_VALUE,
                 },
             )
