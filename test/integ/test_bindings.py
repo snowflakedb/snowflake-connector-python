@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import calendar
 import json
+import math
 import tempfile
 import time
 from datetime import date, datetime
@@ -14,9 +15,15 @@ from unittest.mock import patch
 import pendulum
 import pytest
 import pytz
+from numpy import long
 
 from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ForbiddenError, ProgrammingError
+from snowflake.connector.type_wrappers import (
+    snowflake_array,
+    snowflake_object,
+    snowflake_variant,
+)
 
 try:
     from snowflake.connector.util_text import random_string
@@ -705,18 +712,16 @@ def test_binding_variant(conn_cnx):
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
         snowflake_type = "VARIANT"
         cursor.execute(f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
-        cursor.execute(bind_query, params=(None,), snowflake_type=snowflake_type)
-        cursor.execute(bind_query, params=("",), snowflake_type=snowflake_type)
-        cursor.execute(bind_query, params=([1, 2, 3],), snowflake_type=snowflake_type)
+        cursor.execute(bind_query, params=(snowflake_variant(None),))
+        cursor.execute(bind_query, params=(snowflake_variant(""),))
+        cursor.execute(bind_query, params=(snowflake_variant([1, 2, 3]),))
         cursor.execute(
             bind_query,
-            params=("{'a': 1, 'b': 2, 'c': 3}",),
-            snowflake_type=snowflake_type,
+            params=(snowflake_variant("{'a': 1, 'b': 2, 'c': 3}"),),
         )
         cursor.execute(
             bind_query,
-            params=({"a": 1, "b": 2, "c": 3},),
-            snowflake_type=snowflake_type,
+            params=(snowflake_variant({"a": 1, "b": 2, "c": 3}),),
         )
 
         results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
@@ -732,65 +737,116 @@ def test_binding_variant(conn_cnx):
 def test_binding_array_without_schema(conn_cnx):
     bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
-        snowflake_type = "ARRAY"
-        cursor.execute(f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
-        cursor.execute(bind_query, params=(None,), snowflake_type=snowflake_type)
-        cursor.execute(bind_query, params=("",), snowflake_type=snowflake_type)
-        cursor.execute(bind_query, params=("[1, 2, 3]",), snowflake_type=snowflake_type)
-        cursor.execute(bind_query, params=([1, 2, 3],), snowflake_type=snowflake_type)
+        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 ARRAY);")
+        cursor.execute(bind_query, params=(snowflake_array([]),))
         cursor.execute(
-            bind_query, params=(["a", "b", "c"],), snowflake_type=snowflake_type
+            bind_query,
+            params=(
+                snowflake_array(
+                    [
+                        None,
+                    ]
+                ),
+            ),
         )
-        cursor.execute(bind_query, params=([1, "2", 3],), snowflake_type=snowflake_type)
+        cursor.execute(bind_query, params=(snowflake_array([1, 2, 3]),))
+        cursor.execute(bind_query, params=(snowflake_array(["a", "b", "c"]),))
+        cursor.execute(bind_query, params=(snowflake_array([1, "2", 3]),))
         cursor.execute(
-            bind_query, params=([b"1", b"2", b"3"],), snowflake_type=snowflake_type
+            bind_query,
+            params=(
+                snowflake_array(
+                    [
+                        datetime.strptime("2020-01-01", "%Y-%m-%d"),
+                        datetime.strptime("2020-01-02", "%Y-%m-%d"),
+                    ]
+                ),
+            ),
         )
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_array(
+                    [
+                        time.strptime("30 Nov 00", "%d %b %y"),
+                        time.strptime("30 Nov 01", "%d %b %y"),
+                    ]
+                ),
+            ),
+        )
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_array(
+                    [
+                        timedelta(days=365),
+                        timedelta(hours=1),
+                    ]
+                ),
+            ),
+        )
+        cursor.execute(bind_query, params=(snowflake_array([True, False, True]),))
+        cursor.execute(bind_query, params=(snowflake_array([b"1", b"2", b"3"]),))
+        cursor.execute(bind_query, params=(snowflake_array(bytearray(b"123")),))
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_array(
+                    [long(10), long(-9223372036854775807), long(9223372036854775807)]
+                ),
+            ),
+        )
+        cursor.execute(bind_query, params=(snowflake_array([math.pi, 1.1, 1.2]),))
 
         results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
 
-        assert results[0][0] is None
-        assert results[1][0] is None
+        assert json.loads(results[0][0]) == []
+        assert json.loads(results[1][0]) == [None]
         assert json.loads(results[2][0]) == [1, 2, 3]
-        assert json.loads(results[3][0]) == [1, 2, 3]
-        assert json.loads(results[4][0]) == ["a", "b", "c"]
-        assert json.loads(results[5][0]) == [1, "2", 3]
-        assert json.loads(results[6][0]) == bytearray(b"123")
+        assert json.loads(results[3][0]) == ["a", "b", "c"]
+        assert json.loads(results[4][0]) == [1, "2", 3]
+        # TODO: why no Z
+        assert json.loads(results[5][0]) == [
+            "Wed, 01 Jan 2020 00:00:00 ",
+            "Thu, 02 Jan 2020 00:00:00 ",
+        ]
+        assert json.loads(results[6][0]) == [
+            "Thu, 30 Nov 2000 00:00:00 ",
+            "Fri, 30 Nov 2001 00:00:00 ",
+        ]
+        assert json.loads(results[7][0]) == ["31536000000000000", "3600000000000"]
+        assert json.loads(results[8][0]) == [True, False, True]
+        # assert json.loads(results[9][0]) == ["1", "2", "3"]
+        # TODO: what would make more sense here? Int or string conversion of numpy long?
+        assert json.loads(results[10][0]) == [49, 50, 51]
+        assert json.loads(results[11][0]) == [
+            10,
+            -9223372036854775807,
+            9223372036854775807,
+        ]
+        assert json.loads(results[12][0]) == [3.141592653589793, 1.1, 1.2]
 
 
 @pytest.mark.skipolddriver
 def test_binding_object_without_schema(conn_cnx):
     bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
-        snowflake_type = "OBJECT"
-        cursor.execute(f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
-        cursor.execute(bind_query, params=(None,), snowflake_type=snowflake_type)
-        cursor.execute(bind_query, params=("",), snowflake_type=snowflake_type)
-        cursor.execute(
-            bind_query,
-            params=("{'a': 1, 'b': 2, 'c': 3}",),
-            snowflake_type=snowflake_type,
-        )
-        cursor.execute(
-            bind_query,
-            params=({"a": 1, "b": 2, "c": 3},),
-            snowflake_type=snowflake_type,
-        )
+        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
+        cursor.execute(bind_query, params=(snowflake_object([]),))
+        cursor.execute(bind_query, params=(snowflake_object({"a": 1, "b": 2, "c": 3}),))
 
         results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
 
-        assert results[0][0] is None
-        assert results[1][0] is None
-        assert json.loads(results[2][0]) == {"a": 1, "b": 2, "c": 3}
-        assert json.loads(results[3][0]) == {"a": 1, "b": 2, "c": 3}
+        assert json.loads(results[0][0]) == {}
+        assert json.loads(results[1][0]) == {"a": 1, "b": 2, "c": 3}
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.parametrize("snowflake_type", ("ARRAY", "OBJECT"))
-def test_semi_structured_binding_fails_when_invalid_type(conn_cnx, snowflake_type):
+def test_structured_array_binding(conn_cnx):
     bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
-    with pytest.raises(ProgrammingError, match=r"Attempted to insert value"):
-        with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
-            cursor.execute(
-                f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});"
-            )
-            cursor.execute(bind_query, params=({1},), snowflake_type=snowflake_type)
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 BINARY)")
+        cursor.execute(bind_query, params=(snowflake_array(bytearray(b"123")),))
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
+
+        assert results[0][0] == bytearray(b"123")
