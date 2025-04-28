@@ -1203,7 +1203,6 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
-                self._check_experimental_authentication_flag()
                 self._check_oauth_required_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
@@ -1231,7 +1230,6 @@ class SnowflakeConnection:
                     enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
-                self._check_experimental_authentication_flag()
                 self._check_oauth_required_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
