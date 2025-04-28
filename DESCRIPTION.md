@@ -12,7 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - OCSP: terminate certificates chain traversal if a trusted certificate already reached.
   - Added new authentication methods support for programmatic access tokens (PATs), OAuth 2.0 Authorization Code Flow, OAuth 2.0 Client Credentials Flow, and OAuth Token caching.
     - For OAuth 2.0 Authorization Code Flow:
-      - Added the `oauth_client_id`, `oauth_client_secret`, `oauth_authorization_url`, `oauth_token_request_url`, `oauth_redirect_uri`, `oauth_scope`, `oauth_enable_pkce`, `oauth_enable_refresh_tokens` and `oauth_enable_single_use_refresh_tokens` parameters.
+      - Added the `oauth_client_id`, `oauth_client_secret`, `oauth_authorization_url`, `oauth_token_request_url`, `oauth_redirect_uri`, `oauth_scope`, `oauth_disable_pkce`, `oauth_enable_refresh_tokens` and `oauth_enable_single_use_refresh_tokens` parameters.
       - Added the `OAUTH_AUTHORIZATION_CODE` value for the parameter authenticator.
     - For OAuth 2.0 Client Credentials Flow:
       - Added the `oauth_client_id`, `oauth_client_secret`, `oauth_token_request_url`, and `oauth_scope` parameters.
