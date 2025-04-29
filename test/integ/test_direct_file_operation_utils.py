@@ -7,8 +7,6 @@ from typing import TYPE_CHECKING, Callable, Generator
 
 import pytest
 
-from snowflake.connector._utils import TempObjectType, random_name_for_temp_object
-
 try:
     from snowflake.connector.options import pandas
     from snowflake.connector.pandas_tools import (
@@ -55,6 +53,8 @@ def _test_runner(
     special_stage_name: str = None,
     special_base_file_name: str = None,
 ):
+    from snowflake.connector._utils import TempObjectType, random_name_for_temp_object
+
     with conn_cnx() as conn:
         cursor = conn.cursor()
         stage_name = special_stage_name or random_name_for_temp_object(
@@ -82,6 +82,7 @@ def _test_runner(
             )
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize("is_compressed", [False, True])
 def test_upload(
     conn_cnx: Callable[..., Generator[SnowflakeConnection]],
@@ -97,6 +98,7 @@ def test_upload(
     _test_runner(conn_cnx, upload_task, is_compressed=is_compressed)
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize("is_compressed", [False, True])
 def test_upload_stream(
     conn_cnx: Callable[..., Generator[SnowflakeConnection]],
