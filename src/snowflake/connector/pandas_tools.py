@@ -444,7 +444,7 @@ def write_pandas(
             # Upload parquet file
             path = chunk_path.replace("\\", "\\\\").replace("'", "\\'")
             cursor._upload(
-                local_file_name="file://" + path,
+                local_file_name=f"'file://{path}'",
                 stage_location="@" + stage_location,
                 options={"parallel": parallel},
             )
