@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .connection import SnowflakeConnection
 
+import os
 from abc import ABC, abstractmethod
 
 from .constants import CMD_TYPE_UPLOAD
@@ -62,8 +63,8 @@ class FileOperationParser(FileOperationParserBase):
 
         if command_type == CMD_TYPE_UPLOAD:
             if has_source_from_stream:
-                stage_location, unprefixed_local_file_name = stage_location.rsplit(
-                    "/", maxsplit=1
+                stage_location, unprefixed_local_file_name = os.path.split(
+                    stage_location
                 )
                 local_file_name = "file://" + unprefixed_local_file_name
             sql = f"PUT {local_file_name} ? {options_in_sql}"
