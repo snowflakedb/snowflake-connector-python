@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .errors import NotSupportedError
-
 if TYPE_CHECKING:
     from .connection import SnowflakeConnection
 
@@ -71,7 +69,7 @@ class FileOperationParser(FileOperationParserBase):
             sql = f"PUT {local_file_name} ? {options_in_sql}"
             params = [stage_location]
         else:
-            raise NotSupportedError(f"unsupported command type: {command_type}")
+            raise NotImplementedError(f"unsupported command type: {command_type}")
 
         with self._connection.cursor() as cursor:
             # Send constructed SQL to server and get back parsing result.
@@ -86,4 +84,4 @@ class StreamDownloader(StreamDownloaderBase):
         pass
 
     def download_as_stream(self, ret, decompress=False):
-        raise NotSupportedError("download_as_stream is not yet supported")
+        raise NotImplementedError("download_as_stream is not yet supported")
