@@ -58,19 +58,25 @@ def build_location_helper(
     database: str | None, schema: str | None, name: str, quote_identifiers: bool
 ) -> str:
     """Helper to format table/stage/file format's location."""
-    if quote_identifiers:
-        location = (
-            (('"' + database + '".') if database else "")
-            + (('"' + schema + '".') if schema else "")
-            + ('"' + name + '"')
-        )
-    else:
-        location = (
-            (database + "." if database else "")
-            + (schema + "." if schema else "")
-            + name
-        )
+    location = (
+        (_escape_part_location(database, quote_identifiers) + "." if database else "")
+        + (_escape_part_location(schema, quote_identifiers) + "." if schema else "")
+        + _escape_part_location(name, quote_identifiers)
+    )
     return location
+
+
+def _escape_part_location(part: str, should_quote: bool) -> str:
+    if "'" in part:
+        part = part.replace("'", "\\'")
+        should_quote = True
+    if should_quote:
+        if not part.startswith('"'):
+            part = '"' + part
+        if not part.endswith('"'):
+            part = part + '"'
+
+    return part
 
 
 def _do_create_temp_stage(
@@ -440,18 +446,17 @@ def write_pandas(
             # Upload parquet file
             upload_sql = (
                 "PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                "'file://{path}' '?' PARALLEL={parallel}"
+                "'file://{path}' '{stage_location}' PARALLEL={parallel}"
             ).format(
                 path=chunk_path.replace("\\", "\\\\").replace("'", "\\'"),
+                stage_location="@" + stage_location,
                 parallel=parallel,
             )
-            params = ("@" + stage_location,)
-            logger.debug(f"uploading files with '{upload_sql}', params: %s", params)
+            logger.debug(f"uploading files with '{upload_sql}'")
             cursor.execute(
                 upload_sql,
                 _is_internal=True,
                 _force_qmark_paramstyle=True,
-                params=params,
                 num_statements=1,
             )
             # Remove chunk file
@@ -571,9 +576,9 @@ def write_pandas(
             )
 
         copy_into_sql = (
-            f"COPY INTO identifier(?) /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+            f"COPY INTO identifier('{target_table_location}') /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
             f"({columns}) "
-            f"FROM (SELECT {parquet_columns} FROM @{stage_location}) "
+            f"FROM (SELECT {parquet_columns} FROM '@{stage_location}') "
             f"FILE_FORMAT=("
             f"TYPE=PARQUET "
             f"COMPRESSION={compression_map[compression]}"
@@ -582,7 +587,7 @@ def write_pandas(
             f") "
             f"PURGE=TRUE ON_ERROR=?"
         )
-        params = (target_table_location, on_error)
+        params = (on_error,)
         logger.debug(f"copying into with '{copy_into_sql}'. params: %s", params)
         copy_results = cursor.execute(
             copy_into_sql,
