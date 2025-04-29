@@ -22,6 +22,10 @@ if TYPE_CHECKING:
     from snowflake.connector import SnowflakeConnection, SnowflakeCursor
 
 
+def _normalize_windows_local_path(path):
+    return path.replace("\\", "\\\\").replace("'", "\\'")
+
+
 def _validate_upload_content(
     expected_content, cursor, stage_name, local_dir, base_file_name, is_compressed
 ):
@@ -30,7 +34,9 @@ def _validate_upload_content(
     local_path = os.path.join(local_dir, base_file_name)
 
     cursor.execute(
-        f"GET ? 'file://{local_dir}'", params=[stage_path], _force_qmark_paramstyle=True
+        f"GET ? 'file://{_normalize_windows_local_path(local_dir)}'",
+        params=[stage_path],
+        _force_qmark_paramstyle=True,
     )
     if is_compressed:
         stage_path += gz_suffix
@@ -90,7 +96,7 @@ def test_upload(
 ):
     def upload_task(cursor, stage_name, temp_dir, base_file_name):
         cursor._upload(
-            local_file_name=f"file://{os.path.join(temp_dir, base_file_name)}",
+            local_file_name=f"'file://{_normalize_windows_local_path(os.path.join(temp_dir, base_file_name))}'",
             stage_location=f"@{stage_name}",
             options={"auto_compress": is_compressed},
         )
