@@ -786,8 +786,7 @@ def test_binding_array_without_schema(conn_cnx):
             ),
         )
         cursor.execute(bind_query, params=(snowflake_array([True, False, True]),))
-        cursor.execute(bind_query, params=(snowflake_array([b"1", b"2", b"3"]),))
-        cursor.execute(bind_query, params=(snowflake_array(bytearray(b"123")),))
+        cursor.execute(bind_query, params=(snowflake_array([b"123", b"HEX", b"3"]),))
         cursor.execute(
             bind_query,
             params=(
@@ -797,6 +796,15 @@ def test_binding_array_without_schema(conn_cnx):
             ),
         )
         cursor.execute(bind_query, params=(snowflake_array([math.pi, 1.1, 1.2]),))
+        cursor.execute(
+            bind_query,
+            params=(snowflake_array([Decimal(10.10), Decimal(-5.001), Decimal(-5.5)]),),
+        )
+        cursor.execute(
+            bind_query,
+            params=(snowflake_array([bytearray(b"abc"), bytearray(b"def")]),),
+        )
+        cursor.execute(bind_query, params=(snowflake_array(bytearray(b"123")),))
 
         results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
 
@@ -816,15 +824,16 @@ def test_binding_array_without_schema(conn_cnx):
         ]
         assert json.loads(results[7][0]) == ["31536000000000000", "3600000000000"]
         assert json.loads(results[8][0]) == [True, False, True]
-        # assert json.loads(results[9][0]) == ["1", "2", "3"]
-        # TODO: what would make more sense here? Int or string conversion of numpy long?
-        assert json.loads(results[10][0]) == [49, 50, 51]
-        assert json.loads(results[11][0]) == [
+        assert json.loads(results[9][0]) == ["313233", "484558", "33"]
+        assert json.loads(results[10][0]) == [
             10,
             -9223372036854775807,
             9223372036854775807,
         ]
-        assert json.loads(results[12][0]) == [3.141592653589793, 1.1, 1.2]
+        assert json.loads(results[11][0]) == [3.141592653589793, 1.1, 1.2]
+        assert json.loads(results[12][0]) == [10.1, -5.001, -5.5]
+        assert json.loads(results[13][0]) == ["616263", "646566"]
+        assert json.loads(results[14][0]) == ["31", "32", "33"]
 
 
 @pytest.mark.skipolddriver
@@ -842,11 +851,38 @@ def test_binding_object_without_schema(conn_cnx):
 
 
 @pytest.mark.skipolddriver
+def test_structured_array_binding_timestamp(conn_cnx):
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        cursor.execute(
+            "CREATE OR REPLACE TABLE TEST_TABLE1 (col1 ARRAY(TIMESTAMP_LTZ))"
+        )
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_array(
+                    [datetime.strptime("2020-01-01", "%Y-%m-%d")],
+                ),
+            ),
+        )
+        result = cursor.execute("SELECT col1 FROM TEST_TABLE1").fetchone()
+
+        assert json.loads(result[0]) == ["Wed, 01 Jan 2020 00:00:00 Z"]
+
+
+@pytest.mark.skipolddriver
 def test_structured_array_binding(conn_cnx):
     bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
-        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 BINARY)")
-        cursor.execute(bind_query, params=(snowflake_array(bytearray(b"123")),))
+        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 ARRAY(BINARY))")
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_array(
+                    [bytearray(b"abc"), b"1", b"2"],
+                ),
+            ),
+        )
         results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
 
-        assert results[0][0] == bytearray(b"123")
+        assert json.loads(results[0][0]) == ["616263", "31", "32"]

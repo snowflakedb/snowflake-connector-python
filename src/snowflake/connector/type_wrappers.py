@@ -8,10 +8,9 @@ class snowflake_type_wrapper:
 
 
 class snowflake_array(snowflake_type_wrapper, list):
-    def __init__(self, seq=(), desired_snowflake_type: str | None = None):
+    def __init__(self, seq=()):
         super().__init__(seq)
         self.original_type = type(seq)
-        self.desired_snowflake_type = desired_snowflake_type
 
 
 class snowflake_object(snowflake_type_wrapper, dict):

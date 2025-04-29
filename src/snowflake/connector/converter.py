@@ -8,6 +8,7 @@ import time
 from datetime import date, datetime
 from datetime import time as dt_t
 from datetime import timedelta, timezone, tzinfo
+from decimal import Decimal
 from functools import partial
 from logging import getLogger
 from math import ceil
@@ -523,83 +524,44 @@ class SnowflakeConverter:
                 "schema": None,
             }
 
-        inner_snowflake_type = self.snowflake_type(value[0])
-        inner_python_type = type(value[0])
-
-        if value.desired_snowflake_type is None:
-            if inner_python_type == datetime or inner_python_type == date:
-                converted_value = [
-                    v.strftime("%a, %d %b %Y %H:%M:%S %Z") for v in value
-                ]
-            elif inner_python_type == struct_time or inner_python_type == dt_t:
-                converted_value = [
-                    time.strftime("%a, %d %b %Y %H:%M:%S %Z", v) for v in value
-                ]
-            elif inner_python_type == timedelta:
-                converted_value = [
-                    self._timedelta_to_snowflake_bindings("TIME", v) for v in value
-                ]
-            elif inner_python_type == bytes:
-                # TODO: this probably must be done differently
-                converted_value = [
-                    self._bytes_to_snowflake_bindings(_, v) for v in value
-                ]
-            elif inner_python_type == numpy.long:
-                converted_value = [int(v) for v in value]
-            else:
-                converted_value = value
-            return {
-                "type": "ARRAY",
-                "value": json.dumps(converted_value),
-                "fmt": JSON_FORMAT_STR,
-            }
-
+        converted_values = []
+        # TODO: is this an edge case that needs to be handled
         if value.original_type == bytearray:
-            return {
-                "type": "BINARY",
-                "value": self._bytearray_to_snowflake_bindings(_, bytearray(value)),
-                "fmt": JSON_FORMAT_STR,
-            }
-        if inner_snowflake_type in ("TIMESTAMP_TZ", "TIMESTAMP_LTZ", "TIMESTAMP_NTZ"):
-            field_metadata = {"type": inner_snowflake_type, "nullable": True}
-            schema = {"type": "array", "nullable": True, "fields": [field_metadata]}
+            # bytearray when converted to snowflake_array becomes an array of int. The reasonable expectation would be
+            # for it to be binded as an array of individual bytes the same way as array of bytes value is binded.
+            converted_values = [
+                self._bytes_to_snowflake_bindings(_, bytes(chr(v), "utf-8"))
+                for v in value
+            ]
             return {
                 "type": "ARRAY",
-                "value": json.dumps(
-                    [self.to_snowflake_bindings(inner_snowflake_type, v) for v in value]
-                ),
+                "value": json.dumps(converted_values),
                 "fmt": JSON_FORMAT_STR,
-                "schema": schema,
             }
-        if inner_snowflake_type == "TIME":
-            return {
-                "type": "ARRAY",
-                "value": json.dumps(
-                    [self.to_snowflake_bindings("TIME", v) for v in value]
-                ),
-                "fmt": JSON_FORMAT_STR,
-                "schema": None,
-            }
-        if inner_snowflake_type == "DATE":
-            return {
-                "type": "ARRAY",
-                "value": json.dumps(
-                    [self.to_snowflake_bindings("DATE", v) for v in value]
-                ),
-                "fmt": JSON_FORMAT_STR,
-                "schema": None,
-            }
-        if inner_snowflake_type == "ARRAY":
-            raise ProgrammingError(
-                msg="Binding array of arrays is not supported.",
-                errno=ER_NOT_SUPPORT_DATA_TYPE,
-            )
+
+        for v in value:
+            inner_python_type = type(v)
+            if inner_python_type == datetime or inner_python_type == date:
+                converted_values.append(v.strftime("%a, %d %b %Y %H:%M:%S %Z"))
+            elif inner_python_type == struct_time or inner_python_type == dt_t:
+                converted_values.append(time.strftime("%a, %d %b %Y %H:%M:%S %Z", v))
+            elif inner_python_type == timedelta:
+                converted_values.append(
+                    self._timedelta_to_snowflake_bindings("TIME", v)
+                )
+            elif inner_python_type == bytes or inner_python_type == bytearray:
+                converted_values.append(self._bytes_to_snowflake_bindings(_, v))
+            elif inner_python_type == numpy.long:
+                converted_values.append(int(v))
+            elif inner_python_type == Decimal:
+                converted_values.append(float(v))
+            else:
+                converted_values.append(v)
 
         return {
             "type": "ARRAY",
-            "value": json.dumps(value),
+            "value": json.dumps(converted_values),
             "fmt": JSON_FORMAT_STR,
-            "schema": None,
         }
 
     def _snowflake_object_to_snowflake_bindings_dict(
