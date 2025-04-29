@@ -75,9 +75,11 @@ class FileOperationParser(FileOperationParserBase):
         with self._connection.cursor() as cursor:
             # Send constructed SQL to server and get back parsing result.
             processed_params = cursor._connection._process_params_qmarks(params, cursor)
-            return cursor._execute_helper(
+            ret = cursor._execute_helper(
                 sql, binding_params=processed_params, is_internal=True
             )
+            assert ret.get("success", False), f"parse failed, ret is {ret}"
+            return ret
 
 
 class StreamDownloader(StreamDownloaderBase):
