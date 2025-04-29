@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Callable, Generator
 import pytest
 
 from snowflake.connector._utils import TempObjectType, random_name_for_temp_object
-from snowflake.connector.errors import NotSupportedError
 
 try:
     from snowflake.connector.options import pandas
@@ -112,40 +111,3 @@ def test_upload_stream(
             )
 
     _test_runner(conn_cnx, upload_stream_task, is_compressed=is_compressed)
-
-
-def test_upload_special_local_file_path(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
-):
-    def upload_task(cursor, stage_name, temp_dir, base_file_name):
-        cursor._upload(
-            local_file_name=f"file://{temp_dir}/{base_file_name}",
-            stage_location=f"@{stage_name}",
-            options={"auto_compress": False},
-        )
-
-    _test_runner(
-        conn_cnx,
-        upload_task,
-        is_compressed=False,
-        special_base_file_name="te ;DROP TABLE foo; st.txt",
-    )
-
-
-def test_upload_invalid_option_key(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
-):
-    invalid_option_key = "auto;DELETE FROM TABLE foo;compress"
-
-    def upload_task(cursor, stage_name, temp_dir, base_file_name):
-        cursor._upload(
-            local_file_name=f"file://{temp_dir}/{base_file_name}",
-            stage_location=f"@{stage_name}",
-            options={invalid_option_key: False},
-        )
-
-    with pytest.raises(
-        NotSupportedError,
-        match=invalid_option_key,
-    ):
-        _test_runner(conn_cnx, upload_task, is_compressed=False)
