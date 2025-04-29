@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 def _normalize_windows_local_path(path):
-    return path.replace("\\", "\\\\")
+    return path.replace("\\", "\\\\").replace("'", "\\'")
 
 
 def _validate_upload_content(
@@ -96,7 +96,7 @@ def test_upload(
 ):
     def upload_task(cursor, stage_name, temp_dir, base_file_name):
         cursor._upload(
-            local_file_name=f"file://{_normalize_windows_local_path(os.path.join(temp_dir, base_file_name))}",
+            local_file_name=f"'file://{_normalize_windows_local_path(os.path.join(temp_dir, base_file_name))}'",
             stage_location=f"@{stage_name}",
             options={"auto_compress": is_compressed},
         )

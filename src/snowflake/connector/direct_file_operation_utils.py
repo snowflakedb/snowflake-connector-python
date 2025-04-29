@@ -78,7 +78,9 @@ class FileOperationParser(FileOperationParserBase):
             ret = cursor._execute_helper(
                 sql, binding_params=processed_params, is_internal=True
             )
-            assert ret.get("success", False), f"parse failed, ret is {ret}"
+            assert ret.get(
+                "success", False
+            ), f"parse failed, ret is {ret}, local_file_name is {local_file_name}, stage_location is {stage_location}"
             return ret
 
 
