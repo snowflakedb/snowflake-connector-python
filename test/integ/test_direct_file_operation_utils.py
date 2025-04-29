@@ -27,7 +27,7 @@ def _validate_upload_content(
 ):
     gz_suffix = ".gz"
     stage_path = f"@{stage_name}/{base_file_name}"
-    local_path = f"{local_dir}/{base_file_name}"
+    local_path = os.path.join(local_dir, base_file_name)
 
     cursor.execute(
         f"GET ? 'file://{local_dir}'", params=[stage_path], _force_qmark_paramstyle=True
@@ -90,7 +90,7 @@ def test_upload(
 ):
     def upload_task(cursor, stage_name, temp_dir, base_file_name):
         cursor._upload(
-            local_file_name=f"file://{temp_dir}/{base_file_name}",
+            local_file_name=f"file://{os.path.join(temp_dir, base_file_name)}",
             stage_location=f"@{stage_name}",
             options={"auto_compress": is_compressed},
         )
@@ -105,10 +105,10 @@ def test_upload_stream(
     is_compressed: bool,
 ):
     def upload_stream_task(cursor, stage_name, temp_dir, base_file_name):
-        with open(f"{temp_dir}/{base_file_name}", "rb") as input_stream:
+        with open(f"{os.path.join(temp_dir, base_file_name)}", "rb") as input_stream:
             cursor._upload_stream(
                 input_stream=input_stream,
-                stage_location=f"@{stage_name}/{base_file_name}",
+                stage_location=f"@{os.path.join(stage_name, base_file_name)}",
                 options={"auto_compress": is_compressed},
             )
 
