@@ -1105,3 +1105,26 @@ def test_write_pandas_with_on_error(
             assert result["COUNT(*)"] == 1
         finally:
             cnx.execute_string(drop_sql)
+
+
+def test_pandas_with_single_quote(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
+):
+    random_table_name = random_string(5, "test'table")
+    table_name = f'"{random_table_name}"'
+    create_sql = f"CREATE OR REPLACE TABLE {table_name}(A INT)"
+    df_data = [[1]]
+    df = pandas.DataFrame(df_data, columns=["a"])
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        try:
+            cnx.execute_string(create_sql)
+            write_pandas(
+                cnx,
+                df,
+                table_name,
+                quote_identifiers=False,
+                auto_create_table=False,
+                index=False,
+            )
+        finally:
+            cnx.execute_string(f"drop table if exists {table_name}")
