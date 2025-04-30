@@ -7,22 +7,36 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.14.1(TBD)
+- v3.15.0(Apr 29,2025)
+  - Bumped up min boto and botocore version to 1.24.
+  - OCSP: terminate certificates chain traversal if a trusted certificate already reached.
+  - Added new authentication methods support for programmatic access tokens (PATs), OAuth 2.0 Authorization Code Flow, OAuth 2.0 Client Credentials Flow, and OAuth Token caching.
+    - For OAuth 2.0 Authorization Code Flow:
+      - Added the `oauth_client_id`, `oauth_client_secret`, `oauth_authorization_url`, `oauth_token_request_url`, `oauth_redirect_uri`, `oauth_scope`, `oauth_disable_pkce`, `oauth_enable_refresh_tokens` and `oauth_enable_single_use_refresh_tokens` parameters.
+      - Added the `OAUTH_AUTHORIZATION_CODE` value for the parameter authenticator.
+    - For OAuth 2.0 Client Credentials Flow:
+      - Added the `oauth_client_id`, `oauth_client_secret`, `oauth_token_request_url`, and `oauth_scope` parameters.
+      - Added the `OAUTH_CLIENT_CREDENTIALS` value for the parameter authenticator.
+    - For OAuth Token caching: Passing a username to driver configuration is required, and the `client_store_temporary_credential property` is to be set to `true`.
+
+- v3.14.1(April 21, 2025)
   - Added support for Python 3.13.
     - NOTE: Windows 64 support is still experimental and should not yet be used for production environments.
   - Dropped support for Python 3.8.
-  - Basic decimal floating-point type support.
-  - Added handling of PAT provided in `password` field.
-  - Added experimental support for OAuth authorization code and client credentials flows.
-  - Improved error message for client-side query cancellations due to timeouts.
+  - Added basic decimal floating-point type support.
+  - Added experimental authentication methods.
   - Added support of GCS regional endpoints.
-  - Added `gcs_use_virtual_endpoints` connection property that forces the usage of the virtual GCS usage. Thanks to this it should be possible to set up private DNS entry for the GCS endpoint. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
-  - Fixed a bug that caused driver to fail silently on `TO_DATE` arrow to python conversion when invalid date was followed by the correct one.
-  - Added `check_arrow_conversion_error_on_every_column` connection property that can be set to `False` to restore previous behaviour in which driver will ignore errors until it occurs in the last column. This flag's purpose is to unblock workflows that may be impacted by the bugfix and will be removed in later releases.
-  - Lower log levels from info to debug for some of the messages to make the output easier to follow.
-  - Allow the connector to inherit a UUID4 generated upstream, provided in statement parameters (field: `requestId`), rather than automatically generate a UUID4 to use for the HTTP Request ID.
-  - Fix expired S3 credentials update and increment retry when expired credentials are found.
+  - Added support of GCS virtual urls. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
   - Added `client_fetch_threads` experimental parameter to better utilize threads for fetching query results.
+  - Added `check_arrow_conversion_error_on_every_column` connection property that can be set to `False` to restore previous behaviour in which driver will ignore errors until it occurs in the last column. This flag's purpose is to unblock workflows that may be impacted by the bugfix and will be removed in later releases.
+  - Lowered log levels from info to debug for some of the messages to make the output easier to follow.
+  - Allowed the connector to inherit a UUID4 generated upstream, provided in statement parameters (field: `requestId`), rather than automatically generate a UUID4 to use for the HTTP Request ID.
+  - Improved logging in urllib3, boto3, botocore - assured data masking even after migration to the external owned library in the future.
+  - Improved error message for client-side query cancellations due to timeouts.
+  - Improved security and robustness for the temporary credentials cache storage.
+  - Fixed a bug that caused driver to fail silently on `TO_DATE` arrow to python conversion when invalid date was followed by the correct one.
+  - Fixed expired S3 credentials update and increment retry when expired credentials are found.
+  - Deprecated `insecure_mode` connection property and replaced it with `disable_ocsp_checks` with the same behavior as the former property.
 
 - v3.14.0(March 03, 2025)
   - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
@@ -34,7 +48,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug where file permission check happened on Windows.
   - Added support for File types.
   - Added `unsafe_file_write` connection parameter that restores the previous behaviour of saving files downloaded with GET with 644 permissions.
-  - Deprecated `insecure_mode` connection property and replaced it with `disable_ocsp_checks` with the same behavior as the former property.
 
 - v3.13.2(January 29, 2025)
   - Changed not to use scoped temporary objects.

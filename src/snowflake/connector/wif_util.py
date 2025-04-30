@@ -20,8 +20,7 @@ from .vendored.requests import Response
 
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
-# TODO: use real app ID or domain name once it's available.
-DEFAULT_ENTRA_SNOWFLAKE_RESOURCE = "NOT REAL - WILL BREAK"
+DEFAULT_ENTRA_SNOWFLAKE_RESOURCE = "api://fd3f753b-eed3-462c-b6a7-a4b5bb650aad"
 
 
 @unique
@@ -235,7 +234,10 @@ def create_azure_attestation(
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     if not issuer or not subject:
         return None
-    if not issuer.startswith("https://sts.windows.net/"):
+    if not (
+        issuer.startswith("https://sts.windows.net/")
+        or issuer.startswith("https://login.microsoftonline.com/")
+    ):
         # This might happen if we're running on a different platform that responds to the same metadata request signature as Azure.
         logger.debug("Unexpected Azure token issuer '%s'", issuer)
         return None

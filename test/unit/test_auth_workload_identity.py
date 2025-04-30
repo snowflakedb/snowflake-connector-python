@@ -236,12 +236,30 @@ def test_explicit_azure_metadata_server_error_raises_auth_error(exception):
 
 
 def test_explicit_azure_wrong_issuer_raises_error(fake_azure_metadata_service):
-    fake_azure_metadata_service.iss = "not-azure"
+    fake_azure_metadata_service.iss = "https://notazure.com"
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare()
     assert "No workload identity credential was found for 'AZURE'" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "issuer",
+    [
+        "https://sts.windows.net/067802cd-8f92-4c7c-bceb-ea8f15d31cc5",
+        "https://login.microsoftonline.com/067802cd-8f92-4c7c-bceb-ea8f15d31cc5",
+        "https://login.microsoftonline.com/067802cd-8f92-4c7c-bceb-ea8f15d31cc5/v2.0",
+    ],
+    ids=["v1", "v2_without_suffix", "v2_with_suffix"],
+)
+def test_explicit_azure_v1_and_v2_issuers_accepted(fake_azure_metadata_service, issuer):
+    fake_azure_metadata_service.iss = issuer
+
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+    auth_class.prepare()
+
+    assert issuer == json.loads(auth_class.assertion_content)["iss"]
 
 
 def test_explicit_azure_plumbs_token_to_api(fake_azure_metadata_service):
@@ -279,7 +297,7 @@ def test_explicit_azure_uses_default_entra_resource_if_unspecified(
     token = fake_azure_metadata_service.token
     parsed = jwt.decode(token, options={"verify_signature": False})
     assert (
-        parsed["aud"] == "NOT REAL - WILL BREAK"
+        parsed["aud"] == "api://fd3f753b-eed3-462c-b6a7-a4b5bb650aad"
     )  # the default entra resource defined in wif_util.py.
 
 

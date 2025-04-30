@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import atexit
-import collections.abc
 import logging
 import os
 import pathlib
@@ -94,6 +93,7 @@ from .errorcode import (
     ER_INVALID_WIF_SETTINGS,
     ER_NO_ACCOUNT_NAME,
     ER_NO_CLIENT_ID,
+    ER_NO_CLIENT_SECRET,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
     ER_NO_USER,
@@ -320,10 +320,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # SNOW-1817982: limit iobound TPE sizes when executing PUT/GET
-    "gcs_use_virtual_endpoints": (
-        False,
-        bool,
-    ),  # use https://{bucket}.storage.googleapis.com instead of https://storage.googleapis.com/{bucket}
     "oauth_client_id": (
         None,
         (type(None), str),
@@ -350,10 +346,19 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-1825621: OAUTH implementation
     ),
-    "oauth_security_features": (
-        ("pkce",),
-        collections.abc.Iterable,  # of strings
+    "oauth_disable_pkce": (
+        False,
+        bool,
         # SNOW-1825621: OAUTH PKCE
+    ),
+    "oauth_enable_refresh_tokens": (
+        False,
+        bool,
+    ),
+    "oauth_enable_single_use_refresh_tokens": (
+        False,
+        bool,
+        # Client-side opt-in to single-use refresh tokens.
     ),
     "check_arrow_conversion_error_on_every_column": (
         True,
@@ -439,7 +444,6 @@ class SnowflakeConnection:
           before the connector shuts down. Default value is false.
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
         unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
-        gcs_use_virtual_endpoints: When true, the virtual endpoint url is used, see: https://cloud.google.com/storage/docs/request-endpoints#xml-api
         check_arrow_conversion_error_on_every_column: When true, the error check after the conversion from arrow to python types will happen for every column in the row. This is a new behaviour which fixes the bug that caused the type errors to trigger silently when occurring at any place other than last column in a row. To revert the previous (faulty) behaviour, please set this flag to false.
     """
 
@@ -843,29 +847,6 @@ class SnowflakeConnection:
     def unsafe_file_write(self, value: bool) -> None:
         self._unsafe_file_write = value
 
-    class _OAuthSecurityFeatures(NamedTuple):
-        pkce_enabled: bool
-        refresh_token_enabled: bool
-
-    @property
-    def oauth_security_features(self) -> _OAuthSecurityFeatures:
-        features = self._oauth_security_features
-        if isinstance(features, str):
-            features = features.split(" ")
-        features = [feat.lower() for feat in features]
-        return self._OAuthSecurityFeatures(
-            pkce_enabled="pkce" in features,
-            refresh_token_enabled="refresh_token" in features,
-        )
-
-    @property
-    def gcs_use_virtual_endpoints(self) -> bool:
-        return self._gcs_use_virtual_endpoints
-
-    @gcs_use_virtual_endpoints.setter
-    def gcs_use_virtual_endpoints(self, value: bool) -> None:
-        self._gcs_use_virtual_endpoints = value
-
     @property
     def check_arrow_conversion_error_on_every_column(self) -> bool:
         return self._check_arrow_conversion_error_on_every_column
@@ -1223,9 +1204,7 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
-                self._check_experimental_authentication_flag()
-                self._check_oauth_required_parameters()
-                features = self.oauth_security_features
+                self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1241,19 +1220,18 @@ class SnowflakeConnection:
                     ),
                     redirect_uri=self._oauth_redirect_uri,
                     scope=self._oauth_scope,
-                    pkce_enabled=features.pkce_enabled,
+                    pkce_enabled=not self._oauth_disable_pkce,
                     token_cache=(
                         auth.get_token_cache()
                         if self._client_store_temporary_credential
                         else None
                     ),
-                    refresh_token_enabled=features.refresh_token_enabled,
+                    refresh_token_enabled=self._oauth_enable_refresh_tokens,
                     external_browser_timeout=self._external_browser_timeout,
+                    enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
-                self._check_experimental_authentication_flag()
-                self._check_oauth_required_parameters()
-                features = self.oauth_security_features
+                self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1270,7 +1248,7 @@ class SnowflakeConnection:
                         if self._client_store_temporary_credential
                         else None
                     ),
-                    refresh_token_enabled=features.refresh_token_enabled,
+                    refresh_token_enabled=self._oauth_enable_refresh_tokens,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
@@ -2258,7 +2236,7 @@ class SnowflakeConnection:
                 },
             )
 
-    def _check_oauth_required_parameters(self) -> None:
+    def _check_oauth_parameters(self) -> None:
         if self._oauth_client_id is None:
             Error.errorhandler_wrapper(
                 self,
@@ -2276,6 +2254,32 @@ class SnowflakeConnection:
                 ProgrammingError,
                 {
                     "msg": "Oauth code flow requirement 'client_secret' is empty",
-                    "errno": ER_NO_CLIENT_ID,
+                    "errno": ER_NO_CLIENT_SECRET,
+                },
+            )
+        if (
+            self._oauth_authorization_url
+            and not self._oauth_authorization_url.startswith("https://")
+        ):
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "OAuth supports only authorization urls that use 'https' scheme",
+                    "errno": ER_INVALID_VALUE,
+                },
+            )
+        if self._oauth_redirect_uri and not (
+            self._oauth_redirect_uri.startswith("http://")
+            or self._oauth_redirect_uri.startswith("https://")
+        ):
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "OAuth supports only authorization urls that use 'http(s)' scheme",
+                    "errno": ER_INVALID_VALUE,
                 },
             )
