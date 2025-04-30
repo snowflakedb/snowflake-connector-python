@@ -446,7 +446,7 @@ def write_pandas(
             cursor._upload(
                 local_file_name=f"'file://{path}'",
                 stage_location="@" + stage_location,
-                options={"parallel": parallel},
+                options={"parallel": parallel, "source_compression": "auto_detect"},
             )
 
             # Remove chunk file
