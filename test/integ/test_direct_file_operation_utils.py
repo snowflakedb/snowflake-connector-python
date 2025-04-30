@@ -34,9 +34,7 @@ def _validate_upload_content(
     local_path = os.path.join(local_dir, base_file_name)
 
     cursor.execute(
-        f"GET ? 'file://{_normalize_windows_local_path(local_dir)}'",
-        params=[stage_path],
-        _force_qmark_paramstyle=True,
+        f"GET {stage_path} 'file://{_normalize_windows_local_path(local_dir)}'",
     )
     if is_compressed:
         stage_path += gz_suffix
