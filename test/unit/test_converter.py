@@ -4,7 +4,6 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 from logging import getLogger
-from sys import byteorder
 
 import numpy
 import pytest
@@ -119,7 +118,7 @@ def test_day_time_interval_int_to_timedelta(nanos):
 @pytest.mark.parametrize("nanos", [0, 1, 999, 1000, 999999, 10**9 * NANOS_PER_DAY - 1])
 def test_day_time_interval_decimal_to_timedelta(nanos):
     converter = ArrowConverterContext()
-    nano_bytes = nanos.to_bytes(16, byteorder=byteorder, signed=True)
+    nano_bytes = nanos.to_bytes(16, byteorder="little", signed=True)
     assert converter.INTERVAL_DAY_TIME_decimal_to_timedelta(nano_bytes) == timedelta(
         microseconds=nanos // 1000
     )
