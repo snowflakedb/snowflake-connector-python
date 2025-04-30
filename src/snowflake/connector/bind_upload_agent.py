@@ -81,7 +81,7 @@ class BindUploadAgent:
                 self.cursor._upload_stream(
                     input_stream=f,
                     stage_location=os.path.join(self.stage_path, f"{row_idx}.csv"),
-                    options={},
+                    options={"source_compression": "auto_detect"},
                 )
             except Error as err:
                 logger.debug("Failed to upload the bindings file to stage.")
