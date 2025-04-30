@@ -20,7 +20,6 @@ from typing import (
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
-from snowflake.connector.util_text import random_string
 
 from ._utils import (
     _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING,
@@ -103,11 +102,7 @@ def _create_temp_stage(
     overwrite: bool,
     use_scoped_temp_object: bool = False,
 ) -> str:
-    stage_name = (
-        random_name_for_temp_object(TempObjectType.STAGE)
-        if use_scoped_temp_object
-        else random_string()
-    )
+    stage_name = random_name_for_temp_object(TempObjectType.STAGE)
     stage_location = build_location_helper(
         database=database,
         schema=schema,
@@ -174,11 +169,7 @@ def _create_temp_file_format(
     sql_use_logical_type: str,
     use_scoped_temp_object: bool = False,
 ) -> str:
-    file_format_name = (
-        random_name_for_temp_object(TempObjectType.FILE_FORMAT)
-        if use_scoped_temp_object
-        else random_string()
-    )
+    file_format_name = random_name_for_temp_object(TempObjectType.FILE_FORMAT)
     file_format_location = build_location_helper(
         database=database,
         schema=schema,
