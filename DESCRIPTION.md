@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.16(TBD)
+  - Require PyArrow version to be greater or equal to `10.0.1`.
+
 - v3.15.0(Apr 29,2025)
   - Bumped up min boto and botocore version to 1.24.
   - OCSP: terminate certificates chain traversal if a trusted certificate already reached.
