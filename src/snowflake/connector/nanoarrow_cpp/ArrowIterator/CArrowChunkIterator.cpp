@@ -13,6 +13,7 @@
 #include "FixedSizeListConverter.hpp"
 #include "FloatConverter.hpp"
 #include "IntConverter.hpp"
+#include "IntervalConverter.hpp"
 #include "MapConverter.hpp"
 #include "ObjectConverter.hpp"
 #include "StringConverter.hpp"
@@ -476,6 +477,36 @@ std::shared_ptr<sf::IColumnConverter> getConverterFromSchema(
     case SnowflakeType::Type::DECFLOAT: {
       converter = std::make_shared<sf::DecFloatConverter>(*array, schemaView,
                                                           *context, useNumpy);
+      break;
+    }
+
+    case SnowflakeType::Type::INTERVAL_YEAR_MONTH: {
+      converter = std::make_shared<sf::IntervalYearMonthConverter>(
+          array, context, useNumpy);
+      break;
+    }
+
+    case SnowflakeType::Type::INTERVAL_DAY_TIME: {
+      switch (schemaView.type) {
+        case NANOARROW_TYPE_INT64:
+          converter = std::make_shared<sf::IntervalDayTimeConverterInt>(
+              array, context, useNumpy);
+          break;
+        case NANOARROW_TYPE_DECIMAL128:
+          converter = std::make_shared<sf::IntervalDayTimeConverterDecimal>(
+              array, context, useNumpy);
+          break;
+        default: {
+          std::string errorInfo = Logger::formatString(
+              "[Snowflake Exception] unknown arrow internal data type(%d) "
+              "for OBJECT data in %s",
+              NANOARROW_TYPE_ENUM_STRING[schemaView.type],
+              schemaView.schema->name);
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+          PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+          break;
+        }
+      }
       break;
     }
 

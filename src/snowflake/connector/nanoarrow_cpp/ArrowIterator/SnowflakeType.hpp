@@ -30,6 +30,8 @@ class SnowflakeType {
     VECTOR = 16,
     MAP = 17,
     DECFLOAT = 18,
+    INTERVAL_YEAR_MONTH = 19,
+    INTERVAL_DAY_TIME = 20,
   };
 
   static SnowflakeType::Type snowflakeTypeFromString(std::string str) {
