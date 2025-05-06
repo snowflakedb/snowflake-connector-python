@@ -575,9 +575,35 @@ class SnowflakeConverter:
                 "schema": None,
             }
 
+        converted_object = {}
+
+        for key, v in value.items():
+            if type(key) is not str:
+                logger.info(
+                    "snowflake_object key %s is not a string. Converting to string.",
+                    key,
+                )
+                key = str(key)
+            value_type = type(v)
+
+            if value_type == datetime or value_type == date:
+                converted_object[key] = v.strftime("%a, %d %b %Y %H:%M:%S %Z")
+            elif value_type == struct_time or value_type == dt_t:
+                converted_object[key] = time.strftime("%a, %d %b %Y %H:%M:%S %Z", v)
+            elif value_type == timedelta:
+                converted_object[key] = self._timedelta_to_snowflake_bindings("TIME", v)
+            elif value_type == bytes or value_type == bytearray:
+                converted_object[key] = self._bytes_to_snowflake_bindings(_, v)
+            elif value_type == numpy.long:
+                converted_object[key] = int(v)
+            elif value_type == Decimal:
+                converted_object[key] = float(v)
+            else:
+                converted_object[key] = v
+
         return {
             "type": "OBJECT",
-            "value": json.dumps(value),
+            "value": json.dumps(converted_object),
             "fmt": JSON_FORMAT_STR,
             "schema": None,
         }

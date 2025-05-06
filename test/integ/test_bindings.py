@@ -840,14 +840,94 @@ def test_binding_array_without_schema(conn_cnx):
 def test_binding_object_without_schema(conn_cnx):
     bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
-        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
-        cursor.execute(bind_query, params=(snowflake_object([]),))
+        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 OBJECT);")
+        cursor.execute(bind_query, params=(snowflake_object({}),))
+        cursor.execute(bind_query, params=(snowflake_object(None),))
         cursor.execute(bind_query, params=(snowflake_object({"a": 1, "b": 2, "c": 3}),))
+        cursor.execute(bind_query, params=(snowflake_object({1: 1, 2: 2, "c": 3}),))
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_object(
+                    {"Jan 1st 2020": datetime.strptime("2020-01-01", "%Y-%m-%d")}
+                ),
+            ),
+        )
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_object(
+                    {
+                        "Nov 30th 2000": time.strptime("30 Nov 00", "%d %b %y"),
+                        "Nov 30th 2001": time.strptime("30 Nov 01", "%d %b %y"),
+                    }
+                ),
+            ),
+        )
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_object(
+                    {
+                        "year": timedelta(days=365),
+                        "hour": timedelta(hours=1),
+                    }
+                ),
+            ),
+        )
+        cursor.execute(
+            bind_query, params=(snowflake_object({"a": True, "b": False, "c": False}),)
+        )
+        cursor.execute(
+            bind_query, params=(snowflake_object({1: b"123", 2: b"HEX", 3: b"3"}),)
+        )
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_object(
+                    {
+                        1: long(10),
+                        2: long(-9223372036854775807),
+                        3: long(9223372036854775807),
+                    }
+                ),
+            ),
+        )
+        cursor.execute(
+            bind_query, params=(snowflake_object({1: math.pi, 2: 1.1, 3: 1.2}),)
+        )
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_object(
+                    {1: Decimal(10.10), 2: Decimal(-5.001), 3: Decimal(-5.5)}
+                ),
+            ),
+        )
+        cursor.execute(
+            bind_query,
+            params=(snowflake_object({1: bytearray(b"abc"), 2: bytearray(b"def")}),),
+        )
 
         results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
 
         assert json.loads(results[0][0]) == {}
-        assert json.loads(results[1][0]) == {"a": 1, "b": 2, "c": 3}
+        assert json.loads(results[0][0]) == {}
+        assert json.loads(results[2][0]) == {"a": 1, "b": 2, "c": 3}
+        assert json.loads(results[3][0]) == {"1": 1, "2": 2, "c": 3}
+        assert json.loads(results[4][0]) == {
+            "Jan 1st 2020": "Wed, 01 Jan 2020 00:00:00 "
+        }
+        assert json.loads(results[5][0]) == {
+            "Nov 30th 2000": "Thu, 30 Nov 2000 00:00:00 ",
+            "Nov 30th 2001": "Fri, 30 Nov 2001 00:00:00 ",
+        }
+        assert json.loads(results[6][0]) == {
+            "year": "31536000000000000",
+            "hour": "3600000000000",
+        }
+        assert json.loads(results[7][0]) == {"a": True, "b": False, "c": False}
+        assert json.loads(results[8][0]) == {"a": True, "b": False, "c": False}
 
 
 @pytest.mark.skipolddriver
