@@ -513,31 +513,22 @@ class SnowflakeConverter:
             str(hours * 3600 + mins * 60 + secs) + f"{value.microseconds:06d}" + "000"
         )
 
-    def _snowflake_array_to_snowflake_bindings_dict(
-        self, _, value: snowflake_array
-    ) -> dict[str, Any]:
+    def _snowflake_array_to_snowflake_bindings(
+        self, value: snowflake_array
+    ) -> list[Any]:
         if not value:
-            return {
-                "type": "ARRAY",
-                "value": "[]",
-                "fmt": JSON_FORMAT_STR,
-                "schema": None,
-            }
+            return []
 
         converted_values = []
         # TODO: is this an edge case that needs to be handled
+
         if value.original_type == bytearray:
             # bytearray when converted to snowflake_array becomes an array of int. The reasonable expectation would be
             # for it to be binded as an array of individual bytes the same way as array of bytes value is binded.
-            converted_values = [
-                self._bytes_to_snowflake_bindings(_, bytes(chr(v), "utf-8"))
+            return [
+                self._bytes_to_snowflake_bindings(None, bytes(chr(v), "utf-8"))
                 for v in value
             ]
-            return {
-                "type": "ARRAY",
-                "value": json.dumps(converted_values),
-                "fmt": JSON_FORMAT_STR,
-            }
 
         for v in value:
             inner_python_type = type(v)
@@ -550,30 +541,42 @@ class SnowflakeConverter:
                     self._timedelta_to_snowflake_bindings("TIME", v)
                 )
             elif inner_python_type == bytes or inner_python_type == bytearray:
-                converted_values.append(self._bytes_to_snowflake_bindings(_, v))
+                converted_values.append(self._bytes_to_snowflake_bindings(None, v))
             elif inner_python_type == numpy.long:
                 converted_values.append(int(v))
             elif inner_python_type == Decimal:
                 converted_values.append(float(v))
+            elif inner_python_type == snowflake_array:
+                converted_values.append(self._snowflake_array_to_snowflake_bindings(v))
+            elif inner_python_type == snowflake_object:
+                converted_values.append(self._snowflake_object_to_snowflake_bindings(v))
             else:
                 converted_values.append(v)
 
-        return {
-            "type": "ARRAY",
-            "value": json.dumps(converted_values),
-            "fmt": JSON_FORMAT_STR,
-        }
+        return converted_values
 
-    def _snowflake_object_to_snowflake_bindings_dict(
-        self, _, value: snowflake_object
+    def _snowflake_array_to_snowflake_bindings_dict(
+        self, _, value: snowflake_array
     ) -> dict[str, Any]:
         if not value:
             return {
-                "type": "OBJECT",
-                "value": "{}",
+                "type": "ARRAY",
+                "value": "[]",
                 "fmt": JSON_FORMAT_STR,
                 "schema": None,
             }
+
+        return {
+            "type": "ARRAY",
+            "value": json.dumps(self._snowflake_array_to_snowflake_bindings(value)),
+            "fmt": JSON_FORMAT_STR,
+        }
+
+    def _snowflake_object_to_snowflake_bindings(
+        self, value: snowflake_object
+    ) -> dict[str, Any]:
+        if not value:
+            return {}
 
         converted_object = {}
 
@@ -593,17 +596,34 @@ class SnowflakeConverter:
             elif value_type == timedelta:
                 converted_object[key] = self._timedelta_to_snowflake_bindings("TIME", v)
             elif value_type == bytes or value_type == bytearray:
-                converted_object[key] = self._bytes_to_snowflake_bindings(_, v)
+                converted_object[key] = self._bytes_to_snowflake_bindings(None, v)
             elif value_type == numpy.long:
                 converted_object[key] = int(v)
             elif value_type == Decimal:
                 converted_object[key] = float(v)
+            elif value_type == snowflake_array:
+                converted_object[key] = self._snowflake_array_to_snowflake_bindings(v)
+            elif value_type == snowflake_object:
+                converted_object[key] = self._snowflake_object_to_snowflake_bindings(v)
             else:
                 converted_object[key] = v
 
+        return converted_object
+
+    def _snowflake_object_to_snowflake_bindings_dict(
+        self, _, value: snowflake_object
+    ) -> dict[str, Any]:
+        if not value:
+            return {
+                "type": "OBJECT",
+                "value": "{}",
+                "fmt": JSON_FORMAT_STR,
+                "schema": None,
+            }
+
         return {
             "type": "OBJECT",
-            "value": json.dumps(converted_object),
+            "value": json.dumps(self._snowflake_object_to_snowflake_bindings(value)),
             "fmt": JSON_FORMAT_STR,
             "schema": None,
         }

@@ -805,6 +805,13 @@ def test_binding_array_without_schema(conn_cnx):
             params=(snowflake_array([bytearray(b"abc"), bytearray(b"def")]),),
         )
         cursor.execute(bind_query, params=(snowflake_array(bytearray(b"123")),))
+        cursor.execute(
+            bind_query, params=(snowflake_array([1, snowflake_array([1, 2, 3])]),)
+        )
+        cursor.execute(
+            bind_query,
+            params=(snowflake_array([1, snowflake_object({"a": 1, "b": 2, "c": 3})]),),
+        )
 
         results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
 
@@ -834,6 +841,8 @@ def test_binding_array_without_schema(conn_cnx):
         assert json.loads(results[12][0]) == [10.1, -5.001, -5.5]
         assert json.loads(results[13][0]) == ["616263", "646566"]
         assert json.loads(results[14][0]) == ["31", "32", "33"]
+        assert json.loads(results[15][0]) == [1, [1, 2, 3]]
+        assert json.loads(results[16][0]) == [1, {"a": 1, "b": 2, "c": 3}]
 
 
 @pytest.mark.skipolddriver
@@ -908,6 +917,8 @@ def test_binding_object_without_schema(conn_cnx):
             bind_query,
             params=(snowflake_object({1: bytearray(b"abc"), 2: bytearray(b"def")}),),
         )
+        cursor.execute(bind_query, params=(snowflake_object({1: [1, 2, 3]}),))
+        cursor.execute(bind_query, params=(snowflake_object({1: {1: 1, 2: 2, 3: 3}}),))
 
         results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
 
@@ -927,7 +938,21 @@ def test_binding_object_without_schema(conn_cnx):
             "hour": "3600000000000",
         }
         assert json.loads(results[7][0]) == {"a": True, "b": False, "c": False}
-        assert json.loads(results[8][0]) == {"a": True, "b": False, "c": False}
+        assert json.loads(results[8][0]) == {"1": "313233", "2": "484558", "3": "33"}
+        assert json.loads(results[9][0]) == {
+            "1": 10,
+            "2": -9223372036854775807,
+            "3": 9223372036854775807,
+        }
+        assert json.loads(results[10][0]) == {
+            "1": 3.141592653589793,
+            "2": 1.1,
+            "3": 1.2,
+        }
+        assert json.loads(results[11][0]) == {"1": 10.1, "2": -5.001, "3": -5.5}
+        assert json.loads(results[12][0]) == {"1": "616263", "2": "646566"}
+        assert json.loads(results[13][0]) == {"1": [1, 2, 3]}
+        assert json.loads(results[14][0]) == {"1": {"1": 1, "2": 2, "3": 3}}
 
 
 @pytest.mark.skipolddriver
