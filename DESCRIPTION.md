@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v3.16(TBD)
   - Added basic arrow support for Interval types.
+  - Require PyArrow version to be greater or equal to `10.0.1`.
 
 - v3.15.0(Apr 29,2025)
   - Bumped up min boto and botocore version to 1.24.
