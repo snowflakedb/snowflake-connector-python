@@ -14,8 +14,6 @@ from functools import partial
 from logging import getLogger
 from time import time
 from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
-from urllib.parse import urlparse
-from urllib.request import url2pathname
 
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import GET_CWD, IS_WINDOWS
@@ -57,6 +55,10 @@ from .gcs_storage_client import SnowflakeGCSRestClient
 from .local_storage_client import SnowflakeLocalStorageClient
 from .s3_storage_client import SnowflakeS3RestClient
 from .storage_client import SnowflakeFileEncryptionMaterial, SnowflakeStorageClient
+
+# from urllib.parse import urlparse
+# from urllib.request import url2pathname
+
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
@@ -836,16 +838,50 @@ class SnowflakeFileTransferAgent:
                 "rowset": sorted(rowset),
             }
 
+    # def _expand_filenames(self, locations: list[str]) -> list[str]:
+    #     canonical_locations = []
+    #     for file_name in locations:
+    #         if self._command_type == CMD_TYPE_UPLOAD:
+    #             # TODO: Since python 3.13 os.path.isabs returns other values for URI ... comment to be finished
+    #             parsed = urlparse(file_name)
+    #             if parsed.scheme == "file":
+    #                 file_name = url2pathname(parsed.path)
+    #
+    #             file_name = os.path.expanduser(file_name)
+    #             if (
+    #                 IS_WINDOWS
+    #                 and len(file_name) > 2
+    #                 and file_name[0] == "/"
+    #                 and file_name[2] == ":"
+    #             ):
+    #                 # Windows path: /C:/data/file1.txt where it starts with slash
+    #                 # followed by a drive letter and colon.
+    #                 file_name = file_name[1:]
+    #
+    #             if not os.path.isabs(file_name):
+    #                 file_name = os.path.join(GET_CWD(), file_name)
+    #
+    #             files = glob.glob(file_name)
+    #             canonical_locations += files
+    #         else:
+    #             canonical_locations.append(file_name)
+    #
+    #     return canonical_locations
+
     def _expand_filenames(self, locations: list[str]) -> list[str]:
         canonical_locations = []
         for file_name in locations:
-            # TODO: Since python 3.13 os.path.isabs returns other values for URI ... comment to be finished
-            parsed = urlparse(file_name)
-            if parsed.scheme == "file":
-                file_name = url2pathname(parsed.path)
-
             if self._command_type == CMD_TYPE_UPLOAD:
+                # # TODO: Since python 3.13 os.path.isabs returns other values for URI ... comment to be finished
+                # parsed = urlparse(file_name)
+                # if parsed.scheme == "file":
+                #     file_name = url2pathname(parsed.path)
+
                 file_name = os.path.expanduser(file_name)
+
+                if not os.path.isabs(file_name):
+                    file_name = os.path.join(GET_CWD(), file_name)
+
                 if (
                     IS_WINDOWS
                     and len(file_name) > 2
@@ -855,9 +891,6 @@ class SnowflakeFileTransferAgent:
                     # Windows path: /C:/data/file1.txt where it starts with slash
                     # followed by a drive letter and colon.
                     file_name = file_name[1:]
-
-                if not os.path.isabs(file_name):
-                    file_name = os.path.join(GET_CWD(), file_name)
 
                 files = glob.glob(file_name)
                 canonical_locations += files

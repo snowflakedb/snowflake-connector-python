@@ -54,7 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+#        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -73,17 +74,18 @@ jobs:
     strategy:
       matrix:
         os:
-          - image: ubuntu-latest
-            id: manylinux_x86_64
-          - image: ubuntu-latest
-            id: manylinux_aarch64
+#          - image: ubuntu-latest
+#            id: manylinux_x86_64
+#          - image: ubuntu-latest
+#            id: manylinux_aarch64
           - image: windows-latest
             id: win_amd64
-          - image: macos-latest
-            id: macosx_x86_64
-          - image: macos-latest
-            id: macosx_arm64
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+#          - image: macos-latest
+#            id: macosx_x86_64
+#          - image: macos-latest
+#            id: macosx_arm64
+#        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.12", "3.13"]
     name: Build ${{ matrix.os.id }}-py${{ matrix.python-version }}
     runs-on: ${{ matrix.os.image }}
     steps:
