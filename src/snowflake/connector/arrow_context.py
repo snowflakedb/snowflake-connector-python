@@ -15,7 +15,7 @@ from .constants import PARAMETER_TIMEZONE
 from .converter import _generate_tzinfo_from_tzoffset
 
 if TYPE_CHECKING:
-    from numpy import datetime64, float64, int64
+    from numpy import datetime64, float64, int64, timedelta64
 
 
 try:
@@ -163,3 +163,41 @@ class ArrowConverterContext:
 
     def DECFLOAT_to_numpy_float64(self, exponent: int, significand: bytes) -> float64:
         return numpy.float64(self.DECFLOAT_to_decimal(exponent, significand))
+
+    def INTERVAL_YEAR_MONTH_to_numpy_timedelta(self, months: int) -> timedelta64:
+        return numpy.timedelta64(months, "M")
+
+    def INTERVAL_DAY_TIME_int_to_numpy_timedelta(self, nanos: int) -> timedelta64:
+        return numpy.timedelta64(nanos, "ns")
+
+    def INTERVAL_DAY_TIME_int_to_timedelta(self, nanos: int) -> timedelta:
+        # Python timedelta only supports microsecond precision. We receive value in
+        # nanoseconds.
+        return timedelta(microseconds=nanos // 1000)
+
+    def INTERVAL_DAY_TIME_decimal_to_numpy_timedelta(self, value: bytes) -> timedelta64:
+        # Snowflake supports up to 9 digits leading field precision for the day-time
+        # interval. That when represented in nanoseconds can not be stored in a 64-bit
+        # integer. So we send these as Decimal128 from server to client.
+        # Arrow uses little-endian by default.
+        # https://arrow.apache.org/docs/format/Columnar.html#byte-order-endianness
+        nanos = int.from_bytes(value, byteorder="little", signed=True)
+        # Numpy timedelta only supports up to 64-bit integers, so we need to change the
+        # unit to milliseconds to avoid overflow.
+        # Max value received from server
+        #   = 10**9 * NANOS_PER_DAY - 1
+        #   = 86399999999999999999999 nanoseconds
+        #   = 86399999999999999 milliseconds
+        # math.log2(86399999999999999) = 56.3 < 64
+        return numpy.timedelta64(nanos // 1_000_000, "ms")
+
+    def INTERVAL_DAY_TIME_decimal_to_timedelta(self, value: bytes) -> timedelta:
+        # Snowflake supports up to 9 digits leading field precision for the day-time
+        # interval. That when represented in nanoseconds can not be stored in a 64-bit
+        # integer. So we send these as Decimal128 from server to client.
+        # Arrow uses little-endian by default.
+        # https://arrow.apache.org/docs/format/Columnar.html#byte-order-endianness
+        nanos = int.from_bytes(value, byteorder="little", signed=True)
+        # Python timedelta only supports microsecond precision. We receive value in
+        # nanoseconds.
+        return timedelta(microseconds=nanos // 1000)

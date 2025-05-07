@@ -7,8 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.15.1(TBD)
-  - Fix `write_pandas` special characters usage in the location name.
+- v3.16(TBD)
+  - Added basic arrow support for Interval types.
+- Fix `write_pandas` special characters usage in the location name.
 
 - v3.15.0(Apr 29,2025)
   - Bumped up min boto and botocore version to 1.24.
