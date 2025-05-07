@@ -74,8 +74,8 @@ jobs:
     strategy:
       matrix:
         os:
-#          - image: ubuntu-latest
-#            id: manylinux_x86_64
+          - image: ubuntu-latest
+            id: manylinux_x86_64
 #          - image: ubuntu-latest
 #            id: manylinux_aarch64
           - image: windows-latest
