@@ -535,7 +535,7 @@ def test_table_location_building(
 
         def mocked_execute(*args, **kwargs):
             if len(args) >= 1 and args[0].startswith("COPY INTO"):
-                assert expected_location in args[0]
+                assert kwargs["params"][0] == expected_location
             cur = SnowflakeCursor(cnx)
             cur._result = iter([])
             return cur
@@ -566,8 +566,8 @@ def test_table_location_building(
         (None, "schema", False, "schema"),
         (None, None, True, ""),
         (None, None, False, ""),
-        ("data'base", "schema", True, '"data\\\'base"."schema"'),
-        ("data'base", "schema", False, '"data\\\'base".schema'),
+        ("data'base", "schema", True, '"data\'base"."schema"'),
+        ("data'base", "schema", False, '"data\'base".schema'),
     ],
 )
 def test_stage_location_building(
@@ -583,11 +583,9 @@ def test_stage_location_building(
     with conn_cnx() as cnx:
 
         def mocked_execute(*args, **kwargs):
-            if len(args) >= 1 and args[0].lower().startswith("create temp stage"):
-                location_identifier = re.search(
-                    r"identifier\(\'(.*?)\)", args[0]
-                ).group(1)
-                assert location_identifier.startswith(expected_db_schema)
+            if len(args) >= 1 and args[0].startswith("create temporary stage"):
+                db_schema = ".".join(args[0].split(" ")[-1].split(".")[:-1])
+                assert db_schema == expected_db_schema
             cur = SnowflakeCursor(cnx)
             cur._result = iter([])
             return cur
