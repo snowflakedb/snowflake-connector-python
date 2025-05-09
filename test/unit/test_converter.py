@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 from logging import getLogger
+from uuid import UUID
 
 import numpy
 import pytest
@@ -41,9 +42,9 @@ def test_is_dst():
     m = conv.to_python_method("TIMESTAMP_LTZ", col_meta)
     ret = m("1414890189.000")
 
-    assert (
-        str(ret) == "2014-11-01 18:03:09-07:00"
-    ), "Timestamp during from DST to non-DST"
+    assert str(ret) == "2014-11-01 18:03:09-07:00", (
+        "Timestamp during from DST to non-DST"
+    )
 
     # non-DST to DST
     col_meta = {
@@ -57,9 +58,9 @@ def test_is_dst():
     m = conv.to_python_method("TIMESTAMP_LTZ", col_meta)
     ret = m("1425780189.000")
 
-    assert (
-        str(ret) == "2015-03-07 18:03:09-08:00"
-    ), "Timestamp during from non-DST to DST"
+    assert str(ret) == "2015-03-07 18:03:09-08:00", (
+        "Timestamp during from non-DST to DST"
+    )
 
 
 def test_more_timestamps():
@@ -75,6 +76,13 @@ def test_more_timestamps():
     assert m("-2208943503.8765432") == "1900-01-01 12:34:56.123456800"
     assert m("-2208943503.0000000") == "1900-01-01 12:34:57.000000000"
     assert m("-2208943503.0120000") == "1900-01-01 12:34:56.988000000"
+
+
+def test_converter_to_snowflake_bytes():
+    uuid = UUID("12345678-1234-5678-1234-567812345678")
+
+    converter = SnowflakeConverter()
+    assert converter.to_snowflake([uuid.bytes]) == ["X'\x124Vx\x124Vx\x124Vx\x124Vx'"]
 
 
 def test_converter_to_snowflake_error():

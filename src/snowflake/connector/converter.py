@@ -5,9 +5,8 @@ import binascii
 import decimal
 import json
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from datetime import time as dt_t
-from datetime import timedelta, timezone, tzinfo
 from functools import partial
 from logging import getLogger
 from math import ceil
@@ -623,8 +622,8 @@ class SnowflakeConverter:
 
     def _list_to_snowflake(self, value: list) -> list:
         return [
-            SnowflakeConverter.quote(v0)
-            for v0 in [SnowflakeConverter.escape(v) for v in value]
+            SnowflakeConverter.quote(SnowflakeConverter.escape(self.to_snowflake(v)))
+            for v in value
         ]
 
     _tuple_to_snowflake = _list_to_snowflake
