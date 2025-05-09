@@ -1000,7 +1000,7 @@ def test_no_create_internal_object_privilege_in_target_schema(
             def mock_execute(*args, **kwargs):
                 if (
                     f"CREATE TEMP {object_type}" in args[0]
-                    and "target_schema_no_create_" in args[0]
+                    and "target_schema_no_create_" in kwargs["params"][0]
                 ):
                     raise ProgrammingError("Cannot create temp object in target schema")
                 cursor = cnx.cursor()
