@@ -315,6 +315,9 @@ class StorageCredential:
     def update(self, cur_timestamp) -> None:
         with self.lock:
             if cur_timestamp < self.timestamp:
+                logger.debug(
+                    "Omitting renewal of storage token, as it already happened."
+                )
                 return
             logger.debug("Renewing expired storage token.")
             ret = self.connection.cursor()._execute_helper(self._command)
@@ -352,7 +355,6 @@ class SnowflakeFileTransferAgent:
         use_s3_regional_url: bool = False,
         iobound_tpe_limit: int | None = None,
         unsafe_file_write: bool = False,
-        gcs_use_virtual_endpoints: bool = False,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -385,7 +387,6 @@ class SnowflakeFileTransferAgent:
         self._credentials: StorageCredential | None = None
         self._iobound_tpe_limit = iobound_tpe_limit
         self._unsafe_file_write = unsafe_file_write
-        self._gcs_use_virtual_endpoints = gcs_use_virtual_endpoints
 
     def execute(self) -> None:
         self._parse_command()
@@ -536,7 +537,7 @@ class SnowflakeFileTransferAgent:
         ) -> None:
             # Note: chunk_id is 0 based while num_of_chunks is count
             logger.debug(
-                f"Chunk {chunk_id}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
+                f"Chunk(id: {chunk_id}) {chunk_id+1}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
             )
             with cv_chunk_process:
                 transfer_metadata.chunks_in_queue -= 1
@@ -701,7 +702,6 @@ class SnowflakeFileTransferAgent:
                 self._cursor._connection,
                 self._command,
                 unsafe_file_write=self._unsafe_file_write,
-                use_virtual_endpoints=self._gcs_use_virtual_endpoints,
             )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 

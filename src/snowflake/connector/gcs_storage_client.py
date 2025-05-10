@@ -52,7 +52,6 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         cnx: SnowflakeConnection,
         command: str,
         unsafe_file_write: bool = False,
-        use_virtual_endpoints: bool = False,
     ) -> None:
         """Creates a client object with given stage credentials.
 
@@ -86,7 +85,9 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         self.endpoint: str | None = (
             None if "endPoint" not in stage_info else stage_info["endPoint"]
         )
-        self.use_virtual_endpoints: bool = use_virtual_endpoints
+        self.use_virtual_url: bool = (
+            "useVirtualUrl" in stage_info and stage_info["useVirtualUrl"]
+        )
 
         if self.security_token:
             logger.debug(f"len(GCS_ACCESS_TOKEN): {len(self.security_token)}")
@@ -169,7 +170,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                         else self.stage_info["region"]
                     ),
                     self.endpoint,
-                    self.use_virtual_endpoints,
+                    self.use_virtual_url,
                 )
                 access_token = self.security_token
             else:
@@ -208,7 +209,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                         else self.stage_info["region"]
                     ),
                     self.endpoint,
-                    self.use_virtual_endpoints,
+                    self.use_virtual_url,
                 )
                 access_token = self.security_token
                 gcs_headers["Authorization"] = f"Bearer {access_token}"
@@ -374,7 +375,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
                         else self.stage_info["region"]
                     ),
                     self.endpoint,
-                    self.use_virtual_endpoints,
+                    self.use_virtual_url,
                 )
                 gcs_headers = {"Authorization": f"Bearer {self.security_token}"}
                 rest_args = {"headers": gcs_headers}
@@ -423,7 +424,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         use_regional_url: str = False,
         region: str = None,
         endpoint: str = None,
-        use_virtual_endpoints: bool = False,
+        use_virtual_url: bool = False,
     ) -> GcsLocation:
         container_name = stage_location
         path = ""
@@ -438,7 +439,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
             if endpoint.endswith("/"):
                 endpoint = endpoint[:-1]
             return GcsLocation(bucket_name=container_name, path=path, endpoint=endpoint)
-        elif use_virtual_endpoints:
+        elif use_virtual_url:
             return GcsLocation(
                 bucket_name=container_name,
                 path=path,
@@ -460,14 +461,14 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         use_regional_url: str = False,
         region: str = None,
         endpoint: str = None,
-        use_virtual_endpoints: bool = False,
+        use_virtual_url: bool = False,
     ) -> str:
         gcs_location = SnowflakeGCSRestClient.get_location(
             stage_location, use_regional_url, region, endpoint
         )
         full_file_path = f"{gcs_location.path}{filename}"
 
-        if use_virtual_endpoints:
+        if use_virtual_url:
             return f"{gcs_location.endpoint}/{quote(full_file_path)}"
         else:
             return f"{gcs_location.endpoint}/{gcs_location.bucket_name}/{quote(full_file_path)}"

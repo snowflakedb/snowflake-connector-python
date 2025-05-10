@@ -626,7 +626,7 @@ def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
             account="account", authenticator="WORKLOAD_IDENTITY"
         )
     assert (
-        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable to use the 'WORKLOAD_IDENTITY' authenticator"
+        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable true to use the 'WORKLOAD_IDENTITY' authenticator"
         in str(excinfo.value)
     )
 
@@ -636,7 +636,7 @@ def test_connection_params_are_plumbed_into_authbyworkloadidentity(monkeypatch):
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "")  # Can be set to anything.
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = snowflake.connector.connect(
             account="my_account_1",
@@ -678,7 +678,7 @@ def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "")
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = snowflake.connector.connect(connections_file_path=connections_file)
         assert conn.auth_class.provider == AttestationProvider.OIDC
@@ -687,3 +687,24 @@ def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
             == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
         )
         assert conn.auth_class.token == "my_token"
+
+
+@pytest.mark.parametrize("rtr_enabled", [True, False])
+def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
+    monkeypatch, rtr_enabled: bool
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
+
+        conn = snowflake.connector.connect(
+            account="my_account_1",
+            user="user",
+            oauth_client_id="client_id",
+            oauth_client_secret="client_secret",
+            authenticator="OAUTH_AUTHORIZATION_CODE",
+            oauth_enable_single_use_refresh_tokens=rtr_enabled,
+        )
+        assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled

@@ -35,7 +35,11 @@ from snowflake.connector.result_set import ResultSet
 
 from . import compat
 from ._sql_util import get_file_transfer_type
-from ._utils import _TrackedQueryCancellationTimer
+from ._utils import (
+    REQUEST_ID_STATEMENT_PARAM_NAME,
+    _TrackedQueryCancellationTimer,
+    is_uuid4,
+)
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .constants import (
     CMD_TYPE_DOWNLOAD,
@@ -637,7 +641,27 @@ class SnowflakeCursor:
                     )
 
         self._sequence_counter = self._connection._next_sequence_counter()
-        self._request_id = uuid.uuid4()
+
+        # If requestId is contained in statement parameters, use it to set request id. Verify here it is a valid uuid4
+        # identifier.
+        if (
+            statement_params is not None
+            and REQUEST_ID_STATEMENT_PARAM_NAME in statement_params
+        ):
+            request_id = statement_params[REQUEST_ID_STATEMENT_PARAM_NAME]
+
+            if not is_uuid4(request_id):
+                # uuid.UUID will throw an error if invalid, but we explicitly check and throw here.
+                raise ValueError(f"requestId {request_id} is not a valid UUID4.")
+            self._request_id = uuid.UUID(str(request_id), version=4)
+
+            # Create a (deep copy) and remove the statement param, there is no need to encode it as extra parameter
+            # one more time.
+            statement_params = statement_params.copy()
+            statement_params.pop(REQUEST_ID_STATEMENT_PARAM_NAME)
+        else:
+            # Generate UUID for query.
+            self._request_id = uuid.uuid4()
 
         logger.debug(f"Request id: {self._request_id}")
 
@@ -886,8 +910,8 @@ class SnowflakeCursor:
             _exec_async: Whether to execute this query asynchronously.
             _no_retry: Whether or not to retry on known errors.
             _do_reset: Whether or not the result set needs to be reset before executing query.
-            _put_callback: Function to which GET command should call back to.
-            _put_azure_callback: Function to which an Azure GET command should call back to.
+            _put_callback: Function to which PUT command should call back to.
+            _put_azure_callback: Function to which an Azure PUT command should call back to.
             _put_callback_output_stream: The output stream a PUT command's callback should report on.
             _get_callback: Function to which GET command should call back to.
             _get_azure_callback: Function to which an Azure GET command should call back to.
@@ -1059,7 +1083,6 @@ class SnowflakeCursor:
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
                     iobound_tpe_limit=self._connection.iobound_tpe_limit,
                     unsafe_file_write=self._connection.unsafe_file_write,
-                    gcs_use_virtual_endpoints=self._connection.gcs_use_virtual_endpoints,
                 )
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
@@ -1184,7 +1207,8 @@ class SnowflakeCursor:
         self._result_set = ResultSet(
             self,
             result_chunks,
-            self._connection.client_prefetch_threads,
+            self._connection.client_fetch_threads
+            or self._connection.client_prefetch_threads,
         )
         self._rownumber = -1
         self._result_state = ResultState.VALID
@@ -1281,7 +1305,7 @@ class SnowflakeCursor:
             data = ret.get("data")
             self._init_result_and_meta(data)
         else:
-            logger.info("failed")
+            logger.debug("failed")
             logger.debug(ret)
             err = ret["message"]
             code = ret.get("code", -1)
@@ -1811,6 +1835,7 @@ class SnowflakeCursor:
             self,
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
+            force_put_overwrite=False,  # _upload should respect user decision on overwriting
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
@@ -1878,6 +1903,7 @@ class SnowflakeCursor:
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
             source_from_stream=input_stream,
+            force_put_overwrite=False,  # _upload_stream should respect user decision on overwriting
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
