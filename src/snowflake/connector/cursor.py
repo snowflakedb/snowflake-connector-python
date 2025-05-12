@@ -1462,7 +1462,7 @@ class SnowflakeCursor:
                 bind_stage = None
                 if (
                     bind_size
-                    > self.connection._session_parameters[
+                    >= self.connection._session_parameters[
                         "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
                     ]
                     > 0
