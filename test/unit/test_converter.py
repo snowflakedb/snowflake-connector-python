@@ -42,9 +42,9 @@ def test_is_dst():
     m = conv.to_python_method("TIMESTAMP_LTZ", col_meta)
     ret = m("1414890189.000")
 
-    assert str(ret) == "2014-11-01 18:03:09-07:00", (
-        "Timestamp during from DST to non-DST"
-    )
+    assert (
+        str(ret) == "2014-11-01 18:03:09-07:00"
+    ), "Timestamp during from DST to non-DST"
 
     # non-DST to DST
     col_meta = {
@@ -58,9 +58,9 @@ def test_is_dst():
     m = conv.to_python_method("TIMESTAMP_LTZ", col_meta)
     ret = m("1425780189.000")
 
-    assert str(ret) == "2015-03-07 18:03:09-08:00", (
-        "Timestamp during from non-DST to DST"
-    )
+    assert (
+        str(ret) == "2015-03-07 18:03:09-08:00"
+    ), "Timestamp during from non-DST to DST"
 
 
 def test_more_timestamps():
