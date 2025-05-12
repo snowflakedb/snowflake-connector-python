@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.16(TBD)
   - Added basic arrow support for Interval types.
   - Added `infer_schema` parameter to `write_pandas` to perform schema inference on the passed data.
+  - Fix `write_pandas` special characters usage in the location name.
 
 - v3.15.0(Apr 29,2025)
   - Bumped up min boto and botocore version to 1.24.
