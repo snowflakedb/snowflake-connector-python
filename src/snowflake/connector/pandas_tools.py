@@ -57,19 +57,24 @@ def build_location_helper(
     database: str | None, schema: str | None, name: str, quote_identifiers: bool
 ) -> str:
     """Helper to format table/stage/file format's location."""
-    if quote_identifiers:
-        location = (
-            (('"' + database + '".') if database else "")
-            + (('"' + schema + '".') if schema else "")
-            + ('"' + name + '"')
-        )
-    else:
-        location = (
-            (database + "." if database else "")
-            + (schema + "." if schema else "")
-            + name
-        )
+    location = (
+        (_escape_part_location(database, quote_identifiers) + "." if database else "")
+        + (_escape_part_location(schema, quote_identifiers) + "." if schema else "")
+        + _escape_part_location(name, quote_identifiers)
+    )
     return location
+
+
+def _escape_part_location(part: str, should_quote: bool) -> str:
+    if "'" in part:
+        should_quote = True
+    if should_quote:
+        if not part.startswith('"'):
+            part = '"' + part
+        if not part.endswith('"'):
+            part = part + '"'
+
+    return part
 
 
 def _do_create_temp_stage(
@@ -459,6 +464,7 @@ def write_pandas(
         drop_sql = f"DROP {object_type.upper()} IF EXISTS identifier(?) /* Python:snowflake.connector.pandas_tools.write_pandas() */"
         params = (name,)
         logger.debug(f"dropping {object_type} with '{drop_sql}'. params: %s", params)
+
         cursor.execute(
             drop_sql,
             _is_internal=True,
@@ -560,10 +566,11 @@ def write_pandas(
                 num_statements=1,
             )
 
+        copy_stage_location = "@" + stage_location.replace("'", "\\'")
         copy_into_sql = (
             f"COPY INTO identifier(?) /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
             f"({columns}) "
-            f"FROM (SELECT {parquet_columns} FROM @{stage_location}) "
+            f"FROM (SELECT {parquet_columns} FROM '{copy_stage_location}') "
             f"FILE_FORMAT=("
             f"TYPE=PARQUET "
             f"COMPRESSION={compression_map[compression]}"
@@ -572,7 +579,10 @@ def write_pandas(
             f") "
             f"PURGE=TRUE ON_ERROR=?"
         )
-        params = (target_table_location, on_error)
+        params = (
+            target_table_location,
+            on_error,
+        )
         logger.debug(f"copying into with '{copy_into_sql}'. params: %s", params)
         copy_results = cursor.execute(
             copy_into_sql,
