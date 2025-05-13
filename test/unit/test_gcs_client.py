@@ -350,7 +350,7 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "region,return_url,use_regional_url,endpoint,use_virtual_url",
+    "region,return_url,use_regional_url,endpoint,use_virtual_url,complete_url",
     [
         (
             "US-CENTRAL1",
@@ -358,6 +358,7 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
             True,
             None,
             False,
+            "https://storage.us-central1.rep.googleapis.com/location/filename",
         ),
         (
             "ME-CENTRAL2",
@@ -365,17 +366,47 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
             True,
             None,
             False,
+            "https://storage.me-central2.rep.googleapis.com/location/filename",
         ),
-        ("US-CENTRAL1", "https://storage.googleapis.com", False, None, False),
-        ("US-CENTRAL1", "https://storage.googleapis.com", False, None, False),
-        ("US-CENTRAL1", "https://location.storage.googleapis.com", False, None, True),
-        ("US-CENTRAL1", "https://location.storage.googleapis.com", True, None, True),
+        (
+            "US-CENTRAL1",
+            "https://storage.googleapis.com",
+            False,
+            None,
+            False,
+            "https://storage.googleapis.com/location/filename",
+        ),
+        (
+            "US-CENTRAL1",
+            "https://storage.us-central1.rep.googleapis.com",
+            True,
+            None,
+            False,
+            "https://storage.us-central1.rep.googleapis.com/location/filename",
+        ),
+        (
+            "US-CENTRAL1",
+            "https://location.storage.googleapis.com",
+            False,
+            None,
+            True,
+            "https://location.storage.googleapis.com/filename",
+        ),
+        (
+            "US-CENTRAL1",
+            "https://location.storage.googleapis.com",
+            True,
+            None,
+            True,
+            "https://location.storage.googleapis.com/filename",
+        ),
         (
             "US-CENTRAL1",
             "https://overriddenurl.com",
             False,
             "https://overriddenurl.com",
             False,
+            "https://overriddenurl.com/location/filename",
         ),
         (
             "US-CENTRAL1",
@@ -383,6 +414,7 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
             True,
             "https://overriddenurl.com",
             False,
+            "https://overriddenurl.com/location/filename",
         ),
         (
             "US-CENTRAL1",
@@ -390,13 +422,7 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
             True,
             "https://overriddenurl.com",
             True,
-        ),
-        (
-            "US-CENTRAL1",
-            "https://overriddenurl.com",
-            False,
-            "https://overriddenurl.com",
-            False,
+            "https://overriddenurl.com/filename",
         ),
         (
             "US-CENTRAL1",
@@ -404,10 +430,13 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
             False,
             "https://overriddenurl.com",
             True,
+            "https://overriddenurl.com/filename",
         ),
     ],
 )
-def test_url(region, return_url, use_regional_url, endpoint, use_virtual_url):
+def test_url(
+    region, return_url, use_regional_url, endpoint, use_virtual_url, complete_url
+):
     gcs_location = SnowflakeGCSRestClient.get_location(
         stage_location="location",
         use_regional_url=use_regional_url,
@@ -416,6 +445,17 @@ def test_url(region, return_url, use_regional_url, endpoint, use_virtual_url):
         use_virtual_url=use_virtual_url,
     )
     assert gcs_location.endpoint == return_url
+
+    generated_url = SnowflakeGCSRestClient.generate_file_url(
+        stage_location="location",
+        filename="filename",
+        use_regional_url=use_regional_url,
+        region=region,
+        endpoint=endpoint,
+        use_virtual_url=use_virtual_url,
+    )
+
+    assert generated_url == complete_url
 
 
 @pytest.mark.parametrize(

@@ -464,7 +464,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         use_virtual_url: bool = False,
     ) -> str:
         gcs_location = SnowflakeGCSRestClient.get_location(
-            stage_location, use_regional_url, region, endpoint
+            stage_location, use_regional_url, region, endpoint, use_virtual_url
         )
         full_file_path = f"{gcs_location.path}{filename}"
 
