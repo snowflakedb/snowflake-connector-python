@@ -126,7 +126,7 @@ class HTTPConnection(_HTTPConnection, object):
         # Proxy options provided by the user.
         self.proxy = kw.pop("proxy", None)
         self.proxy_config = kw.pop("proxy_config", None)
-
+        self._counter = 0
         _HTTPConnection.__init__(self, *args, **kw)
 
     @property
@@ -241,7 +241,15 @@ class HTTPConnection(_HTTPConnection, object):
             headers = headers.copy()
         if "user-agent" not in (six.ensure_str(k.lower()) for k in headers):
             headers["User-Agent"] = _get_default_user_agent()
+        # this goes to python built in client
         super(HTTPConnection, self).request(method, url, body=body, headers=headers)
+        if method.upper() == 'GET' and "/queries/" in url:
+            # try immediately close socket here when performing get query request, not waiting for result
+            # TODO: not sure if this is fast enough to trigger 499 at the backend, check snowhouse traffic if this can trigger 499 error
+            if self._counter == 1:
+                self.sock.close()
+                self._counter = 0
+            self._counter += 1
 
     def request_chunked(self, method, url, body=None, headers=None):
         """
