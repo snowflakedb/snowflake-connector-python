@@ -35,27 +35,46 @@ timestamps {
         string(name: 'parent_job', value: env.JOB_NAME),
         string(name: 'parent_build_number', value: env.BUILD_NUMBER)
       ]
-      stage('Test') {
-          try {
-          def commit_hash = "main" // default which we want to override
-          def bptp_tag = "bptp-built"
-          def response = authenticatedGithubCall("https://api.github.com/repos/snowflakedb/snowflake/git/ref/tags/${bptp_tag}")
-          commit_hash = response.object.sha
-          // Append the bptp-built commit sha to params
-          params += [string(name: 'svn_revision', value: commit_hash)]
-          } catch(Exception e) {
-          println("Exception computing commit hash from: ${response}")
+      parallel(
+      'Test': {
+        stage('Test') {
+            try {
+            def commit_hash = "main" // default which we want to override
+            def bptp_tag = "bptp-stable"
+            def response = authenticatedGithubCall("https://api.github.com/repos/snowflakedb/snowflake/git/ref/tags/${bptp_tag}")
+            commit_hash = response.object.sha
+            // Append the bptp-stable commit sha to params
+            params += [string(name: 'svn_revision', value: commit_hash)]
+            } catch(Exception e) {
+            println("Exception computing commit hash from: ${response}")
+            }
+          parallel (
+            'Test Python 39': { build job: 'RT-PyConnector39-PC',parameters: params},
+            'Test Python 310': { build job: 'RT-PyConnector310-PC',parameters: params},
+            'Test Python 311': { build job: 'RT-PyConnector311-PC',parameters: params},
+            'Test Python 312': { build job: 'RT-PyConnector312-PC',parameters: params},
+            'Test Python 313': { build job: 'RT-PyConnector313-PC',parameters: params},
+            'Test Python 39 OldDriver': { build job: 'RT-PyConnector39-OldDriver-PC',parameters: params},
+            'Test Python 39 FIPS': { build job: 'RT-FIPS-PyConnector39',parameters: params},
+            )
           }
-        parallel (
-          'Test Python 38': { build job: 'RT-PyConnector38-PC',parameters: params},
-          'Test Python 39': { build job: 'RT-PyConnector39-PC',parameters: params},
-          'Test Python 310': { build job: 'RT-PyConnector310-PC',parameters: params},
-          'Test Python 311': { build job: 'RT-PyConnector311-PC',parameters: params},
-          'Test Python 312': { build job: 'RT-PyConnector312-PC',parameters: params},
-          )
+        },
+      'Test Authentication': {
+        stage('Test Authentication') {
+          withCredentials([
+            string(credentialsId: 'a791118f-a1ea-46cd-b876-56da1b9bc71c', variable: 'NEXUS_PASSWORD'),
+            string(credentialsId: 'sfctest0-parameters-secret', variable: 'PARAMETERS_SECRET')
+          ]) {
+            sh '''\
+            |#!/bin/bash -e
+            |$WORKSPACE/ci/test_authentication.sh
+            '''.stripMargin()
+          }
         }
       }
-    }
+    )
+  }
+}
 
 
 pipeline {

@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import gc
@@ -34,13 +30,13 @@ from snowflake.connector.errorcode import (
     ER_NO_ACCOUNT_NAME,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from snowflake.connector.errors import Error
+from snowflake.connector.errors import Error, InterfaceError
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
 from ..randomize import random_string
-from .conftest import RUNNING_ON_GH
+from .conftest import RUNNING_ON_GH, create_connection
 
 try:  # pragma: no cover
     from ..parameters import CONNECTION_PARAMETERS_ADMIN
@@ -298,6 +294,7 @@ def test_with_string_login_timeout(db_parameters):
         )
 
 
+@pytest.mark.skip(reason="the test is affected by CI breaking change")
 def test_bogus(db_parameters):
     """Attempts to login with invalid user name and password.
 
@@ -324,7 +321,7 @@ def test_bogus(db_parameters):
             host=db_parameters["host"],
             port=db_parameters["port"],
             login_timeout=5,
-            insecure_mode=True,
+            disable_ocsp_checks=True,
         )
 
     with pytest.raises(DatabaseError):
@@ -516,7 +513,7 @@ def test_drop_create_user(conn_cnx, db_parameters):
 @pytest.mark.timeout(15)
 @pytest.mark.skipolddriver
 def test_invalid_account_timeout():
-    with pytest.raises(OperationalError):
+    with pytest.raises(InterfaceError):
         snowflake.connector.connect(
             account="bogus", user="test", password="test", login_timeout=5
         )
@@ -557,7 +554,7 @@ def test_eu_connection(tmpdir):
     import os
 
     os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED"] = "true"
-    with pytest.raises(OperationalError):
+    with pytest.raises(InterfaceError):
         # must reach Snowflake
         snowflake.connector.connect(
             account="testaccount1234",
@@ -581,7 +578,7 @@ def test_us_west_connection(tmpdir):
     Notes:
         Region is deprecated.
     """
-    with pytest.raises(OperationalError):
+    with pytest.raises(InterfaceError):
         # must reach Snowflake
         snowflake.connector.connect(
             account="testaccount1234",
@@ -665,6 +662,19 @@ def test_privatelink_ocsp_url_creation():
     )
 
     del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
+
+    SnowflakeConnection.setup_ocsp_privatelink(CLIENT_NAME, hostname)
+    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
+    assert (
+        ocsp_cache_server
+        == "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
+    )
+
+
+@pytest.mark.skipolddriver
+def test_uppercase_privatelink_ocsp_url_creation():
+    account = "TESTACCOUNT.US-EAST-1.PRIVATELINK"
+    hostname = account + ".snowflakecomputing.com"
 
     SnowflakeConnection.setup_ocsp_privatelink(CLIENT_NAME, hostname)
     ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
@@ -1133,6 +1143,15 @@ def test_client_prefetch_threads_setting(conn_cnx):
         assert conn.client_prefetch_threads == new_thread_count
 
 
+@pytest.mark.skipolddriver
+def test_client_fetch_threads_setting(conn_cnx):
+    """Tests whether client_fetch_threads is None by default and setting the parameter has effect."""
+    with conn_cnx() as conn:
+        assert conn.client_fetch_threads is None
+        conn.client_fetch_threads = 32
+        assert conn.client_fetch_threads == 32
+
+
 @pytest.mark.external
 def test_client_failover_connection_url(conn_cnx):
     with conn_cnx("client_failover") as conn:
@@ -1359,9 +1378,9 @@ def test_server_session_keep_alive(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_mode_insecure(conn_cnx, is_public_test, caplog):
+def test_ocsp_mode_disable_ocsp_checks(conn_cnx, is_public_test, caplog):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
-    with conn_cnx(insecure_mode=True) as conn, conn.cursor() as cur:
+    with conn_cnx(disable_ocsp_checks=True) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
         assert "snowflake.connector.ocsp_snowflake" not in caplog.text
         caplog.clear()
@@ -1370,8 +1389,96 @@ def test_ocsp_mode_insecure(conn_cnx, is_public_test, caplog):
         assert cur.execute("select 1").fetchall() == [(1,)]
         if is_public_test:
             assert "snowflake.connector.ocsp_snowflake" in caplog.text
+            assert "This connection does not perform OCSP checks." not in caplog.text
         else:
             assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure_mode(conn_cnx, is_public_test, caplog):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
+    with conn_cnx(insecure_mode=True) as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+            assert "This connection does not perform OCSP checks." in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_match(
+    conn_cnx, is_public_test, caplog
+):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
+    with conn_cnx(
+        insecure_mode=True, disable_ocsp_checks=True
+    ) as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+            assert (
+                "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                "Using the value of 'disable_ocsp_checks."
+            ) not in caplog.text
+            assert "This connection does not perform OCSP checks." in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_disabled(
+    conn_cnx, is_public_test, caplog
+):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
+    with conn_cnx(
+        insecure_mode=False, disable_ocsp_checks=True
+    ) as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+            assert (
+                "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                "Using the value of 'disable_ocsp_checks."
+            ) in caplog.text
+            assert "This connection does not perform OCSP checks." in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
+    conn_cnx, is_public_test, caplog
+):
+    caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
+    with conn_cnx(
+        insecure_mode=True, disable_ocsp_checks=False
+    ) as conn, conn.cursor() as cur:
+        assert cur.execute("select 1").fetchall() == [(1,)]
+        if is_public_test:
+            assert "snowflake.connector.ocsp_snowflake" in caplog.text
+            assert (
+                "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                "Using the value of 'disable_ocsp_checks."
+            ) in caplog.text
+            assert "This connection does not perform OCSP checks." not in caplog.text
+        else:
+            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_ocsp_mode_insecure_mode_deprecation_warning(conn_cnx):
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("ignore")
+        warnings.filterwarnings(
+            "always", category=DeprecationWarning, message=".*insecure_mode"
+        )
+        with conn_cnx(insecure_mode=True):
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+            assert "The 'insecure_mode' connection property is deprecated." in str(
+                w[0].message
+            )
 
 
 @pytest.mark.skipolddriver
@@ -1464,3 +1571,45 @@ def test_disable_telemetry(conn_cnx, caplog):
                 cur.execute("select 1").fetchall()
             assert not conn.telemetry_enabled
     assert "POST /telemetry/send" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_is_valid(conn_cnx):
+    """Tests whether connection and session validation happens."""
+    with conn_cnx() as conn:
+        assert conn
+        assert conn.is_valid() is True
+    assert conn.is_valid() is False
+
+
+@pytest.mark.skipolddriver
+def test_no_auth_connection_negative_case():
+    # AuthNoAuth does not exist in old drivers, so we import at test level to
+    # skip importing it for old driver tests.
+    from snowflake.connector.auth.no_auth import AuthNoAuth
+
+    no_auth = AuthNoAuth()
+
+    # Create a no-auth connection in an invalid way.
+    # We do not fail connection establishment because there is no validated way
+    # to tell whether the no-auth is a valid use case or not. But it is
+    # effectively protected because invalid no-auth will fail to run any query.
+    conn = create_connection("default", auth_class=no_auth)
+
+    # Make sure we are indeed passing the no-auth configuration to the
+    # connection.
+    assert isinstance(conn.auth_class, AuthNoAuth)
+
+    # We expect a failure here when executing queries, because invalid no-auth
+    # connection is not able to run any query
+    with pytest.raises(DatabaseError, match="Connection is closed"):
+        conn.execute_string("select 1")
+
+
+# _file_operation_parser and _stream_downloader are newly introduced and
+# therefore should not be tested on old drivers.
+@pytest.mark.skipolddriver
+def test_file_utils_sanity_check():
+    conn = create_connection("default")
+    assert hasattr(conn._file_operation_parser, "parse_file_operation")
+    assert hasattr(conn._stream_downloader, "download_as_stream")

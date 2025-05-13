@@ -1,10 +1,7 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import typing
 from base64 import b64decode, b64encode
 from collections import OrderedDict
 from datetime import datetime, timezone
@@ -28,6 +25,9 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, utils
+from cryptography.hazmat.primitives.asymmetric.dsa import DSAPublicKey
+from cryptography.hazmat.primitives.asymmetric.ec import ECDSA, EllipticCurvePublicKey
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from OpenSSL.SSL import Connection
 
 from snowflake.connector.errorcode import (
@@ -368,9 +368,21 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         hasher = hashes.Hash(chosen_hash, backend)
         hasher.update(data.dump())
         digest = hasher.finalize()
+        additional_kwargs: dict[str, typing.Any] = dict()
+        if isinstance(public_key, RSAPublicKey):
+            additional_kwargs["padding"] = padding.PKCS1v15()
+            additional_kwargs["algorithm"] = utils.Prehashed(chosen_hash)
+        elif isinstance(public_key, DSAPublicKey):
+            additional_kwargs["algorithm"] = utils.Prehashed(chosen_hash)
+        elif isinstance(public_key, EllipticCurvePublicKey):
+            additional_kwargs["signature_algorithm"] = ECDSA(
+                utils.Prehashed(chosen_hash)
+            )
         try:
             public_key.verify(
-                signature, digest, padding.PKCS1v15(), utils.Prehashed(chosen_hash)
+                signature,
+                digest,
+                **additional_kwargs,
             )
         except InvalidSignature:
             raise RevocationCheckError(msg="Failed to verify the signature")
@@ -382,15 +394,22 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
         from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
 
         cert_map = OrderedDict()
-        logger.debug("# of certificates: %s", len(connection.get_peer_cert_chain()))
-
-        for cert_openssl in connection.get_peer_cert_chain():
+        cert_chain = connection.get_peer_cert_chain()
+        logger.debug("# of certificates: %s", len(cert_chain))
+        self._lazy_read_ca_bundle()
+        for cert_openssl in cert_chain:
             cert_der = dump_certificate(FILETYPE_ASN1, cert_openssl)
             cert = Certificate.load(cert_der)
             logger.debug(
                 "subject: %s, issuer: %s", cert.subject.native, cert.issuer.native
             )
             cert_map[cert.subject.sha256] = cert
+            if cert.issuer.sha256 in SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
+                logger.debug(
+                    "A trusted root certificate found: %s, stopping chain traversal here",
+                    cert.subject.native,
+                )
+                break
 
         return self.create_pair_issuer_subject(cert_map)
 

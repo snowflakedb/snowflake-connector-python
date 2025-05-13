@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import os
@@ -55,7 +51,7 @@ class TelemetryCaptureFixture:
         self,
         con: SnowflakeConnection,
         propagate: bool = True,
-    ) -> Generator[TelemetryCaptureHandler, None, None]:
+    ) -> Generator[TelemetryCaptureHandler]:
         original_telemetry = con._telemetry
         new_telemetry = TelemetryCaptureHandler(
             original_telemetry,
@@ -146,3 +142,7 @@ def pytest_runtest_setup(item) -> None:
         pytest.skip("cannot run this test on public Snowflake deployment")
     elif INTERNAL_SKIP_TAGS.intersection(test_tags) and not running_on_public_ci():
         pytest.skip("cannot run this test on private Snowflake deployment")
+
+    if "auth" in test_tags:
+        if os.getenv("RUN_AUTH_TESTS") != "true":
+            pytest.skip("Skipping auth test in current environment")

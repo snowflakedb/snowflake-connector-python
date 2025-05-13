@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import collections
@@ -46,6 +42,7 @@ from .compat import (
     urlparse,
 )
 from .constants import (
+    _CONNECTIVITY_ERR_MSG,
     _SNOWFLAKE_HOST_SUFFIX_REGEX,
     HTTP_HEADER_ACCEPT,
     HTTP_HEADER_CONTENT_TYPE,
@@ -142,6 +139,7 @@ MASTER_TOKEN_EXPIRED_GS_CODE = "390114"
 MASTER_TOKEN_INVALD_GS_CODE = "390115"
 ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE = "390195"
 BAD_REQUEST_GS_CODE = "390400"
+OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE = "390318"
 
 # other constants
 CONTENT_TYPE_APPLICATION_JSON = "application/json"
@@ -185,8 +183,13 @@ DEFAULT_AUTHENTICATOR = "SNOWFLAKE"  # default authenticator name
 EXTERNAL_BROWSER_AUTHENTICATOR = "EXTERNALBROWSER"
 KEY_PAIR_AUTHENTICATOR = "SNOWFLAKE_JWT"
 OAUTH_AUTHENTICATOR = "OAUTH"
+OAUTH_AUTHORIZATION_CODE = "OAUTH_AUTHORIZATION_CODE"
+OAUTH_CLIENT_CREDENTIALS = "OAUTH_CLIENT_CREDENTIALS"
 ID_TOKEN_AUTHENTICATOR = "ID_TOKEN"
 USR_PWD_MFA_AUTHENTICATOR = "USERNAME_PASSWORD_MFA"
+PROGRAMMATIC_ACCESS_TOKEN = "PROGRAMMATIC_ACCESS_TOKEN"
+NO_AUTH_AUTHENTICATOR = "NO_AUTH"
+WORKLOAD_IDENTITY_AUTHENTICATOR = "WORKLOAD_IDENTITY"
 
 
 def is_retryable_http_code(code: int) -> bool:
@@ -354,6 +357,15 @@ class SessionPool:
         self._idle_sessions.clear()
 
 
+# Customizable JSONEncoder to support additional types.
+class SnowflakeRestfulJsonEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, uuid.UUID):
+            return str(o)
+
+        return super().default(o)
+
+
 class SnowflakeRestful:
     """Snowflake Restful class."""
 
@@ -486,18 +498,26 @@ class SnowflakeRestful:
             HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
         try:
-            from opentelemetry.propagate import inject
+            # SNOW-1763555: inject OpenTelemetry headers if available specifically in WC3 format
+            #  into our request headers in case tracing is enabled. This should make sure that
+            #  our requests are accounted for properly if OpenTelemetry is used by users.
+            from opentelemetry.trace.propagation.tracecontext import (
+                TraceContextTextMapPropagator,
+            )
 
-            inject(headers)
-        except ModuleNotFoundError as e:
-            logger.debug(f"Opentelemtry otel injection failed because of: {e}")
+            TraceContextTextMapPropagator().inject(headers)
+        except Exception:
+            logger.debug(
+                "Opentelemtry otel injection failed",
+                exc_info=True,
+            )
         if self._connection.service_name:
             headers[HTTP_HEADER_SERVICE_NAME] = self._connection.service_name
         if method == "post":
             return self._post_request(
                 url,
                 headers,
-                json.dumps(body),
+                json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
                 token=self.token,
                 _no_results=_no_results,
                 timeout=timeout,
@@ -559,7 +579,7 @@ class SnowflakeRestful:
         ret = self._post_request(
             url,
             headers,
-            json.dumps(body),
+            json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
             token=header_token,
         )
         if ret.get("success") and ret.get("data", {}).get("sessionToken"):
@@ -657,7 +677,7 @@ class SnowflakeRestful:
                 ret = self._post_request(
                     url,
                     headers,
-                    json.dumps(body),
+                    json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
                     token=self.token,
                     timeout=5,
                     no_retry=True,
@@ -898,6 +918,14 @@ class SnowflakeRestful:
         full_url = retry_ctx.add_retry_params(full_url)
         full_url = SnowflakeRestful.add_request_guid(full_url)
         is_fetch_query_status = kwargs.pop("is_fetch_query_status", False)
+        # raise_raw_http_failure is not a public parameter and may change in the future
+        # it enables raising raw http errors that are not handled by
+        # connector, connector handles the following http error:
+        #  1. FORBIDDEN error when trying to login
+        #  2. retryable http code defined in method is_retryable_http_code
+        #  3. UNAUTHORIZED error when using okta authentication
+        # raise_raw_http_failure doesn't work for the 3 mentioned cases.
+        raise_raw_http_failure = kwargs.pop("raise_raw_http_failure", False)
         try:
             return_object = self._request_exec(
                 session=session,
@@ -906,6 +934,7 @@ class SnowflakeRestful:
                 headers=headers,
                 data=data,
                 token=token,
+                raise_raw_http_failure=raise_raw_http_failure,
                 **kwargs,
             )
             if return_object is not None:
@@ -973,7 +1002,9 @@ class SnowflakeRestful:
                     )
             return None  # retry
         except Exception as e:
-            if not no_retry:
+            if (
+                raise_raw_http_failure and isinstance(e, requests.exceptions.HTTPError)
+            ) or not no_retry:
                 raise e
             logger.debug("Ignored error", exc_info=True)
             return {}
@@ -1042,6 +1073,7 @@ class SnowflakeRestful:
         binary_data_handler=None,
         socket_timeout: int | None = None,
         is_okta_authentication: bool = False,
+        raise_raw_http_failure: bool = False,
     ):
         if socket_timeout is None:
             if self._connection.socket_timeout is not None:
@@ -1119,6 +1151,8 @@ class SnowflakeRestful:
                     raise_okta_unauthorized_error(self._connection, raw_ret)
                     return None  # required for tests
                 else:
+                    if raise_raw_http_failure:
+                        raw_ret.raise_for_status()
                     raise_failed_request_error(
                         self._connection, full_url, method, raw_ret
                     )
@@ -1126,8 +1160,19 @@ class SnowflakeRestful:
             finally:
                 raw_ret.close()  # ensure response is closed
         except SSLError as se:
-            logger.debug("Hit non-retryable SSL error, %s", str(se))
-
+            msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
+            logger.debug(msg)
+            # the following code is for backward compatibility with old versions of python connector which calls
+            # self._handle_unknown_error to process SSLError
+            Error.errorhandler_wrapper(
+                self._connection,
+                None,
+                OperationalError,
+                {
+                    "msg": msg,
+                    "errno": ER_FAILED_TO_REQUEST,
+                },
+            )
         except (
             BadStatusLine,
             ConnectionError,

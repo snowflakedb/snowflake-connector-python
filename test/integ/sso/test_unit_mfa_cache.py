@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import json
@@ -12,28 +8,20 @@ from unittest.mock import Mock, patch
 import pytest
 
 import snowflake.connector
-from snowflake.connector.compat import IS_LINUX
 from snowflake.connector.errors import DatabaseError
 
 try:
-    from snowflake.connector.compat import IS_MACOS
+    from snowflake.connector.compat import IS_LINUX, IS_MACOS, IS_WINDOWS
 except ImportError:
     import platform
 
     IS_MACOS = platform.system() == "Darwin"
-try:
-    from snowflake.connector.auth import delete_temporary_credential
-except ImportError:
-    delete_temporary_credential = None
-
-MFA_TOKEN = "MFATOKEN"
+    IS_LINUX = platform.system() == "Linux"
+    IS_WINDOWS = platform.system() == "Windows"
 
 
 # Although this is an unit test, we put it under test/integ/sso, since it needs keyring package installed
-@pytest.mark.skipif(
-    delete_temporary_credential is None,
-    reason="delete_temporary_credential is not available.",
-)
+@pytest.mark.skipolddriver
 @patch("snowflake.connector.network.SnowflakeRestful._post_request")
 def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     """Connects with (username, pwd, mfa) mock."""
@@ -130,8 +118,10 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
 
     def test_body(conn_cfg):
-        delete_temporary_credential(
-            host=conn_cfg["host"], user=conn_cfg["user"], cred_type=MFA_TOKEN
+        from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
+
+        TokenCache.make().remove(
+            TokenKey(conn_cfg["host"], conn_cfg["user"], TokenType.MFA_TOKEN)
         )
 
         # first connection, no mfa token cache
@@ -158,6 +148,7 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
             # Under authentication failed exception, mfa cache is expected to be cleaned up
             con = snowflake.connector.connect(**conn_cfg)
 
+        # assert 1 == -1
         # no mfa cache token should be sent at this connection
         con = snowflake.connector.connect(**conn_cfg)
         con.close()
@@ -172,7 +163,7 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     if IS_LINUX:
         conn_cfg["client_request_mfa_token"] = True
 
-    if IS_MACOS:
+    if IS_MACOS or IS_WINDOWS:
         with patch(
             "keyring.delete_password", Mock(side_effect=mock_del_password)
         ), patch("keyring.set_password", Mock(side_effect=mock_set_password)), patch(

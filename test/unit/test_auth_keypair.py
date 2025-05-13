@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 from unittest.mock import Mock, PropertyMock, patch
@@ -107,7 +103,7 @@ def test_auth_keypair_bad_type():
     class Bad:
         pass
 
-    for bad_private_key in ("abcd", 1234, Bad()):
+    for bad_private_key in (1234, Bad()):
         auth_instance = AuthByKeyPair(private_key=bad_private_key)
         with raises(TypeError) as ex:
             auth_instance.prepare(account=account, user=user)

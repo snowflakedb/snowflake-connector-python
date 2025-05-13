@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import logging
@@ -18,7 +14,7 @@ except ImportError:
     MissingPandas = None
     _import_or_missing_pandas_option = None
 
-from importlib.metadata import distributions
+from importlib.metadata import PackageNotFoundError, distribution
 
 
 @pytest.mark.skipif(
@@ -30,18 +26,15 @@ def test_pandas_option_reporting(caplog):
 
     This issue was brought to attention in: https://github.com/snowflakedb/snowflake-connector-python/issues/412
     """
-    modified_distributions = list(
-        d
-        for d in distributions()
-        if d.metadata["Name"]
-        not in (
-            "pyarrow",
-            "snowflake-connecctor-python",
-        )
-    )
+
+    def modified_distribution(name, *args, **kwargs):
+        if name in ["pyarrow", "snowflake-connector-python"]:
+            raise PackageNotFoundError("TestErrorMessage")
+        return distribution(name, *args, **kwargs)
+
     with mock.patch(
-        "snowflake.connector.options.distributions",
-        return_value=modified_distributions,
+        "snowflake.connector.options.distribution",
+        wraps=modified_distribution,
     ):
         caplog.set_level(logging.DEBUG, "snowflake.connector")
         pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
@@ -49,6 +42,7 @@ def test_pandas_option_reporting(caplog):
         assert not isinstance(pandas, MissingPandas)
         assert not isinstance(pyarrow, MissingPandas)
         assert (
-            "Cannot determine if compatible pyarrow is installed because of missing package(s) "
-            "from "
-        ) in caplog.text
+            "Cannot determine if compatible pyarrow is installed because of missing package(s)"
+            in caplog.text
+        )
+        assert "TestErrorMessage" in caplog.text

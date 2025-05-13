@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import binascii
@@ -319,6 +315,9 @@ class StorageCredential:
     def update(self, cur_timestamp) -> None:
         with self.lock:
             if cur_timestamp < self.timestamp:
+                logger.debug(
+                    "Omitting renewal of storage token, as it already happened."
+                )
                 return
             logger.debug("Renewing expired storage token.")
             ret = self.connection.cursor()._execute_helper(self._command)
@@ -354,6 +353,8 @@ class SnowflakeFileTransferAgent:
         multipart_threshold: int | None = None,
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
+        iobound_tpe_limit: int | None = None,
+        unsafe_file_write: bool = False,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -384,6 +385,8 @@ class SnowflakeFileTransferAgent:
         self._multipart_threshold = multipart_threshold or 67108864  # Historical value
         self._use_s3_regional_url = use_s3_regional_url
         self._credentials: StorageCredential | None = None
+        self._iobound_tpe_limit = iobound_tpe_limit
+        self._unsafe_file_write = unsafe_file_write
 
     def execute(self) -> None:
         self._parse_command()
@@ -440,10 +443,15 @@ class SnowflakeFileTransferAgent:
             result.result_status = result.result_status.value
 
     def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
+        iobound_tpe_limit = min(len(metas), os.cpu_count())
+        logger.debug("Decided IO-bound TPE size: %d", iobound_tpe_limit)
+        if self._iobound_tpe_limit is not None:
+            logger.debug("IO-bound TPE size is limited to: %d", self._iobound_tpe_limit)
+            iobound_tpe_limit = min(iobound_tpe_limit, self._iobound_tpe_limit)
         max_concurrency = self._parallel
         network_tpe = ThreadPoolExecutor(max_concurrency)
-        preprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
-        postprocess_tpe = ThreadPoolExecutor(min(len(metas), os.cpu_count()))
+        preprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
+        postprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
         logger.debug(f"Chunk ThreadPoolExecutor size: {max_concurrency}")
         cv_main_thread = threading.Condition()  # to signal the main thread
         cv_chunk_process = (
@@ -454,6 +462,9 @@ class SnowflakeFileTransferAgent:
         transfer_metadata = TransferMetadata()  # this is protected by cv_chunk_process
         is_upload = self._command_type == CMD_TYPE_UPLOAD
         exception_caught_in_callback: Exception | None = None
+        logger.debug(
+            "Going to %sload %d files", "up" if is_upload else "down", len(metas)
+        )
 
         def notify_file_completed() -> None:
             # Increment the number of completed files, then notify the main thread.
@@ -526,7 +537,7 @@ class SnowflakeFileTransferAgent:
         ) -> None:
             # Note: chunk_id is 0 based while num_of_chunks is count
             logger.debug(
-                f"Chunk {chunk_id}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
+                f"Chunk(id: {chunk_id}) {chunk_id+1}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
             )
             with cv_chunk_process:
                 transfer_metadata.chunks_in_queue -= 1
@@ -663,6 +674,7 @@ class SnowflakeFileTransferAgent:
                 meta,
                 self._stage_info,
                 4 * megabyte,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == AZURE_FS:
             return SnowflakeAzureRestClient(
@@ -670,7 +682,7 @@ class SnowflakeFileTransferAgent:
                 self._credentials,
                 AZURE_CHUNK_SIZE,
                 self._stage_info,
-                use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == S3_FS:
             return SnowflakeS3RestClient(
@@ -680,6 +692,7 @@ class SnowflakeFileTransferAgent:
                 _chunk_size_calculator(meta.src_file_size),
                 use_accelerate_endpoint=self._use_accelerate_endpoint,
                 use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == GCS_FS:
             return SnowflakeGCSRestClient(
@@ -688,7 +701,7 @@ class SnowflakeFileTransferAgent:
                 self._stage_info,
                 self._cursor._connection,
                 self._command,
-                use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 

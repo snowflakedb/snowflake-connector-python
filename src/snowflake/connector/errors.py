@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import logging
@@ -12,7 +8,6 @@ import traceback
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
-from .compat import BASE_EXCEPTION_CLASS
 from .secret_detector import SecretDetector
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
@@ -28,7 +23,7 @@ connector_base_path = os.path.join("snowflake", "connector")
 RE_FORMATTED_ERROR = re.compile(r"^(\d{6,})(?: \((\S+)\))?:")
 
 
-class Error(BASE_EXCEPTION_CLASS):
+class Error(Exception):
     """Base Snowflake exception class."""
 
     def __init__(
@@ -361,7 +356,7 @@ class Error(BASE_EXCEPTION_CLASS):
         return error_class(error_value)
 
 
-class _Warning(BASE_EXCEPTION_CLASS):
+class _Warning(Exception):
     """Exception for important warnings."""
 
     pass

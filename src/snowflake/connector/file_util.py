@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -19,6 +15,10 @@ from cryptography.hazmat.primitives import hashes
 from .constants import UTF8, kilobyte
 
 logger = getLogger(__name__)
+
+
+def owner_rw_opener(path, flags) -> int:
+    return os.open(path, flags, mode=0o600)
 
 
 class SnowflakeFileUtil:

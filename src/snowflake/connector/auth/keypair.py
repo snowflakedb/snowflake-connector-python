@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -43,7 +39,7 @@ class AuthByKeyPair(AuthByPlugin):
 
     def __init__(
         self,
-        private_key: bytes | RSAPrivateKey,
+        private_key: bytes | str | RSAPrivateKey,
         lifetime_in_seconds: int = LIFETIME,
         **kwargs,
     ) -> None:
@@ -75,7 +71,7 @@ class AuthByKeyPair(AuthByPlugin):
             ).total_seconds()
         )
 
-        self._private_key: bytes | RSAPrivateKey | None = private_key
+        self._private_key: bytes | str | RSAPrivateKey | None = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
         self._lifetime = timedelta(
@@ -104,6 +100,17 @@ class AuthByKeyPair(AuthByPlugin):
         user = user.upper()
 
         now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        if isinstance(self._private_key, str):
+            try:
+                self._private_key = base64.b64decode(self._private_key)
+            except Exception as e:
+                raise ProgrammingError(
+                    msg=f"Failed to decode private key: {e}\nPlease provide a valid "
+                    "unencrypted rsa private key in base64-encoded DER format as a "
+                    "str object",
+                    errno=ER_INVALID_PRIVATE_KEY,
+                )
 
         if isinstance(self._private_key, bytes):
             try:
