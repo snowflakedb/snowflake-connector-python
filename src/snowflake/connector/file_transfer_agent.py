@@ -885,15 +885,6 @@ class SnowflakeFileTransferAgent:
                 logger.error(f"_expand_filenames FILE: {file_name}")
                 logger.error(f"isabs: {os.path.isabs(file_name)}")
 
-                if not os.path.isabs(file_name):
-                    file_name = os.path.abspath(file_name)
-                    # file_name = os.path.join(GET_CWD(), file_name)
-
-                    print(f"After extend: \n\n_expand_filenames FILE: {file_name}")
-                    print(os.path.isabs(file_name))
-                    print("\n\n")
-                    logger.error(f"After extend: _expand_filenames FILE: {file_name}")
-                    logger.error(f"isabs: {os.path.isabs(file_name)}")
                 if (
                     IS_WINDOWS
                     and len(file_name) > 2
@@ -903,6 +894,24 @@ class SnowflakeFileTransferAgent:
                     # Windows path: /C:/data/file1.txt where it starts with slash
                     # followed by a drive letter and colon.
                     file_name = file_name[1:]
+
+                    print(f" AFTER Windows cut \n\n_expand_filenames FILE: {file_name}")
+                    print(os.path.isabs(file_name))
+                    print("\n\n")
+                    logger.error(
+                        f" AFTER Windows cut _expand_filenames FILE: {file_name}"
+                    )
+                    logger.error(f"isabs: {os.path.isabs(file_name)}")
+
+                if not os.path.isabs(file_name):
+                    file_name = os.path.abspath(file_name)
+                    # file_name = os.path.join(GET_CWD(), file_name)
+
+                    print(f"After extend: \n\n_expand_filenames FILE: {file_name}")
+                    print(os.path.isabs(file_name))
+                    print("\n\n")
+                    logger.error(f"After extend: _expand_filenames FILE: {file_name}")
+                    logger.error(f"isabs: {os.path.isabs(file_name)}")
 
                 files = glob.glob(file_name)
                 canonical_locations += files
