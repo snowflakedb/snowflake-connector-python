@@ -879,6 +879,9 @@ class SnowflakeFileTransferAgent:
 
                 file_name = os.path.expanduser(file_name)
 
+                print(f"\n\n_expand_filenames FILE: {file_name}")
+                print(os.path.isabs(file_name))
+                print("\n\n")
                 if not os.path.isabs(file_name):
                     file_name = os.path.join(GET_CWD(), file_name)
 
