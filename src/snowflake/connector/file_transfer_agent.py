@@ -16,7 +16,7 @@ from time import time
 from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 
 from .azure_storage_client import SnowflakeAzureRestClient
-from .compat import GET_CWD, IS_WINDOWS
+from .compat import IS_WINDOWS
 from .constants import (
     AZURE_CHUNK_SIZE,
     AZURE_FS,
@@ -886,7 +886,9 @@ class SnowflakeFileTransferAgent:
                 logger.error(f"isabs: {os.path.isabs(file_name)}")
 
                 if not os.path.isabs(file_name):
-                    file_name = os.path.join(GET_CWD(), file_name)
+                    file_name = os.path.abspath(file_name)
+                    # file_name = os.path.join(GET_CWD(), file_name)
+
                     print(f"After extend: \n\n_expand_filenames FILE: {file_name}")
                     print(os.path.isabs(file_name))
                     print("\n\n")
