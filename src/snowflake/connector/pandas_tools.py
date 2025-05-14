@@ -441,7 +441,7 @@ def write_pandas(
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression, **kwargs)
             if not use_wildcard_upload:
-                # Upload parquet file
+                # Upload parquet file chunk right away
                 path = chunk_path.replace("\\", "\\\\").replace("'", "\\'")
                 cursor._upload(
                     local_file_name=f"'file://{path}'",
@@ -453,21 +453,12 @@ def write_pandas(
                 os.remove(chunk_path)
 
         if use_wildcard_upload:
-            # Upload directory
-            upload_sql = (
-                "PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                "'file://{path}/*' ? PARALLEL={parallel}"
-            ).format(
-                path=tmp_folder.replace("\\", "\\\\").replace("'", "\\'"),
-                parallel=parallel,
-            )
-            params = ("@" + stage_location,)
-            logger.debug(f"uploading files with '{upload_sql}', params: %s", params)
-            cursor.execute(
-                upload_sql,
-                _is_internal=True,
-                _force_qmark_paramstyle=True,
-                params=params,
+            # Upload tmp directory with parquet chunks
+            path = tmp_folder.replace("\\", "\\\\").replace("'", "\\'")
+            cursor._upload(
+                local_file_name=f"'file://{path}/*'",
+                stage_location="@" + stage_location,
+                options={"parallel": parallel, "source_compression": "auto_detect"},
             )
 
     # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
