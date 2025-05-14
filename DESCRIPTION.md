@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added basic arrow support for Interval types.
   - Fix `write_pandas` special characters usage in the location name.
   - Fix usage of `use_virtual_url` when building the location for gcs storage client.
+  - Add `use_wildcard_uploads` parameter to `write_pandas` function to allow wildcard upload of chunks.
 
 - v3.15.0(Apr 29,2025)
   - Bumped up min boto and botocore version to 1.24.
