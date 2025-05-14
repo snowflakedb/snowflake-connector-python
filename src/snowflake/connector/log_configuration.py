@@ -26,8 +26,6 @@ class EasyLoggingConfigPython:
             self.level = log.get("level", "INFO")
             self.path = log.get("path", os.path.join(DIRS.user_config_path, "logs"))
 
-            # TODO: wont work in 3.13?
-            # if not self.path.scheme and self.path.netloc and self.path.path.startswith("/"):
             if not os.path.isabs(self.path):
                 raise FileNotFoundError(
                     f"Log path must be an absolute file path: {self.path}"
