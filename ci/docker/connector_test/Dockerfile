@@ -3,7 +3,7 @@ FROM $BASE_IMAGE
 
 RUN yum install -y java-11-openjdk
 
-# Our dependencies rely on the Rust toolchain being available in the build-time environment
+# Our dependencies rely on the Rust toolchain being available in the build-time environment (https://github.com/pyca/cryptography/issues/5771)
 RUN yum -y install rust cargo
 
 # This is to solve permission issue, read https://denibertovic.com/posts/handling-permissions-with-docker-volumes/
