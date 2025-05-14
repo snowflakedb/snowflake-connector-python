@@ -269,6 +269,7 @@ def write_pandas(
     table_type: Literal["", "temp", "temporary", "transient"] = "",
     use_logical_type: bool | None = None,
     iceberg_config: dict[str, str] | None = None,
+    use_wildcard_upload: bool = False,
     **kwargs: Any,
 ) -> tuple[
     bool,
@@ -340,6 +341,8 @@ def write_pandas(
                 * base_location: the base directory that snowflake can write iceberg metadata and files to
                 * catalog_sync: optionally sets the catalog integration configured for Polaris Catalog
                 * storage_serialization_policy: specifies the storage serialization policy for the table
+        use_wildcard_upload: If set to True, the upload will use the wildcard upload method.
+            This is a faster method of uploading but instead of uploading and cleaning up each chunk separately it will upload all chunks at once and then clean up locally stored chunks.
 
 
 
@@ -442,12 +445,34 @@ def write_pandas(
             chunk_path = os.path.join(tmp_folder, f"file{i}.txt")
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression, **kwargs)
-            # Upload parquet file
+            if not use_wildcard_upload:
+                # Upload parquet file
+                upload_sql = (
+                    "PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+                    "'file://{path}' ? PARALLEL={parallel}"
+                ).format(
+                    path=chunk_path.replace("\\", "\\\\").replace("'", "\\'"),
+                    parallel=parallel,
+                )
+                params = ("@" + stage_location,)
+                logger.debug(f"uploading files with '{upload_sql}', params: %s", params)
+                cursor.execute(
+                    upload_sql,
+                    _is_internal=True,
+                    _force_qmark_paramstyle=True,
+                    params=params,
+                    num_statements=1,
+                )
+                # Remove chunk file
+                os.remove(chunk_path)
+
+        if use_wildcard_upload:
+            # Upload directory
             upload_sql = (
                 "PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                "'file://{path}' ? PARALLEL={parallel}"
+                "'file://{path}/*' ? PARALLEL={parallel}"
             ).format(
-                path=chunk_path.replace("\\", "\\\\").replace("'", "\\'"),
+                path=tmp_folder.replace("\\", "\\\\").replace("'", "\\'"),
                 parallel=parallel,
             )
             params = ("@" + stage_location,)
@@ -457,10 +482,7 @@ def write_pandas(
                 _is_internal=True,
                 _force_qmark_paramstyle=True,
                 params=params,
-                num_statements=1,
             )
-            # Remove chunk file
-            os.remove(chunk_path)
 
     # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
     # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
