@@ -2,9 +2,6 @@ FROM public.ecr.aws/lambda/python:3.13-x86_64
 
 WORKDIR /home/user/snowflake-connector-python
 
-# TODO: When there are prebuilt wheels accessible for our dependencies (i.e. numpy)
-# for Python 3.13 all dnf ... commands installing building kits can be removed.
-
 # Install necessary packages and compilers - we need to build numpy for newer version
 # Update dnf and install development tools
 RUN dnf -y update && \
@@ -16,6 +13,8 @@ RUN dnf -y update && \
     openblas-devel \
     lapack-devel && \
     dnf clean all
+
+# Our dependencies rely on the Rust toolchain being available in the build-time environment (https://github.com/pyca/cryptography/issues/5771)
 RUN dnf -y install rust cargo
 RUN dnf -y upgrade
 
