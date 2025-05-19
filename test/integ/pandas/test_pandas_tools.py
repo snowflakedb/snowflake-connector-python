@@ -1141,8 +1141,8 @@ def test_pandas_with_single_quote(
             cnx.execute_string(f"drop table if exists {table_name}")
 
 
-@pytest.mark.parametrize("use_wildcard_upload", [True, False])
-def test_write_pandas_wildcard_upload(conn_cnx, use_wildcard_upload):
+@pytest.mark.parametrize("write_then_upload", [True, False])
+def test_write_pandas_wildcard_upload(conn_cnx, write_then_upload):
     """Tests whether overwriting table using a Pandas DataFrame works as expected."""
     random_table_name = random_string(5, "userspoints_")
     df_data = [("Dash", 50), ("Luke", 20), ("Mark", 10), ("John", 30)]
@@ -1174,7 +1174,7 @@ def test_write_pandas_wildcard_upload(conn_cnx, use_wildcard_upload):
                 index=True,
                 on_error="continue",
                 chunk_size=1,
-                use_wildcard_upload=use_wildcard_upload,
+                write_then_upload=write_then_upload,
             )
             # Check write_pandas output
             assert success
