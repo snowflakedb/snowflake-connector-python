@@ -1032,6 +1032,7 @@ class SnowflakeOCSP:
         use_ocsp_cache_server=None,
         use_post_method: bool = True,
         use_fail_open: bool = True,
+        root_certs_dict_lock_timeout: int = -1,
         **kwargs,
     ) -> None:
         self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)
@@ -1040,6 +1041,7 @@ class SnowflakeOCSP:
             logger.debug("WARNING - DRIVER CONFIGURED IN TEST MODE")
 
         self._use_post_method = use_post_method
+        self._root_certs_dict_lock_timeout = root_certs_dict_lock_timeout
         self.OCSP_CACHE_SERVER = OCSPServer(
             top_level_domain=extract_top_level_domain_from_hostname(
                 kwargs.pop("hostname", None)
@@ -1410,7 +1412,10 @@ class SnowflakeOCSP:
 
     def _lazy_read_ca_bundle(self) -> None:
         """Reads the local cabundle file and cache it in memory."""
-        with SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK:
+        SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK.acquire(
+            timeout=self._root_certs_dict_lock_timeout
+        )
+        try:
             if SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
                 # return if already loaded
                 return
@@ -1471,6 +1476,8 @@ class SnowflakeOCSP:
                     "No CA bundle file is found in the system. "
                     "Set REQUESTS_CA_BUNDLE to the file."
                 )
+        finally:
+            SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK.release()
 
     @staticmethod
     def _calculate_tolerable_validity(this_update: float, next_update: float) -> int:

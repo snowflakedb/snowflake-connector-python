@@ -396,6 +396,12 @@ class SnowflakeRestful:
         ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
             self._connection._ocsp_response_cache_filename if self._connection else None
         )
+        # OCSP root timeout
+        ssl_wrap_socket.FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT = (
+            self._connection._ocsp_root_certs_dict_lock_timeout
+            if self._connection
+            else -1
+        )
 
         # This is to address the issue where requests hangs
         _ = "dummy".encode("idna").decode("utf-8")
