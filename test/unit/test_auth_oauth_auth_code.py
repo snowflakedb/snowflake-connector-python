@@ -21,6 +21,7 @@ def test_auth_oauth_auth_code_oauth_type():
         "tokenRequestUrl",
         "redirectUri:{port}",
         "scope",
+        "host",
     )
     body = {"data": {}}
     auth.update_body(body)
@@ -38,6 +39,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
         "tokenRequestUrl",
         "http://127.0.0.1:8080",
         "scope",
+        "host",
         pkce_enabled=False,
         enable_single_use_refresh_tokens=rtr_enabled,
     )
