@@ -7,6 +7,10 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.16(TBD)
+  - Bumped numpy dependency from <2.1.0 to <=2.2.4
+  - Added Windows support for Python 3.13.
+
 - v3.15.1(May 20, 2025)
   - Added basic arrow support for Interval types.
   - Fix `write_pandas` special characters usage in the location name.
@@ -24,8 +28,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
       - Added the `oauth_client_id`, `oauth_client_secret`, `oauth_token_request_url`, and `oauth_scope` parameters.
       - Added the `OAUTH_CLIENT_CREDENTIALS` value for the parameter authenticator.
     - For OAuth Token caching: Passing a username to driver configuration is required, and the `client_store_temporary_credential property` is to be set to `true`.
-  - Bumped numpy dependency from <2.1.0 to <=2.2.4
-  - Added Windows support for Python 3.13.
 
 - v3.14.1(April 21, 2025)
   - Added support for Python 3.13.
