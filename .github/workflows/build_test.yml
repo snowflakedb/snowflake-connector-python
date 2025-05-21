@@ -180,6 +180,8 @@ jobs:
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
+          # To specify the test name (in single test mode) pass this env variable:
+          # SINGLE_TEST_NAME: test/file/path::test_name
         shell: bash
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
