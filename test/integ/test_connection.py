@@ -878,7 +878,7 @@ def test_invalid_connection_parameter(db_parameters, name, value, exc_warn):
         try:
             conn = snowflake.connector.connect(**conn_params)
             assert getattr(conn, "_" + name) == value
-            # TODO: remove filtering once the root cause for deprecation warning is fixed
+            # TODO: SNOW-2114216 remove filtering once the root cause for deprecation warning is fixed
             # Filter out the deprecation warning
             filtered_w = [
                 warning for warning in w if warning.category != DeprecationWarning
@@ -909,7 +909,7 @@ def test_invalid_connection_parameters_turned_off(db_parameters):
             conn = snowflake.connector.connect(**conn_params)
             assert conn._autocommit == conn_params["autocommit"]
             assert conn._applucation == conn_params["applucation"]
-            # TODO: remove filtering once the root cause for deprecation warning is fixed
+            # TODO: SNOW-2114216 remove filtering once the root cause for deprecation warning is fixed
             # Filter out the deprecation warning
             filtered_w = [
                 warning for warning in w if warning.category != DeprecationWarning
