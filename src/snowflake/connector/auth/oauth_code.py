@@ -45,6 +45,8 @@ def _get_query_params(
 class AuthByOauthCode(AuthByOAuthBase):
     """Authenticates user by OAuth code flow."""
 
+    _LOCAL_APPLICATION_CLIENT_CREDENTIALS = "LOCAL_APPLICATION"
+
     def __init__(
         self,
         application: str,
@@ -54,6 +56,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         token_request_url: str,
         redirect_uri: str,
         scope: str,
+        host: str,
         pkce_enabled: bool = True,
         token_cache: TokenCache | None = None,
         refresh_token_enabled: bool = False,
@@ -61,6 +64,14 @@ class AuthByOauthCode(AuthByOAuthBase):
         enable_single_use_refresh_tokens: bool = False,
         **kwargs,
     ) -> None:
+        if self._eligible_for_default_client_credentials(
+            client_id, client_secret, authentication_url, token_request_url, host
+        ):
+            client_id, client_secret = (
+                self.__class__._LOCAL_APPLICATION_CLIENT_CREDENTIALS,
+                self.__class__._LOCAL_APPLICATION_CLIENT_CREDENTIALS,
+            )
+
         super().__init__(
             client_id=client_id,
             client_secret=client_secret,
@@ -385,3 +396,24 @@ You can close this window now and go back where you started from.
                 },
             )
         return parsed.get("code", [None])[0], parsed.get("state", [None])[0]
+
+    def _eligible_for_default_client_credentials(
+        self,
+        client_id: str,
+        client_secret: str,
+        authentication_url: str,
+        token_request_url: str,
+        host: str,
+    ) -> bool:
+        return (
+            client_id == ""
+            and client_secret == ""
+            and self._is_snowflake_as_idp(authentication_url, token_request_url, host)
+        )
+
+    def _is_snowflake_as_idp(
+        self, authentication_url: str, token_request_url: str, host: str
+    ) -> bool:
+        return (authentication_url == "" or host in authentication_url) and (
+            token_request_url == "" or host in token_request_url
+        )

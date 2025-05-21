@@ -1212,6 +1212,7 @@ class SnowflakeConnection:
                     application=self.application,
                     client_id=self._oauth_client_id,
                     client_secret=self._oauth_client_secret,
+                    host=self.host,
                     authentication_url=self._oauth_authorization_url.format(
                         host=self.host, port=self.port
                     ),
