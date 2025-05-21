@@ -106,6 +106,33 @@ class AuthorizationTestHelper:
             logger.error(e)
             return False
 
+    def connect_and_execute_set_session_state(self, key: str, value: str):
+        try:
+            logger.info("Trying to connect to Snowflake")
+            with snowflake.connector.connect(**self.configuration) as con:
+                result = con.cursor().execute(f"SET {key} = '{value}'")
+                logger.debug(result.fetchall())
+                logger.info("Successfully SET session variable")
+                return True
+        except Exception as e:
+            self.error_msg = e
+            logger.error(e)
+            return False
+
+    def connect_and_execute_check_session_state(self, key: str):
+        try:
+            logger.info("Trying to connect to Snowflake")
+            with snowflake.connector.connect(**self.configuration) as con:
+                result = con.cursor().execute(f"SELECT 1, ${key}")
+                value = result.fetchone()[0]
+                logger.debug(value)
+                logger.info("Successfully READ session variable")
+                return value
+        except Exception as e:
+            self.error_msg = e
+            logger.error(e)
+            return False
+
     def _provide_credentials(self, scenario: Scenario, login: str, password: str):
         try:
             webbrowser.register("xdg-open", None, webbrowser.GenericBrowser("xdg-open"))
