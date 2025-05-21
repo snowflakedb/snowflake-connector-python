@@ -16,6 +16,8 @@ from uuid import uuid4
 
 import pytest
 
+logger = logging.getLogger(__name__)
+
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
 from snowflake.connector.connection import (
@@ -878,6 +880,9 @@ def test_invalid_connection_parameter(db_parameters, name, value, exc_warn):
         try:
             conn = snowflake.connector.connect(**conn_params)
             assert getattr(conn, "_" + name) == value
+            for warning in w:
+                logger.warning(warning.category)
+                logger.warning(warning.message)
             assert len(w) == 1
             assert str(w[0].message) == str(exc_warn)
         finally:
