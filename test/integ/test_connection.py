@@ -882,6 +882,8 @@ def test_invalid_connection_parameter(db_parameters, name, value, exc_warn):
             assert getattr(conn, "_" + name) == value
             for warning in w:
                 logger.warning(warning.category)
+                logger.warning(warning.file)
+                logger.warning(warning.line)
                 logger.warning(warning.message)
             assert len(w) == 1
             assert str(w[0].message) == str(exc_warn)
