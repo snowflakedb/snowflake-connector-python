@@ -701,6 +701,7 @@ def test_invalid_connection_parameter(conn_cnx, name, value, exc_warn):
             if name != "no_such_parameter":  # Skip check for fake parameters
                 assert getattr(conn, "_" + name) == value
 
+            # TODO: SNOW-2114216 remove filtering once the root cause for deprecation warning is fixed
             # Filter out deprecation warnings and focus on parameter validation warnings
             filtered_w = [
                 warning
