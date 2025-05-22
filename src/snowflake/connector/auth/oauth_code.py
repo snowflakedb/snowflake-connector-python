@@ -408,11 +408,14 @@ You can close this window now and go back where you started from.
         return (
             client_id == ""
             and client_secret == ""
-            and self._is_snowflake_as_idp(authentication_url, token_request_url, host)
+            and self.__class__._is_snowflake_as_idp(
+                authentication_url, token_request_url, host
+            )
         )
 
+    @staticmethod
     def _is_snowflake_as_idp(
-        self, authentication_url: str, token_request_url: str, host: str
+        authentication_url: str, token_request_url: str, host: str
     ) -> bool:
         return (authentication_url == "" or host in authentication_url) and (
             token_request_url == "" or host in token_request_url
