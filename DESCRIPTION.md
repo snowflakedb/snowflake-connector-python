@@ -7,14 +7,12 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.16(TBD)
-  - Added support for Snowflake OAuth for local applications.
-
 - v3.15.1(May 20, 2025)
   - Added basic arrow support for Interval types.
   - Fix `write_pandas` special characters usage in the location name.
   - Fix usage of `use_virtual_url` when building the location for gcs storage client.
   - Bind cryptography to <=44.0.3 to avoid issues with 45.0.0.
+  - Added support for Snowflake OAuth for local applications.
 
 - v3.15.0(Apr 29,2025)
   - Bumped up min boto and botocore version to 1.24.

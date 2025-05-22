@@ -8,7 +8,6 @@ import base64
 import hashlib
 import json
 import logging
-import re
 import secrets
 import socket
 import time
@@ -34,9 +33,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 BUF_SIZE = 16384
-SNOWFLAKE_DOMAIN_REGEX: re.Pattern[str] = re.compile(
-    r"(^|\.)snowflakecomputing\.(com|cn)$"
-)
 
 
 def _get_query_params(
@@ -60,6 +56,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         token_request_url: str,
         redirect_uri: str,
         scope: str,
+        host: str,
         pkce_enabled: bool = True,
         token_cache: TokenCache | None = None,
         refresh_token_enabled: bool = False,
@@ -68,7 +65,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         **kwargs,
     ) -> None:
         if self._eligible_for_default_client_credentials(
-            client_id, client_secret, authentication_url, token_request_url
+            client_id, client_secret, authentication_url, token_request_url, host
         ):
             client_id, client_secret = (
                 self.__class__._LOCAL_APPLICATION_CLIENT_CREDENTIALS,
@@ -406,20 +403,17 @@ You can close this window now and go back where you started from.
         client_secret: str,
         authentication_url: str,
         token_request_url: str,
+        host: str,
     ) -> bool:
         return (
             client_id == ""
             and client_secret == ""
-            and self.__class__._is_snowflake_as_idp(
-                authentication_url, token_request_url
-            )
+            and self._is_snowflake_as_idp(authentication_url, token_request_url, host)
         )
 
-    @staticmethod
-    def _is_snowflake_as_idp(authentication_url: str, token_request_url: str) -> bool:
-        return (
-            authentication_url == ""
-            or SNOWFLAKE_DOMAIN_REGEX.search(authentication_url)
-        ) and (
-            token_request_url == "" or SNOWFLAKE_DOMAIN_REGEX.search(token_request_url)
+    def _is_snowflake_as_idp(
+        self, authentication_url: str, token_request_url: str, host: str
+    ) -> bool:
+        return (authentication_url == "" or host in authentication_url) and (
+            token_request_url == "" or host in token_request_url
         )
