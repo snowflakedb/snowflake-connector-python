@@ -38,11 +38,15 @@ def test_status_when_num_of_chunks_is_zero():
     }
     meta = SnowflakeFileMeta(**meta_info)
     creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
+
+    mock_connection = MagicMock(autospec=SnowflakeConnection)
+    mock_connection.ocsp_root_certs_dict_lock_timeout.return_value = -1
+
     rest_client = SnowflakeS3RestClient(
         meta,
         StorageCredential(
             creds,
-            MagicMock(autospec=SnowflakeConnection),
+            mock_connection,
             "PUT file:/tmp/file.txt @~",
         ),
         {
