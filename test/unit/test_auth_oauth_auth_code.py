@@ -66,72 +66,96 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             )
 
 
-def test_eligible_for_default_client_credentials_via_constructor():
-    """Tests default credential logic by checking what gets set on init."""
-    tests = [
-        {
-            "name": "Client credentials not supplied and Snowflake as IdP",
-            "client_id": "",
-            "client_secret": "",
-            "auth_url": "https://example.snowflakecomputing.com/oauth/authorize",
-            "token_url": "https://example.snowflakecomputing.com/oauth/token",
-            "expected_local": True,
-        },
-        {
-            "name": "Client credentials not supplied and empty URLs",
-            "client_id": "",
-            "client_secret": "",
-            "auth_url": "",
-            "token_url": "",
-            "expected_local": True,
-        },
-        {
-            "name": "Client credentials supplied",
-            "client_id": "testClientID",
-            "client_secret": "testClientSecret",
-            "auth_url": "https://example.snowflakecomputing.com/oauth/authorize",
-            "token_url": "https://example.snowflakecomputing.com/oauth/token",
-            "expected_local": False,
-        },
-        {
-            "name": "Only client ID supplied",
-            "client_id": "testClientID",
-            "client_secret": "",
-            "auth_url": "https://example.snowflakecomputing.com/oauth/authorize",
-            "token_url": "https://example.snowflakecomputing.com/oauth/token",
-            "expected_local": False,
-        },
-        {
-            "name": "Non-Snowflake IdP",
-            "client_id": "",
-            "client_secret": "",
-            "auth_url": "https://example.com/oauth/authorize",
-            "token_url": "https://example.com/oauth/token",
-            "expected_local": False,
-        },
-    ]
-
-    for test in tests:
-        auth = AuthByOauthCode(
-            application="app",
-            client_id=test["client_id"],
-            client_secret=test["client_secret"],
-            authentication_url=test["auth_url"],
-            token_request_url=test["token_url"],
-            redirect_uri="redirectUri:{port}",
-            scope="scope",
-            host="example.snowflakecomputing.com",
-        )
-        if test["expected_local"]:
-            assert (
-                auth._client_id == AuthByOauthCode._LOCAL_APPLICATION_CLIENT_CREDENTIALS
-            ), f"{test['name']} - expected LOCAL_APPLICATION"
-            assert (
-                auth._client_secret
-                == AuthByOauthCode._LOCAL_APPLICATION_CLIENT_CREDENTIALS
-            )
-        else:
-            assert (
-                auth._client_id == test["client_id"]
-            ), f"{test['name']} - expected original client_id"
-            assert auth._client_secret == test["client_secret"]
+@pytest.mark.parametrize(
+    "name, client_id, client_secret, auth_url, token_url, expected_local",
+    [
+        (
+            "Client credentials not supplied and Snowflake as IdP",
+            "",
+            "",
+            "https://example.snowflakecomputing.com/oauth/authorize",
+            "https://example.snowflakecomputing.com/oauth/token",
+            True,
+        ),
+        (
+            "Client credentials not supplied and empty URLs",
+            "",
+            "",
+            "",
+            "",
+            True,
+        ),
+        (
+            "Client credentials supplied",
+            "testClientID",
+            "testClientSecret",
+            "https://example.snowflakecomputing.com/oauth/authorize",
+            "https://example.snowflakecomputing.com/oauth/token",
+            False,
+        ),
+        (
+            "Only client ID supplied",
+            "testClientID",
+            "",
+            "https://example.snowflakecomputing.com/oauth/authorize",
+            "https://example.snowflakecomputing.com/oauth/token",
+            False,
+        ),
+        (
+            "Non-Snowflake IdP",
+            "",
+            "",
+            "https://example.com/oauth/authorize",
+            "https://example.com/oauth/token",
+            False,
+        ),
+        (
+            "[China] Client credentials not supplied and Snowflake as IdP",
+            "",
+            "",
+            "https://example.snowflakecomputing.cn/oauth/authorize",
+            "https://example.snowflakecomputing.cn/oauth/token",
+            True,
+        ),
+        (
+            "[China] Client credentials supplied",
+            "testClientID",
+            "testClientSecret",
+            "https://example.snowflakecomputing.cn/oauth/authorize",
+            "https://example.snowflakecomputing.cn/oauth/token",
+            False,
+        ),
+        (
+            "[China] Only client ID supplied",
+            "testClientID",
+            "",
+            "https://example.snowflakecomputing.cn/oauth/authorize",
+            "https://example.snowflakecomputing.cn/oauth/token",
+            False,
+        ),
+    ],
+)
+def test_eligible_for_default_client_credentials_via_constructor(
+    name, client_id, client_secret, auth_url, token_url, expected_local
+):
+    auth = AuthByOauthCode(
+        application="app",
+        client_id=client_id,
+        client_secret=client_secret,
+        authentication_url=auth_url,
+        token_request_url=token_url,
+        redirect_uri="redirectUri:{port}",
+        scope="scope",
+    )
+    if expected_local:
+        assert (
+            auth._client_id == AuthByOauthCode._LOCAL_APPLICATION_CLIENT_CREDENTIALS
+        ), f"{name} - expected LOCAL_APPLICATION as client_id"
+        assert (
+            auth._client_secret == AuthByOauthCode._LOCAL_APPLICATION_CLIENT_CREDENTIALS
+        ), f"{name} - expected LOCAL_APPLICATION as client_secret"
+    else:
+        assert auth._client_id == client_id, f"{name} - expected original client_id"
+        assert (
+            auth._client_secret == client_secret
+        ), f"{name} - expected original client_secret"
