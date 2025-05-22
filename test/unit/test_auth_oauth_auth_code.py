@@ -69,12 +69,13 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
 
 
 @pytest.mark.parametrize(
-    "name, client_id, client_secret, auth_url, token_url, expected_local",
+    "name, client_id, client_secret, host, auth_url, token_url, expected_local",
     [
         (
             "Client credentials not supplied and Snowflake as IdP",
             "",
             "",
+            "example.snowflakecomputing.com",
             "https://example.snowflakecomputing.com/oauth/authorize",
             "https://example.snowflakecomputing.com/oauth/token",
             True,
@@ -85,12 +86,14 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "",
             "",
             "",
+            "",
             True,
         ),
         (
             "Client credentials supplied",
             "testClientID",
             "testClientSecret",
+            "example.snowflakecomputing.com",
             "https://example.snowflakecomputing.com/oauth/authorize",
             "https://example.snowflakecomputing.com/oauth/token",
             False,
@@ -99,6 +102,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "Only client ID supplied",
             "testClientID",
             "",
+            "example.snowflakecomputing.com",
             "https://example.snowflakecomputing.com/oauth/authorize",
             "https://example.snowflakecomputing.com/oauth/token",
             False,
@@ -107,6 +111,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "Non-Snowflake IdP",
             "",
             "",
+            "example.snowflakecomputing.com",
             "https://example.com/oauth/authorize",
             "https://example.com/oauth/token",
             False,
@@ -115,6 +120,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "[China] Client credentials not supplied and Snowflake as IdP",
             "",
             "",
+            "example.snowflakecomputing.cn",
             "https://example.snowflakecomputing.cn/oauth/authorize",
             "https://example.snowflakecomputing.cn/oauth/token",
             True,
@@ -123,6 +129,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "[China] Client credentials supplied",
             "testClientID",
             "testClientSecret",
+            "example.snowflakecomputing.cn",
             "https://example.snowflakecomputing.cn/oauth/authorize",
             "https://example.snowflakecomputing.cn/oauth/token",
             False,
@@ -131,6 +138,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "[China] Only client ID supplied",
             "testClientID",
             "",
+            "example.snowflakecomputing.cn",
             "https://example.snowflakecomputing.cn/oauth/authorize",
             "https://example.snowflakecomputing.cn/oauth/token",
             False,
@@ -138,7 +146,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
     ],
 )
 def test_eligible_for_default_client_credentials_via_constructor(
-    name, client_id, client_secret, auth_url, token_url, expected_local
+    name, client_id, client_secret, host, auth_url, token_url, expected_local
 ):
     auth = AuthByOauthCode(
         application="app",
@@ -148,6 +156,7 @@ def test_eligible_for_default_client_credentials_via_constructor(
         token_request_url=token_url,
         redirect_uri="redirectUri:{port}",
         scope="scope",
+        host=host,
     )
     if expected_local:
         assert (
