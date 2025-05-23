@@ -1,6 +1,8 @@
 from os import path
 from unittest.mock import MagicMock
 
+from snowflake.connector.vendored.urllib3.util import ssl_wrap_socket
+
 try:
     from snowflake.connector import SnowflakeConnection
     from snowflake.connector.constants import ResultStatus
@@ -39,14 +41,13 @@ def test_status_when_num_of_chunks_is_zero():
     meta = SnowflakeFileMeta(**meta_info)
     creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
 
-    mock_connection = MagicMock(autospec=SnowflakeConnection)
-    mock_connection.ocsp_root_certs_dict_lock_timeout = -1
+    ssl_wrap_socket.FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT = -1
 
     rest_client = SnowflakeS3RestClient(
         meta,
         StorageCredential(
             creds,
-            mock_connection,
+            MagicMock(autospec=SnowflakeConnection),
             "PUT file:/tmp/file.txt @~",
         ),
         {
