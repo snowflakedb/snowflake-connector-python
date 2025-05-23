@@ -260,7 +260,7 @@ def write_pandas(
     table_type: Literal["", "temp", "temporary", "transient"] = "",
     use_logical_type: bool | None = None,
     iceberg_config: dict[str, str] | None = None,
-    write_then_upload: bool = False,
+    bulk_upload_chunks: bool = False,
     **kwargs: Any,
 ) -> tuple[
     bool,
@@ -332,7 +332,7 @@ def write_pandas(
                 * base_location: the base directory that snowflake can write iceberg metadata and files to
                 * catalog_sync: optionally sets the catalog integration configured for Polaris Catalog
                 * storage_serialization_policy: specifies the storage serialization policy for the table
-        write_then_upload: If set to True, the upload will use the wildcard upload method.
+        bulk_upload_chunks: If set to True, the upload will use the wildcard upload method.
             This is a faster method of uploading but instead of uploading and cleaning up each chunk separately it will upload all chunks at once and then clean up locally stored chunks.
 
 
@@ -440,7 +440,7 @@ def write_pandas(
             chunk_path = os.path.join(tmp_folder, f"file{i}.txt")
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression, **kwargs)
-            if not write_then_upload:
+            if not bulk_upload_chunks:
                 # Upload parquet file chunk right away
                 path = chunk_path.replace("\\", "\\\\").replace("'", "\\'")
                 cursor._upload(
@@ -452,7 +452,7 @@ def write_pandas(
                 # Remove chunk file
                 os.remove(chunk_path)
 
-        if write_then_upload:
+        if bulk_upload_chunks:
             # Upload tmp directory with parquet chunks
             path = tmp_folder.replace("\\", "\\\\").replace("'", "\\'")
             cursor._upload(
