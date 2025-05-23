@@ -7,11 +7,14 @@ from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum, unique
 
-import boto3
 import jwt
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-from botocore.utils import InstanceMetadataRegionFetcher
+
+from .options import boto3, installed_boto3, installed_botocore
+
+if installed_botocore:
+    from botocore.auth import SigV4Auth
+    from botocore.awsrequest import AWSRequest
+    from botocore.utils import InstanceMetadataRegionFetcher
 
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
@@ -113,6 +116,15 @@ def create_aws_attestation() -> WorkloadIdentityAttestation | None:
 
     If the application isn't running on AWS or no credentials were found, returns None.
     """
+    if not (installed_boto3 and installed_botocore):
+        logger.error("AWS attestation requires botocore and boto3 libraries")
+        _warn(
+            "Dependencies botocore and boto3 are not installed, cannot create AWS Workload Identity attestation."
+            "Please install these modules using the following command:\n"
+            " pip install snowflake-connector-python[cloud-auth]"
+        )
+        return None
+
     aws_creds = boto3.session.Session().get_credentials()
     if not aws_creds:
         logger.debug("No AWS credentials were found.")

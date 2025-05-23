@@ -48,6 +48,18 @@ class MissingKeyring(MissingOptionalDependency):
     _dep_name = "keyring"
 
 
+class MissingBoto3(MissingOptionalDependency):
+    """The class is specifically for boto3 optional dependency."""
+
+    _dep_name = "boto3"
+
+
+class MissingBotoCore(MissingOptionalDependency):
+    """The class is specifically for botocore optional dependency."""
+
+    _dep_name = "botocore"
+
+
 ModuleLikeObject = Union[ModuleType, MissingOptionalDependency]
 
 
@@ -126,6 +138,32 @@ def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
         return MissingKeyring(), False
 
 
+def _import_or_missing_botocore_option() -> tuple[ModuleLikeObject, bool]:
+    """This function tries importing the following packages: botocore.
+
+    If available it returns botocore package with a flag of whether it was imported.
+    """
+    try:
+        botocore = importlib.import_module("botocore")
+        return botocore, True
+    except ImportError:
+        return MissingBotoCore(), False
+
+
+def _import_or_missing_boto3_option() -> tuple[ModuleLikeObject, bool]:
+    """This function tries importing the following packages: boto3.
+
+    If available it returns boto3 package with a flag of whether it was imported.
+    """
+    try:
+        boto3 = importlib.import_module("boto3")
+        return boto3, True
+    except ImportError:
+        return MissingBoto3(), False
+
+
 # Create actual constants to be imported from this file
 pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
 keyring, installed_keyring = _import_or_missing_keyring_option()
+boto3, installed_boto3 = _import_or_missing_boto3_option()
+botocore, installed_botocore = _import_or_missing_botocore_option()
