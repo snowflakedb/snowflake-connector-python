@@ -55,9 +55,10 @@ def perform_login(connection_parameters):
 
         # Perform a simple query to test the connection
         cursor = connection.cursor()
-        cursor.execute("SELECT 1();")
+        cursor.execute("SELECT 1;")
         result = cursor.fetchone()
-        assert result == 1
+        logger.info(result)
+        assert result == (1,)
         logger.info({f"success_login={True}"})
     except Exception as e:
         logger.info({f"success_login={False}"})
