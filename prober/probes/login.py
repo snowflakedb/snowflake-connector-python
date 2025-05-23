@@ -1,6 +1,5 @@
-from cmd.prober.logging_config import initialize_logger
-from cmd.prober.registry import prober_function
-
+from probes.logging_config import initialize_logger
+from probes.registry import prober_function
 import snowflake.connector
 
 # Initialize logger
@@ -30,6 +29,7 @@ def connect(connection_parameters):
             schema=connection_parameters.get("schema"),
             role=connection_parameters.get("role"),
             authenticator="KEY_PAIR_AUTHENTICATOR",
+            private_key=connection_parameters.get("private_key"),
         )
         return connection
     except Exception as e:
