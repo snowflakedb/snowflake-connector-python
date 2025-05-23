@@ -133,15 +133,7 @@ jobs:
            download_name: win_amd64
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         cloud-provider: [aws, azure, gcp]
-        # TODO: When there are prebuilt wheels accessible for our dependencies (i.e. numpy)
-        # for Python 3.13 windows runs can be re-enabled. Currently, according to numpy:
-        # "Numpy built with MINGW-W64 on Windows 64 bits is experimental, and only available for
-        # testing. You are advised not to use it for production."
-        exclude:
-          - os:
-              image_name: windows-latest
-              download_name: win_amd64
-            python-version: "3.13"
+
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -179,12 +171,17 @@ jobs:
       - name: Install tox
         run: python -m pip install tox>=4
       - name: Run tests
+       # To run a single test on GHA use the below command:
+       # run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
         run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
+
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
+         # To specify the test name (in single test mode) pass this env variable:
+         # SINGLE_TEST_NAME: test/file/path::test_name
         shell: bash
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
