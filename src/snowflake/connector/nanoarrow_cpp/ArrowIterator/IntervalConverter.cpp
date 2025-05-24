@@ -16,23 +16,27 @@ static constexpr char INTERVAL_DT_INT_TO_NUMPY_TIMEDELTA[] =
     "INTERVAL_DAY_TIME_int_to_numpy_timedelta";
 static constexpr char INTERVAL_DT_INT_TO_TIMEDELTA[] =
     "INTERVAL_DAY_TIME_int_to_timedelta";
+static constexpr char INTERVAL_YEAR_MONTH_TO_NUMPY_TIMEDELTA[] =
+    "INTERVAL_YEAR_MONTH_to_numpy_timedelta";
+// Python timedelta does not support year-month intervals. Use ANSI SQL
+// formatted string instead.
+static constexpr char INTERVAL_YEAR_MONTH_TO_STR[] =
+    "INTERVAL_YEAR_MONTH_to_str";
 
 IntervalYearMonthConverter::IntervalYearMonthConverter(ArrowArrayView* array,
                                                        PyObject* context,
                                                        bool useNumpy)
-    : m_array(array), m_context(context), m_useNumpy(useNumpy) {}
+    : m_array(array), m_context(context) {
+  m_method = useNumpy ? INTERVAL_YEAR_MONTH_TO_NUMPY_TIMEDELTA
+                      : INTERVAL_YEAR_MONTH_TO_STR;
+}
 
 PyObject* IntervalYearMonthConverter::toPyObject(int64_t rowIndex) const {
   if (ArrowArrayViewIsNull(m_array, rowIndex)) {
     Py_RETURN_NONE;
   }
   int64_t val = ArrowArrayViewGetIntUnsafe(m_array, rowIndex);
-  if (m_useNumpy) {
-    return PyObject_CallMethod(
-        m_context, "INTERVAL_YEAR_MONTH_to_numpy_timedelta", "L", val);
-  }
-  // Python timedelta does not support year-month intervals. Use long instead.
-  return PyLong_FromLongLong(val);
+  return PyObject_CallMethod(m_context, m_method, "L", val);
 }
 
 IntervalDayTimeConverterInt::IntervalDayTimeConverterInt(ArrowArrayView* array,
