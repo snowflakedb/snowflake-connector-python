@@ -1,10 +1,8 @@
 from os import path
-from unittest.mock import MagicMock
 
 from snowflake.connector.vendored.urllib3.util import ssl_wrap_socket
 
 try:
-    from snowflake.connector import SnowflakeConnection
     from snowflake.connector.constants import ResultStatus
     from snowflake.connector.file_transfer_agent import (
         SnowflakeFileMeta,
@@ -47,7 +45,7 @@ def test_status_when_num_of_chunks_is_zero():
         meta,
         StorageCredential(
             creds,
-            MagicMock(autospec=SnowflakeConnection),
+            None,
             "PUT file:/tmp/file.txt @~",
         ),
         {
