@@ -4,6 +4,10 @@ include LICENSE.txt
 include NOTICE
 include pyproject.toml
 include src/snowflake/connector/nanoarrow_cpp/ArrowIterator/LICENSE.txt
+
+include *.py
+include Dockerfile
+
 recursive-include src/snowflake/connector py.typed *.py *.pyx
 recursive-include src/snowflake/connector/vendored LICENSE*
 
