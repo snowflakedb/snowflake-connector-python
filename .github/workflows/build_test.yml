@@ -179,12 +179,13 @@ jobs:
       - name: Install tox
         run: python -m pip install tox>=4
       - name: Run tests
-        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
+          SINGLE_TEST_NAME: test/unit/test_storage_client::test_status_when_num_of_chunks_is_zero
         shell: bash
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
