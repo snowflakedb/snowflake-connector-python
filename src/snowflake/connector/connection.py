@@ -860,14 +860,6 @@ class SnowflakeConnection:
     def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
         self._check_arrow_conversion_error_on_every_column = value
 
-    @property
-    def ocsp_root_certs_dict_lock_timeout(self) -> int:
-        return self._ocsp_root_certs_dict_lock_timeout
-
-    @ocsp_root_certs_dict_lock_timeout.setter
-    def ocsp_root_certs_dict_lock_timeout(self, value: int) -> None:
-        self._ocsp_root_certs_dict_lock_timeout = value
-
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")

@@ -1,5 +1,5 @@
 from os import path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from snowflake.connector import SnowflakeConnection
 from snowflake.connector.vendored.urllib3.util import ssl_wrap_socket
@@ -41,25 +41,29 @@ def test_status_when_num_of_chunks_is_zero():
     meta = SnowflakeFileMeta(**meta_info)
     creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": "", "AWS_TOKEN": ""}
 
-    ssl_wrap_socket.FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT = -1
+    ssl_wrap_socket.FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT = "test"
 
-    rest_client = SnowflakeS3RestClient(
-        meta,
-        StorageCredential(
-            creds,
-            MagicMock(autospec=SnowflakeConnection),
-            "PUT file:/tmp/file.txt @~",
-        ),
-        {
-            "locationType": "AWS",
-            "location": "bucket/path",
-            "creds": creds,
-            "region": "test",
-            "endPoint": None,
-        },
-        8 * megabyte,
-    )
-    rest_client.successful_transfers = 0
-    rest_client.num_of_chunks = 0
-    rest_client.finish_upload()
-    assert meta.result_status == ResultStatus.ERROR
+    with patch(
+        "snowflake.connector.vendored.urllib3.util.ssl_wrap_socket.FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT"
+    ) as mock_lock_timeout:
+        mock_lock_timeout.return_value = "test"
+        rest_client = SnowflakeS3RestClient(
+            meta,
+            StorageCredential(
+                creds,
+                MagicMock(autospec=SnowflakeConnection),
+                "PUT file:/tmp/file.txt @~",
+            ),
+            {
+                "locationType": "AWS",
+                "location": "bucket/path",
+                "creds": creds,
+                "region": "test",
+                "endPoint": None,
+            },
+            8 * megabyte,
+        )
+        rest_client.successful_transfers = 0
+        rest_client.num_of_chunks = 0
+        rest_client.finish_upload()
+        assert meta.result_status == ResultStatus.ERROR
