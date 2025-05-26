@@ -20,7 +20,7 @@ from time import time
 from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 
 from .azure_storage_client import SnowflakeAzureRestClient
-from .compat import GET_CWD, IS_WINDOWS
+from .compat import IS_WINDOWS
 from .constants import (
     AZURE_CHUNK_SIZE,
     AZURE_FS,
@@ -826,17 +826,17 @@ class SnowflakeFileTransferAgent:
         for file_name in locations:
             if self._command_type == CMD_TYPE_UPLOAD:
                 file_name = os.path.expanduser(file_name)
-                if not os.path.isabs(file_name):
-                    file_name = os.path.join(GET_CWD(), file_name)
                 if (
                     IS_WINDOWS
                     and len(file_name) > 2
                     and file_name[0] == "/"
                     and file_name[2] == ":"
                 ):
-                    # Windows path: /C:/data/file1.txt where it starts with slash
-                    # followed by a drive letter and colon.
+                    # Since python 3.13 os.path.isabs returns different values for URI or paths starting with a '/' etc. on Windows (https://github.com/python/cpython/issues/125283)
+                    # Windows path: /C:/data/file1.txt is not treated as absolute - could be prefixed with another Windows driver's letter and colon.
                     file_name = file_name[1:]
+                if not os.path.isabs(file_name):
+                    file_name = os.path.abspath(file_name)
                 files = glob.glob(file_name)
                 canonical_locations += files
             else:
