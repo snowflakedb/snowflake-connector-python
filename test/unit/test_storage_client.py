@@ -1,5 +1,7 @@
 from os import path
+from unittest.mock import MagicMock
 
+from snowflake.connector import SnowflakeConnection
 from snowflake.connector.vendored.urllib3.util import ssl_wrap_socket
 
 try:
@@ -45,7 +47,7 @@ def test_status_when_num_of_chunks_is_zero():
         meta,
         StorageCredential(
             creds,
-            None,
+            MagicMock(autospec=SnowflakeConnection),
             "PUT file:/tmp/file.txt @~",
         ),
         {
