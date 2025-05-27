@@ -7,6 +7,10 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.16(TBD)
+  - Bumped numpy dependency from <2.1.0 to <=2.2.4
+  - Added Windows support for Python 3.13.
+
 - v3.15.1(May 20, 2025)
   - Added basic arrow support for Interval types.
   - Fix `write_pandas` special characters usage in the location name.
