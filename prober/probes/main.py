@@ -7,6 +7,7 @@ import probes.login
 # Initialize logger
 logger = initialize_logger(__name__)
 
+
 def main():
     logger.info("Starting Python Driver Prober...")
     # Set up argument parser

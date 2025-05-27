@@ -1,5 +1,6 @@
 import logging
 
+
 def initialize_logger(name=__name__, level=logging.INFO):
     """
     Initializes and configures a logger.
