@@ -1,5 +1,5 @@
 from os import path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 try:
     from snowflake.connector import SnowflakeConnection
@@ -24,9 +24,6 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 megabyte = 1024 * 1024
 
 
-@patch(
-    "snowflake.connector.ssl_wrap_socket.FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT", new=-1
-)
 def test_status_when_num_of_chunks_is_zero():
     meta_info = {
         "name": "data1.txt.gz",

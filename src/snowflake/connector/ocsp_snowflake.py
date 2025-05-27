@@ -1412,6 +1412,12 @@ class SnowflakeOCSP:
 
     def _lazy_read_ca_bundle(self) -> None:
         """Reads the local cabundle file and cache it in memory."""
+        if type(self._root_certs_dict_lock_timeout) is not int:
+            logger.warning(
+                "_root_certs_dict_lock_timeout is not an integer. %s",
+                self._root_certs_dict_lock_timeout,
+            )
+
         SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK.acquire(
             timeout=self._root_certs_dict_lock_timeout
         )
