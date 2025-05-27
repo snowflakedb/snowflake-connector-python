@@ -20,7 +20,8 @@ exclude tox.ini
 exclude mypy.ini
 exclude .clang-format
 exclude .wiremock/*
-exclude cmd/prober/testing_matrix.json
+exclude /prober/*
+
 
 prune ci
 prune benchmark
