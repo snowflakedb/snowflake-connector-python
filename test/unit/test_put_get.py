@@ -26,7 +26,7 @@ def test_put_error(tmpdir):
     with open(file1, "w") as f:
         f.write("test1")
 
-    con = mock.MagicMock()
+    con = mock.MagicMock(name="test_put_error::mock_connection")
     cursor = con.cursor()
     cursor.errorhandler = Error.default_errorhandler
     query = "PUT something"
@@ -74,7 +74,7 @@ def test_get_empty_file(tmpdir):
     """Tests for error message when retrieving missing file."""
     tmp_dir = str(tmpdir.mkdir("getfiledir"))
 
-    con = mock.MagicMock()
+    con = mock.MagicMock(name="test_get_empty_file::mock_connection")
     cursor = con.cursor()
     cursor.errorhandler = Error.default_errorhandler
     query = f"GET something file:\\{tmp_dir}"
@@ -127,7 +127,10 @@ def test_upload_file_with_azure_upload_failed_error(tmp_path):
     with file1.open("w") as f:
         f.write("test1")
     rest_client = SnowflakeFileTransferAgent(
-        mock.MagicMock(autospec=SnowflakeCursor),
+        mock.MagicMock(
+            name="test_upload_file_with_azure_upload_failed_error::mock_cursor",
+            autospec=SnowflakeCursor,
+        ),
         "PUT some_file.txt",
         {
             "data": {
@@ -172,7 +175,9 @@ def test_iobound_limit(tmp_path):
     file3.touch()
     # Positive case
     rest_client = SnowflakeFileTransferAgent(
-        mock.MagicMock(autospec=SnowflakeCursor),
+        mock.MagicMock(
+            name="test_iobound_limit::mock_cursor", autospec=SnowflakeCursor
+        ),
         "PUT some_file.txt",
         {
             "data": {
@@ -201,6 +206,7 @@ def test_iobound_limit(tmp_path):
             with mock.patch(
                 "snowflake.connector.file_transfer_agent.TransferMetadata",
                 return_value=mock.Mock(
+                    name="test_iobound_limit::mock_transfer_metadata_return_value",
                     num_files_started=0,
                     num_files_completed=3,
                 ),
@@ -211,7 +217,9 @@ def test_iobound_limit(tmp_path):
                     pass
     # 2 IObound TPEs should be created for 3 files unlimited
     rest_client = SnowflakeFileTransferAgent(
-        mock.MagicMock(autospec=SnowflakeCursor),
+        mock.MagicMock(
+            name="test_iobound_limit::mock_cursor_1", autospec=SnowflakeCursor
+        ),
         "PUT some_file.txt",
         {
             "data": {
@@ -242,6 +250,7 @@ def test_iobound_limit(tmp_path):
             with mock.patch(
                 "snowflake.connector.file_transfer_agent.TransferMetadata",
                 return_value=mock.Mock(
+                    name="test_iobound_limit::mock_transfer_metadata_return_value",
                     num_files_started=0,
                     num_files_completed=3,
                 ),

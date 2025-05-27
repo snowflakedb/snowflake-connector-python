@@ -400,7 +400,8 @@ def test_get_gcp_file_object_http_400_error(tmpdir, conn_cnx):
                 def mocked_file_agent(*args, **kwargs):
                     agent = SnowflakeGCSRestClient(*args, **kwargs)
                     agent._update_presigned_url = mock.MagicMock(
-                        wraps=agent._update_presigned_url
+                        name="mocked_file_agent::agent::update_presigned_url",
+                        wraps=agent._update_presigned_url,
                     )
                     mocked_file_agent.agent = agent
                     return agent
@@ -565,7 +566,8 @@ def test_get_gcp_file_object_http_recoverable_error_refresh_with_downscoped(
                 def mocked_file_agent(*args, **kwargs):
                     agent = SnowflakeFileTransferAgent(*args, **kwargs)
                     agent.renew_expired_client = mock.MagicMock(
-                        wraps=agent.renew_expired_client
+                        name="mocked_file_agent::agent::renew_expired_client",
+                        wraps=agent.renew_expired_client,
                     )
                     mocked_file_agent.agent = agent
                     return agent

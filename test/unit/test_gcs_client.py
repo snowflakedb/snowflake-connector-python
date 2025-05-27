@@ -117,7 +117,7 @@ def test_upload_uncaught_exception(tmpdir):
     with open(f_name, "w") as f:
         f.write(random_string(15))
     agent = SnowflakeFileTransferAgent(
-        mock.MagicMock(),
+        mock.MagicMock(name="test_upload_uncaught_exception::mock_cursor"),
         f"put {f_name} @~",
         {
             "data": {
@@ -164,7 +164,9 @@ def test_download_retry_errors(errno, tmp_path):
     }
     meta = SnowflakeFileMeta(**meta_info)
     creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
-    cnx = mock.MagicMock(autospec=SnowflakeConnection)
+    cnx = mock.MagicMock(
+        name="test_download_retry_errors::mock_cnx", autospec=SnowflakeConnection
+    )
     rest_client = SnowflakeGCSRestClient(
         meta,
         StorageCredential(
@@ -185,7 +187,12 @@ def test_download_retry_errors(errno, tmp_path):
     from snowflake.connector.storage_client import METHODS
 
     rest_client.SLEEP_UNIT = 0
-    with mock.patch.dict(METHODS, GET=mock.MagicMock(return_value=resp)):
+    with mock.patch.dict(
+        METHODS,
+        GET=mock.MagicMock(
+            name="test_download_retry_errors::mock_dict_get", return_value=resp
+        ),
+    ):
         with pytest.raises(
             RequestExceedMaxRetryError,
             match="GET with url .* failed for exceeding maximum retries",
@@ -211,7 +218,9 @@ def test_download_uncaught_exception(tmp_path, errno):
     }
     meta = SnowflakeFileMeta(**meta_info)
     creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
-    cnx = mock.MagicMock(autospec=SnowflakeConnection)
+    cnx = mock.MagicMock(
+        name="test_download_uncaught_exception::mock_cnx", autospec=SnowflakeConnection
+    )
     rest_client = SnowflakeGCSRestClient(
         meta,
         StorageCredential(
@@ -232,7 +241,12 @@ def test_download_uncaught_exception(tmp_path, errno):
     from snowflake.connector.storage_client import METHODS
 
     rest_client.SLEEP_UNIT = 0
-    with mock.patch.dict(METHODS, GET=mock.MagicMock(return_value=resp)):
+    with mock.patch.dict(
+        METHODS,
+        GET=mock.MagicMock(
+            name="test_download_uncaught_exception::mock_dict_get", return_value=resp
+        ),
+    ):
         with pytest.raises(
             requests.exceptions.HTTPError,
         ):
@@ -247,7 +261,11 @@ def test_upload_put_timeout(tmp_path, caplog):
     with open(f_name, "w") as f:
         f.write(random_string(15))
     agent = SnowflakeFileTransferAgent(
-        mock.Mock(autospec=SnowflakeConnection, connection=None),
+        mock.Mock(
+            name="test_upload_put_timeout::mock_cursor",
+            autospec=SnowflakeConnection,
+            connection=None,
+        ),
         f"put {f_name} @~",
         {
             "data": {
@@ -264,7 +282,9 @@ def test_upload_put_timeout(tmp_path, caplog):
             }
         },
     )
-    mocked_put, mocked_head = mock.MagicMock(), mock.MagicMock()
+    mocked_put, mocked_head = mock.MagicMock(
+        name="test_upload_put_timeout::mocked_put"
+    ), mock.MagicMock(name="test_upload_put_timeout::mocked_head")
     mocked_put.side_effect = requests.exceptions.Timeout(response=resp)
     resp = Response()
     resp.status_code = 404
@@ -302,7 +322,9 @@ def test_download_timeout(tmp_path, caplog):
     }
     meta = SnowflakeFileMeta(**meta_info)
     creds = {"AWS_SECRET_KEY": "", "AWS_KEY_ID": ""}
-    cnx = mock.MagicMock(autospec=SnowflakeConnection)
+    cnx = mock.MagicMock(
+        name="test_download_timeout::mock_cnx", autospec=SnowflakeConnection
+    )
     rest_client = SnowflakeGCSRestClient(
         meta,
         StorageCredential(
@@ -323,7 +345,12 @@ def test_download_timeout(tmp_path, caplog):
     from snowflake.connector.storage_client import METHODS
 
     rest_client.SLEEP_UNIT = 0
-    with mock.patch.dict(METHODS, GET=mock.MagicMock(side_effect=timeout_exc)):
+    with mock.patch.dict(
+        METHODS,
+        GET=mock.MagicMock(
+            name="test_download_timeout::mock_dict_get", side_effect=timeout_exc
+        ),
+    ):
         exc = Exception("stop execution")
         with mock.patch.object(rest_client.credentials, "update", side_effect=exc):
             with pytest.raises(RequestExceedMaxRetryError):

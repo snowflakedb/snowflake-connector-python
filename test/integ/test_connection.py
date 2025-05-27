@@ -1042,10 +1042,14 @@ def test_authenticate_error(conn_cnx, caplog):
     """Test Reauthenticate error handling while authenticating."""
     # The docs say unsafe should make this test work, but
     # it doesn't seem to work on MagicMock
-    mock_auth = mock.Mock(spec=AuthByPlugin, unsafe=True)
+    mock_auth = mock.Mock(
+        name="test_authenticate_error::mock_auth", spec=AuthByPlugin, unsafe=True
+    )
     mock_auth.prepare.return_value = mock_auth
     mock_auth.update_body.side_effect = ReauthenticationRequest(None)
-    mock_auth._retry_ctx = mock.MagicMock()
+    mock_auth._retry_ctx = mock.MagicMock(
+        name="test_authenticate_error::mock_auth::_retry_ctx"
+    )
     with conn_cnx() as conn:
         caplog.set_level(logging.DEBUG, "snowflake.connector")
         with pytest.raises(ReauthenticationRequest):
@@ -1090,7 +1094,12 @@ def test_process_qmark_params_error(conn_cnx):
                 match=r"Python data type \[magicmock\] cannot be automatically mapped "
                 r"to Snowflake",
             ) as pe:
-                cur.execute(sql, params=[mock.MagicMock()])
+                cur.execute(
+                    sql,
+                    params=[
+                        mock.MagicMock(name="test_process_qmark_params_error::params")
+                    ],
+                )
             assert pe.value.errno == ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE
 
 
@@ -1120,7 +1129,9 @@ def test_process_param_error(conn_cnx):
                 "snowflake.connector.converter.SnowflakeConverter.to_snowflake",
                 side_effect=Exception("test"),
             ):
-                conn._process_params_pyformat(mock.Mock())
+                conn._process_params_pyformat(
+                    mock.Mock(name="test_process_param_error::mock_params")
+                )
             assert pe.errno == ER_FAILED_PROCESSING_PYFORMAT
 
 
@@ -1374,12 +1385,16 @@ def test_not_found_connection_name():
 
 @pytest.mark.skipolddriver
 def test_server_session_keep_alive(conn_cnx):
-    mock_delete_session = mock.MagicMock()
+    mock_delete_session = mock.MagicMock(
+        name="test_server_session_keep_alive::mock_delete_session"
+    )
     with conn_cnx(server_session_keep_alive=True) as conn:
         conn.rest.delete_session = mock_delete_session
     mock_delete_session.assert_not_called()
 
-    mock_delete_session = mock.MagicMock()
+    mock_delete_session = mock.MagicMock(
+        name="test_server_session_keep_alive::mock_delete_session_1"
+    )
     with conn_cnx() as conn:
         conn.rest.delete_session = mock_delete_session
     mock_delete_session.assert_called_once()

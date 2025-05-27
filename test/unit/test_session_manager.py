@@ -23,7 +23,7 @@ url_2 = f"https://{hostname_2}/rgm1-s-sfctest0/stages/"
 url_3 = f"https://{hostname_2}/rgm1-s-sfctst0/stages/another-url"
 
 
-mock_conn = mock.Mock()
+mock_conn = mock.Mock(name="test_session_manager::mock_conn")
 mock_conn.disable_request_pooling = False
 mock_conn._ocsp_mode = lambda: DEFAULT_OCSP_MODE
 

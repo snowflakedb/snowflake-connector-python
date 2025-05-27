@@ -1941,7 +1941,7 @@ def test_decoding_utf8_for_json_result(conn_cnx):
     result_batch = JSONResultBatch(
         None, None, None, None, None, False, json_result_force_utf8_decoding=True
     )
-    mock_resp = mock.Mock()
+    mock_resp = mock.Mock(name="test_decoding_utf8_for_json_result::mock_resp")
     mock_resp.content = "À".encode("latin1")
     with pytest.raises(Error):
         result_batch._load(mock_resp)
