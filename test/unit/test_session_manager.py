@@ -4,8 +4,6 @@ from __future__ import annotations
 from enum import Enum
 from unittest import mock
 
-import pytest
-
 from snowflake.connector.network import SnowflakeRestful
 
 try:
@@ -23,14 +21,6 @@ url_1 = f"https://{hostname_1}:443/session/v1/login-request"
 hostname_2 = "sfc-ds2-customer-stage.s3.amazonaws.com"
 url_2 = f"https://{hostname_2}/rgm1-s-sfctest0/stages/"
 url_3 = f"https://{hostname_2}/rgm1-s-sfctst0/stages/another-url"
-
-
-@pytest.fixture
-def mock_conn():
-    mock_conn = mock.Mock(name="test_session_manager::mock_conn")
-    mock_conn.disable_request_pooling = False
-    mock_conn._ocsp_mode = lambda: DEFAULT_OCSP_MODE
-    return mock_conn
 
 
 def close_sessions(rest: SnowflakeRestful, num_session_pools: int) -> None:
@@ -54,7 +44,11 @@ def create_session(
 
 
 @mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
-def test_no_url_multiple_sessions(make_session_mock, mock_conn):
+def test_no_url_multiple_sessions(make_session_mock):
+    mock_conn = mock.Mock(name="test_no_url_multiple_sessions::mock_conn")
+    mock_conn.disable_request_pooling = False
+    mock_conn._ocsp_mode = lambda: DEFAULT_OCSP_MODE
+
     rest = SnowflakeRestful(connection=mock_conn)
 
     create_session(rest, 2)
@@ -71,7 +65,11 @@ def test_no_url_multiple_sessions(make_session_mock, mock_conn):
 
 
 @mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
-def test_multiple_urls_multiple_sessions(make_session_mock, mock_conn):
+def test_multiple_urls_multiple_sessions(make_session_mock):
+    mock_conn = mock.Mock(name="test_multiple_urls_multiple_sessions::mock_conn")
+    mock_conn.disable_request_pooling = False
+    mock_conn._ocsp_mode = lambda: DEFAULT_OCSP_MODE
+
     rest = SnowflakeRestful(connection=mock_conn)
 
     for url in [url_1, url_2, None]:
@@ -91,7 +89,11 @@ def test_multiple_urls_multiple_sessions(make_session_mock, mock_conn):
 
 
 @mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
-def test_multiple_urls_reuse_sessions(make_session_mock, mock_conn):
+def test_multiple_urls_reuse_sessions(make_session_mock):
+    mock_conn = mock.Mock(name="test_multiple_urls_reuse_sessions::mock_conn")
+    mock_conn.disable_request_pooling = False
+    mock_conn._ocsp_mode = lambda: DEFAULT_OCSP_MODE
+
     rest = SnowflakeRestful(connection=mock_conn)
     for url in [url_1, url_2, url_3, None]:
         # create 10 sessions, one after another
