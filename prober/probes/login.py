@@ -7,7 +7,7 @@ import snowflake.connector
 logger = initialize_logger(__name__)
 
 
-def connect(connection_parameters):
+def connect(connection_parameters: dict):
     """
     Initializes the Python driver for login using the provided connection parameters.
 
@@ -23,14 +23,14 @@ def connect(connection_parameters):
         connection = snowflake.connector.connect(
             user=connection_parameters["user"],
             account=connection_parameters["account"],
-            host=connection_parameters.get("host"),
-            port=connection_parameters.get("port"),
-            warehouse=connection_parameters.get("warehouse"),
-            database=connection_parameters.get("database"),
-            schema=connection_parameters.get("schema"),
-            role=connection_parameters.get("role"),
+            host=connection_parameters["host"],
+            port=connection_parameters["port"],
+            warehouse=connection_parameters["warehouse"],
+            database=connection_parameters["database"],
+            schema=connection_parameters["schema"],
+            role=connection_parameters["role"],
             authenticator="KEY_PAIR_AUTHENTICATOR",
-            private_key=connection_parameters.get("private_key"),
+            private_key=connection_parameters["private_key"],
         )
         return connection
     except Exception as e:
@@ -39,7 +39,7 @@ def connect(connection_parameters):
 
 
 @prober_function
-def perform_login(connection_parameters):
+def perform_login(connection_parameters: dict):
     """
     Performs the login operation using the provided connection parameters.
 
