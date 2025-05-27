@@ -22,7 +22,6 @@ exclude .clang-format
 exclude .wiremock/*
 exclude /prober/*
 
-
 prune ci
 prune benchmark
 prune test
