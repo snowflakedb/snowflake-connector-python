@@ -45,7 +45,7 @@ def test_status_when_num_of_chunks_is_zero():
         meta,
         StorageCredential(
             creds,
-            MagicMock(SnowflakeConnection),
+            MagicMock(autospec=SnowflakeConnection),
             "PUT file:/tmp/file.txt @~",
         ),
         {
