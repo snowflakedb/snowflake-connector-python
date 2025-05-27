@@ -1,4 +1,5 @@
 from typing import Any, Generator
+from unittest.mock import patch
 
 import pytest
 
@@ -19,6 +20,9 @@ def wiremock_client() -> Generator[WiremockClient, Any, None]:
         yield client
 
 
+@patch(
+    "snowflake.connector.ssl_wrap_socket.FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT", new=-1
+)
 def test_wiremock(wiremock_client):
     connection_reset_by_peer_mapping = {
         "mappings": [
