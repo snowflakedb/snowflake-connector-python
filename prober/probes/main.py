@@ -1,5 +1,6 @@
 import argparse
 import logging
+
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
 

@@ -1,5 +1,6 @@
 from probes.logging_config import initialize_logger
 from probes.registry import prober_function
+
 import snowflake.connector
 
 # Initialize logger
