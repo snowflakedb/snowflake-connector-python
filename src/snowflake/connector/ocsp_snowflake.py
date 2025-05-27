@@ -1417,6 +1417,12 @@ class SnowflakeOCSP:
                 "_root_certs_dict_lock_timeout is not an integer. %s",
                 self._root_certs_dict_lock_timeout,
             )
+            logger.warning(
+                "method calls: %s", self._root_certs_dict_lock_timeout.method_calls
+            )
+            logger.warning(
+                "method calls: %s", self._root_certs_dict_lock_timeout.method_calls
+            )
 
         SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK.acquire(
             timeout=self._root_certs_dict_lock_timeout
