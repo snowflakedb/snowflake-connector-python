@@ -3,6 +3,7 @@ import logging
 
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
+from src.snowflake.connector.compat import parse_qs
 
 # Initialize logger
 logger = initialize_logger(__name__)
@@ -20,7 +21,9 @@ def main():
     parser.add_argument("--schema", required=True, help="Schema")
     parser.add_argument("--warehouse", required=True, help="Warehouse")
     parser.add_argument("--user", required=True, help="Username")
-    parser.add_argument("--private_key", required=True, help="Private key")
+    parser.add_argument("--auth", required=True, help="Authenticator (e.g., KEY_PAIR_AUTHENTICATOR)")
+    parser.add_argument("--private_key_file", required=True, help="Private key pwd")
+
 
     # Parse arguments
     args = parser.parse_args()
@@ -33,7 +36,8 @@ def main():
         "schema": args.schema,
         "warehouse": args.warehouse,
         "user": args.user,
-        "private_key": args.private_key,
+        "authenticator": args.auth,
+        "private_key_file": args.private_key_file,
     }
 
     for function_name, function in PROBES_FUNCTIONS.items():
