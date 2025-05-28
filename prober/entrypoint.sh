@@ -1,13 +1,29 @@
 #!/bin/bash
 
-JSON_FILE="/prober/parameters.json"
 
-# Iterate through each key-value pair in the JSON file
-while IFS="=" read -r key value; do
-    # Export the key-value pair as an environment variable
-    export "$key"="$value"
-    echo "Exported: $key=$value"
-done < <(jq -r 'to_entries | .[] | "\(.key)=\(.value)"' "$JSON_FILE")
+# Parse command-line arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --scope) scope="$2"; shift ;;
+        --host) host="$2"; shift ;;
+        --port) port="$2"; shift ;;
+        --role) role="$2"; shift ;;
+        --account) account="$2"; shift ;;
+        --schema) schema="$2"; shift ;;
+        --warehouse) warehouse="$2"; shift ;;
+        --user) user="$2"; shift ;;
+        --private_key) private_key="$2"; shift ;;
+        *) echo "Unknown parameter: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+# Validate required parameters
+if [[ -z "$scope" || -z "$host" || -z "$port" || -z "$role" || -z "$account" || -z "$schema" || -z "$warehouse" || -z "$user" || -z "$private_key" ]]; then
+    echo "Error: Missing required parameters."
+    exit 1
+fi
+
 
 # Run main.py with all available virtual environments
 for venv in /venvs/*; do

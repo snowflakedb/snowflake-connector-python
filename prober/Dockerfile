@@ -54,6 +54,3 @@ COPY entrypoint.sh /prober
 COPY __init__.py /prober
 COPY probes/* /prober/probes
 COPY parameters.json /prober
-
-# Set default command
-CMD ["/prober/entrypoint.sh"]

@@ -38,7 +38,6 @@ def main():
 
     for function_name, function in PROBES_FUNCTIONS.items():
         try:
-            logging.info("BBB")
             logging.error(f"Running probe: {function_name}")
             function(connection_params)
         except Exception as e:
