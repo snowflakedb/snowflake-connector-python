@@ -805,7 +805,7 @@ def test_binding_variant(conn_cnx):
         "nested_object",
     ],
 )
-def test_binding_array_without_schema_parameterized(conn_cnx, write_value, read_value):
+def test_binding_array_without_schema(conn_cnx, write_value, read_value):
     bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
         cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 ARRAY);")
@@ -817,113 +817,79 @@ def test_binding_array_without_schema_parameterized(conn_cnx, write_value, read_
 
 
 @pytest.mark.skipolddriver
-def test_binding_object_without_schema(conn_cnx):
+@pytest.mark.parametrize(
+    "write_value, read_value",
+    [
+        (None, {}),
+        ({}, {}),
+        ({"a": 1, "b": 2, "c": 3}, {"a": 1, "b": 2, "c": 3}),
+        ({1: 1, 2: 2, "c": 3}, {"1": 1, "2": 2, "c": 3}),
+        (
+            {"Jan 1st 2020": datetime.strptime("2020-01-01", "%Y-%m-%d")},
+            {"Jan 1st 2020": "Wed, 01 Jan 2020 00:00:00 "},
+        ),
+        (
+            {
+                "Nov 30th 2000": time.strptime("30 Nov 00", "%d %b %y"),
+                "Nov 30th 2001": time.strptime("30 Nov 01", "%d %b %y"),
+            },
+            {
+                "Nov 30th 2000": "Thu, 30 Nov 2000 00:00:00 ",
+                "Nov 30th 2001": "Fri, 30 Nov 2001 00:00:00 ",
+            },
+        ),
+        (
+            {
+                "year": timedelta(days=365),
+                "hour": timedelta(hours=1),
+            },
+            {"year": "31536000000000000", "hour": "3600000000000"},
+        ),
+        ({"a": True, "b": False, "c": False}, {"a": True, "b": False, "c": False}),
+        ({1: b"123", 2: b"HEX", 3: b"3"}, {"1": "313233", "2": "484558", "3": "33"}),
+        (
+            {1: long(10), 2: long(-9223372036854775807), 3: long(9223372036854775807)},
+            {"1": 10, "2": -9223372036854775807, "3": 9223372036854775807},
+        ),
+        ({1: math.pi, 2: 1.1, 3: 1.2}, {"1": math.pi, "2": 1.1, "3": 1.2}),
+        (
+            {1: Decimal(10.10), 2: Decimal(-5.001), 3: Decimal(-5.5)},
+            {"1": 10.1, "2": -5.001, "3": -5.5},
+        ),
+        (
+            {1: bytearray(b"abc"), 2: bytearray(b"def")},
+            {"1": "616263", "2": "646566"},
+        ),
+        ({1: [1, 2, 3]}, {"1": [1, 2, 3]}),
+        ({1: {1: 1, 2: 2, 3: 3}}, {"1": {"1": 1, "2": 2, "3": 3}}),
+    ],
+    ids=[
+        "none_object",
+        "empty_object",
+        "object_with_integers",
+        "object_with_mixed_types",
+        "object_with_dates",
+        "object_with_times",
+        "object_with_timedeltas",
+        "object_with_booleans",
+        "object_with_bytes",
+        "object_with_long_integers",
+        "object_with_floats",
+        "object_with_decimals",
+        "object_with_bytearrays",
+        "nested_array",
+        "nested_object",
+    ],
+)
+def test_binding_object_without_schema(conn_cnx, write_value, read_value):
     bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
     with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
         cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 OBJECT);")
-        cursor.execute(bind_query, params=(snowflake_object({}),))
-        cursor.execute(bind_query, params=(snowflake_object(None),))
-        cursor.execute(bind_query, params=(snowflake_object({"a": 1, "b": 2, "c": 3}),))
-        cursor.execute(bind_query, params=(snowflake_object({1: 1, 2: 2, "c": 3}),))
-        cursor.execute(
-            bind_query,
-            params=(
-                snowflake_object(
-                    {"Jan 1st 2020": datetime.strptime("2020-01-01", "%Y-%m-%d")}
-                ),
-            ),
-        )
-        cursor.execute(
-            bind_query,
-            params=(
-                snowflake_object(
-                    {
-                        "Nov 30th 2000": time.strptime("30 Nov 00", "%d %b %y"),
-                        "Nov 30th 2001": time.strptime("30 Nov 01", "%d %b %y"),
-                    }
-                ),
-            ),
-        )
-        cursor.execute(
-            bind_query,
-            params=(
-                snowflake_object(
-                    {
-                        "year": timedelta(days=365),
-                        "hour": timedelta(hours=1),
-                    }
-                ),
-            ),
-        )
-        cursor.execute(
-            bind_query, params=(snowflake_object({"a": True, "b": False, "c": False}),)
-        )
-        cursor.execute(
-            bind_query, params=(snowflake_object({1: b"123", 2: b"HEX", 3: b"3"}),)
-        )
-        cursor.execute(
-            bind_query,
-            params=(
-                snowflake_object(
-                    {
-                        1: long(10),
-                        2: long(-9223372036854775807),
-                        3: long(9223372036854775807),
-                    }
-                ),
-            ),
-        )
-        cursor.execute(
-            bind_query, params=(snowflake_object({1: math.pi, 2: 1.1, 3: 1.2}),)
-        )
-        cursor.execute(
-            bind_query,
-            params=(
-                snowflake_object(
-                    {1: Decimal(10.10), 2: Decimal(-5.001), 3: Decimal(-5.5)}
-                ),
-            ),
-        )
-        cursor.execute(
-            bind_query,
-            params=(snowflake_object({1: bytearray(b"abc"), 2: bytearray(b"def")}),),
-        )
-        cursor.execute(bind_query, params=(snowflake_object({1: [1, 2, 3]}),))
-        cursor.execute(bind_query, params=(snowflake_object({1: {1: 1, 2: 2, 3: 3}}),))
+        cursor.execute(bind_query, params=(snowflake_object(write_value),))
 
         results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
 
-        assert json.loads(results[0][0]) == {}
-        assert json.loads(results[0][0]) == {}
-        assert json.loads(results[2][0]) == {"a": 1, "b": 2, "c": 3}
-        assert json.loads(results[3][0]) == {"1": 1, "2": 2, "c": 3}
-        assert json.loads(results[4][0]) == {
-            "Jan 1st 2020": "Wed, 01 Jan 2020 00:00:00 "
-        }
-        assert json.loads(results[5][0]) == {
-            "Nov 30th 2000": "Thu, 30 Nov 2000 00:00:00 ",
-            "Nov 30th 2001": "Fri, 30 Nov 2001 00:00:00 ",
-        }
-        assert json.loads(results[6][0]) == {
-            "year": "31536000000000000",
-            "hour": "3600000000000",
-        }
-        assert json.loads(results[7][0]) == {"a": True, "b": False, "c": False}
-        assert json.loads(results[8][0]) == {"1": "313233", "2": "484558", "3": "33"}
-        assert json.loads(results[9][0]) == {
-            "1": 10,
-            "2": -9223372036854775807,
-            "3": 9223372036854775807,
-        }
-        assert json.loads(results[10][0]) == {
-            "1": 3.141592653589793,
-            "2": 1.1,
-            "3": 1.2,
-        }
-        assert json.loads(results[11][0]) == {"1": 10.1, "2": -5.001, "3": -5.5}
-        assert json.loads(results[12][0]) == {"1": "616263", "2": "646566"}
-        assert json.loads(results[13][0]) == {"1": [1, 2, 3]}
-        assert json.loads(results[14][0]) == {"1": {"1": 1, "2": 2, "3": 3}}
+        assert json.loads(results[0][0]) == read_value
 
 
 @pytest.mark.skipolddriver
