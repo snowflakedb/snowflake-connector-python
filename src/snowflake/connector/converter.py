@@ -8,6 +8,7 @@ import time
 from datetime import date, datetime
 from datetime import time as dt_t
 from datetime import timedelta, timezone, tzinfo
+from decimal import Decimal
 from functools import partial
 from logging import getLogger
 from math import ceil
@@ -22,6 +23,12 @@ from .errorcode import ER_NOT_SUPPORT_DATA_TYPE
 from .errors import ProgrammingError
 from .sfbinaryformat import binary_to_python, binary_to_snowflake
 from .sfdatetime import sfdatetime_total_seconds_from_timedelta
+from .type_wrappers import (
+    snowflake_array,
+    snowflake_map,
+    snowflake_object,
+    snowflake_variant,
+)
 
 if TYPE_CHECKING:
     from numpy import bool_, int64
@@ -80,6 +87,8 @@ PYTHON_TO_SNOWFLAKE_TYPE = {
 
 # Type alias
 SnowflakeConverterType = Callable[[Any], Any]
+
+JSON_FORMAT_STR = "json"
 
 
 def convert_datetime_to_epoch(dt: datetime) -> float:
@@ -370,9 +379,31 @@ class SnowflakeConverter:
             snowflake_type, value
         )
 
+    def to_snowflake_bindings_dict(
+        self, snowflake_type: str, value: Any
+    ) -> dict[str, Any]:
+        """Converts Python data to snowflake bindings dict dor qmark and numeric parameter style.
+
+        The output is bound in a query in the server side.
+        """
+        type_name = value.__class__.__name__.lower()
+        return getattr(self, f"_{type_name}_to_snowflake_bindings_dict")(
+            snowflake_type, value
+        )
+
     def _str_to_snowflake_bindings(self, _, value: str) -> str:
         # NOTE: str type is always taken as a text data and never binary
         return str(value)
+
+    def _str_to_snowflake_bindings_dict(
+        self, snowflake_type: str, value: str
+    ) -> dict[str, Any]:
+        return {
+            "type": snowflake_type,
+            "value": str(value),
+            "schema": None,
+            "fmt": JSON_FORMAT_STR,
+        }
 
     def _date_to_snowflake_bindings_in_bulk_insertion(self, value: date) -> str:
         # notes: this is for date type bulk insertion, it's different from non-bulk date type insertion flow
@@ -402,6 +433,14 @@ class SnowflakeConverter:
 
     def _nonetype_to_snowflake_bindings(self, *_) -> None:
         return None
+
+    def _nonetype_to_snowflake_bindings_dict(self, *_) -> dict[str, Any]:
+        return {
+            "type": "ANY",
+            "value": None,
+            "schema": None,
+            "format": JSON_FORMAT_STR,
+        }
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
         # this is for date type non-bulk insertion, it's different from bulk date type insertion flow
@@ -473,6 +512,138 @@ class SnowflakeConverter:
         return (
             str(hours * 3600 + mins * 60 + secs) + f"{value.microseconds:06d}" + "000"
         )
+
+    def _snowflake_array_to_snowflake_bindings(
+        self, value: snowflake_array
+    ) -> list[Any]:
+        if not value:
+            return []
+
+        converted_values = []
+        # TODO: is this an edge case that needs to be handled
+
+        if value.original_type == bytearray:
+            # bytearray when converted to snowflake_array becomes an array of int. The reasonable expectation would be
+            # for it to be binded as an array of individual bytes the same way as array of bytes value is binded.
+            return [self._bytes_to_snowflake_bindings(None, bytes([v])) for v in value]
+
+        for v in value:
+            inner_python_type = type(v)
+            if inner_python_type == datetime or inner_python_type == date:
+                converted_values.append(v.strftime("%a, %d %b %Y %H:%M:%S %Z"))
+            elif inner_python_type == struct_time or inner_python_type == dt_t:
+                converted_values.append(time.strftime("%a, %d %b %Y %H:%M:%S %Z", v))
+            elif inner_python_type == timedelta:
+                converted_values.append(
+                    self._timedelta_to_snowflake_bindings("TIME", v)
+                )
+            elif inner_python_type == bytes or inner_python_type == bytearray:
+                converted_values.append(self._bytes_to_snowflake_bindings(None, v))
+            elif inner_python_type == numpy.int64:
+                converted_values.append(int(v))
+            elif inner_python_type == Decimal:
+                converted_values.append(float(v))
+            elif inner_python_type == snowflake_array:
+                converted_values.append(self._snowflake_array_to_snowflake_bindings(v))
+            elif inner_python_type == snowflake_object:
+                converted_values.append(self._snowflake_object_to_snowflake_bindings(v))
+            else:
+                converted_values.append(v)
+
+        return converted_values
+
+    def _snowflake_array_to_snowflake_bindings_dict(
+        self, _, value: snowflake_array
+    ) -> dict[str, Any]:
+        if not value:
+            return {
+                "type": "ARRAY",
+                "value": "[]",
+                "fmt": JSON_FORMAT_STR,
+                "schema": None,
+            }
+
+        return {
+            "type": "ARRAY",
+            "value": json.dumps(self._snowflake_array_to_snowflake_bindings(value)),
+            "fmt": JSON_FORMAT_STR,
+        }
+
+    def _snowflake_object_to_snowflake_bindings(
+        self, value: snowflake_object
+    ) -> dict[str, Any]:
+        if not value:
+            return {}
+
+        converted_object = {}
+
+        for key, v in value.items():
+            if type(key) is not str:
+                logger.info(
+                    "snowflake_object key %s is not a string. Converting to string.",
+                    key,
+                )
+                key = str(key)
+            value_type = type(v)
+
+            if value_type == datetime or value_type == date:
+                converted_object[key] = v.strftime("%a, %d %b %Y %H:%M:%S %Z")
+            elif value_type == struct_time or value_type == dt_t:
+                converted_object[key] = time.strftime("%a, %d %b %Y %H:%M:%S %Z", v)
+            elif value_type == timedelta:
+                converted_object[key] = self._timedelta_to_snowflake_bindings("TIME", v)
+            elif value_type == bytes or value_type == bytearray:
+                converted_object[key] = self._bytes_to_snowflake_bindings(None, v)
+            elif value_type == numpy.long:
+                converted_object[key] = int(v)
+            elif value_type == Decimal:
+                converted_object[key] = float(v)
+            elif value_type == snowflake_array:
+                converted_object[key] = self._snowflake_array_to_snowflake_bindings(v)
+            elif value_type == snowflake_object:
+                converted_object[key] = self._snowflake_object_to_snowflake_bindings(v)
+            else:
+                converted_object[key] = v
+
+        return converted_object
+
+    def _snowflake_object_to_snowflake_bindings_dict(
+        self, _, value: snowflake_object
+    ) -> dict[str, Any]:
+        if not value:
+            return {
+                "type": "OBJECT",
+                "value": "{}",
+                "fmt": JSON_FORMAT_STR,
+                "schema": None,
+            }
+
+        return {
+            "type": "OBJECT",
+            "value": json.dumps(self._snowflake_object_to_snowflake_bindings(value)),
+            "fmt": JSON_FORMAT_STR,
+            "schema": None,
+        }
+
+    def _snowflake_variant_to_snowflake_bindings_dict(
+        self, _, value: snowflake_variant
+    ) -> dict[str, Any]:
+        return {
+            "type": "VARIANT",
+            "value": json.dumps(value.value),
+            "fmt": JSON_FORMAT_STR,
+            "schema": None,
+        }
+
+    def _snowflake_map_to_snowflake_bindings_dict(
+        self, _, value: snowflake_map
+    ) -> dict[str, Any]:
+        return {
+            "type": "MAP",
+            "value": json.dumps(value),
+            "fmt": JSON_FORMAT_STR,
+            "schema": None,
+        }
 
     def to_snowflake(self, value: Any) -> Any:
         """Converts Python data to Snowflake data for pyformat/format style.
