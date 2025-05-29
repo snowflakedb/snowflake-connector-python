@@ -2,21 +2,12 @@ FROM alpine:3.18
 
 RUN apk add --no-cache \
     bash \
-    curl \
     git \
     make \
-    gcc \
     g++ \
-    musl-dev \
     zlib-dev \
-    bzip2-dev \
-    readline-dev \
-    sqlite-dev \
     openssl-dev \
-    libffi-dev \
-    xz-dev \
-    jq \
-    tk-dev
+    libffi-dev
 
 ENV HOME="/root"
 WORKDIR ${HOME}
@@ -49,8 +40,15 @@ done
 
 # Copy the prober script into the container
 RUN mkdir -p /prober/probes/
+COPY __init__.py /prober
+COPY parameters.json /prober
 COPY setup.py /prober
 COPY entrypoint.sh /prober
-COPY __init__.py /prober
 COPY probes/* /prober/probes
-COPY parameters.json /prober
+
+# Install /prober in editable mode for each virtual environment
+RUN for venv in /venvs/*; do \
+    source $venv/bin/activate && \
+    pip install -e /prober && \
+    deactivate; \
+done

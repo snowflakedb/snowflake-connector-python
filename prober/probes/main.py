@@ -3,6 +3,7 @@ import logging
 
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
+from probes import login  # noqa
 
 # Initialize logger
 logger = initialize_logger(__name__)
@@ -19,6 +20,7 @@ def main():
     parser.add_argument("--account", required=True, help="Account")
     parser.add_argument("--schema", required=True, help="Schema")
     parser.add_argument("--warehouse", required=True, help="Warehouse")
+    parser.add_argument("--database", required=True, help="Datanase")
     parser.add_argument("--user", required=True, help="Username")
     parser.add_argument(
         "--auth", required=True, help="Authenticator (e.g., KEY_PAIR_AUTHENTICATOR)"
@@ -35,6 +37,7 @@ def main():
         "account": args.account,
         "schema": args.schema,
         "warehouse": args.warehouse,
+        "database": args.database,
         "user": args.user,
         "authenticator": args.auth,
         "private_key_file": args.private_key_file,
