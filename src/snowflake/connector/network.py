@@ -12,7 +12,7 @@ import time
 import uuid
 from collections import OrderedDict
 from threading import Lock
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generator, MutableSequence
 
 import OpenSSL.SSL
 
@@ -191,6 +191,14 @@ NO_AUTH_AUTHENTICATOR = "NO_AUTH"
 WORKLOAD_IDENTITY_AUTHENTICATOR = "WORKLOAD_IDENTITY"
 
 
+# TODO:
+# from snowflake.connector.http_interceptor import (
+from .http_interceptor import Headers, HttpInterceptor, InterceptOnMixin, RequestDTO
+
+# TODO: remove all dto to Info
+# TODO: add tests
+
+
 def is_retryable_http_code(code: int) -> bool:
     """Decides whether code is a retryable HTTP issue."""
     return 500 <= code < 600 or code in (
@@ -365,7 +373,7 @@ class SnowflakeRestfulJsonEncoder(json.JSONEncoder):
         return super().default(o)
 
 
-class SnowflakeRestful:
+class SnowflakeRestful(InterceptOnMixin):
     """Snowflake Restful class."""
 
     def __init__(
@@ -385,6 +393,8 @@ class SnowflakeRestful:
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
         )
+        # Creating a reference, for quicker access
+        # self._request_interceptors = connection._requests_interceptors
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
         ssl_wrap_socket.FEATURE_OCSP_MODE = (
@@ -424,6 +434,10 @@ class SnowflakeRestful:
         )
 
     @property
+    def request_interceptors(self) -> MutableSequence[HttpInterceptor]:
+        return self._connection.request_interceptors
+
+    @property
     def id_token(self):
         return getattr(self, "_id_token", None)
 
@@ -442,6 +456,14 @@ class SnowflakeRestful:
     @property
     def server_url(self) -> str:
         return f"{self._protocol}://{self._host}:{self._port}"
+
+    # @property
+    # def headers_customizers(self):
+    #     return self._headers_customizers
+    #
+    # @headers_customizers.setter
+    # def headers_customizers(self, value) -> None:
+    #     self._headers_customizers = value
 
     def close(self) -> None:
         if hasattr(self, "_token"):
@@ -823,7 +845,7 @@ class SnowflakeRestful:
         self,
         method: str,
         full_url: str,
-        headers: dict[str, Any],
+        headers: Headers,
         data: dict[str, Any] | None = None,
         timeout: int | None = None,
         **kwargs,
@@ -859,6 +881,12 @@ class SnowflakeRestful:
         include_retry_reason = self._connection._enable_retry_reason_in_query_response
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
+        request_info = RequestDTO(url=full_url, headers=headers, method=method)
+        self._intercept_on(
+            hook=HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST,
+            request=request_info,
+        )
+
         with self._use_requests_session(full_url) as session:
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,
@@ -871,11 +899,18 @@ class SnowflakeRestful:
 
             retry_ctx.set_start_time()
             while True:
+                # # request_info.headers.update(headers)
+                # self._intercept_on(hook=HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request=request_info)
+
                 ret = self._request_exec_wrapper(
                     session, method, full_url, headers, data, retry_ctx, **kwargs
                 )
                 if ret is not None:
                     return ret
+
+    # def _intercept_on(self, hook: HttpInterceptor.InterceptionHook, request: RequestDTO) -> None:
+    #     for interceptor in self._connection._request_interceptors:
+    #         interceptor.intercept_on(hook, request)
 
     @staticmethod
     def add_request_guid(full_url: str) -> str:
@@ -895,7 +930,7 @@ class SnowflakeRestful:
         session,
         method,
         full_url,
-        headers,
+        headers: Headers,
         data,
         retry_ctx,
         no_retry: bool = False,
@@ -1058,7 +1093,7 @@ class SnowflakeRestful:
         session,
         method,
         full_url,
-        headers,
+        headers: Headers,
         data,
         token,
         catch_okta_unauthorized_error: bool = False,
@@ -1088,6 +1123,15 @@ class SnowflakeRestful:
             # socket timeout is constant. You should be able to receive
             # the response within the time. If not, ConnectReadTimeout or
             # ReadTimeout is raised.
+            # TODO: here
+            # tODO: check how does it impact timeouts - is it in their scope
+            # request_info.headers.update(headers)
+            request_info = RequestDTO(url=full_url, headers=headers, method=method)
+            self._intercept_on(
+                hook=HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY,
+                request=request_info,
+            )
+
             raw_ret = session.request(
                 method=method,
                 url=full_url,
@@ -1208,7 +1252,9 @@ class SnowflakeRestful:
         return s
 
     @contextlib.contextmanager
-    def _use_requests_session(self, url: str | None = None):
+    def _use_requests_session(
+        self, url: str | bytes | None = None
+    ) -> Generator[Session, Any, None]:
         """Session caching context manager.
 
         Notes:
