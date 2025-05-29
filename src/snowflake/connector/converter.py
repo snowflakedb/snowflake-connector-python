@@ -525,10 +525,7 @@ class SnowflakeConverter:
         if value.original_type == bytearray:
             # bytearray when converted to snowflake_array becomes an array of int. The reasonable expectation would be
             # for it to be binded as an array of individual bytes the same way as array of bytes value is binded.
-            return [
-                self._bytes_to_snowflake_bindings(None, bytes(chr(v), "utf-8"))
-                for v in value
-            ]
+            return [self._bytes_to_snowflake_bindings(None, bytes([v])) for v in value]
 
         for v in value:
             inner_python_type = type(v)
@@ -542,7 +539,7 @@ class SnowflakeConverter:
                 )
             elif inner_python_type == bytes or inner_python_type == bytearray:
                 converted_values.append(self._bytes_to_snowflake_bindings(None, v))
-            elif inner_python_type == numpy.long:
+            elif inner_python_type == numpy.int64:
                 converted_values.append(int(v))
             elif inner_python_type == Decimal:
                 converted_values.append(float(v))
