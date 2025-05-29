@@ -21,9 +21,10 @@ def main():
     parser.add_argument("--schema", required=True, help="Schema")
     parser.add_argument("--warehouse", required=True, help="Warehouse")
     parser.add_argument("--user", required=True, help="Username")
-    parser.add_argument("--auth", required=True, help="Authenticator (e.g., KEY_PAIR_AUTHENTICATOR)")
+    parser.add_argument(
+        "--auth", required=True, help="Authenticator (e.g., KEY_PAIR_AUTHENTICATOR)"
+    )
     parser.add_argument("--private_key_file", required=True, help="Private key pwd")
-
 
     # Parse arguments
     args = parser.parse_args()
