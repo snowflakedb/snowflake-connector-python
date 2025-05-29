@@ -1,9 +1,9 @@
 import argparse
 import logging
 
+from probes import login  # noqa
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
-from probes import login  # noqa
 
 # Initialize logger
 logger = initialize_logger(__name__)
