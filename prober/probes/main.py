@@ -3,7 +3,6 @@ import logging
 
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
-from src.snowflake.connector.compat import parse_qs
 
 # Initialize logger
 logger = initialize_logger(__name__)
