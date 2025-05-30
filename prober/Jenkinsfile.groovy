@@ -43,13 +43,13 @@ pipeline {
             steps {
                 sh """
                 ./k8sc-jenkins_scripts/jenkins_push.sh \
-                -r ${VAULT_CREDENTIALS_USR} \
-                -s ${VAULT_CREDENTIALS_PSW} \
-                -i ${IMAGE_NAME} \
-                -v ${COMMIT_SHA_SHORT} \
-                -n ${TEAM_JIRA_DL} \
-                -a ${TEAM_JIRA_AREA} \
-                -C ${TEAM_JIRA_COMPONENT}
+                -r "${VAULT_CREDENTIALS_USR}" \
+                -s "${VAULT_CREDENTIALS_PSW}" \
+                -i "${IMAGE_NAME}" \
+                -v "${COMMIT_SHA_SHORT}" \
+                -n "${TEAM_JIRA_DL}" \
+                -a "${TEAM_JIRA_AREA}" \
+                -C "${TEAM_JIRA_COMPONENT}"
                 """
             }
         }
