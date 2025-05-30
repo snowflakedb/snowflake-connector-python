@@ -10,6 +10,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.16(TBD)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4
   - Added Windows support for Python 3.13.
+  - Added support for new authentication mechanims PAT with external session ID
 
 - v3.15.1(May 20, 2025)
   - Added basic arrow support for Interval types.
