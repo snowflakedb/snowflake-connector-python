@@ -19,10 +19,12 @@ pipeline {
     stages {
         stage('Build Image') {
             steps {
-                sh """
-                docker build \
-                -t ${IMAGE_NAME}:${COMMIT_SHA_SHORT} -f ./Dockerfile .
-                """
+                dir('prober') {
+                    sh """
+                    docker build \
+                    -t ${IMAGE_NAME}:${COMMIT_SHA_SHORT} -f ./Dockerfile .
+                    """
+                }
             }
         }
 
