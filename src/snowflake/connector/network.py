@@ -1113,7 +1113,7 @@ class SnowflakeRestful:
         headers,
         data,
         token,
-        external_session_id,
+        external_session_id=None,
         catch_okta_unauthorized_error: bool = False,
         is_raw_text: bool = False,
         is_raw_binary: bool = False,
