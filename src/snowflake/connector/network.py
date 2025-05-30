@@ -148,11 +148,11 @@ REQUEST_TYPE_RENEW = "RENEW"
 
 HEADER_AUTHORIZATION_KEY = "Authorization"
 HEADER_SNOWFLAKE_TOKEN = 'Snowflake Token="{token}"'
+HEADER_EXTERNAL_SESSION_KEY = "X-Snowflake-External-Session-ID"
 
 REQUEST_ID = "requestId"
 REQUEST_GUID = "request_guid"
 SNOWFLAKE_HOST_SUFFIX = ".snowflakecomputing.com"
-
 
 SNOWFLAKE_CONNECTOR_VERSION = SNOWFLAKE_CONNECTOR_VERSION
 PYTHON_VERSION = PYTHON_VERSION
@@ -166,6 +166,7 @@ CLIENT_VERSION = CLIENT_VERSION
 PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
 
 NO_TOKEN = "no-token"
+NO_EXTERNAL_SESSION_ID = "no-external-session-id"
 
 STATUS_TO_EXCEPTION: dict[int, type[Error]] = {
     INTERNAL_SERVER_ERROR: InternalServerError,
@@ -189,6 +190,7 @@ USR_PWD_MFA_AUTHENTICATOR = "USERNAME_PASSWORD_MFA"
 PROGRAMMATIC_ACCESS_TOKEN = "PROGRAMMATIC_ACCESS_TOKEN"
 NO_AUTH_AUTHENTICATOR = "NO_AUTH"
 WORKLOAD_IDENTITY_AUTHENTICATOR = "WORKLOAD_IDENTITY"
+PAT_WITH_EXTERNAL_SESSION = "PAT_WITH_EXTERNAL_SESSION"
 
 
 def is_retryable_http_code(code: int) -> bool:
@@ -313,6 +315,25 @@ class SnowflakeAuth(AuthBase):
         return r
 
 
+class PATWithExternalSessionAuth(AuthBase):
+    """Attaches HTTP Authorization headers for PAT with External Session."""
+
+    def __init__(self, token, external_session_id) -> None:
+        # setup any auth-related data here
+        self.token = token
+        self.external_session_id = external_session_id
+
+    def __call__(self, r: PreparedRequest) -> PreparedRequest:
+        """Modifies and returns the request."""
+        if HEADER_AUTHORIZATION_KEY in r.headers:
+            del r.headers[HEADER_AUTHORIZATION_KEY]
+        if self.token != NO_TOKEN:
+            r.headers[HEADER_AUTHORIZATION_KEY] = "Bearer " + self.token
+        if self.external_session_id != NO_EXTERNAL_SESSION_ID:
+            r.headers[HEADER_EXTERNAL_SESSION_KEY] = self.external_session_id
+        return r
+
+
 class SessionPool:
     def __init__(self, rest: SnowflakeRestful) -> None:
         # A stack of the idle sessions
@@ -403,6 +424,12 @@ class SnowflakeRestful:
     @property
     def token(self) -> str | None:
         return self._token if hasattr(self, "_token") else None
+
+    @property
+    def external_session_id(self) -> str | None:
+        return (
+            self._external_session_id if hasattr(self, "_external_session_id") else None
+        )
 
     @property
     def master_token(self) -> str | None:
@@ -513,6 +540,7 @@ class SnowflakeRestful:
                 headers,
                 json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
                 token=self.token,
+                external_session_id=self.external_session_id,
                 _no_results=_no_results,
                 timeout=timeout,
                 _include_retry_params=_include_retry_params,
@@ -523,6 +551,7 @@ class SnowflakeRestful:
                 url,
                 headers,
                 token=self.token,
+                external_session_id=self.external_session_id,
                 timeout=timeout,
             )
 
@@ -541,6 +570,17 @@ class SnowflakeRestful:
             self._id_token = id_token
             self._mfa_token = mfa_token
             self._master_validity_in_seconds = master_validity_in_seconds
+
+    def set_pat_and_external_session(
+        self,
+        personal_access_token,
+        external_session_id,
+    ) -> None:
+        """Updates session and master tokens and optionally temporary credential."""
+        with self._lock_token:
+            self._personal_access_token = personal_access_token
+            self._token = personal_access_token
+            self._external_session_id = external_session_id
 
     def _renew_session(self):
         """Renew a session and master token."""
@@ -698,6 +738,7 @@ class SnowflakeRestful:
         url: str,
         headers: dict[str, str],
         token: str = None,
+        external_session_id: str = None,
         timeout: int | None = None,
         is_fetch_query_status: bool = False,
     ) -> dict[str, Any]:
@@ -713,9 +754,13 @@ class SnowflakeRestful:
             headers,
             timeout=timeout,
             token=token,
+            external_session_id=external_session_id,
             is_fetch_query_status=is_fetch_query_status,
         )
-        if ret.get("code") == SESSION_EXPIRED_GS_CODE:
+        if (
+            ret.get("code") == SESSION_EXPIRED_GS_CODE
+            and self._connection._authenticator != PAT_WITH_EXTERNAL_SESSION
+        ):
             try:
                 ret = self._renew_session()
             except ReauthenticationRequest as ex:
@@ -743,6 +788,7 @@ class SnowflakeRestful:
         headers,
         body,
         token=None,
+        external_session_id: str | None = None,
         timeout: int | None = None,
         socket_timeout: int | None = None,
         _no_results: bool = False,
@@ -763,6 +809,7 @@ class SnowflakeRestful:
             data=body,
             timeout=timeout,
             token=token,
+            external_session_id=external_session_id,
             no_retry=no_retry,
             _include_retry_params=_include_retry_params,
             socket_timeout=socket_timeout,
@@ -775,7 +822,10 @@ class SnowflakeRestful:
 
         if ret.get("code") == MASTER_TOKEN_EXPIRED_GS_CODE:
             self._connection.expired = True
-        elif ret.get("code") == SESSION_EXPIRED_GS_CODE:
+        elif (
+            ret.get("code") == SESSION_EXPIRED_GS_CODE
+            and self._connection._authenticator != PAT_WITH_EXTERNAL_SESSION
+        ):
             try:
                 ret = self._renew_session()
             except ReauthenticationRequest as ex:
@@ -900,6 +950,7 @@ class SnowflakeRestful:
         retry_ctx,
         no_retry: bool = False,
         token=NO_TOKEN,
+        external_session_id=NO_EXTERNAL_SESSION_ID,
         **kwargs,
     ):
         conn = self._connection
@@ -928,6 +979,7 @@ class SnowflakeRestful:
                 headers=headers,
                 data=data,
                 token=token,
+                external_session_id=external_session_id,
                 raise_raw_http_failure=raise_raw_http_failure,
                 **kwargs,
             )
@@ -1061,6 +1113,7 @@ class SnowflakeRestful:
         headers,
         data,
         token,
+        external_session_id=None,
         catch_okta_unauthorized_error: bool = False,
         is_raw_text: bool = False,
         is_raw_binary: bool = False,
@@ -1088,6 +1141,11 @@ class SnowflakeRestful:
             # socket timeout is constant. You should be able to receive
             # the response within the time. If not, ConnectReadTimeout or
             # ReadTimeout is raised.
+            auth = (
+                PATWithExternalSessionAuth(token, external_session_id)
+                if (external_session_id is not None and token is not None)
+                else SnowflakeAuth(token)
+            )
             raw_ret = session.request(
                 method=method,
                 url=full_url,
@@ -1096,7 +1154,7 @@ class SnowflakeRestful:
                 timeout=socket_timeout,
                 verify=True,
                 stream=is_raw_binary,
-                auth=SnowflakeAuth(token),
+                auth=auth,
             )
             download_end_time = get_time_millis()
 
