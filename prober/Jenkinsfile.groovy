@@ -1,4 +1,3 @@
-
 pipeline {
     agent { label 'regular-memory-node' }
 
@@ -51,11 +50,11 @@ pipeline {
                 """
             }
         }
+    }
 
-        post {
-            always {
-                cleanWs()
-            }
+    post {
+        always {
+            cleanWs()
         }
     }
 }
