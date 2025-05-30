@@ -19,7 +19,7 @@ pipeline {
     stages {
         stage('Build Image') {
             steps {
-                dir('prober') {
+                dir('.') {
                     sh """
                     ls -l
                     docker build \
