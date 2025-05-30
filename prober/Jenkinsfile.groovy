@@ -13,7 +13,7 @@ pipeline {
         TEAM_NAME = 'Snow Drivers'
         TEAM_JIRA_DL = 'triage-snow-drivers-warsaw-dl'
         TEAM_JIRA_AREA = 'Developer Platform'
-        TEAM_COMPONENT = 'Python Driver'
+        TEAM_JIRA_COMPONENT = 'Python Driver'
     }
 
     stages {
