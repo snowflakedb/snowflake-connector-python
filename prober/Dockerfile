@@ -41,7 +41,7 @@ done
 # Copy the prober script into the container
 RUN mkdir -p /prober/probes/
 COPY __init__.py /prober
-# COPY parameters.json /prober
+COPY parameters.json /prober
 COPY setup.py /prober
 COPY entrypoint.sh /prober
 COPY probes/* /prober/probes

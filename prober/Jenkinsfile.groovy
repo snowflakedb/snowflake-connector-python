@@ -23,7 +23,7 @@ pipeline {
                     sh """
                     ls -l
                     docker build \
-                    -t ${IMAGE_NAME}:${COMMIT_SHA_SHORT} -f ./Dockerfile .
+                    -t ${IMAGE_NAME}:${COMMIT_SHA_SHORT} -f ./Dockerfile_min .
                     """
                 }
             }
