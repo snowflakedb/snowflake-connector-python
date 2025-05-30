@@ -19,7 +19,7 @@ pipeline {
     stages {
         stage('Build Image') {
             steps {
-                dir('.') {
+                dir('./PythonConnector/prober') {
                     sh """
                     ls -l
                     docker build \
