@@ -124,7 +124,7 @@ class AuthorizationTestHelper:
             logger.info("Trying to connect to Snowflake")
             with snowflake.connector.connect(**self.configuration) as con:
                 result = con.cursor().execute(f"SELECT 1, ${key}")
-                value = result.fetchone()[0]
+                value = result.fetchone()[1]
                 logger.debug(value)
                 logger.info("Successfully READ session variable")
                 return value
