@@ -8,7 +8,7 @@ pipeline {
 
     environment {
         VAULT_CREDENTIALS = credentials('vault-jenkins')
-        COMMIT_SHA_SHORT = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+        COMMIT_SHA_SHORT = '1234567890' // sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
         IMAGE_NAME = 'drivers/python-driver-prober'
         TEAM_NAME = 'Snow Drivers'
         TEAM_JIRA_DL = 'triage-snow-drivers-warsaw-dl'
