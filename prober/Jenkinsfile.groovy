@@ -1,4 +1,3 @@
-import utilities.Credentials
 
 pipeline {
     agent { label 'regular-memory-node' }
@@ -32,7 +31,7 @@ pipeline {
             steps {
                 dir('k8sc-jenkins_scripts') {
                     git branch: 'master',
-                    credentialsId: Credentials.GithubAppCredentials.DEV_SNOWFLAKE_3.credentialId,
+                    credentialsId: 'jenkins-snowflake-github-app-3',
                     url: 'https://github.com/snowflakedb/k8sc-jenkins_scripts.git'
                 }
             }
