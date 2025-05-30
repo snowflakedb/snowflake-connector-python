@@ -42,7 +42,7 @@ pipeline {
         stage('Push Image') {
             steps {
                 sh """
-                ./k8sc-jenkins_scripts/push_image.sh \
+                ./k8sc-jenkins_scripts/jenkins_push.sh \
                 -r ${VAULT_CREDENTIALS_USR} \
                 -s ${VAULT_CREDENTIALS_PSW} \
                 -i ${IMAGE_NAME} \
