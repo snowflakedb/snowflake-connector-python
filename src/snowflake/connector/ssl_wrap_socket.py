@@ -41,6 +41,41 @@ def inject_into_urllib3() -> None:
     connection_.ssl_wrap_socket = ssl_wrap_socket_with_ocsp
 
 
+# from .vendored.urllib3.retry import Retry
+#
+#
+# class HeaderCustomizerRetry(Retry):
+#     def __init__(self, *args, sf_connection = None, **kwargs) -> Retry:
+#         super().__init__(*args, **kwargs)
+#         self._sf_connection = sf_connection
+#
+#     def increment(self, *args, **kwargs):
+#         request_info: RequestDTO = get_request_info(*args, **kwargs)
+#         _intercept_on_static(self._sf_connection, request_info)
+#
+#         return super.increment(*args, **kwargs)
+#
+#
+# def inject_intercepted_request(connection):
+#     requests.request = request_intercepted(connection)
+#     urllib3.HTTPSConnectionPool.urlopen = request_intercepted(connection)
+#     urllib3.HTTPConnectionPool.urlopen = request_intercepted(connection)
+#
+#
+# def request_intercepted(connection):
+#     @wraps(requests.request)
+#     def request_intercepted_inner(*args: Any, sf_connection=connection, **kwargs: Any) -> Any:
+#         request_info: RequestDTO = get_request_info(*args, **kwargs)
+#         _intercept_on_static(connection, request_info)
+#
+#         retry_config = HeaderCustomizerRetry(sf_connection=sf_connection)
+#
+#         return requests.request(*args, retry=retry_config, **kwargs)
+#
+#     return request_intercepted_inner
+
+
+# here
 @wraps(ssl_.ssl_wrap_socket)
 def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
     # Extract host_name
@@ -70,6 +105,7 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
     if not ca_certs_in_args and not kwargs.get("ca_certs"):
         kwargs["ca_certs"] = certifi.where()
 
+    # TODO: here?
     ret = ssl_.ssl_wrap_socket(*args, **kwargs)
 
     log.debug(

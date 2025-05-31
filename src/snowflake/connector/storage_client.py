@@ -315,10 +315,12 @@ class SnowflakeStorageClient(ABC, InterceptOnMixin):
         if self.retry_count[retry_id] < self.max_retry:
             url, rest_kwargs = get_request_args()
             headers = rest_kwargs.get("headers")
+
             request_info = RequestDTO(url=url, method=rest_call, headers=headers)
             self._intercept_on(
                 HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request_info
             )
+
             request_args_generator = generate_values_from_beginning(
                 url, rest_kwargs, original_function=get_request_args
             )
@@ -340,7 +342,7 @@ class SnowflakeStorageClient(ABC, InterceptOnMixin):
             url, rest_kwargs = next(request_args_generator)
 
             headers = rest_kwargs.get("headers")
-            request_info = RequestDTO(url=url, method=rest_call, headers=headers)
+            request_info = RequestDTO(url=url, method=verb, headers=headers)
             self._intercept_on(
                 HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY, request_info
             )
