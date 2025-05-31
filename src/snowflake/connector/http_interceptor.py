@@ -3,7 +3,12 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum, auto
+from functools import wraps
 from typing import Any, Iterable, MutableSequence, NamedTuple
+
+import requests
+
+from .vendored import urllib3
 
 Headers = dict[str, Any]
 
@@ -167,3 +172,46 @@ class InterceptOnMixin:
                 "Mixin can be used only for classes with defined attribute or property named request_interceptors. Error: %s. Skipping...",
                 ex,
             )
+
+
+# in init -> if customizers then inject_intercepted_request()
+
+# Bo nie chcemy grzebac w vendored bardziej niz konieczne imo
+# 1. albo mixin
+# 2. albo injection
+
+
+# TODO: how will this behave when we are no longer importing vendored
+
+
+class HeaderCustomizerRetry(urllib3.Retry):
+    def __init__(self, *args, sf_connection=None, **kwargs) -> Retry:
+        super().__init__(*args, **kwargs)
+        self._sf_connection = sf_connection
+
+    def increment(self, *args, **kwargs):
+        request_info: RequestDTO = get_request_info(*args, **kwargs)
+        _intercept_on_static(self._sf_connection, request_info)
+
+        return super.increment(*args, **kwargs)
+
+
+def inject_intercepted_request(connection):
+    requests.request = request_intercepted(connection)
+    urllib3.HTTPSConnectionPool.urlopen = request_intercepted(connection)
+    urllib3.HTTPConnectionPool.urlopen = request_intercepted(connection)
+
+
+def request_intercepted(connection):
+    @wraps(requests.request)
+    def request_intercepted_inner(
+        *args: Any, sf_connection=connection, **kwargs: Any
+    ) -> Any:
+        request_info: RequestDTO = get_request_info(*args, **kwargs)
+        _intercept_on_static(connection, request_info)
+
+        retry_config = HeaderCustomizerRetry(sf_connection=sf_connection)
+
+        return requests.request(*args, retry=retry_config, **kwargs)
+
+    return request_intercepted_inner
