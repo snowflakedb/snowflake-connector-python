@@ -4,3 +4,9 @@ ENV HOME="/root"
 WORKDIR ${HOME}
 
 LABEL org.opencontainers.image.source="https://github.com/snowflakedb/snowflake-connector-python"
+LABEL com.snowflake.owners.email="snow-drivers-warsaw-DL@snowflake.com"
+LABEL com.snowflake.owners.slack="triage-snow-drivers-warsaw-dl"
+LABEL com.snowflake.owners.team="Snow Drivers"
+LABEL com.snowflake.owners.jira_area="Developer Platform"
+LABEL com.snowflake.owners.jira_component="Python Driver"
+LABEL com.snowflake.ugcbi.layers="no-ugcbi-layers"
