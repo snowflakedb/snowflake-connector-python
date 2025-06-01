@@ -110,7 +110,10 @@ from .errorcode import (
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
 from .errors import DatabaseError, Error, OperationalError, ProgrammingError
-from .http_interceptor import HeadersCustomizerInterceptor
+from .http_interceptor import (
+    HeadersCustomizerInterceptor,
+    inject_interceptors_for_connection,
+)
 from .log_configuration import EasyLoggingConfigPython
 from .network import (
     DEFAULT_AUTHENTICATOR,
@@ -1474,16 +1477,20 @@ class SnowflakeConnection:
         self._headers_customizers = kwargs.get("headers_customizers", [])
         # # TODO: rethink how adding customizer should work - create new interceptor or append to existing - or just dont do this scenario xd
         # TODO: rethink if we should store here in self interceptors or customizers or what
-        header_customizer_interceptor = (
-            self._create_interceptor_for_headers_customizers(self._headers_customizers)
-        )
-        self._request_interceptors = (
-            [
-                header_customizer_interceptor,
-            ]
-            if header_customizer_interceptor
-            else []
-        )
+        if self._headers_customizers:
+            header_customizer_interceptor = (
+                self._create_interceptor_for_headers_customizers(
+                    self._headers_customizers
+                )
+            )
+            self._request_interceptors = (
+                [
+                    header_customizer_interceptor,
+                ]
+                if header_customizer_interceptor
+                else []
+            )
+            inject_interceptors_for_connection(connection=self)
 
         if self._headers_customizers:
             logger.info(
