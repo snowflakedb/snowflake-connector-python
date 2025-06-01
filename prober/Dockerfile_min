@@ -2,3 +2,5 @@ FROM alpine:3.18
 
 ENV HOME="/root"
 WORKDIR ${HOME}
+
+LABEL org.opencontainers.image.source="https://github.com/snowflakedb/snowflake-connector-python"

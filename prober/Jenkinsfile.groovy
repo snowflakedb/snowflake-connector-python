@@ -23,7 +23,9 @@ pipeline {
                     sh """
                     ls -l
                     docker build \
-                    -t ${IMAGE_NAME}:${COMMIT_SHA_SHORT} -f ./Dockerfile_min .
+                    -t ${IMAGE_NAME}:${COMMIT_SHA_SHORT} \
+                    --label "org.opencontainers.image.revision=${COMMIT_SHA_SORT}" \
+                    -f ./Dockerfile_min .
                     """
                 }
             }
