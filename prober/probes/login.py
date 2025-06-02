@@ -29,8 +29,8 @@ def connect(connection_parameters: dict):
             database=connection_parameters["database"],
             schema=connection_parameters["schema"],
             role=connection_parameters["role"],
-            authenticator="KEY_PAIR_AUTHENTICATOR",
-            private_key=connection_parameters["private_key"],
+            authenticator=connection_parameters["authenticator"],
+            private_key_file=connection_parameters["private_key_file"],
         )
         return connection
     except Exception as e:
