@@ -21,6 +21,7 @@ from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ForbiddenError, ProgrammingError
 from snowflake.connector.type_wrappers import (
     snowflake_array,
+    snowflake_map,
     snowflake_object,
     snowflake_variant,
 )
@@ -889,6 +890,41 @@ def test_binding_object_without_schema(conn_cnx, write_value, read_value):
 
         results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
 
+        assert json.loads(results[0][0]) == read_value
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "snowflake_type, write_value, read_value",
+    [
+        ("MAP(NUMBER, NUMBER)", {}, {}),
+        # TODO: JSON format quotes keys, so even though the keys are integers, the assertion needs to expect strings
+        ("MAP(NUMBER, NUMBER)", {1: 1, 2: 2, 3: 3}, {"1": 1, "2": 2, "3": 3}),
+        ("MAP(TEXT, NUMBER)", {"1": 1, "2": 2, "3": 3}, {"1": 1, "2": 2, "3": 3}),
+        ("MAP(NUMBER, TEXT)", {1: "1", 2: "2", 3: "3"}, {"1": "1", "2": "2", "3": "3"}),
+        (
+            "MAP(TEXT, DATE)",
+            {"a": datetime.strptime("2020-01-01", "%Y-%m-%d").date()},
+            {"a": "2020-01-01"},
+        ),
+    ],
+    ids=[
+        "empty_map",
+        "map_number_number",
+        "map_text_number",
+        "map_number_text",
+        "map_text_date",
+    ],
+)
+def test_binding_structured_map(conn_cnx, snowflake_type, write_value, read_value):
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        cursor.execute(f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
+        cursor.execute(bind_query, params=(snowflake_map(write_value),))
+
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
+
+        print(results[0][0])
         assert json.loads(results[0][0]) == read_value
 
 
