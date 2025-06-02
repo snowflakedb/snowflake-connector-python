@@ -72,7 +72,7 @@ def test_non_applying_interceptor_not_called(sample_request_factory):
     # Create a mock customizer with applies_to returning False
     customizer = Mock(spec=HeadersCustomizer)
     customizer.applies_to.return_value = False
-    customizer.is_invoked_once.return_value = False
+    customizer.is_invoked_once.return_value = True
     customizer.get_new_headers.return_value = {}
 
     interceptor = HeadersCustomizerInterceptor([customizer])
