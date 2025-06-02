@@ -1,82 +1,16 @@
-from typing import Callable, Union
 from unittest.mock import Mock
 
 import pytest
 
 from snowflake.connector.http_interceptor import (
-    Headers,
     HeadersCustomizer,
     HeadersCustomizerInterceptor,
     HttpInterceptor,
-    RequestDTO,
     get_request_info,
     verify_headers,
     verify_method,
     verify_url,
 )
-
-# TODO: test_headers_customizer_trying_to_overwrite_headers add tests that conflict of headers is resolved - we keep the original ones
-
-
-@pytest.fixture
-def sample_request_factory():
-    def _factory(
-        url="https://test.snowflakecomputing.com/api/v1",
-        method="GET",
-        headers=None,
-    ):
-        return RequestDTO(
-            url=url,
-            method=method,
-            headers=headers or {"User-Agent": "SnowflakeDriver/1.0"},
-        )
-
-    return _factory
-
-
-@pytest.fixture
-def headers_customizer_factory():
-    def _customizer_factory(
-        applies: Union[Callable[[RequestDTO], bool], bool] = True,
-        invoke_once: bool = False,
-        headers: Union[Callable[[RequestDTO], Headers], Headers] = None,
-    ):
-        class MockCustomizer(HeadersCustomizer):
-            def applies_to(self, request: RequestDTO) -> bool:
-                if callable(applies):
-                    return applies(request)
-                return applies
-
-            def is_invoked_once(self) -> bool:
-                return invoke_once
-
-            def get_new_headers(self, request: RequestDTO) -> Headers:
-                if callable(headers):
-                    return headers(request)
-                return headers or {}
-
-        return MockCustomizer()
-
-    return _customizer_factory
-
-
-@pytest.fixture
-def dynamic_customizer():
-    counter = {"count": 0}
-
-    class DynamicCustomizer(HeadersCustomizer):
-        def applies_to(self, request: RequestDTO) -> bool:
-            return True
-
-        def is_invoked_once(self) -> bool:
-            return False
-
-        def get_new_headers(self, request: RequestDTO) -> Headers:
-            counter["count"] += 1
-            return {"X-Dynamic": f"DynamicVal-{counter['count']}"}
-
-    return DynamicCustomizer()
-
 
 # === Verification tests ===
 
@@ -174,10 +108,10 @@ def test_static_hook_respects_invoked_once_flag(
 
 
 def test_dynamic_customizer_adds_different_headers(
-    sample_request_factory, dynamic_customizer
+    sample_request_factory, dynamic_customizer_factory
 ):
     request = sample_request_factory()
-    interceptor = HeadersCustomizerInterceptor([dynamic_customizer])
+    interceptor = HeadersCustomizerInterceptor([dynamic_customizer_factory()])
 
     result1 = interceptor.intercept_on(
         HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY, request

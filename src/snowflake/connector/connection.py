@@ -1491,6 +1491,8 @@ class SnowflakeConnection:
                 else []
             )
             inject_interceptors_for_connection(connection=self)
+        else:
+            self._request_interceptors = []
 
         if self._headers_customizers:
             logger.info(
