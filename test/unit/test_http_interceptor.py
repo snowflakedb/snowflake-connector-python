@@ -154,7 +154,7 @@ def test_invoke_always_runs_on_retry(
 def test_prevents_header_overwrite(sample_request_factory, headers_customizer_factory):
     request = sample_request_factory(headers={"User-Agent": "SnowflakeDriver/1.0"})
     customizer = headers_customizer_factory(
-        applies=True, headers={"User-Agent": "MaliciousAgent"}
+        applies=True, invoke_once=True, headers={"User-Agent": "MaliciousAgent"}
     )
     interceptor = HeadersCustomizerInterceptor([customizer])
     result = interceptor.intercept_on(
@@ -162,6 +162,33 @@ def test_prevents_header_overwrite(sample_request_factory, headers_customizer_fa
     )
     assert result.headers["User-Agent"] == "SnowflakeDriver/1.0"
     assert result.headers["User-Agent"] != "MaliciousAgent"
+
+
+def test_partial_header_overwrite_ignores_only_conflicting_keys(
+    sample_request_factory, headers_customizer_factory
+):
+    request = sample_request_factory(headers={"User-Agent": "SnowflakeDriver/1.0"})
+
+    customizer = headers_customizer_factory(
+        applies=True,
+        invoke_once=True,
+        headers={
+            "User-Agent": "MaliciousAgent",  # should be blocked
+            "X-New-Header": "NewValue",  # should be added
+        },
+    )
+
+    interceptor = HeadersCustomizerInterceptor([customizer])
+    result = interceptor.intercept_on(
+        HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request
+    )
+
+    # Original value preserved
+    assert result.headers["User-Agent"] == "SnowflakeDriver/1.0"
+    assert result.headers["User-Agent"] != "MaliciousAgent"
+
+    # Non-conflicting key added
+    assert result.headers["X-New-Header"] == "NewValue"
 
 
 def test_multiple_customizers_add_headers(
@@ -226,3 +253,12 @@ def test_customizer_applies_only_to_specific_domain(
         assert result.headers["X-Domain-Specific"] == "True"
     else:
         assert "X-Domain-Specific" not in result.headers
+
+
+# TODO: compare tests with those from jdbc
+# TODO: finish doc
+# TODO: finish PSD
+# TODO: add tests for interceptions
+# TODO: add remove interceptors in destructor
+# TODO: add argument "inplace"
+# TODO: replace DTO with Info

@@ -4,7 +4,15 @@ import logging
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, Callable, Iterable, MutableSequence, NamedTuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    MutableSequence,
+    NamedTuple,
+)
 
 if TYPE_CHECKING:
     from . import SnowflakeConnection
@@ -34,7 +42,8 @@ class RequestDTO(NamedTuple):
 
 
 class ConflictDTO(NamedTuple):
-    conflicting_items: Iterable[Any]
+    original_key: str
+    value: Any
     had_conflict: bool = True
 
 
@@ -94,34 +103,26 @@ class HeadersCustomizerInterceptor(HttpInterceptor):
         return static, dynamic
 
     @staticmethod
-    def would_overwrite_keys(
+    def iter_non_conflicting_headers(
         original_headers: Headers, other_headers: Headers, case_sensitive: bool = False
-    ) -> ConflictDTO:
+    ) -> Generator[ConflictDTO]:
+        """
+        Yields (key, value, is_conflicting) for each key in other_headers,
+        telling you if it conflicts with original_headers.
+        """
+        original_keys = (
+            set(original_headers)
+            if case_sensitive
+            else {k.lower() for k in original_headers}
+        )
 
-        # After some time of system functioning sets of (original headers names, additional headers names) will be often reoccurring. Therefore, caching can be beneficial. But frozenset convertion would need to be done.
-        try:
-            if not case_sensitive:
-                original_key_set = {key.lower() for key in original_headers}
-                other_key_set = {key.lower() for key in other_headers}
+        for key, value in other_headers.items():
+            comp_key = key if case_sensitive else key.lower()
+            if comp_key in original_keys:
+                yield ConflictDTO(key, value, True)
             else:
-                original_key_set = set(original_headers)
-                other_key_set = set(other_headers)
+                yield ConflictDTO(key, value, False)
 
-            conflicting_keys = original_key_set & other_key_set
-            has_conflict = bool(conflicting_keys)
-        except (TypeError, AttributeError) as ex:
-            # It is very rare to have original or additional headers empty - therefore zero-cost exceptions should be used
-            if not original_headers or not other_headers:
-                return ConflictDTO(had_conflict=False, conflicting_items=set())
-            else:
-                logger.warning(
-                    "Unable to determine conflicting headers: %s. Skipping", ex
-                )
-                raise ex
-
-        return ConflictDTO(conflicting_keys, has_conflict)
-
-    # TODO: add argument "inplace"
     def intercept_on(
         self, hook: HttpInterceptor.InterceptionHook, request: RequestDTO
     ) -> RequestDTO:
@@ -140,30 +141,30 @@ class HeadersCustomizerInterceptor(HttpInterceptor):
         self, request: RequestDTO, headers_customizers: Iterable[HeadersCustomizer]
     ) -> RequestDTO:
         # copy preventing mutation in the registered customizer
-        original_headers = dict(request.headers)
-        additional_headers = {}
+        result_headers = dict(request.headers)
 
         for header_customizer in headers_customizers:
             try:
                 if header_customizer.applies_to(request):
                     additional_headers = header_customizer.get_new_headers(request)
-                    conflict_info = self.would_overwrite_keys(
-                        original_headers, additional_headers
-                    )
-                    if conflict_info.had_conflict:
-                        logger.warning(
-                            "Overwriting headers detected for: %s. Skipping customization.",
-                            conflict_info.conflicting_items,
-                        )
-                    else:
-                        original_headers.update(additional_headers)
+
+                    for key, value, is_conflicting in self.iter_non_conflicting_headers(
+                        result_headers, additional_headers
+                    ):
+                        if is_conflicting:
+                            logger.warning(
+                                f"Overwriting header '{key}' detected. Skipping this key."
+                            )
+                        else:
+                            result_headers[key] = value
             except Exception as ex:
+                # Custom logic failure is treated as non-fatal for the connection
                 logger.warning("Unable to customize headers: %s. Skipping...", ex)
 
         return RequestDTO(
             url=request.url,
             method=request.method,
-            headers={**original_headers, **additional_headers},
+            headers=result_headers,
         )
 
 
@@ -356,32 +357,6 @@ def get_request_info(
     )
 
 
-# def get_request_info_from_args(*original_args, original_method_arg_position: int = 1, original_url_arg_position: int = 2, original_headers_arg_position: int = 4,  **original_kwargs) -> RequestDTO:
-#     def verify_method_and_url(suspected_method: Any, suspected_url: Any) -> Tuple[Optional[str], Optional[str]]:
-#         method = None
-#         url = None
-
-#         if str(suspected_method) in METHODS:
-#             method = suspected_method
-#         else:
-#             suspected_url = suspected_method
-
-#         if isinstance(suspected_url, str):
-#             url = suspected_url
-
-#         return method, url
-
-#     # if all from kwargs - just create dto and return, else try guessing
-
-#     suspected_method = original_kwargs.get('method', original_args[original_method_arg_position] if original_args else '')
-#     suspected_url = original_kwargs.get('url', original_args[original_url_arg_position] if original_args else '')
-
-#     method, url = verify_method_and_url(suspected_method, suspected_url)
-#     headers = original_kwargs.get('headers', {})
-
-#     return RequestDTO(url=url, method=method, headers=headers)
-
-
 # @contextmanager
 # def intercepted_connection(connection):
 #     inject_interceptors_for_connection(connection)
@@ -389,5 +364,3 @@ def get_request_info(
 #         yield
 #     finally:
 #         remove_interceptors()
-
-# TODO:  Helper (you need to implement this!)
