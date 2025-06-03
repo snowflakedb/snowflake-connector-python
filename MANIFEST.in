@@ -28,3 +28,4 @@ prune tested_requirements
 prune src/snowflake/connector/nanoarrow_cpp/scripts
 prune __pycache__
 prune samples
+prune prober

@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Generator
 from unittest import mock
+from unittest.mock import MagicMock
 
 import numpy.random
 import pytest
@@ -543,7 +544,10 @@ def test_table_location_building(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
                 sf_connector_version_df.get(),
@@ -566,6 +570,8 @@ def test_table_location_building(
         (None, "schema", False, "schema"),
         (None, None, True, ""),
         (None, None, False, ""),
+        ("data'base", "schema", True, '"data\'base"."schema"'),
+        ("data'base", "schema", False, '"data\'base".schema'),
     ],
 )
 def test_stage_location_building(
@@ -591,7 +597,10 @@ def test_stage_location_building(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
                 sf_connector_version_df.get(),
@@ -643,7 +652,10 @@ def test_use_scoped_object(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             cnx._update_parameters({"PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS": True})
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
@@ -701,7 +713,10 @@ def test_file_format_location_building(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
                 sf_connector_version_df.get(),
@@ -1101,3 +1116,26 @@ def test_write_pandas_with_on_error(
             assert result["COUNT(*)"] == 1
         finally:
             cnx.execute_string(drop_sql)
+
+
+def test_pandas_with_single_quote(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
+):
+    random_table_name = random_string(5, "test'table")
+    table_name = f'"{random_table_name}"'
+    create_sql = f"CREATE OR REPLACE TABLE {table_name}(A INT)"
+    df_data = [[1]]
+    df = pandas.DataFrame(df_data, columns=["a"])
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        try:
+            cnx.execute_string(create_sql)
+            write_pandas(
+                cnx,
+                df,
+                table_name,
+                quote_identifiers=False,
+                auto_create_table=False,
+                index=False,
+            )
+        finally:
+            cnx.execute_string(f"drop table if exists {table_name}")
