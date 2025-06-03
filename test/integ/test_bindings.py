@@ -924,7 +924,6 @@ def test_binding_structured_map(conn_cnx, snowflake_type, write_value, read_valu
 
         results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
 
-        print(results[0][0])
         assert json.loads(results[0][0]) == read_value
 
 
