@@ -7,6 +7,7 @@ setup(
     install_requires=[
         "snowflake-connector-python",
         "requests",
+        "faker"
     ],
     entry_points={
         "console_scripts": [
