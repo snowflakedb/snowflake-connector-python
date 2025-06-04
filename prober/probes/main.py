@@ -1,6 +1,7 @@
 import argparse
 import logging
 
+from probes import login  # noqa
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
 
@@ -19,8 +20,12 @@ def main():
     parser.add_argument("--account", required=True, help="Account")
     parser.add_argument("--schema", required=True, help="Schema")
     parser.add_argument("--warehouse", required=True, help="Warehouse")
+    parser.add_argument("--database", required=True, help="Datanase")
     parser.add_argument("--user", required=True, help="Username")
-    parser.add_argument("--private_key", required=True, help="Private key")
+    parser.add_argument(
+        "--auth", required=True, help="Authenticator (e.g., KEY_PAIR_AUTHENTICATOR)"
+    )
+    parser.add_argument("--private_key_file", required=True, help="Private key pwd")
 
     # Parse arguments
     args = parser.parse_args()
@@ -32,13 +37,14 @@ def main():
         "account": args.account,
         "schema": args.schema,
         "warehouse": args.warehouse,
+        "database": args.database,
         "user": args.user,
-        "private_key": args.private_key,
+        "authenticator": args.auth,
+        "private_key_file": args.private_key_file,
     }
 
     for function_name, function in PROBES_FUNCTIONS.items():
         try:
-            logging.info("BBB")
             logging.error(f"Running probe: {function_name}")
             function(connection_params)
         except Exception as e:
