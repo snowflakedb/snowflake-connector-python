@@ -165,7 +165,7 @@ def compare_fetched_data(
     with open(file_name, mode="r", newline="", encoding="utf-8") as csvfile:
         reader = csv.reader(csvfile)
         csv_data = list(reader)[1:]  # Skip header row
-        for x in range(repetitions):
+        for _ in range(repetitions):
             random_index = random.randint(0, fetch_limit - 1)
             for y in range(len(fetched_data[0])):
                 if str(fetched_data[random_index][y]) != csv_data[random_index][y]:
