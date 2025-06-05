@@ -30,7 +30,7 @@ def generate_random_data(num_records: int, file_path: str) -> str:
         writer.writerow(["id", "name", "email", "address"])
         for i in range(1, num_records + 1):
             writer.writerow([i, fake.name(), fake.email(), fake.address()])
-    with open(file_path, mode="r", newline="", encoding="utf-8") as csvfile:
+    with open(file_path, newline="", encoding="utf-8") as csvfile:
         reader = csv.reader(csvfile)
         rows = list(reader)
         # Subtract 1 for the header row
@@ -162,7 +162,7 @@ def compare_fetched_data(
         f"SELECT * FROM {table_name} LIMIT {fetch_limit}"
     ).fetchall()
 
-    with open(file_name, mode="r", newline="", encoding="utf-8") as csvfile:
+    with open(file_name, newline="", encoding="utf-8") as csvfile:
         reader = csv.reader(csvfile)
         csv_data = list(reader)[1:]  # Skip header row
         for _ in range(repetitions):
