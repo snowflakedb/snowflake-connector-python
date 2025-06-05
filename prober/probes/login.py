@@ -30,7 +30,7 @@ def connect(connection_parameters: dict):
             schema=connection_parameters["schema"],
             role=connection_parameters["role"],
             authenticator=connection_parameters["authenticator"],
-            private_key_file=connection_parameters["private_key_file"],
+            private_key=connection_parameters["private_key_file"],
         )
         return connection
     except Exception as e:
@@ -58,9 +58,9 @@ def perform_login(connection_parameters: dict):
         cursor = connection.cursor()
         cursor.execute("SELECT 1;")
         result = cursor.fetchone()
-        logger.info(result)
+        logger.error(f"Logging: {result}")
         assert result == (1,)
-        logger.info({f"success_login={True}"})
+        print({"success_login": True})
     except Exception as e:
-        logger.info({f"success_login={False}"})
+        print({"success_login": False})
         logger.error(f"Error during login: {e}")
