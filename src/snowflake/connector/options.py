@@ -10,8 +10,6 @@ from typing import Union
 
 from packaging.requirements import Requirement
 
-from . import errors
-
 logger = getLogger(__name__)
 
 """This module helps to manage optional dependencies.
@@ -33,6 +31,7 @@ class MissingOptionalDependency:
     _dep_name = "not set"
 
     def __getattr__(self, item):
+        from . import errors
         raise errors.MissingDependencyError(self._dep_name)
 
 
@@ -143,6 +142,8 @@ def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
 try:
     pyarrow = importlib.import_module("pyarrow")
 except ImportError:
+    # Defer errors import to avoid circular dependency
+    from . import errors
     raise errors.MissingDependencyError("pyarrow")
 
 keyring, installed_keyring = _import_or_missing_keyring_option()
