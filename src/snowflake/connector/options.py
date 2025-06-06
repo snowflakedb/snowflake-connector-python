@@ -32,6 +32,7 @@ class MissingOptionalDependency:
 
     def __getattr__(self, item):
         from . import errors
+
         raise errors.MissingDependencyError(self._dep_name)
 
 
@@ -139,13 +140,6 @@ def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
 
 
 # Create actual constants to be imported from this file
-try:
-    pyarrow = importlib.import_module("pyarrow")
-except ImportError:
-    # Defer errors import to avoid circular dependency
-    from . import errors
-    raise errors.MissingDependencyError("pyarrow")
-
 keyring, installed_keyring = _import_or_missing_keyring_option()
 
 
@@ -155,6 +149,14 @@ def __getattr__(name):
             return importlib.import_module("pandas")
         except ImportError:
             return MissingPandas()
+
+    elif name == "pyarrow":
+        try:
+            return importlib.import_module("pyarrow")
+        except ImportError:
+            from . import errors
+
+            raise errors.MissingDependencyError("pyarrow")
 
     elif name == "installed_pandas":
         return installed_pandas()
