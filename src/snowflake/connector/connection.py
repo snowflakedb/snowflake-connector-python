@@ -499,10 +499,9 @@ class SnowflakeConnection:
         is_kwargs_empty = not kwargs
 
         if "application" not in kwargs:
-            if ENV_VAR_PARTNER in os.environ.keys():
-                kwargs["application"] = os.environ[ENV_VAR_PARTNER]
-            elif "streamlit" in sys.modules:
-                kwargs["application"] = "streamlit"
+            app = self._detect_application()
+            if app:
+                kwargs["application"] = app
 
         if "insecure_mode" in kwargs:
             warn_message = "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
@@ -2283,3 +2282,15 @@ class SnowflakeConnection:
                     "errno": ER_INVALID_VALUE,
                 },
             )
+
+    @staticmethod
+    def _detect_application() -> None | str:
+        if ENV_VAR_PARTNER in os.environ.keys():
+            return os.environ[ENV_VAR_PARTNER]
+        if "streamlit" in sys.modules:
+            return "streamlit"
+        if all(
+            (jpmod in sys.modules)
+            for jpmod in ("ipykernel", "jupyter_core", "jupyter_client")
+        ):
+            return "jupyter_notebook"
