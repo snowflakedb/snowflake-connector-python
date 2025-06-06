@@ -68,14 +68,6 @@ def pandas():
         return MissingPandas()
 
 
-def pyarrow():
-    try:
-        pyarrow = importlib.import_module("pyarrow")
-        return pyarrow
-    except ImportError:
-        raise errors.MissingDependencyError("pyarrow")
-
-
 def _import_or_missing_pandas_option() -> (
     tuple[ModuleLikeObject, ModuleLikeObject, bool]
 ):
