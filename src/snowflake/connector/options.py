@@ -61,6 +61,21 @@ def warn_incompatible_dep(
     )
 
 
+def pandas():
+    try:
+        return importlib.import_module("pandas")
+    except ImportError:
+        return MissingPandas()
+
+
+def pyarrow():
+    try:
+        pyarrow = importlib.import_module("pyarrow")
+        return pyarrow
+    except ImportError:
+        raise errors.MissingDependencyError("pyarrow")
+
+
 def _import_or_missing_pandas_option() -> (
     tuple[ModuleLikeObject, ModuleLikeObject, bool]
 ):
@@ -114,6 +129,12 @@ def _import_or_missing_pandas_option() -> (
         return MissingPandas(), MissingPandas(), False
 
 
+def installed_pandas() -> bool:
+    """This function checks if pandas is available and compatible."""
+    _, _, installed = _import_or_missing_pandas_option()
+    return installed
+
+
 def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
     """This function tries importing the following packages: keyring.
 
@@ -127,5 +148,22 @@ def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
 
 
 # Create actual constants to be imported from this file
-pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
+try:
+    pyarrow = importlib.import_module("pyarrow")
+except ImportError:
+    raise errors.MissingDependencyError("pyarrow")
+
 keyring, installed_keyring = _import_or_missing_keyring_option()
+
+
+def __getattr__(name):
+    if name == "pandas":
+        try:
+            return importlib.import_module("pandas")
+        except ImportError:
+            return MissingPandas()
+
+    elif name == "installed_pandas":
+        return installed_pandas()
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
