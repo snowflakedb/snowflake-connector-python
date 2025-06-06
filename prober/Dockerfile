@@ -17,7 +17,8 @@ RUN apk add --no-cache \
     g++ \
     zlib-dev \
     openssl-dev \
-    libffi-dev
+    libffi-dev \
+    jq
 
 ENV HOME="/root"
 WORKDIR ${HOME}
@@ -27,20 +28,19 @@ ENV PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${PATH}"
 
 
 # Build arguments for Python versions and Snowflake connector versions
-ARG PYTHON_VERSIONS="3.8.20 3.9.22 3.10.17"
-ARG SNOWFLAKE_CONNECTOR_VERSIONS="3.14.0 3.13.2 3.13.1"
+ARG MATRIX_VERSION='{"3.10.17": ["3.14.0", "3.13.2", "3.13.1"], "3.9.22": ["3.14.0", "3.13.2", "3.13.1"], "3.8.20": ["3.14.0", "3.13.2", "3.13.1"]}'
 
 
-# Install Python versions
+# Install Python versions from ARG MATRIX_VERSION
 RUN eval "$(pyenv init --path)" && \
-    for version in $PYTHON_VERSIONS; do \
-        pyenv install $version || echo "Failed to install Python $version"; \
+    for python_version in $(echo $MATRIX_VERSION | jq -r 'keys[]'); do \
+        pyenv install $python_version || echo "Failed to install Python $python_version"; \
     done
 
 
 # Create virtual environments for each combination of Python and Snowflake connector versions
-RUN for python_version in $PYTHON_VERSIONS; do \
-    for connector_version in $SNOWFLAKE_CONNECTOR_VERSIONS; do \
+RUN for python_version in $(echo $MATRIX_VERSION | jq -r 'keys[]'); do \
+    for connector_version in $(echo $MATRIX_VERSION | jq -r ".\"${python_version}\"[]"); do \
         venv_path="/venvs/python_${python_version}_connector_${connector_version}"; \
         $PYENV_ROOT/versions/$python_version/bin/python -m venv $venv_path && \
         $venv_path/bin/pip install --upgrade pip && \
@@ -51,7 +51,6 @@ done
 # Copy the prober script into the container
 RUN mkdir -p /prober/probes/
 COPY __init__.py /prober
-# COPY parameters.json /prober
 COPY setup.py /prober
 COPY entrypoint.sh /prober
 COPY probes/* /prober/probes
