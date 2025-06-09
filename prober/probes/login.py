@@ -1,3 +1,5 @@
+import sys
+
 from probes.logging_config import initialize_logger
 from probes.registry import prober_function
 
@@ -54,13 +56,17 @@ def perform_login(connection_parameters: dict):
         # Connect to Snowflake
         connection = connect(connection_parameters)
 
+        # Log the connection details
+        python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+        driver_version = snowflake.connector.__version__
+
         # Perform a simple query to test the connection
         cursor = connection.cursor()
         cursor.execute("SELECT 1;")
         result = cursor.fetchone()
         logger.error(f"Logging: {result}")
         assert result == (1,)
-        print({"success_login": True})
+        print(f"cloudprober_driver_python_perform_login{{python_version={python_version}, driver_version={driver_version}}} 0")
     except Exception as e:
-        print({"success_login": False})
+        print(f"cloudprober_driver_python_perform_login{{python_version={python_version}, driver_version={driver_version}}} 1")
         logger.error(f"Error during login: {e}")

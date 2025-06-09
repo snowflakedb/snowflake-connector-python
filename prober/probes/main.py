@@ -43,13 +43,15 @@ def main():
         "private_key_file": args.private_key_file,
     }
 
-    for function_name, function in PROBES_FUNCTIONS.items():
+    if args.scope not in PROBES_FUNCTIONS:
+        logging.error(f"Invalid scope: {args.scope}. Available scopes: {list(PROBES_FUNCTIONS.keys())}")
+    else:
+        logging.info(f"Running probe for scope: {args.scope}")
         try:
-            logging.error(f"Running probe: {function_name}")
-            function(connection_params)
+            logging.error(f"Running probe: {args.scope}")
+            PROBES_FUNCTIONS[args.scope](connection_params)
         except Exception as e:
-            logging.error(f"Error running probe {function_name}: {e}")
-
+            logging.error(f"Error running probe {args.scope}: {e}")
 
 if __name__ == "__main__":
     main()
