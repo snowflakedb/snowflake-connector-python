@@ -9,7 +9,7 @@ while [[ "$#" -gt 0 ]]; do
     shift 2
 done
 
-# Run main.py with all available virtual environments
+# Run main.py within all available virtual environments
 for venv in /venvs/*; do
     echo "Running main.py with virtual environment: $(basename "$venv")"
     source "$venv/bin/activate"
