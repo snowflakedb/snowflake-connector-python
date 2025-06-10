@@ -20,7 +20,7 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 # Construct the virtual environment path
-venv_path="/venvs/python_${python_version}_connector_${connector_version}"
+venv_path="${HOME}/venvs/python_${python_version}_connector_${connector_version}"
 
 # Check if the virtual environment exists
 if [[ ! -d "$venv_path" ]]; then

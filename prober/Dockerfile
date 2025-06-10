@@ -20,12 +20,27 @@ RUN apk add --no-cache \
     libffi-dev \
     jq
 
-ENV HOME="/root"
+ENV HOME="/home/driveruser"
+
+# Create a group with GID=1000 and a user with UID=1000
+RUN addgroup -g 1000 drivergroup && \
+    adduser -u 1000 -G drivergroup -D driveruser
+
+# Set permissions for the non-root user
+RUN mkdir -p ${HOME} && \
+    chown -R driveruser:drivergroup ${HOME}
+
+# Switch to the non-root user
+USER driveruser
 WORKDIR ${HOME}
-RUN git clone --depth=1 https://github.com/pyenv/pyenv.git .pyenv
+
+# Set environment variables
 ENV PYENV_ROOT="${HOME}/.pyenv"
 ENV PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${PATH}"
 
+
+# Install pyenv
+RUN git clone --depth=1 https://github.com/pyenv/pyenv.git ${PYENV_ROOT}
 
 # Build arguments for Python versions and Snowflake connector versions
 ARG MATRIX_VERSION='{"3.10.17": ["3.14.0", "3.13.2", "3.13.1"], "3.9.22": ["3.14.0", "3.13.2", "3.13.1"], "3.8.20": ["3.14.0", "3.13.2", "3.13.1"]}'
@@ -37,31 +52,26 @@ RUN eval "$(pyenv init --path)" && \
         pyenv install $python_version || echo "Failed to install Python $python_version"; \
     done
 
-
 # Create virtual environments for each combination of Python and Snowflake connector versions
 RUN for python_version in $(echo $MATRIX_VERSION | jq -r 'keys[]'); do \
     for connector_version in $(echo $MATRIX_VERSION | jq -r ".\"${python_version}\"[]"); do \
-        venv_path="/venvs/python_${python_version}_connector_${connector_version}"; \
+        venv_path="${HOME}/venvs/python_${python_version}_connector_${connector_version}"; \
         $PYENV_ROOT/versions/$python_version/bin/python -m venv $venv_path && \
-        chmod -R 777 $venv_path && \
         $venv_path/bin/pip install --upgrade pip && \
         $venv_path/bin/pip install snowflake-connector-python==$connector_version; \
     done; \
 done
 
 # Copy the prober script into the container
-RUN mkdir -p /prober/probes/
-COPY __init__.py /prober
-COPY setup.py /prober
-COPY entrypoint.sh /prober
-COPY probes/* /prober/probes
-
-# Set permissions for the group
-RUN chmod -R 777 /prober
+RUN mkdir -p prober/probes/
+COPY __init__.py prober
+COPY setup.py prober
+COPY entrypoint.sh prober
+COPY probes/* prober/probes
 
 # Install /prober in editable mode for each virtual environment
-RUN for venv in /venvs/*; do \
+RUN for venv in ${HOME}/venvs/*; do \
     source $venv/bin/activate && \
-    pip install -e /prober && \
+    pip install -e ${HOME}/prober && \
     deactivate; \
 done
