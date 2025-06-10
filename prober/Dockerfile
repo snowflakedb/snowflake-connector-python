@@ -43,6 +43,7 @@ RUN for python_version in $(echo $MATRIX_VERSION | jq -r 'keys[]'); do \
     for connector_version in $(echo $MATRIX_VERSION | jq -r ".\"${python_version}\"[]"); do \
         venv_path="/venvs/python_${python_version}_connector_${connector_version}"; \
         $PYENV_ROOT/versions/$python_version/bin/python -m venv $venv_path && \
+        chmod -R 777 $venv_path && \
         $venv_path/bin/pip install --upgrade pip && \
         $venv_path/bin/pip install snowflake-connector-python==$connector_version; \
     done; \
@@ -56,7 +57,7 @@ COPY entrypoint.sh /prober
 COPY probes/* /prober/probes
 
 # Set permissions for the group
-RUN chmod -R 777 /prober/*
+RUN chmod -R 777 /prober
 
 # Install /prober in editable mode for each virtual environment
 RUN for venv in /venvs/*; do \
