@@ -1,9 +1,6 @@
 import argparse
 import logging
 
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-
 from probes import login, put_fetch_get  # noqa
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
@@ -26,12 +23,22 @@ def main():
     parser.add_argument("--database", required=True, help="Database")
     parser.add_argument("--user", required=True, help="Username")
     parser.add_argument(
-        "--authenticator", required=True, help="Authenticator (e.g., KEY_PAIR_AUTHENTICATOR)"
+        "--authenticator",
+        required=True,
+        help="Authenticator (e.g., KEY_PAIR_AUTHENTICATOR)",
     )
-    parser.add_argument("--private_key_file", required=True, help="Private key pwd")
+    parser.add_argument(
+        "--private_key_file",
+        required=True,
+        help="Private key file in DER format base64-encoded and '/' -> '_', '+' -> '-' replacements",
+    )
 
     # Parse arguments
     args = parser.parse_args()
+
+    private_key = (
+        open(args.private_key_file).read().strip().replace("_", "/").replace("-", "+")
+    )
 
     connection_params = {
         "host": args.host,
@@ -43,11 +50,13 @@ def main():
         "database": args.database,
         "user": args.user,
         "authenticator": args.authenticator,
-        "private_key": args.private_key_file,
+        "private_key": private_key,
     }
 
     if args.scope not in PROBES_FUNCTIONS:
-        logging.error(f"Invalid scope: {args.scope}. Available scopes: {list(PROBES_FUNCTIONS.keys())}")
+        logging.error(
+            f"Invalid scope: {args.scope}. Available scopes: {list(PROBES_FUNCTIONS.keys())}"
+        )
     else:
         logging.info(f"Running probe for scope: {args.scope}")
         try:
@@ -55,6 +64,7 @@ def main():
             PROBES_FUNCTIONS[args.scope](connection_params)
         except Exception as e:
             logging.error(f"Error running probe {args.scope}: {e}")
+
 
 if __name__ == "__main__":
     main()

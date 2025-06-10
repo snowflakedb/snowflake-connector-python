@@ -32,7 +32,7 @@ def connect(connection_parameters: dict):
             schema=connection_parameters["schema"],
             role=connection_parameters["role"],
             authenticator=connection_parameters["authenticator"],
-            private_key_file=connection_parameters["private_key_file"],
+            private_key=connection_parameters["private_key"],
         )
         return connection
     except Exception as e:
@@ -66,7 +66,11 @@ def perform_login(connection_parameters: dict):
         result = cursor.fetchone()
         logger.error(f"Logging: {result}")
         assert result == (1,)
-        print(f"cloudprober_driver_python_perform_login{{python_version={python_version}, driver_version={driver_version}}} 0")
+        print(
+            f"cloudprober_driver_python_perform_login{{python_version={python_version}, driver_version={driver_version}}} 0"
+        )
     except Exception as e:
-        print(f"cloudprober_driver_python_perform_login{{python_version={python_version}, driver_version={driver_version}}} 1")
+        print(
+            f"cloudprober_driver_python_perform_login{{python_version={python_version}, driver_version={driver_version}}} 1"
+        )
         logger.error(f"Error during login: {e}")
