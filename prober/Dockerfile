@@ -55,11 +55,8 @@ COPY setup.py /prober
 COPY entrypoint.sh /prober
 COPY probes/* /prober/probes
 
-# Change group ownership to GID 1000
-RUN chgrp -R 1000 /prober/*
-
 # Set permissions for the group
-RUN chmod -R g+rwx /prober/*
+RUN chmod -R 755 /prober/*
 
 # Install /prober in editable mode for each virtual environment
 RUN for venv in /venvs/*; do \
