@@ -56,7 +56,7 @@ COPY entrypoint.sh /prober
 COPY probes/* /prober/probes
 
 # Set permissions for the group
-RUN chmod -R 755 /prober/*
+RUN chmod -R 777 /prober/*
 
 # Install /prober in editable mode for each virtual environment
 RUN for venv in /venvs/*; do \
