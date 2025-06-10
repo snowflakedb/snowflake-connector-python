@@ -156,7 +156,7 @@ def _generate_tzinfo_from_tzoffset(tzoffset_minutes: int) -> tzinfo:
     return pytz.FixedOffset(tzoffset_minutes)
 
 
-def snowflake_type(value: Any) -> str | None:
+def infer_snowflake_type(value: Any) -> str | None:
     """Returns Snowflake data type for the value. This is used for qmark parameter style."""
     type_name = value.__class__.__name__.lower()
     return PYTHON_TO_SNOWFLAKE_TYPE.get(type_name)
@@ -637,8 +637,8 @@ class SnowflakeConverter:
         key_type = None
         value_type = None
         for key, v in value.items():
-            new_key_type = snowflake_type(key)
-            new_value_type = snowflake_type(v)
+            new_key_type = infer_snowflake_type(key)
+            new_value_type = infer_snowflake_type(v)
 
             if key_type and new_key_type != key_type:
                 raise ValueError("Keys in snowflake_map must be of the same type.")
@@ -681,17 +681,11 @@ class SnowflakeConverter:
                 "fields": [
                     {
                         "type": value.key_type,
-                        "nullable": True,
-                        "length": 0,
-                        "scale": 0,
-                        "precision": 36,
+                        **value.key_attributes,
                     },
                     {
                         "type": value.value_type,
-                        "nullable": True,
-                        "length": 0,
-                        "scale": 0,
-                        "precision": 36,
+                        **value.value_attributes,
                     },
                 ],
             },
@@ -913,7 +907,7 @@ class SnowflakeConverter:
                 # to_csv_bindings is only used in bulk insertion logic
                 val = self._date_to_snowflake_bindings_in_bulk_insertion(value)
             else:
-                _type = snowflake_type(value)
+                _type = infer_snowflake_type(value)
                 val = self.to_snowflake_bindings(_type, value)
         return self.escape_for_csv(val)
 

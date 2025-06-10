@@ -72,7 +72,7 @@ from .constants import (
     OCSPMode,
     QueryStatus,
 )
-from .converter import SnowflakeConverter
+from .converter import SnowflakeConverter, infer_snowflake_type
 from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor
 from .description import (
     CLIENT_NAME,
@@ -1738,7 +1738,7 @@ class SnowflakeConnection:
                 )
             snowflake_type, v = v
         else:
-            snowflake_type = self.converter.snowflake_type(v)
+            snowflake_type = infer_snowflake_type(v)
             if snowflake_type is None:
                 Error.errorhandler_wrapper(
                     self,
@@ -1778,7 +1778,7 @@ class SnowflakeConnection:
                     self.converter.to_snowflake_bindings_dict("", v)
                 )
             elif isinstance(v, list):
-                snowflake_type = self.converter.snowflake_type(v)
+                snowflake_type = infer_snowflake_type(v)
                 all_param_data = list(map(get_type_and_binding, v))
                 first_type = all_param_data[0].type
                 # if all elements have the same snowflake type, update snowflake_type

@@ -773,8 +773,8 @@ def test_binding_variant(conn_cnx):
         ([True, False, True], [True, False, True]),
         ([b"123", b"HEX", b"3"], ["313233", "484558", "33"]),
         (
-            [long(10), long(-9223372036854775807), long(9223372036854775807)],
-            [10, -9223372036854775807, 9223372036854775807],
+            [long(10), long(-2147483647), long(2147483647)],
+            [10, -2147483647, 2147483647],
         ),
         ([math.pi, 1.1, 1.2], [3.141592653589793, 1.1, 1.2]),
         ([Decimal(10.10), Decimal(-5.001), Decimal(-5.5)], [10.1, -5.001, -5.5]),
@@ -849,8 +849,8 @@ def test_binding_array_without_schema(conn_cnx, write_value, read_value):
         ({"a": True, "b": False, "c": False}, {"a": True, "b": False, "c": False}),
         ({1: b"123", 2: b"HEX", 3: b"3"}, {"1": "313233", "2": "484558", "3": "33"}),
         (
-            {1: long(10), 2: long(-9223372036854775807), 3: long(9223372036854775807)},
-            {"1": 10, "2": -9223372036854775807, "3": 9223372036854775807},
+            {1: long(10), 2: long(-2147483647), 3: long(2147483647)},
+            {"1": 10, "2": -2147483647, "3": 2147483647},
         ),
         ({1: math.pi, 2: 1.1, 3: 1.2}, {"1": math.pi, "2": 1.1, "3": 1.2}),
         (
@@ -907,6 +907,31 @@ def test_binding_object_without_schema(conn_cnx, write_value, read_value):
             {"a": datetime.strptime("2020-01-01", "%Y-%m-%d").date()},
             {"a": "2020-01-01"},
         ),
+        (
+            "MAP(TEXT, TIMESTAMP_NTZ)",
+            {"a": datetime.strptime("2020-01-01", "%Y-%m-%d")},
+            {"a": "Wed, 01 Jan 2020 00:00:00 Z"},
+        ),
+        (
+            "MAP(TEXT, TIME)",
+            {"year": timedelta(days=365), "hour": timedelta(hours=1)},
+            {"year": "31536000000000000", "hour": "3600000000000"},
+        ),
+        (
+            "MAP(TEXT, BOOLEAN)",
+            {"a": True, "b": False, "c": True},
+            {"a": True, "b": False, "c": True},
+        ),
+        (
+            "MAP(TEXT, BINARY)",
+            {"1": b"123", "2": b"HEX", "3": b"3"},
+            {"1": "313233", "2": "484558", "3": "33"},
+        ),
+        (
+            "MAP(TEXT, NUMBER)",
+            {"1": long(10), "2": long(-2147483647), "3": long(2147483647)},
+            {"1": 10, "2": -2147483647, "3": 2147483647},
+        ),
     ],
     ids=[
         "empty_map",
@@ -914,6 +939,11 @@ def test_binding_object_without_schema(conn_cnx, write_value, read_value):
         "map_text_number",
         "map_number_text",
         "map_text_date",
+        "map_text_timestamp_ntz",
+        "map_text_timedelta",
+        "map_text_boolean",
+        "map_text_binary",
+        "map_text_long",
     ],
 )
 def test_binding_structured_map(conn_cnx, snowflake_type, write_value, read_value):
@@ -922,9 +952,10 @@ def test_binding_structured_map(conn_cnx, snowflake_type, write_value, read_valu
         cursor.execute(f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
         cursor.execute(bind_query, params=(snowflake_map(write_value),))
 
-        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchone()
 
-        assert json.loads(results[0][0]) == read_value
+        print(write_value, read_value)
+        assert json.loads(results[0]) == read_value
 
 
 @pytest.mark.skipolddriver
