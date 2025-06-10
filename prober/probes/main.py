@@ -23,7 +23,7 @@ def main():
     parser.add_argument("--database", required=True, help="Database")
     parser.add_argument("--user", required=True, help="Username")
     parser.add_argument(
-        "--auth", required=True, help="Authenticator (e.g., KEY_PAIR_AUTHENTICATOR)"
+        "--authenticator", required=True, help="Authenticator (e.g., KEY_PAIR_AUTHENTICATOR)"
     )
     parser.add_argument("--private_key_file", required=True, help="Private key pwd")
 
@@ -39,7 +39,7 @@ def main():
         "warehouse": args.warehouse,
         "database": args.database,
         "user": args.user,
-        "authenticator": args.auth,
+        "authenticator": args.authenticator,
         "private_key_file": args.private_key_file,
     }
 
