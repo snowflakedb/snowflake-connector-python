@@ -1,6 +1,9 @@
 import argparse
 import logging
 
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+
 from probes import login, put_fetch_get  # noqa
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
@@ -30,9 +33,6 @@ def main():
     # Parse arguments
     args = parser.parse_args()
 
-    with open(args.private_key_file, "r") as file:
-        private_key = file.read().strip()
-
     connection_params = {
         "host": args.host,
         "port": args.port,
@@ -43,7 +43,7 @@ def main():
         "database": args.database,
         "user": args.user,
         "authenticator": args.authenticator,
-        "private_key": private_key,
+        "private_key": args.private_key_file,
     }
 
     if args.scope not in PROBES_FUNCTIONS:
