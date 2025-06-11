@@ -36,7 +36,6 @@ def connect(connection_parameters: dict):
         )
         return connection
     except Exception as e:
-        logger.info({f"success_login={False}"})
         logger.error(f"Error connecting to Snowflake: {e}")
 
 
@@ -64,13 +63,14 @@ def perform_login(connection_parameters: dict):
         cursor = connection.cursor()
         cursor.execute("SELECT 1;")
         result = cursor.fetchone()
-        logger.error(f"Logging: {result}")
         assert result == (1,)
         print(
             f"cloudprober_driver_python_perform_login{{python_version={python_version}, driver_version={driver_version}}} 0"
         )
+        sys.exit(0)
     except Exception as e:
         print(
             f"cloudprober_driver_python_perform_login{{python_version={python_version}, driver_version={driver_version}}} 1"
         )
         logger.error(f"Error during login: {e}")
+        sys.exit(1)

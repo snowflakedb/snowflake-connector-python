@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 
 from probes import login, put_fetch_get  # noqa
 from probes.logging_config import initialize_logger
@@ -40,6 +41,7 @@ def main():
         open(args.private_key_file).read().strip().replace("_", "/").replace("-", "+")
     )
 
+
     connection_params = {
         "host": args.host,
         "port": args.port,
@@ -57,13 +59,14 @@ def main():
         logging.error(
             f"Invalid scope: {args.scope}. Available scopes: {list(PROBES_FUNCTIONS.keys())}"
         )
+        sys.exit(1)
     else:
         logging.info(f"Running probe for scope: {args.scope}")
         try:
-            logging.error(f"Running probe: {args.scope}")
             PROBES_FUNCTIONS[args.scope](connection_params)
         except Exception as e:
             logging.error(f"Error running probe {args.scope}: {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

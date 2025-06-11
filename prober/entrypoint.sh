@@ -32,4 +32,14 @@ fi
 echo "Running main.py with virtual environment: $venv_path"
 source "$venv_path/bin/activate"
 prober $params
+status=$?
 deactivate
+
+# Check the exit status of prober
+if [[ $status -ne 0 ]]; then
+    echo "Error: prober returned failure."
+    exit 1
+else
+    echo "Success: prober returned success."
+    exit 0
+fi
