@@ -21,9 +21,10 @@ def update_dockerfile(version_mapping):
     with open(dockerfile_path, "w") as file:
         for line in lines:
             if line.startswith("ARG MATRIX_VERSION"):
-                file.write(f'ARG MATRIX_VERSION=\'{new_matrix_version}\'\n')
+                file.write(f"ARG MATRIX_VERSION='{new_matrix_version}'\n")
             else:
                 file.write(line)
+
 
 if __name__ == "__main__":
     extracted_mapping = extract_versions()
