@@ -1,7 +1,7 @@
 import argparse
 import logging
 
-from probes import login  # noqa
+from probes import login, put_fetch_get  # noqa
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
 
@@ -20,7 +20,7 @@ def main():
     parser.add_argument("--account", required=True, help="Account")
     parser.add_argument("--schema", required=True, help="Schema")
     parser.add_argument("--warehouse", required=True, help="Warehouse")
-    parser.add_argument("--database", required=True, help="Datanase")
+    parser.add_argument("--database", required=True, help="Database")
     parser.add_argument("--user", required=True, help="Username")
     parser.add_argument(
         "--auth", required=True, help="Authenticator (e.g., KEY_PAIR_AUTHENTICATOR)"
