@@ -20,7 +20,11 @@ repos:
                 src/snowflake/connector/nanoarrow_cpp/ArrowIterator/flatcc/.*\.h|
             )$
     -   id: check-yaml
-        exclude: .github/repo_meta.yaml
+        exclude: >
+            (?x)^(
+                .github/repo_meta.yaml|
+                recipe/meta.yaml|
+            )$
     -   id: debug-statements
     -   id: check-ast
 -   repo: https://github.com/asottile/yesqa

@@ -1,0 +1,73 @@
+{% set name = "snowflake-connector-python" %}
+{% set version = "3.999.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  path: ../
+
+build:
+  number: {{ os.environ.get('SNOWFLAKE_CONNECTOR_PYTHON_BUILD_NUMBER', 0) }}
+  string: "py{{ py }}_{{ PKG_BUILDNUM }}"
+  script:
+    - export SF_NO_COPY_ARROW_LIB=1              # [unix]
+    - export SF_ARROW_LIBDIR="${PREFIX}/lib"     # [unix]
+    - export ENABLE_EXT_MODULES=true             # [unix]
+    - {{ PYTHON }} -m pip install . --no-use-pep517 --no-deps -vvv
+  entry_points:
+    - snowflake-dump-ocsp-response = snowflake.connector.tool.dump_ocsp_response:main
+    - snowflake-dump-ocsp-response-cache = snowflake.connector.tool.dump_ocsp_response_cache:main
+    - snowflake-dump-certs = snowflake.connector.tool.dump_certs:main
+
+requirements:
+  build:
+    - {{ compiler("c") }}
+    - {{ compiler("cxx") }}
+    - libgcc-ng
+    - libstdcxx-ng
+    - patch     # [not win]
+  host:
+    - setuptools >=40.6.0
+    - wheel
+    - cython
+    - python {{ python }}
+  run:
+    - setuptools >=40.6.0
+    - python {{ python }}
+    - asn1crypto >0.24.0,<2.0.0
+    - boto3 >=1.24
+    - botocore >=1.24
+    - cffi >=1.9,<2.0.0
+    - cryptography >=3.1.0,<=44.0.3
+    - pyOpenSSL >=22.0.0,<26.0.0
+    - pyjwt <3.0.0
+    - pytz
+    - requests <3.0.0
+    - packaging
+    - charset-normalizer >=2,<4
+    - idna >=2.5,<4
+    - urllib3 >=1.21.1,<2.0.0  # [py<310]
+    - certifi >=2017.4.17
+    - typing_extensions >=4.3,<5
+    - filelock >=3.5,<4
+    - sortedcontainers >=2.4.0
+    - platformdirs >=2.6.0,<5.0.0
+    - tomlkit
+  run_constrained:
+    - pandas>=2.1.2,<3.0.0
+    - pyarrow<19.0.0
+test:
+  requires:
+    - pip
+  imports:
+    - snowflake
+    - snowflake.connector
+    - snowflake.connector.nanoarrow_arrow_iterator  # [unix]
+  commands:
+    - pip check
+
+about:
+  home: https://github.com/snowflakedb/snowflake-connector-python
+  summary: Snowflake Connector for Python

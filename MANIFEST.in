@@ -6,6 +6,7 @@ include pyproject.toml
 include src/snowflake/connector/nanoarrow_cpp/ArrowIterator/LICENSE.txt
 recursive-include src/snowflake/connector py.typed *.py *.pyx
 recursive-include src/snowflake/connector/vendored LICENSE*
+recursive-include recipe *.yaml
 
 recursive-include src/snowflake/connector/nanoarrow_cpp *.cpp *.hpp
 recursive-include src/snowflake/connector/nanoarrow_cpp *.c *.h
