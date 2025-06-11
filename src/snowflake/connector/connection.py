@@ -2294,3 +2294,5 @@ class SnowflakeConnection:
             for jpmod in ("ipykernel", "jupyter_core", "jupyter_client")
         ):
             return "jupyter_notebook"
+        if "snowbooks" in sys.modules:
+            return "snowflake_notebook"
