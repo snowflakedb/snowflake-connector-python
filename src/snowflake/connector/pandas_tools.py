@@ -260,6 +260,7 @@ def write_pandas(
     table_type: Literal["", "temp", "temporary", "transient"] = "",
     use_logical_type: bool | None = None,
     iceberg_config: dict[str, str] | None = None,
+    bulk_upload_chunks: bool = False,
     **kwargs: Any,
 ) -> tuple[
     bool,
@@ -331,6 +332,8 @@ def write_pandas(
                 * base_location: the base directory that snowflake can write iceberg metadata and files to
                 * catalog_sync: optionally sets the catalog integration configured for Polaris Catalog
                 * storage_serialization_policy: specifies the storage serialization policy for the table
+        bulk_upload_chunks: If set to True, the upload will use the wildcard upload method.
+            This is a faster method of uploading but instead of uploading and cleaning up each chunk separately it will upload all chunks at once and then clean up locally stored chunks.
 
 
 
@@ -437,16 +440,26 @@ def write_pandas(
             chunk_path = os.path.join(tmp_folder, f"file{i}.txt")
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression, **kwargs)
-            # Upload parquet file
-            path = chunk_path.replace("\\", "\\\\").replace("'", "\\'")
+            if not bulk_upload_chunks:
+                # Upload parquet file chunk right away
+                path = chunk_path.replace("\\", "\\\\").replace("'", "\\'")
+                cursor._upload(
+                    local_file_name=f"'file://{path}'",
+                    stage_location="@" + stage_location,
+                    options={"parallel": parallel, "source_compression": "auto_detect"},
+                )
+
+                # Remove chunk file
+                os.remove(chunk_path)
+
+        if bulk_upload_chunks:
+            # Upload tmp directory with parquet chunks
+            path = tmp_folder.replace("\\", "\\\\").replace("'", "\\'")
             cursor._upload(
-                local_file_name=f"'file://{path}'",
+                local_file_name=f"'file://{path}/*'",
                 stage_location="@" + stage_location,
                 options={"parallel": parallel, "source_compression": "auto_detect"},
             )
-
-            # Remove chunk file
-            os.remove(chunk_path)
 
     # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
     # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
