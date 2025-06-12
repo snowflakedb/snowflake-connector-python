@@ -41,7 +41,6 @@ def main():
         open(args.private_key_file).read().strip().replace("_", "/").replace("-", "+")
     )
 
-
     connection_params = {
         "host": args.host,
         "port": args.port,
