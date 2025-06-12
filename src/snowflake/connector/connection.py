@@ -363,7 +363,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # SNOW-XXXXX: remove the check_arrow_conversion_error_on_every_column flag
-    "external_session": (
+    "external_session_id": (
         None,
         str,
         # SNOW-2096721: External (Spark) session ID
