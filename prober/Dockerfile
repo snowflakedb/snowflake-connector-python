@@ -43,7 +43,7 @@ ENV PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${PATH}"
 RUN git clone --depth=1 https://github.com/pyenv/pyenv.git ${PYENV_ROOT}
 
 # Build arguments for Python versions and Snowflake connector versions
-ARG MATRIX_VERSION='{"3.10.17": ["3.14.0", "3.13.2", "3.13.1"], "3.9.22": ["3.14.0", "3.13.2", "3.13.1"], "3.8.20": ["3.14.0", "3.13.2", "3.13.1"]}'
+ARG MATRIX_VERSION='{"3.13.4": ["3.13.2", "3.14.0", "3.12.3", "3.0.4", "3.12.1", "3.12.4", "3.11.0", "3.12.2", "3.6.0", "3.7.0"], "3.9.22": ["3.13.2", "3.14.0", "3.12.3", "3.0.4", "3.12.1", "3.12.4", "3.11.0", "3.12.2", "3.6.0", "3.7.0"]}'
 
 
 # Install Python versions from ARG MATRIX_VERSION
