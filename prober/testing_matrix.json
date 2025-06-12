@@ -1,0 +1,16 @@
+{
+  "python-version": [
+    {
+      "version": "3.10.17",
+      "snowflake-connector-python": ["3.14.0", "3.13.2", "3.13.1"]
+    },
+    {
+      "version": "3.9.22",
+      "snowflake-connector-python": ["3.14.0", "3.13.2", "3.13.1"]
+    },
+    {
+      "version": "3.8.20",
+      "snowflake-connector-python": ["3.14.0", "3.13.2", "3.13.1"]
+    }
+  ]
+}
