@@ -26,9 +26,12 @@ ENV HOME="/home/driveruser"
 RUN addgroup -g 1000 drivergroup && \
     adduser -u 1000 -G drivergroup -D driveruser
 
+
 # Set permissions for the non-root user
 RUN mkdir -p ${HOME} && \
     chown -R driveruser:drivergroup ${HOME}
+
+RUN chmod -R 777 ${HOME}
 
 # Switch to the non-root user
 USER driveruser
@@ -43,7 +46,7 @@ ENV PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${PATH}"
 RUN git clone --depth=1 https://github.com/pyenv/pyenv.git ${PYENV_ROOT}
 
 # Build arguments for Python versions and Snowflake connector versions
-ARG MATRIX_VERSION='{"3.13.4": ["3.13.2", "3.14.0", "3.12.3", "3.0.4", "3.12.1", "3.12.4", "3.11.0", "3.12.2", "3.6.0", "3.7.0"], "3.9.22": ["3.13.2", "3.14.0", "3.12.3", "3.0.4", "3.12.1", "3.12.4", "3.11.0", "3.12.2", "3.6.0", "3.7.0"]}'
+ARG MATRIX_VERSION='{"3.13.4": ["3.15.0"]}'
 
 
 # Install Python versions from ARG MATRIX_VERSION
