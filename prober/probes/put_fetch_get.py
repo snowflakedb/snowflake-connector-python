@@ -398,7 +398,7 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
 
                 logger.error("Generating random data")
 
-                file_name = generate_random_data(num_records, f"prober/tmp/{table_name}.csv")
+                file_name = generate_random_data(num_records, f"/tmp/{table_name}.csv")
 
                 # Get the absolute path
                 absolute_path = os.path.abspath(file_name)
