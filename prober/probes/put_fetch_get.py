@@ -64,19 +64,21 @@ def get_driver_version() -> str:
     """
     return snowflake.connector.__version__
 
-def setup_database(cursor: snowflake.connector.cursor.SnowflakeCursor, database: str):
+def setup_database(cursor: snowflake.connector.cursor.SnowflakeCursor):
     """
     Sets up the database in Snowflake.
 
     Args:
         cursor (snowflake.connector.cursor.SnowflakeCursor): The cursor to execute the SQL command.
-        database (str): The name of the database to create or replace.
     """
     try:
-        cursor.execute(f"USE DATABASE {database};")
+        database_name = random_string(10, "test_database_")
+        cursor.execute(f"CREATE OR REPLACE DATABASE {database_name};")
+        cursor.execute(f"USE DATABASE {database_name};")
         print(
             f"cloudprober_driver_python_create_database{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
         )
+        return database_name
     except Exception as e:
         logger.error(f"Error creating database: {e}")
         print(
@@ -349,7 +351,7 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
             with conn.cursor() as cur:
 
                 logger.error("Setting up database")
-                setup_database(cur, conn.database)
+                database_name = setup_database(cur)
                 logger.error("Database setup complete")
 
                 logger.error("Creating stage")
@@ -394,6 +396,7 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                 with conn.cursor() as cur:
                     cur.execute(f"REMOVE @{stage_name}")
                     cur.execute(f"DROP TABLE {table_name}")
+                    cur.execute(f"DROP DATABASE {database_name}")
             sys.exit(0)
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
