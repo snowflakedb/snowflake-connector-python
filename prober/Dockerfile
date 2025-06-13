@@ -31,8 +31,6 @@ RUN addgroup -g 1000 drivergroup && \
 RUN mkdir -p ${HOME} && \
     chown -R driveruser:drivergroup ${HOME}
 
-RUN chmod -R 777 ${HOME}
-
 # Switch to the non-root user
 USER driveruser
 WORKDIR ${HOME}
