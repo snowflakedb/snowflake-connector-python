@@ -26,6 +26,10 @@ def generate_random_data(num_records: int, file_path: str) -> str:
         str: File path to CSV file
     """
     try:
+        directory = os.path.dirname(file_path)
+        if directory and not os.path.exists(directory):
+            os.makedirs(directory)
+
         fake = Faker()
         with open(file_path, mode="w", newline="", encoding="utf-8") as csvfile:
             writer = csv.writer(csvfile, quoting=csv.QUOTE_ALL)
@@ -64,6 +68,30 @@ def get_driver_version() -> str:
     """
     return snowflake.connector.__version__
 
+def setup_schema(cursor: snowflake.connector.cursor.SnowflakeCursor):
+    """
+    Sets up the schema in Snowflake.
+
+    Args:
+        cursor (snowflake.connector.cursor.SnowflakeCursor): The cursor to execute the SQL command.
+    """
+    try:
+        schema_name = random_string(10, "test_schema_")
+        cursor.execute(f"CREATE OR REPLACE SCHEMA {schema_name};")
+        cursor.execute(f"USE SCHEMA {schema_name}")
+        if cursor.fetchone():
+            print(
+                f"cloudprober_driver_python_create_schema{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+            )
+        return schema_name
+    except Exception as e:
+        logger.error(f"Error creating schema: {e}")
+        print(
+            f"cloudprober_driver_python_create_schema{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+        )
+        sys.exit(1)
+
+
 def setup_database(cursor: snowflake.connector.cursor.SnowflakeCursor):
     """
     Sets up the database in Snowflake.
@@ -74,10 +102,12 @@ def setup_database(cursor: snowflake.connector.cursor.SnowflakeCursor):
     try:
         database_name = random_string(10, "test_database_")
         cursor.execute(f"CREATE OR REPLACE DATABASE {database_name};")
+
         cursor.execute(f"USE DATABASE {database_name};")
-        print(
-            f"cloudprober_driver_python_create_database{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
-        )
+        if cursor.fetchone():
+            print(
+                f"cloudprober_driver_python_create_database{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+            )
         return database_name
     except Exception as e:
         logger.error(f"Error creating database: {e}")
@@ -109,6 +139,7 @@ def create_data_table(cursor: snowflake.connector.cursor.SnowflakeCursor) -> str
             print(
                 f"cloudprober_driver_python_create_table{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
             )
+            # cursor.execute(f"USE TABLE {table_name};")
         else:
             print(
                 f"cloudprober_driver_python_create_table{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
@@ -208,7 +239,6 @@ def put_file_to_stage(
         logger.error(response)
 
         if response[0][6] == "UPLOADED":
-            print({"PUT_operation": True})
             print(
                 f"cloudprober_driver_python_perform_put{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
             )
@@ -354,16 +384,20 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                 database_name = setup_database(cur)
                 logger.error("Database setup complete")
 
+                logger.error("Setting up schema")
+                schema_name = setup_schema(cur)
+                logger.error("Schema setup complete")
+
                 logger.error("Creating stage")
                 stage_name = create_data_stage(cur)
                 logger.error(f"Stage {stage_name} created")
 
-                logger.error("Creating stage")
+                logger.error("Creating table")
                 table_name = create_data_table(cur)
                 logger.error(f"Table {table_name} created")
 
                 logger.error("Generating random data")
-                file_name = generate_random_data(num_records, f"{table_name}.csv")
+                file_name = generate_random_data(num_records, f"prober/probes/{table_name}.csv")
                 logger.error(f"Random data generated in {file_name}")
 
                 logger.error("PUT file to stage")
@@ -394,6 +428,8 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
         # Cleanup: Remove data from the stage and delete table
             with connect(connection_parameters) as conn:
                 with conn.cursor() as cur:
+                    cur.execute(f"USE DATABASE {database_name}")
+                    cur.execute(f"USE SCHEMA {schema_name}")
                     cur.execute(f"REMOVE @{stage_name}")
                     cur.execute(f"DROP TABLE {table_name}")
                     cur.execute(f"DROP DATABASE {database_name}")
