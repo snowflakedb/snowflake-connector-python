@@ -26,7 +26,7 @@ ENV HOME="/home/driveruser"
 RUN addgroup -g 1000 drivergroup && \
     adduser -u 1000 -G drivergroup -D driveruser
 
-RUN mkdir -p ${HOME}/prober/tmp && chmod -R 777 ${HOME}/prober/tmp
+RUN mkdir -p ${HOME}/prober/tmp && chown -R driveruser:drivergroup ${HOME}
 
 # Set permissions for the non-root user
 RUN mkdir -p ${HOME} && \
