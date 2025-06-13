@@ -2,7 +2,6 @@ import csv
 import os
 import random
 import sys
-
 from faker import Faker
 from probes.logging_config import initialize_logger
 from probes.login import connect
@@ -21,6 +20,7 @@ def generate_random_data(num_records: int, file_path: str) -> str:
 
     Args:
         num_records (int): Number of rows to generate.
+        file_path (str): Path to save the generated CSV file.
 
     Returns:
         str: File path to CSV file
@@ -45,6 +45,45 @@ def generate_random_data(num_records: int, file_path: str) -> str:
         logger.error(f"Error generating random data: {e}")
         sys.exit(1)
 
+def get_python_version() ->str:
+    """
+    Returns the Python version being used.
+
+    Returns:
+        str: The Python version in the format 'major.minor'.
+    """
+    return f"{sys.version_info.major}.{sys.version_info.minor}"
+
+
+def get_driver_version() -> str:
+    """
+    Returns the version of the Snowflake connector.
+
+    Returns:
+        str: The version of the Snowflake connector.
+    """
+    return snowflake.connector.__version__
+
+def setup_database(cursor: snowflake.connector.cursor.SnowflakeCursor, database: str):
+    """
+    Sets up the database in Snowflake.
+
+    Args:
+        cursor (snowflake.connector.cursor.SnowflakeCursor): The cursor to execute the SQL command.
+        database (str): The name of the database to create or replace.
+    """
+    try:
+        cursor.execute(f"USE DATABASE {database};")
+        print(
+            f"cloudprober_driver_python_create_database{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+        )
+    except Exception as e:
+        logger.error(f"Error creating database: {e}")
+        print(
+            f"cloudprober_driver_python_create_database{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+        )
+        sys.exit(1)
+
 
 def create_data_table(cursor: snowflake.connector.cursor.SnowflakeCursor) -> str:
     """
@@ -65,13 +104,19 @@ def create_data_table(cursor: snowflake.connector.cursor.SnowflakeCursor) -> str
         """
         cursor.execute(create_table_query)
         if cursor.fetchone():
-            print({"created_table": True})
+            print(
+                f"cloudprober_driver_python_create_table{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+            )
         else:
-            print({"created_table": False})
+            print(
+                f"cloudprober_driver_python_create_table{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+            )
             sys.exit(1)
     except Exception as e:
         logger.error(f"Error creating table: {e}")
-        print({"created_table": False})
+        print(
+            f"cloudprober_driver_python_create_table{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+        )
         sys.exit(1)
     return table_name
 
@@ -89,13 +134,19 @@ def create_data_stage(cursor: snowflake.connector.cursor.SnowflakeCursor) -> str
 
         cursor.execute(create_stage_query)
         if cursor.fetchone():
-            print({"created_stage": True})
+            print(
+                f"cloudprober_driver_python_create_stage{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+            )
         else:
-            print({"created_stage": False})
+            print(
+                f"cloudprober_driver_python_create_stage{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+            )
             sys.exit(1)
         return stage_name
     except Exception as e:
-        print({"created_stage": False})
+        print(
+            f"cloudprober_driver_python_create_stage{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+        )
         logger.error(f"Error creating stage: {e}")
         sys.exit(1)
 
@@ -121,13 +172,19 @@ def copy_into_table_from_stage(
 
         # Check if the data was loaded successfully
         if cur.fetchall()[0][1] == "LOADED":
-            print({"copied_data_from_stage_into_table": True})
+            print(
+                f"cloudprober_driver_python_create_stage{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+            )
         else:
-            print({"copied_data_from_stage_into_table": False})
+            print(
+                f"cloudprober_driver_python_copy_data_from_stage_into_table{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+            )
             sys.exit(1)
     except Exception as e:
         logger.error(f"Error copying data from stage to table: {e}")
-        print({"copied_data_from_stage_into_table": False})
+        print(
+            f"cloudprober_driver_python_copy_data_from_stage_into_table{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+        )
         sys.exit(1)
 
 
@@ -150,12 +207,19 @@ def put_file_to_stage(
 
         if response[0][6] == "UPLOADED":
             print({"PUT_operation": True})
+            print(
+                f"cloudprober_driver_python_perform_put{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+            )
         else:
-            print({"PUT_operation": False})
+            print(
+                f"cloudprober_driver_python_perform_put{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+            )
             sys.exit(1)
     except Exception as e:
         logger.error(f"Error uploading file to stage: {e}")
-        print({"PUT_operation": False})
+        print(
+            f"cloudprober_driver_python_perform_put{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+        )
         sys.exit(1)
 
 
@@ -165,13 +229,19 @@ def count_data_from_table(
     try:
         count = cur.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         if count == num_records:
-            print({"data_transferred_completely": True})
+            print(
+                f"cloudprober_driver_python_data_transferred_completely{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+            )
         else:
-            print({"data_transferred_completely": False})
+            print(
+                f"cloudprober_driver_python_data_transferred_completely{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+            )
             sys.exit(1)
     except Exception as e:
         logger.error(f"Error counting data from table: {e}")
-        print({"data_transferred_completely": False})
+        print(
+            f"cloudprober_driver_python_data_transferred_completely{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+        )
         sys.exit(1)
 
 
@@ -204,12 +274,18 @@ def compare_fetched_data(
                 random_index = random.randint(0, fetch_limit - 1)
                 for y in range(len(fetched_data[0])):
                     if str(fetched_data[random_index][y]) != csv_data[random_index][y]:
-                        print({"data_integrity_check": False})
-                        break
-            print({"data_integrity_check": True})
+                        print(
+                            f"cloudprober_driver_python_data_transferred_completely{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+                        )
+                        sys.exit(1)
+            print(
+                f"cloudprober_driver_python_data_data_integrity{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+            )
     except Exception as e:
         logger.error(f"Error comparing fetched data: {e}")
-        print({"data_integrity_check": False})
+        print(
+            f"cloudprober_driver_python_data_data_integrity{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+        )
         sys.exit(1)
 
 
@@ -230,14 +306,20 @@ def execute_get_command(stage_name: str, conn: snowflake.connector.SnowflakeConn
         # Check if files are downloaded
         downloaded_files = os.listdir(download_dir)
         if downloaded_files:
-            print({"GET_operation": True})
+            print(
+                f"cloudprober_driver_python_perform_get{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+            )
         else:
-            print({"GET_operation": False})
+            print(
+                f"cloudprober_driver_python_perform_get{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+            )
             sys.exit(1)
 
     except Exception as e:
         logger.error(f"Error downloading file from stage: {e}")
-        print({"GET_operation": False})
+        print(
+            f"cloudprober_driver_python_perform_get{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+        )
         sys.exit(1)
     finally:
         try:
@@ -265,6 +347,10 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
     try:
         with connect(connection_parameters) as conn:
             with conn.cursor() as cur:
+
+                logger.error("Setting up database")
+                setup_database(cur, conn.database)
+                logger.error("Database setup complete")
 
                 logger.error("Creating stage")
                 stage_name = create_data_stage(cur)
@@ -302,7 +388,6 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
         sys.exit(1)
 
     finally:
-        logger.error("INFORMATIONING")
         try:
         # Cleanup: Remove data from the stage and delete table
             with connect(connection_parameters) as conn:
