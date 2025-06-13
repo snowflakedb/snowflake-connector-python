@@ -1,4 +1,5 @@
 import argparse
+import base64
 import logging
 import sys
 
@@ -37,9 +38,12 @@ def main():
     # Parse arguments
     args = parser.parse_args()
 
-    private_key = (
+    private_key_str = (
         open(args.private_key_file).read().strip().replace("_", "/").replace("-", "+")
     )
+
+    # Decode the private key from Base64
+    private_key_bytes = base64.b64decode(private_key_str)
 
     connection_params = {
         "host": args.host,
@@ -51,7 +55,7 @@ def main():
         "database": args.database,
         "user": args.user,
         "authenticator": args.authenticator,
-        "private_key": private_key,
+        "private_key": private_key_bytes,
     }
 
     if args.scope not in PROBES_FUNCTIONS:
