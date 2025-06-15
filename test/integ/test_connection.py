@@ -51,6 +51,10 @@ except ImportError:
 
 try:
     from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
+    from snowflake.connector.http_interceptor import (  # HttpInterceptor,
+        HeadersCustomizer,
+        RequestDTO,
+    )
 except ImportError:  # Keep olddrivertest from breaking
     ER_FAILED_PROCESSING_QMARK = 252012
 
@@ -1621,3 +1625,230 @@ def test_file_utils_sanity_check():
     conn = create_connection("default")
     assert hasattr(conn._file_operation_parser, "parse_file_operation")
     assert hasattr(conn._stream_downloader, "download_as_stream")
+
+
+from typing import Any, Generator, NamedTuple
+
+from ..wiremock.wiremock_utils import WiremockClient  # adjust import path if needed
+
+
+# TODO: move to the conftest
+@pytest.fixture(scope="session")
+def wiremock_client() -> Generator[WiremockClient | Any, Any, None]:
+    with WiremockClient() as client:
+        yield client
+
+
+@pytest.fixture(scope="session")
+def wiremock_mapping_dir() -> pathlib.Path:
+    return pathlib.Path(__file__).parent.parent / "data" / "wiremock" / "mappings"
+
+
+@pytest.fixture(scope="session")
+def wiremock_generic_mappings_dir(wiremock_mapping_dir) -> pathlib.Path:
+    return wiremock_mapping_dir / "generic"
+
+
+@pytest.fixture(scope="session")
+def wiremock_auth_dir(wiremock_mapping_dir) -> pathlib.Path:
+    return wiremock_mapping_dir / "auth"
+
+
+@pytest.fixture(scope="session")
+def wiremock_password_auth_dir(wiremock_auth_dir) -> pathlib.Path:
+    return wiremock_auth_dir / "password"
+
+
+class CollectingCustomizer(HeadersCustomizer):
+    def __init__(self):
+        self.invocations = []
+
+    def applies_to(self, request: RequestDTO) -> bool:
+        return True
+
+    def get_new_headers(self, request: RequestDTO) -> dict[str, str]:
+        self.invocations.append(request)
+        return {"test-header": "test-header-value"}
+
+
+class StaticCollectingCustomizer(CollectingCustomizer):
+    def is_invoked_once(self) -> bool:
+        return True
+
+
+class DynamicCollectingCustomizer(CollectingCustomizer):
+    def is_invoked_once(self) -> bool:
+        return False
+
+    def get_new_headers(self, request: RequestDTO) -> dict[str, str]:
+        self.invocations.append(request)
+        return {"test-header": f"test-header-value-{len(self.invocations)}"}
+
+
+@pytest.fixture
+def static_collecting_customizer():
+    return StaticCollectingCustomizer()
+
+
+@pytest.fixture
+def dynamic_collecting_customizer():
+    return DynamicCollectingCustomizer()
+
+
+import re
+
+import pytest
+
+# from snowflake.connector.http_interceptor import RequestDTO
+
+# from ..wiremock.wiremock_utils import WiremockClient
+
+
+def assert_request_matches(request: RequestDTO, method: str, url_regexp: str) -> bool:
+    return request.method.upper() == method.upper() and re.fullmatch(
+        url_regexp, request.url
+    )
+
+
+class ExpectedRequestInfo(NamedTuple):
+    method: str
+    path: Optional[str] = None
+    params_names: Optional[list[str]] = None
+
+
+def assert_request_occurred_after_optional_retries(
+    requests: list[RequestDTO],
+    previous_request_index: int,
+    expected_request: ExpectedRequestInfo,
+) -> int:
+    """
+    Returns the index after matching the expected request,
+    skipping retry duplicates if needed.
+    """
+    expected_method, expected_url_pattern, param_names = expected_request
+
+    i = previous_request_index + 1
+    while i < len(requests):
+        if assert_request_matches(requests[i], expected_method, expected_url_pattern):
+            return i + 1
+        if i > 0 and assert_request_matches(
+            requests[i], requests[i - 1].method, requests[i - 1].url
+        ):
+            i += 1  # skip retry
+        else:
+            raise AssertionError(f"Unexpected request at index {i}: {requests[i]}")
+    raise AssertionError(
+        f"Expected request '{expected_method} {expected_url_pattern}' not found"
+    )
+
+
+from typing import Optional
+
+# from urllib.parse import ParseResult, urlparse
+
+
+def assert_login_issued(
+    suspected_request_index: int, requests: list[RequestDTO]
+) -> int:
+    expected_request_info = ExpectedRequestInfo("POST", r"/session/v1/login-request.*")
+    return assert_request_occurred_after_optional_retries(
+        requests, suspected_request_index, expected_request_info
+    )
+
+
+def assert_query_issued(
+    suspected_request_index: int, requests: list[RequestDTO]
+) -> int:
+    expected_request_info = ExpectedRequestInfo("POST", r"/queries/v1/query-request.*")
+    return assert_request_occurred_after_optional_retries(
+        requests, suspected_request_index, expected_request_info
+    )
+
+
+def assert_disconnect_issued(
+    suspected_request_index: int, requests: list[RequestDTO]
+) -> int:
+    expected_request_info = ExpectedRequestInfo("POST", r"/session\?delete=true")
+    return assert_request_occurred_after_optional_retries(
+        requests, suspected_request_index, expected_request_info
+    )
+
+
+@pytest.mark.parametrize("execute_on_wiremock", (True, False))
+@pytest.mark.skipolddriver
+def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
+    request,
+    execute_on_wiremock,
+    wiremock_password_auth_dir,
+    wiremock_generic_mappings_dir,
+    static_collecting_customizer,
+    conn_cnx,
+) -> None:
+
+    def assert_expected_requests_occurred(conn: SnowflakeConnection) -> None:
+        requests = (
+            invocation for invocation in static_collecting_customizer.invocations
+        )
+        index = 0
+
+        index = assert_login_issued(index, requests)
+
+        with conn as cnx:
+            cnx.cursor().execute("select 1")
+            index = assert_query_issued(index, requests)
+
+            cnx.fetchall()  # No HTTP call happens here
+            # You could assert result if desired
+
+        index = assert_disconnect_issued(index, requests)
+
+    if execute_on_wiremock:
+        with request.getfixturevalue("wiremock_client") as local_wiremock_client:
+            local_wiremock_client.import_mapping(
+                wiremock_password_auth_dir / "successful_flow.json"
+            )
+            local_wiremock_client.add_mapping(
+                wiremock_generic_mappings_dir / "select_1_successful.json"
+            )
+            local_wiremock_client.add_mapping(
+                wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+            )
+            local_wiremock_client.add_mapping(
+                wiremock_generic_mappings_dir / "telemetry.json"
+            )
+
+            connection = snowflake.connector.connect(
+                account="testAccount",
+                user="testUser",
+                password="testPassword",
+                host=local_wiremock_client.wiremock_host,
+                port=local_wiremock_client.wiremock_http_port,
+                protocol="http",
+                headers_customizers=[static_collecting_customizer],
+            )
+            with local_wiremock_client:
+                assert_expected_requests_occurred(connection)
+    else:
+        connection = conn_cnx(headers_customizers=[static_collecting_customizer])
+        assert_expected_requests_occurred(connection)
+
+    # Print actual requests
+    print("Captured requests:")
+    for r in static_collecting_customizer.invocations:
+        print(f"{r.method} {r.url}")
+
+    # Final count
+    assert index == len(
+        requests
+    ), f"Too many requests: expected {index}, got {len(requests)}"
+    # Perform GET request through Snowflake’s internal session
+    # response = rest._session.get(f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/echo-headers")
+    # response.raise_for_status()
+    # content = response.json()
+
+    # Validate that the custom header was added
+    # headers = {k.lower(): v for k, v in content.items()}
+    # assert any("test-header-value" in v for v in headers.values()), "Custom header not found in response"
+    #
+    # # Check the number of times the customizer was invoked (should match retries)
+    # assert static_collecting_customizer.invocations == 3, f"Expected 3 invocations, got {static_collecting_customizer.invocations}"
