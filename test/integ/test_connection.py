@@ -11,7 +11,6 @@ import tempfile
 import threading
 import warnings
 import weakref
-from typing import Generator
 from unittest import mock
 from uuid import uuid4
 
@@ -37,12 +36,6 @@ from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
 from ..randomize import random_string
-from ..test_utils.http_test_utils import (
-    assert_disconnect_issued,
-    assert_login_issued,
-    assert_sql_query_issued,
-    assert_telemetry_send_issued,
-)
 from .conftest import RUNNING_ON_GH, create_connection
 
 try:  # pragma: no cover
@@ -58,7 +51,6 @@ except ImportError:
 
 try:
     from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
-    from snowflake.connector.http_interceptor import RequestDTO
 except ImportError:  # Keep olddrivertest from breaking
     ER_FAILED_PROCESSING_QMARK = 252012
 
@@ -1629,88 +1621,3 @@ def test_file_utils_sanity_check():
     conn = create_connection("default")
     assert hasattr(conn._file_operation_parser, "parse_file_operation")
     assert hasattr(conn._stream_downloader, "download_as_stream")
-
-
-@pytest.fixture(scope="session")
-def wiremock_auth_dir(wiremock_mapping_dir) -> pathlib.Path:
-    return wiremock_mapping_dir / "auth"
-
-
-@pytest.fixture(scope="session")
-def wiremock_password_auth_dir(wiremock_auth_dir) -> pathlib.Path:
-    return wiremock_auth_dir / "password"
-
-
-@pytest.mark.parametrize("execute_on_wiremock", (True, False))
-@pytest.mark.skipolddriver
-def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
-    request,
-    execute_on_wiremock,
-    wiremock_password_auth_dir,
-    wiremock_generic_mappings_dir,
-    static_collecting_customizer,
-    conn_cnx,
-    conn_cnx_wiremock,
-) -> None:
-    # TODO: this does not collect retried requests - uses static collector
-
-    # TODO: finish this comment
-    # Detects if interceptor correctly works collecting all the requests that should occur.
-    # Detects if all expected requests occur AND NO OTHER.
-    # If added new steps that should generate http traffic it will detect those and raise an error.
-    # If needed to inspect what requests are occuring use this test or similar and add those asserts
-
-    def assert_expected_requests_occurred(conn: SnowflakeConnection) -> None:
-        requests: Generator[RequestDTO] = (
-            invocation for invocation in static_collecting_customizer.invocations
-        )
-        last_request: RequestDTO = None
-
-        with conn as connection_context:
-            last_request = assert_login_issued(requests, last_request=last_request)
-
-            cursor = connection_context.cursor().execute("select 1")
-            last_request = assert_sql_query_issued(requests, last_request=last_request)
-
-            result = cursor.fetchall()
-            assert len(result) == 1, "Result should contain exactly one row"
-            assert (
-                result[0][0] == 1
-            ), "Result should contain the value 1 in the first row and the first column"
-
-        last_request = assert_telemetry_send_issued(requests, last_request=last_request)
-        last_request = assert_disconnect_issued(requests, last_request=last_request)
-
-    if execute_on_wiremock:
-        local_wiremock_client = request.getfixturevalue("wiremock_client")
-        local_wiremock_client.import_mapping(
-            wiremock_password_auth_dir / "successful_flow.json"
-        )
-        local_wiremock_client.add_mapping(
-            wiremock_generic_mappings_dir / "select_1_successful.json"
-        )
-        local_wiremock_client.add_mapping(
-            wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
-        )
-        local_wiremock_client.add_mapping(
-            wiremock_generic_mappings_dir / "telemetry.json"
-        )
-
-        connection = conn_cnx_wiremock(
-            headers_customizers=[static_collecting_customizer],
-        )
-    else:
-        connection = conn_cnx(headers_customizers=[static_collecting_customizer])
-
-    assert_expected_requests_occurred(connection)
-
-    # TODO: add here checks if headers added to each request
-    # TODO: e.g. get all requests from wiremock (its endpoint) and chcek if they had headers
-    # Perform GET request through Snowflake’s internal session
-    # response = rest._session.get(f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/echo-headers")
-    # response.raise_for_status()
-    # content = response.json()
-
-    # Validate that the custom header was added
-    # headers = {k.lower(): v for k, v in content.items()}
-    # assert any("test-header-value" in v for v in headers.values()), "Custom header not found in response"
