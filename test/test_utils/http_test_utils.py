@@ -1,7 +1,29 @@
 import re
 from typing import Generator, Iterable, NamedTuple, Optional
 
-from snowflake.connector.http_interceptor import RequestDTO
+from snowflake.connector.http_interceptor import HeadersCustomizer, RequestDTO
+
+
+class CollectingCustomizer(HeadersCustomizer):
+    def __init__(self):
+        self.invocations = []
+
+    def applies_to(self, request: RequestDTO) -> bool:
+        return True
+
+    def get_new_headers(self, request: RequestDTO) -> dict[str, str]:
+        self.invocations.append(request)
+        return {}
+
+
+class StaticCollectingCustomizer(CollectingCustomizer):
+    def is_invoked_once(self) -> bool:
+        return True
+
+
+class DynamicCollectingCustomizer(CollectingCustomizer):
+    def is_invoked_once(self) -> bool:
+        return False
 
 
 class ExpectedRequestInfo(NamedTuple):

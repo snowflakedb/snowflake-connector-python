@@ -5,7 +5,6 @@
 import logging
 import pathlib
 from threading import Thread
-from typing import Any, Generator, Union
 from unittest import mock
 from unittest.mock import Mock, patch
 
@@ -16,15 +15,9 @@ import snowflake.connector
 from snowflake.connector.auth import AuthByOauthCredentials
 from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
-from ..wiremock.wiremock_utils import WiremockClient
+from ..test_utils.wiremock.wiremock_utils import WiremockClient
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture(scope="session")
-def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
-    with WiremockClient() as client:
-        yield client
 
 
 @pytest.fixture(scope="session")
@@ -50,17 +43,6 @@ def wiremock_oauth_client_creds_dir() -> pathlib.Path:
         / "auth"
         / "oauth"
         / "client_credentials"
-    )
-
-
-@pytest.fixture(scope="session")
-def wiremock_generic_mappings_dir() -> pathlib.Path:
-    return (
-        pathlib.Path(__file__).parent.parent
-        / "data"
-        / "wiremock"
-        / "mappings"
-        / "generic"
     )
 
 

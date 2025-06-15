@@ -38,7 +38,9 @@ class WiremockClient:
         self.wiremock_https_port = None
         self.forbidden_ports = forbidden_ports if forbidden_ports is not None else []
 
-        self.wiremock_dir = pathlib.Path(__file__).parent.parent.parent / ".wiremock"
+        self.wiremock_dir = (
+            pathlib.Path(__file__).parent.parent.parent.parent / ".wiremock"
+        )
         assert self.wiremock_dir.exists(), f"{self.wiremock_dir} does not exist"
 
         self.wiremock_jar_path = self.wiremock_dir / self.wiremock_filename

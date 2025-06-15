@@ -11,6 +11,7 @@ import tempfile
 import threading
 import warnings
 import weakref
+from typing import Generator
 from unittest import mock
 from uuid import uuid4
 
@@ -36,7 +37,7 @@ from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
 from ..randomize import random_string
-from ..utils.http_test_utils import (
+from ..test_utils.http_test_utils import (
     assert_disconnect_issued,
     assert_login_issued,
     assert_sql_query_issued,
@@ -57,10 +58,7 @@ except ImportError:
 
 try:
     from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
-    from snowflake.connector.http_interceptor import (  # HttpInterceptor,
-        HeadersCustomizer,
-        RequestDTO,
-    )
+    from snowflake.connector.http_interceptor import RequestDTO
 except ImportError:  # Keep olddrivertest from breaking
     ER_FAILED_PROCESSING_QMARK = 252012
 
@@ -1633,29 +1631,6 @@ def test_file_utils_sanity_check():
     assert hasattr(conn._stream_downloader, "download_as_stream")
 
 
-# TODO: move to the conftest
-from typing import Any, Generator
-
-from ..wiremock.wiremock_utils import WiremockClient
-
-
-# TODO: move to the conftest
-@pytest.fixture(scope="session")
-def wiremock_client() -> Generator[WiremockClient | Any, Any, None]:
-    with WiremockClient() as client:
-        yield client
-
-
-@pytest.fixture(scope="session")
-def wiremock_mapping_dir() -> pathlib.Path:
-    return pathlib.Path(__file__).parent.parent / "data" / "wiremock" / "mappings"
-
-
-@pytest.fixture(scope="session")
-def wiremock_generic_mappings_dir(wiremock_mapping_dir) -> pathlib.Path:
-    return wiremock_mapping_dir / "generic"
-
-
 @pytest.fixture(scope="session")
 def wiremock_auth_dir(wiremock_mapping_dir) -> pathlib.Path:
     return wiremock_mapping_dir / "auth"
@@ -1664,42 +1639,6 @@ def wiremock_auth_dir(wiremock_mapping_dir) -> pathlib.Path:
 @pytest.fixture(scope="session")
 def wiremock_password_auth_dir(wiremock_auth_dir) -> pathlib.Path:
     return wiremock_auth_dir / "password"
-
-
-class CollectingCustomizer(HeadersCustomizer):
-    def __init__(self):
-        self.invocations = []
-
-    def applies_to(self, request: RequestDTO) -> bool:
-        return True
-
-    def get_new_headers(self, request: RequestDTO) -> dict[str, str]:
-        self.invocations.append(request)
-        return {"test-header": "test-header-value"}
-
-
-class StaticCollectingCustomizer(CollectingCustomizer):
-    def is_invoked_once(self) -> bool:
-        return True
-
-
-class DynamicCollectingCustomizer(CollectingCustomizer):
-    def is_invoked_once(self) -> bool:
-        return False
-
-    def get_new_headers(self, request: RequestDTO) -> dict[str, str]:
-        self.invocations.append(request)
-        return {"test-header": f"test-header-value-{len(self.invocations)}"}
-
-
-@pytest.fixture
-def static_collecting_customizer():
-    return StaticCollectingCustomizer()
-
-
-@pytest.fixture
-def dynamic_collecting_customizer():
-    return DynamicCollectingCustomizer()
 
 
 @pytest.mark.parametrize("execute_on_wiremock", (True, False))
@@ -1711,6 +1650,7 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
     wiremock_generic_mappings_dir,
     static_collecting_customizer,
     conn_cnx,
+    conn_cnx_wiremock,
 ) -> None:
     # TODO: this does not collect retried requests - uses static collector
 
@@ -1726,8 +1666,8 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
         )
         last_request: RequestDTO = None
 
-        last_request = assert_login_issued(requests, last_request=last_request)
         with conn as connection_context:
+            last_request = assert_login_issued(requests, last_request=last_request)
 
             cursor = connection_context.cursor().execute("select 1")
             last_request = assert_sql_query_issued(requests, last_request=last_request)
@@ -1756,22 +1696,13 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
             wiremock_generic_mappings_dir / "telemetry.json"
         )
 
-        # TODO: Here already request is sent to establish connection
-        # TODO: add fixture wiremock_sf_conn_cnx
-        connection = snowflake.connector.connect(
-            account="testAccount",
-            user="testUser",
-            password="testPassword",
-            host=local_wiremock_client.wiremock_host,
-            port=local_wiremock_client.wiremock_http_port,
-            protocol="http",
+        connection = conn_cnx_wiremock(
             headers_customizers=[static_collecting_customizer],
         )
-        assert_expected_requests_occurred(connection)
     else:
-        # TODO: Here no request is sent yet
-        with conn_cnx(headers_customizers=[static_collecting_customizer]) as connection:
-            assert_expected_requests_occurred(connection)
+        connection = conn_cnx(headers_customizers=[static_collecting_customizer])
+
+    assert_expected_requests_occurred(connection)
 
     # TODO: add here checks if headers added to each request
     # TODO: e.g. get all requests from wiremock (its endpoint) and chcek if they had headers
