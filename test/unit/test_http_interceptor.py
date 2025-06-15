@@ -49,7 +49,7 @@ def test_no_interceptors_does_nothing(sample_request_factory):
     request = sample_request_factory()
     interceptor = HeadersCustomizerInterceptor([])
     result = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request
+        HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
     )
     assert result == request
 
@@ -61,7 +61,7 @@ def test_non_applying_interceptor_does_nothing(
     customizer = headers_customizer_factory(applies=False)
     interceptor = HeadersCustomizerInterceptor([customizer])
     result = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request
+        HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
     )
     assert result == request
 
@@ -77,7 +77,7 @@ def test_non_applying_interceptor_not_called(sample_request_factory):
 
     interceptor = HeadersCustomizerInterceptor([customizer])
     result = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request
+        HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
     )
 
     # Assert result is unchanged
@@ -98,7 +98,7 @@ def test_static_hook_respects_invoked_once_flag(
     )
     interceptor = HeadersCustomizerInterceptor([customizer])
     result = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request
+        HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
     )
 
     if invoke_once:
@@ -114,10 +114,10 @@ def test_dynamic_customizer_adds_different_headers(
     interceptor = HeadersCustomizerInterceptor([dynamic_customizer_factory()])
 
     result1 = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY, request
+        HttpInterceptor.InterceptionHook.BEFORE_RETRY, request
     )
     result2 = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY, request
+        HttpInterceptor.InterceptionHook.BEFORE_RETRY, request
     )
 
     assert result1.headers["X-Dynamic-1"] != result2.headers["X-Dynamic-2"]
@@ -128,7 +128,7 @@ def test_invoke_once_skips_on_retry(sample_request_factory, headers_customizer_f
     customizer = headers_customizer_factory(applies=True, invoke_once=True)
     interceptor = HeadersCustomizerInterceptor([customizer])
     result = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY, request
+        HttpInterceptor.InterceptionHook.BEFORE_RETRY, request
     )
     assert result == request
 
@@ -142,10 +142,10 @@ def test_invoke_always_runs_on_retry(
     )
     interceptor = HeadersCustomizerInterceptor([customizer])
     result1 = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY, request
+        HttpInterceptor.InterceptionHook.BEFORE_RETRY, request
     )
     result2 = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY, request
+        HttpInterceptor.InterceptionHook.BEFORE_RETRY, request
     )
     assert result1.headers["X-Retry"] == "RetryVal"
     assert result2.headers["X-Retry"] == "RetryVal"
@@ -158,7 +158,7 @@ def test_prevents_header_overwrite(sample_request_factory, headers_customizer_fa
     )
     interceptor = HeadersCustomizerInterceptor([customizer])
     result = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request
+        HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
     )
     assert result.headers["User-Agent"] == "SnowflakeDriver/1.0"
     assert result.headers["User-Agent"] != "MaliciousAgent"
@@ -180,7 +180,7 @@ def test_partial_header_overwrite_ignores_only_conflicting_keys(
 
     interceptor = HeadersCustomizerInterceptor([customizer])
     result = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request
+        HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
     )
 
     # Original value preserved
@@ -203,7 +203,7 @@ def test_multiple_customizers_add_headers(
     )
     interceptor = HeadersCustomizerInterceptor([customizer1, customizer2])
     result = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request
+        HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
     )
     assert result.headers["X-Custom1"] == "Val1"
     assert result.headers["X-Custom2"] == "Val2"
@@ -216,7 +216,7 @@ def test_multi_value_headers(sample_request_factory, headers_customizer_factory)
     )
     interceptor = HeadersCustomizerInterceptor([customizer])
     result = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request
+        HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
     )
     values = result.headers["X-Multi"]
     if isinstance(values, list):
@@ -246,7 +246,7 @@ def test_customizer_applies_only_to_specific_domain(
     )
     interceptor = HeadersCustomizerInterceptor([customizer])
     result = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request
+        HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
     )
 
     if should_apply:

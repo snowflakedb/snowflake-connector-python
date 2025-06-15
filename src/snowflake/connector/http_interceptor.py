@@ -64,8 +64,8 @@ class HeadersCustomizer(ABC):
 
 class HttpInterceptor(ABC):
     class InterceptionHook(Enum):
-        BEFORE_EACH_RETRY = auto()
-        ONCE_BEFORE_REQUEST = auto()
+        BEFORE_RETRY = auto()
+        BEFORE_REQUEST_ISSUED = auto()
 
     @abstractmethod
     def intercept_on(
@@ -126,13 +126,14 @@ class HeadersCustomizerInterceptor(HttpInterceptor):
     def intercept_on(
         self, hook: HttpInterceptor.InterceptionHook, request: RequestDTO
     ) -> RequestDTO:
-        if hook is HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY:
+        if hook is HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED:
+            customizers_to_apply = (
+                self._static_headers_customizers + self._dynamic_headers_customizers
+            )
+            return self._handle_headers_customization(request, customizers_to_apply)
+        elif hook is HttpInterceptor.InterceptionHook.BEFORE_RETRY:
             return self._handle_headers_customization(
                 request, self._dynamic_headers_customizers
-            )
-        elif hook is HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST:
-            return self._handle_headers_customization(
-                request, self._static_headers_customizers
             )
         return request
 
@@ -141,7 +142,7 @@ class HeadersCustomizerInterceptor(HttpInterceptor):
         self, request: RequestDTO, headers_customizers: Iterable[HeadersCustomizer]
     ) -> RequestDTO:
         # copy preventing mutation in the registered customizer
-        result_headers = dict(request.headers)
+        result_headers = dict(request.headers) if request.headers else {}
 
         for header_customizer in headers_customizers:
             try:
@@ -193,7 +194,7 @@ class InterceptOnMixin:
             )
 
 
-_original_requests_request = requests.request
+_original_requests_session_request = requests.sessions.Session.request
 _original_http_urlopen = urllib3.HTTPConnectionPool.urlopen
 _original_https_urlopen = urllib3.HTTPSConnectionPool.urlopen
 _original_retry_increment = urllib3.Retry.increment
@@ -202,17 +203,23 @@ _original_retry_increment = urllib3.Retry.increment
 def inject_interception_callback(
     intercept_fn: Callable[[HttpInterceptor.InterceptionHook, RequestDTO], RequestDTO]
 ) -> None:
-    # Signature must match requests.request
-    @wraps(_original_requests_request)
-    def intercepted_requests_request(method, url, *args, headers=None, **kwargs):
+    # Signature must match requests.Session.request
+    @wraps(_original_requests_session_request)
+    def intercepted_requests_session_request(
+        self, method, url, params=None, data=None, headers=None, *args, **kwargs
+    ):
         request_info = get_request_info(method, url, headers or kwargs.get("headers"))
         updated_request = intercept_fn(
-            HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request_info
+            hook=HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED,
+            request=request_info,
         )
-        return _original_requests_request(
+        return _original_requests_session_request(
+            self,
             updated_request.method,
             updated_request.url,
             *args,
+            params=params,
+            data=data,
             headers=updated_request.headers,
             **kwargs,
         )
@@ -222,18 +229,19 @@ def inject_interception_callback(
     def intercepted_http_urlopen(
         self, method, url, body=None, headers=None, retries=None, *args, **kwargs
     ):
-        request_info = get_request_info(method, url, headers)
+        request_info = get_request_info(method, url, headers or kwargs.get("headers"))
         updated_request = intercept_fn(
-            HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request_info
+            hook=HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED,
+            request=request_info,
         )
         return _original_http_urlopen(
             self,
             updated_request.method,
             updated_request.url,
-            body,
-            updated_request.headers,
-            retries,
             *args,
+            body=body,
+            headers=updated_request.headers,
+            retries=retries,
             **kwargs,
         )
 
@@ -242,22 +250,23 @@ def inject_interception_callback(
     def intercepted_https_urlopen(
         self, method, url, body=None, headers=None, retries=None, *args, **kwargs
     ):
-        request_info = get_request_info(method, url, headers)
+        request_info = get_request_info(method, url, headers or kwargs.get("headers"))
         updated_request = intercept_fn(
-            HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request_info
+            hook=HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED,
+            request=request_info,
         )
         return _original_https_urlopen(
             self,
             updated_request.method,
             updated_request.url,
-            body,
-            updated_request.headers,
-            retries,
             *args,
+            body=body,
+            headers=updated_request.headers,
+            retries=retries,
             **kwargs,
         )
 
-    # NOTE: Signature must match urllib3.Retry.increment
+    # Signature must match urllib3.Retry.increment
     @wraps(_original_retry_increment)
     def intercepted_retry_increment(
         self,
@@ -273,7 +282,7 @@ def inject_interception_callback(
         response_headers = getattr(response, "headers", {}) if response else {}
         request_info = get_request_info(method, url, response_headers)
         updated_request = intercept_fn(
-            HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY, request_info
+            hook=HttpInterceptor.InterceptionHook.BEFORE_RETRY, request=request_info
         )
         return _original_retry_increment(
             self,
@@ -287,14 +296,17 @@ def inject_interception_callback(
             **kwargs,
         )
 
-    requests.request = intercepted_requests_request
-    urllib3.HTTPConnectionPool.urlopen = intercepted_http_urlopen
-    urllib3.HTTPSConnectionPool.urlopen = intercepted_https_urlopen
+    # Apply monkey patches
+    # TODO: remove the unused ones
+    # TODO: remove this and use the adapter of proxy or overriding the methods when headers applied
+    requests.sessions.Session.request = intercepted_requests_session_request
+    # urllib3.HTTPConnectionPool.urlopen = intercepted_http_urlopen
+    # urllib3.HTTPSConnectionPool.urlopen = intercepted_https_urlopen
     urllib3.Retry.increment = intercepted_retry_increment
 
 
 def remove_interceptors():
-    requests.request = _original_requests_request
+    requests.sessions.Session.request = _original_requests_session_request
     urllib3.HTTPConnectionPool.urlopen = _original_http_urlopen
     urllib3.HTTPSConnectionPool.urlopen = _original_https_urlopen
     urllib3.Retry.increment = _original_retry_increment
@@ -344,19 +356,18 @@ def verify_headers(suspected_headers: Any) -> dict | None:
     return None
 
 
-def get_request_info(
-    method: Any,
-    url: Any,
-    headers: Any,
-) -> RequestDTO:
+def get_request_info(method: Any, url: Any, headers: Any) -> RequestDTO:
     validated_method = verify_method(method)
     validated_url = verify_url(url)
     validated_headers = verify_headers(headers)
     return RequestDTO(
-        url=validated_url, method=validated_method, headers=validated_headers
+        url=validated_url,
+        method=validated_method,
+        headers=validated_headers,
     )
 
 
+# TODO
 # @contextmanager
 # def intercepted_connection(connection):
 #     inject_interceptors_for_connection(connection)

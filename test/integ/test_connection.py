@@ -36,6 +36,12 @@ from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 
 from ..randomize import random_string
+from ..utils.http_test_utils import (
+    assert_disconnect_issued,
+    assert_login_issued,
+    assert_sql_query_issued,
+    assert_telemetry_send_issued,
+)
 from .conftest import RUNNING_ON_GH, create_connection
 
 try:  # pragma: no cover
@@ -1627,9 +1633,10 @@ def test_file_utils_sanity_check():
     assert hasattr(conn._stream_downloader, "download_as_stream")
 
 
-from typing import Any, Generator, NamedTuple
+# TODO: move to the conftest
+from typing import Any, Generator
 
-from ..wiremock.wiremock_utils import WiremockClient  # adjust import path if needed
+from ..wiremock.wiremock_utils import WiremockClient
 
 
 # TODO: move to the conftest
@@ -1695,85 +1702,6 @@ def dynamic_collecting_customizer():
     return DynamicCollectingCustomizer()
 
 
-import re
-
-import pytest
-
-# from snowflake.connector.http_interceptor import RequestDTO
-
-# from ..wiremock.wiremock_utils import WiremockClient
-
-
-def assert_request_matches(request: RequestDTO, method: str, url_regexp: str) -> bool:
-    return request.method.upper() == method.upper() and re.fullmatch(
-        url_regexp, request.url
-    )
-
-
-class ExpectedRequestInfo(NamedTuple):
-    method: str
-    path: Optional[str] = None
-    params_names: Optional[list[str]] = None
-
-
-def assert_request_occurred_after_optional_retries(
-    requests: list[RequestDTO],
-    previous_request_index: int,
-    expected_request: ExpectedRequestInfo,
-) -> int:
-    """
-    Returns the index after matching the expected request,
-    skipping retry duplicates if needed.
-    """
-    expected_method, expected_url_pattern, param_names = expected_request
-
-    i = previous_request_index + 1
-    while i < len(requests):
-        if assert_request_matches(requests[i], expected_method, expected_url_pattern):
-            return i + 1
-        if i > 0 and assert_request_matches(
-            requests[i], requests[i - 1].method, requests[i - 1].url
-        ):
-            i += 1  # skip retry
-        else:
-            raise AssertionError(f"Unexpected request at index {i}: {requests[i]}")
-    raise AssertionError(
-        f"Expected request '{expected_method} {expected_url_pattern}' not found"
-    )
-
-
-from typing import Optional
-
-# from urllib.parse import ParseResult, urlparse
-
-
-def assert_login_issued(
-    suspected_request_index: int, requests: list[RequestDTO]
-) -> int:
-    expected_request_info = ExpectedRequestInfo("POST", r"/session/v1/login-request.*")
-    return assert_request_occurred_after_optional_retries(
-        requests, suspected_request_index, expected_request_info
-    )
-
-
-def assert_query_issued(
-    suspected_request_index: int, requests: list[RequestDTO]
-) -> int:
-    expected_request_info = ExpectedRequestInfo("POST", r"/queries/v1/query-request.*")
-    return assert_request_occurred_after_optional_retries(
-        requests, suspected_request_index, expected_request_info
-    )
-
-
-def assert_disconnect_issued(
-    suspected_request_index: int, requests: list[RequestDTO]
-) -> int:
-    expected_request_info = ExpectedRequestInfo("POST", r"/session\?delete=true")
-    return assert_request_occurred_after_optional_retries(
-        requests, suspected_request_index, expected_request_info
-    )
-
-
 @pytest.mark.parametrize("execute_on_wiremock", (True, False))
 @pytest.mark.skipolddriver
 def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
@@ -1784,63 +1712,69 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
     static_collecting_customizer,
     conn_cnx,
 ) -> None:
+    # TODO: this does not collect retried requests - uses static collector
+
+    # TODO: finish this comment
+    # Detects if interceptor correctly works collecting all the requests that should occur.
+    # Detects if all expected requests occur AND NO OTHER.
+    # If added new steps that should generate http traffic it will detect those and raise an error.
+    # If needed to inspect what requests are occuring use this test or similar and add those asserts
 
     def assert_expected_requests_occurred(conn: SnowflakeConnection) -> None:
-        requests = (
+        requests: Generator[RequestDTO] = (
             invocation for invocation in static_collecting_customizer.invocations
         )
-        index = 0
+        last_request: RequestDTO = None
 
-        index = assert_login_issued(index, requests)
+        last_request = assert_login_issued(requests, last_request=last_request)
+        with conn as connection_context:
 
-        with conn as cnx:
-            cnx.cursor().execute("select 1")
-            index = assert_query_issued(index, requests)
+            cursor = connection_context.cursor().execute("select 1")
+            last_request = assert_sql_query_issued(requests, last_request=last_request)
 
-            cnx.fetchall()  # No HTTP call happens here
-            # You could assert result if desired
+            result = cursor.fetchall()
+            assert len(result) == 1, "Result should contain exactly one row"
+            assert (
+                result[0][0] == 1
+            ), "Result should contain the value 1 in the first row and the first column"
 
-        index = assert_disconnect_issued(index, requests)
+        last_request = assert_telemetry_send_issued(requests, last_request=last_request)
+        last_request = assert_disconnect_issued(requests, last_request=last_request)
 
     if execute_on_wiremock:
-        with request.getfixturevalue("wiremock_client") as local_wiremock_client:
-            local_wiremock_client.import_mapping(
-                wiremock_password_auth_dir / "successful_flow.json"
-            )
-            local_wiremock_client.add_mapping(
-                wiremock_generic_mappings_dir / "select_1_successful.json"
-            )
-            local_wiremock_client.add_mapping(
-                wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
-            )
-            local_wiremock_client.add_mapping(
-                wiremock_generic_mappings_dir / "telemetry.json"
-            )
+        local_wiremock_client = request.getfixturevalue("wiremock_client")
+        local_wiremock_client.import_mapping(
+            wiremock_password_auth_dir / "successful_flow.json"
+        )
+        local_wiremock_client.add_mapping(
+            wiremock_generic_mappings_dir / "select_1_successful.json"
+        )
+        local_wiremock_client.add_mapping(
+            wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+        )
+        local_wiremock_client.add_mapping(
+            wiremock_generic_mappings_dir / "telemetry.json"
+        )
 
-            connection = snowflake.connector.connect(
-                account="testAccount",
-                user="testUser",
-                password="testPassword",
-                host=local_wiremock_client.wiremock_host,
-                port=local_wiremock_client.wiremock_http_port,
-                protocol="http",
-                headers_customizers=[static_collecting_customizer],
-            )
-            with local_wiremock_client:
-                assert_expected_requests_occurred(connection)
-    else:
-        connection = conn_cnx(headers_customizers=[static_collecting_customizer])
+        # TODO: Here already request is sent to establish connection
+        # TODO: add fixture wiremock_sf_conn_cnx
+        connection = snowflake.connector.connect(
+            account="testAccount",
+            user="testUser",
+            password="testPassword",
+            host=local_wiremock_client.wiremock_host,
+            port=local_wiremock_client.wiremock_http_port,
+            protocol="http",
+            headers_customizers=[static_collecting_customizer],
+        )
         assert_expected_requests_occurred(connection)
+    else:
+        # TODO: Here no request is sent yet
+        with conn_cnx(headers_customizers=[static_collecting_customizer]) as connection:
+            assert_expected_requests_occurred(connection)
 
-    # Print actual requests
-    print("Captured requests:")
-    for r in static_collecting_customizer.invocations:
-        print(f"{r.method} {r.url}")
-
-    # Final count
-    assert index == len(
-        requests
-    ), f"Too many requests: expected {index}, got {len(requests)}"
+    # TODO: add here checks if headers added to each request
+    # TODO: e.g. get all requests from wiremock (its endpoint) and chcek if they had headers
     # Perform GET request through Snowflake’s internal session
     # response = rest._session.get(f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/echo-headers")
     # response.raise_for_status()
@@ -1849,6 +1783,3 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
     # Validate that the custom header was added
     # headers = {k.lower(): v for k, v in content.items()}
     # assert any("test-header-value" in v for v in headers.values()), "Custom header not found in response"
-    #
-    # # Check the number of times the customizer was invoked (should match retries)
-    # assert static_collecting_customizer.invocations == 3, f"Expected 3 invocations, got {static_collecting_customizer.invocations}"

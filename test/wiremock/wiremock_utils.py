@@ -76,14 +76,22 @@ class WiremockClient:
         self._wait_for_wiremock()
 
     def _stop_wiremock(self):
-        response = self._wiremock_post(
-            f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/shutdown"
-        )
-        if response.status_code != 200:
-            logger.info("Wiremock shutdown failed, the process will be killed")
+        if self.wiremock_process.poll() is not None:
+            logger.warning("Wiremock process already exited, skipping shutdown")
+            return
+
+        try:
+            response = self._wiremock_post(
+                f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/shutdown"
+            )
+            if response.status_code != 200:
+                logger.info("Wiremock shutdown failed, the process will be killed")
+                self.wiremock_process.kill()
+            else:
+                logger.debug("Wiremock shutdown gracefully")
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Shutdown request failed: {e}. Killing process directly.")
             self.wiremock_process.kill()
-        else:
-            logger.debug("Wiremock shutdown gracefully")
 
     def _wait_for_wiremock(self):
         retry_count = 0
