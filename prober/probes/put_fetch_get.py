@@ -116,6 +116,26 @@ def setup_database(cursor: snowflake.connector.cursor.SnowflakeCursor):
         )
         sys.exit(1)
 
+def setup_warehouse(cursor: snowflake.connector.cursor.SnowflakeCursor, warehouse_name: str):
+    """
+    Sets up the warehouse in Snowflake.
+
+    Args:
+        cursor (snowflake.connector.cursor.SnowflakeCursor): The cursor to execute the SQL command.
+        warehouse_name (str): The name of the warehouse to set up.
+    """
+    try:
+        # Create or use the specified warehouse
+        cursor.execute(f"USE WAREHOUSE {warehouse_name};")
+        print(
+            f"cloudprober_driver_python_setup_warehouse{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+        )
+    except Exception as e:
+        logger.error(f"Error creating warehouse: {e}")
+        print(
+            f"cloudprober_driver_python_setup_warehouse{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+        )
+        sys.exit(1)
 
 def create_data_table(cursor: snowflake.connector.cursor.SnowflakeCursor) -> str:
     """
@@ -329,7 +349,7 @@ def execute_get_command(stage_name: str, conn: snowflake.connector.SnowflakeConn
         stage_name (str): The name of the stage from which the file will be downloaded.
         conn (snowflake.connector.SnowflakeConnection): The connection object to execute the SQL command.
     """
-    download_dir = f"s3://{conn.account}/{stage_name}"
+    download_dir = f"/tmp/{conn.account}/{stage_name}"
 
     try:
         if not os.path.exists(download_dir):
@@ -341,6 +361,7 @@ def execute_get_command(stage_name: str, conn: snowflake.connector.SnowflakeConn
             print(
                 f"cloudprober_driver_python_perform_get{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
             )
+
         else:
             print(
                 f"cloudprober_driver_python_perform_get{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
@@ -388,6 +409,9 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                 schema_name = setup_schema(cur)
                 logger.error("Schema setup complete")
 
+                logger.error("Setting up warehouse")
+                setup_warehouse(cur, conn.warehouse)
+
                 logger.error("Creating stage")
                 stage_name = create_data_stage(cur)
                 logger.error(f"Stage {stage_name} created")
@@ -399,10 +423,6 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                 logger.error("Generating random data")
 
                 file_name = generate_random_data(num_records, f"/tmp/{table_name}.csv")
-
-                # Get the absolute path
-                absolute_path = os.path.abspath(file_name)
-                print(f"Absolute path: {absolute_path}") # DELETE
 
                 logger.error(f"Random data generated in {file_name}")
 
