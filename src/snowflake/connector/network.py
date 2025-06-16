@@ -23,6 +23,15 @@ from snowflake.connector.vendored.urllib3.connectionpool import (
     HTTPSConnectionPool,
 )
 
+try:
+    from snowflake.connector.http_interceptor import (
+        Headers,
+        HttpInterceptor,
+        InterceptOnMixin,
+    )
+except ImportError:
+    pass
+
 from . import ssl_wrap_socket
 from .compat import (
     BAD_GATEWAY,
@@ -189,14 +198,6 @@ USR_PWD_MFA_AUTHENTICATOR = "USERNAME_PASSWORD_MFA"
 PROGRAMMATIC_ACCESS_TOKEN = "PROGRAMMATIC_ACCESS_TOKEN"
 NO_AUTH_AUTHENTICATOR = "NO_AUTH"
 WORKLOAD_IDENTITY_AUTHENTICATOR = "WORKLOAD_IDENTITY"
-
-
-# TODO:
-# from snowflake.connector.http_interceptor import (
-from .http_interceptor import Headers, HttpInterceptor, InterceptOnMixin, RequestDTO
-
-# TODO: remove all dto to Info
-# TODO: add tests
 
 
 def is_retryable_http_code(code: int) -> bool:
@@ -881,12 +882,6 @@ class SnowflakeRestful(InterceptOnMixin):
         include_retry_reason = self._connection._enable_retry_reason_in_query_response
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
-        request_info = RequestDTO(url=full_url, headers=headers, method=method)
-        self._intercept_on(
-            hook=HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST,
-            request=request_info,
-        )
-
         with self._use_requests_session(full_url) as session:
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,
@@ -899,18 +894,11 @@ class SnowflakeRestful(InterceptOnMixin):
 
             retry_ctx.set_start_time()
             while True:
-                # # request_info.headers.update(headers)
-                # self._intercept_on(hook=HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request=request_info)
-
                 ret = self._request_exec_wrapper(
                     session, method, full_url, headers, data, retry_ctx, **kwargs
                 )
                 if ret is not None:
                     return ret
-
-    # def _intercept_on(self, hook: HttpInterceptor.InterceptionHook, request: RequestDTO) -> None:
-    #     for interceptor in self._connection._request_interceptors:
-    #         interceptor.intercept_on(hook, request)
 
     @staticmethod
     def add_request_guid(full_url: str) -> str:
@@ -1123,14 +1111,6 @@ class SnowflakeRestful(InterceptOnMixin):
             # socket timeout is constant. You should be able to receive
             # the response within the time. If not, ConnectReadTimeout or
             # ReadTimeout is raised.
-            # TODO: here
-            # tODO: check how does it impact timeouts - is it in their scope
-            # request_info.headers.update(headers)
-            request_info = RequestDTO(url=full_url, headers=headers, method=method)
-            self._intercept_on(
-                hook=HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY,
-                request=request_info,
-            )
 
             raw_ret = session.request(
                 method=method,
