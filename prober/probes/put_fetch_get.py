@@ -68,16 +68,16 @@ def get_driver_version() -> str:
     """
     return snowflake.connector.__version__
 
-def setup_schema(cursor: snowflake.connector.cursor.SnowflakeCursor):
+def setup_schema(cursor: snowflake.connector.cursor.SnowflakeCursor, schema_name: str):
     """
     Sets up the schema in Snowflake.
 
     Args:
         cursor (snowflake.connector.cursor.SnowflakeCursor): The cursor to execute the SQL command.
+        schema_name (str): The name of the schema to set up.
     """
     try:
-        schema_name = random_string(10, "test_schema_")
-        cursor.execute(f"CREATE OR REPLACE SCHEMA {schema_name};")
+        cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name};")
         cursor.execute(f"USE SCHEMA {schema_name}")
         if cursor.fetchone():
             print(
@@ -92,17 +92,16 @@ def setup_schema(cursor: snowflake.connector.cursor.SnowflakeCursor):
         sys.exit(1)
 
 
-def setup_database(cursor: snowflake.connector.cursor.SnowflakeCursor):
+def setup_database(cursor: snowflake.connector.cursor.SnowflakeCursor, database_name: str):
     """
     Sets up the database in Snowflake.
 
     Args:
         cursor (snowflake.connector.cursor.SnowflakeCursor): The cursor to execute the SQL command.
+        database_name (str): The name of the database to set up.
     """
     try:
-        database_name = random_string(10, "test_database_")
-        cursor.execute(f"CREATE OR REPLACE DATABASE {database_name};")
-
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {database_name};")
         cursor.execute(f"USE DATABASE {database_name};")
         if cursor.fetchone():
             print(
@@ -125,7 +124,6 @@ def setup_warehouse(cursor: snowflake.connector.cursor.SnowflakeCursor, warehous
         warehouse_name (str): The name of the warehouse to set up.
     """
     try:
-        # Create or use the specified warehouse
         cursor.execute(f"CREATE WAREHOUSE IF NOT EXISTS {warehouse_name} WAREHOUSE_SIZE='X-SMALL';")
         cursor.execute(f"USE WAREHOUSE {warehouse_name};")
         print(
@@ -146,7 +144,7 @@ def create_data_table(cursor: snowflake.connector.cursor.SnowflakeCursor) -> str
         str: The name of the created table.
     """
     try:
-        table_name = random_string(7, "test_data_")
+        table_name = random_string(10, "test_data_")
         create_table_query = f"""
         CREATE OR REPLACE TABLE {table_name} (
             id INT,
@@ -183,7 +181,7 @@ def create_data_stage(cursor: snowflake.connector.cursor.SnowflakeCursor) -> str
         str: The name of the created stage.
     """
     try:
-        stage_name = random_string(7, "test_data_stage_")
+        stage_name = random_string(10, "test_data_stage_")
         create_stage_query = f"CREATE OR REPLACE STAGE {stage_name};"
 
         cursor.execute(create_stage_query)
@@ -403,11 +401,11 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
             with conn.cursor() as cur:
 
                 logger.error("Setting up database")
-                database_name = setup_database(cur)
+                database_name = setup_database(cur, conn.database)
                 logger.error("Database setup complete")
 
                 logger.error("Setting up schema")
-                schema_name = setup_schema(cur)
+                schema_name = setup_schema(cur, conn.schema)
                 logger.error("Schema setup complete")
 
                 logger.error("Setting up warehouse")
@@ -446,10 +444,10 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                 logger.error("Performing GET operation")
                 execute_get_command(stage_name, conn)
                 logger.error("File downloaded from stage to local directory")
-                sys.exit(0)
 
     except Exception as e:
         logger.error(f"Error during PUT_FETCH_GET operation: {e}")
+        sys.exit(1)
 
     finally:
         try:
@@ -462,7 +460,6 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                     cur.execute(f"USE SCHEMA {schema_name}")
                     cur.execute(f"REMOVE @{stage_name}")
                     cur.execute(f"DROP TABLE {table_name}")
-                    cur.execute(f"DROP DATABASE {database_name}")
             logger.error("Resources cleaned up successfully")
             print(
                 f"cloudprober_driver_python_cleanup_resources{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
