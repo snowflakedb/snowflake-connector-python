@@ -26,7 +26,7 @@ from .constants import (
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
-from .http_interceptor import HttpInterceptor, InterceptOnMixin, RequestDTO
+from .http_interceptor import HttpInterceptor, InterceptOnMixin
 from .vendored import requests
 from .vendored.requests import ConnectionError, Timeout
 from .vendored.urllib3 import HTTPResponse
@@ -314,38 +314,14 @@ class SnowflakeStorageClient(ABC, InterceptOnMixin):
 
         if self.retry_count[retry_id] < self.max_retry:
             url, rest_kwargs = get_request_args()
-            headers = rest_kwargs.get("headers")
-
-            request_info = RequestDTO(url=url, method=rest_call, headers=headers)
-            self._intercept_on(
-                HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request_info
-            )
-
             request_args_generator = generate_values_from_beginning(
                 url, rest_kwargs, original_function=get_request_args
             )
 
-            # ...TODO
-            # TODO: this url is wrong
-            # request = RequestDTO(url=url, method=rest_call, headers=rest_kwargs.get('headers')
-            # self._intercept_on(HttpInterceptor.InterceptionHook.ONCE_BEFORE_REQUEST, request)
-        # ...
-
-        # TODO: here add
         while self.retry_count[retry_id] < self.max_retry:
-            #
-            # if self.retry_count[retry_id] == 0:
-            #     url, rest_kwargs = get_request_args()
-
             logger.debug(f"retry #{self.retry_count[retry_id]}")
             cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = next(request_args_generator)
-
-            headers = rest_kwargs.get("headers")
-            request_info = RequestDTO(url=url, method=verb, headers=headers)
-            self._intercept_on(
-                HttpInterceptor.InterceptionHook.BEFORE_EACH_RETRY, request_info
-            )
 
             rest_kwargs["timeout"] = (REQUEST_CONNECTION_TIMEOUT, REQUEST_READ_TIMEOUT)
             try:
