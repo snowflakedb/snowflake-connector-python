@@ -126,12 +126,13 @@ def setup_warehouse(cursor: snowflake.connector.cursor.SnowflakeCursor, warehous
     """
     try:
         # Create or use the specified warehouse
+        cursor.execute(f"CREATE WAREHOUSE IF NOT EXISTS {warehouse_name} WAREHOUSE_SIZE='X-SMALL';")
         cursor.execute(f"USE WAREHOUSE {warehouse_name};")
         print(
             f"cloudprober_driver_python_setup_warehouse{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
         )
     except Exception as e:
-        logger.error(f"Error creating warehouse: {e}")
+        logger.error(f"Error setup warehouse: {e}")
         print(
             f"cloudprober_driver_python_setup_warehouse{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
         )
