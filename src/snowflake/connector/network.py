@@ -500,9 +500,11 @@ class SnowflakeRestful:
             )
 
             TraceContextTextMapPropagator().inject(headers)
+        except ModuleNotFoundError:
+            pass
         except Exception:
             logger.debug(
-                "Opentelemtry otel injection failed",
+                "Opentelemetry otel injection failed",
                 exc_info=True,
             )
         if self._connection.service_name:
