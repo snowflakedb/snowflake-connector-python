@@ -2,10 +2,11 @@ import csv
 import os
 import random
 import sys
+
 from faker import Faker
 from probes.logging_config import initialize_logger
 from probes.login import connect
-from probes.registry import prober_function  # noqa
+from probes.registry import prober_function
 
 import snowflake.connector
 from snowflake.connector.util_text import random_string
@@ -49,7 +50,8 @@ def generate_random_data(num_records: int, file_path: str) -> str:
         logger.error(f"Error generating random data: {e}")
         sys.exit(1)
 
-def get_python_version() ->str:
+
+def get_python_version() -> str:
     """
     Returns the Python version being used.
 
@@ -67,6 +69,7 @@ def get_driver_version() -> str:
         str: The version of the Snowflake connector.
     """
     return snowflake.connector.__version__
+
 
 def setup_schema(cursor: snowflake.connector.cursor.SnowflakeCursor, schema_name: str):
     """
@@ -92,7 +95,9 @@ def setup_schema(cursor: snowflake.connector.cursor.SnowflakeCursor, schema_name
         sys.exit(1)
 
 
-def setup_database(cursor: snowflake.connector.cursor.SnowflakeCursor, database_name: str):
+def setup_database(
+    cursor: snowflake.connector.cursor.SnowflakeCursor, database_name: str
+):
     """
     Sets up the database in Snowflake.
 
@@ -115,7 +120,10 @@ def setup_database(cursor: snowflake.connector.cursor.SnowflakeCursor, database_
         )
         sys.exit(1)
 
-def setup_warehouse(cursor: snowflake.connector.cursor.SnowflakeCursor, warehouse_name: str):
+
+def setup_warehouse(
+    cursor: snowflake.connector.cursor.SnowflakeCursor, warehouse_name: str
+):
     """
     Sets up the warehouse in Snowflake.
 
@@ -124,7 +132,9 @@ def setup_warehouse(cursor: snowflake.connector.cursor.SnowflakeCursor, warehous
         warehouse_name (str): The name of the warehouse to set up.
     """
     try:
-        cursor.execute(f"CREATE WAREHOUSE IF NOT EXISTS {warehouse_name} WAREHOUSE_SIZE='X-SMALL';")
+        cursor.execute(
+            f"CREATE WAREHOUSE IF NOT EXISTS {warehouse_name} WAREHOUSE_SIZE='X-SMALL';"
+        )
         cursor.execute(f"USE WAREHOUSE {warehouse_name};")
         print(
             f"cloudprober_driver_python_setup_warehouse{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
@@ -135,6 +145,7 @@ def setup_warehouse(cursor: snowflake.connector.cursor.SnowflakeCursor, warehous
             f"cloudprober_driver_python_setup_warehouse{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
         )
         sys.exit(1)
+
 
 def create_data_table(cursor: snowflake.connector.cursor.SnowflakeCursor) -> str:
     """
@@ -448,12 +459,9 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
     except Exception as e:
         logger.error(f"Error during PUT_FETCH_GET operation: {e}")
         sys.exit(1)
-
     finally:
         try:
-        # Cleanup: Remove data from the stage and delete table
             logger.error("Cleaning up resources")
-
             with connect(connection_parameters) as conn:
                 with conn.cursor() as cur:
                     cur.execute(f"USE DATABASE {database_name}")
