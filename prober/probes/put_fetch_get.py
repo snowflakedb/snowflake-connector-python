@@ -446,9 +446,10 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                 logger.error("Performing GET operation")
                 execute_get_command(stage_name, conn)
                 logger.error("File downloaded from stage to local directory")
+                sys.exit(0)
+
     except Exception as e:
         logger.error(f"Error during PUT_FETCH_GET operation: {e}")
-        sys.exit(1)
 
     finally:
         try:
@@ -464,13 +465,12 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                     cur.execute(f"DROP DATABASE {database_name}")
             logger.error("Resources cleaned up successfully")
             print(
-                f"cloudprober_driver_python_cleanupo_resources{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+                f"cloudprober_driver_python_cleanup_resources{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
             )
-            sys.exit(0)
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
             print(
-                f"cloudprober_driver_python_cleanupo_resources{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+                f"cloudprober_driver_python_cleanup_resources{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
             )
             sys.exit(1)
 
