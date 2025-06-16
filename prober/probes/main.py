@@ -1,6 +1,8 @@
 import argparse
 import logging
+import sys
 
+from probes import login, put_fetch_get  # noqa
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
 
@@ -19,11 +21,25 @@ def main():
     parser.add_argument("--account", required=True, help="Account")
     parser.add_argument("--schema", required=True, help="Schema")
     parser.add_argument("--warehouse", required=True, help="Warehouse")
+    parser.add_argument("--database", required=True, help="Database")
     parser.add_argument("--user", required=True, help="Username")
-    parser.add_argument("--private_key", required=True, help="Private key")
+    parser.add_argument(
+        "--authenticator",
+        required=True,
+        help="Authenticator (e.g., KEY_PAIR_AUTHENTICATOR)",
+    )
+    parser.add_argument(
+        "--private_key_file",
+        required=True,
+        help="Private key file in DER format base64-encoded and '/' -> '_', '+' -> '-' replacements",
+    )
 
     # Parse arguments
     args = parser.parse_args()
+
+    private_key = (
+        open(args.private_key_file).read().strip().replace("_", "/").replace("-", "+")
+    )
 
     connection_params = {
         "host": args.host,
@@ -32,17 +48,24 @@ def main():
         "account": args.account,
         "schema": args.schema,
         "warehouse": args.warehouse,
+        "database": args.database,
         "user": args.user,
-        "private_key": args.private_key,
+        "authenticator": args.authenticator,
+        "private_key": private_key,
     }
 
-    for function_name, function in PROBES_FUNCTIONS.items():
+    if args.scope not in PROBES_FUNCTIONS:
+        logging.error(
+            f"Invalid scope: {args.scope}. Available scopes: {list(PROBES_FUNCTIONS.keys())}"
+        )
+        sys.exit(1)
+    else:
+        logging.info(f"Running probe for scope: {args.scope}")
         try:
-            logging.info("BBB")
-            logging.error(f"Running probe: {function_name}")
-            function(connection_params)
+            PROBES_FUNCTIONS[args.scope](connection_params)
         except Exception as e:
-            logging.error(f"Error running probe {function_name}: {e}")
+            logging.error(f"Error running probe {args.scope}: {e}")
+            sys.exit(1)
 
 
 if __name__ == "__main__":
