@@ -453,6 +453,8 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
     finally:
         try:
         # Cleanup: Remove data from the stage and delete table
+            logger.error("Cleaning up resources")
+
             with connect(connection_parameters) as conn:
                 with conn.cursor() as cur:
                     cur.execute(f"USE DATABASE {database_name}")
@@ -460,9 +462,16 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                     cur.execute(f"REMOVE @{stage_name}")
                     cur.execute(f"DROP TABLE {table_name}")
                     cur.execute(f"DROP DATABASE {database_name}")
+            logger.error("Resources cleaned up successfully")
+            print(
+                f"cloudprober_driver_python_cleanupo_resources{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+            )
             sys.exit(0)
         except Exception as e:
             logger.error(f"Error during cleanup: {e}")
+            print(
+                f"cloudprober_driver_python_cleanupo_resources{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+            )
             sys.exit(1)
 
 
