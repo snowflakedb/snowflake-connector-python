@@ -48,6 +48,14 @@ class WiremockClient:
             self.wiremock_jar_path.exists()
         ), f"{self.wiremock_jar_path} does not exist"
 
+    @property
+    def http_host_with_port(self) -> str:
+        return f"http://{self.wiremock_host}:{self.wiremock_http_port}"
+
+    @property
+    def http_placeholders(self) -> dict[str, str]:
+        return {"{{WIREMOCK_HTTP_HOST_WITH_PORT}}": self.http_host_with_port}
+
     def _start_wiremock(self):
         self.wiremock_http_port = self._find_free_port(
             forbidden_ports=self.forbidden_ports,
@@ -149,19 +157,36 @@ class WiremockClient:
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
         return requests.post(endpoint, data=body, headers=headers)
 
-    def import_mapping(self, mapping: Union[str, dict, pathlib.Path]):
+    def _replace_placeholders_in_mapping(
+        self, mapping_str: str, placeholders: Optional[dict[str, object]]
+    ) -> str:
+        if not placeholders:
+            return mapping_str
+        for key, value in placeholders.items():
+            mapping_str = mapping_str.replace(str(key), str(value))
+        return mapping_str
+
+    def import_mapping(
+        self,
+        mapping: Union[str, dict, pathlib.Path],
+        placeholders: Optional[dict[str, object]] = None,
+    ):
         self._reset_wiremock()
-        import_mapping_endpoint = f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/mappings/import"
+        import_mapping_endpoint = f"{self.http_host_with_port}/__admin/mappings/import"
         mapping_str = _get_mapping_str(mapping)
+        mapping_str = self._replace_placeholders_in_mapping(mapping_str, placeholders)
         response = self._wiremock_post(import_mapping_endpoint, mapping_str)
         if response.status_code != requests.codes.ok:
             raise RuntimeError("Failed to import mapping")
 
-    def add_mapping(self, mapping: Union[str, dict, pathlib.Path]):
-        add_mapping_endpoint = (
-            f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/mappings"
-        )
+    def add_mapping(
+        self,
+        mapping: Union[str, dict, pathlib.Path],
+        placeholders: Optional[dict[str, object]] = None,
+    ):
+        add_mapping_endpoint = f"{self.http_host_with_port}/__admin/mappings"
         mapping_str = _get_mapping_str(mapping)
+        mapping_str = self._replace_placeholders_in_mapping(mapping_str, placeholders)
         response = self._wiremock_post(add_mapping_endpoint, mapping_str)
         if response.status_code != requests.codes.created:
             raise RuntimeError("Failed to add mapping")

@@ -1,16 +1,12 @@
 import pathlib
-from typing import Generator
+from typing import Deque
 
 import pytest
 
 from snowflake.connector import SnowflakeConnection
 
-from ..test_utils.http_test_utils import (
-    assert_disconnect_issued,
-    assert_login_issued,
-    assert_sql_query_issued,
-    assert_telemetry_send_issued,
-)
+from ..test_utils.http_test_utils import RequestTracker
+from .test_large_result_set import ingest_data  # NOQA
 
 try:
     from snowflake.connector.http_interceptor import RequestDTO
@@ -21,6 +17,11 @@ except ImportError:  # Keep olddrivertest from breaking
 @pytest.fixture(scope="session")
 def wiremock_auth_dir(wiremock_mapping_dir) -> pathlib.Path:
     return wiremock_mapping_dir / "auth"
+
+
+@pytest.fixture(scope="session")
+def wiremock_queries_dir(wiremock_mapping_dir) -> pathlib.Path:
+    return wiremock_mapping_dir / "queries"
 
 
 @pytest.fixture(scope="session")
@@ -35,6 +36,7 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
     execute_on_wiremock,
     wiremock_password_auth_dir,
     wiremock_generic_mappings_dir,
+    wiremock_queries_dir,
     static_collecting_customizer,
     conn_cnx,
     conn_cnx_wiremock,
@@ -42,22 +44,21 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
     # TODO: this does not collect retried requests - uses static collector
 
     # TODO: finish this comment
+    # By covering in this way (wiremock + real server) the request we make sure that we will detect if in the future new requests are added and wiremock does not reflect them
+    # Prevents duplication and makes sure all requests are covered
     # Detects if interceptor correctly works collecting all the requests that should occur.
     # Detects if all expected requests occur AND NO OTHER.
     # If added new steps that should generate http traffic it will detect those and raise an error.
     # If needed to inspect what requests are occuring use this test or similar and add those asserts
 
     def assert_expected_requests_occurred(conn: SnowflakeConnection) -> None:
-        requests: Generator[RequestDTO] = (
-            invocation for invocation in static_collecting_customizer.invocations
-        )
-        last_request: RequestDTO = None
+        requests: Deque[RequestDTO] = static_collecting_customizer.invocations
+        tracker = RequestTracker(requests)
 
         with conn as connection_context:
-            last_request = assert_login_issued(requests, last_request=last_request)
-
+            tracker.assert_login_issued()
             cursor = connection_context.cursor().execute("select 1")
-            last_request = assert_sql_query_issued(requests, last_request=last_request)
+            tracker.assert_sql_query_issued()
 
             result = cursor.fetchall()
             assert len(result) == 1, "Result should contain exactly one row"
@@ -65,8 +66,8 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
                 result[0][0] == 1
             ), "Result should contain the value 1 in the first row and the first column"
 
-        last_request = assert_telemetry_send_issued(requests, last_request=last_request)
-        last_request = assert_disconnect_issued(requests, last_request=last_request)
+        tracker.assert_telemetry_send_issued()
+        tracker.assert_disconnect_issued()
 
     if execute_on_wiremock:
         local_wiremock_client = request.getfixturevalue("wiremock_client")
@@ -74,7 +75,7 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
             wiremock_password_auth_dir / "successful_flow.json"
         )
         local_wiremock_client.add_mapping(
-            wiremock_generic_mappings_dir / "select_1_successful.json"
+            wiremock_queries_dir / "select_1_successful.json"
         )
         local_wiremock_client.add_mapping(
             wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
@@ -84,7 +85,7 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
         )
 
         connection = conn_cnx_wiremock(
-            headers_customizers=[static_collecting_customizer],
+            headers_customizers=[static_collecting_customizer]
         )
     else:
         connection = conn_cnx(headers_customizers=[static_collecting_customizer])
@@ -107,3 +108,71 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
 #     EXCLUDED_REGEXPS = [..]
 
 # def test_
+
+
+@pytest.mark.parametrize("execute_on_wiremock", (True, False))
+@pytest.mark.skipolddriver
+def test_interceptor_detects_expected_requests_in_successful_flow_with_chunks(
+    request,
+    execute_on_wiremock,
+    wiremock_password_auth_dir,
+    wiremock_generic_mappings_dir,
+    wiremock_queries_dir,
+    static_collecting_customizer,
+    conn_cnx,
+    conn_cnx_wiremock,
+    db_parameters,
+    default_db_wiremock_parameters,
+) -> None:
+
+    def assert_expected_requests_occurred(
+        conn: SnowflakeConnection, expected_large_table_name: str
+    ) -> None:
+        requests: Deque[RequestDTO] = static_collecting_customizer.invocations
+        tracker = RequestTracker(requests)
+
+        with conn as connection_context:
+            tracker.assert_login_issued()
+            sql = f"select * from {expected_large_table_name} order by 1"
+            cursor = connection_context.cursor().execute(sql)
+            tracker.assert_sql_query_issued()
+            cursor.fetchall()
+            tracker.assert_get_chunk_issued()
+
+        tracker.assert_telemetry_send_issued()
+        tracker.assert_disconnect_issued()
+
+    if execute_on_wiremock:
+        local_wiremock_client = request.getfixturevalue("wiremock_client")
+        local_wiremock_client.import_mapping(
+            wiremock_password_auth_dir / "successful_flow.json"
+        )
+        local_wiremock_client.add_mapping(
+            wiremock_queries_dir / "select_large_request_successful.json",
+            placeholders=local_wiremock_client.http_placeholders,
+        )
+        local_wiremock_client.add_mapping(
+            wiremock_queries_dir / "chunk_1.json",
+            placeholders=local_wiremock_client.http_placeholders,
+        )
+        local_wiremock_client.add_mapping(
+            wiremock_queries_dir / "chunk_2.json",
+            placeholders=local_wiremock_client.http_placeholders,
+        )
+        local_wiremock_client.add_mapping(
+            wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+        )
+        local_wiremock_client.add_mapping(
+            wiremock_generic_mappings_dir / "telemetry.json"
+        )
+
+        connection = conn_cnx_wiremock(
+            headers_customizers=[static_collecting_customizer]
+        )
+        large_table_name = default_db_wiremock_parameters["name"]
+    else:
+        request.getfixturevalue("ingest_data")
+        connection = conn_cnx(headers_customizers=[static_collecting_customizer])
+        large_table_name = db_parameters["name"]
+
+    assert_expected_requests_occurred(connection, large_table_name)

@@ -37,8 +37,6 @@ class RequestDTO(NamedTuple):
     url: str | bytes
     method: str
     headers: Headers
-    # TODO: can be added if custom logic injection wanted - but should be enriched with checks if it doesnt overwrite other args
-    # kwargs: dict = {}
 
 
 class ConflictDTO(NamedTuple):

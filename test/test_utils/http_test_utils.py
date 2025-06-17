@@ -1,12 +1,13 @@
 import re
-from typing import Generator, Iterable, NamedTuple, Optional
+from collections import deque
+from typing import Deque, FrozenSet, Iterable, NamedTuple, Optional
 
 from snowflake.connector.http_interceptor import HeadersCustomizer, RequestDTO
 
 
 class CollectingCustomizer(HeadersCustomizer):
     def __init__(self):
-        self.invocations = []
+        self.invocations = deque()
 
     def applies_to(self, request: RequestDTO) -> bool:
         return True
@@ -29,7 +30,6 @@ class DynamicCollectingCustomizer(CollectingCustomizer):
 class ExpectedRequestInfo(NamedTuple):
     method: str
     url_regexp: Optional[str] = None
-    params_names: Optional[list[str]] = None
 
     # TODO: pass parameters as well as an argument
     def is_matching(self, request: object) -> bool:
@@ -41,116 +41,81 @@ class ExpectedRequestInfo(NamedTuple):
             return (
                 request.method == self.method.upper()
                 and request.url_regexp == self.url_regexp
-                and request.params_names == self.params_names
             )
-
         return False
 
 
-DEFAULT_REQUESTS_TO_IGNORE_IN_CHECKS = frozenset(
-    [
-        ExpectedRequestInfo("GET", url_regexp=".*/__admin/health"),
-    ]
-)
+class RequestTracker:
+    DEFAULT_REQUESTS_TO_IGNORE_IN_CHECKS: FrozenSet[ExpectedRequestInfo] = frozenset(
+        [
+            ExpectedRequestInfo("GET", r".*/__admin/health"),
+        ]
+    )
 
+    def __init__(
+        self,
+        requests: Deque[RequestDTO],
+        ignored: Optional[
+            Iterable[ExpectedRequestInfo]
+        ] = DEFAULT_REQUESTS_TO_IGNORE_IN_CHECKS,
+    ):
+        self.requests = requests
+        self.ignored = ignored or ()
+        self._last_request: Optional[RequestDTO] = None
+        self._last_expected_info: Optional[ExpectedRequestInfo] = None
 
-def assert_request_occurred_after_optional_retries(
-    requests: Generator[RequestDTO, None, None],
-    last_request: Optional[RequestDTO],
-    expected_request: ExpectedRequestInfo,
-    requests_to_ignore: Optional[
-        Iterable[ExpectedRequestInfo]
-    ] = DEFAULT_REQUESTS_TO_IGNORE_IN_CHECKS,
-) -> RequestDTO:
-    """
-    Returns the index after matching the expected request,
-    skipping retry duplicates if needed.
-    """
+    def _should_ignore(self, request: RequestDTO) -> bool:
+        return any(ignored_info.is_matching(request) for ignored_info in self.ignored)
 
-    requests_to_ignore = requests_to_ignore or ()
-    for request in requests:
-        if any(
-            ignored_request.is_matching(request)
-            for ignored_request in requests_to_ignore
-        ):
-            continue
+    def assert_request_occurred_after_optional_retries(
+        self, expected: ExpectedRequestInfo
+    ) -> RequestDTO:
+        while self.requests:
+            request = self.requests.popleft()
+            if self._should_ignore(request):
+                continue
 
-        if expected_request.is_matching(request):
-            return request
+            if expected.is_matching(request):
+                self._last_request = request
+                self._last_expected_info = expected
+                return request
 
-        if last_request is not None and expected_request.is_matching(last_request):
-            last_request = request  # skip retry
-        else:
+            if self._last_expected_info and self._last_expected_info.is_matching(
+                request
+            ):
+                self._last_request = request  # skip retry
+                continue
+
             raise AssertionError(f"Unexpected request: {request}")
 
-    raise AssertionError(
-        f"Expected request '{expected_request.method} {expected_request.url_regexp}' not found"
-    )
+        raise AssertionError(
+            f"Expected request '{expected.method} {expected.url_regexp}' not found"
+        )
 
+    # Proxy helpers
+    def assert_login_issued(self) -> RequestDTO:
+        return self.assert_request_occurred_after_optional_retries(
+            ExpectedRequestInfo("POST", r".*/session/v1/login-request.*")
+        )
 
-def assert_login_issued(
-    requests: Generator[RequestDTO, None, None],
-    last_request: Optional[RequestDTO],
-    requests_to_ignore: Optional[
-        Iterable[ExpectedRequestInfo]
-    ] = DEFAULT_REQUESTS_TO_IGNORE_IN_CHECKS,
-) -> int:
-    expected_request_info = ExpectedRequestInfo(
-        "POST", r".*/session/v1/login-request(\?.*)?"
-    )
-    return assert_request_occurred_after_optional_retries(
-        requests,
-        last_request=last_request,
-        expected_request=expected_request_info,
-        requests_to_ignore=requests_to_ignore,
-    )
+    def assert_sql_query_issued(self) -> RequestDTO:
+        return self.assert_request_occurred_after_optional_retries(
+            ExpectedRequestInfo("POST", r".*/queries/v1/query-request.*")
+        )
 
+    def assert_telemetry_send_issued(self) -> RequestDTO:
+        return self.assert_request_occurred_after_optional_retries(
+            ExpectedRequestInfo("POST", r".*/telemetry/send.*")
+        )
 
-def assert_sql_query_issued(
-    requests: Generator[RequestDTO, None, None],
-    last_request: Optional[RequestDTO],
-    requests_to_ignore: Optional[
-        Iterable[ExpectedRequestInfo]
-    ] = DEFAULT_REQUESTS_TO_IGNORE_IN_CHECKS,
-) -> int:
-    expected_request_info = ExpectedRequestInfo(
-        "POST", r".*/queries/v1/query-request(\?.*)?"
-    )
-    return assert_request_occurred_after_optional_retries(
-        requests,
-        last_request=last_request,
-        expected_request=expected_request_info,
-        requests_to_ignore=requests_to_ignore,
-    )
+    def assert_disconnect_issued(self) -> RequestDTO:
+        return self.assert_request_occurred_after_optional_retries(
+            ExpectedRequestInfo("POST", r".*/session\?delete=true")
+        )
 
-
-def assert_telemetry_send_issued(
-    requests: Generator[RequestDTO, None, None],
-    last_request: Optional[RequestDTO],
-    requests_to_ignore: Optional[
-        Iterable[ExpectedRequestInfo]
-    ] = DEFAULT_REQUESTS_TO_IGNORE_IN_CHECKS,
-) -> int:
-    expected_request_info = ExpectedRequestInfo("POST", r".*/telemetry/send(\?.*)?")
-    return assert_request_occurred_after_optional_retries(
-        requests,
-        last_request=last_request,
-        expected_request=expected_request_info,
-        requests_to_ignore=requests_to_ignore,
-    )
-
-
-def assert_disconnect_issued(
-    requests: Generator[RequestDTO, None, None],
-    last_request: Optional[RequestDTO],
-    requests_to_ignore: Optional[
-        Iterable[ExpectedRequestInfo]
-    ] = DEFAULT_REQUESTS_TO_IGNORE_IN_CHECKS,
-) -> int:
-    expected_request_info = ExpectedRequestInfo("POST", r".*/session\?delete=true")
-    return assert_request_occurred_after_optional_retries(
-        requests,
-        last_request=last_request,
-        expected_request=expected_request_info,
-        requests_to_ignore=requests_to_ignore,
-    )
+    def assert_get_chunk_issued(self) -> RequestDTO:
+        return self.assert_request_occurred_after_optional_retries(
+            ExpectedRequestInfo(
+                "GET", r".*amazonaws.*/stage/results/.*/main/data.*\?.*"
+            )
+        )

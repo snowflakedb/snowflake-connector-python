@@ -1,4 +1,5 @@
 import pathlib
+import uuid
 from contextlib import contextmanager
 from functools import partial
 from typing import Any, Callable, ContextManager, Generator, Union
@@ -30,14 +31,16 @@ def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
 
 @pytest.fixture
 def default_db_wiremock_parameters(wiremock_client: WiremockClient) -> dict[str, Any]:
-    return {
+    db_params = {
         "account": "testAccount",
         "user": "testUser",
         "password": "testPassword",
         "host": wiremock_client.wiremock_host,
         "port": wiremock_client.wiremock_http_port,
         "protocol": "http",
+        "name": "python_tests_" + str(uuid.uuid4()).replace("-", "_"),
     }
+    return db_params
 
 
 @contextmanager
