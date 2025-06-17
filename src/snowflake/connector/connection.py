@@ -113,7 +113,6 @@ from .http_interceptor import (
     HeadersCustomizer,
     HeadersCustomizerInterceptor,
     HttpInterceptor,
-    inject_interceptors_for_connection,
 )
 from .log_configuration import EasyLoggingConfigPython
 from .network import (
@@ -128,6 +127,9 @@ from .network import (
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
     WORKLOAD_IDENTITY_AUTHENTICATOR,
+    InterceptingAdapter,
+    InterceptingAdapterFactory,
+    ProxySupportAdapter,
     ReauthenticationRequest,
     SnowflakeRestful,
 )
@@ -886,6 +888,8 @@ class SnowflakeConnection:
     def headers_customizers(self, value: MutableSequence[HeadersCustomizer]) -> None:
         self._headers_customizers = value
         # TODO: zrobic to jako dict po typach interceptorów
+        # TODO: remove all dto to Info
+        # TODO: add tests
         request_interceptors = self._create_interceptor_for_headers_customizers(value)
         self._request_interceptors = (
             [
@@ -1476,15 +1480,22 @@ class SnowflakeConnection:
                     self._headers_customizers
                 )
             )
-            self._request_interceptors = (
+            request_interceptors = (
                 [
                     header_customizer_interceptor,
                 ]
                 if header_customizer_interceptor
                 else []
             )
-            inject_interceptors_for_connection(connection=self)
+            InterceptingAdapterFactory.register_for_connection(
+                connection=self,
+                adapter_cls=InterceptingAdapter,
+                interceptors=request_interceptors,
+            )
         else:
+            InterceptingAdapterFactory.register_for_connection(
+                connection=self, adapter_cls=ProxySupportAdapter
+            )
             self._request_interceptors = []
 
         if self._headers_customizers:

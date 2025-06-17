@@ -10,27 +10,29 @@ import logging
 import re
 import time
 import uuid
+import weakref
 from collections import OrderedDict
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Generator, MutableSequence
+from typing import TYPE_CHECKING, Any, Generator, MutableSequence, NamedTuple
 
 import OpenSSL.SSL
-
-from snowflake.connector.secret_detector import SecretDetector
-from snowflake.connector.vendored.requests.models import PreparedRequest
-from snowflake.connector.vendored.urllib3.connectionpool import (
-    HTTPConnectionPool,
-    HTTPSConnectionPool,
-)
 
 try:
     from snowflake.connector.http_interceptor import (
         Headers,
         HttpInterceptor,
         InterceptOnMixin,
+        RequestDTO,
     )
 except ImportError:
     pass
+from snowflake.connector.secret_detector import SecretDetector
+from snowflake.connector.vendored import requests
+from snowflake.connector.vendored.requests.models import PreparedRequest
+from snowflake.connector.vendored.urllib3.connectionpool import (
+    HTTPConnectionPool,
+    HTTPSConnectionPool,
+)
 
 from . import ssl_wrap_socket
 from .compat import (
@@ -104,7 +106,6 @@ from .time_util import (
     get_time_millis,
 )
 from .tool.probe_connection import probe_connection
-from .vendored import requests
 from .vendored.requests import Response, Session
 from .vendored.requests.adapters import HTTPAdapter
 from .vendored.requests.auth import AuthBase
@@ -255,6 +256,62 @@ def is_login_request(url: str) -> bool:
     return "login-request" in parse_url(url).path
 
 
+class AdapterConfig(NamedTuple):
+    adapter_cls: type[requests.adapters.HTTPAdapter]
+    partial_kwargs: dict[str, Any]
+
+
+class InterceptingAdapterFactory:
+    _global_adapter_class: type[requests.adapters.HTTPAdapter] | None = None
+    _global_partial_kwargs: dict[str, Any] = {}
+
+    # Weak-key map of connection -> AdapterConfig
+    _per_connection_adapter_config: weakref.WeakKeyDictionary = (
+        weakref.WeakKeyDictionary()
+    )
+
+    @classmethod
+    def register_global(
+        cls, adapter_cls: type[requests.adapters.HTTPAdapter], **partial_kwargs
+    ) -> None:
+        cls._global_adapter_class = adapter_cls
+        cls._global_partial_kwargs = partial_kwargs
+
+    @classmethod
+    def register_for_connection(
+        cls,
+        connection: Any,
+        *,
+        adapter_cls: type[requests.adapters.HTTPAdapter] | None = None,
+        **partial_kwargs,
+    ) -> None:
+        cls._per_connection_adapter_config[connection] = AdapterConfig(
+            adapter_cls or cls._global_adapter_class or requests.adapters.HTTPAdapter,
+            partial_kwargs,
+        )
+
+    @classmethod
+    def create_adapter(
+        cls, connection: Any | None = None, **runtime_kwargs
+    ) -> requests.adapters.HTTPAdapter:
+        if connection in cls._per_connection_adapter_config:
+            config = cls._per_connection_adapter_config[connection]
+        else:
+            config = AdapterConfig(
+                cls._global_adapter_class or requests.adapters.HTTPAdapter,
+                cls._global_partial_kwargs,
+            )
+
+        final_kwargs = {**config.partial_kwargs, **runtime_kwargs}
+        return config.adapter_cls(**final_kwargs)
+
+    @classmethod
+    def reset(cls) -> None:
+        cls._global_adapter_class = None
+        cls._global_partial_kwargs = {}
+        cls._per_connection_adapter_config.clear()
+
+
 class ProxySupportAdapter(HTTPAdapter):
     """This Adapter creates proper headers for Proxy CONNECT messages."""
 
@@ -289,6 +346,33 @@ class ProxySupportAdapter(HTTPAdapter):
             conn = self.poolmanager.connection_from_url(url)
 
         return conn
+
+
+class InterceptingAdapter(ProxySupportAdapter):
+    def __init__(self, interceptors=None, **kwargs):
+        super().__init__(**kwargs)
+        self._interceptors = interceptors or []
+
+    def send(self, request, **kwargs):
+        retry = kwargs.get("retries")
+        is_retry = retry is not None and getattr(retry, "history", None)
+
+        hook = (
+            HttpInterceptor.InterceptionHook.BEFORE_RETRY
+            if is_retry
+            else HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED
+        )
+
+        dto = RequestDTO(
+            method=request.method, url=request.url, headers=request.headers
+        )
+        for interceptor in self._interceptors:
+            dto = interceptor.intercept_on(hook, dto)
+
+        request.headers.clear()
+        request.headers.update(dto.headers)
+
+        return super().send(request, **kwargs)
 
 
 class RetryRequest(Exception):
@@ -334,7 +418,7 @@ class SessionPool:
         try:
             session = self._idle_sessions.pop()
         except IndexError:
-            session = self._rest.make_requests_session()
+            session = self._rest.make_requests_session(connection=self._rest.connection)
         self._active_sessions.add(session)
         return session
 
@@ -458,13 +542,9 @@ class SnowflakeRestful(InterceptOnMixin):
     def server_url(self) -> str:
         return f"{self._protocol}://{self._host}:{self._port}"
 
-    # @property
-    # def headers_customizers(self):
-    #     return self._headers_customizers
-    #
-    # @headers_customizers.setter
-    # def headers_customizers(self, value) -> None:
-    #     self._headers_customizers = value
+    @property
+    def connection(self):
+        return self._connection
 
     def close(self) -> None:
         if hasattr(self, "_token"):
@@ -1111,6 +1191,8 @@ class SnowflakeRestful(InterceptOnMixin):
             # socket timeout is constant. You should be able to receive
             # the response within the time. If not, ConnectReadTimeout or
             # ReadTimeout is raised.
+            # TODO: here
+            # tODO: check how does it impact timeouts - is it in their scope
 
             raw_ret = session.request(
                 method=method,
@@ -1224,10 +1306,16 @@ class SnowflakeRestful(InterceptOnMixin):
         except Exception as err:
             raise err
 
-    def make_requests_session(self) -> Session:
+    # TODO: remove connection injection when conncection is destroyed - should we remove them from sessions
+    def make_requests_session(
+        self, connection: SnowflakeConnection | None = None
+    ) -> Session:
         s = requests.Session()
-        s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
+        adapter = InterceptingAdapterFactory.create_adapter(
+            connection=connection, max_retries=REQUESTS_RETRY
+        )
+        s.mount("http://", adapter)
+        s.mount("https://", adapter)
         s._reuse_count = itertools.count()
         return s
 
@@ -1242,7 +1330,7 @@ class SnowflakeRestful(InterceptOnMixin):
         """
         # short-lived session, not added to the _sessions_map
         if self._connection.disable_request_pooling:
-            session = self.make_requests_session()
+            session = self.make_requests_session(connection=self._connection)
             try:
                 yield session
             finally:

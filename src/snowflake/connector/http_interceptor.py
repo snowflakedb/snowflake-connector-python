@@ -3,20 +3,8 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from enum import Enum, auto
-from functools import partial, wraps
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Generator,
-    Iterable,
-    MutableSequence,
-    NamedTuple,
-)
-
-if TYPE_CHECKING:
-    from . import SnowflakeConnection
-# from contextlib import contextmanager
+from functools import wraps
+from typing import Any, Callable, Generator, Iterable, MutableSequence, NamedTuple
 
 from .vendored import requests, urllib3
 
@@ -310,11 +298,12 @@ def remove_interceptors():
     urllib3.Retry.increment = _original_retry_increment
 
 
-def inject_interceptors_for_connection(connection: SnowflakeConnection) -> None:
-    intercept_fn = partial(
-        apply_interceptors, interceptors=connection.request_interceptors
-    )
-    inject_interception_callback(intercept_fn)
+# TODO: deacticated - to remove?
+# def inject_interceptors_for_connection(connection: SnowflakeConnection) -> None:
+#     intercept_fn = partial(
+#         apply_interceptors, interceptors=connection.request_interceptors
+#     )
+#     inject_interception_callback(intercept_fn)
 
 
 def verify_method(suspected_method: Any) -> str | None:
