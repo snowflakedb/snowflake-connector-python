@@ -5,7 +5,10 @@ import pytest
 
 from snowflake.connector import SnowflakeConnection
 
-from ..test_utils.http_test_utils import RequestTracker
+try:
+    from ..test_utils.http_test_utils import RequestTracker
+except ImportError:
+    pass
 from .test_large_result_set import ingest_data  # NOQA
 
 try:

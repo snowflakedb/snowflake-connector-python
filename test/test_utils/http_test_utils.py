@@ -2,7 +2,10 @@ import re
 from collections import deque
 from typing import Deque, FrozenSet, Iterable, NamedTuple, Optional
 
-from snowflake.connector.http_interceptor import HeadersCustomizer, RequestDTO
+try:
+    from snowflake.connector.http_interceptor import HeadersCustomizer, RequestDTO
+except ImportError:
+    pass
 
 
 class CollectingCustomizer(HeadersCustomizer):
