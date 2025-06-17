@@ -18,7 +18,6 @@ from typing import (
 
 from .constants import IterUnit
 from .errors import NotSupportedError
-from .options import pandas
 from .options import pyarrow as pa
 from .result_batch import (
     ArrowResultBatch,
@@ -215,6 +214,8 @@ class ResultSet(Iterable[list]):
 
     def _fetch_pandas_all(self, **kwargs) -> DataFrame:
         """Fetches a single Pandas dataframe."""
+        from .options import pandas
+
         concat_args = list(inspect.signature(pandas.concat).parameters)
         concat_kwargs = {k: kwargs.pop(k) for k in dict(kwargs) if k in concat_args}
         dataframes = list(self._fetch_pandas_batches(is_fetch_all=True, **kwargs))
