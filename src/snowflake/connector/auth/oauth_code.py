@@ -62,10 +62,17 @@ class AuthByOauthCode(AuthByOAuthBase):
         refresh_token_enabled: bool = False,
         external_browser_timeout: int | None = None,
         enable_single_use_refresh_tokens: bool = False,
+        connection: SnowflakeConnection | None = None,
         **kwargs,
     ) -> None:
+        self._assert_valid_oauth_code_uris(authentication_url, redirect_uri, connection)
         if self._eligible_for_default_client_credentials(
-            client_id, client_secret, authentication_url, token_request_url, host
+            client_id,
+            client_secret,
+            authentication_url,
+            token_request_url,
+            host,
+            connection,
         ):
             client_id, client_secret = (
                 self.__class__._LOCAL_APPLICATION_CLIENT_CREDENTIALS,
@@ -404,13 +411,11 @@ You can close this window now and go back where you started from.
         authentication_url: str,
         token_request_url: str,
         host: str,
+        connection: SnowflakeConnection,
     ) -> bool:
-        return (
-            client_id == ""
-            and client_secret == ""
-            and self.__class__._is_snowflake_as_idp(
-                authentication_url, token_request_url, host
-            )
+        self._assert_valid_oauth_credentials(client_id, client_secret, connection)
+        return self.__class__._is_snowflake_as_idp(
+            authentication_url, token_request_url, host
         )
 
     @staticmethod
