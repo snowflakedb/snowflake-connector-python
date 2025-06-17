@@ -116,8 +116,11 @@ def _import_or_missing_pandas_option() -> (
 
 def installed_pandas() -> bool:
     """This function checks if pandas is available and compatible."""
-    _, _, installed = _import_or_missing_pandas_option()
-    return installed
+    try:
+        importlib.import_module("pandas")
+        return True
+    except ImportError:
+        return False
 
 
 def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
