@@ -8,7 +8,7 @@ from pathlib import Path
 
 try:
     from test.test_utils.cross_module_fixtures.http_fixtures import *  # NOQA
-except ImportError:
+except (ImportError, NameError):
     pass
 from test.test_utils.cross_module_fixtures.wiremock_fixtures import *  # NOQA
 from typing import Generator
