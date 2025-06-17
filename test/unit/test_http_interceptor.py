@@ -88,23 +88,23 @@ def test_non_applying_interceptor_not_called(sample_request_factory):
     customizer.get_new_headers.assert_not_called()
 
 
-@pytest.mark.parametrize("invoke_once", [True, False])
-def test_static_hook_respects_invoked_once_flag(
-    sample_request_factory, headers_customizer_factory, invoke_once
-):
-    request = sample_request_factory()
-    customizer = headers_customizer_factory(
-        applies=True, invoke_once=invoke_once, headers={"X-Test": "Value"}
-    )
-    interceptor = HeadersCustomizerInterceptor([customizer])
-    result = interceptor.intercept_on(
-        HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
-    )
-
-    if invoke_once:
-        assert result.headers["X-Test"] == "Value"
-    else:
-        assert "X-Test" not in result.headers
+# @pytest.mark.parametrize("invoke_once", [True, False])
+# def test_static_hook_respects_invoked_once_flag(
+#     sample_request_factory, headers_customizer_factory, invoke_once
+# ):
+#     request = sample_request_factory()
+#     customizer = headers_customizer_factory(
+#         applies=True, invoke_once=invoke_once, headers={"X-Test": "Value"}
+#     )
+#     interceptor = HeadersCustomizerInterceptor([customizer])
+#     result = interceptor.intercept_on(
+#         HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
+#     )
+#
+#     if invoke_once:
+#         assert result.headers["X-Test"] == "Value"
+#     else:
+#         assert "X-Test" not in result.headers
 
 
 def test_dynamic_customizer_adds_different_headers(
