@@ -5,15 +5,13 @@ import pytest
 
 from snowflake.connector import SnowflakeConnection
 
-try:
-    from ..test_utils.http_test_utils import RequestTracker
-except ImportError:
-    pass
 from .test_large_result_set import ingest_data  # NOQA
 
 try:
     from snowflake.connector.http_interceptor import RequestDTO
-except ImportError:  # Keep olddrivertest from breaking
+
+    from ..test_utils.http_test_utils import RequestTracker
+except (ImportError, NameError):  # Keep olddrivertest from breaking
     pass
 
 
