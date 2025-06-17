@@ -236,7 +236,7 @@ def copy_into_table_from_stage(
         # Check if the data was loaded successfully
         if cur.fetchall()[0][1] == "LOADED":
             print(
-                f"cloudprober_driver_python_create_stage{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+                f"cloudprober_driver_python_copy_data_from_stage_into_table{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
             )
         else:
             print(
@@ -337,16 +337,16 @@ def compare_fetched_data(
                 for y in range(len(fetched_data[0])):
                     if str(fetched_data[random_index][y]) != csv_data[random_index][y]:
                         print(
-                            f"cloudprober_driver_python_data_transferred_completely{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+                            f"cloudprober_driver_python_data_integrity{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
                         )
                         sys.exit(1)
             print(
-                f"cloudprober_driver_python_data_data_integrity{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
+                f"cloudprober_driver_python_data_integrity{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
             )
     except Exception as e:
         logger.error(f"Error comparing fetched data: {e}")
         print(
-            f"cloudprober_driver_python_data_data_integrity{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
+            f"cloudprober_driver_python_data_integrity{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
         )
         sys.exit(1)
 
