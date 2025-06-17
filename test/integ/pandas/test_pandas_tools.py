@@ -456,7 +456,17 @@ def test_write_pandas_use_logical_type(
         microsecond=6,
         tzinfo=timezone(timedelta(hours=2)),
     )
-    df_write = pandas.DataFrame({col_name: [timestamp]})
+    timestamp_2 = datetime(
+        year=2020,
+        month=1,
+        day=2,
+        hour=3,
+        minute=4,
+        second=5,
+        microsecond=6,
+        tzinfo=timezone(timedelta(hours=4)),
+    )
+    df_write = pandas.DataFrame({col_name: [timestamp, timestamp_2]})
 
     with conn_cnx() as cnx:  # type: SnowflakeConnection
         cnx.cursor().execute(create_sql).fetchall()
@@ -476,6 +486,7 @@ def test_write_pandas_use_logical_type(
                 write_pandas(**write_pandas_kwargs)
                 df_read = cnx.cursor().execute(select_sql).fetch_pandas_all()
                 assert all(df_write == df_read)
+                assert pandas.api.types.is_datetime64tz_dtype(df_read[col_name])
             # For other use_logical_type values, a UserWarning should be displayed.
             else:
                 with pytest.warns(UserWarning, match="Dataframe contains a datetime.*"):
