@@ -21,7 +21,6 @@ from logging import getLogger
 from threading import Lock
 from types import TracebackType
 from typing import (
-    TYPE_CHECKING,
     Any,
     Callable,
     Generator,
@@ -111,7 +110,9 @@ from .errorcode import (
 )
 from .errors import DatabaseError, Error, OperationalError, ProgrammingError
 from .http_interceptor import (
+    HeadersCustomizer,
     HeadersCustomizerInterceptor,
+    HttpInterceptor,
     inject_interceptors_for_connection,
 )
 from .log_configuration import EasyLoggingConfigPython
@@ -136,9 +137,6 @@ from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
 from .wif_util import AttestationProvider
-
-if TYPE_CHECKING:
-    from .network import HeadersCustomizer, HttpInterceptor
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -381,12 +379,9 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # SNOW-XXXXX: remove the check_arrow_conversion_error_on_every_column flag
-    # TODO: add to docs - 1. new parameter, 2. only enrichment allowed, 3. no query params manipulation supported
-    # Subscripted generics cannot be used in class and instance checks (isinstance(...)) -> thus no Iterable[HeadersCustomizer]
     "headers_customizers": (
         None,
-        (type(None), MutableSequence),
-        #     TODO: try MutableSequence[HeadersCustomizer]
+        (type(None), MutableSequence[HeadersCustomizer]),
     ),
 }
 
@@ -469,7 +464,7 @@ class SnowflakeConnection:
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
         unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
         check_arrow_conversion_error_on_every_column: When true, the error check after the conversion from arrow to python types will happen for every column in the row. This is a new behaviour which fixes the bug that caused the type errors to trigger silently when occurring at any place other than last column in a row. To revert the previous (faulty) behaviour, please set this flag to false.
-        headers_customizer: List of headers customizer. TODO: finish
+        headers_customizer: List of headers customizers (HeadersCustomizer class). Setting this parameter allows enriching outgoing request headers using a list of customizers. Only header enrichment is supported — modifying query parameters or overwriting the existing headers is not allowed.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -1455,7 +1450,6 @@ class SnowflakeConnection:
                 )
 
         if self._paramstyle is None:
-            # TODO: remove and import .paramstyle on top
             import snowflake.connector
 
             self._paramstyle = snowflake.connector.paramstyle

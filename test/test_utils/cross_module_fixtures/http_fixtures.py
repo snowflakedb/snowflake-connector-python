@@ -1,12 +1,6 @@
 import pytest
 
-try:
-    from ..http_test_utils import (
-        DynamicCollectingCustomizer,
-        StaticCollectingCustomizer,
-    )
-except ImportError:
-    pass
+from ..http_test_utils import DynamicCollectingCustomizer, StaticCollectingCustomizer
 
 
 @pytest.fixture
