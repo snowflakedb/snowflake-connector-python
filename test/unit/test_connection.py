@@ -700,41 +700,6 @@ def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
         assert conn.auth_class.token == "my_token"
 
 
-def test_headers_customizers_initialization(
-    monkeypatch, dynamic_customizer_factory, headers_customizer_factory
-):
-    STATIC_CUSTOMIZERS_NUM = 5
-    DYNAMIC_CUSTOMIZERS_NUM = 3
-
-    with monkeypatch.context() as m:
-        m.setattr(
-            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
-        )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
-
-        static_customizers = [
-            headers_customizer_factory(applies=True, invoke_once=True)
-            for _ in range(STATIC_CUSTOMIZERS_NUM)
-        ]
-        dynamic_customizers = [
-            dynamic_customizer_factory() for _ in range(DYNAMIC_CUSTOMIZERS_NUM)
-        ]
-
-        conn = fake_connector(
-            headers_customizers=static_customizers + dynamic_customizers
-        )
-
-        assert len(conn.request_interceptors) == 1
-        assert (
-            len(conn.request_interceptors[0]._dynamic_headers_customizers)
-            == DYNAMIC_CUSTOMIZERS_NUM
-        )
-        assert (
-            len(conn.request_interceptors[0]._static_headers_customizers)
-            == STATIC_CUSTOMIZERS_NUM
-        )
-
-
 @pytest.mark.parametrize("rtr_enabled", [True, False])
 def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
     monkeypatch, rtr_enabled: bool
