@@ -406,8 +406,8 @@ You can close this window now and go back where you started from.
         host: str,
     ) -> bool:
         return (
-            client_id == ""
-            and client_secret == ""
+            (client_id == "" or client_secret is None)
+            and (client_secret == "" or client_secret is None)
             and self.__class__._is_snowflake_as_idp(
                 authentication_url, token_request_url, host
             )
