@@ -538,11 +538,7 @@ class JSONResultBatch(ResultBatch):
     def __repr__(self) -> str:
         return f"JSONResultChunk({self.id})"
 
-    def create_iter(
-        self, connection: SnowflakeConnection | None = None, **kwargs
-    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
-        if self._local:
-            return iter(self._data)
+    def _fetch_data(self, connection: SnowflakeConnection | None = None, **kwargs):
         response = self._download(connection=connection)
         # Load data to a intermediate form
         logger.debug(f"started loading result batch id: {self.id}")
@@ -554,7 +550,18 @@ class JSONResultBatch(ResultBatch):
         with TimerContextManager() as parse_metric:
             parsed_data = self._parse(downloaded_data)
         self._metrics[DownloadMetrics.parse.value] = parse_metric.get_timing_millis()
-        return iter(parsed_data)
+        return parsed_data
+
+    def populate_data(self, connection: SnowflakeConnection | None = None, **kwargs):
+        self._data = self._fetch_data(connection=connection, **kwargs)
+        return self
+
+    def create_iter(
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
+        if self._local:
+            return iter(self._data)
+        return iter(self._fetch_data(connection=connection, **kwargs))
 
     def _arrow_fetching_error(self):
         return NotSupportedError(
@@ -613,7 +620,10 @@ class ArrowResultBatch(ResultBatch):
         )
 
     def _from_data(
-        self, data: str, iter_unit: IterUnit, check_error_on_every_column: bool = True
+        self,
+        data: str | bytes,
+        iter_unit: IterUnit,
+        check_error_on_every_column: bool = True,
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` files from a str.
 
@@ -623,8 +633,11 @@ class ArrowResultBatch(ResultBatch):
         if len(data) == 0:
             return iter([])
 
+        if isinstance(data, str):
+            data = b64decode(data)
+
         return _create_nanoarrow_iterator(
-            b64decode(data),
+            data,
             self._context,
             self._use_dict_result,
             self._numpy,
@@ -751,3 +764,9 @@ class ArrowResultBatch(ResultBatch):
                 return self._get_arrow_iter(connection=connection)
         else:
             return self._create_iter(iter_unit=iter_unit, connection=connection)
+
+    def populate_data(
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> ArrowResultBatch:
+        self._data = self._download(connection=connection).content
+        return self

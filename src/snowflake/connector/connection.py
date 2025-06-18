@@ -228,6 +228,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # snowflake
     "client_prefetch_threads": (4, int),  # snowflake
     "client_fetch_threads": (None, (type(None), int)),
+    "client_fetch_use_mp": (False, bool),
     "numpy": (False, bool),  # snowflake
     "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
@@ -694,6 +695,10 @@ class SnowflakeConnection:
         if value is not None:
             value = min(max(1, value), MAX_CLIENT_FETCH_THREADS)
         self._client_fetch_threads = value
+
+    @property
+    def client_fetch_use_mp(self) -> bool:
+        return self._client_fetch_use_mp
 
     @property
     def rest(self) -> SnowflakeRestful | None:
