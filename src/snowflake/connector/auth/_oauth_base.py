@@ -15,7 +15,6 @@ from urllib.error import HTTPError, URLError
 from ..errorcode import (
     ER_FAILED_TO_REQUEST,
     ER_IDP_CONNECTION_ERROR,
-    ER_INVALID_VALUE,
     ER_NO_CLIENT_ID,
     ER_NO_CLIENT_SECRET,
 )
@@ -193,9 +192,9 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         return self._access_token or ""
 
     @staticmethod
-    def _assert_valid_oauth_credentials(
+    def _validate_client_credentials_present(
         client_id: str, client_secret: str, connection: SnowflakeConnection
-    ) -> None:
+    ) -> tuple[str, str]:
         if client_id is None or client_id == "":
             Error.errorhandler_wrapper(
                 connection,
@@ -217,33 +216,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
                 },
             )
 
-    @staticmethod
-    def _assert_valid_oauth_code_uris(
-        authorization_url: str, oauth_redirect_uri: str, connection: SnowflakeConnection
-    ) -> None:
-        if authorization_url and not authorization_url.startswith("https://"):
-            Error.errorhandler_wrapper(
-                connection,
-                None,
-                ProgrammingError,
-                {
-                    "msg": "OAuth supports only authorization urls that use 'https' scheme",
-                    "errno": ER_INVALID_VALUE,
-                },
-            )
-        if oauth_redirect_uri and not (
-            oauth_redirect_uri.startswith("http://")
-            or oauth_redirect_uri.startswith("https://")
-        ):
-            Error.errorhandler_wrapper(
-                connection,
-                None,
-                ProgrammingError,
-                {
-                    "msg": "OAuth supports only authorization urls that use 'http(s)' scheme",
-                    "errno": ER_INVALID_VALUE,
-                },
-            )
+        return client_id, client_secret
 
     def reauthenticate(
         self,

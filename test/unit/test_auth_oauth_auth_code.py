@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from snowflake.connector.auth import AuthByOauthCode
+from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.network import OAUTH_AUTHORIZATION_CODE
 
 
@@ -69,7 +70,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
 
 
 @pytest.mark.parametrize(
-    "name, client_id, client_secret, host, auth_url, token_url, expected_local",
+    "name, client_id, client_secret, host, auth_url, token_url, expected_local, expected_raised_error_cls",
     [
         (
             "Client credentials not supplied and Snowflake as IdP",
@@ -79,6 +80,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "https://example.snowflakecomputing.com/oauth/authorize",
             "https://example.snowflakecomputing.com/oauth/token",
             True,
+            None,
         ),
         (
             "Client credentials not supplied and empty URLs",
@@ -88,6 +90,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "",
             "",
             True,
+            None,
         ),
         (
             "Client credentials supplied",
@@ -97,6 +100,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "https://example.snowflakecomputing.com/oauth/authorize",
             "https://example.snowflakecomputing.com/oauth/token",
             False,
+            None,
         ),
         (
             "Only client ID supplied",
@@ -106,6 +110,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "https://example.snowflakecomputing.com/oauth/authorize",
             "https://example.snowflakecomputing.com/oauth/token",
             False,
+            ProgrammingError,
         ),
         (
             "Non-Snowflake IdP",
@@ -115,6 +120,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "https://example.com/oauth/authorize",
             "https://example.com/oauth/token",
             False,
+            ProgrammingError,
         ),
         (
             "[China] Client credentials not supplied and Snowflake as IdP",
@@ -124,6 +130,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "https://example.snowflakecomputing.cn/oauth/authorize",
             "https://example.snowflakecomputing.cn/oauth/token",
             True,
+            None,
         ),
         (
             "[China] Client credentials supplied",
@@ -133,6 +140,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "https://example.snowflakecomputing.cn/oauth/authorize",
             "https://example.snowflakecomputing.cn/oauth/token",
             False,
+            None,
         ),
         (
             "[China] Only client ID supplied",
@@ -142,31 +150,47 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
             "https://example.snowflakecomputing.cn/oauth/authorize",
             "https://example.snowflakecomputing.cn/oauth/token",
             False,
+            ProgrammingError,
         ),
     ],
 )
 def test_eligible_for_default_client_credentials_via_constructor(
-    name, client_id, client_secret, host, auth_url, token_url, expected_local
+    name,
+    client_id,
+    client_secret,
+    host,
+    auth_url,
+    token_url,
+    expected_local,
+    expected_raised_error_cls,
 ):
-    auth = AuthByOauthCode(
-        application="app",
-        client_id=client_id,
-        client_secret=client_secret,
-        authentication_url=auth_url,
-        token_request_url=token_url,
-        redirect_uri="redirectUri:{port}",
-        scope="scope",
-        host=host,
-    )
-    if expected_local:
-        assert (
-            auth._client_id == AuthByOauthCode._LOCAL_APPLICATION_CLIENT_CREDENTIALS
-        ), f"{name} - expected LOCAL_APPLICATION as client_id"
-        assert (
-            auth._client_secret == AuthByOauthCode._LOCAL_APPLICATION_CLIENT_CREDENTIALS
-        ), f"{name} - expected LOCAL_APPLICATION as client_secret"
+    def assert_initialized_correctly() -> None:
+        auth = AuthByOauthCode(
+            application="app",
+            client_id=client_id,
+            client_secret=client_secret,
+            authentication_url=auth_url,
+            token_request_url=token_url,
+            redirect_uri="https://redirectUri:{port}",
+            scope="scope",
+            host=host,
+        )
+        if expected_local:
+            assert (
+                auth._client_id == AuthByOauthCode._LOCAL_APPLICATION_CLIENT_CREDENTIALS
+            ), f"{name} - expected LOCAL_APPLICATION as client_id"
+            assert (
+                auth._client_secret
+                == AuthByOauthCode._LOCAL_APPLICATION_CLIENT_CREDENTIALS
+            ), f"{name} - expected LOCAL_APPLICATION as client_secret"
+        else:
+            assert auth._client_id == client_id, f"{name} - expected original client_id"
+            assert (
+                auth._client_secret == client_secret
+            ), f"{name} - expected original client_secret"
+
+    if expected_raised_error_cls is not None:
+        with pytest.raises(expected_raised_error_cls):
+            assert_initialized_correctly()
     else:
-        assert auth._client_id == client_id, f"{name} - expected original client_id"
-        assert (
-            auth._client_secret == client_secret
-        ), f"{name} - expected original client_secret"
+        assert_initialized_correctly()
