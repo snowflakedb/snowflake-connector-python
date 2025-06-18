@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from collections import deque
-from concurrent.futures import ALL_COMPLETED, Future, wait
+from concurrent.futures import ALL_COMPLETED, Future, ProcessPoolExecutor, wait
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
 from typing import (
@@ -44,6 +44,7 @@ def result_set_iterator(
     unfetched_batches: Deque[ResultBatch],
     final: Callable[[], None],
     prefetch_thread_num: int,
+    use_mp: bool,
     **kw: Any,
 ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]:
     """Creates an iterator over some other iterators.
@@ -58,26 +59,52 @@ def result_set_iterator(
     to continue iterating through the rest of the ``ResultBatch``.
     """
     is_fetch_all = kw.pop("is_fetch_all", False)
+
+    if use_mp:
+
+        def create_pool_executor() -> ProcessPoolExecutor:
+            return ProcessPoolExecutor(prefetch_thread_num)
+
+        def create_fetch_task(batch: ResultBatch):
+            return batch.populate_data
+
+        def get_fetch_result(future_result: ResultBatch):
+            return future_result.create_iter(**kw)
+
+        kw["connection"] = None
+    else:
+
+        def create_pool_executor() -> ThreadPoolExecutor:
+            return ThreadPoolExecutor(prefetch_thread_num)
+
+        def create_fetch_task(batch: ResultBatch):
+            return batch.create_iter
+
+        def get_fetch_result(future_result: Iterator):
+            return future_result
+
     if is_fetch_all:
-        with ThreadPoolExecutor(prefetch_thread_num) as pool:
+        with create_pool_executor() as pool:
             logger.debug("beginning to schedule result batch downloads")
             yield from first_batch_iter
             while unfetched_batches:
                 logger.debug(
                     f"queuing download of result batch id: {unfetched_batches[0].id}"
                 )
-                future = pool.submit(unfetched_batches.popleft().create_iter, **kw)
+                future = pool.submit(
+                    create_fetch_task(unfetched_batches.popleft()), **kw
+                )
                 unconsumed_batches.append(future)
             _, _ = wait(unconsumed_batches, return_when=ALL_COMPLETED)
             i = 1
             while unconsumed_batches:
                 logger.debug(f"user began consuming result batch {i}")
-                yield from unconsumed_batches.popleft().result()
+                yield from get_fetch_result(unconsumed_batches.popleft().result())
                 logger.debug(f"user began consuming result batch {i}")
                 i += 1
         final()
     else:
-        with ThreadPoolExecutor(prefetch_thread_num) as pool:
+        with create_pool_executor() as pool:
             # Fill up window
 
             logger.debug("beginning to schedule result batch downloads")
@@ -87,7 +114,7 @@ def result_set_iterator(
                     f"queuing download of result batch id: {unfetched_batches[0].id}"
                 )
                 unconsumed_batches.append(
-                    pool.submit(unfetched_batches.popleft().create_iter, **kw)
+                    pool.submit(create_fetch_task(unfetched_batches.popleft()), **kw)
                 )
 
             yield from first_batch_iter
@@ -101,13 +128,15 @@ def result_set_iterator(
                     logger.debug(
                         f"queuing download of result batch id: {unfetched_batches[0].id}"
                     )
-                    future = pool.submit(unfetched_batches.popleft().create_iter, **kw)
+                    future = pool.submit(
+                        create_fetch_task(unfetched_batches.popleft()), **kw
+                    )
                     unconsumed_batches.append(future)
 
                 future = unconsumed_batches.popleft()
 
                 # this will raise an exception if one has occurred
-                batch_iterator = future.result()
+                batch_iterator = get_fetch_result(future.result())
 
                 logger.debug(f"user began consuming result batch {i}")
                 yield from batch_iterator
@@ -136,10 +165,12 @@ class ResultSet(Iterable[list]):
         cursor: SnowflakeCursor,
         result_chunks: list[JSONResultBatch] | list[ArrowResultBatch],
         prefetch_thread_num: int,
+        use_mp: bool,
     ) -> None:
         self.batches = result_chunks
         self._cursor = cursor
         self.prefetch_thread_num = prefetch_thread_num
+        self._use_mp = use_mp
 
     def _report_metrics(self) -> None:
         """Report all metrics totalled up.
@@ -276,6 +307,7 @@ class ResultSet(Iterable[list]):
             self._finish_iterating,
             self.prefetch_thread_num,
             is_fetch_all=is_fetch_all,
+            use_mp=self._use_mp,
             **kwargs,
         )
 
