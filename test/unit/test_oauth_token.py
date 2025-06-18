@@ -122,7 +122,7 @@ def temp_cache():
 @pytest.fixture()
 def omit_oauth_urls_check():
     with mock.patch(
-        "snowflake.connector.auth._oauth_base.AuthByOAuthBase._assert_valid_oauth_code_uris",
+        "snowflake.connector.SnowflakeConnection._check_oauth_parameters",
         return_value=None,
     ):
         yield
