@@ -45,13 +45,26 @@ from .errors import (
 from .log_configuration import EasyLoggingConfigPython
 from .version import VERSION
 
+from typing import TypeVar, ParamSpec, Unpack
+
+P = ParamSpec("P")
+T = TypeVar("T", bound=SnowflakeConnection)
+
 logging.getLogger(__name__).addHandler(NullHandler())
 setup_external_libraries()
 
-
 @wraps(SnowflakeConnection.__init__)
-def Connect(**kwargs) -> SnowflakeConnection:
-    return SnowflakeConnection(**kwargs)
+def connect(
+    __cls: type[T] = SnowflakeConnection, 
+    /, 
+    *args: P.args, 
+    **kwargs: Unpack[P.kwargs]
+) -> T:
+    return __cls(*args, **kwargs)
+
+# @wraps(SnowflakeConnection.__init__)
+# def Connect(**kwargs) -> SnowflakeConnection:
+#     return SnowflakeConnection(**kwargs)
 
 
 connect = Connect
