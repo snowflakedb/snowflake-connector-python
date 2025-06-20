@@ -92,8 +92,6 @@ from .errorcode import (
     ER_INVALID_VALUE,
     ER_INVALID_WIF_SETTINGS,
     ER_NO_ACCOUNT_NAME,
-    ER_NO_CLIENT_ID,
-    ER_NO_CLIENT_SECRET,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
     ER_NO_USER,
@@ -1203,7 +1201,6 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
-                self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1231,7 +1228,6 @@ class SnowflakeConnection:
                     enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
-                self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1249,6 +1245,7 @@ class SnowflakeConnection:
                         else None
                     ),
                     refresh_token_enabled=self._oauth_enable_refresh_tokens,
+                    connection=self,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
@@ -2233,54 +2230,6 @@ class SnowflakeConnection:
                 {
                     "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable true to use the '{self._authenticator}' authenticator.",
                     "errno": ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
-                },
-            )
-
-    def _check_oauth_parameters(self) -> None:
-        if self._oauth_client_id is None:
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": "Oauth code flow requirement 'client_id' is empty",
-                    "errno": ER_NO_CLIENT_ID,
-                },
-            )
-        if self._oauth_client_secret is None:
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": "Oauth code flow requirement 'client_secret' is empty",
-                    "errno": ER_NO_CLIENT_SECRET,
-                },
-            )
-        if (
-            self._oauth_authorization_url
-            and not self._oauth_authorization_url.startswith("https://")
-        ):
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": "OAuth supports only authorization urls that use 'https' scheme",
-                    "errno": ER_INVALID_VALUE,
-                },
-            )
-        if self._oauth_redirect_uri and not (
-            self._oauth_redirect_uri.startswith("http://")
-            or self._oauth_redirect_uri.startswith("https://")
-        ):
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": "OAuth supports only authorization urls that use 'http(s)' scheme",
-                    "errno": ER_INVALID_VALUE,
                 },
             )
 
