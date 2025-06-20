@@ -423,7 +423,9 @@ class SnowflakeConnection:
             See the backoff_policies module for details and implementation examples.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
-        client_fetch_threads: Number of threads to fetch staged query results.
+        client_fetch_threads: Number of threads (or processes) to fetch staged query results.
+            If not specified, reuses client_prefetch_threads value.
+        client_fetch_use_mp: Enables multiprocessing for fetching query results in parallel.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
         application: Application name to communicate with Snowflake as. By default, this is "PythonConnector".
         errorhandler: Handler used with errors. By default, an exception will be raised on error.
