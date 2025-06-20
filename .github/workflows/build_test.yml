@@ -181,7 +181,7 @@ jobs:
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
          # To specify the test name (in single test mode) pass this env variable:
-          SINGLE_TEST_NAME: test/auth/test_snowflake_authorization_code::test_snowflake_authorization_code_local_application_successful
+          SINGLE_TEST_NAME: test/auth/test_snowflake_authorization_code.py::test_snowflake_authorization_code_local_application_successful
         shell: bash
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
