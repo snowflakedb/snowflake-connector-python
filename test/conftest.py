@@ -76,6 +76,8 @@ def pytest_collection_modifyitems(items) -> None:
         item_path = Path(str(item.fspath)).parent
         relative_path = item_path.relative_to(top_test_dir)
         for part in relative_path.parts:
+            if part.endswith("_it"):
+                part = part[:-3]
             item.add_marker(part)
             if part in ("unit", "pandas"):
                 item.add_marker("skipolddriver")
