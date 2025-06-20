@@ -10,8 +10,6 @@ from typing import Union
 
 from packaging.requirements import Requirement
 
-from . import errors
-
 logger = getLogger(__name__)
 
 """This module helps to manage optional dependencies.
@@ -33,6 +31,8 @@ class MissingOptionalDependency:
     _dep_name = "not set"
 
     def __getattr__(self, item):
+        from . import errors
+
         raise errors.MissingDependencyError(self._dep_name)
 
 
@@ -114,6 +114,15 @@ def _import_or_missing_pandas_option() -> (
         return MissingPandas(), MissingPandas(), False
 
 
+def installed_pandas() -> bool:
+    """This function checks if pandas is available and compatible."""
+    try:
+        importlib.import_module("pandas")
+        return True
+    except ImportError:
+        return False
+
+
 def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
     """This function tries importing the following packages: keyring.
 
@@ -127,5 +136,25 @@ def _import_or_missing_keyring_option() -> tuple[ModuleLikeObject, bool]:
 
 
 # Create actual constants to be imported from this file
-pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
 keyring, installed_keyring = _import_or_missing_keyring_option()
+
+
+def __getattr__(name):
+    if name == "pandas":
+        try:
+            return importlib.import_module("pandas")
+        except ImportError:
+            return MissingPandas()
+
+    elif name == "pyarrow":
+        try:
+            return importlib.import_module("pyarrow")
+        except ImportError:
+            from . import errors
+
+            raise errors.MissingDependencyError("pyarrow")
+
+    elif name == "installed_pandas":
+        return installed_pandas()
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
