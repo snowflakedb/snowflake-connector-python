@@ -20,7 +20,16 @@ from io import StringIO
 from logging import getLogger
 from threading import Lock
 from types import TracebackType
-from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    MutableSequence,
+    NamedTuple,
+    Sequence,
+)
 from uuid import UUID
 
 from cryptography.hazmat.backends import default_backend
@@ -100,6 +109,11 @@ from .errorcode import (
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
 from .errors import DatabaseError, Error, OperationalError, ProgrammingError
+from .http_interceptor import (
+    HeadersCustomizer,
+    HeadersCustomizerInterceptor,
+    HttpInterceptor,
+)
 from .log_configuration import EasyLoggingConfigPython
 from .network import (
     DEFAULT_AUTHENTICATOR,
@@ -113,6 +127,9 @@ from .network import (
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
     WORKLOAD_IDENTITY_AUTHENTICATOR,
+    InterceptingAdapter,
+    InterceptingAdapterFactory,
+    ProxySupportAdapter,
     ReauthenticationRequest,
     SnowflakeRestful,
 )
@@ -364,6 +381,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # SNOW-XXXXX: remove the check_arrow_conversion_error_on_every_column flag
+    "headers_customizers": (
+        None,
+        (type(None), MutableSequence[HeadersCustomizer]),
+    ),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -445,6 +466,7 @@ class SnowflakeConnection:
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
         unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
         check_arrow_conversion_error_on_every_column: When true, the error check after the conversion from arrow to python types will happen for every column in the row. This is a new behaviour which fixes the bug that caused the type errors to trigger silently when occurring at any place other than last column in a row. To revert the previous (faulty) behaviour, please set this flag to false.
+        headers_customizer: List of headers customizers (HeadersCustomizer class). Setting this parameter allows enriching outgoing request headers using a list of customizers. Only header enrichment is supported — modifying query parameters or overwriting the existing headers is not allowed.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -854,7 +876,71 @@ class SnowflakeConnection:
     def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
         self._check_arrow_conversion_error_on_every_column = value
 
+    @property
+    def request_interceptors(self) -> MutableSequence[HttpInterceptor]:
+        return self._request_interceptors
+
+    @property
+    def headers_customizers(self) -> MutableSequence[HeadersCustomizer]:
+        return self._headers_customizers
+
+    @headers_customizers.setter
+    def headers_customizers(self, value: MutableSequence[HeadersCustomizer]) -> None:
+        self._headers_customizers = value
+        # TODO: zrobic to jako dict po typach interceptorów
+        # TODO: remove all dto to Info
+        # TODO: add tests
+        request_interceptors = self._create_interceptor_for_headers_customizers(value)
+        self._request_interceptors = (
+            [
+                request_interceptors,
+            ]
+            if request_interceptors
+            else []
+        )
+
+    def add_headers_customizer(
+        self, new_customizer: HeadersCustomizer
+    ) -> SnowflakeConnection:
+        """
+        Builder method to add a single headers customizer to the list of headers customizers TODO: finish this descr.
+        """
+        if new_customizer in self._headers_customizers or not new_customizer:
+            return self
+
+        self._headers_customizers.append(new_customizer)
+        # TODO: czy nie powinien to brac ostatniego header interceptora i do neigo append header customizer
+        self._request_interceptors.append(
+            HeadersCustomizerInterceptor([new_customizer])
+        )
+        return self
+
+    def clear_headers_customizers(self) -> None:
+        """
+        Builder method to add a single headers customizer to the list of headers customizers TODO: finish this descr.
+        """
+        self._headers_customizers.clear()
+        self._request_interceptors[:] = [
+            interceptor
+            for interceptor in self._request_interceptors
+            if not isinstance(interceptor, HeadersCustomizerInterceptor)
+        ]
+        # TODO: below or always rely on connection's attributes (properties outside)- this way we can only clear here
+        # self._rest.headers_customizers.clear()
+        # self._rest._request_interceptors.clear()
+
+    @staticmethod
+    def _create_interceptor_for_headers_customizers(
+        headers_customizers: MutableSequence[HeadersCustomizer],
+    ) -> HeadersCustomizerInterceptor | None:
+        return (
+            HeadersCustomizerInterceptor(headers_customizers)
+            if headers_customizers
+            else None
+        )
+
     def connect(self, **kwargs) -> None:
+        ...
         """Establishes connection to Snowflake."""
         logger.debug("connect")
         if len(kwargs) > 0:
@@ -1144,6 +1230,7 @@ class SnowflakeConnection:
                 ):
                     raise TypeError("auth_class must be a child class of AuthByKeyPair")
                     # TODO: add telemetry for custom auth
+                # TODO: why this is hre xd
                 self.auth_class = self.auth_class
             elif self._authenticator == DEFAULT_AUTHENTICATOR:
                 self.auth_class = AuthByDefault(
@@ -1382,10 +1469,39 @@ class SnowflakeConnection:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
 
-        if "unsafe_file_write" in kwargs:
-            self._unsafe_file_write = kwargs["unsafe_file_write"]
+        self._unsafe_file_write = kwargs.get("unsafe_file_write", False)
+
+        self._headers_customizers = kwargs.get("headers_customizers", [])
+        # # TODO: rethink how adding customizer should work - create new interceptor or append to existing - or just dont do this scenario xd
+        # TODO: rethink if we should store here in self interceptors or customizers or what
+        if self._headers_customizers:
+            header_customizer_interceptor = (
+                self._create_interceptor_for_headers_customizers(
+                    self._headers_customizers
+                )
+            )
+            request_interceptors = (
+                [
+                    header_customizer_interceptor,
+                ]
+                if header_customizer_interceptor
+                else []
+            )
+            InterceptingAdapterFactory.register_for_connection(
+                connection=self,
+                adapter_cls=InterceptingAdapter,
+                interceptors=request_interceptors,
+            )
         else:
-            self._unsafe_file_write = False
+            InterceptingAdapterFactory.register_for_connection(
+                connection=self, adapter_cls=ProxySupportAdapter
+            )
+            self._request_interceptors = []
+
+        if self._headers_customizers:
+            logger.info(
+                f"{len(self._headers_customizers)} custom headers customizers were provided. Requests will be enriched according to the defined conditions."
+            )
 
         logger.info(
             f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), 'GLOBAL')} Snowflake domain"

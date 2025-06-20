@@ -11,10 +11,11 @@ from io import BytesIO
 from logging import getLogger
 from math import ceil
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, NamedTuple
+from typing import TYPE_CHECKING, Any, Callable, Generator, MutableSequence, NamedTuple
 
 import OpenSSL
 
+from . import SnowflakeConnection
 from .constants import (
     HTTP_HEADER_CONTENT_ENCODING,
     REQUEST_CONNECTION_TIMEOUT,
@@ -25,6 +26,7 @@ from .constants import (
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
+from .http_interceptor import HttpInterceptor, InterceptOnMixin
 from .vendored import requests
 from .vendored.requests import ConnectionError, Timeout
 from .vendored.urllib3 import HTTPResponse
@@ -58,7 +60,18 @@ def remove_content_encoding(resp: requests.Response, **kwargs) -> None:
             resp.raw.headers.pop(HTTP_HEADER_CONTENT_ENCODING)
 
 
-class SnowflakeStorageClient(ABC):
+def generate_values_from_beginning(
+    *first_returned_values_in_order: Any,
+    original_function: Callable[..., tuple[Any, ...]],
+    **kwargs_for_original_function: Any,
+) -> Generator[tuple[Any, ...]]:
+    yield first_returned_values_in_order
+
+    while True:
+        yield original_function(**kwargs_for_original_function)
+
+
+class SnowflakeStorageClient(ABC, InterceptOnMixin):
     TRANSIENT_HTTP_ERR = (408, 429, 500, 502, 503, 504)
 
     TRANSIENT_ERRORS = (OpenSSL.SSL.SysCallError, Timeout, ConnectionError)
@@ -269,6 +282,20 @@ class SnowflakeStorageClient(ABC):
     def _has_expired_token(self, response: requests.Response) -> bool:
         pass
 
+    @property
+    def connection(self) -> SnowflakeConnection | None:
+        if self.meta.sfagent:
+            return self.meta.sfagent._cursor.connection
+        else:
+            return None
+
+    @property
+    def request_interceptors(self) -> MutableSequence[HttpInterceptor] | None:
+        try:
+            return self.connection.request_interceptors
+        except AttributeError:
+            return None
+
     def _send_request_with_retry(
         self,
         verb: str,
@@ -278,13 +305,24 @@ class SnowflakeStorageClient(ABC):
         rest_call = METHODS[verb]
         url = b""
         conn = None
-        if self.meta.sfagent and self.meta.sfagent._cursor.connection:
-            conn = self.meta.sfagent._cursor.connection
+        request_args_generator: Generator | None = None
+
+        # TODO: spradzic czy we wszystkich miejscach gdzie jest wolane static nie ma potem w scope zmiany headerów - i czy powinnismy na tym sie opierac czy go i tak zawsze wolac? (sprawdzic jak jest na JDBC - czy bedzie odpalony raz przed wszystkimi retries)
+
+        if self.connection:
+            conn = self.connection
+
+        if self.retry_count[retry_id] < self.max_retry:
+            url, rest_kwargs = get_request_args()
+            request_args_generator = generate_values_from_beginning(
+                url, rest_kwargs, original_function=get_request_args
+            )
 
         while self.retry_count[retry_id] < self.max_retry:
             logger.debug(f"retry #{self.retry_count[retry_id]}")
             cur_timestamp = self.credentials.timestamp
-            url, rest_kwargs = get_request_args()
+            url, rest_kwargs = next(request_args_generator)
+
             rest_kwargs["timeout"] = (REQUEST_CONNECTION_TIMEOUT, REQUEST_READ_TIMEOUT)
             try:
                 if conn:

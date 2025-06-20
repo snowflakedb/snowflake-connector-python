@@ -178,6 +178,7 @@ class TelemetryClient:
             # This logger guarantees the payload won't be masked. Testing purpose.
             rt_plain_logger.debug(f"Inband telemetry data being sent is {body}")
         try:
+            # TODO: here
             ret = self._rest.request(
                 TelemetryClient.SF_PATH_TELEMETRY,
                 body=body,
