@@ -1,0 +1,328 @@
+[MainThread] 2024-07-25 16:30:27,573 [INFO] snowflake.connector.connection: Snowflake Connector for Python Version: 3.8.1, Python Version: 3.12.4, Platform: macOS-10.16-x86_64-i386-64bit
+[MainThread] 2024-07-25 16:30:27,573 [DEBUG] snowflake.connector.connection: connect
+[MainThread] 2024-07-25 16:30:27,573 [DEBUG] snowflake.connector.connection: __config
+[MainThread] 2024-07-25 16:30:27,573 [INFO] snowflake.connector.connection: This connection is in OCSP Fail Open Mode. TLS Certificates would be checked for validity and revocation status. Any other Certificate Revocation related exceptions or OCSP Responder failures would be disregarded in favor of connectivity.
+[MainThread] 2024-07-25 16:30:27,574 [DEBUG] snowflake.connector.converter: use_numpy: False
+[MainThread] 2024-07-25 16:30:27,574 [DEBUG] snowflake.connector.connection: REST API object was created: xxx.snowflakecomputing.com:443
+[MainThread] 2024-07-25 16:30:27,574 [DEBUG] snowflake.connector.auth._auth: authenticate
+[MainThread] 2024-07-25 16:30:27,574 [DEBUG] snowflake.connector.auth._auth: assertion content: *********
+[MainThread] 2024-07-25 16:30:27,574 [DEBUG] snowflake.connector.auth._auth: account=xxx, user=xxx, database=xxx, schema=xxx, warehouse=xxx, role=xxx, request_id=xxxxxxxxx
+[MainThread] 2024-07-25 16:30:27,574 [DEBUG] snowflake.connector.auth._auth: body['data']: {'CLIENT_APP_ID': 'PythonConnector', 'CLIENT_APP_VERSION': '3.8.1', 'SVN_REVISION': None, 'ACCOUNT_NAME': 'xxx', 'LOGIN_NAME': 'xxx', 'CLIENT_ENVIRONMENT': {'APPLICATION': 'PythonConnector', 'OS': 'Darwin', 'OS_VERSION': 'macOS-10.16-x86_64-i386-64bit', 'PYTHON_VERSION': '3.12.4', 'PYTHON_RUNTIME': 'CPython', 'PYTHON_COMPILER': 'Clang 14.0.6 ', 'OCSP_MODE': 'FAIL_OPEN', 'TRACING': 10, 'LOGIN_TIMEOUT': None, 'NETWORK_TIMEOUT': None, 'SOCKET_TIMEOUT': None}, 'SESSION_PARAMETERS': {'CLIENT_PREFETCH_THREADS': 4}}
+[MainThread] 2024-07-25 16:30:27,574 [DEBUG] snowflake.connector.vendored.urllib3.util.retry: Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+[MainThread] 2024-07-25 16:30:27,574 [DEBUG] snowflake.connector.vendored.urllib3.util.retry: Converted retries value: 1 -> Retry(total=1, connect=None, read=None, redirect=None, status=None)
+[MainThread] 2024-07-25 16:30:27,574 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:30:27,574 [DEBUG] snowflake.connector.network: remaining request timeout: N/A ms, retry cnt: 1
+[MainThread] 2024-07-25 16:30:27,574 [DEBUG] snowflake.connector.network: Request guid: 79904de4-450b-44c8-a05a-fa7a17854d7a
+[MainThread] 2024-07-25 16:30:27,575 [DEBUG] snowflake.connector.network: socket timeout: 60
+[MainThread] 2024-07-25 16:30:27,576 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: Starting new HTTPS connection (1): xxx.snowflakecomputing.com:443
+[MainThread] 2024-07-25 16:30:27,656 [DEBUG] snowflake.connector.ssl_wrap_socket: OCSP Mode: FAIL_OPEN, OCSP response cache file name: None
+[MainThread] 2024-07-25 16:30:27,733 [DEBUG] snowflake.connector.ocsp_snowflake: cache directory: /xxx/Library/Caches/Snowflake
+[MainThread] 2024-07-25 16:30:27,733 [DEBUG] snowflake.connector.ocsp_snowflake: ocsp_response_cache_uri: file:///xxx/Library/Caches/Snowflake/ocsp_response_cache.json
+[MainThread] 2024-07-25 16:30:27,733 [DEBUG] snowflake.connector.ocsp_snowflake: OCSP_VALIDATION_CACHE size: 287
+[MainThread] 2024-07-25 16:30:27,733 [DEBUG] snowflake.connector.ocsp_snowflake: OCSP response cache server is enabled: http://ocsp.snowflakecomputing.com/ocsp_response_cache.json
+[MainThread] 2024-07-25 16:30:27,733 [DEBUG] snowflake.connector.ocsp_snowflake: OCSP dynamic cache server RETRY URL: None
+[MainThread] 2024-07-25 16:30:27,733 [DEBUG] snowflake.connector.ocsp_snowflake: validating certificate: xxx.snowflakecomputing.com
+[MainThread] 2024-07-25 16:30:27,733 [DEBUG] snowflake.connector.ocsp_asn1crypto: # of certificates: 4
+[MainThread] 2024-07-25 16:30:27,734 [DEBUG] snowflake.connector.ocsp_asn1crypto: subject: OrderedDict({'common_name': '*.us-west-2.snowflakecomputing.com'}), issuer: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon RSA 2048 M03'})
+[MainThread] 2024-07-25 16:30:27,734 [DEBUG] snowflake.connector.ocsp_asn1crypto: subject: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon RSA 2048 M03'}), issuer: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon Root CA 1'})
+[MainThread] 2024-07-25 16:30:27,734 [DEBUG] snowflake.connector.ocsp_asn1crypto: subject: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon Root CA 1'}), issuer: OrderedDict({'country_name': 'US', 'state_or_province_name': 'Arizona', 'locality_name': 'Scottsdale', 'organization_name': 'Starfield Technologies, Inc.', 'common_name': 'Starfield Services Root Certificate Authority - G2'})
+[MainThread] 2024-07-25 16:30:27,735 [DEBUG] snowflake.connector.ocsp_asn1crypto: subject: OrderedDict({'country_name': 'US', 'state_or_province_name': 'Arizona', 'locality_name': 'Scottsdale', 'organization_name': 'Starfield Technologies, Inc.', 'common_name': 'Starfield Services Root Certificate Authority - G2'}), issuer: OrderedDict({'country_name': 'US', 'organization_name': 'Starfield Technologies, Inc.', 'organizational_unit_name': 'Starfield Class 2 Certification Authority'})
+[MainThread] 2024-07-25 16:30:27,736 [DEBUG] snowflake.connector.ocsp_asn1crypto: reading certificate bundle: /xxx/lib/python3.12/site-packages/certifi/cacert.pem
+[MainThread] 2024-07-25 16:30:27,746 [DEBUG] snowflake.connector.ocsp_asn1crypto: not found issuer_der: OrderedDict({'country_name': 'US', 'organization_name': 'Starfield Technologies, Inc.', 'organizational_unit_name': 'Starfield Class 2 Certification Authority'})
+[MainThread] 2024-07-25 16:30:27,747 [DEBUG] snowflake.connector.ocsp_snowflake: hit cache for subject: OrderedDict({'common_name': '*.us-west-2.snowflakecomputing.com'})
+[MainThread] 2024-07-25 16:30:27,758 [DEBUG] snowflake.connector.ocsp_asn1crypto: Verifying the attached certificate is signed by the issuer. Valid Not After: 2025-12-10 00:00:00+00:00
+[MainThread] 2024-07-25 16:30:27,758 [DEBUG] snowflake.connector.ocsp_snowflake: hit cache for subject: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon RSA 2048 M03'})
+[MainThread] 2024-07-25 16:30:27,759 [DEBUG] snowflake.connector.ocsp_asn1crypto: Verifying the attached certificate is signed by the issuer. Valid Not After: 2025-12-10 00:00:00+00:00
+[MainThread] 2024-07-25 16:30:27,759 [DEBUG] snowflake.connector.ocsp_snowflake: hit cache for subject: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon Root CA 1'})
+[MainThread] 2024-07-25 16:30:27,761 [DEBUG] snowflake.connector.ocsp_asn1crypto: Verifying the attached certificate is signed by the issuer. Valid Not After: 2025-05-07 12:00:00+00:00
+[MainThread] 2024-07-25 16:30:27,761 [DEBUG] snowflake.connector.ocsp_snowflake: hit cache for subject: OrderedDict({'country_name': 'US', 'state_or_province_name': 'Arizona', 'locality_name': 'Scottsdale', 'organization_name': 'Starfield Technologies, Inc.', 'common_name': 'Starfield Services Root Certificate Authority - G2'})
+[MainThread] 2024-07-25 16:30:27,762 [DEBUG] snowflake.connector.ocsp_snowflake: ok
+[MainThread] 2024-07-25 16:30:27,980 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "POST /session/v1/login-request?request_id=xxx&databaseName=xxx&schemaName=public&warehouse=xxx&roleName=xxx&request_guid=xxx HTTP/1.1" 200 1593
+[MainThread] 2024-07-25 16:30:27,981 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:30:27,981 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:30:27,981 [DEBUG] snowflake.connector.network: ret[code] = None, after post request
+[MainThread] 2024-07-25 16:30:27,981 [DEBUG] snowflake.connector.auth._auth: completed authentication
+[MainThread] 2024-07-25 16:30:27,981 [DEBUG] snowflake.connector.auth._auth: token = ******
+[MainThread] 2024-07-25 16:30:27,981 [DEBUG] snowflake.connector.auth._auth: master_token = ******
+[MainThread] 2024-07-25 16:30:27,981 [DEBUG] snowflake.connector.auth._auth: id_token = NULL
+[MainThread] 2024-07-25 16:30:27,981 [DEBUG] snowflake.connector.auth._auth: mfa_token = NULL
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.connection: cursor
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.cursor: executing SQL/command
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.cursor: query: [create or replace table reproduce_table(col int);]
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.cursor: binding: [create or replace table reproduce_table(col int);] with input=[None], processed=[{}]
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.connection: sequence counter: 1
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.cursor: Request id: xxx
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.cursor: running query [create or replace table reproduce_table(col int);]
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.cursor: is_file_transfer: True
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.connection: _cmd_query
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector._query_context_cache: serialize_to_dict() called
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.connection: sql=[create or replace table reproduce_table(col int);], sequence_id=[1], is_file_transfer=[False]
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.network: remaining request timeout: N/A ms, retry cnt: 1
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.network: Request guid: 68d09e25-967f-4263-a6eb-57b30c9a24ac
+[MainThread] 2024-07-25 16:30:27,982 [DEBUG] snowflake.connector.network: socket timeout: 60
+[MainThread] 2024-07-25 16:30:28,156 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "POST /queries/v1/query-request?requestId=xxx&request_guid=xxx HTTP/1.1" 200 1233
+[MainThread] 2024-07-25 16:30:28,156 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:30:28,156 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:30:28,156 [DEBUG] snowflake.connector.network: ret[code] = None, after post request
+[MainThread] 2024-07-25 16:30:28,156 [DEBUG] snowflake.connector.network: Query id: xxx
+[MainThread] 2024-07-25 16:30:28,156 [DEBUG] snowflake.connector._query_context_cache: deserialize_json_dict() called: data from server: {'entries': [{'id': 0, 'timestamp': 1721950228207441, 'priority': 0}]}
+[MainThread] 2024-07-25 16:30:28,156 [DEBUG] snowflake.connector._query_context_cache: deserialize {'id': 0, 'timestamp': 1721950228207441, 'priority': 0}
+[MainThread] 2024-07-25 16:30:28,156 [DEBUG] snowflake.connector._query_context_cache: sync_priority_map called priority_map size = 0, new_priority_map size = 1
+[MainThread] 2024-07-25 16:30:28,156 [DEBUG] snowflake.connector._query_context_cache: trim_cache() called. treeSet size is 1 and cache capacity is 5
+[MainThread] 2024-07-25 16:30:28,156 [DEBUG] snowflake.connector._query_context_cache: trim_cache() returns. treeSet size is 1 and cache capacity is 5
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector._query_context_cache: deserialize_json_dict() returns
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector._query_context_cache: Cache Entry: (0, 1721950228207441, 0)
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.cursor: sfqid: xxx
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.cursor: query execution done
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.cursor: SUCCESS
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.cursor: PUT OR GET: False
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.cursor: Query result format: json
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.result_batch: parsing for result batch id: 1
+[MainThread] 2024-07-25 16:30:28,157 [INFO] snowflake.connector.cursor: Number of results in first chunk: 1
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.cursor: executing SQL/command
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.cursor: query: [CREATE OR REPLACE PROCEDURE reproduce_long_query_insert() RETURNS VARCHAR NOT NU...]
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.cursor: binding: [CREATE OR REPLACE PROCEDURE reproduce_long_query_insert() RETURNS VARCHAR NOT NU...] with input=[None], processed=[{}]
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.connection: sequence counter: 2
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.cursor: Request id: xxx
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.cursor: running query [CREATE OR REPLACE PROCEDURE reproduce_long_query_insert() RETURNS VARCHAR NOT NU...]
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.cursor: is_file_transfer: True
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.connection: _cmd_query
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector._query_context_cache: serialize_to_dict() called
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector._query_context_cache: Cache Entry: (0, 1721950228207441, 0)
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector._query_context_cache: serialize_to_dict(): data to send to server {'entries': [{'id': 0, 'timestamp': 1721950228207441, 'priority': 0, 'context': {}}]}
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.connection: sql=[CREATE OR REPLACE PROCEDURE reproduce_long_query_insert() RETURNS VARCHAR NOT NU...], sequence_id=[2], is_file_transfer=[False]
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.network: remaining request timeout: N/A ms, retry cnt: 1
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.network: Request guid: xxx
+[MainThread] 2024-07-25 16:30:28,157 [DEBUG] snowflake.connector.network: socket timeout: 60
+[MainThread] 2024-07-25 16:30:28,336 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "POST /queries/v1/query-request?requestId=xxx&request_guid=4b56eb88-bdea-472a-b382-266fa89aaa3b HTTP/1.1" 200 1242
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.network: ret[code] = None, after post request
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.network: Query id: xxx
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector._query_context_cache: deserialize_json_dict() called: data from server: {'entries': [{'id': 0, 'timestamp': 1721950228377484, 'priority': 0}]}
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector._query_context_cache: Cache Entry: (0, 1721950228207441, 0)
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector._query_context_cache: deserialize {'id': 0, 'timestamp': 1721950228377484, 'priority': 0}
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector._query_context_cache: sync_priority_map called priority_map size = 0, new_priority_map size = 1
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector._query_context_cache: trim_cache() called. treeSet size is 1 and cache capacity is 5
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector._query_context_cache: trim_cache() returns. treeSet size is 1 and cache capacity is 5
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector._query_context_cache: deserialize_json_dict() returns
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector._query_context_cache: Cache Entry: (0, 1721950228377484, 0)
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.cursor: sfqid: xxx
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.cursor: query execution done
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.cursor: SUCCESS
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.cursor: PUT OR GET: False
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.cursor: Query result format: json
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.result_batch: parsing for result batch id: 1
+[MainThread] 2024-07-25 16:30:28,337 [INFO] snowflake.connector.cursor: Number of results in first chunk: 1
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.cursor: executing SQL/command
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.cursor: query: [select * from reproduce_table]
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.cursor: binding: [select * from reproduce_table] with input=[None], processed=[{}]
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.connection: sequence counter: 3
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.cursor: Request id: xxx
+[MainThread] 2024-07-25 16:30:28,337 [DEBUG] snowflake.connector.cursor: running query [select * from reproduce_table]
+[MainThread] 2024-07-25 16:30:28,338 [DEBUG] snowflake.connector.cursor: is_file_transfer: True
+[MainThread] 2024-07-25 16:30:28,338 [DEBUG] snowflake.connector.connection: _cmd_query
+[MainThread] 2024-07-25 16:30:28,338 [DEBUG] snowflake.connector._query_context_cache: serialize_to_dict() called
+[MainThread] 2024-07-25 16:30:28,338 [DEBUG] snowflake.connector._query_context_cache: Cache Entry: (0, 1721950228377484, 0)
+[MainThread] 2024-07-25 16:30:28,338 [DEBUG] snowflake.connector._query_context_cache: serialize_to_dict(): data to send to server {'entries': [{'id': 0, 'timestamp': 1721950228377484, 'priority': 0, 'context': {}}]}
+[MainThread] 2024-07-25 16:30:28,338 [DEBUG] snowflake.connector.connection: sql=[select * from reproduce_table], sequence_id=[3], is_file_transfer=[False]
+[MainThread] 2024-07-25 16:30:28,338 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:30:28,338 [DEBUG] snowflake.connector.network: remaining request timeout: N/A ms, retry cnt: 1
+[MainThread] 2024-07-25 16:30:28,338 [DEBUG] snowflake.connector.network: Request guid: xxx
+[MainThread] 2024-07-25 16:30:28,338 [DEBUG] snowflake.connector.network: socket timeout: 60
+[MainThread] 2024-07-25 16:30:28,399 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "POST /queries/v1/query-request?requestId=xxx&request_guid=xxx HTTP/1.1" 200 1221
+[MainThread] 2024-07-25 16:30:28,399 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:30:28,399 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:30:28,399 [DEBUG] snowflake.connector.network: ret[code] = None, after post request
+[MainThread] 2024-07-25 16:30:28,399 [DEBUG] snowflake.connector.network: Query id: xxx
+[MainThread] 2024-07-25 16:30:28,399 [DEBUG] snowflake.connector._query_context_cache: deserialize_json_dict() called: data from server: {'entries': [{'id': 0, 'timestamp': 1721950228451266, 'priority': 0}]}
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector._query_context_cache: Cache Entry: (0, 1721950228377484, 0)
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector._query_context_cache: deserialize {'id': 0, 'timestamp': 1721950228451266, 'priority': 0}
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector._query_context_cache: sync_priority_map called priority_map size = 0, new_priority_map size = 1
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector._query_context_cache: trim_cache() called. treeSet size is 1 and cache capacity is 5
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector._query_context_cache: trim_cache() returns. treeSet size is 1 and cache capacity is 5
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector._query_context_cache: deserialize_json_dict() returns
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector._query_context_cache: Cache Entry: (0, 1721950228451266, 0)
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.cursor: sfqid: 01b5ea22-090a-e37e-000c-a90522a305d3
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.cursor: query execution done
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.cursor: SUCCESS
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.cursor: PUT OR GET: False
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.cursor: Query result format: arrow
+[MainThread] 2024-07-25 16:30:28,400 [INFO] snowflake.connector.cursor: Number of results in first chunk: 0
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.result_set: beginning to schedule result batch downloads
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.cursor: executing SQL/command
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.cursor: query: [call reproduce_long_query_insert()]
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.cursor: binding: [call reproduce_long_query_insert()] with input=[None], processed=[{}]
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.connection: sequence counter: 4
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.cursor: Request id: xxx
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.cursor: running query [call reproduce_long_query_insert()]
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.cursor: is_file_transfer: True
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.connection: _cmd_query
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector._query_context_cache: serialize_to_dict() called
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector._query_context_cache: Cache Entry: (0, 1721950228451266, 0)
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector._query_context_cache: serialize_to_dict(): data to send to server {'entries': [{'id': 0, 'timestamp': 1721950228451266, 'priority': 0, 'context': {}}]}
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.connection: sql=[call reproduce_long_query_insert()], sequence_id=[4], is_file_transfer=[False]
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:30:28,400 [DEBUG] snowflake.connector.network: remaining request timeout: N/A ms, retry cnt: 1
+[MainThread] 2024-07-25 16:30:28,401 [DEBUG] snowflake.connector.network: Request guid: fbc7634a-066f-4168-9995-1a1b9a72e2ec
+[MainThread] 2024-07-25 16:30:28,401 [DEBUG] snowflake.connector.network: socket timeout: 60
+[MainThread] 2024-07-25 16:31:13,425 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "POST /queries/v1/query-request?requestId=xxx&request_guid=fbc7634a-066f-4168-9995-1a1b9a72e2ec HTTP/1.1" 200 363
+[MainThread] 2024-07-25 16:31:13,427 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:31:13,427 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:31:13,427 [DEBUG] snowflake.connector.network: ret[code] = 333334, after post request
+[MainThread] 2024-07-25 16:31:13,427 [DEBUG] snowflake.connector.network: Query id: 01b5ea22-090a-dca3-000c-a90522a322e3
+[MainThread] 2024-07-25 16:31:13,428 [DEBUG] snowflake.connector.network: ping pong starting...
+[MainThread] 2024-07-25 16:31:13,428 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:31:13,428 [DEBUG] snowflake.connector.network: remaining request timeout: N/A ms, retry cnt: 1
+[MainThread] 2024-07-25 16:31:13,429 [DEBUG] snowflake.connector.network: Request guid: 2e332f43-3bcd-467c-bbeb-54d9284ef0ac
+[MainThread] 2024-07-25 16:31:13,429 [DEBUG] snowflake.connector.network: socket timeout: 60
+urlopen counter 0
+[MainThread] 2024-07-25 16:31:58,468 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "GET /queries/xxx/result?request_guid=2e332f43-3bcd-467c-bbeb-54d9284ef0ac HTTP/1.1" 200 363
+[MainThread] 2024-07-25 16:31:58,469 [DEBUG] snowflake.connector.vendored.urllib3.util.retry: Incremented Retry for (url='/queries/xxx/result?request_guid=2e332f43-3bcd-467c-bbeb-54d9284ef0ac'): Retry(total=0, connect=None, read=None, redirect=None, status=None)
+[MainThread] 2024-07-25 16:31:58,474 [WARNING] snowflake.connector.vendored.urllib3.connectionpool: Retrying (Retry(total=0, connect=None, read=None, redirect=None, status=None)) after connection broken by 'ProtocolError('Connection aborted.', OSError('Remote Disconnected'))': /queries/01b5ea22-090a-dca3-000c-a90522a322e3/result?request_guid=2e332f43-3bcd-467c-bbeb-54d9284ef0ac
+[MainThread] 2024-07-25 16:31:58,475 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: Starting new HTTPS connection (2): xxx.snowflakecomputing.com:443
+urlopen counter 1
+[MainThread] 2024-07-25 16:31:58,641 [DEBUG] snowflake.connector.ssl_wrap_socket: OCSP Mode: FAIL_OPEN, OCSP response cache file name: None
+[MainThread] 2024-07-25 16:31:58,641 [DEBUG] snowflake.connector.ocsp_snowflake: ocsp_response_cache_uri: file:///xxx/Library/Caches/Snowflake/ocsp_response_cache.json
+[MainThread] 2024-07-25 16:31:58,641 [DEBUG] snowflake.connector.ocsp_snowflake: OCSP_VALIDATION_CACHE size: 287
+[MainThread] 2024-07-25 16:31:58,641 [DEBUG] snowflake.connector.ocsp_snowflake: OCSP response cache server is enabled: http://ocsp.snowflakecomputing.com/ocsp_response_cache.json
+[MainThread] 2024-07-25 16:31:58,641 [DEBUG] snowflake.connector.ocsp_snowflake: OCSP dynamic cache server RETRY URL: None
+[MainThread] 2024-07-25 16:31:58,641 [DEBUG] snowflake.connector.ocsp_snowflake: validating certificate: xxx.snowflakecomputing.com
+[MainThread] 2024-07-25 16:31:58,642 [DEBUG] snowflake.connector.ocsp_asn1crypto: # of certificates: 4
+[MainThread] 2024-07-25 16:31:58,642 [DEBUG] snowflake.connector.ocsp_asn1crypto: subject: OrderedDict({'common_name': '*.us-west-2.snowflakecomputing.com'}), issuer: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon RSA 2048 M03'})
+[MainThread] 2024-07-25 16:31:58,642 [DEBUG] snowflake.connector.ocsp_asn1crypto: subject: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon RSA 2048 M03'}), issuer: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon Root CA 1'})
+[MainThread] 2024-07-25 16:31:58,643 [DEBUG] snowflake.connector.ocsp_asn1crypto: subject: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon Root CA 1'}), issuer: OrderedDict({'country_name': 'US', 'state_or_province_name': 'Arizona', 'locality_name': 'Scottsdale', 'organization_name': 'Starfield Technologies, Inc.', 'common_name': 'Starfield Services Root Certificate Authority - G2'})
+[MainThread] 2024-07-25 16:31:58,643 [DEBUG] snowflake.connector.ocsp_asn1crypto: subject: OrderedDict({'country_name': 'US', 'state_or_province_name': 'Arizona', 'locality_name': 'Scottsdale', 'organization_name': 'Starfield Technologies, Inc.', 'common_name': 'Starfield Services Root Certificate Authority - G2'}), issuer: OrderedDict({'country_name': 'US', 'organization_name': 'Starfield Technologies, Inc.', 'organizational_unit_name': 'Starfield Class 2 Certification Authority'})
+[MainThread] 2024-07-25 16:31:58,646 [DEBUG] snowflake.connector.ocsp_asn1crypto: not found issuer_der: OrderedDict({'country_name': 'US', 'organization_name': 'Starfield Technologies, Inc.', 'organizational_unit_name': 'Starfield Class 2 Certification Authority'})
+[MainThread] 2024-07-25 16:31:58,647 [DEBUG] snowflake.connector.ocsp_snowflake: hit cache for subject: OrderedDict({'common_name': '*.us-west-2.snowflakecomputing.com'})
+[MainThread] 2024-07-25 16:31:58,648 [DEBUG] snowflake.connector.ocsp_asn1crypto: Verifying the attached certificate is signed by the issuer. Valid Not After: 2025-12-10 00:00:00+00:00
+[MainThread] 2024-07-25 16:31:58,648 [DEBUG] snowflake.connector.ocsp_snowflake: hit cache for subject: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon RSA 2048 M03'})
+[MainThread] 2024-07-25 16:31:58,650 [DEBUG] snowflake.connector.ocsp_asn1crypto: Verifying the attached certificate is signed by the issuer. Valid Not After: 2025-12-10 00:00:00+00:00
+[MainThread] 2024-07-25 16:31:58,650 [DEBUG] snowflake.connector.ocsp_snowflake: hit cache for subject: OrderedDict({'country_name': 'US', 'organization_name': 'Amazon', 'common_name': 'Amazon Root CA 1'})
+[MainThread] 2024-07-25 16:31:58,652 [DEBUG] snowflake.connector.ocsp_asn1crypto: Verifying the attached certificate is signed by the issuer. Valid Not After: 2025-05-07 12:00:00+00:00
+[MainThread] 2024-07-25 16:31:58,652 [DEBUG] snowflake.connector.ocsp_snowflake: hit cache for subject: OrderedDict({'country_name': 'US', 'state_or_province_name': 'Arizona', 'locality_name': 'Scottsdale', 'organization_name': 'Starfield Technologies, Inc.', 'common_name': 'Starfield Services Root Certificate Authority - G2'})
+[MainThread] 2024-07-25 16:31:58,654 [DEBUG] snowflake.connector.ocsp_snowflake: ok
+urlopen counter 2
+[MainThread] 2024-07-25 16:32:43,680 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "GET /queries/xxx/result?request_guid=2e332f43-3bcd-467c-bbeb-54d9284ef0ac HTTP/1.1" 200 363
+[MainThread] 2024-07-25 16:32:43,682 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:32:43,683 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:32:43,683 [DEBUG] snowflake.connector.network: ret[code] = 333334
+[MainThread] 2024-07-25 16:32:43,683 [DEBUG] snowflake.connector.network: ping pong done
+[MainThread] 2024-07-25 16:32:43,683 [DEBUG] snowflake.connector.network: ping pong starting...
+[MainThread] 2024-07-25 16:32:43,683 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:32:43,683 [DEBUG] snowflake.connector.network: remaining request timeout: N/A ms, retry cnt: 1
+[MainThread] 2024-07-25 16:32:43,684 [DEBUG] snowflake.connector.network: Request guid: 8e291d43-9bae-4d82-9a24-97569bd6a0a4
+[MainThread] 2024-07-25 16:32:43,684 [DEBUG] snowflake.connector.network: socket timeout: 60
+[MainThread] 2024-07-25 16:33:28,790 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "GET /queries/xxx/result?request_guid=8e291d43-9bae-4d82-9a24-97569bd6a0a4 HTTP/1.1" 200 363
+[MainThread] 2024-07-25 16:33:28,791 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:33:28,791 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:33:28,791 [DEBUG] snowflake.connector.network: ret[code] = 333334
+[MainThread] 2024-07-25 16:33:28,791 [DEBUG] snowflake.connector.network: ping pong done
+[MainThread] 2024-07-25 16:33:28,791 [DEBUG] snowflake.connector.network: ping pong starting...
+[MainThread] 2024-07-25 16:33:28,791 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:33:28,791 [DEBUG] snowflake.connector.network: remaining request timeout: N/A ms, retry cnt: 1
+[MainThread] 2024-07-25 16:33:28,792 [DEBUG] snowflake.connector.network: Request guid: 08b4249a-ef62-4150-9034-c0f0158e22d8
+[MainThread] 2024-07-25 16:33:28,792 [DEBUG] snowflake.connector.network: socket timeout: 60
+urlopen counter 3
+[MainThread] 2024-07-25 16:34:13,834 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "GET /queries/xxx/result?request_guid=08b4249a-ef62-4150-9034-c0f0158e22d8 HTTP/1.1" 200 363
+[MainThread] 2024-07-25 16:34:13,835 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:34:13,835 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:34:13,835 [DEBUG] snowflake.connector.network: ret[code] = 333334
+[MainThread] 2024-07-25 16:34:13,835 [DEBUG] snowflake.connector.network: ping pong done
+[MainThread] 2024-07-25 16:34:13,835 [DEBUG] snowflake.connector.network: ping pong starting...
+[MainThread] 2024-07-25 16:34:13,836 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:34:13,836 [DEBUG] snowflake.connector.network: remaining request timeout: N/A ms, retry cnt: 1
+[MainThread] 2024-07-25 16:34:13,836 [DEBUG] snowflake.connector.network: Request guid: 518f14b1-c87f-41e2-abe6-dc5719124f65
+[MainThread] 2024-07-25 16:34:13,836 [DEBUG] snowflake.connector.network: socket timeout: 60
+urlopen counter 4
+urlopen counter 5
+[MainThread] 2024-07-25 16:34:58,892 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "GET /queries/xxx/result?request_guid=518f14b1-c87f-41e2-abe6-dc5719124f65 HTTP/1.1" 200 363
+[MainThread] 2024-07-25 16:34:58,892 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:34:58,892 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:34:58,892 [DEBUG] snowflake.connector.network: ret[code] = 333334
+[MainThread] 2024-07-25 16:34:58,892 [DEBUG] snowflake.connector.network: ping pong done
+[MainThread] 2024-07-25 16:34:58,892 [DEBUG] snowflake.connector.network: ping pong starting...
+[MainThread] 2024-07-25 16:34:58,893 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:34:58,893 [DEBUG] snowflake.connector.network: remaining request timeout: N/A ms, retry cnt: 1
+[MainThread] 2024-07-25 16:34:58,893 [DEBUG] snowflake.connector.network: Request guid: 8fbf52a6-ff51-4c5a-a6d1-ced4c2062197
+[MainThread] 2024-07-25 16:34:58,893 [DEBUG] snowflake.connector.network: socket timeout: 60
+[MainThread] 2024-07-25 16:35:29,073 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "GET /queries/xxx/result?request_guid=8fbf52a6-ff51-4c5a-a6d1-ced4c2062197 HTTP/1.1" 200 1163
+[MainThread] 2024-07-25 16:35:29,075 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:35:29,075 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:35:29,075 [DEBUG] snowflake.connector.network: ret[code] = None
+[MainThread] 2024-07-25 16:35:29,076 [DEBUG] snowflake.connector.network: ping pong done
+[MainThread] 2024-07-25 16:35:29,076 [DEBUG] snowflake.connector.cursor: sfqid: 01b5ea22-090a-dca3-000c-a90522a322e3
+[MainThread] 2024-07-25 16:35:29,076 [DEBUG] snowflake.connector.cursor: query execution done
+[MainThread] 2024-07-25 16:35:29,076 [DEBUG] snowflake.connector.cursor: SUCCESS
+[MainThread] 2024-07-25 16:35:29,076 [DEBUG] snowflake.connector.cursor: PUT OR GET: False
+[MainThread] 2024-07-25 16:35:29,076 [DEBUG] snowflake.connector.cursor: Query result format: json
+[MainThread] 2024-07-25 16:35:29,076 [DEBUG] snowflake.connector.result_batch: parsing for result batch id: 1
+[MainThread] 2024-07-25 16:35:29,076 [INFO] snowflake.connector.cursor: Number of results in first chunk: 1
+[MainThread] 2024-07-25 16:35:29,076 [DEBUG] snowflake.connector.cursor: executing SQL/command
+[MainThread] 2024-07-25 16:35:29,076 [DEBUG] snowflake.connector.cursor: query: [select * from reproduce_table]
+[MainThread] 2024-07-25 16:35:29,077 [DEBUG] snowflake.connector.cursor: binding: [select * from reproduce_table] with input=[None], processed=[{}]
+[MainThread] 2024-07-25 16:35:29,077 [DEBUG] snowflake.connector.connection: sequence counter: 5
+[MainThread] 2024-07-25 16:35:29,077 [DEBUG] snowflake.connector.cursor: Request id: xxx
+[MainThread] 2024-07-25 16:35:29,077 [DEBUG] snowflake.connector.cursor: running query [select * from reproduce_table]
+[MainThread] 2024-07-25 16:35:29,077 [DEBUG] snowflake.connector.cursor: is_file_transfer: True
+[MainThread] 2024-07-25 16:35:29,077 [DEBUG] snowflake.connector.connection: _cmd_query
+[MainThread] 2024-07-25 16:35:29,077 [DEBUG] snowflake.connector._query_context_cache: serialize_to_dict() called
+[MainThread] 2024-07-25 16:35:29,077 [DEBUG] snowflake.connector._query_context_cache: Cache Entry: (0, 1721950228451266, 0)
+[MainThread] 2024-07-25 16:35:29,077 [DEBUG] snowflake.connector._query_context_cache: serialize_to_dict(): data to send to server {'entries': [{'id': 0, 'timestamp': 1721950228451266, 'priority': 0, 'context': {}}]}
+[MainThread] 2024-07-25 16:35:29,077 [DEBUG] snowflake.connector.connection: sql=[select * from reproduce_table], sequence_id=[5], is_file_transfer=[False]
+[MainThread] 2024-07-25 16:35:29,077 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:35:29,078 [DEBUG] snowflake.connector.network: remaining request timeout: N/A ms, retry cnt: 1
+[MainThread] 2024-07-25 16:35:29,078 [DEBUG] snowflake.connector.network: Request guid: 1e5f0154-a421-463e-8541-414619661795
+[MainThread] 2024-07-25 16:35:29,078 [DEBUG] snowflake.connector.network: socket timeout: 60
+[MainThread] 2024-07-25 16:35:29,176 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "POST /queries/v1/query-request?requestId=xxx&request_guid=1e5f0154-a421-463e-8541-414619661795 HTTP/1.1" 200 1531
+[MainThread] 2024-07-25 16:35:29,177 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:35:29,177 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:35:29,178 [DEBUG] snowflake.connector.network: ret[code] = None, after post request
+[MainThread] 2024-07-25 16:35:29,178 [DEBUG] snowflake.connector.network: Query id: 01b5ea27-090a-dca3-000c-a90522a9aeef
+[MainThread] 2024-07-25 16:35:29,178 [DEBUG] snowflake.connector._query_context_cache: deserialize_json_dict() called: data from server: {'entries': [{'id': 0, 'timestamp': 1721950529214028, 'priority': 0}]}
+[MainThread] 2024-07-25 16:35:29,178 [DEBUG] snowflake.connector._query_context_cache: Cache Entry: (0, 1721950228451266, 0)
+[MainThread] 2024-07-25 16:35:29,178 [DEBUG] snowflake.connector._query_context_cache: deserialize {'id': 0, 'timestamp': 1721950529214028, 'priority': 0}
+[MainThread] 2024-07-25 16:35:29,178 [DEBUG] snowflake.connector._query_context_cache: sync_priority_map called priority_map size = 0, new_priority_map size = 1
+[MainThread] 2024-07-25 16:35:29,178 [DEBUG] snowflake.connector._query_context_cache: trim_cache() called. treeSet size is 1 and cache capacity is 5
+[MainThread] 2024-07-25 16:35:29,178 [DEBUG] snowflake.connector._query_context_cache: trim_cache() returns. treeSet size is 1 and cache capacity is 5
+[MainThread] 2024-07-25 16:35:29,178 [DEBUG] snowflake.connector._query_context_cache: deserialize_json_dict() returns
+[MainThread] 2024-07-25 16:35:29,178 [DEBUG] snowflake.connector._query_context_cache: Cache Entry: (0, 1721950529214028, 0)
+[MainThread] 2024-07-25 16:35:29,178 [DEBUG] snowflake.connector.cursor: sfqid: 01b5ea27-090a-dca3-000c-a90522a9aeef
+[MainThread] 2024-07-25 16:35:29,179 [DEBUG] snowflake.connector.cursor: query execution done
+[MainThread] 2024-07-25 16:35:29,179 [DEBUG] snowflake.connector.cursor: SUCCESS
+[MainThread] 2024-07-25 16:35:29,179 [DEBUG] snowflake.connector.cursor: PUT OR GET: False
+[MainThread] 2024-07-25 16:35:29,179 [DEBUG] snowflake.connector.cursor: Query result format: arrow
+[MainThread] 2024-07-25 16:35:29,179 [INFO] snowflake.connector.cursor: Number of results in first chunk: 1
+[MainThread] 2024-07-25 16:35:29,179 [DEBUG] snowflake.connector.result_batch: Using nanoarrow as the arrow data converter
+[MainThread] 2024-07-25 16:35:29,181 [DEBUG] snowflake.connector.CArrowIterator: Arrow BatchSize: 1
+[MainThread] 2024-07-25 16:35:29,181 [DEBUG] snowflake.connector.CArrowIterator: Arrow chunk info: batchCount 1, columnCount 1, use_numpy: 0
+[MainThread] 2024-07-25 16:35:29,181 [DEBUG] snowflake.connector.nanoarrow_arrow_iterator: Batches read: 0
+[MainThread] 2024-07-25 16:35:29,181 [DEBUG] snowflake.connector.result_set: beginning to schedule result batch downloads
+[MainThread] 2024-07-25 16:35:29,182 [DEBUG] snowflake.connector.CArrowIterator: Current batch index: 0, rows in current batch: 1
+[MainThread] 2024-07-25 16:35:29,182 [INFO] snowflake.connector.connection: closed
+[MainThread] 2024-07-25 16:35:29,182 [DEBUG] snowflake.connector.telemetry: Closing telemetry client.
+[MainThread] 2024-07-25 16:35:29,184 [DEBUG] snowflake.connector.telemetry: Sending 1 logs to telemetry. Data is {'logs': [{'message': {'driver_type': 'PythonConnector', 'driver_version': '3.8.1', 'source': 'PythonConnector', 'type': 'client_imported_packages', 'value': "{'sys', 'idna', 'copy', 'OpenSSL', 'difflib', 'posix', 'random', 'shutil', 'gzip', 'contextvars', 'pickle', 'typing_extensions', 'cryptography', 'concurrent', 'dis', 'http', 'calendar', 'site', 'base64', 'csv', 're', 'email', 'shlex', 'subprocess', 'mimetypes', 'pytz', 'traceback', 'asn1crypto', 'numpy', 'importlib', 'sortedcontainers', 'ast', 'urllib3', 'snowflake', 'zipfile', 'posixpath', 'uuid', 'enum', 'ipaddress', 'heapq', 'unicodedata', 'requests', 'errno', 'bz2', 'tokenize', 'secrets', 'array', 'hmac', 'json', 'contextlib', 'stat', 'selectors', 'datetime', 'xml', 'logging', 'html', 'fractions', 'charset_normalizer', 'webbrowser', 'lzma', 'weakref', 'sysconfig', 'atexit', 'tomlkit', 'os', 'math', 'warnings', 'string', 'plistlib', 'locale', 'ctypes', 'operator', 'packaging', 'itertools', 'time', 'types', 'socket', 'select', 'urllib', 'pyarrow', 'signal', 'asyncio', 'token', 'opcode', 'inspect', 'stringprep', 'textwrap', 'codecs', 'dataclasses', 'copyreg', 'cython_runtime', 'numbers', 'pathlib', 'quopri', 'decimal', 'linecache', 'binascii', 'threading', 'io', 'zlib', 'queue', 'zipimport', 'platform', 'certifi', 'reprlib', 'functools', 'gc', 'collections', 'fnmatch', 'tempfile', 'platformdirs', 'pyexpat', 'builtins', 'ntpath', 'genericpath', 'hashlib', 'bisect', 'encodings', 'jwt', 'struct', 'ssl', 'typing', 'abc', 'filelock', 'fcntl', 'keyword', 'marshal'}"}, 'timestamp': '1721950227981'}, {'message': {'driver_type': 'PythonConnector', 'driver_version': '3.8.1', 'source': 'PythonConnector', 'type': 'client_time_consume_first_result', 'query_id': '01b5ea22-090a-e37e-000c-a90522a3055f', 'value': -58}, 'timestamp': '1721950228157'}, {'message': {'driver_type': 'PythonConnector', 'driver_version': '3.8.1', 'source': 'PythonConnector', 'type': 'client_time_consume_first_result', 'query_id': '01b5ea22-090a-e37e-000c-a90522a30597', 'value': -53}, 'timestamp': '1721950228337'}, {'message': {'driver_type': 'PythonConnector', 'driver_version': '3.8.1', 'source': 'PythonConnector', 'type': 'client_time_consume_first_result', 'query_id': '01b5ea22-090a-e37e-000c-a90522a305d3', 'value': -61}, 'timestamp': '1721950228400'}, {'message': {'driver_type': 'PythonConnector', 'driver_version': '3.8.1', 'source': 'PythonConnector', 'type': 'client_time_consume_last_result', 'query_id': '01b5ea22-090a-e37e-000c-a90522a305d3', 'value': 0}, 'timestamp': '1721950228400'}, {'message': {'driver_type': 'PythonConnector', 'driver_version': '3.8.1', 'source': 'PythonConnector', 'type': 'client_time_consume_first_result', 'query_id': '01b5ea22-090a-dca3-000c-a90522a322e3', 'value': -24}, 'timestamp': '1721950529076'}, {'message': {'driver_type': 'PythonConnector', 'driver_version': '3.8.1', 'source': 'PythonConnector', 'type': 'client_time_consume_first_result', 'query_id': '01b5ea27-090a-dca3-000c-a90522a9aeef', 'value': -46}, 'timestamp': '1721950529179'}, {'message': {'driver_type': 'PythonConnector', 'driver_version': '3.8.1', 'source': 'PythonConnector', 'type': 'client_time_consume_last_result', 'query_id': '01b5ea27-090a-dca3-000c-a90522a9aeef', 'value': 3}, 'timestamp': '1721950529182'}]}.
+[MainThread] 2024-07-25 16:35:29,184 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:35:29,184 [DEBUG] snowflake.connector.network: remaining request timeout: 5000 ms, retry cnt: 1
+[MainThread] 2024-07-25 16:35:29,184 [DEBUG] snowflake.connector.network: Request guid: xxx
+[MainThread] 2024-07-25 16:35:29,184 [DEBUG] snowflake.connector.network: socket timeout: 60
+[MainThread] 2024-07-25 16:35:29,216 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "POST /telemetry/send?request_guid=65f18301-7b80-43e6-bffa-f8345623e2e3 HTTP/1.1" 200 86
+[MainThread] 2024-07-25 16:35:29,217 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:35:29,217 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:35:29,217 [DEBUG] snowflake.connector.network: ret[code] = None, after post request
+[MainThread] 2024-07-25 16:35:29,217 [DEBUG] snowflake.connector.telemetry: Successfully uploading metrics to telemetry.
+[MainThread] 2024-07-25 16:35:29,217 [INFO] snowflake.connector.connection: No async queries seem to be running, deleting session
+[MainThread] 2024-07-25 16:35:29,217 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 1/1 active sessions
+[MainThread] 2024-07-25 16:35:29,218 [DEBUG] snowflake.connector.network: remaining request timeout: 4999 ms, retry cnt: 1
+[MainThread] 2024-07-25 16:35:29,218 [DEBUG] snowflake.connector.network: Request guid: xxx
+[MainThread] 2024-07-25 16:35:29,218 [DEBUG] snowflake.connector.network: socket timeout: 60
+[MainThread] 2024-07-25 16:35:29,265 [DEBUG] snowflake.connector.vendored.urllib3.connectionpool: https://xxx.snowflakecomputing.com:443 "POST /session?delete=true&request_guid=c1a6091a-4e91-4bbf-8913-582416bbdc9b HTTP/1.1" 200 76
+[MainThread] 2024-07-25 16:35:29,266 [DEBUG] snowflake.connector.network: SUCCESS
+[MainThread] 2024-07-25 16:35:29,266 [DEBUG] snowflake.connector.network: Session status for SessionPool 'xxx.snowflakecomputing.com', SessionPool 0/1 active sessions
+[MainThread] 2024-07-25 16:35:29,266 [DEBUG] snowflake.connector.network: ret[code] = None, after post request
+[MainThread] 2024-07-25 16:35:29,267 [DEBUG] snowflake.connector._query_context_cache: clear_cache() called
+[MainThread] 2024-07-25 16:35:29,267 [DEBUG] snowflake.connector.connection: Session is closed
+
+Process finished with exit code 0
