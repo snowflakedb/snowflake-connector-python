@@ -39,6 +39,21 @@ def test_snowflake_authorization_code_successful():
 
 
 @pytest.mark.auth
+def test_snowflake_authorization_code_local_application_successful():
+    connection_parameters = (
+        AuthConnectionParameters().get_snowflake_authorization_code_local_application_connection_parameters()
+    )
+    test_helper = AuthorizationTestHelper(connection_parameters)
+    browser_login, browser_password = get_soteria_okta_login_credentials().values()
+
+    test_helper.connect_and_provide_credentials(
+        Scenario.INTERNAL_OAUTH_SNOWFLAKE_SUCCESS, browser_login, browser_password
+    )
+
+    assert test_helper.error_msg == "", "Error message should be empty"
+
+
+@pytest.mark.auth
 def test_snowflake_authorization_code_mismatched_user():
     connection_parameters = (
         AuthConnectionParameters().get_snowflake_authorization_code_connection_parameters()

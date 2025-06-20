@@ -121,9 +121,12 @@ def temp_cache():
 
 @pytest.fixture()
 def omit_oauth_urls_check():
+    def get_first_two_args(authorization_url: str, redirect_uri: str, *args, **kwargs):
+        return authorization_url, redirect_uri
+
     with mock.patch(
-        "snowflake.connector.SnowflakeConnection._check_oauth_parameters",
-        return_value=None,
+        "snowflake.connector.auth.oauth_code.AuthByOauthCode._validate_oauth_code_uris",
+        side_effect=get_first_two_args,
     ):
         yield
 
