@@ -3,6 +3,7 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
+import unittest.mock as mock
 from unittest.mock import patch
 
 import pytest
@@ -12,7 +13,19 @@ from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.network import OAUTH_AUTHORIZATION_CODE
 
 
-def test_auth_oauth_auth_code_oauth_type():
+@pytest.fixture()
+def omit_oauth_urls_check():
+    def get_first_two_args(authorization_url: str, redirect_uri: str, *args, **kwargs):
+        return authorization_url, redirect_uri
+
+    with mock.patch(
+        "snowflake.connector.auth.oauth_code.AuthByOauthCode._validate_oauth_code_uris",
+        side_effect=get_first_two_args,
+    ):
+        yield
+
+
+def test_auth_oauth_auth_code_oauth_type(omit_oauth_urls_check):
     """Simple OAuth Auth Code oauth type test."""
     auth = AuthByOauthCode(
         "app",
@@ -30,7 +43,9 @@ def test_auth_oauth_auth_code_oauth_type():
 
 
 @pytest.mark.parametrize("rtr_enabled", [True, False])
-def test_auth_oauth_auth_code_single_use_refresh_tokens(rtr_enabled: bool):
+def test_auth_oauth_auth_code_single_use_refresh_tokens(
+    rtr_enabled: bool, omit_oauth_urls_check
+):
     """Verifies that the enable_single_use_refresh_tokens option is plumbed into the authz code request."""
     auth = AuthByOauthCode(
         "app",
