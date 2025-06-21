@@ -340,7 +340,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-1825621: OAUTH implementation
     ),
-    "oauth_redirect_uri": ("http://127.0.0.1/", str),
+    "oauth_redirect_uri": ("http://127.0.0.1", str),
     "oauth_scope": (
         "",
         str,
