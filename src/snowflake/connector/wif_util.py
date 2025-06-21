@@ -29,10 +29,10 @@ References:
 """
 AZURE_ISSUER_PREFIXES = [
     "https://sts.windows.net/",  # Public and USGov (v1 issuer)
-    "https://sts.chinacloudapi.cn",  # Mooncake (v1 issuer)
+    "https://sts.chinacloudapi.cn/",  # Mooncake (v1 issuer)
     "https://login.microsoftonline.com/",  # Public (v2 issuer)
-    "https://login.microsoftonline.us",  # USGov (v2 issuer)
-    "https://login.partner.microsoftonline.cn",  # Mooncake (v2 issuer)
+    "https://login.microsoftonline.us/",  # USGov (v2 issuer)
+    "https://login.partner.microsoftonline.cn/",  # Mooncake (v2 issuer)
 ]
 
 
@@ -147,8 +147,6 @@ def get_aws_sts_hostname(region: str, partition: str) -> str | None:
 
     Args:
         region (str): The AWS region (e.g., 'us-east-1', 'cn-north-1').
-                      Can be an empty string for global STS endpoint if applicable
-                      to the partition.
         partition (str): The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov').
 
     Returns:
