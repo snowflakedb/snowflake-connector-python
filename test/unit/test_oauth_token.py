@@ -121,9 +121,12 @@ def temp_cache():
 
 @pytest.fixture()
 def omit_oauth_urls_check():
+    def get_first_two_args(authorization_url: str, redirect_uri: str, *args, **kwargs):
+        return authorization_url, redirect_uri
+
     with mock.patch(
-        "snowflake.connector.SnowflakeConnection._check_oauth_parameters",
-        return_value=None,
+        "snowflake.connector.auth.oauth_code.AuthByOauthCode._validate_oauth_code_uris",
+        side_effect=get_first_two_args,
     ):
         yield
 
@@ -349,6 +352,50 @@ def test_oauth_code_custom_urls(
                 authenticator="OAUTH_AUTHORIZATION_CODE",
                 oauth_client_id="123",
                 oauth_client_secret="testClientSecret",
+                account="testAccount",
+                protocol="http",
+                role="ANALYST",
+                oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/tokenrequest",
+                oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/authorization",
+                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                host=wiremock_client.wiremock_host,
+                port=wiremock_client.wiremock_http_port,
+            )
+
+            assert cnx, "invalid cnx"
+            cnx.close()
+
+
+@pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
+def test_oauth_code_local_application_custom_urls_successful_flow(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_authorization_code_dir,
+    wiremock_generic_mappings_dir,
+    webbrowser_mock,
+    monkeypatch,
+    omit_oauth_urls_check,
+) -> None:
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
+
+    wiremock_client.import_mapping(
+        wiremock_oauth_authorization_code_dir
+        / "external_idp_custom_urls_local_application.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+
+    with mock.patch("webbrowser.open", new=webbrowser_mock.open):
+        with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+            cnx = snowflake.connector.connect(
+                user="testUser",
+                authenticator="OAUTH_AUTHORIZATION_CODE",
+                oauth_client_id="",
+                oauth_client_secret="",
                 account="testAccount",
                 protocol="http",
                 role="ANALYST",

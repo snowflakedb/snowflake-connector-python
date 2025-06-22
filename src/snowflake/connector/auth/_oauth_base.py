@@ -12,7 +12,13 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError, URLError
 
-from ..errorcode import ER_FAILED_TO_REQUEST, ER_IDP_CONNECTION_ERROR
+from ..errorcode import (
+    ER_FAILED_TO_REQUEST,
+    ER_IDP_CONNECTION_ERROR,
+    ER_NO_CLIENT_ID,
+    ER_NO_CLIENT_SECRET,
+)
+from ..errors import Error, ProgrammingError
 from ..network import OAUTH_AUTHENTICATOR
 from ..secret_detector import SecretDetector
 from ..token_cache import TokenCache, TokenKey, TokenType
@@ -184,6 +190,33 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
     def assertion_content(self) -> str:
         """Returns the token."""
         return self._access_token or ""
+
+    @staticmethod
+    def _validate_client_credentials_present(
+        client_id: str, client_secret: str, connection: SnowflakeConnection
+    ) -> tuple[str, str]:
+        if client_id is None or client_id == "":
+            Error.errorhandler_wrapper(
+                connection,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Oauth code flow requirement 'client_id' is empty",
+                    "errno": ER_NO_CLIENT_ID,
+                },
+            )
+        if client_secret is None or client_secret == "":
+            Error.errorhandler_wrapper(
+                connection,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Oauth code flow requirement 'client_secret' is empty",
+                    "errno": ER_NO_CLIENT_SECRET,
+                },
+            )
+
+        return client_id, client_secret
 
     def reauthenticate(
         self,
