@@ -113,7 +113,7 @@ class RequestTracker:
 
     def assert_disconnect_issued(self) -> RequestDTO:
         return self.assert_request_occurred_after_optional_retries(
-            ExpectedRequestInfo("POST", r".*/session\?delete=true")
+            ExpectedRequestInfo("POST", r".*/session\?delete=true(\&request_guid=.*)?")
         )
 
     def assert_get_chunk_issued(self) -> RequestDTO:
