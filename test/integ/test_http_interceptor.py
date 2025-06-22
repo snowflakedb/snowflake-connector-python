@@ -1,3 +1,4 @@
+import os
 import pathlib
 from typing import Deque
 
@@ -177,3 +178,77 @@ def test_interceptor_detects_expected_requests_in_successful_flow_with_chunks(
         large_table_name = db_parameters["name"]
 
     assert_expected_requests_occurred(connection, large_table_name)
+
+
+@pytest.mark.parametrize("execute_on_wiremock", (True, False))
+@pytest.mark.skipolddriver
+def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
+    request,
+    tmp_path: pathlib.Path,
+    execute_on_wiremock: bool,
+    wiremock_password_auth_dir: pathlib.Path,
+    wiremock_generic_mappings_dir: pathlib.Path,
+    wiremock_queries_dir: pathlib.Path,
+    static_collecting_customizer,
+    conn_cnx,
+    conn_cnx_wiremock,
+):
+    def _assert_expected_requests_occurred(conn: SnowflakeConnection) -> None:
+        requests: Deque[RequestDTO] = static_collecting_customizer.invocations
+        tracker = RequestTracker(requests)
+
+        test_file = tmp_path / "single_part.txt"
+        test_file.write_text("test,data\n")
+        download_dir = tmp_path / "download"
+        download_dir.mkdir()
+        current_provider = os.getenv("cloud_provider", "dev")
+        stage_path = "~"
+
+        with conn as cxn:
+            tracker.assert_login_issued()
+
+            put_sql = f"PUT file://{test_file} @{stage_path} AUTO_COMPRESS = FALSE"
+            cxn.cursor().execute(put_sql)
+            tracker.assert_sql_query_issued()
+            if current_provider in ("aws", "dev"):
+                tracker.assert_aws_get_accelerate_issued()
+
+            tracker.assert_file_head_issued(test_file.name)
+
+            get_sql = f"GET @{stage_path}/{test_file.name} file://{download_dir}"
+            cxn.cursor().execute(get_sql)
+            tracker.assert_sql_query_issued()
+            if current_provider in ("aws", "dev"):
+                tracker.assert_aws_get_accelerate_issued()
+            tracker.assert_file_head_issued(test_file.name)
+            tracker.assert_get_file_issued(test_file.name)
+
+        tracker.assert_telemetry_send_issued()
+        tracker.assert_disconnect_issued()
+
+    if execute_on_wiremock:
+        wiremock_client = request.getfixturevalue("wiremock_client")
+        wiremock_client.import_mapping(
+            wiremock_password_auth_dir / "successful_flow.json"
+        )
+        # TODO: wiremock files
+        wiremock_client.add_mapping(
+            wiremock_queries_dir / "put_successful.json",
+            placeholders=wiremock_client.http_placeholders,
+        )
+        wiremock_client.add_mapping(
+            wiremock_queries_dir / "get_successful.json",
+            placeholders=wiremock_client.http_placeholders,
+        )
+        wiremock_client.add_mapping(
+            wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+        )
+        wiremock_client.add_mapping(wiremock_generic_mappings_dir / "telemetry.json")
+
+        connection = conn_cnx_wiremock(
+            headers_customizers=[static_collecting_customizer]
+        )
+    else:
+        connection = conn_cnx(headers_customizers=[static_collecting_customizer])
+
+    _assert_expected_requests_occurred(connection)

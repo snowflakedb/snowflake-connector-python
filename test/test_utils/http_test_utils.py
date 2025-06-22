@@ -37,8 +37,8 @@ class ExpectedRequestInfo(NamedTuple):
     # TODO: pass parameters as well as an argument
     def is_matching(self, request: object) -> bool:
         if isinstance(request, RequestDTO):
-            return request.method.upper() == self.method.upper() and re.fullmatch(
-                self.url_regexp, request.url
+            return request.method.upper() == self.method.upper() and bool(
+                re.fullmatch(self.url_regexp, request.url)
             )
         elif isinstance(request, ExpectedRequestInfo):
             return (
@@ -121,5 +121,28 @@ class RequestTracker:
             ExpectedRequestInfo(
                 "GET",
                 r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*?/results/.*main.*data.*\?.*",
+            )
+        )
+
+    def assert_aws_get_accelerate_issued(self) -> RequestDTO:
+        return self.assert_request_occurred_after_optional_retries(
+            ExpectedRequestInfo("GET", r".*\.s3\.amazonaws.*/\?accelerate(.*)?")
+        )
+
+    def assert_get_file_issued(self, filename: Optional[str] = None) -> RequestDTO:
+        return self.assert_request_occurred_after_optional_retries(
+            ExpectedRequestInfo(
+                "GET",
+                r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*"
+                + (filename if filename else ""),
+            )
+        )
+
+    def assert_file_head_issued(self, filename: Optional[str] = None) -> RequestDTO:
+        return self.assert_request_occurred_after_optional_retries(
+            ExpectedRequestInfo(
+                "HEAD",
+                r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*"
+                + (filename if filename else ""),
             )
         )
