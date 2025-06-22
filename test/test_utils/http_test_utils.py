@@ -118,5 +118,5 @@ class RequestTracker:
 
     def assert_get_chunk_issued(self) -> RequestDTO:
         return self.assert_request_occurred_after_optional_retries(
-            ExpectedRequestInfo("GET", r".*/results/.*/main/data.*\?.*")
+            ExpectedRequestInfo("GET", r".*/results/.*/main.*data.*\?.*")
         )
