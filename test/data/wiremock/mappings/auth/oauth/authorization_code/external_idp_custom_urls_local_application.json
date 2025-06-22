@@ -39,7 +39,7 @@
       }
     },
     {
-      "scenarioName": "Custom urls OAuth authorization code flow",
+      "scenarioName": "Custom urls OAuth authorization code flow local application",
       "requiredScenarioState": "Authorized",
       "newScenarioState": "Acquired access token",
       "request": {
