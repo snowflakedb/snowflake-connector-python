@@ -50,7 +50,9 @@ def test_snowflake_authorization_code_local_application_successful():
         Scenario.INTERNAL_OAUTH_SNOWFLAKE_SUCCESS, browser_login, browser_password
     )
 
-    assert test_helper.error_msg == "", "Error message should be empty"
+    assert (
+        test_helper.error_msg == ""
+    ), f"Error message should be empty, but got {test_helper.error_msg}"
 
 
 @pytest.mark.auth
