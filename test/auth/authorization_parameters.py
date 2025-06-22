@@ -216,9 +216,3 @@ class AuthConnectionParameters:
         config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
 
         return config
-
-    def get_snowflake_authorization_code_local_application_connection_parameters(self):
-        config = self.get_snowflake_authorization_code_connection_parameters()
-        config["oauth_client_id"] = ""
-        config["oauth_client_secret"] = ""
-        return config
