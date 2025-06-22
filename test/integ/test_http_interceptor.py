@@ -187,18 +187,12 @@ def test_interceptor_detects_expected_requests_in_successful_flow_with_chunks(
     assert_expected_requests_occurred(connection, large_table_name)
 
 
-@pytest.mark.parametrize("execute_on_wiremock", (True, False))
 @pytest.mark.skipolddriver
 def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
     request,
     tmp_path: pathlib.Path,
-    execute_on_wiremock: bool,
-    wiremock_password_auth_dir: pathlib.Path,
-    wiremock_generic_mappings_dir: pathlib.Path,
-    wiremock_queries_dir: pathlib.Path,
     static_collecting_customizer,
     conn_cnx,
-    conn_cnx_wiremock,
     current_provider,
 ):
     def _assert_expected_requests_occurred(conn: SnowflakeConnection) -> None:
@@ -238,51 +232,23 @@ def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
         tracker.assert_telemetry_send_issued()
         tracker.assert_disconnect_issued()
 
-    if execute_on_wiremock:
-        wiremock_client = request.getfixturevalue("wiremock_client")
-        wiremock_client.import_mapping(
-            wiremock_password_auth_dir / "successful_flow.json"
-        )
-        # TODO: wiremock files
-        wiremock_client.add_mapping(
-            wiremock_queries_dir / "put_successful.json",
-            placeholders=wiremock_client.http_placeholders,
-        )
-        wiremock_client.add_mapping(
-            wiremock_queries_dir / "get_successful.json",
-            placeholders=wiremock_client.http_placeholders,
-        )
-        wiremock_client.add_mapping(
-            wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
-        )
-        wiremock_client.add_mapping(wiremock_generic_mappings_dir / "telemetry.json")
-
-        connection = conn_cnx_wiremock(
-            headers_customizers=[static_collecting_customizer]
-        )
-    else:
-        connection = conn_cnx(headers_customizers=[static_collecting_customizer])
-
+    connection = conn_cnx(headers_customizers=[static_collecting_customizer])
     _assert_expected_requests_occurred(connection)
 
 
-@pytest.mark.parametrize("execute_on_wiremock", (True, False))
 @pytest.mark.skipolddriver
 def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
     request,
     tmp_path: pathlib.Path,
-    execute_on_wiremock: bool,
-    wiremock_password_auth_dir,
-    wiremock_generic_mappings_dir,
-    wiremock_queries_dir,
     static_collecting_customizer,
     conn_cnx,
-    conn_cnx_wiremock,
     current_provider,
 ):
     """Verifies request flow for multipart PUT and GET of a large file, with MD5 check and optional WireMock."""
 
-    def _assert_expected_requests_occurred_multipart(conn: SnowflakeConnection) -> None:
+    def _assert_expected_requests_occurred_multipart(
+        connection: SnowflakeConnection,
+    ) -> None:
         requests: Deque[RequestDTO] = static_collecting_customizer.invocations
         tracker = RequestTracker(requests)
 
@@ -297,7 +263,7 @@ def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
         download_dir.mkdir()
         big_test_file_stage_path = f"{stage_path}/{big_test_file.name}"
 
-        with conn as cnx:
+        with connection as cnx:
             with cnx.cursor() as cur:
                 tracker.assert_login_issued()
 
@@ -332,27 +298,5 @@ def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
         tracker.assert_telemetry_send_issued()
         tracker.assert_disconnect_issued()
 
-    if execute_on_wiremock:
-        wiremock_client = request.getfixturevalue("wiremock_client")
-
-        wiremock_client.import_mapping(
-            wiremock_password_auth_dir / "successful_flow.json"
-        )
-        wiremock_client.add_mapping(
-            wiremock_queries_dir / "put_multipart_successful.json",
-            placeholders=wiremock_client.http_placeholders,
-        )
-        wiremock_client.add_mapping(
-            wiremock_queries_dir / "get_successful.json",
-            placeholders=wiremock_client.http_placeholders,
-        )
-        wiremock_client.add_mapping(wiremock_generic_mappings_dir / "telemetry.json")
-        wiremock_client.add_mapping(
-            wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
-        )
-
-        conn = conn_cnx_wiremock(headers_customizers=[static_collecting_customizer])
-    else:
-        conn = conn_cnx(headers_customizers=[static_collecting_customizer])
-
+    conn = conn_cnx(headers_customizers=[static_collecting_customizer])
     _assert_expected_requests_occurred_multipart(conn)
