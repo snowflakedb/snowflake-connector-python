@@ -138,11 +138,41 @@ class RequestTracker:
             )
         )
 
+    def assert_put_file_issued(self, filename: Optional[str] = None) -> RequestDTO:
+        return self.assert_request_occurred_after_optional_retries(
+            ExpectedRequestInfo(
+                "PUT",
+                r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*/stages/.*"
+                + (filename if filename else "")
+                + "(.*)?",
+            )
+        )
+
     def assert_file_head_issued(self, filename: Optional[str] = None) -> RequestDTO:
         return self.assert_request_occurred_after_optional_retries(
             ExpectedRequestInfo(
                 "HEAD",
                 r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*"
                 + (filename if filename else ""),
+            )
+        )
+
+    def assert_post_start_for_multipart_file_issued(
+        self, file_path: Optional[str] = None
+    ) -> RequestDTO:
+        return self.assert_request_occurred_after_optional_retries(
+            ExpectedRequestInfo(
+                "POST",
+                r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*/stages/.*"
+                + (file_path if file_path else "")
+                + r"\?uploads",
+            )
+        )
+
+    def assert_post_end_for_multipart_file_issued(self) -> RequestDTO:
+        return self.assert_request_occurred_after_optional_retries(
+            ExpectedRequestInfo(
+                "POST",
+                r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*/stages/.*",
             )
         )

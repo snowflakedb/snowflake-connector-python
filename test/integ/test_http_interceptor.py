@@ -6,14 +6,16 @@ import pytest
 
 from snowflake.connector import SnowflakeConnection
 
+from ..generate_test_files import generate_k_lines_of_n_files
+from ..test_utils.http_test_utils import RequestTracker
 from .test_large_result_set import ingest_data  # NOQA
 
 try:
     from snowflake.connector.http_interceptor import RequestDTO
+    from snowflake.connector.util_text import random_string
 
-    from ..test_utils.http_test_utils import RequestTracker
 except (ImportError, NameError):  # Keep olddrivertest from breaking
-    pass
+    from ..randomize import random_string
 
 
 @pytest.fixture(scope="session")
@@ -29,6 +31,11 @@ def wiremock_queries_dir(wiremock_mapping_dir) -> pathlib.Path:
 @pytest.fixture(scope="session")
 def wiremock_password_auth_dir(wiremock_auth_dir) -> pathlib.Path:
     return wiremock_auth_dir / "password"
+
+
+@pytest.fixture(scope="session")
+def current_provider():
+    return os.getenv("cloud_provider", "dev")
 
 
 @pytest.mark.parametrize("execute_on_wiremock", (True, False))
@@ -192,6 +199,7 @@ def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
     static_collecting_customizer,
     conn_cnx,
     conn_cnx_wiremock,
+    current_provider,
 ):
     def _assert_expected_requests_occurred(conn: SnowflakeConnection) -> None:
         requests: Deque[RequestDTO] = static_collecting_customizer.invocations
@@ -201,27 +209,31 @@ def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
         test_file.write_text("test,data\n")
         download_dir = tmp_path / "download"
         download_dir.mkdir()
-        current_provider = os.getenv("cloud_provider", "dev")
-        stage_path = "~"
+        stage_name = random_string(5, "test_put_get_")
 
         with conn as cxn:
-            tracker.assert_login_issued()
+            with cxn.cursor() as cursor:
+                tracker.assert_login_issued()
 
-            put_sql = f"PUT file://{test_file} @{stage_path} AUTO_COMPRESS = FALSE"
-            cxn.cursor().execute(put_sql)
-            tracker.assert_sql_query_issued()
-            if current_provider in ("aws", "dev"):
-                tracker.assert_aws_get_accelerate_issued()
+                cursor.execute(f"create temporary stage {stage_name}")
+                tracker.assert_sql_query_issued()
 
-            tracker.assert_file_head_issued(test_file.name)
+                put_sql = f"PUT file://{test_file} @{stage_name} AUTO_COMPRESS = FALSE"
+                cursor.execute(put_sql)
+                tracker.assert_sql_query_issued()
+                if current_provider in ("aws", "dev"):
+                    tracker.assert_aws_get_accelerate_issued()
 
-            get_sql = f"GET @{stage_path}/{test_file.name} file://{download_dir}"
-            cxn.cursor().execute(get_sql)
-            tracker.assert_sql_query_issued()
-            if current_provider in ("aws", "dev"):
-                tracker.assert_aws_get_accelerate_issued()
-            tracker.assert_file_head_issued(test_file.name)
-            tracker.assert_get_file_issued(test_file.name)
+                tracker.assert_file_head_issued(test_file.name)
+                tracker.assert_put_file_issued()
+
+                get_sql = f"GET @{stage_name}/{test_file.name} file://{download_dir}"
+                cursor.execute(get_sql)
+                tracker.assert_sql_query_issued()
+                if current_provider in ("aws", "dev"):
+                    tracker.assert_aws_get_accelerate_issued()
+                tracker.assert_file_head_issued(test_file.name)
+                tracker.assert_get_file_issued(test_file.name)
 
         tracker.assert_telemetry_send_issued()
         tracker.assert_disconnect_issued()
@@ -252,3 +264,95 @@ def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
         connection = conn_cnx(headers_customizers=[static_collecting_customizer])
 
     _assert_expected_requests_occurred(connection)
+
+
+@pytest.mark.parametrize("execute_on_wiremock", (True, False))
+@pytest.mark.skipolddriver
+def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
+    request,
+    tmp_path: pathlib.Path,
+    execute_on_wiremock: bool,
+    wiremock_password_auth_dir,
+    wiremock_generic_mappings_dir,
+    wiremock_queries_dir,
+    static_collecting_customizer,
+    conn_cnx,
+    conn_cnx_wiremock,
+    current_provider,
+):
+    """Verifies request flow for multipart PUT and GET of a large file, with MD5 check and optional WireMock."""
+
+    def _assert_expected_requests_occurred_multipart(conn: SnowflakeConnection) -> None:
+        requests: Deque[RequestDTO] = static_collecting_customizer.invocations
+        tracker = RequestTracker(requests)
+
+        big_folder = tmp_path / "big"
+        big_folder.mkdir()
+        generate_k_lines_of_n_files(3_000_000, 1, tmp_dir=str(big_folder))
+        big_test_file = big_folder / "file0"
+
+        stage_name = random_string(5, "test_multipart_put_get_")
+        stage_path = "bigdata"
+        download_dir = tmp_path / "download"
+        download_dir.mkdir()
+        big_test_file_stage_path = f"{stage_path}/{big_test_file.name}"
+
+        with conn as cnx:
+            with cnx.cursor() as cur:
+                tracker.assert_login_issued()
+
+                cur.execute(f"create temporary stage {stage_name}")
+                tracker.assert_sql_query_issued()
+
+                clean_file_path = str(big_test_file).replace("\\", "/")
+                cur.execute(
+                    f"PUT 'file://{clean_file_path}' "
+                    f"@{stage_name}/{stage_path} AUTO_COMPRESS=FALSE"
+                )
+                tracker.assert_sql_query_issued()
+                if current_provider in ("aws", "dev"):
+                    tracker.assert_aws_get_accelerate_issued()
+
+                tracker.assert_file_head_issued(big_test_file.name)
+                tracker.assert_post_start_for_multipart_file_issued(
+                    big_test_file_stage_path
+                )
+                tracker.assert_put_file_issued(big_test_file.name)
+                tracker.assert_post_end_for_multipart_file_issued()
+
+                cur.execute(
+                    f"GET @{stage_name}/{big_test_file_stage_path} file://{download_dir}"
+                )
+                tracker.assert_sql_query_issued()
+                if current_provider in ("aws", "dev"):
+                    tracker.assert_aws_get_accelerate_issued()
+                tracker.assert_file_head_issued(big_test_file.name)
+                tracker.assert_get_file_issued(big_test_file.name)
+
+        tracker.assert_telemetry_send_issued()
+        tracker.assert_disconnect_issued()
+
+    if execute_on_wiremock:
+        wiremock_client = request.getfixturevalue("wiremock_client")
+
+        wiremock_client.import_mapping(
+            wiremock_password_auth_dir / "successful_flow.json"
+        )
+        wiremock_client.add_mapping(
+            wiremock_queries_dir / "put_multipart_successful.json",
+            placeholders=wiremock_client.http_placeholders,
+        )
+        wiremock_client.add_mapping(
+            wiremock_queries_dir / "get_successful.json",
+            placeholders=wiremock_client.http_placeholders,
+        )
+        wiremock_client.add_mapping(wiremock_generic_mappings_dir / "telemetry.json")
+        wiremock_client.add_mapping(
+            wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+        )
+
+        conn = conn_cnx_wiremock(headers_customizers=[static_collecting_customizer])
+    else:
+        conn = conn_cnx(headers_customizers=[static_collecting_customizer])
+
+    _assert_expected_requests_occurred_multipart(conn)
