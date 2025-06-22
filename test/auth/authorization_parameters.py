@@ -221,3 +221,4 @@ class AuthConnectionParameters:
         config = self.get_snowflake_authorization_code_connection_parameters()
         config["oauth_client_id"] = ""
         config["oauth_client_secret"] = ""
+        return config
