@@ -9,7 +9,7 @@ try:
         RequestDTO,
     )
 except ImportError:
-    pass
+    HeadersCustomizer = object
 
 
 class CollectingCustomizer(HeadersCustomizer):
