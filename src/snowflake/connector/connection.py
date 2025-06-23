@@ -59,7 +59,6 @@ from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
     _OAUTH_DEFAULT_SCOPE,
-    ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -1305,7 +1304,6 @@ class SnowflakeConnection:
                     self._token, self._external_session_id
                 )
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
-                self._check_experimental_authentication_flag()
                 # Standardize the provider enum.
                 if self._workload_identity_provider and isinstance(
                     self._workload_identity_provider, str
@@ -2257,18 +2255,6 @@ class SnowflakeConnection:
         except Exception as e:
             logger.debug("session could not be validated due to exception: %s", e)
             return False
-
-    def _check_experimental_authentication_flag(self) -> None:
-        if os.getenv(ENV_VAR_EXPERIMENTAL_AUTHENTICATION, "false").lower() != "true":
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable true to use the '{self._authenticator}' authenticator.",
-                    "errno": ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
-                },
-            )
 
     @staticmethod
     def _detect_application() -> None | str:
