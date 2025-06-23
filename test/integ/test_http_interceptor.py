@@ -50,15 +50,24 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
     conn_cnx,
     conn_cnx_wiremock,
 ) -> None:
-    # TODO: this does not collect retried requests - uses static collector
+    """
+    This kind of test ensures that the request interceptor correctly captures all expected HTTP requests
+    during a known use-case scenario of the driver.
 
-    # TODO: finish this comment
-    # By covering in this way (wiremock + real server) the request we make sure that we will detect if in the future new requests are added and wiremock does not reflect them
-    # Prevents duplication and makes sure all requests are covered
-    # Detects if interceptor correctly works collecting all the requests that should occur.
-    # Detects if all expected requests occur AND NO OTHER.
-    # If added new steps that should generate http traffic it will detect those and raise an error.
-    # If needed to inspect what requests are occuring use this test or similar and add those asserts
+    By covering both real and mock (WireMock) executions via the `execute_on_wiremock` param,
+    we validate two critical things:
+    1. **Real execution**: Interceptor must detect and log every actual request in a live environment.
+    2. **WireMock execution**: Verifies that the stubbed mappings in WireMock match the current behavior
+       of the driver, so any future API changes (added/removed requests) will cause the test to fail.
+
+    This dual setup:
+    - Prevents stale mocks (detects missing or extra requests not aligned with the driver).
+    - Guarantees that the interceptor observes requests **in correct order** and no unexpected traffic occurs.
+    - Ensures the customizer receives all invocations and no requests go untracked.
+
+    If new driver code introduces additional HTTP calls, this test will fail until WireMock is updated
+    to reflect them, prompting to verify those new requests in the flow.
+    """
 
     def assert_expected_requests_occurred(conn: SnowflakeConnection) -> None:
         requests: Deque[RequestDTO] = static_collecting_customizer.invocations
@@ -100,23 +109,6 @@ def test_interceptor_detects_expected_requests_in_successful_flow_select_1(
         connection = conn_cnx(headers_customizers=[static_collecting_customizer])
 
     assert_expected_requests_occurred(connection)
-
-    # TODO: add here checks if headers added to each request
-    # TODO: e.g. get all requests from wiremock (its endpoint) and chcek if they had headers
-    # Perform GET request through Snowflake’s internal session
-    # response = rest._session.get(f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/echo-headers")
-    # response.raise_for_status()
-    # content = response.json()
-
-    # Validate that the custom header was added
-    # headers = {k.lower(): v for k, v in content.items()}
-    # assert any("test-header-value" in v for v in headers.values()), "Custom header not found in response"
-
-
-# def test_wiremock_received_all_requests_with_headers
-#     EXCLUDED_REGEXPS = [..]
-
-# def test_
 
 
 @pytest.mark.parametrize("execute_on_wiremock", (True, False))

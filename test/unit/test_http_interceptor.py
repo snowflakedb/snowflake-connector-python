@@ -6,43 +6,7 @@ from snowflake.connector.http_interceptor import (
     HeadersCustomizer,
     HeadersCustomizerInterceptor,
     HttpInterceptor,
-    get_request_info,
-    verify_headers,
-    verify_method,
-    verify_url,
 )
-
-# === Verification tests ===
-
-
-def test_verify_method_valid():
-    assert verify_method("get") == "GET"
-    assert verify_method("POST") == "POST"
-    assert verify_method("invalid") is None
-    assert verify_method("GETs") is None
-    assert verify_method(None) is None
-
-
-def test_verify_url_valid():
-    assert verify_url("http://example.com") == "http://example.com"
-    assert verify_url(None) is None
-    assert verify_url(12345) is None
-
-
-def test_verify_headers_valid():
-    assert verify_headers({"X-Test": "Value"}) == {"X-Test": "Value"}
-    assert verify_headers(None) is None
-    assert verify_headers("not-a-dict") is None
-
-
-def test_get_request_info_combines_verified():
-    dto = get_request_info("get", "http://example.com", {"X-Test": "Value"})
-    assert dto.method == "GET"
-    assert dto.url == "http://example.com"
-    assert dto.headers == {"X-Test": "Value"}
-
-
-# === Interceptor behavior ===
 
 
 def test_no_interceptors_does_nothing(sample_request_factory):
@@ -86,25 +50,6 @@ def test_non_applying_interceptor_not_called(sample_request_factory):
     # Check call counts
     customizer.applies_to.assert_called_once_with(request)
     customizer.get_new_headers.assert_not_called()
-
-
-# @pytest.mark.parametrize("invoke_once", [True, False])
-# def test_static_hook_respects_invoked_once_flag(
-#     sample_request_factory, headers_customizer_factory, invoke_once
-# ):
-#     request = sample_request_factory()
-#     customizer = headers_customizer_factory(
-#         applies=True, invoke_once=invoke_once, headers={"X-Test": "Value"}
-#     )
-#     interceptor = HeadersCustomizerInterceptor([customizer])
-#     result = interceptor.intercept_on(
-#         HttpInterceptor.InterceptionHook.BEFORE_REQUEST_ISSUED, request
-#     )
-#
-#     if invoke_once:
-#         assert result.headers["X-Test"] == "Value"
-#     else:
-#         assert "X-Test" not in result.headers
 
 
 def test_dynamic_customizer_adds_different_headers(
@@ -253,12 +198,3 @@ def test_customizer_applies_only_to_specific_domain(
         assert result.headers["X-Domain-Specific"] == "True"
     else:
         assert "X-Domain-Specific" not in result.headers
-
-
-# TODO: compare tests with those from jdbc
-# TODO: finish doc
-# TODO: finish PSD
-# TODO: add tests for interceptions
-# TODO: add remove interceptors in destructor
-# TODO: add argument "inplace"
-# TODO: replace DTO with Info

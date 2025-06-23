@@ -13,7 +13,7 @@ import uuid
 import weakref
 from collections import OrderedDict
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Generator, MutableSequence, NamedTuple
+from typing import TYPE_CHECKING, Any, Generator, NamedTuple
 
 import OpenSSL.SSL
 
@@ -21,7 +21,6 @@ try:
     from snowflake.connector.http_interceptor import (
         Headers,
         HttpInterceptor,
-        InterceptOnMixin,
         RequestDTO,
     )
 except ImportError:
@@ -459,7 +458,7 @@ class SnowflakeRestfulJsonEncoder(json.JSONEncoder):
         return super().default(o)
 
 
-class SnowflakeRestful(InterceptOnMixin):
+class SnowflakeRestful:
     """Snowflake Restful class."""
 
     def __init__(
@@ -479,8 +478,6 @@ class SnowflakeRestful(InterceptOnMixin):
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
         )
-        # Creating a reference, for quicker access
-        # self._request_interceptors = connection._requests_interceptors
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
         ssl_wrap_socket.FEATURE_OCSP_MODE = (
@@ -518,10 +515,6 @@ class SnowflakeRestful(InterceptOnMixin):
         self._master_validity_in_seconds = (
             value if value else DEFAULT_MASTER_VALIDITY_IN_SECONDS
         )
-
-    @property
-    def request_interceptors(self) -> MutableSequence[HttpInterceptor]:
-        return self._connection.request_interceptors
 
     @property
     def id_token(self):
@@ -999,7 +992,7 @@ class SnowflakeRestful(InterceptOnMixin):
         session,
         method,
         full_url,
-        headers: Headers,
+        headers,
         data,
         retry_ctx,
         no_retry: bool = False,
@@ -1162,7 +1155,7 @@ class SnowflakeRestful(InterceptOnMixin):
         session,
         method,
         full_url,
-        headers: Headers,
+        headers,
         data,
         token,
         catch_okta_unauthorized_error: bool = False,

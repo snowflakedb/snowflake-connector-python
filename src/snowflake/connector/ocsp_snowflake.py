@@ -57,7 +57,6 @@ from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
 from . import constants
 from .backoff_policies import exponential_backoff
 from .cache import CacheEntry, SFDictCache, SFDictFileCache
-from .http_interceptor import InterceptOnMixin
 from .telemetry import TelemetryField, generate_telemetry_data_dict
 from .url_util import extract_top_level_domain_from_hostname, url_encode_str
 from .util_text import _base64_bytes_to_str
@@ -502,7 +501,6 @@ class OCSPServer:
             # if any of them is not cache, download the cache file from
             # OCSP response cache server.
             try:
-
                 retval = OCSPServer._download_ocsp_response_cache(
                     ocsp, self.CACHE_SERVER_URL
                 )
@@ -552,7 +550,6 @@ class OCSPServer:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
                 backoff = exponential_backoff()()
-                # TODO: here
                 for _ in range(max_retry):
                     response = session.get(
                         url,
@@ -972,7 +969,7 @@ class OCSPCache:
 OCSPCache.reset_cache_dir()
 
 
-class SnowflakeOCSP(InterceptOnMixin):
+class SnowflakeOCSP:
     """OCSP validator using PyOpenSSL and asn1crypto/pyasn1."""
 
     # root certificate cache
@@ -1125,7 +1122,6 @@ class SnowflakeOCSP(InterceptOnMixin):
         ]
         | None
     ):
-        # todo: here is connection
         """Validates the certificate is not revoked using OCSP."""
         logger.debug("validating certificate: %s", hostname)
 
@@ -1251,7 +1247,6 @@ class SnowflakeOCSP(InterceptOnMixin):
             if not cache_status:
                 telemetry_data.set_cache_hit(False)
                 logger.debug("getting OCSP response from CA's OCSP server")
-                #
                 ocsp_response = self._fetch_ocsp_response(
                     req, subject, cert_id, telemetry_data, hostname, do_retry
                 )
@@ -1334,7 +1329,6 @@ class SnowflakeOCSP(InterceptOnMixin):
     ) -> list[tuple[Exception | None, Certificate, Certificate, CertId, bytes]]:
         results = []
         try:
-
             self._check_ocsp_response_cache_server(cert_data)
         except RevocationCheckError as rce:
             telemetry_data.set_event_sub_type(
@@ -1628,7 +1622,6 @@ class SnowflakeOCSP(InterceptOnMixin):
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = exponential_backoff()()
-            # tODO: here
             for _ in range(max_retry):
                 try:
                     response = session.request(

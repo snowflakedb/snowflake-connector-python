@@ -312,7 +312,6 @@ class ResultBatch(abc.ABC):
             if connection is not None
             else exponential_backoff()()
         )
-        # TODO: here
         for retry in range(MAX_DOWNLOAD_RETRY):
             try:
                 with TimerContextManager() as download_metric:
