@@ -238,7 +238,7 @@ class RequestTracker:
         rv = self.assert_request_occurred_after_optional_retries(
             ExpectedRequestInfo(
                 "PUT",
-                r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*/stages/.*"
+                r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*stages.*"
                 + (filename if filename else "")
                 + r"(.*)?",
             )
