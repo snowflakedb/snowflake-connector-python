@@ -2,13 +2,17 @@ from unittest.mock import Mock
 
 import pytest
 
-from snowflake.connector.http_interceptor import (
-    HeadersCustomizer,
-    HeadersCustomizerInterceptor,
-    HttpInterceptor,
-)
+try:
+    from snowflake.connector.http_interceptor import (
+        HeadersCustomizer,
+        HeadersCustomizerInterceptor,
+        HttpInterceptor,
+    )
+except ImportError:
+    pass
 
 
+@pytest.mark.skipolddriver
 def test_no_interceptors_does_nothing(sample_request_factory):
     request = sample_request_factory()
     interceptor = HeadersCustomizerInterceptor([])
@@ -18,6 +22,7 @@ def test_no_interceptors_does_nothing(sample_request_factory):
     assert result == request
 
 
+@pytest.mark.skipolddriver
 def test_non_applying_interceptor_does_nothing(
     sample_request_factory, headers_customizer_factory
 ):
@@ -30,6 +35,7 @@ def test_non_applying_interceptor_does_nothing(
     assert result == request
 
 
+@pytest.mark.skipolddriver
 def test_non_applying_interceptor_not_called(sample_request_factory):
     request = sample_request_factory()
 
@@ -52,6 +58,7 @@ def test_non_applying_interceptor_not_called(sample_request_factory):
     customizer.get_new_headers.assert_not_called()
 
 
+@pytest.mark.skipolddriver
 def test_dynamic_customizer_adds_different_headers(
     sample_request_factory, dynamic_customizer_factory
 ):
@@ -68,6 +75,7 @@ def test_dynamic_customizer_adds_different_headers(
     assert result1.headers["X-Dynamic-1"] != result2.headers["X-Dynamic-2"]
 
 
+@pytest.mark.skipolddriver
 def test_invoke_once_skips_on_retry(sample_request_factory, headers_customizer_factory):
     request = sample_request_factory()
     customizer = headers_customizer_factory(applies=True, invoke_once=True)
@@ -78,6 +86,7 @@ def test_invoke_once_skips_on_retry(sample_request_factory, headers_customizer_f
     assert result == request
 
 
+@pytest.mark.skipolddriver
 def test_invoke_always_runs_on_retry(
     sample_request_factory, headers_customizer_factory
 ):
@@ -96,6 +105,7 @@ def test_invoke_always_runs_on_retry(
     assert result2.headers["X-Retry"] == "RetryVal"
 
 
+@pytest.mark.skipolddriver
 def test_prevents_header_overwrite(sample_request_factory, headers_customizer_factory):
     request = sample_request_factory(headers={"User-Agent": "SnowflakeDriver/1.0"})
     customizer = headers_customizer_factory(
@@ -109,6 +119,7 @@ def test_prevents_header_overwrite(sample_request_factory, headers_customizer_fa
     assert result.headers["User-Agent"] != "MaliciousAgent"
 
 
+@pytest.mark.skipolddriver
 def test_partial_header_overwrite_ignores_only_conflicting_keys(
     sample_request_factory, headers_customizer_factory
 ):
@@ -136,6 +147,7 @@ def test_partial_header_overwrite_ignores_only_conflicting_keys(
     assert result.headers["X-New-Header"] == "NewValue"
 
 
+@pytest.mark.skipolddriver
 def test_multiple_customizers_add_headers(
     sample_request_factory, headers_customizer_factory
 ):
@@ -154,6 +166,7 @@ def test_multiple_customizers_add_headers(
     assert result.headers["X-Custom2"] == "Val2"
 
 
+@pytest.mark.skipolddriver
 def test_multi_value_headers(sample_request_factory, headers_customizer_factory):
     request = sample_request_factory()
     customizer = headers_customizer_factory(
@@ -178,6 +191,7 @@ def test_multi_value_headers(sample_request_factory, headers_customizer_factory)
         ("https://example.com/api", False),
     ],
 )
+@pytest.mark.skipolddriver
 def test_customizer_applies_only_to_specific_domain(
     sample_request_factory, headers_customizer_factory, url, should_apply
 ):
