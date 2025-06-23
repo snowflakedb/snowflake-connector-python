@@ -332,7 +332,6 @@ class TransferMetadata:
     chunks_in_queue: int = 0
 
 
-#
 class SnowflakeFileTransferAgent:
     """Snowflake File Transfer Agent provides cloud provider independent implementation for putting/getting files."""
 
@@ -671,14 +670,12 @@ class SnowflakeFileTransferAgent:
         self, meta: SnowflakeFileMeta
     ) -> SnowflakeStorageClient:
         if self._stage_location_type == LOCAL_FS:
-            #
             return SnowflakeLocalStorageClient(
                 meta,
                 self._stage_info,
                 4 * megabyte,
                 unsafe_file_write=self._unsafe_file_write,
             )
-        # clients
         elif self._stage_location_type == AZURE_FS:
             return SnowflakeAzureRestClient(
                 meta,

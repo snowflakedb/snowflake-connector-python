@@ -123,7 +123,6 @@ class HeadersCustomizerInterceptor(HttpInterceptor):
             )
         return request
 
-    # updates in place headers dict
     def _handle_headers_customization(
         self, request: RequestDTO, headers_customizers: Iterable[HeadersCustomizer]
     ) -> RequestDTO:

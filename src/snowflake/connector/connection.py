@@ -887,9 +887,6 @@ class SnowflakeConnection:
     @headers_customizers.setter
     def headers_customizers(self, value: MutableSequence[HeadersCustomizer]) -> None:
         self._headers_customizers = value
-        # TODO: zrobic to jako dict po typach interceptorów
-        # TODO: remove all dto to Info
-        # TODO: add tests
         request_interceptors = self._create_interceptor_for_headers_customizers(value)
         self._request_interceptors = (
             [
@@ -903,31 +900,24 @@ class SnowflakeConnection:
         self, new_customizer: HeadersCustomizer
     ) -> SnowflakeConnection:
         """
-        Builder method to add a single headers customizer to the list of headers customizers TODO: finish this descr.
+        Builder method to add a single headers customizer to the list of headers customizers.
         """
         if new_customizer in self._headers_customizers or not new_customizer:
             return self
 
         self._headers_customizers.append(new_customizer)
-        # TODO: czy nie powinien to brac ostatniego header interceptora i do neigo append header customizer
         self._request_interceptors.append(
             HeadersCustomizerInterceptor([new_customizer])
         )
         return self
 
     def clear_headers_customizers(self) -> None:
-        """
-        Builder method to add a single headers customizer to the list of headers customizers TODO: finish this descr.
-        """
         self._headers_customizers.clear()
         self._request_interceptors[:] = [
             interceptor
             for interceptor in self._request_interceptors
             if not isinstance(interceptor, HeadersCustomizerInterceptor)
         ]
-        # TODO: below or always rely on connection's attributes (properties outside)- this way we can only clear here
-        # self._rest.headers_customizers.clear()
-        # self._rest._request_interceptors.clear()
 
     @staticmethod
     def _create_interceptor_for_headers_customizers(
@@ -1230,8 +1220,6 @@ class SnowflakeConnection:
                 ):
                     raise TypeError("auth_class must be a child class of AuthByKeyPair")
                     # TODO: add telemetry for custom auth
-                # TODO: why this is hre xd
-                self.auth_class = self.auth_class
             elif self._authenticator == DEFAULT_AUTHENTICATOR:
                 self.auth_class = AuthByDefault(
                     password=self._password,
@@ -1472,8 +1460,6 @@ class SnowflakeConnection:
         self._unsafe_file_write = kwargs.get("unsafe_file_write", False)
 
         self._headers_customizers = kwargs.get("headers_customizers", [])
-        # # TODO: rethink how adding customizer should work - create new interceptor or append to existing - or just dont do this scenario xd
-        # TODO: rethink if we should store here in self interceptors or customizers or what
         if self._headers_customizers:
             header_customizer_interceptor = (
                 self._create_interceptor_for_headers_customizers(
