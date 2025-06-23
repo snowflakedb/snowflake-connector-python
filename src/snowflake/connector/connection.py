@@ -127,8 +127,8 @@ from .network import (
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
     WORKLOAD_IDENTITY_AUTHENTICATOR,
+    HttpAdapterFactory,
     InterceptingAdapter,
-    InterceptingAdapterFactory,
     ProxySupportAdapter,
     ReauthenticationRequest,
     SnowflakeRestful,
@@ -1487,13 +1487,14 @@ class SnowflakeConnection:
                 if header_customizer_interceptor
                 else []
             )
-            InterceptingAdapterFactory.register_for_connection(
+            HttpAdapterFactory.register_for_connection(
                 connection=self,
                 adapter_cls=InterceptingAdapter,
                 interceptors=request_interceptors,
             )
         else:
-            InterceptingAdapterFactory.register_for_connection(
+            # Default adapter
+            HttpAdapterFactory.register_for_connection(
                 connection=self, adapter_cls=ProxySupportAdapter
             )
             self._request_interceptors = []
