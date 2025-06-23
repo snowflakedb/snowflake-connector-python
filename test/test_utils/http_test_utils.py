@@ -141,7 +141,8 @@ class RequestTracker:
             ExpectedRequestInfo(
                 "GET",
                 r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*"
-                + (filename if filename else ""),
+                + (filename if filename else "")
+                + r"(.*)?",
             )
         )
 
@@ -151,7 +152,7 @@ class RequestTracker:
                 "PUT",
                 r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*/stages/.*"
                 + (filename if filename else "")
-                + "(.*)?",
+                + r"(.*)?",
             )
         )
 
@@ -160,7 +161,8 @@ class RequestTracker:
             ExpectedRequestInfo(
                 "HEAD",
                 r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*"
-                + (filename if filename else ""),
+                + (filename if filename else "")
+                + r"(.*)?",
             )
         )
 
