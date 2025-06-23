@@ -228,6 +228,8 @@ def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
     _assert_expected_requests_occurred(connection)
 
 
+@pytest.mark.aws
+@pytest.mark.azure
 @pytest.mark.skipolddriver
 def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
     request,
