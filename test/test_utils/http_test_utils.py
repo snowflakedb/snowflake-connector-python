@@ -2,10 +2,12 @@ import re
 from collections import deque
 from typing import Any, Deque, FrozenSet, Iterable, NamedTuple, Optional, Union
 
-from src.snowflake.connector.http_interceptor import Headers
-
 try:
-    from snowflake.connector.http_interceptor import HeadersCustomizer, RequestDTO
+    from snowflake.connector.http_interceptor import (
+        Headers,
+        HeadersCustomizer,
+        RequestDTO,
+    )
 except ImportError:
     pass
 
