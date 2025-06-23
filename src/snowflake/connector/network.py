@@ -261,7 +261,7 @@ class AdapterConfig(NamedTuple):
     partial_kwargs: dict[str, Any]
 
 
-class InterceptingAdapterFactory:
+class HttpAdapterFactory:
     _global_adapter_class: type[requests.adapters.HTTPAdapter] | None = None
     _global_partial_kwargs: dict[str, Any] = {}
 
@@ -286,21 +286,22 @@ class InterceptingAdapterFactory:
         **partial_kwargs,
     ) -> None:
         cls._per_connection_adapter_config[connection] = AdapterConfig(
-            adapter_cls or cls._global_adapter_class or requests.adapters.HTTPAdapter,
+            adapter_cls,
             partial_kwargs,
         )
 
     @classmethod
-    def create_adapter(
+    def try_create_adapter(
         cls, connection: Any | None = None, **runtime_kwargs
-    ) -> requests.adapters.HTTPAdapter:
+    ) -> requests.adapters.HTTPAdapter | None:
         if connection in cls._per_connection_adapter_config:
             config = cls._per_connection_adapter_config[connection]
-        else:
+        elif cls._global_adapter_class is not None:
             config = AdapterConfig(
-                cls._global_adapter_class or requests.adapters.HTTPAdapter,
-                cls._global_partial_kwargs,
+                cls._global_adapter_class, cls._global_partial_kwargs
             )
+        else:
+            return None
 
         final_kwargs = {**config.partial_kwargs, **runtime_kwargs}
         return config.adapter_cls(**final_kwargs)
@@ -1191,8 +1192,6 @@ class SnowflakeRestful(InterceptOnMixin):
             # socket timeout is constant. You should be able to receive
             # the response within the time. If not, ConnectReadTimeout or
             # ReadTimeout is raised.
-            # TODO: here
-            # tODO: check how does it impact timeouts - is it in their scope
 
             raw_ret = session.request(
                 method=method,
@@ -1306,16 +1305,17 @@ class SnowflakeRestful(InterceptOnMixin):
         except Exception as err:
             raise err
 
-    # TODO: remove connection injection when conncection is destroyed - should we remove them from sessions
     def make_requests_session(
         self, connection: SnowflakeConnection | None = None
     ) -> Session:
         s = requests.Session()
-        adapter = InterceptingAdapterFactory.create_adapter(
+        adapter = HttpAdapterFactory.try_create_adapter(
             connection=connection, max_retries=REQUESTS_RETRY
         )
-        s.mount("http://", adapter)
-        s.mount("https://", adapter)
+        if adapter is not None:
+            s.mount("http://", adapter)
+            s.mount("https://", adapter)
+
         s._reuse_count = itertools.count()
         return s
 
