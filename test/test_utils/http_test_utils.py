@@ -207,7 +207,8 @@ class RequestTracker:
             ExpectedRequestInfo("GET", r".*\.s3\.amazonaws.*/\?accelerate(.*)?"),
             raise_on_missing=not optional,
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
+        if rv is not None:
+            self._assert_headers_were_added(rv.headers, expected_headers)
         return rv
 
     def assert_get_file_issued(

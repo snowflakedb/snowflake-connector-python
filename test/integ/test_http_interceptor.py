@@ -181,7 +181,6 @@ def test_interceptor_detects_expected_requests_in_successful_flow_with_chunks(
 
 @pytest.mark.skipolddriver
 def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
-    request,
     tmp_path: pathlib.Path,
     static_collecting_customizer,
     conn_cnx,
@@ -232,7 +231,6 @@ def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
 @pytest.mark.azure
 @pytest.mark.skipolddriver
 def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
-    request,
     tmp_path: pathlib.Path,
     static_collecting_customizer,
     conn_cnx,
