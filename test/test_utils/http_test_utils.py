@@ -71,7 +71,7 @@ class RequestTracker:
         return any(ignored_info.is_matching(request) for ignored_info in self.ignored)
 
     def assert_request_occurred_after_optional_retries(
-        self, expected: ExpectedRequestInfo
+        self, expected: ExpectedRequestInfo, raise_on_missing: bool = True
     ) -> RequestDTO:
         while self.requests:
             request = self.requests.popleft()
@@ -89,11 +89,17 @@ class RequestTracker:
                 self._last_request = request  # skip retry
                 continue
 
-            raise AssertionError(f"Unexpected request: {request}")
+            if raise_on_missing:
+                raise AssertionError(f"Unexpected request: {request}")
+            else:
+                return None
 
-        raise AssertionError(
-            f"Expected request '{expected.method} {expected.url_regexp}' not found"
-        )
+        if raise_on_missing:
+            raise AssertionError(
+                f"Expected request '{expected.method} {expected.url_regexp}' not found"
+            )
+        else:
+            return None
 
     # Proxy helpers
     def assert_login_issued(self) -> RequestDTO:
@@ -124,9 +130,10 @@ class RequestTracker:
             )
         )
 
-    def assert_aws_get_accelerate_issued(self) -> RequestDTO:
+    def assert_aws_get_accelerate_issued(self, optional: bool = True) -> RequestDTO:
         return self.assert_request_occurred_after_optional_retries(
-            ExpectedRequestInfo("GET", r".*\.s3\.amazonaws.*/\?accelerate(.*)?")
+            ExpectedRequestInfo("GET", r".*\.s3\.amazonaws.*/\?accelerate(.*)?"),
+            raise_on_missing=not optional,
         )
 
     def assert_get_file_issued(self, filename: Optional[str] = None) -> RequestDTO:

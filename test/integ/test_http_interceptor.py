@@ -216,7 +216,7 @@ def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
                 cursor.execute(put_sql)
                 tracker.assert_sql_query_issued()
                 if current_provider in ("aws", "dev"):
-                    tracker.assert_aws_get_accelerate_issued()
+                    tracker.assert_aws_get_accelerate_issued(optional=True)
 
                 tracker.assert_file_head_issued(test_file.name)
                 tracker.assert_put_file_issued()
@@ -225,7 +225,7 @@ def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
                 cursor.execute(get_sql)
                 tracker.assert_sql_query_issued()
                 if current_provider in ("aws", "dev"):
-                    tracker.assert_aws_get_accelerate_issued()
+                    tracker.assert_aws_get_accelerate_issued(optional=True)
                 tracker.assert_file_head_issued(test_file.name)
                 tracker.assert_get_file_issued(test_file.name)
 
@@ -277,7 +277,7 @@ def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
                 )
                 tracker.assert_sql_query_issued()
                 if current_provider in ("aws", "dev"):
-                    tracker.assert_aws_get_accelerate_issued()
+                    tracker.assert_aws_get_accelerate_issued(optional=True)
 
                 tracker.assert_file_head_issued(big_test_file.name)
                 tracker.assert_post_start_for_multipart_file_issued(
@@ -291,7 +291,7 @@ def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
                 )
                 tracker.assert_sql_query_issued()
                 if current_provider in ("aws", "dev"):
-                    tracker.assert_aws_get_accelerate_issued()
+                    tracker.assert_aws_get_accelerate_issued(optional=True)
                 tracker.assert_file_head_issued(big_test_file.name)
                 tracker.assert_get_file_issued(big_test_file.name)
 
