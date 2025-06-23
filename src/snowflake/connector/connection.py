@@ -119,6 +119,7 @@ from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
+from .vendored import requests
 from .wif_util import AttestationProvider
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
@@ -274,6 +275,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # Whether to log imported packages in telemetry
+    "log_platform_in_telemetry": (
+        True,
+        bool,
+    ),  # Whether to log platform in telemetry
     "disable_query_context_cache": (
         False,
         bool,
@@ -378,6 +383,68 @@ class TypeAndBinding(NamedTuple):
 
     type: str
     binding: str | None
+
+
+def detect_platforms() -> dict:
+    def is_ec2_instance(timeout=2):
+        try:
+            token_resp = requests.put(
+                "http://169.254.169.254/latest/api/token",
+                headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
+                timeout=timeout,
+            )
+            token_resp.raise_for_status()
+            token = token_resp.text
+
+            doc_resp = requests.get(
+                "http://169.254.169.254/latest/dynamic/instance-identity/document",
+                headers={"X-aws-ec2-metadata-token": token},
+                timeout=timeout,
+            )
+            doc_resp.raise_for_status()
+            return bool(doc_resp.text)
+        except requests.RequestException:
+            return False
+
+    def is_aws_lambda():
+        return "LAMBDA_TASK_ROOT" in os.environ
+
+    def is_azure_vm(timeout=2):
+        try:
+            token_resp = requests.get(
+                "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
+                headers={"Metadata": "true"},
+                timeout=timeout,
+            )
+            return token_resp.status_code == 200
+        except requests.RequestException:
+            return False
+
+    def is_gce_vm(timeout=2):
+        try:
+            response = requests.get("http://metadata.google.internal", timeout=timeout)
+            return response.headers.get("Metadata-Flavor") == "Google"
+        except Exception:
+            return False
+
+    def is_gce_cloud_run_service():
+        service_vars = ["K_SERVICE", "K_REVISION", "K_CONFIGURATION"]
+        return all(var in os.environ for var in service_vars)
+
+    def is_gce_cloud_run_job():
+        job_vars = ["CLOUD_RUN_JOB", "CLOUD_RUN_EXECUTION"]
+        return all(var in os.environ for var in job_vars)
+
+    platforms = {
+        "ec2": is_ec2_instance(),
+        "aws_lambda": is_aws_lambda(),
+        "azure_vm": is_azure_vm(),
+        "gce_vm": is_gce_vm(),
+        "gce_cloud_run_service": is_gce_cloud_run_service(),
+        "gce_cloud_run_job": is_gce_cloud_run_job(),
+    }
+
+    return platforms
 
 
 class SnowflakeConnection:
@@ -548,6 +615,8 @@ class SnowflakeConnection:
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
+        # log the platform of the client
+        self._log_telemetry_platform_info()
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
@@ -2197,6 +2266,20 @@ class SnowflakeConnection:
                     from_dict={
                         TelemetryField.KEY_TYPE.value: TelemetryField.IMPORTED_PACKAGES.value,
                         TelemetryField.KEY_VALUE.value: str(imported_modules),
+                    },
+                    timestamp=ts,
+                    connection=self,
+                )
+            )
+
+    def _log_telemetry_platform_info(self) -> None:
+        if self._log_platform_in_telemetry:
+            ts = get_time_millis()
+            self._log_telemetry(
+                TelemetryData.from_telemetry_data_dict(
+                    from_dict={
+                        TelemetryField.KEY_TYPE.value: TelemetryField.PLATFORM_INFO.value,
+                        TelemetryField.KEY_VALUE.value: detect_platforms(),
                     },
                     timestamp=ts,
                     connection=self,

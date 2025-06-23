@@ -37,6 +37,8 @@ class TelemetryField(Enum):
     PANDAS_WRITE = "client_write_pandas"
     # imported packages along with client
     IMPORTED_PACKAGES = "client_imported_packages"
+    # platform information describing where the client is running (AWS EC2, GCP VM, Azure function, etc)
+    PLATFORM_INFO = "client_platform_info"
     # multi-statement usage
     MULTI_STATEMENT = "client_multi_statement_query"
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
