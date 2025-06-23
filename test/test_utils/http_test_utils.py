@@ -1,6 +1,16 @@
 import re
 from collections import deque
-from typing import Any, Deque, FrozenSet, Iterable, NamedTuple, Optional, Union
+from typing import (
+    Any,
+    Deque,
+    Dict,
+    FrozenSet,
+    Iterable,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Union,
+)
 
 try:
     from snowflake.connector.http_interceptor import (
@@ -10,6 +20,8 @@ try:
     )
 except ImportError:
     HeadersCustomizer = object
+    RequestDTO = Tuple
+    Headers = Dict
 
 
 class CollectingCustomizer(HeadersCustomizer):
