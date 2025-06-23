@@ -87,7 +87,6 @@ from .description import (
 from .direct_file_operation_utils import FileOperationParser, StreamDownloader
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
-    ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
     ER_FAILED_TO_CONNECT_TO_DB,
