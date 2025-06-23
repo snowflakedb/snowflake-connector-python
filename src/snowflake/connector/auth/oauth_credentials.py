@@ -29,8 +29,10 @@ class AuthByOauthCredentials(AuthByOAuthBase):
         scope: str,
         token_cache: TokenCache | None = None,
         refresh_token_enabled: bool = False,
+        connection: SnowflakeConnection | None = None,
         **kwargs,
     ) -> None:
+        self._validate_client_credentials_present(client_id, client_secret, connection)
         super().__init__(
             client_id=client_id,
             client_secret=client_secret,
