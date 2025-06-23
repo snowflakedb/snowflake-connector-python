@@ -176,7 +176,7 @@ class RequestTracker:
         rv = self.assert_request_occurred_after_optional_retries(
             ExpectedRequestInfo(
                 "GET",
-                r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*?/results/.*main.*data.*\?.*",
+                r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*/results/.*main.*data.*\?.*",
             )
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
