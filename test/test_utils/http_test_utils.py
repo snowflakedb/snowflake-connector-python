@@ -293,19 +293,30 @@ class RequestTracker:
     def assert_put_file_issued(
         self,
         filename: Optional[str] = None,
+        cloud_platform: Union[str, None] = None,
         expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
             ("test-header", "test-value"),
         ),
         sequentially: bool = True,
         optional: bool = False,
     ) -> Optional[RequestDTO]:
-        return self._assert_issued_with_custom_headers(
-            ExpectedRequestInfo(
+        expected_request = None
+        optional_filename_regexp = (filename + "(.*)?") if filename else ""
+        if cloud_platform == "azure":
+            expected_request = ExpectedRequestInfo(
                 "PUT",
-                r".*(s3(.*)?\.amazonaws|blob\.core\.windows|storage\.googleapis).*stages.*"
-                + (filename or "")
-                + r"(.*)?",
-            ),
+                r".*blob\.core\.windows.*stages.*"
+                + optional_filename_regexp
+                + r"\?comp=block&blockid=.*",
+            )
+        elif cloud_platform in ("aws", "dev", "gcp"):
+            expected_request = ExpectedRequestInfo(
+                "PUT",
+                r".*(s3(.*)?\.amazonaws|storage\.googleapis).*stages.*"
+                + optional_filename_regexp,
+            )
+        return self._assert_issued_with_custom_headers(
+            expected_request,
             expected_headers,
             sequentially,
             optional,
@@ -407,7 +418,7 @@ class RequestTracker:
             return self.assert_post_end_for_multipart_on_aws_file_issued(
                 file_path, expected_headers, sequentially, optional
             )
-        elif cloud_platform in ("azure", "dev"):
+        elif cloud_platform == "azure":
             return self.assert_put_end_for_multipart_on_azure_file_issued(
                 file_path, expected_headers, sequentially, optional
             )
@@ -416,6 +427,7 @@ class RequestTracker:
     def assert_multiple_put_file_issued(
         self,
         filename: Optional[str] = None,
+        cloud_platform: Union[str, None] = None,
         expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
             ("test-header", "test-value"),
         ),
@@ -423,9 +435,13 @@ class RequestTracker:
         optional: bool = True,
     ) -> None:
         self.assert_put_file_issued(
-            filename, expected_headers, sequentially=sequentially
+            filename, cloud_platform, expected_headers, sequentially=sequentially
         )
         while self.assert_put_file_issued(
-            filename, expected_headers, sequentially=sequentially, optional=optional
+            filename,
+            cloud_platform,
+            expected_headers,
+            sequentially=sequentially,
+            optional=optional,
         ):
             continue
