@@ -10,7 +10,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.16(TBD)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4
   - Added Windows support for Python 3.13.
-  - Add `bulk_upload_chunks` parameter to `write_pandas` function. Setting this parameter to True changes the behaviour of write_pandas function to first write all the data chunks to the local disk and then perform the wildcard upload of the chunks folder to the stage. In default behaviour the chunks are being saved, uploaded and deleted one by one.
+  - Added `bulk_upload_chunks` parameter to `write_pandas` function. Setting this parameter to True changes the behaviour of write_pandas function to first write all the data chunks to the local disk and then perform the wildcard upload of the chunks folder to the stage. In default behaviour the chunks are being saved, uploaded and deleted one by one.
+  - Added new authentication methods support for Workload Identity Federation (WIF).
+    - Added the `WORKLOAD_IDENTITY` value for authenticator type.
+    - Added the `workload_identity_provider` and `workload_identity_entra_resource` parameters.
 
 
 - v3.15.1(May 20, 2025)
