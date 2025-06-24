@@ -210,7 +210,7 @@ def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
                     tracker.assert_aws_get_accelerate_issued(optional=True)
 
                 tracker.assert_file_head_issued(test_file.name)
-                tracker.assert_put_file_issued(cloud_platform=current_provider)
+                tracker.assert_put_file_issued(filename=test_file.name)
 
                 get_sql = f"GET @{stage_name}/{test_file.name} file://{download_dir}"
                 cursor.execute(get_sql)

@@ -293,6 +293,27 @@ class RequestTracker:
     def assert_put_file_issued(
         self,
         filename: Optional[str] = None,
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
+        return self._assert_issued_with_custom_headers(
+            ExpectedRequestInfo(
+                "PUT",
+                r".*(s3(.*)?\.amazonaws|blob\.core\.windows|storage\.googleapis).*stages.*"
+                + (filename or "")
+                + r"(.*)?",
+            ),
+            expected_headers,
+            sequentially,
+            optional,
+        )
+
+    def assert_put_file_part_in_multipart_issued(
+        self,
+        filename: Optional[str] = None,
         cloud_platform: Union[str, None] = None,
         expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
             ("test-header", "test-value"),
@@ -434,10 +455,10 @@ class RequestTracker:
         sequentially: bool = True,
         optional: bool = True,
     ) -> None:
-        self.assert_put_file_issued(
+        self.assert_put_file_part_in_multipart_issued(
             filename, cloud_platform, expected_headers, sequentially=sequentially
         )
-        while self.assert_put_file_issued(
+        while self.assert_put_file_part_in_multipart_issued(
             filename,
             cloud_platform,
             expected_headers,
