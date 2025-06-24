@@ -121,6 +121,7 @@ from .network import (
     OAUTH_AUTHENTICATOR,
     OAUTH_AUTHORIZATION_CODE,
     OAUTH_CLIENT_CREDENTIALS,
+    PAT_WITH_EXTERNAL_SESSION,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
@@ -382,6 +383,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "headers_customizers": (
         None,
         (type(None), MutableSequence[HeadersCustomizer]),
+    "external_session_id": (
+        None,
+        str,
+        # SNOW-2096721: External (Spark) session ID
     ),
 }
 
@@ -1340,6 +1345,15 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
                 self.auth_class = AuthByPAT(self._token)
+            elif self._authenticator == PAT_WITH_EXTERNAL_SESSION:
+                # We don't need to do a POST to /v1/login-request to get session and master tokens at the startup
+                # time. PAT with external (Spark) session ID creates a new session when it encounters the unique
+                # (PAT, external session ID) combination for the first time and then onwards use the (PAT, external
+                # session id) as a key to identify and authenticate the session. So we bypass actual AuthN here.
+                self.auth_class = AuthNoAuth()
+                self._rest.set_pat_and_external_session(
+                    self._token, self._external_session_id
+                )
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
                 self._check_experimental_authentication_flag()
                 # Standardize the provider enum.
@@ -1507,6 +1521,7 @@ class SnowflakeConnection:
                 OAUTH_AUTHENTICATOR,
                 USR_PWD_MFA_AUTHENTICATOR,
                 WORKLOAD_IDENTITY_AUTHENTICATOR,
+                PAT_WITH_EXTERNAL_SESSION,
             ]:
                 self._authenticator = auth_tmp
 
@@ -1522,6 +1537,7 @@ class SnowflakeConnection:
             NO_AUTH_AUTHENTICATOR,
             WORKLOAD_IDENTITY_AUTHENTICATOR,
             PROGRAMMATIC_ACCESS_TOKEN,
+            PAT_WITH_EXTERNAL_SESSION,
         }
 
         if not (self._master_token and self._session_token):
@@ -1570,6 +1586,7 @@ class SnowflakeConnection:
                     KEY_PAIR_AUTHENTICATOR,
                     PROGRAMMATIC_ACCESS_TOKEN,
                     WORKLOAD_IDENTITY_AUTHENTICATOR,
+                    PAT_WITH_EXTERNAL_SESSION,
                 )
                 and not self._password
             ):
