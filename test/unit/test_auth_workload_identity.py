@@ -14,7 +14,12 @@ from snowflake.connector.vendored.requests.exceptions import (
     HTTPError,
     Timeout,
 )
-from snowflake.connector.wif_util import AttestationProvider
+from snowflake.connector.wif_util import (
+    AZURE_ISSUER_PREFIXES,
+    AttestationProvider,
+    get_aws_partition,
+    get_aws_sts_hostname,
+)
 
 from ..csp_helpers import FakeAwsEnvironment, FakeGceMetadataService, gen_dummy_id_token
 
@@ -152,6 +157,73 @@ def test_explicit_aws_generates_unique_assertion_content(
         '{"_provider":"AWS","arn":"arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"}'
         == auth_class.assertion_content
     )
+
+
+@pytest.mark.parametrize(
+    "arn, expected_partition",
+    [
+        ("arn:aws:iam::123456789012:role/MyTestRole", "aws"),
+        (
+            "arn:aws-cn:ec2:cn-north-1:987654321098:instance/i-1234567890abcdef0",
+            "aws-cn",
+        ),
+        ("arn:aws-us-gov:s3:::my-gov-bucket", "aws-us-gov"),
+        ("arn:aws:s3:::my-bucket/my/key", "aws"),
+        ("arn:aws:lambda:us-east-1:123456789012:function:my-function", "aws"),
+        ("arn:aws:sns:eu-west-1:111122223333:my-topic", "aws"),
+        # Edge cases / Invalid inputs
+        ("invalid-arn", None),
+        ("arn::service:region:account:resource", None),  # Missing partition
+        ("arn:aws:iam:", "aws"),  # Incomplete ARN, but partition is present
+        ("", None),  # Empty string
+        (None, None),  # None input
+        (123, None),  # Non-string input
+    ],
+)
+def test_get_aws_partition_valid_and_invalid_arns(arn, expected_partition):
+    assert get_aws_partition(arn) == expected_partition
+
+
+@pytest.mark.parametrize(
+    "region, partition, expected_hostname",
+    [
+        # AWS partition
+        ("us-east-1", "aws", "sts.us-east-1.amazonaws.com"),
+        ("eu-west-2", "aws", "sts.eu-west-2.amazonaws.com"),
+        ("ap-southeast-1", "aws", "sts.ap-southeast-1.amazonaws.com"),
+        (
+            "us-east-1",
+            "aws",
+            "sts.us-east-1.amazonaws.com",
+        ),  # Redundant but good for coverage
+        # AWS China partition
+        ("cn-north-1", "aws-cn", "sts.cn-north-1.amazonaws.com.cn"),
+        ("cn-northwest-1", "aws-cn", "sts.cn-northwest-1.amazonaws.com.cn"),
+        ("", "aws-cn", None),  # No global endpoint for 'aws-cn' without region
+        # AWS GovCloud partition
+        ("us-gov-west-1", "aws-us-gov", "sts.us-gov-west-1.amazonaws.com"),
+        ("us-gov-east-1", "aws-us-gov", "sts.us-gov-east-1.amazonaws.com"),
+        ("", "aws-us-gov", None),  # No global endpoint for 'aws-us-gov' without region
+        # Invalid/Edge cases
+        ("us-east-1", "unknown-partition", None),  # Unknown partition
+        ("some-region", "invalid-partition", None),  # Invalid partition
+        (None, "aws", None),  # None region
+        ("us-east-1", None, None),  # None partition
+        (123, "aws", None),  # Non-string region
+        ("us-east-1", 456, None),  # Non-string partition
+        ("", "", None),  # Empty region and partition
+        ("us-east-1", "", None),  # Empty partition
+        (
+            "invalid-region",
+            "aws",
+            "sts.invalid-region.amazonaws.com",
+        ),  # Valid format, invalid region name
+    ],
+)
+def test_get_aws_sts_hostname_valid_and_invalid_inputs(
+    region, partition, expected_hostname
+):
+    assert get_aws_sts_hostname(region, partition) == expected_hostname
 
 
 # -- GCP Tests --
@@ -310,6 +382,22 @@ def test_explicit_azure_uses_explicit_entra_resource(fake_azure_metadata_service
     token = fake_azure_metadata_service.token
     parsed = jwt.decode(token, options={"verify_signature": False})
     assert parsed["aud"] == "api://non-standard"
+
+
+@pytest.mark.parametrize(
+    "issuer",
+    [
+        "https://sts.windows.net/067802cd-8f92-4c7c-bceb-ea8f15d31cc5",
+        "https://sts.chinacloudapi.cn/067802cd-8f92-4c7c-bceb-ea8f15d31cc5",
+        "https://login.microsoftonline.com/067802cd-8f92-4c7c-bceb-ea8f15d31cc5/v2.0",
+        "https://login.microsoftonline.us/067802cd-8f92-4c7c-bceb-ea8f15d31cc5/v2.0",
+        "https://login.partner.microsoftonline.cn/067802cd-8f92-4c7c-bceb-ea8f15d31cc5/v2.0",
+    ],
+)
+def test_azure_issuer_prefixes(issuer):
+    assert any(
+        issuer.startswith(issuer_prefix) for issuer_prefix in AZURE_ISSUER_PREFIXES
+    )
 
 
 # -- Auto-detect Tests --
