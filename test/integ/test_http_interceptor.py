@@ -233,6 +233,7 @@ def test_interceptor_detects_expected_requests_in_successful_flow_put_get(
 def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
     tmp_path: pathlib.Path,
     static_collecting_customizer,
+    dynamic_collecting_customizer,
     conn_cnx,
     current_provider,
 ):
@@ -300,6 +301,23 @@ def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
     conn = conn_cnx(
         headers_customizers=[
             static_collecting_customizer,
+            dynamic_collecting_customizer,
         ]
     )
-    _assert_expected_requests_occurred_multipart(conn)
+    try:
+        _assert_expected_requests_occurred_multipart(conn)
+    except AssertionError as ex:
+        list_of_inv = (
+            str(ex)
+            + "\n\n"
+            + str(
+                "\n".join(
+                    map(
+                        lambda r: f"{r.method} {r.url}",
+                        dynamic_collecting_customizer.invocations,
+                    )
+                )
+            )
+        )
+        print(list_of_inv)
+        raise AssertionError(list_of_inv)
