@@ -275,12 +275,14 @@ def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
 
                 if current_provider in ("aws", "dev"):
                     tracker.assert_post_start_for_multipart_file_issued(
-                        big_test_file_stage_path, sequentially=False
+                        sequentially=False, file_path=big_test_file_stage_path
                     )
 
-                tracker.assert_put_file_issued(big_test_file.name, sequentially=False)
+                tracker.assert_multiple_put_file_issued(
+                    big_test_file.name, sequentially=False
+                )
                 tracker.assert_end_for_multipart_file_issued(
-                    cloud_platform=current_provider, sequentially=False
+                    cloud_platform=current_provider
                 )
 
                 cur.execute(
@@ -295,5 +297,9 @@ def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
         tracker.assert_telemetry_send_issued()
         tracker.assert_disconnect_issued()
 
-    conn = conn_cnx(headers_customizers=[static_collecting_customizer])
+    conn = conn_cnx(
+        headers_customizers=[
+            static_collecting_customizer,
+        ]
+    )
     _assert_expected_requests_occurred_multipart(conn)
