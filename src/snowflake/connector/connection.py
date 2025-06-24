@@ -383,6 +383,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "headers_customizers": (
         None,
         (type(None), MutableSequence[HeadersCustomizer]),
+    ),
     "external_session_id": (
         None,
         str,
