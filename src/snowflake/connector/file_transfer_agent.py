@@ -18,6 +18,7 @@ from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import IS_WINDOWS
 from .constants import (
+    _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     AZURE_CHUNK_SIZE,
     AZURE_FS,
     CMD_TYPE_DOWNLOAD,
@@ -355,6 +356,7 @@ class SnowflakeFileTransferAgent:
         use_s3_regional_url: bool = False,
         iobound_tpe_limit: int | None = None,
         unsafe_file_write: bool = False,
+        snowflake_server_dop_cap_for_file_transfer=_DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -387,6 +389,9 @@ class SnowflakeFileTransferAgent:
         self._credentials: StorageCredential | None = None
         self._iobound_tpe_limit = iobound_tpe_limit
         self._unsafe_file_write = unsafe_file_write
+        self._snowflake_server_dop_cap_for_file_transfer = (
+            snowflake_server_dop_cap_for_file_transfer
+        )
 
     def execute(self) -> None:
         self._parse_command()
@@ -443,12 +448,16 @@ class SnowflakeFileTransferAgent:
             result.result_status = result.result_status.value
 
     def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
-        iobound_tpe_limit = min(len(metas), os.cpu_count())
+        iobound_tpe_limit = min(
+            len(metas), os.cpu_count(), self._snowflake_server_dop_cap_for_file_transfer
+        )
         logger.debug("Decided IO-bound TPE size: %d", iobound_tpe_limit)
         if self._iobound_tpe_limit is not None:
             logger.debug("IO-bound TPE size is limited to: %d", self._iobound_tpe_limit)
             iobound_tpe_limit = min(iobound_tpe_limit, self._iobound_tpe_limit)
-        max_concurrency = self._parallel
+        max_concurrency = min(
+            self._parallel, self._snowflake_server_dop_cap_for_file_transfer
+        )
         network_tpe = ThreadPoolExecutor(max_concurrency)
         preprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
         postprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
