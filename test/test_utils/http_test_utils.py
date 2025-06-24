@@ -272,7 +272,10 @@ class RequestTracker:
         ),
         sequentially: bool = True,
     ) -> RequestDTO:
-        while self.assert_put_file_issued(filename, expected_headers, sequentially):
+        self.assert_put_file_issued(
+            filename, expected_headers, sequentially=sequentially
+        )
+        while self.assert_put_file_issued(filename, expected_headers, optional=True):
             continue
 
     def assert_put_file_issued(
@@ -282,6 +285,7 @@ class RequestTracker:
             ("test-header", "test-value"),
         ),
         sequentially: bool = True,
+        optional: bool = False,
     ) -> RequestDTO:
         expected = ExpectedRequestInfo(
             "PUT",
@@ -290,9 +294,11 @@ class RequestTracker:
             + r"(.*)?",
         )
         rv = (
-            self.assert_request_occurred_sequentially(expected)
+            self.assert_request_occurred_sequentially(
+                expected, raise_on_missing=not optional
+            )
             if sequentially
-            else self.assert_request_occurred(expected)
+            else self.assert_request_occurred(expected, raise_on_missing=not optional)
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
         return rv
