@@ -384,7 +384,7 @@ class RequestTracker:
         return self._assert_issued_with_custom_headers(
             ExpectedRequestInfo(
                 "PUT",
-                r".*blob\.core\.windows.*/stages/.*"
+                r".*blob\.core\.windows.*stages.*"
                 + (file_path or "")
                 + r".*?comp=blocklist(.*)?",
             ),
