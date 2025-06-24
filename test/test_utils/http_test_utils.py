@@ -22,18 +22,18 @@ try:
 except ImportError:
     HeadersCustomizer = object
     RequestDTO = Tuple
-    Headers = Dict
+    Headers = Dict[str, Any]
 
 
 class CollectingCustomizer(HeadersCustomizer):
-    def __init__(self):
-        self.invocations = deque()
-        self._lock = threading.Lock()
+    def __init__(self) -> None:
+        self.invocations: Deque[RequestDTO] = deque()
+        self._lock: threading.Lock = threading.Lock()
 
     def applies_to(self, request: RequestDTO) -> bool:
         return True
 
-    def get_new_headers(self, request: RequestDTO) -> dict[str, str]:
+    def get_new_headers(self, request: RequestDTO) -> Dict[str, str]:
         with self._lock:
             self.invocations.append(request)
         return {"test-header": "test-value"}
@@ -77,16 +77,16 @@ class RequestTracker:
         ignored: Optional[
             Iterable[ExpectedRequestInfo]
         ] = DEFAULT_REQUESTS_TO_IGNORE_IN_CHECKS,
-    ):
+    ) -> None:
         self.requests = requests
         self.ignored = ignored or ()
-        self._last_request: Optional[RequestDTO] = None
-        self._last_expected_info: Optional[ExpectedRequestInfo] = None
+        self._last_request = None
+        self._last_expected_info = None
 
     @staticmethod
     def _assert_headers_were_added(
         headers: Headers,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
             ("test-header", "test-value"),
         ),
     ) -> None:
@@ -105,7 +105,7 @@ class RequestTracker:
         self,
         expected: ExpectedRequestInfo,
         raise_on_missing: bool = True,
-    ):
+    ) -> Optional[RequestDTO]:
         for i, request in enumerate(self.requests):
             if self._should_ignore(request):
                 continue
@@ -161,11 +161,11 @@ class RequestTracker:
     def _assert_issued_with_custom_headers(
         self,
         expected: ExpectedRequestInfo,
-        expected_headers,
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]],
         sequentially: bool,
         optional: bool,
-    ):
-        found_request: RequestDTO = (
+    ) -> Optional[RequestDTO]:
+        found_request: Optional[RequestDTO] = (
             self.assert_request_occurred_sequentially(
                 expected, raise_on_missing=not optional
             )
@@ -178,182 +178,231 @@ class RequestTracker:
 
     def assert_login_issued(
         self,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-    ):
-        expected = ExpectedRequestInfo("POST", r".*/session/v1/login-request.*")
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo("POST", r".*/session/v1/login-request.*"),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_sql_query_issued(
         self,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-    ):
-        expected = ExpectedRequestInfo("POST", r".*/queries/v1/query-request.*")
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo("POST", r".*/queries/v1/query-request.*"),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_telemetry_send_issued(
         self,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-    ):
-        expected = ExpectedRequestInfo("POST", r".*/telemetry/send.*")
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo("POST", r".*/telemetry/send.*"),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_disconnect_issued(
         self,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-    ):
-        expected = ExpectedRequestInfo(
-            "POST", r".*/session\?delete=true(\&request_guid=.*)?"
-        )
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo("POST", r".*/session\?delete=true(\&request_guid=.*)?"),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_get_chunk_issued(
         self,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-    ):
-        expected = ExpectedRequestInfo(
-            "GET",
-            r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*/results/.*main.*data.*\?.*",
-        )
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo(
+                "GET",
+                r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*/results/.*main.*data.*\?.*",
+            ),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_aws_get_accelerate_issued(
         self,
-        expected_headers=(("test-header", "test-value"),),
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
         sequentially=True,
         optional=True,
-    ):
-        expected = ExpectedRequestInfo(
-            "GET", r".*\.s3(.*)?\.amazonaws.*/\?accelerate(.*)?"
-        )
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo("GET", r".*\.s3(.*)?\.amazonaws.*/\?accelerate(.*)?"),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_get_file_issued(
         self,
-        filename=None,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-    ):
-        expected = ExpectedRequestInfo(
-            "GET",
-            r".*(s3(.*)?\.amazonaws|blob\.core\.windows|storage\.googleapis).*"
-            + (filename or "")
-            + r"(.*)?",
-        )
+        filename: Optional[str] = None,
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo(
+                "GET",
+                r".*(s3(.*)?\.amazonaws|blob\.core\.windows|storage\.googleapis).*"
+                + (filename or "")
+                + r"(.*)?",
+            ),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_put_file_issued(
         self,
-        filename=None,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-    ):
-        expected = ExpectedRequestInfo(
-            "PUT",
-            r".*(s3(.*)?\.amazonaws|blob\.core\.windows|storage\.googleapis).*stages.*"
-            + (filename or "")
-            + r"(.*)?",
-        )
+        filename: Optional[str] = None,
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo(
+                "PUT",
+                r".*(s3(.*)?\.amazonaws|blob\.core\.windows|storage\.googleapis).*stages.*"
+                + (filename or "")
+                + r"(.*)?",
+            ),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_file_head_issued(
         self,
-        filename=None,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-    ):
-        expected = ExpectedRequestInfo(
-            "HEAD",
-            r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*"
-            + (filename or "")
-            + r"(.*)?",
-        )
+        filename: Optional[str] = None,
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo(
+                "HEAD",
+                r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*"
+                + (filename or "")
+                + r"(.*)?",
+            ),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_post_start_for_multipart_file_issued(
         self,
-        file_path=None,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-    ):
-        expected = ExpectedRequestInfo(
-            "POST", r".*s3.*\.amazonaws.*stages.*" + (file_path or "") + r"\?uploads"
-        )
+        file_path: Optional[str] = None,
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo(
+                "POST",
+                r".*s3.*\.amazonaws.*stages.*" + (file_path or "") + r"\?uploads",
+            ),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_post_end_for_multipart_on_aws_file_issued(
         self,
-        file_path=None,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-    ):
-        expected = ExpectedRequestInfo(
-            "POST",
-            r".*s3(.*)?\.amazonaws.*/stages/.*" + (file_path or "") + r".*uploadId=.*",
-        )
+        file_path: Optional[str] = None,
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo(
+                "POST",
+                r".*s3(.*)?\.amazonaws.*/stages/.*"
+                + (file_path or "")
+                + r".*uploadId=.*",
+            ),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_put_end_for_multipart_on_azure_file_issued(
         self,
-        file_path=None,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-    ):
-        expected = ExpectedRequestInfo(
-            "PUT",
-            r".*blob\.core\.windows.*/stages/.*"
-            + (file_path or "")
-            + r".*?comp=blocklist(.*)?",
-        )
+        file_path: Optional[str] = None,
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+    ) -> Optional[RequestDTO]:
         return self._assert_issued_with_custom_headers(
-            expected, expected_headers, sequentially, optional
+            ExpectedRequestInfo(
+                "PUT",
+                r".*blob\.core\.windows.*/stages/.*"
+                + (file_path or "")
+                + r".*?comp=blocklist(.*)?",
+            ),
+            expected_headers,
+            sequentially,
+            optional,
         )
 
     def assert_end_for_multipart_file_issued(
         self,
-        cloud_platform,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-        optional=False,
-        file_path=None,
-    ):
+        cloud_platform: str,
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = False,
+        file_path: Optional[str] = None,
+    ) -> Optional[RequestDTO]:
         if cloud_platform in ("aws", "dev"):
             return self.assert_post_end_for_multipart_on_aws_file_issued(
                 file_path, expected_headers, sequentially, optional
@@ -362,17 +411,21 @@ class RequestTracker:
             return self.assert_put_end_for_multipart_on_azure_file_issued(
                 file_path, expected_headers, sequentially, optional
             )
+        return None
 
     def assert_multiple_put_file_issued(
         self,
-        filename=None,
-        expected_headers=(("test-header", "test-value"),),
-        sequentially=True,
-    ):
+        filename: Optional[str] = None,
+        expected_headers: Union[Dict[str, Any], Tuple[Tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+        optional: bool = True,
+    ) -> None:
         self.assert_put_file_issued(
             filename, expected_headers, sequentially=sequentially
         )
         while self.assert_put_file_issued(
-            filename, expected_headers, sequentially=sequentially, optional=True
+            filename, expected_headers, sequentially=sequentially, optional=optional
         ):
             continue
