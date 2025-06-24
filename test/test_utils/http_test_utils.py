@@ -237,7 +237,7 @@ class RequestTracker:
         ),
     ) -> RequestDTO:
         rv = self.assert_request_occurred_sequentially(
-            ExpectedRequestInfo("GET", r".*\.s3\.amazonaws.*/\?accelerate(.*)?"),
+            ExpectedRequestInfo("GET", r".*\.s3(.*)?\.amazonaws.*/\?accelerate(.*)?"),
             raise_on_missing=not optional,
         )
         if rv is not None:
@@ -254,7 +254,7 @@ class RequestTracker:
     ) -> RequestDTO:
         expected = ExpectedRequestInfo(
             "GET",
-            r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*"
+            r".*(s3(.*)?\.amazonaws|blob\.core\.windows|storage\.googleapis).*"
             + (filename if filename else "")
             + r"(.*)?",
         )
@@ -291,7 +291,7 @@ class RequestTracker:
     ) -> RequestDTO:
         expected = ExpectedRequestInfo(
             "PUT",
-            r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*stages.*"
+            r".*(s3(.*)?\.amazonaws|blob\.core\.windows|storage\.googleapis).*stages.*"
             + (filename if filename else "")
             + r"(.*)?",
         )
@@ -339,7 +339,7 @@ class RequestTracker:
     ) -> RequestDTO:
         expected = ExpectedRequestInfo(
             "POST",
-            r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*/stages/.*"
+            r".*s3.*\.amazonaws.*stages.*"
             + (file_path if file_path else "")
             + r"\?uploads",
         )
@@ -361,7 +361,7 @@ class RequestTracker:
     ) -> RequestDTO:
         expected = ExpectedRequestInfo(
             "POST",
-            r".*s3\.amazonaws.*/stages/.*" + (file_path or "") + ".*uploadId=.*",
+            r".*s3(.*)?\.amazonaws.*/stages/.*" + (file_path or "") + ".*uploadId=.*",
         )
         rv = (
             self.assert_request_occurred_sequentially(expected)
