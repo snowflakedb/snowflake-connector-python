@@ -151,6 +151,8 @@ class RequestTracker:
                 self._last_request = request  # skip retry
                 continue
 
+            # Rollback and exit
+            self.requests.appendleft(request)
             if raise_on_missing:
                 raise AssertionError(f"Unexpected request: {request}")
             else:
@@ -300,7 +302,9 @@ class RequestTracker:
             if sequentially
             else self.assert_request_occurred(expected, raise_on_missing=not optional)
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
+        if rv is not None:
+            self._assert_headers_were_added(rv.headers, expected_headers)
+
         return rv
 
     def assert_file_head_issued(
@@ -327,11 +331,11 @@ class RequestTracker:
 
     def assert_post_start_for_multipart_file_issued(
         self,
-        file_path: Optional[str] = None,
         expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
             ("test-header", "test-value"),
         ),
         sequentially: bool = True,
+        file_path: Optional[str] = None,
     ) -> RequestDTO:
         expected = ExpectedRequestInfo(
             "POST",
@@ -353,10 +357,11 @@ class RequestTracker:
             ("test-header", "test-value"),
         ),
         sequentially: bool = True,
+        file_path: Optional[str] = None,
     ) -> RequestDTO:
         expected = ExpectedRequestInfo(
             "POST",
-            r".*s3\.amazonaws.*/stages/.*",
+            r".*s3\.amazonaws.*/stages/.*" + (file_path or "") + ".*uploadId=.*",
         )
         rv = (
             self.assert_request_occurred_sequentially(expected)
@@ -372,10 +377,13 @@ class RequestTracker:
             ("test-header", "test-value"),
         ),
         sequentially: bool = True,
+        file_path: Optional[str] = None,
     ) -> RequestDTO:
         expected = ExpectedRequestInfo(
             "PUT",
-            r".*blob\.core\.windows.*/stages/.*?comp=blocklist(.*)?",
+            r".*blob\.core\.windows.*/stages/.*"
+            + (file_path or "")
+            + ".*?comp=blocklist(.*)?",
         )
         rv = (
             self.assert_request_occurred_sequentially(expected)
@@ -392,8 +400,13 @@ class RequestTracker:
             ("test-header", "test-value"),
         ),
         sequentially: bool = True,
-    ) -> RequestDTO:
+        file_path: Optional[str] = None,
+    ) -> Optional[RequestDTO]:
         if cloud_platform in ("aws", "dev"):
-            self.assert_post_end_for_multipart_on_aws_file_issued()
+            return self.assert_post_end_for_multipart_on_aws_file_issued(
+                expected_headers, sequentially, file_path
+            )
         elif cloud_platform in ("azure", "dev"):
-            self.assert_put_end_for_multipart_on_azure_file_issued()
+            return self.assert_put_end_for_multipart_on_azure_file_issued(
+                expected_headers, sequentially, file_path
+            )
