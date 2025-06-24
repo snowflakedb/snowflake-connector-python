@@ -165,15 +165,16 @@ class RequestTracker:
         sequentially: bool,
         optional: bool,
     ):
-        fn = (
-            self.assert_request_occurred_sequentially
+        found_request: RequestDTO = (
+            self.assert_request_occurred_sequentially(
+                expected, raise_on_missing=not optional
+            )
             if sequentially
-            else self.assert_request_occurred
+            else self.assert_request_occurred(expected, raise_on_missing=not optional)
         )
-        rv = fn(expected, raise_on_missing=not optional)
-        if rv:
-            self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
+        if found_request:
+            self._assert_headers_were_added(found_request.headers, expected_headers)
+        return found_request
 
     def assert_login_issued(
         self,
@@ -361,3 +362,17 @@ class RequestTracker:
             return self.assert_put_end_for_multipart_on_azure_file_issued(
                 file_path, expected_headers, sequentially, optional
             )
+
+    def assert_multiple_put_file_issued(
+        self,
+        filename=None,
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+    ):
+        self.assert_put_file_issued(
+            filename, expected_headers, sequentially=sequentially
+        )
+        while self.assert_put_file_issued(
+            filename, expected_headers, sequentially=sequentially, optional=True
+        ):
+            continue
