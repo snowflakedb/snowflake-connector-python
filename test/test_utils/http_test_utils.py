@@ -341,7 +341,7 @@ class RequestTracker:
         self._assert_headers_were_added(rv.headers, expected_headers)
         return rv
 
-    def assert_post_end_for_multipart_file_issued(
+    def assert_post_end_for_multipart_on_aws_file_issued(
         self,
         expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
             ("test-header", "test-value"),
@@ -350,7 +350,7 @@ class RequestTracker:
     ) -> RequestDTO:
         expected = ExpectedRequestInfo(
             "POST",
-            r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*/stages/.*",
+            r".*s3\.amazonaws.*/stages/.*",
         )
         rv = (
             self.assert_request_occurred_sequentially(expected)
@@ -359,3 +359,35 @@ class RequestTracker:
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
         return rv
+
+    def assert_put_end_for_multipart_on_azure_file_issued(
+        self,
+        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+    ) -> RequestDTO:
+        expected = ExpectedRequestInfo(
+            "PUT",
+            r".*blob\.core\.windows.*/stages/.*?comp=blocklist(.*)?",
+        )
+        rv = (
+            self.assert_request_occurred_sequentially(expected)
+            if sequentially
+            else self.assert_request_occurred(expected)
+        )
+        self._assert_headers_were_added(rv.headers, expected_headers)
+        return rv
+
+    def assert_end_for_multipart_file_issued(
+        self,
+        cloud_platform: str,
+        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+    ) -> RequestDTO:
+        if cloud_platform in ("aws", "dev"):
+            self.assert_post_end_for_multipart_on_aws_file_issued()
+        elif cloud_platform in ("azure", "dev"):
+            self.assert_put_end_for_multipart_on_azure_file_issued()

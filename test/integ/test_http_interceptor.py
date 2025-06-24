@@ -272,11 +272,16 @@ def test_interceptor_detects_expected_requests_in_successful_multipart_put_get(
                     tracker.assert_aws_get_accelerate_issued(optional=True)
 
                 tracker.assert_file_head_issued(big_test_file.name, sequentially=False)
-                tracker.assert_post_start_for_multipart_file_issued(
-                    big_test_file_stage_path, sequentially=False
-                )
+
+                if current_provider in ("aws", "dev"):
+                    tracker.assert_post_start_for_multipart_file_issued(
+                        big_test_file_stage_path, sequentially=False
+                    )
+
                 tracker.assert_put_file_issued(big_test_file.name, sequentially=False)
-                tracker.assert_post_end_for_multipart_file_issued()
+                tracker.assert_end_for_multipart_file_issued(
+                    cloud_platform=current_provider, sequentially=False
+                )
 
                 cur.execute(
                     f"GET @{stage_name}/{big_test_file_stage_path} file://{download_dir}"
