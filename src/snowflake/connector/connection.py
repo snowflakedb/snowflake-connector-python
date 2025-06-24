@@ -435,6 +435,9 @@ def detect_platforms() -> dict:
         job_vars = ["CLOUD_RUN_JOB", "CLOUD_RUN_EXECUTION"]
         return all(var in os.environ for var in job_vars)
 
+    def is_github_action():
+        return "GITHUB_ACTIONS" in os.environ
+
     platforms = {
         "ec2": is_ec2_instance(),
         "aws_lambda": is_aws_lambda(),
@@ -442,6 +445,7 @@ def detect_platforms() -> dict:
         "gce_vm": is_gce_vm(),
         "gce_cloud_run_service": is_gce_cloud_run_service(),
         "gce_cloud_run_job": is_gce_cloud_run_job(),
+        "github_action": is_github_action(),
     }
 
     return platforms
