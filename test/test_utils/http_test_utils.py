@@ -1,4 +1,5 @@
 import re
+import threading
 from collections import deque
 from typing import (
     Any,
@@ -27,12 +28,14 @@ except ImportError:
 class CollectingCustomizer(HeadersCustomizer):
     def __init__(self):
         self.invocations = deque()
+        self._lock = threading.Lock()
 
     def applies_to(self, request: RequestDTO) -> bool:
         return True
 
     def get_new_headers(self, request: RequestDTO) -> dict[str, str]:
-        self.invocations.append(request)
+        with self._lock:
+            self.invocations.append(request)
         return {"test-header": "test-value"}
 
 
@@ -101,8 +104,34 @@ class RequestTracker:
     def _should_ignore(self, request: RequestDTO) -> bool:
         return any(ignored_info.is_matching(request) for ignored_info in self.ignored)
 
-    def assert_request_occurred_after_optional_retries(
-        self, expected: ExpectedRequestInfo, raise_on_missing: bool = True
+    def assert_request_occurred(
+        self,
+        expected: ExpectedRequestInfo,
+        raise_on_missing: bool = True,
+    ):
+        for i, request in enumerate(self.requests):
+            if self._should_ignore(request):
+                continue
+
+            if expected.is_matching(request):
+                self._last_request = request
+                self._last_expected_info = expected
+                # Pop the matched request from deque, while iterating only once
+                del self.requests[i]
+                return request
+
+        if raise_on_missing:
+            raise AssertionError(
+                f"Expected request '{expected.method} {expected.url_regexp}' not found"
+            )
+        else:
+            return None
+
+    def assert_request_occurred_sequentially(
+        self,
+        expected: ExpectedRequestInfo,
+        raise_on_missing: bool = True,
+        skip_previous_request_retries: bool = True,
     ) -> RequestDTO:
         while self.requests:
             request = self.requests.popleft()
@@ -114,8 +143,10 @@ class RequestTracker:
                 self._last_expected_info = expected
                 return request
 
-            if self._last_expected_info and self._last_expected_info.is_matching(
-                request
+            if (
+                skip_previous_request_retries
+                and self._last_expected_info
+                and self._last_expected_info.is_matching(request)
             ):
                 self._last_request = request  # skip retry
                 continue
@@ -139,7 +170,7 @@ class RequestTracker:
             ("test-header", "test-value"),
         ),
     ) -> RequestDTO:
-        rv = self.assert_request_occurred_after_optional_retries(
+        rv = self.assert_request_occurred_sequentially(
             ExpectedRequestInfo("POST", r".*/session/v1/login-request.*")
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
@@ -151,7 +182,7 @@ class RequestTracker:
             ("test-header", "test-value"),
         ),
     ) -> RequestDTO:
-        rv = self.assert_request_occurred_after_optional_retries(
+        rv = self.assert_request_occurred_sequentially(
             ExpectedRequestInfo("POST", r".*/queries/v1/query-request.*")
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
@@ -163,7 +194,7 @@ class RequestTracker:
             ("test-header", "test-value"),
         ),
     ) -> RequestDTO:
-        rv = self.assert_request_occurred_after_optional_retries(
+        rv = self.assert_request_occurred_sequentially(
             ExpectedRequestInfo("POST", r".*/telemetry/send.*")
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
@@ -175,7 +206,7 @@ class RequestTracker:
             ("test-header", "test-value"),
         ),
     ) -> RequestDTO:
-        rv = self.assert_request_occurred_after_optional_retries(
+        rv = self.assert_request_occurred_sequentially(
             ExpectedRequestInfo("POST", r".*/session\?delete=true(\&request_guid=.*)?")
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
@@ -187,7 +218,7 @@ class RequestTracker:
             ("test-header", "test-value"),
         ),
     ) -> RequestDTO:
-        rv = self.assert_request_occurred_after_optional_retries(
+        rv = self.assert_request_occurred_sequentially(
             ExpectedRequestInfo(
                 "GET",
                 r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*/results/.*main.*data.*\?.*",
@@ -203,7 +234,7 @@ class RequestTracker:
             ("test-header", "test-value"),
         ),
     ) -> RequestDTO:
-        rv = self.assert_request_occurred_after_optional_retries(
+        rv = self.assert_request_occurred_sequentially(
             ExpectedRequestInfo("GET", r".*\.s3\.amazonaws.*/\?accelerate(.*)?"),
             raise_on_missing=not optional,
         )
@@ -217,17 +248,32 @@ class RequestTracker:
         expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
             ("test-header", "test-value"),
         ),
+        sequentially: bool = True,
     ) -> RequestDTO:
-        rv = self.assert_request_occurred_after_optional_retries(
-            ExpectedRequestInfo(
-                "GET",
-                r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*"
-                + (filename if filename else "")
-                + r"(.*)?",
-            )
+        expected = ExpectedRequestInfo(
+            "GET",
+            r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*"
+            + (filename if filename else "")
+            + r"(.*)?",
+        )
+        rv = (
+            self.assert_request_occurred_sequentially(expected)
+            if sequentially
+            else self.assert_request_occurred(expected)
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
         return rv
+
+    def assert_multiple_put_file_issued(
+        self,
+        filename: Optional[str] = None,
+        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
+            ("test-header", "test-value"),
+        ),
+        sequentially: bool = True,
+    ) -> RequestDTO:
+        while self.assert_put_file_issued(filename, expected_headers, sequentially):
+            continue
 
     def assert_put_file_issued(
         self,
@@ -235,14 +281,18 @@ class RequestTracker:
         expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
             ("test-header", "test-value"),
         ),
+        sequentially: bool = True,
     ) -> RequestDTO:
-        rv = self.assert_request_occurred_after_optional_retries(
-            ExpectedRequestInfo(
-                "PUT",
-                r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*stages.*"
-                + (filename if filename else "")
-                + r"(.*)?",
-            )
+        expected = ExpectedRequestInfo(
+            "PUT",
+            r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*stages.*"
+            + (filename if filename else "")
+            + r"(.*)?",
+        )
+        rv = (
+            self.assert_request_occurred_sequentially(expected)
+            if sequentially
+            else self.assert_request_occurred(expected)
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
         return rv
@@ -253,14 +303,18 @@ class RequestTracker:
         expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
             ("test-header", "test-value"),
         ),
+        sequentially: bool = True,
     ) -> RequestDTO:
-        rv = self.assert_request_occurred_after_optional_retries(
-            ExpectedRequestInfo(
-                "HEAD",
-                r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*"
-                + (filename if filename else "")
-                + r"(.*)?",
-            )
+        expected = ExpectedRequestInfo(
+            "HEAD",
+            r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*"
+            + (filename if filename else "")
+            + r"(.*)?",
+        )
+        rv = (
+            self.assert_request_occurred_sequentially(expected)
+            if sequentially
+            else self.assert_request_occurred(expected)
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
         return rv
@@ -271,14 +325,18 @@ class RequestTracker:
         expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
             ("test-header", "test-value"),
         ),
+        sequentially: bool = True,
     ) -> RequestDTO:
-        rv = self.assert_request_occurred_after_optional_retries(
-            ExpectedRequestInfo(
-                "POST",
-                r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*/stages/.*"
-                + (file_path if file_path else "")
-                + r"\?uploads",
-            )
+        expected = ExpectedRequestInfo(
+            "POST",
+            r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*/stages/.*"
+            + (file_path if file_path else "")
+            + r"\?uploads",
+        )
+        rv = (
+            self.assert_request_occurred_sequentially(expected)
+            if sequentially
+            else self.assert_request_occurred(expected)
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
         return rv
@@ -288,12 +346,16 @@ class RequestTracker:
         expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
             ("test-header", "test-value"),
         ),
+        sequentially: bool = True,
     ) -> RequestDTO:
-        rv = self.assert_request_occurred_after_optional_retries(
-            ExpectedRequestInfo(
-                "POST",
-                r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*/stages/.*",
-            )
+        expected = ExpectedRequestInfo(
+            "POST",
+            r".*(s3\.amazonaws|blob\.core\.windows|storage\.googleapis).*/stages/.*",
+        )
+        rv = (
+            self.assert_request_occurred_sequentially(expected)
+            if sequentially
+            else self.assert_request_occurred(expected)
         )
         self._assert_headers_were_added(rv.headers, expected_headers)
         return rv
