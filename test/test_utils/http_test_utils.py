@@ -68,9 +68,7 @@ class ExpectedRequestInfo(NamedTuple):
 
 class RequestTracker:
     DEFAULT_REQUESTS_TO_IGNORE_IN_CHECKS: FrozenSet[ExpectedRequestInfo] = frozenset(
-        [
-            ExpectedRequestInfo("GET", r".*/__admin/health"),
-        ]
+        [ExpectedRequestInfo("GET", r".*/__admin/health")]
     )
 
     def __init__(
@@ -93,13 +91,12 @@ class RequestTracker:
         ),
     ) -> None:
         expected_headers = dict(expected_headers)
-
         headers_lowercased = {k.lower(): v for k, v in headers.items()}
         for expected_header_name, expected_header_value in expected_headers.items():
             assert (
-                headers_lowercased[expected_header_name.lower()]
+                headers_lowercased.get(expected_header_name.lower())
                 == expected_header_value
-            ), "Custom header not found in response"
+            ), f"Custom header not found: {expected_header_name}"
 
     def _should_ignore(self, request: RequestDTO) -> bool:
         return any(ignored_info.is_matching(request) for ignored_info in self.ignored)
@@ -116,10 +113,9 @@ class RequestTracker:
             if expected.is_matching(request):
                 self._last_request = request
                 self._last_expected_info = expected
-                # Pop the matched request from deque, while iterating only once
+                # Pop the matched request from the associated index in the deque, while searching the whole collection
                 del self.requests[i]
                 return request
-
         if raise_on_missing:
             raise AssertionError(
                 f"Expected request '{expected.method} {expected.url_regexp}' not found"
@@ -132,7 +128,7 @@ class RequestTracker:
         expected: ExpectedRequestInfo,
         raise_on_missing: bool = True,
         skip_previous_request_retries: bool = True,
-    ) -> RequestDTO:
+    ) -> Optional[RequestDTO]:
         while self.requests:
             request = self.requests.popleft()
             if self._should_ignore(request):
@@ -155,258 +151,213 @@ class RequestTracker:
             self.requests.appendleft(request)
             if raise_on_missing:
                 raise AssertionError(f"Unexpected request: {request}")
-            else:
-                return None
-
+            return None
         if raise_on_missing:
             raise AssertionError(
                 f"Expected request '{expected.method} {expected.url_regexp}' not found"
             )
-        else:
-            return None
+        return None
 
-    # Proxy helpers
+    def _assert_issued_with_custom_headers(
+        self,
+        expected: ExpectedRequestInfo,
+        expected_headers,
+        sequentially: bool,
+        optional: bool,
+    ):
+        fn = (
+            self.assert_request_occurred_sequentially
+            if sequentially
+            else self.assert_request_occurred
+        )
+        rv = fn(expected, raise_on_missing=not optional)
+        if rv:
+            self._assert_headers_were_added(rv.headers, expected_headers)
+        return rv
+
     def assert_login_issued(
         self,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-    ) -> RequestDTO:
-        rv = self.assert_request_occurred_sequentially(
-            ExpectedRequestInfo("POST", r".*/session/v1/login-request.*")
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+    ):
+        expected = ExpectedRequestInfo("POST", r".*/session/v1/login-request.*")
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
 
     def assert_sql_query_issued(
         self,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-    ) -> RequestDTO:
-        rv = self.assert_request_occurred_sequentially(
-            ExpectedRequestInfo("POST", r".*/queries/v1/query-request.*")
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+    ):
+        expected = ExpectedRequestInfo("POST", r".*/queries/v1/query-request.*")
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
 
     def assert_telemetry_send_issued(
         self,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-    ) -> RequestDTO:
-        rv = self.assert_request_occurred_sequentially(
-            ExpectedRequestInfo("POST", r".*/telemetry/send.*")
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+    ):
+        expected = ExpectedRequestInfo("POST", r".*/telemetry/send.*")
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
 
     def assert_disconnect_issued(
         self,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-    ) -> RequestDTO:
-        rv = self.assert_request_occurred_sequentially(
-            ExpectedRequestInfo("POST", r".*/session\?delete=true(\&request_guid=.*)?")
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+    ):
+        expected = ExpectedRequestInfo(
+            "POST", r".*/session\?delete=true(\&request_guid=.*)?"
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
+        )
 
     def assert_get_chunk_issued(
         self,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-    ) -> RequestDTO:
-        rv = self.assert_request_occurred_sequentially(
-            ExpectedRequestInfo(
-                "GET",
-                r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*/results/.*main.*data.*\?.*",
-            )
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+    ):
+        expected = ExpectedRequestInfo(
+            "GET",
+            r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*/results/.*main.*data.*\?.*",
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
+        )
 
     def assert_aws_get_accelerate_issued(
         self,
-        optional: bool = True,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-    ) -> RequestDTO:
-        rv = self.assert_request_occurred_sequentially(
-            ExpectedRequestInfo("GET", r".*\.s3(.*)?\.amazonaws.*/\?accelerate(.*)?"),
-            raise_on_missing=not optional,
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=True,
+    ):
+        expected = ExpectedRequestInfo(
+            "GET", r".*\.s3(.*)?\.amazonaws.*/\?accelerate(.*)?"
         )
-        if rv is not None:
-            self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
+        )
 
     def assert_get_file_issued(
         self,
-        filename: Optional[str] = None,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-        sequentially: bool = True,
-    ) -> RequestDTO:
+        filename=None,
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+    ):
         expected = ExpectedRequestInfo(
             "GET",
             r".*(s3(.*)?\.amazonaws|blob\.core\.windows|storage\.googleapis).*"
-            + (filename if filename else "")
+            + (filename or "")
             + r"(.*)?",
         )
-        rv = (
-            self.assert_request_occurred_sequentially(expected)
-            if sequentially
-            else self.assert_request_occurred(expected)
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
-
-    def assert_multiple_put_file_issued(
-        self,
-        filename: Optional[str] = None,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-        sequentially: bool = True,
-    ) -> RequestDTO:
-        self.assert_put_file_issued(
-            filename, expected_headers, sequentially=sequentially
-        )
-        while self.assert_put_file_issued(filename, expected_headers, optional=True):
-            continue
 
     def assert_put_file_issued(
         self,
-        filename: Optional[str] = None,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-        sequentially: bool = True,
-        optional: bool = False,
-    ) -> RequestDTO:
+        filename=None,
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+    ):
         expected = ExpectedRequestInfo(
             "PUT",
             r".*(s3(.*)?\.amazonaws|blob\.core\.windows|storage\.googleapis).*stages.*"
-            + (filename if filename else "")
+            + (filename or "")
             + r"(.*)?",
         )
-        rv = (
-            self.assert_request_occurred_sequentially(
-                expected, raise_on_missing=not optional
-            )
-            if sequentially
-            else self.assert_request_occurred(expected, raise_on_missing=not optional)
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
         )
-        if rv is not None:
-            self._assert_headers_were_added(rv.headers, expected_headers)
-
-        return rv
 
     def assert_file_head_issued(
         self,
-        filename: Optional[str] = None,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-        sequentially: bool = True,
-    ) -> RequestDTO:
+        filename=None,
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+    ):
         expected = ExpectedRequestInfo(
             "HEAD",
             r".*(amazonaws|blob\.core\.windows|storage\.googleapis).*"
-            + (filename if filename else "")
+            + (filename or "")
             + r"(.*)?",
         )
-        rv = (
-            self.assert_request_occurred_sequentially(expected)
-            if sequentially
-            else self.assert_request_occurred(expected)
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
 
     def assert_post_start_for_multipart_file_issued(
         self,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-        sequentially: bool = True,
-        file_path: Optional[str] = None,
-    ) -> RequestDTO:
+        file_path=None,
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+    ):
         expected = ExpectedRequestInfo(
-            "POST",
-            r".*s3.*\.amazonaws.*stages.*"
-            + (file_path if file_path else "")
-            + r"\?uploads",
+            "POST", r".*s3.*\.amazonaws.*stages.*" + (file_path or "") + r"\?uploads"
         )
-        rv = (
-            self.assert_request_occurred_sequentially(expected)
-            if sequentially
-            else self.assert_request_occurred(expected)
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
 
     def assert_post_end_for_multipart_on_aws_file_issued(
         self,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-        sequentially: bool = True,
-        file_path: Optional[str] = None,
-    ) -> RequestDTO:
+        file_path=None,
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+    ):
         expected = ExpectedRequestInfo(
             "POST",
-            r".*s3(.*)?\.amazonaws.*/stages/.*" + (file_path or "") + ".*uploadId=.*",
+            r".*s3(.*)?\.amazonaws.*/stages/.*" + (file_path or "") + r".*uploadId=.*",
         )
-        rv = (
-            self.assert_request_occurred_sequentially(expected)
-            if sequentially
-            else self.assert_request_occurred(expected)
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
 
     def assert_put_end_for_multipart_on_azure_file_issued(
         self,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-        sequentially: bool = True,
-        file_path: Optional[str] = None,
-    ) -> RequestDTO:
+        file_path=None,
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+    ):
         expected = ExpectedRequestInfo(
             "PUT",
             r".*blob\.core\.windows.*/stages/.*"
             + (file_path or "")
-            + ".*?comp=blocklist(.*)?",
+            + r".*?comp=blocklist(.*)?",
         )
-        rv = (
-            self.assert_request_occurred_sequentially(expected)
-            if sequentially
-            else self.assert_request_occurred(expected)
+        return self._assert_issued_with_custom_headers(
+            expected, expected_headers, sequentially, optional
         )
-        self._assert_headers_were_added(rv.headers, expected_headers)
-        return rv
 
     def assert_end_for_multipart_file_issued(
         self,
-        cloud_platform: str,
-        expected_headers: Union[dict[str, Any], tuple[tuple[str, Any], ...]] = (
-            ("test-header", "test-value"),
-        ),
-        sequentially: bool = True,
-        file_path: Optional[str] = None,
-    ) -> Optional[RequestDTO]:
+        cloud_platform,
+        expected_headers=(("test-header", "test-value"),),
+        sequentially=True,
+        optional=False,
+        file_path=None,
+    ):
         if cloud_platform in ("aws", "dev"):
             return self.assert_post_end_for_multipart_on_aws_file_issued(
-                expected_headers, sequentially, file_path
+                file_path, expected_headers, sequentially, optional
             )
         elif cloud_platform in ("azure", "dev"):
             return self.assert_put_end_for_multipart_on_azure_file_issued(
-                expected_headers, sequentially, file_path
+                file_path, expected_headers, sequentially, optional
             )
