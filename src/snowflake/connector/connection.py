@@ -428,6 +428,27 @@ def detect_platforms() -> dict:
         ]
         return all(var in os.environ for var in service_vars)
 
+    def is_managed_identity_available_on_azure_vm(
+        resource="https://management.azure.com/",
+    ):
+        endpoint = (
+            "http://169.254.169.254/metadata/identity/oauth2/token"
+            "?api-version=2018-02-01&resource={}".format(resource)
+        )
+        headers = {"Metadata": "true"}
+        try:
+            response = requests.get(endpoint, headers=headers, timeout=2)
+            return response.status_code == 200
+        except requests.RequestException:
+            return False
+
+    def has_managed_identity(on_azure_vm, on_azure_function):
+        if on_azure_function:
+            return bool(os.environ.get("IDENTITY_HEADER"))
+        if on_azure_vm:
+            return is_managed_identity_available_on_azure_vm()
+        return False
+
     def is_gce_vm(timeout=2):
         try:
             response = requests.get("http://metadata.google.internal", timeout=timeout)
@@ -446,11 +467,16 @@ def detect_platforms() -> dict:
     def is_github_action():
         return "GITHUB_ACTIONS" in os.environ
 
+    running_on_azure_vm = is_azure_vm()
+    running_on_azure_function = is_azure_function()
     platforms = {
         "ec2": is_ec2_instance(),
         "aws_lambda": is_aws_lambda(),
-        "azure_vm": is_azure_vm(),
-        "azure_function": is_azure_function(),
+        "azure_vm": running_on_azure_vm,
+        "azure_function": running_on_azure_function,
+        "managed_identity": has_managed_identity(
+            running_on_azure_vm, running_on_azure_function
+        ),
         "gce_vm": is_gce_vm(),
         "gce_cloud_run_service": is_gce_cloud_run_service(),
         "gce_cloud_run_job": is_gce_cloud_run_job(),
@@ -2292,7 +2318,7 @@ class SnowflakeConnection:
                 TelemetryData.from_telemetry_data_dict(
                     from_dict={
                         TelemetryField.KEY_TYPE.value: TelemetryField.PLATFORM_INFO.value,
-                        TelemetryField.KEY_VALUE.value: detect_platforms(),
+                        TelemetryField.KEY_VALUE.value: str(detect_platforms()),
                     },
                     timestamp=ts,
                     connection=self,
