@@ -53,8 +53,10 @@ from .config_manager import CONFIG_MANAGER, _get_default_connection_params
 from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
+    _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     _DOMAIN_NAME_MAP,
     _OAUTH_DEFAULT_SCOPE,
+    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
@@ -368,6 +370,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-2096721: External (Spark) session ID
     ),
+    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER: (
+        _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
+        int,  # type
+    ),  # snowflake internal
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")

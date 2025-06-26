@@ -37,6 +37,15 @@ _CHINA_HOSTNAME_TLD = "cn"
 _TOP_LEVEL_DOMAIN_REGEX = r"\.[a-zA-Z]{1,63}$"
 _SNOWFLAKE_HOST_SUFFIX_REGEX = r"snowflakecomputing(\.[a-zA-Z]{1,63}){1,2}$"
 
+# Default server side cap on Degree of Parallelism for file transfer
+# This default value is set to 2^30 (~ 10^9), such that it will not
+# throttle regular sessions.
+_DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER = 1 << 30
+# Variable name of server DoP cap for file transfer
+_VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER = (
+    "snowflake_server_dop_cap_for_file_transfer"
+)
+
 
 class FieldType(NamedTuple):
     name: str
