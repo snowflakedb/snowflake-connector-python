@@ -18,7 +18,7 @@ from difflib import get_close_matches
 from functools import partial
 from io import StringIO
 from logging import getLogger
-from threading import Lock
+from threading import Lock, Thread
 from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
 from uuid import UUID
@@ -655,7 +655,7 @@ class SnowflakeConnection:
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
         # log the platform of the client
-        self._log_telemetry_platform_info()
+        Thread(target=self._log_telemetry_platform_info(), daemon=True).start()
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
