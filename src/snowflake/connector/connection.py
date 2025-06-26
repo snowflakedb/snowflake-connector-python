@@ -23,6 +23,8 @@ from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
 from uuid import UUID
 
+import boto3
+from botocore.utils import IMDSFetcher
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
@@ -388,26 +390,32 @@ class TypeAndBinding(NamedTuple):
 def detect_platforms() -> dict:
     def is_ec2_instance(timeout=2):
         try:
-            token_resp = requests.put(
-                "http://169.254.169.254/latest/api/token",
-                headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
-                timeout=timeout,
+            fetcher = IMDSFetcher(timeout=2, num_attempts=2)
+            document = fetcher._get_request(
+                "/latest/dynamic/instance-identity/document",
+                None,
+                fetcher._fetch_metadata_token(),
             )
-            token_resp.raise_for_status()
-            token = token_resp.text
-
-            doc_resp = requests.get(
-                "http://169.254.169.254/latest/dynamic/instance-identity/document",
-                headers={"X-aws-ec2-metadata-token": token},
-                timeout=timeout,
-            )
-            doc_resp.raise_for_status()
-            return bool(doc_resp.text)
+            return bool(document.content)
         except requests.RequestException:
             return False
 
     def is_aws_lambda():
         return "LAMBDA_TASK_ROOT" in os.environ
+
+    def is_valid_arn(arn: str) -> bool:
+        patterns = [
+            r"^arn:[^:]+:iam::[^:]+:user/.+$",
+            r"^arn:[^:]+:sts::[^:]+:assumed-role/.+$",
+        ]
+        return any(re.match(p, arn) for p in patterns)
+
+    def has_aws_identity():
+        caller_identity = boto3.client("sts").get_caller_identity()
+        if not caller_identity or "Arn" not in caller_identity:
+            return False
+        else:
+            return is_valid_arn(caller_identity["Arn"])
 
     def is_azure_vm(timeout=2):
         try:
@@ -442,7 +450,7 @@ def detect_platforms() -> dict:
         except requests.RequestException:
             return False
 
-    def has_managed_identity(on_azure_vm, on_azure_function):
+    def has_azure_managed_identity(on_azure_vm, on_azure_function):
         if on_azure_function:
             return bool(os.environ.get("IDENTITY_HEADER"))
         if on_azure_vm:
@@ -472,9 +480,10 @@ def detect_platforms() -> dict:
     platforms = {
         "ec2": is_ec2_instance(),
         "aws_lambda": is_aws_lambda(),
+        "aws_identity": has_aws_identity(),
         "azure_vm": running_on_azure_vm,
         "azure_function": running_on_azure_function,
-        "managed_identity": has_managed_identity(
+        "azure_managed_identity": has_azure_managed_identity(
             running_on_azure_vm, running_on_azure_function
         ),
         "gce_vm": is_gce_vm(),
