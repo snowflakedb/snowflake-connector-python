@@ -6,7 +6,7 @@ import time
 from base64 import b64decode
 from enum import Enum, unique
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Self, Sequence
 
 from .arrow_context import ArrowConverterContext
 from .backoff_policies import exponential_backoff
@@ -413,6 +413,14 @@ class ResultBatch(abc.ABC):
     def to_arrow(self) -> Table:
         raise NotImplementedError()
 
+    @abc.abstractmethod
+    def populate_data(
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> Self:
+        """Downloads the data that the ``ResultBatch`` is pointing at and populates it into self._data.
+        Returns the instance itself."""
+        raise NotImplementedError()
+
 
 class JSONResultBatch(ResultBatch):
     def __init__(
@@ -538,7 +546,9 @@ class JSONResultBatch(ResultBatch):
     def __repr__(self) -> str:
         return f"JSONResultChunk({self.id})"
 
-    def _fetch_data(self, connection: SnowflakeConnection | None = None, **kwargs):
+    def _fetch_data(
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> list[dict | Exception] | list[tuple | Exception]:
         response = self._download(connection=connection)
         # Load data to a intermediate form
         logger.debug(f"started loading result batch id: {self.id}")
@@ -552,7 +562,9 @@ class JSONResultBatch(ResultBatch):
         self._metrics[DownloadMetrics.parse.value] = parse_metric.get_timing_millis()
         return parsed_data
 
-    def populate_data(self, connection: SnowflakeConnection | None = None, **kwargs):
+    def populate_data(
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> Self:
         self._data = self._fetch_data(connection=connection, **kwargs)
         return self
 
@@ -767,6 +779,6 @@ class ArrowResultBatch(ResultBatch):
 
     def populate_data(
         self, connection: SnowflakeConnection | None = None, **kwargs
-    ) -> ArrowResultBatch:
+    ) -> Self:
         self._data = self._download(connection=connection).content
         return self
