@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import json
+import os
 import time
 from base64 import b64decode
 from enum import Enum, unique
@@ -131,6 +132,9 @@ def create_batches_from_response(
         rowset_b64 = data.get("rowsetBase64")
         arrow_context = ArrowConverterContext(cursor._connection._session_parameters)
     if "chunks" in data:
+        if os.getenv("PUT_CHUNKS_INTO"):
+            with open(os.getenv("PUT_CHUNKS_INTO"), "w") as chunks_f:
+                json.dump(data, chunks_f)
         chunks = data["chunks"]
         logger.debug(f"chunk size={len(chunks)}")
         # prepare the downloader for further fetch
