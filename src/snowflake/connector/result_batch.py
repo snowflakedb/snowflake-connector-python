@@ -6,7 +6,9 @@ import time
 from base64 import b64decode
 from enum import Enum, unique
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Self, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
+
+from typing_extensions import Self
 
 from .arrow_context import ArrowConverterContext
 from .backoff_policies import exponential_backoff
