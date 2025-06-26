@@ -22,6 +22,19 @@ logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
 DEFAULT_ENTRA_SNOWFLAKE_RESOURCE = "api://fd3f753b-eed3-462c-b6a7-a4b5bb650aad"
 
+"""
+References:
+- https://learn.microsoft.com/en-us/entra/identity-platform/authentication-national-cloud#microsoft-entra-authentication-endpoints
+- https://learn.microsoft.com/en-us/answers/questions/1190472/what-are-the-token-issuers-for-the-sovereign-cloud
+"""
+AZURE_ISSUER_PREFIXES = [
+    "https://sts.windows.net/",  # Public and USGov (v1 issuer)
+    "https://sts.chinacloudapi.cn/",  # Mooncake (v1 issuer)
+    "https://login.microsoftonline.com/",  # Public (v2 issuer)
+    "https://login.microsoftonline.us/",  # USGov (v2 issuer)
+    "https://login.partner.microsoftonline.cn/",  # Mooncake (v2 issuer)
+]
+
 
 @unique
 class AttestationProvider(Enum):
@@ -108,6 +121,70 @@ def get_aws_arn() -> str | None:
     return caller_identity["Arn"]
 
 
+def get_aws_partition(arn: str) -> str | None:
+    """Get the current AWS partition from ARN, if any.
+
+    Args:
+        arn (str): The Amazon Resource Name (ARN) string.
+
+    Returns:
+        str | None: The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov')
+                    if found, otherwise None.
+
+    Reference: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html.
+    """
+    if not arn or not isinstance(arn, str):
+        return None
+    parts = arn.split(":")
+    if len(parts) > 1 and parts[0] == "arn" and parts[1]:
+        return parts[1]
+    logger.warning("Invalid AWS ARN: %s", arn)
+    return None
+
+
+def get_aws_sts_hostname(region: str, partition: str) -> str | None:
+    """Constructs the AWS STS hostname for a given region and partition.
+
+    Args:
+        region (str): The AWS region (e.g., 'us-east-1', 'cn-north-1').
+        partition (str): The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov').
+
+    Returns:
+        str | None: The AWS STS hostname (e.g., 'sts.us-east-1.amazonaws.com')
+                    if a valid hostname can be constructed, otherwise None.
+
+    References:
+    - https://docs.aws.amazon.com/sdkref/latest/guide/feature-sts-regionalized-endpoints.html
+    - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
+    - https://docs.aws.amazon.com/general/latest/gr/sts.html
+    """
+    if (
+        not region
+        or not partition
+        or not isinstance(region, str)
+        or not isinstance(partition, str)
+    ):
+        return None
+
+    if partition == "aws":
+        # For the 'aws' partition, STS endpoints are generally regional
+        # except for the global endpoint (sts.amazonaws.com) which is
+        # generally resolved to us-east-1 under the hood by the SDKs
+        # when a region is not explicitly specified.
+        # However, for explicit regional endpoints, the format is sts.<region>.amazonaws.com
+        return f"sts.{region}.amazonaws.com"
+    elif partition == "aws-cn":
+        # China regions have a different domain suffix
+        return f"sts.{region}.amazonaws.com.cn"
+    elif partition == "aws-us-gov":
+        return (
+            f"sts.{region}.amazonaws.com"  # GovCloud uses .com, but dedicated regions
+        )
+    else:
+        logger.warning("Invalid AWS partition: %s", partition)
+        return None
+
+
 def create_aws_attestation() -> WorkloadIdentityAttestation | None:
     """Tries to create a workload identity attestation for AWS.
 
@@ -125,8 +202,12 @@ def create_aws_attestation() -> WorkloadIdentityAttestation | None:
     if not arn:
         logger.debug("No AWS caller identity was found.")
         return None
+    partition = get_aws_partition(arn)
+    if not partition:
+        logger.debug("No AWS partition was found.")
+        return None
 
-    sts_hostname = f"sts.{region}.amazonaws.com"
+    sts_hostname = get_aws_sts_hostname(region, partition)
     request = AWSRequest(
         method="POST",
         url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
@@ -234,9 +315,8 @@ def create_azure_attestation(
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     if not issuer or not subject:
         return None
-    if not (
-        issuer.startswith("https://sts.windows.net/")
-        or issuer.startswith("https://login.microsoftonline.com/")
+    if not any(
+        issuer.startswith(issuer_prefix) for issuer_prefix in AZURE_ISSUER_PREFIXES
     ):
         # This might happen if we're running on a different platform that responds to the same metadata request signature as Azure.
         logger.debug("Unexpected Azure token issuer '%s'", issuer)
