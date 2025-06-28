@@ -179,7 +179,10 @@ jobs:
 
       - name: Start mitmdump proxy
         run: |
+          echo "Starting proxy..."
           nohup mitmdump --mode regular --listen-port 8080 --showhost --set block_global=false > mitmproxy.log 2>&1 &
+          echo "PROXY_PID=$!" >> $GITHUB_ENV
+
           # Wait for proxy to be ready
           for i in {1..30}; do
             if curl -s --connect-timeout 1 http://127.0.0.1:8080 > /dev/null 2>&1; then
@@ -189,18 +192,17 @@ jobs:
             sleep 1
           done
 
-      - name: Force mitmproxy to generate CA cert
-        run: |
+          # Force mitmproxy to generate CA cert
           curl -x http://127.0.0.1:8080 https://example.com -k || true
 
-      - name: Wait for mitmproxy CA cert
-        run: |
+          # Wait for CA cert to be created
           timeout=30
           while [ ! -f ~/.mitmproxy/mitmproxy-ca-cert.pem ] && [ $timeout -gt 0 ]; do
             echo "Waiting for CA cert... ($timeout seconds left)"
             sleep 1
             timeout=$((timeout - 1))
           done
+
           if [ ! -f ~/.mitmproxy/mitmproxy-ca-cert.pem ]; then
             echo "CA certificate was not created!"
             echo "Contents of ~/.mitmproxy/:"
@@ -209,7 +211,7 @@ jobs:
             cat mitmproxy.log || echo "No log file"
             exit 1
           fi
-          echo "CA certificate found"
+          echo "CA certificate found, proxy running and ready"
 
       - name: Export mitmproxy CA cert
         run: |
@@ -235,6 +237,34 @@ jobs:
          # To specify the test name (in single test mode) pass this env variable:
           SINGLE_TEST_NAME: test/integ/test_put_get.py::test_multipart_put
         shell: bash
+      - name: Stop mitmdump proxy
+        if: always()
+        run: |
+          echo "Stopping proxy after test execution..."
+          if [ -n "$PROXY_PID" ]; then
+            if kill -0 $PROXY_PID 2>/dev/null; then
+              echo "Stopping proxy with PID $PROXY_PID"
+              kill $PROXY_PID || true
+              # Wait for process to stop gracefully
+              for i in {1..10}; do
+                if ! kill -0 $PROXY_PID 2>/dev/null; then
+                  echo "Proxy stopped gracefully"
+                  break
+                fi
+                sleep 1
+              done
+              # Force kill if still running
+              if kill -0 $PROXY_PID 2>/dev/null; then
+                echo "Force killing proxy"
+                kill -9 $PROXY_PID || true
+              fi
+            else
+              echo "Proxy process not running"
+            fi
+          else
+            echo "No proxy PID found in environment"
+          fi
+        shell: bash
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
         shell: bash
@@ -247,9 +277,10 @@ jobs:
             .tox/coverage.xml
 
       - name: Upload mitmproxy log as artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mitmproxy-log
+          name: mitmproxy-log-${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: mitmproxy.log
 
 
