@@ -29,50 +29,98 @@ IGNORE_DOMAINS = {
 }
 
 
-def safe_str(value):
-    """Convert value to string, handling encoding issues only when they occur"""
+def safe_str(value, max_length=5000):
+    """Convert value to string, handling encoding issues aggressively"""
     if value is None:
         return ""
 
     try:
-        return str(value)
+        # First attempt - normal string conversion
+        result = str(value)
+
+        # Truncate extremely long strings to prevent issues
+        if len(result) > max_length:
+            result = result[:max_length] + "...[TRUNCATED]"
+
+        return result
+
     except (UnicodeDecodeError, UnicodeEncodeError):
-        # Only if encoding fails, try with error replacement
+        # Unicode encoding issues
         try:
             if isinstance(value, bytes):
-                return value.decode("utf-8", errors="replace")
-            return repr(value)  # Fall back to repr() which handles anything
+                result = value.decode("utf-8", errors="replace")
+            else:
+                # Force ASCII-only representation
+                result = repr(value)
+
+            # Truncate if too long
+            if len(result) > max_length:
+                result = result[:max_length] + "...[TRUNCATED]"
+
+            return result
+
+        except Exception as e:
+            return f"[ENCODING ERROR: {type(e).__name__}]"
+
+    except Exception as e:
+        # Any other string conversion issues
+        try:
+            # Last resort - ASCII-only repr
+            result = ascii(value)
+            if len(result) > max_length:
+                result = result[:max_length] + "...[TRUNCATED]"
+            return result
         except Exception:
-            return "[ENCODING ERROR]"
+            return f"[STR ERROR: {type(e).__name__}]"
 
 
 # Open CSV file for writing requests with proper encoding and quoting
-f = open("test_requests.csv", "w", newline="", encoding="utf-8", errors="replace")
-writer = csv.writer(f, quoting=csv.QUOTE_ALL)
+try:
+    f = open("test_requests.csv", "w", newline="", encoding="utf-8", errors="replace")
+    writer = csv.writer(f, quoting=csv.QUOTE_ALL)
+    print("CSV file opened successfully")
 
-# Write CSV header
-writer.writerow(
-    [
-        "timestamp",
-        "method",
-        "url",
-        "host",
-        "path",
-        "status_code",
-        "reason",
-        "request_size",
-        "response_size",
-        "content_type",
-        "duration_ms",
-        "request_headers",
-        "response_headers",
-        "error_message",
-    ]
-)
+    # Write CSV header
+    writer.writerow(
+        [
+            "timestamp",
+            "method",
+            "url",
+            "host",
+            "path",
+            "status_code",
+            "reason",
+            "request_size",
+            "response_size",
+            "content_type",
+            "duration_ms",
+            "request_headers",
+            "response_headers",
+            "error_message",
+        ]
+    )
+    f.flush()
+    print("Header written and flushed successfully")
+except Exception as file_error:
+    print(f"CRITICAL: Failed to open/write CSV file: {file_error}")
+    # Fallback to stdout if file fails
+    import sys
+
+    f = sys.stdout
+    writer = csv.writer(f)
+    print("Falling back to stdout output")
+print("MITM script loaded and ready to capture requests...")
 
 
 def response(flow):
     """Called when a response is received"""
+    try:
+        host = getattr(flow.request, "pretty_host", "unknown")
+        method = getattr(flow.request, "method", "unknown")
+        print(f"Processing {method} request to {host}")
+    except Exception as debug_error:
+        print(f"Debug error: {debug_error}")
+
     try:
         # Skip if domain should be ignored
         host = flow.request.pretty_host.lower()
@@ -140,7 +188,11 @@ def response(flow):
             ]
         )
 
-        f.flush()  # Ensure it's written immediately
+        try:
+            f.flush()  # Ensure it's written immediately
+            print(f"Successfully wrote {method} {host}")
+        except Exception as flush_error:
+            print(f"Flush error: {flush_error}")
 
     except Exception as e:
         # Write error row (only for non-ignored domains)
@@ -177,7 +229,11 @@ def response(flow):
                 ),  # Error message
             ]
         )
-        f.flush()
+        try:
+            f.flush()
+            print(f"Successfully wrote error for {error_method} {error_host}")
+        except Exception as flush_error:
+            print(f"Error flush failed: {flush_error}")
 
 
 def done():
