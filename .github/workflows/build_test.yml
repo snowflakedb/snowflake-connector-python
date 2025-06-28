@@ -150,6 +150,30 @@ jobs:
           distribution: 'temurin'
           java-package: 'jre'
 
+      - name: Fetch Wiremock
+        shell: bash
+        run: curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
+      - name: Setup parameters file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+
+      - name: Download wheel(s)
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.os.download_name }}_py${{ matrix.python-version }}
+          path: dist
+      - name: Show wheels downloaded
+        run: ls -lh dist
+        shell: bash
+      - name: Upgrade setuptools, pip and wheel
+        run: python -m pip install -U setuptools pip wheel
+      - name: Install tox
+        run: python -m pip install tox>=4
+
       - name: Install mitmproxy
         run: python -m pip install mitmproxy
 
@@ -198,28 +222,6 @@ jobs:
           echo "HTTP_PROXY=http://127.0.0.1:8080" >> $GITHUB_ENV
           echo "HTTPS_PROXY=http://127.0.0.1:8080" >> $GITHUB_ENV
 
-      - name: Fetch Wiremock
-        shell: bash
-        run: curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
-      - name: Setup parameters file
-        shell: bash
-        env:
-          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
-        run: |
-          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
-          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
-      - name: Download wheel(s)
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.os.download_name }}_py${{ matrix.python-version }}
-          path: dist
-      - name: Show wheels downloaded
-        run: ls -lh dist
-        shell: bash
-      - name: Upgrade setuptools, pip and wheel
-        run: python -m pip install -U setuptools pip wheel
-      - name: Install tox
-        run: python -m pip install tox>=4
       - name: Run tests
        # To run a single test on GHA use the below command:
         run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
