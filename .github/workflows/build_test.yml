@@ -180,7 +180,9 @@ jobs:
       - name: Start mitmdump proxy
         run: |
           echo "Starting proxy..."
-          nohup mitmdump --mode regular --listen-port 8080 --showhost --set block_global=false > mitmproxy.log 2>&1 &
+          nohup mitmdump --mode regular --listen-port 8080 \
+            -w test_flows.mitm \
+            --set termlog_verbosity=warn > mitmproxy.log 2>&1 &
           echo "PROXY_PID=$!" >> $GITHUB_ENV
 
           # Wait for proxy to be ready
