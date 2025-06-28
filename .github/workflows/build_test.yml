@@ -142,14 +142,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
-
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v4 # for wiremock
         with:
           java-version: 11
           distribution: 'temurin'
           java-package: 'jre'
-
       - name: Fetch Wiremock
         shell: bash
         run: curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
@@ -160,7 +158,6 @@ jobs:
         run: |
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
-
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
         with:
@@ -176,7 +173,6 @@ jobs:
 
       - name: Install mitmproxy
         run: python -m pip install mitmproxy
-
       - name: Start mitmdump proxy
         run: |
           echo "Starting proxy..."
@@ -229,8 +225,8 @@ jobs:
 
       - name: Run tests
        # To run a single test on GHA use the below command:
-        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
-#        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
+       # run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
 
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
@@ -238,7 +234,7 @@ jobs:
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
          # To specify the test name (in single test mode) pass this env variable:
-          SINGLE_TEST_NAME: test/integ/test_put_get.py::test_multipart_put
+         # SINGLE_TEST_NAME: test/integ/test_put_get.py::test_multipart_put
         shell: bash
       - name: Stop mitmdump proxy
         if: always() && env.PROXY_PID
