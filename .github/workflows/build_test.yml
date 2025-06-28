@@ -150,11 +150,16 @@ jobs:
         run: |
           nohup mitmdump --mode regular --listen-port 8080 --showhost --set block_global=false > mitmproxy.log 2>&1 &
 
+      - name: Force mitmproxy to generate CA cert
+        run: |
+          curl -x http://127.0.0.1:8080 https://example.com -k || true
+
       - name: Export mitmproxy CA cert
         run: |
           mkdir -p ~/ca-cert
           cp ~/.mitmproxy/mitmproxy-ca-cert.pem ~/ca-cert/
           echo "REQUESTS_CA_BUNDLE=$HOME/ca-cert/mitmproxy-ca-cert.pem" >> $GITHUB_ENV
+
 
       - name: Set proxy variables
         run: |
