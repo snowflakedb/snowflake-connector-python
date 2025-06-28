@@ -212,6 +212,7 @@ jobs:
             exit 1
           fi
           echo "CA certificate found, proxy running and ready"
+        shell: bash
 
       - name: Export mitmproxy CA cert
         run: |
@@ -238,7 +239,7 @@ jobs:
           SINGLE_TEST_NAME: test/integ/test_put_get.py::test_multipart_put
         shell: bash
       - name: Stop mitmdump proxy
-        if: always()
+        if: always() && env.PROXY_PID
         run: |
           echo "Stopping proxy after test execution..."
           if [ -n "$PROXY_PID" ]; then
@@ -264,6 +265,11 @@ jobs:
           else
             echo "No proxy PID found in environment"
           fi
+
+          # Unset proxy environment variables
+          echo "HTTP_PROXY=" >> $GITHUB_ENV
+          echo "HTTPS_PROXY=" >> $GITHUB_ENV
+          echo "Proxy environment variables cleared"
         shell: bash
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
@@ -277,7 +283,7 @@ jobs:
             .tox/coverage.xml
 
       - name: Upload mitmproxy log as artifact
-        if: always()
+        if: always() && env.PROXY_PID
         uses: actions/upload-artifact@v4
         with:
           name: mitmproxy-log-${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
