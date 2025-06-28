@@ -1,7 +1,11 @@
 import csv
 import json
+import sys
 from datetime import datetime
+from pathlib import Path
 
+# Add src directory to path for local import
+sys.path.insert(0, str(Path(__file__).parent / ".." / ".." / "src"))
 from snowflake.connector.secret_detector import SecretDetector
 
 # Domains to ignore (pip/installation traffic)
