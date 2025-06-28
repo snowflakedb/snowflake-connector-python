@@ -1,12 +1,25 @@
 import csv
+import importlib.util
 import json
-import sys
 from datetime import datetime
 from pathlib import Path
 
-# Add src directory to path for local import
-sys.path.insert(0, str(Path(__file__).parent / ".." / ".." / "src"))
-from snowflake.connector.secret_detector import SecretDetector
+# Import SecretDetector directly without package initialization
+secret_detector_path = (
+    Path(__file__).parent
+    / ".."
+    / ".."
+    / "src"
+    / "snowflake"
+    / "connector"
+    / "secret_detector.py"
+)
+spec = importlib.util.spec_from_file_location("secret_detector", secret_detector_path)
+if spec is None or spec.loader is None:
+    raise ImportError("Could not load secret_detector module")
+secret_detector_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(secret_detector_module)
+SecretDetector = secret_detector_module.SecretDetector
 
 # Domains to ignore (pip/installation traffic)
 IGNORE_DOMAINS = {
