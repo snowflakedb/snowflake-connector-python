@@ -29,21 +29,21 @@ IGNORE_DOMAINS = {
 }
 
 
-def clean_for_csv(value):
-    """Clean a value for safe CSV output"""
+def safe_str(value):
+    """Convert value to string, handling encoding issues only when they occur"""
     if value is None:
         return ""
 
-    # Convert to string and handle encoding issues
     try:
-        str_value = str(value)
-        # Replace problematic characters
-        str_value = str_value.replace("\x00", "")  # Remove null bytes
-        str_value = str_value.replace("\r", "\\r")  # Escape carriage returns
-        str_value = str_value.replace("\n", "\\n")  # Escape newlines
-        return str_value
+        return str(value)
     except (UnicodeDecodeError, UnicodeEncodeError):
-        return "[ENCODING ERROR]"
+        # Only if encoding fails, try with error replacement
+        try:
+            if isinstance(value, bytes):
+                return value.decode("utf-8", errors="replace")
+            return repr(value)  # Fall back to repr() which handles anything
+        except Exception:
+            return "[ENCODING ERROR]"
 
 
 # Open CSV file for writing requests with proper encoding and quoting
@@ -120,22 +120,22 @@ def response(flow):
         reason = flow.response.reason or ""
         content_type = flow.response.headers.get("content-type", "")
 
-        # Write row to CSV with cleaned data
+        # Write row to CSV with safe string conversion
         writer.writerow(
             [
-                clean_for_csv(timestamp),
-                clean_for_csv(method),
-                clean_for_csv(url),
-                clean_for_csv(host),
-                clean_for_csv(path),
-                clean_for_csv(status_code),
-                clean_for_csv(reason),
-                clean_for_csv(request_size),
-                clean_for_csv(response_size),
-                clean_for_csv(content_type),
-                clean_for_csv(duration_ms),
-                clean_for_csv(request_headers),
-                clean_for_csv(response_headers),
+                safe_str(timestamp),
+                safe_str(method),
+                safe_str(url),
+                safe_str(host),
+                safe_str(path),
+                safe_str(status_code),
+                safe_str(reason),
+                safe_str(request_size),
+                safe_str(response_size),
+                safe_str(content_type),
+                safe_str(duration_ms),
+                safe_str(request_headers),
+                safe_str(response_headers),
                 "",  # No error for successful requests
             ]
         )
@@ -159,10 +159,10 @@ def response(flow):
 
         writer.writerow(
             [
-                clean_for_csv(datetime.now().isoformat()),
-                clean_for_csv(error_method),
+                safe_str(datetime.now().isoformat()),
+                safe_str(error_method),
                 "",  # Empty URL for errors
-                clean_for_csv(error_host),
+                safe_str(error_host),
                 "",  # Empty path for errors
                 "",  # Empty status code for errors
                 "",  # Empty reason for errors
@@ -172,7 +172,7 @@ def response(flow):
                 "",  # Empty duration for errors
                 "",  # Empty request headers for errors
                 "",  # Empty response headers for errors
-                clean_for_csv(
+                safe_str(
                     SecretDetector.mask_secrets(str(e)).masked_text
                 ),  # Error message
             ]
