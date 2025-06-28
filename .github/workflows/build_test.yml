@@ -178,7 +178,7 @@ jobs:
           echo "Starting proxy..."
           nohup mitmdump --mode regular --listen-port 8080 \
             -s ci/github/save_mitm_requests.py \
-            --set termlog_verbosity=warn > mitmproxy.log 2>&1 &
+            --set termlog_verbosity=warn &
           echo "PROXY_PID=$!" >> $GITHUB_ENV
 
           # Wait for proxy to be ready
@@ -205,8 +205,6 @@ jobs:
             echo "CA certificate was not created!"
             echo "Contents of ~/.mitmproxy/:"
             ls -la ~/.mitmproxy/ || echo "Directory doesn't exist"
-            echo "Proxy log:"
-            cat mitmproxy.log || echo "No log file"
             exit 1
           fi
           echo "CA certificate found, proxy running and ready"
@@ -288,9 +286,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mitmproxy-artifacts-${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
-          path: |
-            mitmproxy.log
-            test_requests.csv
+          path: test_requests.csv
 
 
   test-olddriver:

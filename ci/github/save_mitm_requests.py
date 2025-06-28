@@ -1,8 +1,17 @@
 import csv
 import importlib.util
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler(), logging.FileHandler("mitm_script.log")],
+)
+logger = logging.getLogger(__name__)
 
 # Import SecretDetector directly without package initialization
 secret_detector_path = (
@@ -78,7 +87,7 @@ def safe_str(value, max_length=5000):
 try:
     f = open("test_requests.csv", "w", newline="", encoding="utf-8", errors="replace")
     writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-    print("CSV file opened successfully")
+    logger.info("CSV file opened successfully")
 
     # Write CSV header
     writer.writerow(
@@ -100,16 +109,16 @@ try:
         ]
     )
     f.flush()
-    print("Header written and flushed successfully")
+    logger.info("Header written and flushed successfully")
 except Exception as file_error:
-    print(f"CRITICAL: Failed to open/write CSV file: {file_error}")
+    logger.critical(f"Failed to open/write CSV file: {file_error}")
     # Fallback to stdout if file fails
     import sys
 
     f = sys.stdout
     writer = csv.writer(f)
-    print("Falling back to stdout output")
-print("MITM script loaded and ready to capture requests...")
+    logger.warning("Falling back to stdout output")
+logger.info("MITM script loaded and ready to capture requests...")
 
 
 def response(flow):
@@ -117,9 +126,9 @@ def response(flow):
     try:
         host = getattr(flow.request, "pretty_host", "unknown")
         method = getattr(flow.request, "method", "unknown")
-        print(f"Processing {method} request to {host}")
+        logger.debug(f"Processing {method} request to {host}")
     except Exception as debug_error:
-        print(f"Debug error: {debug_error}")
+        logger.error(f"Debug error: {debug_error}")
 
     try:
         # Skip if domain should be ignored
@@ -190,9 +199,9 @@ def response(flow):
 
         try:
             f.flush()  # Ensure it's written immediately
-            print(f"Successfully wrote {method} {host}")
+            logger.debug(f"Successfully wrote {method} {host}")
         except Exception as flush_error:
-            print(f"Flush error: {flush_error}")
+            logger.error(f"Flush error: {flush_error}")
 
     except Exception as e:
         # Write error row (only for non-ignored domains)
@@ -231,9 +240,9 @@ def response(flow):
         )
         try:
             f.flush()
-            print(f"Successfully wrote error for {error_method} {error_host}")
+            logger.debug(f"Successfully wrote error for {error_method} {error_host}")
         except Exception as flush_error:
-            print(f"Error flush failed: {flush_error}")
+            logger.error(f"Error flush failed: {flush_error}")
 
 
 def done():
