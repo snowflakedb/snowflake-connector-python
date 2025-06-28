@@ -39,7 +39,7 @@ IGNORE_DOMAINS = {
 
 
 def safe_str(value, max_length=5000):
-    """Convert value to string, handling encoding issues aggressively"""
+    """Convert value to string, handling multiple encoding scenarios aggressively"""
     if value is None:
         return ""
 
@@ -54,22 +54,50 @@ def safe_str(value, max_length=5000):
         return result
 
     except (UnicodeDecodeError, UnicodeEncodeError):
-        # Unicode encoding issues
-        try:
-            if isinstance(value, bytes):
-                result = value.decode("utf-8", errors="replace")
-            else:
-                # Force ASCII-only representation
+        # Unicode encoding issues - try multiple encodings
+        if isinstance(value, bytes):
+            # Try multiple common encodings
+            encodings_to_try = [
+                "utf-8",
+                "utf-16",
+                "utf-32",  # Unicode variants
+                "cp1252",
+                "windows-1252",  # Windows encodings
+                "iso-8859-1",
+                "latin1",  # Western European
+                "cp437",
+                "cp850",  # DOS/Windows console
+                "ascii",  # Safe fallback
+            ]
+
+            for encoding in encodings_to_try:
+                try:
+                    result = value.decode(encoding, errors="replace")
+                    if len(result) > max_length:
+                        result = result[:max_length] + "...[TRUNCATED]"
+                    logger.debug(f"Successfully decoded with {encoding}")
+                    return result
+                except (UnicodeDecodeError, LookupError):
+                    continue
+
+            # If all encodings fail, use repr for safety
+            try:
                 result = repr(value)
-
-            # Truncate if too long
-            if len(result) > max_length:
-                result = result[:max_length] + "...[TRUNCATED]"
-
-            return result
-
-        except Exception as e:
-            return f"[ENCODING ERROR: {type(e).__name__}]"
+                if len(result) > max_length:
+                    result = result[:max_length] + "...[TRUNCATED]"
+                return result
+            except Exception as e:
+                return f"[BYTES ENCODING ERROR: {type(e).__name__}]"
+        else:
+            # Non-bytes object with encoding issues
+            try:
+                # Force ASCII-only representation
+                result = ascii(value)
+                if len(result) > max_length:
+                    result = result[:max_length] + "...[TRUNCATED]"
+                return result
+            except Exception as e:
+                return f"[OBJECT ENCODING ERROR: {type(e).__name__}]"
 
     except Exception as e:
         # Any other string conversion issues
@@ -85,9 +113,19 @@ def safe_str(value, max_length=5000):
 
 # Open CSV file for writing requests with proper encoding and quoting
 try:
-    f = open("test_requests.csv", "w", newline="", encoding="utf-8", errors="replace")
+    import platform
+
+    system_info = f"{platform.system()} {platform.release()}"
+    logger.info(f"Running on: {system_info}")
+
+    # Use UTF-8 with BOM for better Windows compatibility
+    f = open(
+        "test_requests.csv", "w", newline="", encoding="utf-8-sig", errors="replace"
+    )
     writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-    logger.info("CSV file opened successfully")
+    logger.info(
+        f"CSV file opened successfully with UTF-8-sig encoding on {system_info}"
+    )
 
     # Write CSV header
     writer.writerow(
@@ -124,33 +162,73 @@ logger.info("MITM script loaded and ready to capture requests...")
 def response(flow):
     """Called when a response is received"""
     try:
-        host = getattr(flow.request, "pretty_host", "unknown")
-        method = getattr(flow.request, "method", "unknown")
-        logger.debug(f"Processing {method} request to {host}")
+        debug_host = getattr(flow.request, "pretty_host", "unknown")
+        debug_method = getattr(flow.request, "method", "unknown")
+        logger.debug(f"Processing {debug_method} request to {debug_host}")
     except Exception as debug_error:
-        logger.error(f"Debug error: {debug_error}")
+        logger.error(f"Debug error getting basic request info: {debug_error}")
 
     try:
-        # Skip if domain should be ignored
-        host = flow.request.pretty_host.lower()
+        # Skip if domain should be ignored - wrap mitmproxy API call
+        try:
+            host = flow.request.pretty_host.lower()
+        except Exception as host_error:
+            logger.warning(f"Failed to get pretty_host: {host_error}")
+            try:
+                # Fallback to host header
+                host = flow.request.headers.get("host", "unknown").lower()
+            except Exception:
+                host = "unknown"
+
         if any(ignored_domain in host for ignored_domain in IGNORE_DOMAINS):
             return
 
-        # Calculate duration
-        duration_ms = (
-            int((flow.response.timestamp_end - flow.request.timestamp_start) * 1000)
-            if flow.response.timestamp_end and flow.request.timestamp_start
-            else 0
-        )
+        # Calculate duration - wrap mitmproxy API calls
+        try:
+            duration_ms = (
+                int((flow.response.timestamp_end - flow.request.timestamp_start) * 1000)
+                if flow.response.timestamp_end and flow.request.timestamp_start
+                else 0
+            )
+        except Exception as duration_error:
+            logger.warning(f"Failed to calculate duration: {duration_error}")
+            duration_ms = 0
 
-        # Get request/response sizes
-        request_size = len(flow.request.content) if flow.request.content else 0
-        response_size = len(flow.response.content) if flow.response.content else 0
+        # Get request/response sizes - wrap mitmproxy API calls
+        try:
+            request_size = len(flow.request.content) if flow.request.content else 0
+        except Exception as req_size_error:
+            logger.warning(f"Failed to get request size: {req_size_error}")
+            request_size = 0
+
+        try:
+            response_size = len(flow.response.content) if flow.response.content else 0
+        except Exception as resp_size_error:
+            logger.warning(f"Failed to get response size: {resp_size_error}")
+            response_size = 0
 
         # Convert headers to JSON strings and mask secrets (with proper encoding)
+        # Wrap each mitmproxy API call separately
         try:
             request_headers_dict = dict(flow.request.headers)
+        except Exception as req_header_error:
+            logger.warning(f"Failed to get request headers: {req_header_error}")
+            request_headers_dict = {}
+
+        try:
             response_headers_dict = dict(flow.response.headers)
+        except Exception as resp_header_error:
+            logger.warning(f"Failed to get response headers: {resp_header_error}")
+            response_headers_dict = {}
+
+        # Process headers safely
+        try:
+            # Log content-encoding and content-type for debugging
+            content_encoding = response_headers_dict.get("content-encoding", "none")
+            content_type = response_headers_dict.get("content-type", "unknown")
+            logger.debug(
+                f"Response content-encoding: {content_encoding}, content-type: {content_type}"
+            )
 
             request_headers = SecretDetector.mask_secrets(
                 json.dumps(request_headers_dict, ensure_ascii=True)
@@ -159,23 +237,70 @@ def response(flow):
                 json.dumps(response_headers_dict, ensure_ascii=True)
             ).masked_text
         except (UnicodeDecodeError, UnicodeEncodeError) as e:
-            request_headers = f"[ENCODING ERROR: {str(e)}]"
-            response_headers = f"[ENCODING ERROR: {str(e)}]"
+            logger.warning(f"Header processing encoding error: {e}")
+            request_headers = f"[HEADER ENCODING ERROR: {str(e)}]"
+            response_headers = f"[HEADER ENCODING ERROR: {str(e)}]"
+        except Exception as e:
+            logger.error(f"Unexpected header processing error: {e}")
+            request_headers = f"[HEADER ERROR: {type(e).__name__}]"
+            response_headers = f"[HEADER ERROR: {type(e).__name__}]"
 
         # Extract key info and mask sensitive data (with proper encoding)
         timestamp = datetime.now().isoformat()
-        method = flow.request.method
+
+        # Get method safely
+        try:
+            method = flow.request.method
+        except Exception as method_error:
+            logger.warning(f"Failed to get request method: {method_error}")
+            method = "UNKNOWN"
+
+        # Get URL and path safely - wrap mitmproxy API calls
+        try:
+            raw_url = flow.request.pretty_url
+        except Exception as url_error:
+            logger.warning(f"Failed to get pretty_url: {url_error}")
+            try:
+                raw_url = flow.request.url
+            except Exception:
+                raw_url = "unknown"
 
         try:
-            url = SecretDetector.mask_secrets(flow.request.pretty_url).masked_text
-            path = SecretDetector.mask_secrets(flow.request.path).masked_text
-        except (UnicodeDecodeError, UnicodeEncodeError) as e:
-            url = f"[ENCODING ERROR: {str(e)}]"
-            path = f"[ENCODING ERROR: {str(e)}]"
+            raw_path = flow.request.path
+        except Exception as path_error:
+            logger.warning(f"Failed to get path: {path_error}")
+            raw_path = "unknown"
 
-        status_code = flow.response.status_code
-        reason = flow.response.reason or ""
-        content_type = flow.response.headers.get("content-type", "")
+        # Process URL and path with masking
+        try:
+            logger.debug(
+                f"Raw URL type: {type(raw_url)}, Raw path type: {type(raw_path)}"
+            )
+            url = SecretDetector.mask_secrets(safe_str(raw_url)).masked_text
+            path = SecretDetector.mask_secrets(safe_str(raw_path)).masked_text
+        except Exception as e:
+            logger.error(f"Failed to mask URL/path: {e}")
+            url = safe_str(raw_url)
+            path = safe_str(raw_path)
+
+        # Get response properties safely
+        try:
+            status_code = flow.response.status_code
+        except Exception as status_error:
+            logger.warning(f"Failed to get status_code: {status_error}")
+            status_code = 0
+
+        try:
+            reason = flow.response.reason or ""
+        except Exception as reason_error:
+            logger.warning(f"Failed to get reason: {reason_error}")
+            reason = ""
+
+        try:
+            content_type = flow.response.headers.get("content-type", "")
+        except Exception as content_type_error:
+            logger.warning(f"Failed to get content-type: {content_type_error}")
+            content_type = ""
 
         # Write row to CSV with safe string conversion
         writer.writerow(

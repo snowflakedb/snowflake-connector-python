@@ -220,6 +220,8 @@ jobs:
         run: |
           echo "HTTP_PROXY=http://127.0.0.1:8080" >> $GITHUB_ENV
           echo "HTTPS_PROXY=http://127.0.0.1:8080" >> $GITHUB_ENV
+          echo "http_proxy=http://127.0.0.1:8080" >> $GITHUB_ENV
+          echo "https_proxy=http://127.0.0.1:8080" >> $GITHUB_ENV
 
       - name: Run tests
        # To run a single test on GHA use the below command:
