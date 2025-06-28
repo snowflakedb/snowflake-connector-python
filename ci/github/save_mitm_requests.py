@@ -174,7 +174,6 @@ SecretDetector = secret_detector_module.SecretDetector
 IGNORE_DOMAINS = {
     "pypi.org",
     "files.pythonhosted.org",
-    "example.com",  # Test domain from setup
 }
 
 

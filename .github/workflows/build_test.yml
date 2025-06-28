@@ -190,8 +190,49 @@ jobs:
             sleep 1
           done
 
-          # Force mitmproxy to generate CA cert
+          # Force mitmproxy to generate CA cert and test script capture
           curl -x http://127.0.0.1:8080 https://example.com -k || true
+
+          # Give script a moment to process the request
+          sleep 3
+
+          # Check if the proxy script is working
+          script_working=false
+
+          # Check log file exists
+          if [ ! -f "mitm_script.log" ]; then
+            echo "❌ FATAL: mitm_script.log not created - proxy script failed to start"
+            exit 1
+          fi
+
+          echo "✅ Log file created, checking contents..."
+          cat mitm_script.log
+
+          # Check if the example.com request was captured in CSV
+          if [ -f "test_requests.csv" ]; then
+            echo "✅ CSV file created"
+            if grep -q "example.com" test_requests.csv; then
+              echo "✅ example.com request captured - script is working!"
+              # Remove example.com from CSV since it was just a test
+              sed -i '/example\.com/d' test_requests.csv
+              echo "example.com test request removed from CSV"
+              script_working=true
+            else
+              echo "❌ example.com request NOT found in CSV"
+              echo "CSV contents:"
+              cat test_requests.csv
+            fi
+          else
+            echo "❌ CSV file not created"
+          fi
+
+          # Fail pipeline if proxy script isn't capturing requests
+          if [ "$script_working" = false ]; then
+            echo "❌ FATAL: Proxy script is not capturing requests properly"
+            echo "Log file contents:"
+            cat mitm_script.log
+            exit 1
+          fi
 
           # Wait for CA cert to be created
           timeout=30
@@ -288,7 +329,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mitmproxy-artifacts-${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
-          path: test_requests.csv
+          path: |
+            test_requests.csv
+            mitm_script.log
 
 
   test-olddriver:
