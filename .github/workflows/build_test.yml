@@ -181,7 +181,7 @@ jobs:
         run: |
           echo "Starting proxy..."
           nohup mitmdump --mode regular --listen-port 8080 \
-            -w test_flows.mitm \
+            -s ci/github/save_mitm_requests.py \
             --set termlog_verbosity=warn > mitmproxy.log 2>&1 &
           echo "PROXY_PID=$!" >> $GITHUB_ENV
 
@@ -287,12 +287,14 @@ jobs:
             .tox/.coverage
             .tox/coverage.xml
 
-      - name: Upload mitmproxy log as artifact
+      - name: Upload mitmproxy artifacts
         if: always() && env.PROXY_PID
         uses: actions/upload-artifact@v4
         with:
-          name: mitmproxy-log-${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
-          path: mitmproxy.log
+          name: mitmproxy-artifacts-${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            mitmproxy.log
+            test_requests.csv
 
 
   test-olddriver:
