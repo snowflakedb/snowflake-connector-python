@@ -13,6 +13,146 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def safe_mitmproxy_call(func, fallback, description):
+    """Safely call a mitmproxy API function with fallback"""
+    try:
+        return func()
+    except Exception as e:
+        logger.warning(f"Failed to {description}: {e}")
+        return fallback
+
+
+def extract_request_data(flow):
+    """Extract request data safely from mitmproxy flow"""
+    data = {}
+
+    # Basic request info
+    data["method"] = safe_mitmproxy_call(
+        lambda: flow.request.method, "UNKNOWN", "get request method"
+    )
+
+    data["host"] = safe_mitmproxy_call(
+        lambda: flow.request.pretty_host.lower(),
+        safe_mitmproxy_call(
+            lambda: flow.request.headers.get("host", "unknown").lower(),
+            "unknown",
+            "get host from headers",
+        ),
+        "get pretty_host",
+    )
+
+    # URLs and paths
+    raw_url = safe_mitmproxy_call(
+        lambda: flow.request.pretty_url,
+        safe_mitmproxy_call(lambda: flow.request.url, "unknown", "get basic URL"),
+        "get pretty_url",
+    )
+
+    raw_path = safe_mitmproxy_call(
+        lambda: flow.request.path, "unknown", "get request path"
+    )
+
+    # Process URLs with masking
+    try:
+        data["url"] = SecretDetector.mask_secrets(safe_str(raw_url)).masked_text
+        data["path"] = SecretDetector.mask_secrets(safe_str(raw_path)).masked_text
+    except Exception as e:
+        logger.error(f"Failed to mask URL/path: {e}")
+        data["url"] = safe_str(raw_url)
+        data["path"] = safe_str(raw_path)
+
+    # Request headers and size
+    data["headers"] = safe_mitmproxy_call(
+        lambda: dict(flow.request.headers), {}, "get request headers"
+    )
+
+    data["size"] = safe_mitmproxy_call(
+        lambda: len(flow.request.content) if flow.request.content else 0,
+        0,
+        "get request size",
+    )
+
+    return data
+
+
+def extract_response_data(flow):
+    """Extract response data safely from mitmproxy flow"""
+    data = {}
+
+    # Basic response info
+    data["status_code"] = safe_mitmproxy_call(
+        lambda: flow.response.status_code, 0, "get status code"
+    )
+
+    data["reason"] = safe_mitmproxy_call(
+        lambda: flow.response.reason or "", "", "get response reason"
+    )
+
+    # Response headers and size
+    data["headers"] = safe_mitmproxy_call(
+        lambda: dict(flow.response.headers), {}, "get response headers"
+    )
+
+    data["size"] = safe_mitmproxy_call(
+        lambda: len(flow.response.content) if flow.response.content else 0,
+        0,
+        "get response size",
+    )
+
+    # Content type for debugging
+    data["content_type"] = data["headers"].get("content-type", "")
+
+    return data
+
+
+def extract_timing_data(flow):
+    """Extract timing data safely from mitmproxy flow"""
+    return safe_mitmproxy_call(
+        lambda: (
+            int((flow.response.timestamp_end - flow.request.timestamp_start) * 1000)
+            if flow.response.timestamp_end and flow.request.timestamp_start
+            else 0
+        ),
+        0,
+        "calculate duration",
+    )
+
+
+def process_headers_safely(request_headers, response_headers):
+    """Process headers with SecretDetector masking"""
+    try:
+        # Log content-encoding for debugging
+        content_encoding = response_headers.get("content-encoding", "none")
+        content_type = response_headers.get("content-type", "unknown")
+        logger.debug(
+            f"Response content-encoding: {content_encoding}, content-type: {content_type}"
+        )
+
+        masked_request = SecretDetector.mask_secrets(
+            json.dumps(request_headers, ensure_ascii=True)
+        ).masked_text
+
+        masked_response = SecretDetector.mask_secrets(
+            json.dumps(response_headers, ensure_ascii=True)
+        ).masked_text
+
+        return masked_request, masked_response
+
+    except (UnicodeDecodeError, UnicodeEncodeError) as e:
+        logger.warning(f"Header processing encoding error: {e}")
+        return (
+            f"[HEADER ENCODING ERROR: {str(e)}]",
+            f"[HEADER ENCODING ERROR: {str(e)}]",
+        )
+    except Exception as e:
+        logger.error(f"Unexpected header processing error: {e}")
+        return (
+            f"[HEADER ERROR: {type(e).__name__}]",
+            f"[HEADER ERROR: {type(e).__name__}]",
+        )
+
+
 # Import SecretDetector directly without package initialization
 secret_detector_path = (
     Path(__file__).parent
@@ -118,6 +258,20 @@ try:
     system_info = f"{platform.system()} {platform.release()}"
     logger.info(f"Running on: {system_info}")
 
+    # Log proxy environment variables for debugging
+    import os
+
+    proxy_vars = [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "REQUESTS_CA_BUNDLE",
+    ]
+    for var in proxy_vars:
+        value = os.environ.get(var, "NOT_SET")
+        logger.info(f"Environment {var}={value}")
+
     # Use UTF-8 with BOM for better Windows compatibility
     f = open(
         "test_requests.csv", "w", newline="", encoding="utf-8-sig", errors="replace"
@@ -161,6 +315,7 @@ logger.info("MITM script loaded and ready to capture requests...")
 
 def response(flow):
     """Called when a response is received"""
+    # Debug logging
     try:
         debug_host = getattr(flow.request, "pretty_host", "unknown")
         debug_method = getattr(flow.request, "method", "unknown")
@@ -169,152 +324,36 @@ def response(flow):
         logger.error(f"Debug error getting basic request info: {debug_error}")
 
     try:
-        # Skip if domain should be ignored - wrap mitmproxy API call
-        try:
-            host = flow.request.pretty_host.lower()
-        except Exception as host_error:
-            logger.warning(f"Failed to get pretty_host: {host_error}")
-            try:
-                # Fallback to host header
-                host = flow.request.headers.get("host", "unknown").lower()
-            except Exception:
-                host = "unknown"
+        # Extract all data using helper functions
+        request_data = extract_request_data(flow)
+        response_data = extract_response_data(flow)
+        duration_ms = extract_timing_data(flow)
 
-        if any(ignored_domain in host for ignored_domain in IGNORE_DOMAINS):
+        # Skip if domain should be ignored
+        if any(
+            ignored_domain in request_data["host"] for ignored_domain in IGNORE_DOMAINS
+        ):
             return
 
-        # Calculate duration - wrap mitmproxy API calls
-        try:
-            duration_ms = (
-                int((flow.response.timestamp_end - flow.request.timestamp_start) * 1000)
-                if flow.response.timestamp_end and flow.request.timestamp_start
-                else 0
-            )
-        except Exception as duration_error:
-            logger.warning(f"Failed to calculate duration: {duration_error}")
-            duration_ms = 0
-
-        # Get request/response sizes - wrap mitmproxy API calls
-        try:
-            request_size = len(flow.request.content) if flow.request.content else 0
-        except Exception as req_size_error:
-            logger.warning(f"Failed to get request size: {req_size_error}")
-            request_size = 0
-
-        try:
-            response_size = len(flow.response.content) if flow.response.content else 0
-        except Exception as resp_size_error:
-            logger.warning(f"Failed to get response size: {resp_size_error}")
-            response_size = 0
-
-        # Convert headers to JSON strings and mask secrets (with proper encoding)
-        # Wrap each mitmproxy API call separately
-        try:
-            request_headers_dict = dict(flow.request.headers)
-        except Exception as req_header_error:
-            logger.warning(f"Failed to get request headers: {req_header_error}")
-            request_headers_dict = {}
-
-        try:
-            response_headers_dict = dict(flow.response.headers)
-        except Exception as resp_header_error:
-            logger.warning(f"Failed to get response headers: {resp_header_error}")
-            response_headers_dict = {}
-
-        # Process headers safely
-        try:
-            # Log content-encoding and content-type for debugging
-            content_encoding = response_headers_dict.get("content-encoding", "none")
-            content_type = response_headers_dict.get("content-type", "unknown")
-            logger.debug(
-                f"Response content-encoding: {content_encoding}, content-type: {content_type}"
-            )
-
-            request_headers = SecretDetector.mask_secrets(
-                json.dumps(request_headers_dict, ensure_ascii=True)
-            ).masked_text
-            response_headers = SecretDetector.mask_secrets(
-                json.dumps(response_headers_dict, ensure_ascii=True)
-            ).masked_text
-        except (UnicodeDecodeError, UnicodeEncodeError) as e:
-            logger.warning(f"Header processing encoding error: {e}")
-            request_headers = f"[HEADER ENCODING ERROR: {str(e)}]"
-            response_headers = f"[HEADER ENCODING ERROR: {str(e)}]"
-        except Exception as e:
-            logger.error(f"Unexpected header processing error: {e}")
-            request_headers = f"[HEADER ERROR: {type(e).__name__}]"
-            response_headers = f"[HEADER ERROR: {type(e).__name__}]"
-
-        # Extract key info and mask sensitive data (with proper encoding)
-        timestamp = datetime.now().isoformat()
-
-        # Get method safely
-        try:
-            method = flow.request.method
-        except Exception as method_error:
-            logger.warning(f"Failed to get request method: {method_error}")
-            method = "UNKNOWN"
-
-        # Get URL and path safely - wrap mitmproxy API calls
-        try:
-            raw_url = flow.request.pretty_url
-        except Exception as url_error:
-            logger.warning(f"Failed to get pretty_url: {url_error}")
-            try:
-                raw_url = flow.request.url
-            except Exception:
-                raw_url = "unknown"
-
-        try:
-            raw_path = flow.request.path
-        except Exception as path_error:
-            logger.warning(f"Failed to get path: {path_error}")
-            raw_path = "unknown"
-
-        # Process URL and path with masking
-        try:
-            logger.debug(
-                f"Raw URL type: {type(raw_url)}, Raw path type: {type(raw_path)}"
-            )
-            url = SecretDetector.mask_secrets(safe_str(raw_url)).masked_text
-            path = SecretDetector.mask_secrets(safe_str(raw_path)).masked_text
-        except Exception as e:
-            logger.error(f"Failed to mask URL/path: {e}")
-            url = safe_str(raw_url)
-            path = safe_str(raw_path)
-
-        # Get response properties safely
-        try:
-            status_code = flow.response.status_code
-        except Exception as status_error:
-            logger.warning(f"Failed to get status_code: {status_error}")
-            status_code = 0
-
-        try:
-            reason = flow.response.reason or ""
-        except Exception as reason_error:
-            logger.warning(f"Failed to get reason: {reason_error}")
-            reason = ""
-
-        try:
-            content_type = flow.response.headers.get("content-type", "")
-        except Exception as content_type_error:
-            logger.warning(f"Failed to get content-type: {content_type_error}")
-            content_type = ""
+        # Process headers with secret masking
+        request_headers, response_headers = process_headers_safely(
+            request_data["headers"], response_data["headers"]
+        )
 
         # Write row to CSV with safe string conversion
+        timestamp = datetime.now().isoformat()
         writer.writerow(
             [
                 safe_str(timestamp),
-                safe_str(method),
-                safe_str(url),
-                safe_str(host),
-                safe_str(path),
-                safe_str(status_code),
-                safe_str(reason),
-                safe_str(request_size),
-                safe_str(response_size),
-                safe_str(content_type),
+                safe_str(request_data["method"]),
+                safe_str(request_data["url"]),
+                safe_str(request_data["host"]),
+                safe_str(request_data["path"]),
+                safe_str(response_data["status_code"]),
+                safe_str(response_data["reason"]),
+                safe_str(request_data["size"]),
+                safe_str(response_data["size"]),
+                safe_str(response_data["content_type"]),
                 safe_str(duration_ms),
                 safe_str(request_headers),
                 safe_str(response_headers),
@@ -324,7 +363,9 @@ def response(flow):
 
         try:
             f.flush()  # Ensure it's written immediately
-            logger.debug(f"Successfully wrote {method} {host}")
+            logger.debug(
+                f"Successfully wrote {request_data['method']} {request_data['host']}"
+            )
         except Exception as flush_error:
             logger.error(f"Flush error: {flush_error}")
 
