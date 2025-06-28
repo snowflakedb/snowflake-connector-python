@@ -269,7 +269,10 @@ jobs:
           # Unset proxy environment variables
           echo "HTTP_PROXY=" >> $GITHUB_ENV
           echo "HTTPS_PROXY=" >> $GITHUB_ENV
-          echo "Proxy environment variables cleared"
+          echo "http_proxy=" >> $GITHUB_ENV
+          echo "https_proxy=" >> $GITHUB_ENV
+          echo "REQUESTS_CA_BUNDLE=" >> $GITHUB_ENV
+          echo "All proxy environment variables cleared"
         shell: bash
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
