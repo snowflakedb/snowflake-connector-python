@@ -28,9 +28,27 @@ IGNORE_DOMAINS = {
     "example.com",  # Test domain from setup
 }
 
-# Open CSV file for writing requests
-f = open("test_requests.csv", "w", newline="", encoding="utf-8")
-writer = csv.writer(f)
+
+def clean_for_csv(value):
+    """Clean a value for safe CSV output"""
+    if value is None:
+        return ""
+
+    # Convert to string and handle encoding issues
+    try:
+        str_value = str(value)
+        # Replace problematic characters
+        str_value = str_value.replace("\x00", "")  # Remove null bytes
+        str_value = str_value.replace("\r", "\\r")  # Escape carriage returns
+        str_value = str_value.replace("\n", "\\n")  # Escape newlines
+        return str_value
+    except (UnicodeDecodeError, UnicodeEncodeError):
+        return "[ENCODING ERROR]"
+
+
+# Open CSV file for writing requests with proper encoding and quoting
+f = open("test_requests.csv", "w", newline="", encoding="utf-8", errors="replace")
+writer = csv.writer(f, quoting=csv.QUOTE_ALL)
 
 # Write CSV header
 writer.writerow(
@@ -48,6 +66,7 @@ writer.writerow(
         "duration_ms",
         "request_headers",
         "response_headers",
+        "error_message",
     ]
 )
 
@@ -71,42 +90,53 @@ def response(flow):
         request_size = len(flow.request.content) if flow.request.content else 0
         response_size = len(flow.response.content) if flow.response.content else 0
 
-        # Convert headers to JSON strings and mask secrets
-        request_headers_dict = dict(flow.request.headers)
-        response_headers_dict = dict(flow.response.headers)
+        # Convert headers to JSON strings and mask secrets (with proper encoding)
+        try:
+            request_headers_dict = dict(flow.request.headers)
+            response_headers_dict = dict(flow.response.headers)
 
-        request_headers = SecretDetector.mask_secrets(
-            json.dumps(request_headers_dict)
-        ).masked_text
-        response_headers = SecretDetector.mask_secrets(
-            json.dumps(response_headers_dict)
-        ).masked_text
+            request_headers = SecretDetector.mask_secrets(
+                json.dumps(request_headers_dict, ensure_ascii=True)
+            ).masked_text
+            response_headers = SecretDetector.mask_secrets(
+                json.dumps(response_headers_dict, ensure_ascii=True)
+            ).masked_text
+        except (UnicodeDecodeError, UnicodeEncodeError) as e:
+            request_headers = f"[ENCODING ERROR: {str(e)}]"
+            response_headers = f"[ENCODING ERROR: {str(e)}]"
 
-        # Extract key info and mask sensitive data
+        # Extract key info and mask sensitive data (with proper encoding)
         timestamp = datetime.now().isoformat()
         method = flow.request.method
-        url = SecretDetector.mask_secrets(flow.request.pretty_url).masked_text
-        path = SecretDetector.mask_secrets(flow.request.path).masked_text
+
+        try:
+            url = SecretDetector.mask_secrets(flow.request.pretty_url).masked_text
+            path = SecretDetector.mask_secrets(flow.request.path).masked_text
+        except (UnicodeDecodeError, UnicodeEncodeError) as e:
+            url = f"[ENCODING ERROR: {str(e)}]"
+            path = f"[ENCODING ERROR: {str(e)}]"
+
         status_code = flow.response.status_code
-        reason = flow.response.reason
+        reason = flow.response.reason or ""
         content_type = flow.response.headers.get("content-type", "")
 
-        # Write row to CSV
+        # Write row to CSV with cleaned data
         writer.writerow(
             [
-                timestamp,
-                method,
-                url,
-                host,
-                path,
-                status_code,
-                reason,
-                request_size,
-                response_size,
-                content_type,
-                duration_ms,
-                request_headers,
-                response_headers,
+                clean_for_csv(timestamp),
+                clean_for_csv(method),
+                clean_for_csv(url),
+                clean_for_csv(host),
+                clean_for_csv(path),
+                clean_for_csv(status_code),
+                clean_for_csv(reason),
+                clean_for_csv(request_size),
+                clean_for_csv(response_size),
+                clean_for_csv(content_type),
+                clean_for_csv(duration_ms),
+                clean_for_csv(request_headers),
+                clean_for_csv(response_headers),
+                "",  # No error for successful requests
             ]
         )
 
@@ -114,30 +144,40 @@ def response(flow):
 
     except Exception as e:
         # Write error row (only for non-ignored domains)
-        if "host" in locals():
-            host_check = locals()["host"]
-        else:
-            host_check = getattr(flow.request, "pretty_host", "").lower()
+        try:
+            error_host = getattr(flow.request, "pretty_host", "")
+            error_method = getattr(flow.request, "method", "")
+        except Exception:
+            error_host = ""
+            error_method = ""
 
-        if not any(ignored_domain in host_check for ignored_domain in IGNORE_DOMAINS):
-            writer.writerow(
-                [
-                    datetime.now().isoformat(),
-                    "ERROR",
-                    SecretDetector.mask_secrets(str(e)).masked_text,
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                    "",
-                ]
-            )
-            f.flush()
+        # Check if we should ignore this domain
+        if error_host and any(
+            ignored_domain in error_host.lower() for ignored_domain in IGNORE_DOMAINS
+        ):
+            return
+
+        writer.writerow(
+            [
+                clean_for_csv(datetime.now().isoformat()),
+                clean_for_csv(error_method),
+                "",  # Empty URL for errors
+                clean_for_csv(error_host),
+                "",  # Empty path for errors
+                "",  # Empty status code for errors
+                "",  # Empty reason for errors
+                "",  # Empty request size for errors
+                "",  # Empty response size for errors
+                "",  # Empty content type for errors
+                "",  # Empty duration for errors
+                "",  # Empty request headers for errors
+                "",  # Empty response headers for errors
+                clean_for_csv(
+                    SecretDetector.mask_secrets(str(e)).masked_text
+                ),  # Error message
+            ]
+        )
+        f.flush()
 
 
 def done():
