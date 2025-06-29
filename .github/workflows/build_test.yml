@@ -267,9 +267,8 @@ jobs:
 
       - name: Run tests
          # To run a single test on GHA use the below command:
-        run: |
-           python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
-       # run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
+#        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
 
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
@@ -278,7 +277,7 @@ jobs:
           TOX_PARALLEL_NO_SPINNER: 1
 
           # To specify the test name (in single test mode) pass this env variable:
-          SINGLE_TEST_NAME: test/integ/test_put_get.py::test_multipart_put
+#          SINGLE_TEST_NAME: test/integ/test_put_get.py::test_multipart_put
 
           # Proxy environment variables
           HTTP_PROXY: ${{ env.HTTP_PROXY }}
