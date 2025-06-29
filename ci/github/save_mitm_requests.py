@@ -5,6 +5,24 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+# Import SecretDetector directly without package initialization
+secret_detector_path = (
+    Path(__file__).parent
+    / ".."
+    / ".."
+    / "src"
+    / "snowflake"
+    / "connector"
+    / "secret_detector.py"
+)
+spec = importlib.util.spec_from_file_location("secret_detector", secret_detector_path)
+if spec is None or spec.loader is None:
+    raise ImportError("Could not load secret_detector module")
+secret_detector_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(secret_detector_module)
+SecretDetector = secret_detector_module.SecretDetector
+
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
@@ -12,6 +30,13 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(), logging.FileHandler("mitm_script.log")],
 )
 logger = logging.getLogger(__name__)
+
+
+# Domains to ignore (pip/installation traffic)
+IGNORE_DOMAINS = {
+    "pypi.org",
+    "files.pythonhosted.org",
+}
 
 
 def safe_mitmproxy_call(func, fallback, description):
@@ -153,30 +178,6 @@ def process_headers_safely(request_headers, response_headers):
         )
 
 
-# Import SecretDetector directly without package initialization
-secret_detector_path = (
-    Path(__file__).parent
-    / ".."
-    / ".."
-    / "src"
-    / "snowflake"
-    / "connector"
-    / "secret_detector.py"
-)
-spec = importlib.util.spec_from_file_location("secret_detector", secret_detector_path)
-if spec is None or spec.loader is None:
-    raise ImportError("Could not load secret_detector module")
-secret_detector_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(secret_detector_module)
-SecretDetector = secret_detector_module.SecretDetector
-
-# Domains to ignore (pip/installation traffic)
-IGNORE_DOMAINS = {
-    "pypi.org",
-    "files.pythonhosted.org",
-}
-
-
 def safe_str(value, max_length=5000):
     """Convert value to string, handling multiple encoding scenarios aggressively"""
     if value is None:
@@ -252,33 +253,11 @@ def safe_str(value, max_length=5000):
 
 # Open CSV file for writing requests with proper encoding and quoting
 try:
-    import platform
-
-    system_info = f"{platform.system()} {platform.release()}"
-    logger.info(f"Running on: {system_info}")
-
-    # Log proxy environment variables for debugging
-    import os
-
-    proxy_vars = [
-        "HTTP_PROXY",
-        "HTTPS_PROXY",
-        "http_proxy",
-        "https_proxy",
-        "REQUESTS_CA_BUNDLE",
-    ]
-    for var in proxy_vars:
-        value = os.environ.get(var, "NOT_SET")
-        logger.info(f"Environment {var}={value}")
-
     # Use UTF-8 with BOM for better Windows compatibility
     f = open(
         "test_requests.csv", "w", newline="", encoding="utf-8-sig", errors="replace"
     )
     writer = csv.writer(f, quoting=csv.QUOTE_ALL)
-    logger.info(
-        f"CSV file opened successfully with UTF-8-sig encoding on {system_info}"
-    )
 
     # Write CSV header
     writer.writerow(
@@ -311,37 +290,9 @@ except Exception as file_error:
     logger.warning("Falling back to stdout output")
 logger.info("MITM script loaded and ready to capture requests...")
 
-# Add a global counter to track requests
-request_count = 0
-last_heartbeat = datetime.now()
-
-
-def heartbeat_check():
-    """Log periodic heartbeat to show script is alive"""
-    global last_heartbeat, request_count
-    now = datetime.now()
-    if (now - last_heartbeat).seconds >= 30:  # Every 30 seconds
-        logger.error(
-            f"HEARTBEAT: Script alive, processed {request_count} requests so far"
-        )
-        last_heartbeat = now
-
 
 def response(flow):
     """Called when a response is received"""
-    global request_count
-    request_count += 1
-    heartbeat_check()  # Show script is alive
-
-    # Debug logging with counter
-    try:
-        debug_host = getattr(flow.request, "pretty_host", "unknown")
-        debug_method = getattr(flow.request, "method", "unknown")
-        logger.info(
-            f"[{request_count}] Processing {debug_method} request to {debug_host}"
-        )
-    except Exception as debug_error:
-        logger.error(f"Debug error getting basic request info: {debug_error}")
 
     try:
         # Extract all data using helper functions
@@ -433,5 +384,5 @@ def response(flow):
 
 def done():
     """Called when mitmproxy shuts down"""
-    logger.info(f"SHUTDOWN: Processed {request_count} total requests")
+    logger.info("SHUTDOWN: mitmproxy shuts down")
     f.close()
