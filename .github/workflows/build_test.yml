@@ -176,14 +176,14 @@ jobs:
       - name: Start mitmdump proxy
         run: |
           echo "Starting proxy..."
-          nohup mitmdump --mode regular --listen-port 8080 \
+          nohup mitmdump --mode regular --listen-port 18453 \
             -s ci/github/save_mitm_requests.py \
             --set termlog_verbosity=warn &
           echo "PROXY_PID=$!" >> $GITHUB_ENV
 
           # Wait for proxy to be ready
           for i in {1..30}; do
-            if curl -s --connect-timeout 1 http://127.0.0.1:8080 > /dev/null 2>&1; then
+            if curl -s --connect-timeout 1 http://127.0.0.1:18453 > /dev/null 2>&1; then
               echo "Proxy is ready"
               break
             fi
@@ -191,7 +191,7 @@ jobs:
           done
 
           # Force mitmproxy to generate CA cert and test script capture
-          curl -x http://127.0.0.1:8080 https://example.com -k || true
+          curl -x http://127.0.0.1:18453 https://example.com -k || true
 
           # Give script a moment to process the request
           sleep 3
@@ -259,10 +259,10 @@ jobs:
 
       - name: Set proxy variables
         run: |
-          echo "HTTP_PROXY=http://127.0.0.1:8080" >> $GITHUB_ENV
-          echo "HTTPS_PROXY=http://127.0.0.1:8080" >> $GITHUB_ENV
-          echo "http_proxy=http://127.0.0.1:8080" >> $GITHUB_ENV
-          echo "https_proxy=http://127.0.0.1:8080" >> $GITHUB_ENV
+          echo "HTTP_PROXY=http://127.0.0.1:18453" >> $GITHUB_ENV
+          echo "HTTPS_PROXY=http://127.0.0.1:18453" >> $GITHUB_ENV
+          echo "http_proxy=http://127.0.0.1:18453" >> $GITHUB_ENV
+          echo "https_proxy=http://127.0.0.1:18453" >> $GITHUB_ENV
 
       - name: Run tests
        # To run a single test on GHA use the below command:
