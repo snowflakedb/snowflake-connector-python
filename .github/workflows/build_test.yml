@@ -191,7 +191,7 @@ jobs:
           done
 
           # Force mitmproxy to generate CA cert and test script capture
-          curl -x http://127.0.0.1:18453 https://example.com -k || true
+          curl -x http://127.0.0.1:18453 "https://example.com/?this_request_will_not_occur_in_real_driver_operation=true&github_actions_proxy_test=true&purpose=mitmproxy_verification_and_cert_creation" -k || true
 
           # Give script a moment to process the request
           sleep 3
@@ -213,9 +213,6 @@ jobs:
             echo "✅ CSV file created"
             if grep -q "example.com" test_requests.csv; then
               echo "✅ example.com request captured - script is working!"
-              # Reset CSV to clean state for real test data (keep only header)
-              head -1 test_requests.csv > test_requests_clean.csv && mv test_requests_clean.csv test_requests.csv
-              echo "CSV reset to clean state for test data"
               script_working=true
             else
               echo "❌ example.com request NOT found in CSV"

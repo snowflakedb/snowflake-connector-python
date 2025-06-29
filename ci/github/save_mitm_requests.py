@@ -412,4 +412,5 @@ def response(flow):
 
 def done():
     """Called when mitmproxy shuts down"""
+    logger.info("Proxy shutting down...")
     f.close()
