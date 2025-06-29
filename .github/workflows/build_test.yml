@@ -294,8 +294,6 @@ jobs:
           # Proxy environment variables
           HTTP_PROXY: ${{ env.HTTP_PROXY }}
           HTTPS_PROXY: ${{ env.HTTPS_PROXY }}
-          http_proxy: ${{ env.http_proxy }}
-          https_proxy: ${{ env.https_proxy }}
           REQUESTS_CA_BUNDLE: ${{ env.REQUESTS_CA_BUNDLE }}
         shell: bash
       - name: Stop mitmdump proxy
