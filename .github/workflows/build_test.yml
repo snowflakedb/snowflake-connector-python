@@ -213,9 +213,9 @@ jobs:
             echo "✅ CSV file created"
             if grep -q "example.com" test_requests.csv; then
               echo "✅ example.com request captured - script is working!"
-              # Remove example.com from CSV since it was just a test
-              sed -i '/example\.com/d' test_requests.csv
-              echo "example.com test request removed from CSV"
+              # Reset CSV to clean state for real test data (keep only header)
+              head -1 test_requests.csv > test_requests_clean.csv && mv test_requests_clean.csv test_requests.csv
+              echo "CSV reset to clean state for test data"
               script_working=true
             else
               echo "❌ example.com request NOT found in CSV"
