@@ -41,7 +41,7 @@ jobs:
       - name: Install tox
         run: python -m pip install tox>=4
       - name: Set PY
-        run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> $GITHUB_ENV
+        run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> $env.GITHUB_ENV
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pre-commit
@@ -88,7 +88,7 @@ jobs:
     runs-on: ${{ matrix.os.image }}
     steps:
       - name: Set shortver
-        run: echo "shortver=${longver//./}" >> $GITHUB_ENV
+        run: echo "shortver=${longver//./}" >> $env.GITHUB_ENV
         env:
           longver: ${{ matrix.python-version }}
         shell: bash
@@ -179,7 +179,7 @@ jobs:
           nohup mitmdump --mode regular --listen-port 18453 \
             -s ci/github/save_mitm_requests.py \
             --set termlog_verbosity=warn &
-          echo "PROXY_PID=$!" >> $GITHUB_ENV
+          echo "PROXY_PID=$!" >> $env.GITHUB_ENV
 
           # Wait for proxy to be ready
           for i in {1..30}; do
@@ -252,14 +252,17 @@ jobs:
         run: |
           mkdir -p ~/ca-cert
           cp ~/.mitmproxy/mitmproxy-ca-cert.pem ~/ca-cert/
-          echo "REQUESTS_CA_BUNDLE=$HOME/ca-cert/mitmproxy-ca-cert.pem" >> $GITHUB_ENV
+          echo "CA cert copied to ~/ca-cert/"
+        shell: bash
 
-      - name: Set proxy variables
+      - name: Set and verify proxy variables
         run: |
-          echo "HTTP_PROXY=http://127.0.0.1:18453" >> $GITHUB_ENV
-          echo "HTTPS_PROXY=http://127.0.0.1:18453" >> $GITHUB_ENV
-          echo "http_proxy=http://127.0.0.1:18453" >> $GITHUB_ENV
-          echo "https_proxy=http://127.0.0.1:18453" >> $GITHUB_ENV
+          # Set proxy variables for subsequent steps
+          echo "HTTP_PROXY=http://127.0.0.1:18453" >> $env.GITHUB_ENV
+          echo "HTTPS_PROXY=http://127.0.0.1:18453" >> $env.GITHUB_ENV
+          echo "http_proxy=http://127.0.0.1:18453" >> $env.GITHUB_ENV
+          echo "https_proxy=http://127.0.0.1:18453" >> $env.GITHUB_ENV
+          echo "REQUESTS_CA_BUNDLE=$HOME/ca-cert/mitmproxy-ca-cert.pem" >> $env.GITHUB_ENV
 
           # Debug: Verify proxy variables are set
           echo "=== Proxy Environment Check ==="
@@ -268,6 +271,7 @@ jobs:
           echo "http_proxy=$http_proxy"
           echo "https_proxy=$https_proxy"
           echo "REQUESTS_CA_BUNDLE=$REQUESTS_CA_BUNDLE"
+        shell: bash
 
       - name: Run tests
        # To run a single test on GHA use the below command:
@@ -324,14 +328,21 @@ jobs:
             echo "No proxy PID found in environment"
           fi
 
-          # Unset proxy environment variables
-          echo "HTTP_PROXY=" >> $GITHUB_ENV
-          echo "HTTPS_PROXY=" >> $GITHUB_ENV
-          echo "http_proxy=" >> $GITHUB_ENV
-          echo "https_proxy=" >> $GITHUB_ENV
-          echo "REQUESTS_CA_BUNDLE=" >> $GITHUB_ENV
-          echo "All proxy environment variables cleared"
+          echo "Proxy stopped"
         shell: bash
+
+      - name: Clear proxy environment variables
+        if: always()
+        run: |
+          # Clear proxy environment variables for subsequent steps
+          echo "HTTP_PROXY=" >> $env.GITHUB_ENV
+          echo "HTTPS_PROXY=" >> $env.GITHUB_ENV
+          echo "http_proxy=" >> $env.GITHUB_ENV
+          echo "https_proxy=" >> $env.GITHUB_ENV
+          echo "REQUESTS_CA_BUNDLE=" >> $env.GITHUB_ENV
+          echo "Proxy environment variables cleared"
+        shell: bash
+
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
         shell: bash
@@ -478,7 +489,7 @@ jobs:
         cloud-provider: [aws]
     steps:
       - name: Set shortver
-        run: echo "shortver=${longver//./}" >> $GITHUB_ENV
+        run: echo "shortver=${longver//./}" >> $env.GITHUB_ENV
         env:
           longver: ${{ matrix.python-version }}
         shell: bash
