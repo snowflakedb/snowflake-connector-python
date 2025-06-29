@@ -311,14 +311,35 @@ except Exception as file_error:
     logger.warning("Falling back to stdout output")
 logger.info("MITM script loaded and ready to capture requests...")
 
+# Add a global counter to track requests
+request_count = 0
+last_heartbeat = datetime.now()
+
+
+def heartbeat_check():
+    """Log periodic heartbeat to show script is alive"""
+    global last_heartbeat, request_count
+    now = datetime.now()
+    if (now - last_heartbeat).seconds >= 30:  # Every 30 seconds
+        logger.error(
+            f"HEARTBEAT: Script alive, processed {request_count} requests so far"
+        )
+        last_heartbeat = now
+
 
 def response(flow):
     """Called when a response is received"""
-    # Debug logging
+    global request_count
+    request_count += 1
+    heartbeat_check()  # Show script is alive
+
+    # Debug logging with counter
     try:
         debug_host = getattr(flow.request, "pretty_host", "unknown")
         debug_method = getattr(flow.request, "method", "unknown")
-        logger.debug(f"Processing {debug_method} request to {debug_host}")
+        logger.info(
+            f"[{request_count}] Processing {debug_method} request to {debug_host}"
+        )
     except Exception as debug_error:
         logger.error(f"Debug error getting basic request info: {debug_error}")
 
@@ -412,5 +433,5 @@ def response(flow):
 
 def done():
     """Called when mitmproxy shuts down"""
-    logger.info("Proxy shutting down...")
+    logger.info(f"SHUTDOWN: Processed {request_count} total requests")
     f.close()

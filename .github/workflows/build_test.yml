@@ -13,7 +13,7 @@ on:
     workflow_dispatch:
         inputs:
           logLevel:
-            default: warning
+            default: info
             description: "Log level"
             required: true
           tags:
@@ -261,9 +261,27 @@ jobs:
           echo "http_proxy=http://127.0.0.1:18453" >> $GITHUB_ENV
           echo "https_proxy=http://127.0.0.1:18453" >> $GITHUB_ENV
 
+          # Debug: Verify proxy variables are set
+          echo "=== Proxy Environment Check ==="
+          echo "HTTP_PROXY=$HTTP_PROXY"
+          echo "HTTPS_PROXY=$HTTPS_PROXY"
+          echo "http_proxy=$http_proxy"
+          echo "https_proxy=$https_proxy"
+          echo "REQUESTS_CA_BUNDLE=$REQUESTS_CA_BUNDLE"
+
       - name: Run tests
        # To run a single test on GHA use the below command:
-        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
+        run: |
+          echo "=== Test Environment Check ==="
+          echo "HTTP_PROXY=$HTTP_PROXY"
+          echo "HTTPS_PROXY=$HTTPS_PROXY"
+          echo "http_proxy=$http_proxy"
+          echo "https_proxy=$https_proxy"
+          echo "REQUESTS_CA_BUNDLE=$REQUESTS_CA_BUNDLE"
+          echo "=== Testing Proxy Accessibility During Tests ==="
+          curl -x http://127.0.0.1:18453 http://httpbin.org/get -v || echo "Proxy not accessible during test phase"
+          echo "=== Starting Tests ==="
+          python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
 #        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
 
         env:
@@ -273,6 +291,12 @@ jobs:
           TOX_PARALLEL_NO_SPINNER: 1
          # To specify the test name (in single test mode) pass this env variable:
           SINGLE_TEST_NAME: test/integ/test_put_get.py::test_multipart_put
+          # Proxy environment variables
+          HTTP_PROXY: ${{ env.HTTP_PROXY }}
+          HTTPS_PROXY: ${{ env.HTTPS_PROXY }}
+          http_proxy: ${{ env.http_proxy }}
+          https_proxy: ${{ env.https_proxy }}
+          REQUESTS_CA_BUNDLE: ${{ env.REQUESTS_CA_BUNDLE }}
         shell: bash
       - name: Stop mitmdump proxy
         if: always() && env.PROXY_PID
