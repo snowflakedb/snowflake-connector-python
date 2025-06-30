@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 import OpenSSL
 
+from . import SnowflakeConnection
 from .constants import (
     HTTP_HEADER_CONTENT_ENCODING,
     REQUEST_CONNECTION_TIMEOUT,
@@ -269,6 +270,13 @@ class SnowflakeStorageClient(ABC):
     def _has_expired_token(self, response: requests.Response) -> bool:
         pass
 
+    @property
+    def connection(self) -> SnowflakeConnection | None:
+        if self.meta.sfagent:
+            return self.meta.sfagent._cursor.connection
+        else:
+            return None
+
     def _send_request_with_retry(
         self,
         verb: str,
@@ -277,18 +285,16 @@ class SnowflakeStorageClient(ABC):
     ) -> requests.Response:
         rest_call = METHODS[verb]
         url = b""
-        conn = None
-        if self.meta.sfagent and self.meta.sfagent._cursor.connection:
-            conn = self.meta.sfagent._cursor.connection
 
         while self.retry_count[retry_id] < self.max_retry:
             logger.debug(f"retry #{self.retry_count[retry_id]}")
             cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
+
             rest_kwargs["timeout"] = (REQUEST_CONNECTION_TIMEOUT, REQUEST_READ_TIMEOUT)
             try:
-                if conn:
-                    with conn._rest._use_requests_session(url) as session:
+                if self.connection:
+                    with self.connection._rest._use_requests_session(url) as session:
                         logger.debug(f"storage client request with session {session}")
                         response = session.request(verb, url, **rest_kwargs)
                 else:
