@@ -403,7 +403,7 @@ def detect_platforms() -> dict:
     def is_aws_lambda():
         return "LAMBDA_TASK_ROOT" in os.environ
 
-    def is_valid_arn(arn: str) -> bool:
+    def is_valid_arn_for_wif(arn: str) -> bool:
         patterns = [
             r"^arn:[^:]+:iam::[^:]+:user/.+$",
             r"^arn:[^:]+:sts::[^:]+:assumed-role/.+$",
@@ -415,7 +415,7 @@ def detect_platforms() -> dict:
         if not caller_identity or "Arn" not in caller_identity:
             return False
         else:
-            return is_valid_arn(caller_identity["Arn"])
+            return is_valid_arn_for_wif(caller_identity["Arn"])
 
     def is_azure_vm(timeout=2):
         try:
