@@ -397,7 +397,7 @@ def detect_platforms() -> dict:
                 fetcher._fetch_metadata_token(),
             )
             return bool(document.content)
-        except requests.RequestException:
+        except Exception:
             return False
 
     def is_aws_lambda():
@@ -411,11 +411,14 @@ def detect_platforms() -> dict:
         return any(re.match(p, arn) for p in patterns)
 
     def has_aws_identity():
-        caller_identity = boto3.client("sts").get_caller_identity()
-        if not caller_identity or "Arn" not in caller_identity:
+        try:
+            caller_identity = boto3.client("sts").get_caller_identity()
+            if not caller_identity or "Arn" not in caller_identity:
+                return False
+            else:
+                return is_valid_arn_for_wif(caller_identity["Arn"])
+        except Exception:
             return False
-        else:
-            return is_valid_arn_for_wif(caller_identity["Arn"])
 
     def is_azure_vm(timeout=2):
         try:
@@ -461,7 +464,7 @@ def detect_platforms() -> dict:
         try:
             response = requests.get("http://metadata.google.internal", timeout=timeout)
             return response.headers.get("Metadata-Flavor") == "Google"
-        except Exception:
+        except requests.RequestException:
             return False
 
     def is_gce_cloud_run_service():
@@ -471,6 +474,18 @@ def detect_platforms() -> dict:
     def is_gce_cloud_run_job():
         job_vars = ["CLOUD_RUN_JOB", "CLOUD_RUN_EXECUTION"]
         return all(var in os.environ for var in job_vars)
+
+    def has_gcp_identity(timeout=2):
+        try:
+            response = requests.get(
+                "http://metadata/computeMetadata/v1/instance/service-accounts/default/email",
+                headers={"Metadata-Flavor": "Google"},
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            return bool(response.text)
+        except requests.RequestException:
+            return False
 
     def is_github_action():
         return "GITHUB_ACTIONS" in os.environ
@@ -489,6 +504,7 @@ def detect_platforms() -> dict:
         "gce_vm": is_gce_vm(),
         "gce_cloud_run_service": is_gce_cloud_run_service(),
         "gce_cloud_run_job": is_gce_cloud_run_job(),
+        "gcp_identity": has_gcp_identity(),
         "github_action": is_github_action(),
     }
 
