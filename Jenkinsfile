@@ -102,11 +102,11 @@ def authenticatedGithubCall(url) {
   withCredentials([
         usernamePassword(credentialsId: 'jenkins-snowflakedb-github-app',
           usernameVariable: 'GITHUB_USER',
-          passwordVariable: 'GITHUB_TOKEN'),
+          passwordVariable: 'SNOWFLAKE_GITHUB_TOKEN'),
       ]) {
     try {
       def encodedAuth = Base64.getEncoder().encodeToString(
-        "${GITHUB_USER}:${GITHUB_TOKEN}".getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        "${GITHUB_USER}:${SNOWFLAKE_GITHUB_TOKEN}".getBytes(java.nio.charset.StandardCharsets.UTF_8)
       )
       def authHeaderValue = "Basic ${encodedAuth}"
       def connection = new URL(url).openConnection()
