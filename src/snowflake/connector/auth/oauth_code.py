@@ -18,11 +18,13 @@ from typing import TYPE_CHECKING, Any
 from ..compat import parse_qs, urlparse, urlsplit
 from ..constants import OAUTH_TYPE_AUTHORIZATION_CODE
 from ..errorcode import (
+    ER_INVALID_VALUE,
     ER_OAUTH_CALLBACK_ERROR,
     ER_OAUTH_SERVER_TIMEOUT,
     ER_OAUTH_STATE_CHANGED,
     ER_UNABLE_TO_OPEN_BROWSER,
 )
+from ..errors import Error, ProgrammingError
 from ..token_cache import TokenCache
 from ._http_server import AuthHttpServer
 from ._oauth_base import AuthByOAuthBase
@@ -45,6 +47,8 @@ def _get_query_params(
 class AuthByOauthCode(AuthByOAuthBase):
     """Authenticates user by OAuth code flow."""
 
+    _LOCAL_APPLICATION_CLIENT_CREDENTIALS = "LOCAL_APPLICATION"
+
     def __init__(
         self,
         application: str,
@@ -54,13 +58,27 @@ class AuthByOauthCode(AuthByOAuthBase):
         token_request_url: str,
         redirect_uri: str,
         scope: str,
+        host: str,
         pkce_enabled: bool = True,
         token_cache: TokenCache | None = None,
         refresh_token_enabled: bool = False,
         external_browser_timeout: int | None = None,
         enable_single_use_refresh_tokens: bool = False,
+        connection: SnowflakeConnection | None = None,
         **kwargs,
     ) -> None:
+        authentication_url, redirect_uri = self._validate_oauth_code_uris(
+            authentication_url, redirect_uri, connection
+        )
+        client_id, client_secret = self._validate_client_credentials_with_defaults(
+            client_id,
+            client_secret,
+            authentication_url,
+            token_request_url,
+            host,
+            connection,
+        )
+
         super().__init__(
             client_id=client_id,
             client_secret=client_secret,
@@ -385,3 +403,77 @@ You can close this window now and go back where you started from.
                 },
             )
         return parsed.get("code", [None])[0], parsed.get("state", [None])[0]
+
+    @staticmethod
+    def _is_snowflake_as_idp(
+        authentication_url: str, token_request_url: str, host: str
+    ) -> bool:
+        return (authentication_url == "" or host in authentication_url) and (
+            token_request_url == "" or host in token_request_url
+        )
+
+    def _eligible_for_default_client_credentials(
+        self,
+        client_id: str,
+        client_secret: str,
+        authorization_url: str,
+        token_request_url: str,
+        host: str,
+    ) -> bool:
+        return (
+            (client_id == "" or client_secret is None)
+            and (client_secret == "" or client_secret is None)
+            and self.__class__._is_snowflake_as_idp(
+                authorization_url, token_request_url, host
+            )
+        )
+
+    def _validate_client_credentials_with_defaults(
+        self,
+        client_id: str,
+        client_secret: str,
+        authorization_url: str,
+        token_request_url: str,
+        host: str,
+        connection: SnowflakeConnection,
+    ) -> tuple[str, str] | None:
+        if self._eligible_for_default_client_credentials(
+            client_id, client_secret, authorization_url, token_request_url, host
+        ):
+            return (
+                self.__class__._LOCAL_APPLICATION_CLIENT_CREDENTIALS,
+                self.__class__._LOCAL_APPLICATION_CLIENT_CREDENTIALS,
+            )
+        else:
+            self._validate_client_credentials_present(
+                client_id, client_secret, connection
+            )
+            return client_id, client_secret
+
+    @staticmethod
+    def _validate_oauth_code_uris(
+        authorization_url: str, redirect_uri: str, connection: SnowflakeConnection
+    ) -> tuple[str, str]:
+        if authorization_url and not authorization_url.startswith("https://"):
+            Error.errorhandler_wrapper(
+                connection,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "OAuth supports only authorization urls that use 'https' scheme",
+                    "errno": ER_INVALID_VALUE,
+                },
+            )
+        if redirect_uri and not (
+            redirect_uri.startswith("http://") or redirect_uri.startswith("https://")
+        ):
+            Error.errorhandler_wrapper(
+                connection,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "OAuth supports only authorization urls that use 'http(s)' scheme",
+                    "errno": ER_INVALID_VALUE,
+                },
+            )
+        return authorization_url, redirect_uri

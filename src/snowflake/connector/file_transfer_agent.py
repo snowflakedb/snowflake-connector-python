@@ -16,7 +16,7 @@ from time import time
 from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 
 from .azure_storage_client import SnowflakeAzureRestClient
-from .compat import GET_CWD, IS_WINDOWS
+from .compat import IS_WINDOWS
 from .constants import (
     AZURE_CHUNK_SIZE,
     AZURE_FS,
@@ -839,17 +839,17 @@ class SnowflakeFileTransferAgent:
         for file_name in locations:
             if self._command_type == CMD_TYPE_UPLOAD:
                 file_name = os.path.expanduser(file_name)
-                if not os.path.isabs(file_name):
-                    file_name = os.path.join(GET_CWD(), file_name)
                 if (
                     IS_WINDOWS
                     and len(file_name) > 2
                     and file_name[0] == "/"
                     and file_name[2] == ":"
                 ):
-                    # Windows path: /C:/data/file1.txt where it starts with slash
-                    # followed by a drive letter and colon.
+                    # Since python 3.13 os.path.isabs returns different values for URI or paths starting with a '/' etc. on Windows (https://github.com/python/cpython/issues/125283)
+                    # Windows path: /C:/data/file1.txt is not treated as absolute - could be prefixed with another Windows driver's letter and colon.
                     file_name = file_name[1:]
+                if not os.path.isabs(file_name):
+                    file_name = os.path.abspath(file_name)
                 files = glob.glob(file_name)
                 canonical_locations += files
             else:
@@ -1062,11 +1062,14 @@ class SnowflakeFileTransferAgent:
             for idx, file_name in enumerate(self._src_files):
                 if not file_name:
                     continue
-                first_path_sep = file_name.find("/")
                 dst_file_name = (
-                    file_name[first_path_sep + 1 :]
+                    self._strip_stage_prefix_from_dst_file_name_for_download(file_name)
+                )
+                first_path_sep = dst_file_name.find("/")
+                dst_file_name = (
+                    dst_file_name[first_path_sep + 1 :]
                     if first_path_sep >= 0
-                    else file_name
+                    else dst_file_name
                 )
                 url = None
                 if self._presigned_urls and idx < len(self._presigned_urls):
@@ -1201,3 +1204,12 @@ class SnowflakeFileTransferAgent:
                 else:
                     m.dst_file_name = m.name
                     m.dst_compression_type = None
+
+    def _strip_stage_prefix_from_dst_file_name_for_download(self, dst_file_name):
+        """Strips the stage prefix from dst_file_name for download.
+
+        Note that this is no-op in most cases, and therefore we return as is.
+        But for some workloads they will monkeypatch this method to add their
+        stripping logic.
+        """
+        return dst_file_name
