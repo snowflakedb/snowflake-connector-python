@@ -13,8 +13,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Add `bulk_upload_chunks` parameter to `write_pandas` function. Setting this parameter to True changes the behaviour of write_pandas function to first write all the data chunks to the local disk and then perform the wildcard upload of the chunks folder to the stage. In default behaviour the chunks are being saved, uploaded and deleted one by one.
   - Added support for new authentication mechanism PAT with external session ID.
   - Added `client_fetch_use_mp` parameter that enables multiprocessed fetching of result batches.
-
-- v3.15.1(May 20, 2025)
   - Added basic arrow support for Interval types.
   - Fix `write_pandas` special characters usage in the location name.
   - Fix usage of `use_virtual_url` when building the location for gcs storage client.
