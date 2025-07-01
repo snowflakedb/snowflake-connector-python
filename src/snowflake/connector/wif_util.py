@@ -198,7 +198,7 @@ def create_aws_attestation() -> WorkloadIdentityAttestation | None:
         _warn(
             "Dependencies botocore and boto3 are not installed, cannot create AWS Workload Identity attestation."
             "Please install these modules using the following command:\n"
-            " pip install snowflake-connector-python[cloud-auth]"
+            " pip install snowflake-connector-python[aws]"
         )
         return None
 
