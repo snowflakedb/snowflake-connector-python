@@ -9,8 +9,12 @@ from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
 import jwt
-from botocore.awsrequest import AWSRequest
-from botocore.credentials import Credentials
+
+from snowflake.connector.options import installed_botocore
+
+if installed_botocore:
+    from botocore.awsrequest import AWSRequest
+    from botocore.credentials import Credentials
 
 from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
 from snowflake.connector.vendored.requests.models import Response
