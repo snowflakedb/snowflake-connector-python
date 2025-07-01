@@ -1,0 +1,4 @@
+## Development Guidelines
+
+- When creating the analogous async classes / methods in `aio` always annotate the class/method with a reference to the original sync class/method to make debugging, tracing, and modification clearer.
+- When creating analogous async classes / methods in `aio`, as much as possible re-use logic / methods from the sync version of the code, but critically always ensure that the most critical event loop blockers in the query execution path (i.e. network requests, disk access, etc) are async. Any arguments should be as identical as possible between the sync and async versions.
