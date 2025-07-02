@@ -332,8 +332,8 @@ class AsyncSnowflakeCursor:
         
         Async version of: SnowflakeCursor.fetchall()
         
-        This method uses AsyncResultSet to fetch results without blocking
-        the event loop, fixing the critical blocking issue.
+        This method uses optimized bulk fetching for large result sets
+        to avoid row-by-row async iteration overhead.
         
         Returns:
             List of all remaining rows
@@ -343,11 +343,47 @@ class AsyncSnowflakeCursor:
             
         if self._async_result_set is None:
             return []
-            
-        rows = []
-        async for row in self._async_result_set:
-            rows.append(row)
-        return rows
+        
+        # Use optimized bulk fetch for large result sets
+        # This avoids the row-by-row async iteration overhead
+        return await self._bulk_fetchall_async()
+    
+    async def _bulk_fetchall_async(self) -> list[tuple | dict]:
+        """
+        Optimized bulk fetch implementation that processes batches efficiently.
+        
+        This avoids the performance overhead of row-by-row async iteration
+        by using bulk populate_data_async and processing batches concurrently.
+        """
+        all_rows = []
+        
+        # Process all batches concurrently for better performance  
+        import asyncio
+        
+        async def process_batch_bulk(batch):
+            """Process a single batch in bulk and return all its rows."""
+            if batch._local:
+                # Local batch - data already available
+                return list(batch._data) if batch._data else []
+            else:
+                # Remote batch - populate data in bulk then return all rows
+                await batch.populate_data_async(connection=self._async_connection)
+                return list(batch._data) if batch._data else []
+        
+        # Create tasks for all batches to download concurrently
+        batch_tasks = []
+        for batch in self._async_result_set.batches:
+            task = asyncio.create_task(process_batch_bulk(batch))
+            batch_tasks.append(task)
+        
+        # Wait for all batches to complete
+        if batch_tasks:
+            batch_results = await asyncio.gather(*batch_tasks)
+            # Flatten results maintaining order
+            for batch_rows in batch_results:
+                all_rows.extend(batch_rows)
+        
+        return all_rows
         
     async def close(self) -> None:
         """

@@ -1,0 +1,5 @@
+# Requirements for running the benchmark
+# Note: Uses local development version of snowflake-connector-python
+# Most dependencies come from the main package - only additional ones listed here
+
+python-dotenv>=1.0.0  # For loading .env files

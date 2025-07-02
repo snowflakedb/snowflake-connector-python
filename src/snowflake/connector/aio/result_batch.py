@@ -134,52 +134,55 @@ class AsyncResultBatch(abc.ABC):
                 timeout=aiohttp.ClientTimeout(total=DOWNLOAD_TIMEOUT)
             )
         
+        # Start download timing outside retry loop to capture total time
+        download_metric = TimerContextManager()
+        download_metric.__enter__()
+        
         try:
             for retry in range(MAX_DOWNLOAD_RETRY):
                 try:
-                    with TimerContextManager() as download_metric:
-                        logger.debug(f"started downloading result batch id: {self.id}")
-                        chunk_url = self._remote_chunk_info.url
-                        
-                        async with session.get(
-                            chunk_url,
-                            headers=self._chunk_headers
-                        ) as response:
-                            if response.status == OK:
-                                logger.debug(
-                                    f"successfully downloaded result batch id: {self.id}"
-                                )
-                                # Read response content and return mock response object
-                                content = await response.read()
-                                
-                                # Create mock response object compatible with sync code
-                                class MockResponse:
-                                    def __init__(self, content: bytes, status_code: int, text: str):
-                                        self.content = content
-                                        self.status_code = status_code
-                                        self.text = text
-                                        
-                                try:
-                                    text_content = content.decode('utf-8')
-                                except UnicodeDecodeError:
-                                    text_content = content.decode('utf-8', errors='replace')
+                    logger.debug(f"started downloading result batch id: {self.id}")
+                    chunk_url = self._remote_chunk_info.url
+                    
+                    async with session.get(
+                        chunk_url,
+                        headers=self._chunk_headers
+                    ) as response:
+                        if response.status == OK:
+                            logger.debug(
+                                f"successfully downloaded result batch id: {self.id}"
+                            )
+                            # Read response content and return mock response object
+                            content = await response.read()
+                            
+                            # Create mock response object compatible with sync code
+                            class MockResponse:
+                                def __init__(self, content: bytes, status_code: int, text: str):
+                                    self.content = content
+                                    self.status_code = status_code
+                                    self.text = text
                                     
-                                mock_response = MockResponse(content, response.status, text_content)
+                            try:
+                                text_content = content.decode('utf-8')
+                            except UnicodeDecodeError:
+                                text_content = content.decode('utf-8', errors='replace')
                                 
-                                self._metrics[DownloadMetrics.download.value] = (
-                                    download_metric.get_timing_millis()
-                                )
-                                
-                                return mock_response
+                            mock_response = MockResponse(content, response.status, text_content)
+                            
+                            # End timing measurement and store it
+                            download_metric.__exit__(None, None, None)
+                            self._metrics[DownloadMetrics.download.value] = download_metric.get_timing_millis()
+                            
+                            return mock_response
 
-                            # Handle retryable errors
-                            if is_retryable_http_code(response.status):
-                                error: Error = get_http_retryable_error(response.status)
-                                raise RetryRequest(error)
-                            elif response.status == UNAUTHORIZED:
-                                raise_okta_unauthorized_error(None, response)
-                            else:
-                                raise_failed_request_error(None, chunk_url, "get", response)
+                        # Handle retryable errors
+                        if is_retryable_http_code(response.status):
+                            error: Error = get_http_retryable_error(response.status)
+                            raise RetryRequest(error)
+                        elif response.status == UNAUTHORIZED:
+                            raise_okta_unauthorized_error(None, response)
+                        else:
+                            raise_failed_request_error(None, chunk_url, "get", response)
 
                 except (RetryRequest, Exception) as e:
                     if retry == MAX_DOWNLOAD_RETRY - 1:
@@ -193,6 +196,11 @@ class AsyncResultBatch(abc.ABC):
                         f"backing off for {sleep_timer}s for the reason: '{e}'"
                     )
                     await asyncio.sleep(sleep_timer)
+        except Exception:
+            # If an error occurred, still end the timing measurement
+            download_metric.__exit__(None, None, None)
+            self._metrics[DownloadMetrics.download.value] = download_metric.get_timing_millis()
+            raise
         finally:
             if close_session:
                 await session.close()
@@ -551,17 +559,23 @@ class AsyncArrowResultBatch(AsyncResultBatch):
         else:
             response = await self._download_async(connection=connection)
             logger.debug(f"started loading result batch id: {self.id}")
+            
+            # Time only the data loading, not the iteration
             with TimerContextManager() as load_metric:
                 try:
                     loaded_data = self._load(response, iter_unit)
-                    for item in loaded_data:
-                        yield item
                 except Exception:
                     if connection and getattr(connection._sync_connection, "_debug_arrow_chunk", False):
                         logger.debug(f"arrow data can not be parsed: {response}")
                     raise
-            logger.debug(f"finished loading result batch id: {self.id}")
+            
+            # Store load timing after loading is complete
             self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
+            logger.debug(f"finished loading result batch id: {self.id}")
+            
+            # Yield data items (not timed)
+            for item in loaded_data:
+                yield item
 
     async def _get_arrow_iter_async(
         self, connection: AsyncSnowflakeConnection | None = None
