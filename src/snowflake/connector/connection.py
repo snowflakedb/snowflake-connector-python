@@ -122,7 +122,7 @@ from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
 from .vendored import requests
-from .wif_util import AttestationProvider
+from .wif_util import DEFAULT_ENTRA_SNOWFLAKE_RESOURCE, AttestationProvider
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -440,12 +440,9 @@ def detect_platforms() -> dict:
         return all(var in os.environ for var in service_vars)
 
     def is_managed_identity_available_on_azure_vm(
-        resource="https://management.azure.com/",
+        resource=DEFAULT_ENTRA_SNOWFLAKE_RESOURCE,
     ):
-        endpoint = (
-            "http://169.254.169.254/metadata/identity/oauth2/token"
-            "?api-version=2018-02-01&resource={}".format(resource)
-        )
+        endpoint = f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={resource}"
         headers = {"Metadata": "true"}
         try:
             response = requests.get(endpoint, headers=headers, timeout=2)
