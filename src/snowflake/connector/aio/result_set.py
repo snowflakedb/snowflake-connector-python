@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, AsyncIterator, Deque, Iterable
+from typing import TYPE_CHECKING, Any, AsyncIterator, Deque, Iterator
 
 from ..constants import IterUnit
 from .result_batch import AsyncArrowResultBatch, AsyncJSONResultBatch, AsyncResultBatch
@@ -53,7 +53,7 @@ async def async_result_set_iterator(
         logger.debug(f"user finished consuming result batch {batch.id}")
 
 
-class AsyncResultSet(Iterable):
+class AsyncResultSet:
     """
     Async version of ResultSet with non-blocking result iteration.
     
@@ -140,11 +140,18 @@ class AsyncResultSet(Iterable):
                 overall_metrics[n] = overall_metrics.get(n, 0) + v
         return overall_metrics
 
-    def __aiter__(self) -> AsyncIterator[tuple]:
-        """Returns async iterator through all batches."""
-        return self._create_iter_async()
+    def __aiter__(self) -> 'AsyncResultSet':
+        """Returns self for async iteration."""
+        self._async_iter = None
+        return self
+        
+    async def __anext__(self) -> tuple:
+        """Get next item from async iterator."""
+        if self._async_iter is None:
+            self._async_iter = self._create_iter_async()
+        return await self._async_iter.__anext__()
 
-    async def _create_iter_async(
+    def _create_iter_async(
         self,
         **kwargs,
     ) -> (

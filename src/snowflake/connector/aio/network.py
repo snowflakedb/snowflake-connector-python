@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import uuid
 from typing import Any, Optional
+from urllib.parse import urlencode
 
 try:
     import aiohttp
@@ -31,6 +32,8 @@ from ..network import (
     KEY_PAIR_AUTHENTICATOR,
     CONTENT_TYPE_APPLICATION_JSON,
     PYTHON_CONNECTOR_USER_AGENT,
+    REQUEST_ID,
+    ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
 )
 from .auth import AsyncAuthByDefault, AsyncAuthByKeyPair
 
@@ -231,20 +234,24 @@ class AsyncSnowflakeRestful:
             data["bindings"] = binding_params
             
         if not _no_results:
-            # Add query context for sync queries
+            # Add query context for non-async queries (matches sync behavior)
             query_context = self._sync_connection.get_query_context()
             data["queryContextDTO"] = query_context
             
-        # Prepare headers with auth token
+        # Determine client type for proper header handling
+        client = "sfsql_file_transfer" if is_file_transfer else "sfsql"
+        
+        # Prepare headers with auth token (match sync implementation)
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
-            HTTP_HEADER_ACCEPT: "application/snowflake",
+            HTTP_HEADER_ACCEPT: ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
             HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
             "Authorization": f"Snowflake Token=\"{self._sync_connection._token}\"",
         }
         
-        # Execute async query request
-        url = f"{self._base_url}/queries/v1/query-request"
+        # Build URL with required requestId parameter (critical for API compatibility)
+        url_parameters = {REQUEST_ID: request_id}
+        url = f"{self._base_url}/queries/v1/query-request?" + urlencode(url_parameters)
         
         # Set timeout from sync connection if provided
         if timeout is None:
