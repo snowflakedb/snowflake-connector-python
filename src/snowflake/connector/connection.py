@@ -387,7 +387,7 @@ class TypeAndBinding(NamedTuple):
     binding: str | None
 
 
-def detect_platforms() -> dict:
+def detect_platforms() -> list[str]:
     def is_ec2_instance(timeout=0.5):
         try:
             fetcher = IMDSFetcher(timeout=timeout, num_attempts=2)
@@ -489,25 +489,29 @@ def detect_platforms() -> dict:
 
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {
-            "ec2": executor.submit(is_ec2_instance),
-            "aws_lambda": executor.submit(is_aws_lambda),
-            "aws_identity": executor.submit(has_aws_identity),
-            "azure_vm": executor.submit(is_azure_vm),
-            "azure_function": executor.submit(is_azure_function),
-            "gce_vm": executor.submit(is_gce_vm),
-            "gce_cloud_run_service": executor.submit(is_gce_cloud_run_service),
-            "gce_cloud_run_job": executor.submit(is_gce_cloud_run_job),
-            "gcp_identity": executor.submit(has_gcp_identity),
-            "github_action": executor.submit(is_github_action),
+            "is_ec2_instance": executor.submit(is_ec2_instance),
+            "is_aws_lambda": executor.submit(is_aws_lambda),
+            "has_aws_identity": executor.submit(has_aws_identity),
+            "is_azure_vm": executor.submit(is_azure_vm),
+            "is_azure_function": executor.submit(is_azure_function),
+            "is_gce_vm": executor.submit(is_gce_vm),
+            "is_gce_cloud_run_service": executor.submit(is_gce_cloud_run_service),
+            "is_gce_cloud_run_job": executor.submit(is_gce_cloud_run_job),
+            "has_gcp_identity": executor.submit(has_gcp_identity),
+            "is_github_action": executor.submit(is_github_action),
         }
 
         platforms = {key: future.result() for key, future in futures.items()}
 
     platforms["azure_managed_identity"] = has_azure_managed_identity(
-        platforms["azure_vm"], platforms["azure_function"]
+        platforms["is_azure_vm"], platforms["is_azure_function"]
     )
 
-    return platforms
+    detected_platforms = [
+        platform for platform, detected in platforms.items() if detected
+    ]
+
+    return detected_platforms
 
 
 class SnowflakeConnection:
