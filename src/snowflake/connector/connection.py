@@ -388,9 +388,9 @@ class TypeAndBinding(NamedTuple):
 
 
 def detect_platforms() -> dict:
-    def is_ec2_instance(timeout=2):
+    def is_ec2_instance(timeout=0.5):
         try:
-            fetcher = IMDSFetcher(timeout=2, num_attempts=2)
+            fetcher = IMDSFetcher(timeout=timeout, num_attempts=2)
             document = fetcher._get_request(
                 "/latest/dynamic/instance-identity/document",
                 None,
@@ -420,7 +420,7 @@ def detect_platforms() -> dict:
         except Exception:
             return False
 
-    def is_azure_vm(timeout=2):
+    def is_azure_vm(timeout=0.5):
         try:
             token_resp = requests.get(
                 "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
@@ -440,12 +440,12 @@ def detect_platforms() -> dict:
         return all(var in os.environ for var in service_vars)
 
     def is_managed_identity_available_on_azure_vm(
-        resource=DEFAULT_ENTRA_SNOWFLAKE_RESOURCE,
+        resource=DEFAULT_ENTRA_SNOWFLAKE_RESOURCE, timeout=0.5
     ):
         endpoint = f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={resource}"
         headers = {"Metadata": "true"}
         try:
-            response = requests.get(endpoint, headers=headers, timeout=2)
+            response = requests.get(endpoint, headers=headers, timeout=timeout)
             return response.status_code == 200
         except requests.RequestException:
             return False
@@ -457,7 +457,7 @@ def detect_platforms() -> dict:
             return is_managed_identity_available_on_azure_vm()
         return False
 
-    def is_gce_vm(timeout=2):
+    def is_gce_vm(timeout=0.5):
         try:
             response = requests.get("http://metadata.google.internal", timeout=timeout)
             return response.headers.get("Metadata-Flavor") == "Google"
@@ -487,23 +487,25 @@ def detect_platforms() -> dict:
     def is_github_action():
         return "GITHUB_ACTIONS" in os.environ
 
-    running_on_azure_vm = is_azure_vm()
-    running_on_azure_function = is_azure_function()
-    platforms = {
-        "ec2": is_ec2_instance(),
-        "aws_lambda": is_aws_lambda(),
-        "aws_identity": has_aws_identity(),
-        "azure_vm": running_on_azure_vm,
-        "azure_function": running_on_azure_function,
-        "azure_managed_identity": has_azure_managed_identity(
-            running_on_azure_vm, running_on_azure_function
-        ),
-        "gce_vm": is_gce_vm(),
-        "gce_cloud_run_service": is_gce_cloud_run_service(),
-        "gce_cloud_run_job": is_gce_cloud_run_job(),
-        "gcp_identity": has_gcp_identity(),
-        "github_action": is_github_action(),
-    }
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {
+            "ec2": executor.submit(is_ec2_instance),
+            "aws_lambda": executor.submit(is_aws_lambda),
+            "aws_identity": executor.submit(has_aws_identity),
+            "azure_vm": executor.submit(is_azure_vm),
+            "azure_function": executor.submit(is_azure_function),
+            "gce_vm": executor.submit(is_gce_vm),
+            "gce_cloud_run_service": executor.submit(is_gce_cloud_run_service),
+            "gce_cloud_run_job": executor.submit(is_gce_cloud_run_job),
+            "gcp_identity": executor.submit(has_gcp_identity),
+            "github_action": executor.submit(is_github_action),
+        }
+
+        platforms = {key: future.result() for key, future in futures.items()}
+
+    platforms["azure_managed_identity"] = has_azure_managed_identity(
+        platforms["azure_vm"], platforms["azure_function"]
+    )
 
     return platforms
 
