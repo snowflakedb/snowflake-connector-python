@@ -145,32 +145,33 @@ def _arrow_error_stream_chunk_remove_single_byte_test(use_table_iterator):
     decode_bytes = base64.b64decode(b64data)
     exception_result = []
     result_array = []
-    
+
     # Test strategic positions instead of every byte for performance
     # Test header (first 50), middle section, end (last 50), and some random positions
     data_len = len(decode_bytes)
     test_positions = set()
-    
+
     # Critical positions: beginning (headers/metadata)
     test_positions.update(range(min(50, data_len)))
-    
+
     # Middle section positions
     mid_start = data_len // 2 - 25
     mid_end = data_len // 2 + 25
     test_positions.update(range(max(0, mid_start), min(data_len, mid_end)))
-    
+
     # End positions
     test_positions.update(range(max(0, data_len - 50), data_len))
-    
+
     # Some random positions throughout the data (for broader coverage)
     import random
+
     random.seed(42)  # Deterministic for reproducible tests
     random_positions = random.sample(range(data_len), min(50, data_len))
     test_positions.update(random_positions)
-    
+
     # Convert to sorted list for consistent execution
     test_positions = sorted(test_positions)
-    
+
     for i in test_positions:
         try:
             # removing the i-th char in the bytes

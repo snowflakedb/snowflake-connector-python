@@ -832,7 +832,7 @@ def test_put_md5(tmp_path, conn_cnx):
     # Small file for single-part upload test
     small_test_file = tmp_path / "small_file.txt"
     small_test_file.write_text("test content\n")  # Minimal content
-    
+
     # Big file for multi-part upload test - 200MB (well over 64MB threshold)
     big_test_file = tmp_path / "big_file.txt"
     chunk_size = 1024 * 1024  # 1MB chunks
@@ -845,11 +845,11 @@ def test_put_md5(tmp_path, conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
-            
+
             # Upload both files in sequence
             small_filename_in_put = str(small_test_file).replace("\\", "/")
             big_filename_in_put = str(big_test_file).replace("\\", "/")
-            
+
             cur.execute(
                 f"PUT 'file://{small_filename_in_put}' @{stage_name}/small AUTO_COMPRESS = FALSE"
             )
