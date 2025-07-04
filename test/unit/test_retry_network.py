@@ -299,7 +299,9 @@ def test_fetch():
     def fake_request_exec(**kwargs):
         headers = kwargs.get("headers")
         cnt = headers["cnt"]
-        time.sleep(0.1)  # Realistic network delay simulation without excessive test slowdown
+        time.sleep(
+            0.1
+        )  # Realistic network delay simulation without excessive test slowdown
         if cnt.c <= 1:
             # the first two raises failure
             cnt.c += 1
@@ -322,7 +324,9 @@ def test_fetch():
 
     # first attempt to reach timeout even if the exception is retryable
     cnt.reset()
-    ret = rest.fetch(timeout=0.05, **default_parameters)  # Timeout before 0.1s sleep completes
+    ret = rest.fetch(
+        timeout=0.05, **default_parameters
+    )  # Timeout before 0.1s sleep completes
     assert ret == {}
     assert rest._connection.errorhandler.called  # error
 
