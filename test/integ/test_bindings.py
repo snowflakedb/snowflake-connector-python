@@ -617,3 +617,85 @@ drop table if exists identifier(?)
 """,
                 (db_parameters["name"],),
             )
+
+
+def create_or_replace_table(cur, table_name: str, columns):
+    sql = f"CREATE OR REPLACE TEMP TABLE {table_name} ({','.join(columns)})"
+    cur.execute(sql)
+
+
+def insert_multiple_records(
+    cur,
+    table_name: str,
+    ts: str,
+    row_count: int,
+    should_bind: bool,
+):
+    sql = f"INSERT INTO {table_name} values (?)"
+    dates = [[ts] for _ in range(row_count)]
+    cur.executemany(sql, dates)
+    is_bind_sql_scoped = "SHOW stages like 'SNOWPARK_TEMP_STAGE_BIND'"
+    is_bind_sql_non_scoped = "SHOW stages like 'SYSTEMBIND'"
+    res1 = cur.execute(is_bind_sql_scoped).fetchall()
+    res2 = cur.execute(is_bind_sql_non_scoped).fetchall()
+    if should_bind:
+        assert len(res1) != 0 or len(res2) != 0
+    else:
+        assert len(res1) == 0 and len(res2) == 0
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "timestamp_type, timestamp_precision, timestamp, expected_style",
+    [
+        ("TIMESTAMPTZ", 6, "2023-03-15 13:17:29.207 +05:00", "%Y-%m-%d %H:%M:%S.%f %z"),
+        ("TIMESTAMP", 6, "2023-03-15 13:17:29.207", "%Y-%m-%d %H:%M:%S.%f"),
+        (
+            "TIMESTAMPLTZ",
+            6,
+            "2023-03-15 13:17:29.207 +05:00",
+            "%Y-%m-%d %H:%M:%S.%f %z",
+        ),
+        (
+            "TIMESTAMPTZ",
+            None,
+            "2023-03-15 13:17:29.207 +05:00",
+            "%Y-%m-%d %H:%M:%S.%f %z",
+        ),
+        ("TIMESTAMP", None, "2023-03-15 13:17:29.207", "%Y-%m-%d %H:%M:%S.%f"),
+        (
+            "TIMESTAMPLTZ",
+            None,
+            "2023-03-15 13:17:29.207 +05:00",
+            "%Y-%m-%d %H:%M:%S.%f %z",
+        ),
+        ("TIMESTAMPNTZ", 6, "2023-03-15 13:17:29.207", "%Y-%m-%d %H:%M:%S.%f"),
+        ("TIMESTAMPNTZ", None, "2023-03-15 13:17:29.207", "%Y-%m-%d %H:%M:%S.%f"),
+    ],
+)
+def test_timestamp_bindings(
+    conn_cnx, timestamp_type, timestamp_precision, timestamp, expected_style
+):
+    column_name = (
+        f"ts {timestamp_type}({timestamp_precision})"
+        if timestamp_precision is not None
+        else f"ts {timestamp_type}"
+    )
+    table_name = f"TEST_TIMESTAMP_BINDING_{random_string(10)}"
+    binding_threshold = 65280
+
+    with conn_cnx(paramstyle="qmark") as cnx:
+        with cnx.cursor() as cur:
+            create_or_replace_table(cur, table_name, [column_name])
+            insert_multiple_records(cur, table_name, timestamp, 2, False)
+            insert_multiple_records(
+                cur, table_name, timestamp, binding_threshold + 1, True
+            )
+            res = cur.execute(f"select ts from {table_name}").fetchall()
+            expected = datetime.strptime(timestamp, expected_style)
+            assert len(res) == 65283
+            for r in res:
+                if timestamp_type == "TIMESTAMP":
+                    assert r[0].replace(tzinfo=None) == expected.replace(tzinfo=None)
+                else:
+                    assert r[0] == expected
