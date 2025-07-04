@@ -1011,9 +1011,9 @@ def test_select_time(conn_cnx):
 
     table = "test_arrow_time_scales"
 
-    # Create columns for selected scales only
+    # Create columns for selected scales only (init function will add 's number' automatically)
     columns = ", ".join([f"a{i} time({i})" for i in scales])
-    column_def = f"(s number, {columns})"
+    column_def = f"({columns})"
 
     # Create values for selected scales - each case tests all scales simultaneously
     value_rows = []
