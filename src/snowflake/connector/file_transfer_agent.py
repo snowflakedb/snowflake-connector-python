@@ -1062,11 +1062,14 @@ class SnowflakeFileTransferAgent:
             for idx, file_name in enumerate(self._src_files):
                 if not file_name:
                     continue
-                first_path_sep = file_name.find("/")
                 dst_file_name = (
-                    file_name[first_path_sep + 1 :]
+                    self._strip_stage_prefix_from_dst_file_name_for_download(file_name)
+                )
+                first_path_sep = dst_file_name.find("/")
+                dst_file_name = (
+                    dst_file_name[first_path_sep + 1 :]
                     if first_path_sep >= 0
-                    else file_name
+                    else dst_file_name
                 )
                 url = None
                 if self._presigned_urls and idx < len(self._presigned_urls):
@@ -1201,3 +1204,12 @@ class SnowflakeFileTransferAgent:
                 else:
                     m.dst_file_name = m.name
                     m.dst_compression_type = None
+
+    def _strip_stage_prefix_from_dst_file_name_for_download(self, dst_file_name):
+        """Strips the stage prefix from dst_file_name for download.
+
+        Note that this is no-op in most cases, and therefore we return as is.
+        But for some workloads they will monkeypatch this method to add their
+        stripping logic.
+        """
+        return dst_file_name
