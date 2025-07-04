@@ -828,24 +828,28 @@ def test_get_multiple_files_with_same_name(tmp_path, conn_cnx, caplog):
 @pytest.mark.skipolddriver
 def test_put_md5(tmp_path, conn_cnx):
     """This test uploads a single and a multi part file and makes sure that md5 is populated."""
-    # Generate random files and folders
-    small_folder = tmp_path / "small"
-    big_folder = tmp_path / "big"
-    small_folder.mkdir()
-    big_folder.mkdir()
-    generate_k_lines_of_n_files(3, 1, tmp_dir=str(small_folder))
-    # This generate an about 342M file, we want the file big enough to trigger a multipart upload
-    generate_k_lines_of_n_files(3_000_000, 1, tmp_dir=str(big_folder))
-
-    small_test_file = small_folder / "file0"
-    big_test_file = big_folder / "file0"
+    # Create files directly without subfolders for efficiency
+    # Small file for single-part upload test
+    small_test_file = tmp_path / "small_file.txt"
+    small_test_file.write_text("test content\n")  # Minimal content
+    
+    # Big file for multi-part upload test - 200MB (well over 64MB threshold)
+    big_test_file = tmp_path / "big_file.txt"
+    chunk_size = 1024 * 1024  # 1MB chunks
+    chunk_data = "A" * chunk_size  # 1MB of 'A' characters
+    with open(big_test_file, "w") as f:
+        for _ in range(200):  # Write 200MB total
+            f.write(chunk_data)
 
     stage_name = random_string(5, "test_put_md5_")
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
+            
+            # Upload both files in sequence
             small_filename_in_put = str(small_test_file).replace("\\", "/")
             big_filename_in_put = str(big_test_file).replace("\\", "/")
+            
             cur.execute(
                 f"PUT 'file://{small_filename_in_put}' @{stage_name}/small AUTO_COMPRESS = FALSE"
             )
@@ -853,12 +857,11 @@ def test_put_md5(tmp_path, conn_cnx):
                 f"PUT 'file://{big_filename_in_put}' @{stage_name}/big AUTO_COMPRESS = FALSE"
             )
 
+            # Verify MD5 is populated for both files
+            file_list = cur.execute(f"LS @{stage_name}").fetchall()
             assert all(
-                map(
-                    lambda e: e[2] is not None,
-                    cur.execute(f"LS @{stage_name}").fetchall(),
-                )
-            )
+                file_info[2] is not None for file_info in file_list
+            ), "MD5 should be populated for all uploaded files"
 
 
 @pytest.mark.skipolddriver

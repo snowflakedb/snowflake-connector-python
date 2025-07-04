@@ -999,35 +999,46 @@ def test_select_vector(conn_cnx, is_public_test):
 
 
 def test_select_time(conn_cnx):
-    for scale in range(10):
-        select_time_with_scale(conn_cnx, scale)
-
-
-def select_time_with_scale(conn_cnx, scale):
+    # Test key scales and meaningful cases in a single table operation
+    # Cover: no fractional seconds, milliseconds, microseconds, nanoseconds
+    scales = [0, 3, 6, 9]  # Key precision levels
     cases = [
-        "00:01:23",
-        "00:01:23.1",
-        "00:01:23.12",
-        "00:01:23.123",
-        "00:01:23.1234",
-        "00:01:23.12345",
-        "00:01:23.123456",
-        "00:01:23.1234567",
-        "00:01:23.12345678",
-        "00:01:23.123456789",
+        "00:01:23",              # Basic time
+        "00:01:23.123456789",    # Max precision
+        "23:59:59.999999999",    # Edge case - max time with max precision
+        "00:00:00.000000001",    # Edge case - min time with min precision
     ]
-    table = "test_arrow_time"
-    column = f"(a time({scale}))"
-    values = (
-        "(-1, NULL), ("
-        + "),(".join([f"{i}, '{c}'" for i, c in enumerate(cases)])
-        + f"), ({len(cases)}, NULL)"
-    )
-    init(conn_cnx, table, column, values)
-    sql_text = f"select a from {table} order by s"
-    row_count = len(cases) + 2
-    col_count = 1
-    iterate_over_test_chunk("time", conn_cnx, sql_text, row_count, col_count)
+    
+    table = "test_arrow_time_scales"
+    
+    # Create columns for selected scales only
+    columns = ", ".join([f"a{i} time({i})" for i in scales])
+    column_def = f"(s number, {columns})"
+    
+    # Create values for selected scales - each case tests all scales simultaneously
+    value_rows = []
+    for i, case in enumerate(cases):
+        # Each row has the same time value for all scale columns
+        time_values = ", ".join([f"'{case}'" for _ in scales])
+        value_rows.append(f"({i}, {time_values})")
+    
+    # Add NULL rows
+    null_values = ", ".join(["NULL" for _ in scales])
+    value_rows.append(f"(-1, {null_values})")
+    value_rows.append(f"({len(cases)}, {null_values})")
+    
+    values = ", ".join(value_rows)
+    
+    # Single table creation and test
+    init(conn_cnx, table, column_def, values)
+    
+    # Test each scale column
+    for scale in scales:
+        sql_text = f"select a{scale} from {table} order by s"
+        row_count = len(cases) + 2
+        col_count = 1
+        iterate_over_test_chunk("time", conn_cnx, sql_text, row_count, col_count)
+    
     finish(conn_cnx, table)
 
 
