@@ -195,7 +195,7 @@ class Auth:
                 job_vars = ["CLOUD_RUN_JOB", "CLOUD_RUN_EXECUTION"]
                 return all(var in os.environ for var in job_vars)
 
-            def has_gcp_identity(timeout=2):
+            def has_gcp_identity(timeout=0.5):
                 try:
                     response = requests.get(
                         "http://metadata/computeMetadata/v1/instance/service-accounts/default/email",
