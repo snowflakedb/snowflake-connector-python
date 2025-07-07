@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -11,40 +13,32 @@ import jwt
 
 from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
 from snowflake.connector.vendored.requests.models import Response
-
-# NEW: import the light-weight creds class from the refactored util
-from snowflake.connector.wif_util import AwsCredentials
+from snowflake.connector.wif_util import AwsCredentials  # light-weight creds
 
 logger = logging.getLogger(__name__)
 
 
+# --------------------------------------------------------------------------- #
+# Helpers                                                                     #
+# --------------------------------------------------------------------------- #
 def gen_dummy_id_token(
-    sub="test-subject", iss="test-issuer", aud="snowflakecomputing.com"
+    sub: str = "test-subject",
+    iss: str = "test-issuer",
+    aud: str = "snowflakecomputing.com",
 ) -> str:
     """Generates a dummy ID token using the given subject and issuer."""
     now = int(time())
-    key = "secret"
-    payload = {
-        "sub": sub,
-        "iss": iss,
-        "aud": aud,
-        "iat": now,
-        "exp": now + 60 * 60,
-    }
+    payload = {"sub": sub, "iss": iss, "aud": aud, "iat": now, "exp": now + 3600}
     logger.debug(f"Generating dummy token with the following claims:\n{str(payload)}")
-    return jwt.encode(
-        payload=payload,
-        key=key,
-        algorithm="HS256",
-    )
+    return jwt.encode(payload, key="secret", algorithm="HS256")
 
 
 def build_response(content: bytes, status_code: int = 200) -> Response:
     """Builds a requests.Response object with the given status code and content."""
-    response = Response()
-    response.status_code = status_code
-    response._content = content
-    return response
+    resp = Response()
+    resp.status_code = status_code
+    resp._content = content
+    return resp
 
 
 # --------------------------------------------------------------------------- #
@@ -246,52 +240,52 @@ class FakeGceMetadataService(FakeMetadataService):
         return build_response(self.token.encode("utf-8"))
 
 
+# --------------------------------------------------------------------------- #
+# AWS environment fake                                                        #
+# --------------------------------------------------------------------------- #
 class FakeAwsEnvironment:
-    """Emulates the AWS environment-specific helpers now used in wif_util.py."""
+    """Emulates the AWS environment-specific helpers used in wif_util.py."""
 
-    def __init__(self):
-        self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-34afe100cad287fab"
+    def __init__(self) -> None:
         self.region = "us-east-1"
         self.credentials: AwsCredentials | None = AwsCredentials(
-            access_key="ak",
-            secret_key="sk",
-            token="SESSION_TOKEN",
+            access_key="ak", secret_key="sk", token="SESSION_TOKEN"
         )
 
-    # --------------------------------------------------------------------- #
-    # Helper getters (used as side-effects for patching)                    #
-    # --------------------------------------------------------------------- #
-    def get_region(self):
+    # ------------------------------------------------------------------ #
+    # Helper getters (swallow any extra args like session_manager)       #
+    # ------------------------------------------------------------------ #
+    def get_region(self, *_, **__) -> str | None:
         return self.region
 
-    def get_arn(self):
-        return self.arn
-
-    def get_credentials(self):
+    def get_credentials(self, *_, **__) -> AwsCredentials | None:
         return self.credentials
 
-    # --------------------------------------------------------------------- #
-    # Context-manager patching                                              #
-    # --------------------------------------------------------------------- #
+    # ------------------------------------------------------------------ #
+    # Context-manager patching                                           #
+    # ------------------------------------------------------------------ #
     def __enter__(self):
-        # Stash current env so we can restore later
+        # Save & override env vars
         self._prev_env = {
-            "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
-            "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
-            "AWS_SESSION_TOKEN": os.environ.get("AWS_SESSION_TOKEN"),
-            "AWS_REGION": os.environ.get("AWS_REGION"),
+            k: os.environ.get(k)
+            for k in (
+                "AWS_ACCESS_KEY_ID",
+                "AWS_SECRET_ACCESS_KEY",
+                "AWS_SESSION_TOKEN",
+                "AWS_REGION",
+            )
         }
-
-        # Expose creds & region via env vars (preferred path in new util)
         if self.credentials:
-            os.environ["AWS_ACCESS_KEY_ID"] = self.credentials.access_key
-            os.environ["AWS_SECRET_ACCESS_KEY"] = self.credentials.secret_key
-            if self.credentials.token:
-                os.environ["AWS_SESSION_TOKEN"] = self.credentials.token
+            os.environ.update(
+                {
+                    "AWS_ACCESS_KEY_ID": self.credentials.access_key,
+                    "AWS_SECRET_ACCESS_KEY": self.credentials.secret_key,
+                    "AWS_SESSION_TOKEN": (self.credentials.token or ""),
+                }
+            )
         os.environ["AWS_REGION"] = self.region
 
         self.patchers: list[mock._patch] = [
-            # Force util helpers to return our fake data
             mock.patch(
                 "snowflake.connector.wif_util.get_aws_credentials",
                 side_effect=self.get_credentials,
@@ -300,21 +294,12 @@ class FakeAwsEnvironment:
                 "snowflake.connector.wif_util.get_aws_region",
                 side_effect=self.get_region,
             ),
-            # _imds_v2_token() must not hit the network
-            (
-                mock.patch(
-                    "snowflake.connector.wif_util._imds_v2_token",
-                    return_value=None,
-                )
-                if hasattr(
-                    __import__(
-                        "snowflake.connector.wif_util", fromlist=["get_aws_arn"]
-                    ),
-                    "get_aws_arn",
-                )
-                else mock.patch.dict({}, {}, clear=True)
-            ),  # dummy, no-op patch
-            # Block any accidental real HTTP calls via urllib3
+            # Avoid real network for IMDS token
+            mock.patch(
+                "snowflake.connector.wif_util._imds_v2_token",
+                return_value=None,
+            ),
+            # Block stray HTTP traffic
             mock.patch(
                 "urllib3.connection.HTTPConnection.request",
                 side_effect=ConnectTimeout(),
@@ -328,8 +313,7 @@ class FakeAwsEnvironment:
     def __exit__(self, *args):
         for p in self.patchers:
             p.__exit__(*args)
-
-        # Restore previous env-vars
+        # Restore original env vars
         for key, val in self._prev_env.items():
             if val is None:
                 os.environ.pop(key, None)
