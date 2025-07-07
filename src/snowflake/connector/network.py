@@ -12,7 +12,7 @@ import time
 import uuid
 from collections import OrderedDict
 from threading import Lock
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import OpenSSL.SSL
 
@@ -335,8 +335,13 @@ class PATWithExternalSessionAuth(AuthBase):
 
 
 class SessionManager:
-    def __init__(self, use_pooling: bool = True):
+    def __init__(
+        self,
+        use_pooling: bool = True,
+        adapter_factory: Callable[..., HTTPAdapter] | None = None,
+    ):
         self._use_pooling = use_pooling
+        self._adapter_factory = adapter_factory or ProxySupportAdapter
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
         )
@@ -347,8 +352,9 @@ class SessionManager:
 
     def make_session(self) -> Session:
         s = requests.Session()
-        s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
+        adapter = self._adapter_factory(max_retries=REQUESTS_RETRY)
+        s.mount("http://", adapter)
+        s.mount("https://", adapter)
         s._reuse_count = itertools.count()
         return s
 
@@ -436,6 +442,7 @@ class SnowflakeRestful:
         protocol: str = "http",
         inject_client_pause: int = 0,
         connection: SnowflakeConnection | None = None,
+        adapter_factory: Callable[[], HTTPAdapter] | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -445,6 +452,7 @@ class SnowflakeRestful:
         self._lock_token = Lock()
         self._session_manager = SessionManager(
             use_pooling=not self._connection.disable_request_pooling,
+            adapter_factory=adapter_factory,
         )
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
