@@ -27,7 +27,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP, SnowflakeOCSPAsn1CryptoSync):
                 "Please open an issue on the Snowflake Python Connector GitHub repository "
                 "and provide your execution environment"
                 " details: https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose."
-                "As a workaround, you can create the connection with `insecure_mode=True` to skip OCSP Validation."
+                "As a workaround, you can create the connection with `disable_ocsp_checks=True` to skip OCSP Validation."
             )
 
         cert_map = OrderedDict()

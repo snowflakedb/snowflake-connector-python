@@ -11,6 +11,7 @@ import os
 import pathlib
 import sys
 import uuid
+import warnings
 from contextlib import suppress
 from io import StringIO
 from logging import getLogger
@@ -495,6 +496,26 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 connection_init_kwargs["application"] = os.environ[ENV_VAR_PARTNER]
             elif "streamlit" in sys.modules:
                 connection_init_kwargs["application"] = "streamlit"
+
+        if "insecure_mode" in connection_init_kwargs:
+            warn_message = "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
+            warnings.warn(
+                warn_message,
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+            if (
+                "disable_ocsp_checks" in connection_init_kwargs
+                and connection_init_kwargs["disable_ocsp_checks"]
+                != connection_init_kwargs["insecure_mode"]
+            ):
+                logger.warning(
+                    "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                    "Using the value of 'disable_ocsp_checks."
+                )
+            else:
+                self._disable_ocsp_checks = connection_init_kwargs["insecure_mode"]
 
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None

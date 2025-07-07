@@ -53,12 +53,10 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             and protocol is not None
             and not getattr(protocol, "_snowflake_ocsp_validated", False)
         ):
-            if self._snowflake_ocsp_mode == OCSPMode.INSECURE:
-                log.info(
-                    "THIS CONNECTION IS IN INSECURE "
-                    "MODE. IT MEANS THE CERTIFICATE WILL BE "
-                    "VALIDATED BUT THE CERTIFICATE REVOCATION "
-                    "STATUS WILL NOT BE CHECKED."
+            if self._snowflake_ocsp_mode == OCSPMode.DISABLE_OCSP_CHECKS:
+                log.debug(
+                    "This connection does not perform OCSP checks. "
+                    "Revocation status of the certificate will not be checked against OCSP Responder."
                 )
             else:
                 await self.validate_ocsp(req.url.host, protocol)
