@@ -38,12 +38,18 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP, SnowflakeOCSPAsn1CryptoSync):
         # https://docs.python.org/pl/3.13/library/ssl.html#ssl.SSLSocket.get_unverified_chain
         unverified_chain = ssl_object._sslobj.get_unverified_chain()
         logger.debug("# of certificates: %s", len(unverified_chain))
-
+        self._lazy_read_ca_bundle()
         for cert in unverified_chain:
             cert = Certificate.load(ssl.PEM_cert_to_DER_cert(cert.public_bytes()))
             logger.debug(
                 "subject: %s, issuer: %s", cert.subject.native, cert.issuer.native
             )
             cert_map[cert.subject.sha256] = cert
+            if cert.issuer.sha256 in SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
+                logger.debug(
+                    "A trusted root certificate found: %s, stopping chain traversal here",
+                    cert.subject.native,
+                )
+                break
 
         return self.create_pair_issuer_subject(cert_map)
