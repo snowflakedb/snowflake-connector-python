@@ -74,10 +74,13 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         ).value
         body["data"]["TOKEN"] = self.attestation.credential
 
-    def prepare(self, **kwargs: typing.Any) -> None:
+    def prepare(self, *, conn, **kwargs: typing.Any) -> None:
         """Fetch the token."""
         self.attestation = create_attestation(
-            self.provider, self.entra_resource, self.token
+            self.provider,
+            self.entra_resource,
+            self.token,
+            session_manager=conn.session_manager if conn else None,
         )
 
     def reauthenticate(self, **kwargs: typing.Any) -> dict[str, bool]:
