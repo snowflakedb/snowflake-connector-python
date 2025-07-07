@@ -783,6 +783,19 @@ async def test_privatelink_ocsp_url_concurrent_snowsql():
             raise AssertionError()
 
 
+@pytest.mark.skipolddriver
+async def test_uppercase_privatelink_ocsp_url_creation():
+    account = "TESTACCOUNT.US-EAST-1.PRIVATELINK"
+    hostname = account + ".snowflakecomputing.com"
+
+    await SnowflakeConnection.setup_ocsp_privatelink(CLIENT_NAME, hostname)
+    ocsp_cache_server = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL", None)
+    assert (
+        ocsp_cache_server
+        == "http://ocsp.testaccount.us-east-1.privatelink.snowflakecomputing.com/ocsp_response_cache.json"
+    )
+
+
 class ExecPrivatelinkAsyncTask:
     def __init__(self, bucket, hostname, expectation, client_name):
         self.bucket = bucket
