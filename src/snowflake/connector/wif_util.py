@@ -1,17 +1,17 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import os
 from base64 import b64encode
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum, unique
+from urllib.parse import urlparse
 
-import boto3
 import jwt
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-from botocore.utils import InstanceMetadataRegionFetcher
 
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
@@ -62,6 +62,15 @@ class WorkloadIdentityAttestation:
     user_identifier_components: dict
 
 
+@dataclass
+class AwsCredentials:
+    """AWS credentials container."""
+
+    access_key: str
+    secret_key: str
+    token: str | None = None
+
+
 def try_metadata_service_call(
     method: str, url: str, headers: dict, timeout_sec: int = 3
 ) -> Response | None:
@@ -105,84 +114,202 @@ def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[st
     return claims["iss"], claims["sub"]
 
 
-def get_aws_region() -> str | None:
-    """Get the current AWS workload's region, if any."""
-    if "AWS_REGION" in os.environ:  # Lambda
-        return os.environ["AWS_REGION"]
-    else:  # EC2
-        return InstanceMetadataRegionFetcher().retrieve_region()
+def get_aws_credentials() -> AwsCredentials | None:
+    """Get AWS credentials from environment variables or instance metadata.
 
-
-def get_aws_arn() -> str | None:
-    """Get the current AWS workload's ARN, if any."""
-    caller_identity = boto3.client("sts").get_caller_identity()
-    if not caller_identity or "Arn" not in caller_identity:
-        return None
-    return caller_identity["Arn"]
-
-
-def get_aws_partition(arn: str) -> str | None:
-    """Get the current AWS partition from ARN, if any.
-
-    Args:
-        arn (str): The Amazon Resource Name (ARN) string.
-
-    Returns:
-        str | None: The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov')
-                    if found, otherwise None.
-
-    Reference: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html.
+    Implements the AWS credential chain without using boto3.
     """
-    if not arn or not isinstance(arn, str):
-        return None
-    parts = arn.split(":")
-    if len(parts) > 1 and parts[0] == "arn" and parts[1]:
-        return parts[1]
-    logger.warning("Invalid AWS ARN: %s", arn)
+    # Try environment variables first
+    access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    session_token = os.environ.get("AWS_SESSION_TOKEN")
+
+    if access_key and secret_key:
+        return AwsCredentials(access_key, secret_key, session_token)
+
+    # Try instance metadata service (IMDSv2)
+    try:
+        # First, get a token for IMDSv2
+        token_res = try_metadata_service_call(
+            method="PUT",
+            url="http://169.254.169.254/latest/api/token",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "300"},
+        )
+
+        if token_res is None:
+            logger.debug("Failed to get IMDSv2 token from metadata service.")
+            return None
+
+        token = token_res.text.strip()
+
+        # Get the security credentials from the metadata service
+        res = try_metadata_service_call(
+            method="GET",
+            url="http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+            headers={"X-aws-ec2-metadata-token": token},
+        )
+        if res is None:
+            logger.debug("Failed to get IAM role list from metadata service.")
+            return None
+
+        role_name = res.text.strip()
+        if not role_name:
+            logger.debug("No IAM role found in metadata service.")
+            return None
+
+        # Get credentials for the role
+        res = try_metadata_service_call(
+            method="GET",
+            url=f"http://169.254.169.254/latest/meta-data/iam/security-credentials/{role_name}",
+            headers={"X-aws-ec2-metadata-token": token},
+        )
+        if res is None:
+            logger.debug("Failed to get IAM role credentials from metadata service.")
+            return None
+
+        creds_data = res.json()
+        access_key = creds_data.get("AccessKeyId")
+        secret_key = creds_data.get("SecretAccessKey")
+        token = creds_data.get("Token")
+
+        if access_key and secret_key:
+            return AwsCredentials(access_key, secret_key, token)
+
+    except Exception as e:
+        logger.debug(f"Error getting AWS credentials from metadata service: {e}")
+
     return None
 
 
-def get_aws_sts_hostname(region: str, partition: str) -> str | None:
-    """Constructs the AWS STS hostname for a given region and partition.
+def get_aws_region() -> str | None:
+    """Get the current AWS workload's region, if any."""
+    # Try environment variable first
+    region = os.environ.get("AWS_REGION")
+    if region:
+        return region
+
+    # Try instance metadata service (IMDSv2)
+    try:
+        # First, get a token for IMDSv2
+        token_res = try_metadata_service_call(
+            method="PUT",
+            url="http://169.254.169.254/latest/api/token",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "300"},
+        )
+
+        if token_res is None:
+            logger.debug("Failed to get IMDSv2 token from metadata service.")
+            return None
+
+        token = token_res.text.strip()
+
+        # Get region from metadata service
+        res = try_metadata_service_call(
+            method="GET",
+            url="http://169.254.169.254/latest/meta-data/placement/region",
+            headers={"X-aws-ec2-metadata-token": token},
+        )
+        if res is not None:
+            return res.text.strip()
+    except Exception as e:
+        logger.debug(f"Error getting AWS region from metadata service: {e}")
+
+    return None
+
+
+def get_aws_sts_hostname(region: str) -> str:
+    """Constructs the AWS STS hostname for a given region.
 
     Args:
         region (str): The AWS region (e.g., 'us-east-1', 'cn-north-1').
-        partition (str): The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov').
 
     Returns:
-        str | None: The AWS STS hostname (e.g., 'sts.us-east-1.amazonaws.com')
-                    if a valid hostname can be constructed, otherwise None.
+        str: The AWS STS hostname (e.g., 'sts.us-east-1.amazonaws.com')
 
     References:
     - https://docs.aws.amazon.com/sdkref/latest/guide/feature-sts-regionalized-endpoints.html
     - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
     - https://docs.aws.amazon.com/general/latest/gr/sts.html
     """
-    if (
-        not region
-        or not partition
-        or not isinstance(region, str)
-        or not isinstance(partition, str)
-    ):
-        return None
-
-    if partition == "aws":
-        # For the 'aws' partition, STS endpoints are generally regional
-        # except for the global endpoint (sts.amazonaws.com) which is
-        # generally resolved to us-east-1 under the hood by the SDKs
-        # when a region is not explicitly specified.
-        # However, for explicit regional endpoints, the format is sts.<region>.amazonaws.com
-        return f"sts.{region}.amazonaws.com"
-    elif partition == "aws-cn":
+    if region.startswith("cn-"):
         # China regions have a different domain suffix
         return f"sts.{region}.amazonaws.com.cn"
-    elif partition == "aws-us-gov":
-        return (
-            f"sts.{region}.amazonaws.com"  # GovCloud uses .com, but dedicated regions
-        )
     else:
-        logger.warning("Invalid AWS partition: %s", partition)
-        return None
+        # Standard AWS regions
+        return f"sts.{region}.amazonaws.com"
+
+
+def aws_signature_v4_sign(
+    credentials: AwsCredentials,
+    method: str,
+    url: str,
+    region: str,
+    service: str,
+    headers: dict,
+    payload: str = "",
+) -> dict:
+    """Sign an AWS request using Signature Version 4.
+
+    Based on the C# implementation in AwsSignature4Signer.cs.
+    """
+    # Parse the URL
+    parsed_url = urlparse(url)
+
+    # Create timestamp
+    utc_now = datetime.now(timezone.utc)
+    amz_date = utc_now.strftime("%Y%m%dT%H%M%SZ")
+    date_string = utc_now.strftime("%Y%m%d")
+
+    # Add required headers
+    headers = headers.copy()
+    headers["x-amz-date"] = amz_date
+    if credentials.token:
+        headers["x-amz-security-token"] = credentials.token
+
+    # Create canonical request
+    canonical_uri = parsed_url.path or "/"
+    canonical_querystring = parsed_url.query or ""
+
+    # Sort headers and create canonical headers
+    sorted_headers = sorted(headers.items(), key=lambda x: x[0].lower())
+    canonical_headers = ""
+    signed_headers = ""
+
+    for key, value in sorted_headers:
+        canonical_headers += f"{key.lower()}:{str(value).strip()}\n"
+        if signed_headers:
+            signed_headers += ";"
+        signed_headers += key.lower()
+
+    # Create payload hash
+    payload_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    # Create canonical request
+    canonical_request = f"{method}\n{canonical_uri}\n{canonical_querystring}\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
+
+    # Create string to sign
+    algorithm = "AWS4-HMAC-SHA256"
+    credential_scope = f"{date_string}/{region}/{service}/aws4_request"
+    string_to_sign = f"{algorithm}\n{amz_date}\n{credential_scope}\n{hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()}"
+
+    # Calculate signature
+    def hmac_sha256(key: bytes, msg: str) -> bytes:
+        return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
+
+    k_date = hmac_sha256(f"AWS4{credentials.secret_key}".encode(), date_string)
+    k_region = hmac_sha256(k_date, region)
+    k_service = hmac_sha256(k_region, service)
+    k_signing = hmac_sha256(k_service, "aws4_request")
+
+    signature = hmac.new(
+        k_signing, string_to_sign.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+
+    # Create authorization header
+    authorization = f"{algorithm} Credential={credentials.access_key}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}"
+    headers["authorization"] = authorization
+
+    return headers
 
 
 def create_aws_attestation() -> WorkloadIdentityAttestation | None:
@@ -190,43 +317,51 @@ def create_aws_attestation() -> WorkloadIdentityAttestation | None:
 
     If the application isn't running on AWS or no credentials were found, returns None.
     """
-    aws_creds = boto3.session.Session().get_credentials()
-    if not aws_creds:
+    credentials = get_aws_credentials()
+    if not credentials:
         logger.debug("No AWS credentials were found.")
         return None
+
     region = get_aws_region()
     if not region:
         logger.debug("No AWS region was found.")
         return None
-    arn = get_aws_arn()
-    if not arn:
-        logger.debug("No AWS caller identity was found.")
-        return None
-    partition = get_aws_partition(arn)
-    if not partition:
-        logger.debug("No AWS partition was found.")
-        return None
 
-    sts_hostname = get_aws_sts_hostname(region, partition)
-    request = AWSRequest(
+    # Create the GetCallerIdentity request
+    sts_hostname = get_aws_sts_hostname(region)
+    url = f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15"
+
+    headers = {
+        "Host": sts_hostname,
+        "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
+    }
+
+    # Sign the request
+    signed_headers = aws_signature_v4_sign(
+        credentials=credentials,
         method="POST",
-        url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
-        headers={
-            "Host": sts_hostname,
-            "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
-        },
+        url=url,
+        region=region,
+        service="sts",
+        headers=headers,
     )
 
-    SigV4Auth(aws_creds, "sts", region).add_auth(request)
-
-    assertion_dict = {
-        "url": request.url,
-        "method": request.method,
-        "headers": dict(request.headers.items()),
+    # Create attestation request
+    attestation_request = {
+        "method": "POST",
+        "url": url,
+        "headers": signed_headers,
     }
-    credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
+
+    # Encode to base64
+    credential = b64encode(json.dumps(attestation_request).encode("utf-8")).decode(
+        "utf-8"
+    )
+
     return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"arn": arn}
+        AttestationProvider.AWS,
+        credential,
+        {},  # No user identifier components needed - Snowflake will extract from the signed request
     )
 
 
@@ -356,11 +491,11 @@ def create_autodetect_attestation(
     if attestation:
         return attestation
 
-    attestation = create_aws_attestation()
+    attestation = create_azure_attestation(entra_resource)
     if attestation:
         return attestation
 
-    attestation = create_azure_attestation(entra_resource)
+    attestation = create_aws_attestation()
     if attestation:
         return attestation
 
@@ -385,7 +520,7 @@ def create_attestation(
     """
     entra_resource = entra_resource or DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
 
-    attestation: WorkloadIdentityAttestation = None
+    attestation: WorkloadIdentityAttestation | None = None
     if provider == AttestationProvider.AWS:
         attestation = create_aws_attestation()
     elif provider == AttestationProvider.AZURE:
