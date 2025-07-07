@@ -100,8 +100,8 @@ def worker_specific_cache_dir(tmpdir):
 
     # Also handle the OCSP_RESPONSE_VALIDATION_CACHE to prevent conflicts
     try:
-        from snowflake.connector.cache import SFDictFileCache
         import snowflake.connector.ocsp_snowflake as ocsp_module
+        from snowflake.connector.cache import SFDictFileCache
 
         # Create worker-specific validation cache file
         validation_cache_file = tmpdir.join(f"ocsp_validation_cache_{worker_id}.json")
