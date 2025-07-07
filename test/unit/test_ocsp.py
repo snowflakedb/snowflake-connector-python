@@ -77,6 +77,64 @@ TARGET_HOSTS = [
 THIS_DIR = path.dirname(path.realpath(__file__))
 
 
+@pytest.fixture(autouse=True)
+def worker_specific_cache_dir(tmpdir):
+    """Create worker-specific cache directory to avoid file lock conflicts in parallel execution."""
+    import tempfile
+    
+    # Get worker ID for parallel execution (pytest-xdist)
+    worker_id = os.environ.get('PYTEST_XDIST_WORKER', 'master')
+    
+    # Create unique cache directory for this worker
+    unique_cache_dir = tmpdir.join(f"ocsp_cache_{worker_id}")
+    unique_cache_dir.mkdir()
+    
+    # Set environment variable to use worker-specific cache directory
+    original_cache_dir = os.environ.get("SF_OCSP_RESPONSE_CACHE_DIR")
+    os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = str(unique_cache_dir)
+    
+    # Reset cache to use new directory
+    from snowflake.connector.ocsp_snowflake import OCSPCache
+    OCSPCache.reset_cache_dir()
+    
+    # Also handle the OCSP_RESPONSE_VALIDATION_CACHE to prevent conflicts
+    try:
+        from snowflake.connector.cache import SFDictFileCache
+        import snowflake.connector.ocsp_snowflake as ocsp_module
+        
+        # Create worker-specific validation cache file
+        validation_cache_file = tmpdir.join(f"ocsp_validation_cache_{worker_id}.json")
+        
+        # Create new cache instance for this worker
+        worker_validation_cache = SFDictFileCache(
+            file_path=str(validation_cache_file),
+            entry_lifetime=3600
+        )
+        
+        # Store original cache to restore later
+        original_validation_cache = getattr(ocsp_module, 'OCSP_RESPONSE_VALIDATION_CACHE', None)
+        
+        # Replace with worker-specific cache
+        ocsp_module.OCSP_RESPONSE_VALIDATION_CACHE = worker_validation_cache
+        
+        yield str(unique_cache_dir)
+        
+        # Restore original validation cache
+        if original_validation_cache is not None:
+            ocsp_module.OCSP_RESPONSE_VALIDATION_CACHE = original_validation_cache
+            
+    except ImportError:
+        # If modules not available, just yield the directory
+        yield str(unique_cache_dir)
+    
+    # Cleanup: restore original cache directory
+    if original_cache_dir is not None:
+        os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = original_cache_dir
+    else:
+        os.environ.pop("SF_OCSP_RESPONSE_CACHE_DIR", None)
+    OCSPCache.reset_cache_dir()
+
+
 def create_x509_cert(hash_algorithm):
     # Generate a private key
     private_key = rsa.generate_private_key(
