@@ -334,19 +334,59 @@ class PATWithExternalSessionAuth(AuthBase):
         return r
 
 
+class SessionManager:
+    def __init__(self, use_pooling: bool = True):
+        self._use_pooling = use_pooling
+        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
+            lambda: SessionPool(self)
+        )
+
+    @property
+    def sessions_map(self) -> dict[str, SessionPool]:
+        return self._sessions_map
+
+    def make_session(self) -> Session:
+        s = requests.Session()
+        s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
+        s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
+        s._reuse_count = itertools.count()
+        return s
+
+    @contextlib.contextmanager
+    def use_session(self, url: str | None = None):
+        if not self._use_pooling:
+            session = self.make_session()
+            try:
+                yield session
+            finally:
+                session.close()
+        else:
+            hostname = urlparse(url).hostname if url else None
+            pool = self._sessions_map[hostname]
+            session = pool.get_session()
+            try:
+                yield session
+            finally:
+                pool.return_session(session)
+
+    def close(self):
+        for pool in self._sessions_map.values():
+            pool.close()
+
+
 class SessionPool:
-    def __init__(self, rest: SnowflakeRestful) -> None:
+    def __init__(self, manager: SessionManager) -> None:
         # A stack of the idle sessions
-        self._idle_sessions: list[Session] = []
-        self._active_sessions: set[Session] = set()
-        self._rest: SnowflakeRestful = rest
+        self._idle_sessions = []
+        self._active_sessions = set()
+        self._manager = manager
 
     def get_session(self) -> Session:
         """Returns a session from the session pool or creates a new one."""
         try:
             session = self._idle_sessions.pop()
         except IndexError:
-            session = self._rest.make_requests_session()
+            session = self._manager.make_session()
         self._active_sessions.add(session)
         return session
 
@@ -368,11 +408,11 @@ class SessionPool:
         """Closes all active and idle sessions in this session pool."""
         if self._active_sessions:
             logger.debug(f"Closing {len(self._active_sessions)} active sessions")
-        for s in itertools.chain(self._active_sessions, self._idle_sessions):
+        for session in itertools.chain(self._active_sessions, self._idle_sessions):
             try:
-                s.close()
+                session.close()
             except Exception as e:
-                logger.info(f"Session cleanup failed: {e}")
+                logger.info(f"Session cleanup failed - failed to close session: {e}")
         self._active_sessions.clear()
         self._idle_sessions.clear()
 
@@ -403,8 +443,8 @@ class SnowflakeRestful:
         self._inject_client_pause = inject_client_pause
         self._connection = connection
         self._lock_token = Lock()
-        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
-            lambda: SessionPool(self)
+        self._session_manager = SessionManager(
+            use_pooling=not self._connection.disable_request_pooling,
         )
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
@@ -470,6 +510,14 @@ class SnowflakeRestful:
     def server_url(self) -> str:
         return f"{self._protocol}://{self._host}:{self._port}"
 
+    @property
+    def session_manager(self) -> SessionManager:
+        return self._session_manager
+
+    @property
+    def sessions_map(self) -> dict[str, SessionPool]:
+        return self.session_manager.sessions_map
+
     def close(self) -> None:
         if hasattr(self, "_token"):
             del self._token
@@ -480,8 +528,7 @@ class SnowflakeRestful:
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
 
-        for session_pool in self._sessions_map.values():
-            session_pool.close()
+        self._session_manager.close()
 
     def request(
         self,
@@ -1258,40 +1305,5 @@ class SnowflakeRestful:
         except Exception as err:
             raise err
 
-    def make_requests_session(self) -> Session:
-        s = requests.Session()
-        s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        s._reuse_count = itertools.count()
-        return s
-
-    @contextlib.contextmanager
-    def _use_requests_session(self, url: str | None = None):
-        """Session caching context manager.
-
-        Notes:
-            The session is not closed until close() is called so each session may be used multiple times.
-        """
-        # short-lived session, not added to the _sessions_map
-        if self._connection.disable_request_pooling:
-            session = self.make_requests_session()
-            try:
-                yield session
-            finally:
-                session.close()
-        else:
-            try:
-                hostname = urlparse(url).hostname
-            except Exception:
-                hostname = None
-
-            session_pool: SessionPool = self._sessions_map[hostname]
-            session = session_pool.get_session()
-            logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
-            try:
-                yield session
-            finally:
-                session_pool.return_session(session)
-                logger.debug(
-                    f"Session status for SessionPool '{hostname}', {session_pool}"
-                )
+    def _use_requests_session(self, url=None):
+        return self._session_manager.use_session(url)
