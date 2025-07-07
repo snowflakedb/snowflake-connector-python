@@ -32,4 +32,4 @@ jobs:
 
       - name: Run pytest with input arguments
         run: |
-          pytest -vvv -k "ocsp_mode" .
+          pytest -vvv .
