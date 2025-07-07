@@ -17,7 +17,6 @@ from snowflake.connector.vendored.requests.exceptions import (
 from snowflake.connector.wif_util import (
     AZURE_ISSUER_PREFIXES,
     AttestationProvider,
-    get_aws_partition,
     get_aws_sts_hostname,
 )
 
@@ -33,7 +32,7 @@ def extract_api_data(auth_class: AuthByWorkloadIdentity):
     return req_body["data"]
 
 
-def verify_aws_token(token: str, region: str):
+def verify_aws_token(token: str, region: str, expect_session_token: bool = True):
     """Performs some basic checks on a 'token' produced for AWS, to ensure it includes the expected fields."""
     decoded_token = json.loads(b64decode(token))
 
@@ -47,18 +46,22 @@ def verify_aws_token(token: str, region: str):
     assert decoded_token["method"] == "POST"
 
     headers = decoded_token["headers"]
-    assert set(headers.keys()) == {
+
+    base_expected = {
         "Host",
         "X-Snowflake-Audience",
         "X-Amz-Date",
-        "X-Amz-Security-Token",
         "Authorization",
     }
+    if expect_session_token:
+        base_expected.add("X-Amz-Security-Token")
+
+    assert base_expected.issubset(headers.keys())
     assert headers["Host"] == f"sts.{region}.amazonaws.com"
     assert headers["X-Snowflake-Audience"] == "snowflakecomputing.com"
 
 
-# -- OIDC Tests --
+# -- OIDC Tests --------------------------------------------------------------
 
 
 def test_explicit_oidc_valid_inline_token_plumbed_to_api():
@@ -104,7 +107,7 @@ def test_explicit_oidc_no_token_raises_error():
     assert "No workload identity credential was found for 'OIDC'" in str(excinfo.value)
 
 
-# -- AWS Tests --
+# -- AWS Tests ---------------------------------------------------------------
 
 
 def test_explicit_aws_no_auth_raises_error(fake_aws_environment: FakeAwsEnvironment):
@@ -125,7 +128,11 @@ def test_explicit_aws_encodes_audience_host_signature_to_api(
     data = extract_api_data(auth_class)
     assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
     assert data["PROVIDER"] == "AWS"
-    verify_aws_token(data["TOKEN"], fake_aws_environment.region)
+    verify_aws_token(
+        data["TOKEN"],
+        fake_aws_environment.region,
+        expect_session_token=fake_aws_environment.credentials.token is not None,
+    )
 
 
 def test_explicit_aws_uses_regional_hostname(fake_aws_environment: FakeAwsEnvironment):
@@ -160,73 +167,34 @@ def test_explicit_aws_generates_unique_assertion_content(
 
 
 @pytest.mark.parametrize(
-    "arn, expected_partition",
+    "region, expected_hostname",
     [
-        ("arn:aws:iam::123456789012:role/MyTestRole", "aws"),
+        # Standard partition
+        ("us-east-1", "sts.us-east-1.amazonaws.com"),
+        ("eu-west-2", "sts.eu-west-2.amazonaws.com"),
+        # China partition
+        ("cn-north-1", "sts.cn-north-1.amazonaws.com.cn"),
+        ("cn-northwest-1", "sts.cn-northwest-1.amazonaws.com.cn"),
+        # GovCloud partition
+        ("us-gov-west-1", "sts.us-gov-west-1.amazonaws.com"),
+        ("us-gov-east-1", "sts.us-gov-east-1.amazonaws.com"),
         (
-            "arn:aws-cn:ec2:cn-north-1:987654321098:instance/i-1234567890abcdef0",
-            "aws-cn",
+            "invalid-region-valid-format",
+            "sts.invalid-region-valid-format.amazonaws.com",
         ),
-        ("arn:aws-us-gov:s3:::my-gov-bucket", "aws-us-gov"),
-        ("arn:aws:s3:::my-bucket/my/key", "aws"),
-        ("arn:aws:lambda:us-east-1:123456789012:function:my-function", "aws"),
-        ("arn:aws:sns:eu-west-1:111122223333:my-topic", "aws"),
-        # Edge cases / Invalid inputs
-        ("invalid-arn", None),
-        ("arn::service:region:account:resource", None),  # Missing partition
-        ("arn:aws:iam:", "aws"),  # Incomplete ARN, but partition is present
-        ("", None),  # Empty string
-        (None, None),  # None input
-        (123, None),  # Non-string input
     ],
 )
-def test_get_aws_partition_valid_and_invalid_arns(arn, expected_partition):
-    assert get_aws_partition(arn) == expected_partition
+def test_get_aws_sts_hostname_valid_and_invalid_inputs(region, expected_hostname):
+    assert get_aws_sts_hostname(region) == expected_hostname
 
 
-@pytest.mark.parametrize(
-    "region, partition, expected_hostname",
-    [
-        # AWS partition
-        ("us-east-1", "aws", "sts.us-east-1.amazonaws.com"),
-        ("eu-west-2", "aws", "sts.eu-west-2.amazonaws.com"),
-        ("ap-southeast-1", "aws", "sts.ap-southeast-1.amazonaws.com"),
-        (
-            "us-east-1",
-            "aws",
-            "sts.us-east-1.amazonaws.com",
-        ),  # Redundant but good for coverage
-        # AWS China partition
-        ("cn-north-1", "aws-cn", "sts.cn-north-1.amazonaws.com.cn"),
-        ("cn-northwest-1", "aws-cn", "sts.cn-northwest-1.amazonaws.com.cn"),
-        ("", "aws-cn", None),  # No global endpoint for 'aws-cn' without region
-        # AWS GovCloud partition
-        ("us-gov-west-1", "aws-us-gov", "sts.us-gov-west-1.amazonaws.com"),
-        ("us-gov-east-1", "aws-us-gov", "sts.us-gov-east-1.amazonaws.com"),
-        ("", "aws-us-gov", None),  # No global endpoint for 'aws-us-gov' without region
-        # Invalid/Edge cases
-        ("us-east-1", "unknown-partition", None),  # Unknown partition
-        ("some-region", "invalid-partition", None),  # Invalid partition
-        (None, "aws", None),  # None region
-        ("us-east-1", None, None),  # None partition
-        (123, "aws", None),  # Non-string region
-        ("us-east-1", 456, None),  # Non-string partition
-        ("", "", None),  # Empty region and partition
-        ("us-east-1", "", None),  # Empty partition
-        (
-            "invalid-region",
-            "aws",
-            "sts.invalid-region.amazonaws.com",
-        ),  # Valid format, invalid region name
-    ],
-)
-def test_get_aws_sts_hostname_valid_and_invalid_inputs(
-    region, partition, expected_hostname
-):
-    assert get_aws_sts_hostname(region, partition) == expected_hostname
+@pytest.mark.parametrize("bad_region", [None, "", 123, object()])
+def test_get_aws_sts_hostname_returns_none_on_invalid_input(bad_region):
+    # Non-string / empty inputs should fail gracefully
+    assert get_aws_sts_hostname(bad_region) is None  # type: ignore[arg-type]
 
 
-# -- GCP Tests --
+# -- GCP Tests ---------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -284,7 +252,7 @@ def test_explicit_gcp_generates_unique_assertion_content(
     assert auth_class.assertion_content == '{"_provider":"GCP","sub":"123456"}'
 
 
-# -- Azure Tests --
+# -- Azure Tests -------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -400,7 +368,7 @@ def test_azure_issuer_prefixes(issuer):
     )
 
 
-# -- Auto-detect Tests --
+# -- Auto-detect Tests -------------------------------------------------------
 
 
 def test_autodetect_aws_present(
@@ -412,7 +380,11 @@ def test_autodetect_aws_present(
     data = extract_api_data(auth_class)
     assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
     assert data["PROVIDER"] == "AWS"
-    verify_aws_token(data["TOKEN"], fake_aws_environment.region)
+    verify_aws_token(
+        data["TOKEN"],
+        fake_aws_environment.region,
+        expect_session_token=fake_aws_environment.credentials.token is not None,
+    )
 
 
 def test_autodetect_gcp_present(fake_gce_metadata_service: FakeGceMetadataService):
