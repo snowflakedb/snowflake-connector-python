@@ -80,7 +80,7 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 @pytest.fixture(autouse=True)
 def worker_specific_cache_dir(tmpdir, request):
     """Create worker-specific cache directory to avoid file lock conflicts in parallel execution.
-    
+
     Note: Tests that explicitly manage their own cache directories (like test_ocsp_cache_when_server_is_down)
     should work normally - this fixture only provides isolation for the validation cache.
     """
@@ -461,25 +461,29 @@ def test_ocsp_cache_when_server_is_down(tmpdir):
     """Test that OCSP validation handles server failures gracefully."""
     # Create a completely isolated cache for this test
     from snowflake.connector.cache import SFDictFileCache
+
     isolated_cache = SFDictFileCache(
         entry_lifetime=3600,
         file_path=str(tmpdir.join("isolated_ocsp_cache.json")),
     )
-    
+
     with mock.patch(
         "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
         isolated_cache,
     ):
         # Ensure cache starts empty
         isolated_cache.clear()
-        
+
         # Simulate server being down when trying to validate certificates
         with mock.patch(
             "snowflake.connector.ocsp_snowflake.SnowflakeOCSP._fetch_ocsp_response",
             side_effect=BrokenPipeError("fake error"),
         ), mock.patch(
             "snowflake.connector.ocsp_snowflake.SnowflakeOCSP.is_cert_id_in_cache",
-            return_value=(False, None)  # Force cache miss to trigger _fetch_ocsp_response
+            return_value=(
+                False,
+                None,
+            ),  # Force cache miss to trigger _fetch_ocsp_response
         ):
             ocsp = SFOCSP(use_ocsp_cache_server=False, use_fail_open=True)
 
@@ -487,10 +491,12 @@ def test_ocsp_cache_when_server_is_down(tmpdir):
             # even when server is down (BrokenPipeError)
             connection = _openssl_connect("snowflake.okta.com")
             result = ocsp.validate("snowflake.okta.com", connection)
-            
+
             # With fail-open enabled, validation should succeed despite server being down
             # The result should not be None (which would indicate complete failure)
-            assert result is not None, "OCSP validation should succeed with fail-open when server is down"
+            assert (
+                result is not None
+            ), "OCSP validation should succeed with fail-open when server is down"
 
 
 def test_concurrent_ocsp_requests(tmpdir):
