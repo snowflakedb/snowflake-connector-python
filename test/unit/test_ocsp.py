@@ -80,7 +80,6 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 @pytest.fixture(autouse=True)
 def worker_specific_cache_dir(tmpdir):
     """Create worker-specific cache directory to avoid file lock conflicts in parallel execution."""
-    import tempfile
 
     # Get worker ID for parallel execution (pytest-xdist)
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
