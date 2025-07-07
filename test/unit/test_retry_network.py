@@ -325,8 +325,8 @@ def test_fetch():
     # first attempt to reach timeout even if the exception is retryable
     cnt.reset()
     ret = rest.fetch(
-        timeout=0.05, **default_parameters
-    )  # Timeout before 0.1s sleep completes
+        timeout=0.02, **default_parameters
+    )  # Timeout well before 0.1s sleep completes
     assert ret == {}
     assert rest._connection.errorhandler.called  # error
 
