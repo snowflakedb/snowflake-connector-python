@@ -206,7 +206,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
 
         telemetry_data = OCSPTelemetryData()
         telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_SERVER_ENABLED)
-        telemetry_data.set_insecure_mode(False)
+        telemetry_data.set_disable_ocsp_checks(False)
         telemetry_data.set_sfc_peer_host(hostname)
         telemetry_data.set_fail_open(self.is_enabled_fail_open())
 
