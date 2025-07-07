@@ -48,7 +48,7 @@ def create_session(
         create_session(rest, num_sessions - 1, url)
 
 
-@mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
+@mock.patch("snowflake.connector.network.SessionManager.make_session")
 def test_no_url_multiple_sessions(make_session_mock):
     rest = SnowflakeRestful(connection=mock_conn)
 
@@ -65,7 +65,7 @@ def test_no_url_multiple_sessions(make_session_mock):
     close_sessions(rest, 1)
 
 
-@mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
+@mock.patch("snowflake.connector.network.SessionManager.make_session")
 def test_multiple_urls_multiple_sessions(make_session_mock):
     rest = SnowflakeRestful(connection=mock_conn)
 
@@ -85,7 +85,7 @@ def test_multiple_urls_multiple_sessions(make_session_mock):
     close_sessions(rest, 3)
 
 
-@mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
+@mock.patch("snowflake.connector.network.SessionManager.make_session")
 def test_multiple_urls_reuse_sessions(make_session_mock):
     rest = SnowflakeRestful(connection=mock_conn)
     for url in [url_1, url_2, url_3, None]:

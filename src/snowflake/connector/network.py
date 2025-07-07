@@ -338,7 +338,9 @@ class SessionManager:
     def __init__(
         self,
         use_pooling: bool = True,
-        adapter_factory: Callable[..., HTTPAdapter] | None = None,
+        adapter_factory: (
+            Callable[..., HTTPAdapter] | None
+        ) = lambda *args, **kwargs: None,
     ):
         self._use_pooling = use_pooling
         self._adapter_factory = adapter_factory or ProxySupportAdapter
@@ -350,11 +352,15 @@ class SessionManager:
     def sessions_map(self) -> dict[str, SessionPool]:
         return self._sessions_map
 
+    def _mount_adapter(self, session: requests.Session) -> None:
+        adapter = self._adapter_factory(max_retries=REQUESTS_RETRY)
+        if adapter is not None:
+            session.mount("http://", adapter)
+            session.mount("https://", adapter)
+
     def make_session(self) -> Session:
         s = requests.Session()
-        adapter = self._adapter_factory(max_retries=REQUESTS_RETRY)
-        s.mount("http://", adapter)
-        s.mount("https://", adapter)
+        self._mount_adapter(s)
         s._reuse_count = itertools.count()
         return s
 
