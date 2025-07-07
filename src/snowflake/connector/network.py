@@ -457,7 +457,11 @@ class SnowflakeRestful:
         self._connection = connection
         self._lock_token = Lock()
         self._session_manager = SessionManager(
-            use_pooling=not self._connection.disable_request_pooling,
+            use_pooling=(
+                not self._connection.disable_request_pooling
+                if self._connection
+                else True
+            ),
             adapter_factory=adapter_factory,
         )
 
