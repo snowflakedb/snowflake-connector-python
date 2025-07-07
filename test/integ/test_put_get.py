@@ -813,6 +813,16 @@ def test_get_multiple_files_with_same_name(tmp_path, conn_cnx, caplog):
             cur.execute(
                 f"PUT 'file://{filename_in_put}' @{stage_name}/data/2/",
             )
+            
+            # Verify files are uploaded before attempting GET
+            import time
+            for _ in range(10):  # Wait up to 10 seconds for files to be available
+                file_list = cur.execute(f"LS @{stage_name}").fetchall()
+                if len(file_list) >= 2:  # Both files should be available
+                    break
+                time.sleep(1)
+            else:
+                pytest.fail(f"Files not available in stage after 10 seconds: {file_list}")
 
             with caplog.at_level(logging.WARNING):
                 try:
@@ -820,9 +830,12 @@ def test_get_multiple_files_with_same_name(tmp_path, conn_cnx, caplog):
                         f"GET @{stage_name} file://{tmp_path} PATTERN='.*data.csv.gz'"
                     )
                 except OperationalError:
-                    # This is expected flakiness
+                    # This can happen due to cloud storage timing issues
                     pass
-            assert "Downloading multiple files with the same name" in caplog.text
+            
+            # Check for the expected warning message
+            assert "Downloading multiple files with the same name" in caplog.text, \
+                f"Expected warning not found in logs: {caplog.text}"
 
 
 @pytest.mark.skipolddriver
