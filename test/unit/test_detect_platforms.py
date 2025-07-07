@@ -26,8 +26,6 @@ class TestDetectPlatforms:
     @patch("snowflake.connector.platform_detection.boto3")
     @patch("snowflake.connector.platform_detection.requests")
     def test_no_platforms_detected(self, mock_requests, mock_boto3, mock_imds_fetcher):
-        """Test when no platforms are detected."""
-        # Mock all detection methods to return False
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
@@ -36,42 +34,17 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        # Configure mock requests
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
 
         result = detect_platforms()
         assert result == []
 
-    @patch.dict(os.environ, {"LAMBDA_TASK_ROOT": "/var/task"}, clear=True)
-    @patch("snowflake.connector.platform_detection.IMDSFetcher")
-    @patch("snowflake.connector.platform_detection.boto3")
-    @patch("snowflake.connector.platform_detection.requests")
-    def test_aws_lambda_detection(self, mock_requests, mock_boto3, mock_imds_fetcher):
-        """Test AWS Lambda detection via environment variable."""
-        # Mock other methods to return False
-        mock_imds_instance = Mock()
-        mock_imds_instance._get_request.side_effect = Exception("No IMDS")
-        mock_imds_fetcher.return_value = mock_imds_instance
-
-        mock_boto3.client.return_value.get_caller_identity.side_effect = Exception(
-            "No AWS"
-        )
-
-        # Configure mock requests
-        mock_requests.get.side_effect = requests.RequestException("No metadata")
-        mock_requests.RequestException = requests.RequestException
-
-        result = detect_platforms()
-        assert "is_aws_lambda" in result
-
     @patch.dict(os.environ, {}, clear=True)
     @patch("snowflake.connector.platform_detection.IMDSFetcher")
     @patch("snowflake.connector.platform_detection.boto3")
     @patch("snowflake.connector.platform_detection.requests")
     def test_ec2_instance_detection(self, mock_requests, mock_boto3, mock_imds_fetcher):
-        """Test EC2 instance detection via IMDS."""
-        # Mock IMDS to return valid response
         mock_imds_instance = Mock()
         mock_response = Mock()
         mock_response.content = b'{"region": "us-east-1"}'
@@ -83,32 +56,46 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        # Configure mock requests
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
 
         result = detect_platforms()
         assert "is_ec2_instance" in result
 
+    @patch.dict(os.environ, {"LAMBDA_TASK_ROOT": "/var/task"}, clear=True)
+    @patch("snowflake.connector.platform_detection.IMDSFetcher")
+    @patch("snowflake.connector.platform_detection.boto3")
+    @patch("snowflake.connector.platform_detection.requests")
+    def test_aws_lambda_detection(self, mock_requests, mock_boto3, mock_imds_fetcher):
+        mock_imds_instance = Mock()
+        mock_imds_instance._get_request.side_effect = Exception("No IMDS")
+        mock_imds_fetcher.return_value = mock_imds_instance
+
+        mock_boto3.client.return_value.get_caller_identity.side_effect = Exception(
+            "No AWS"
+        )
+
+        mock_requests.get.side_effect = requests.RequestException("No metadata")
+        mock_requests.RequestException = requests.RequestException
+
+        result = detect_platforms()
+        assert "is_aws_lambda" in result
+
     @patch.dict(os.environ, {}, clear=True)
     @patch("snowflake.connector.platform_detection.IMDSFetcher")
     @patch("snowflake.connector.platform_detection.boto3")
     @patch("snowflake.connector.platform_detection.requests")
     def test_aws_identity_detection(self, mock_requests, mock_boto3, mock_imds_fetcher):
-        """Test AWS identity detection via boto3 STS calls."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
 
-        # Mock boto3 to return valid caller identity
         mock_sts_client = Mock()
         mock_sts_client.get_caller_identity.return_value = {
             "Arn": "arn:aws:iam::123456789012:user/test-user"
         }
         mock_boto3.client.return_value = mock_sts_client
 
-        # Configure mock requests
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
 
@@ -120,8 +107,6 @@ class TestDetectPlatforms:
     @patch("snowflake.connector.platform_detection.boto3")
     @patch("snowflake.connector.platform_detection.requests")
     def test_azure_vm_detection(self, mock_requests, mock_boto3, mock_imds_fetcher):
-        """Test Azure VM detection via metadata endpoints."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
@@ -130,7 +115,6 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        # Mock Azure metadata endpoint to succeed
         mock_azure_response = MockResponse(status_code=200)
 
         def mock_get_side_effect(url, **kwargs):
@@ -160,8 +144,6 @@ class TestDetectPlatforms:
     def test_azure_function_detection(
         self, mock_requests, mock_boto3, mock_imds_fetcher
     ):
-        """Test Azure Function detection via environment variables."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
@@ -170,7 +152,6 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        # Configure mock requests
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
 
@@ -193,8 +174,6 @@ class TestDetectPlatforms:
     def test_azure_function_with_managed_identity(
         self, mock_requests, mock_boto3, mock_imds_fetcher
     ):
-        """Test Azure Function with managed identity detection."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
@@ -203,7 +182,6 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        # Configure mock requests
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
 
@@ -216,8 +194,6 @@ class TestDetectPlatforms:
     @patch("snowflake.connector.platform_detection.boto3")
     @patch("snowflake.connector.platform_detection.requests")
     def test_gce_vm_detection(self, mock_requests, mock_boto3, mock_imds_fetcher):
-        """Test GCE VM detection via metadata endpoints."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
@@ -226,7 +202,6 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        # Mock GCE metadata endpoint to succeed
         mock_gce_response = MockResponse(
             status_code=200, headers={"Metadata-Flavor": "Google"}
         )
@@ -258,8 +233,6 @@ class TestDetectPlatforms:
     def test_gce_cloud_run_service_detection(
         self, mock_requests, mock_boto3, mock_imds_fetcher
     ):
-        """Test GCE Cloud Run service detection via environment variables."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
@@ -268,7 +241,6 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        # Configure mock requests
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
 
@@ -286,8 +258,6 @@ class TestDetectPlatforms:
     def test_gce_cloud_run_job_detection(
         self, mock_requests, mock_boto3, mock_imds_fetcher
     ):
-        """Test GCE Cloud Run job detection via environment variables."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
@@ -296,7 +266,6 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        # Configure mock requests
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
 
@@ -308,8 +277,6 @@ class TestDetectPlatforms:
     @patch("snowflake.connector.platform_detection.boto3")
     @patch("snowflake.connector.platform_detection.requests")
     def test_gcp_identity_detection(self, mock_requests, mock_boto3, mock_imds_fetcher):
-        """Test GCP identity detection via metadata endpoints."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
@@ -318,7 +285,6 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        # Mock GCP identity endpoint to succeed
         mock_gcp_response = MockResponse(
             status_code=200, text="test-service-account@project.iam.gserviceaccount.com"
         )
@@ -342,8 +308,6 @@ class TestDetectPlatforms:
     def test_github_actions_detection(
         self, mock_requests, mock_boto3, mock_imds_fetcher
     ):
-        """Test GitHub Actions detection via environment variable."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
@@ -352,7 +316,6 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        # Configure mock requests
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
 
@@ -376,8 +339,6 @@ class TestDetectPlatforms:
     def test_multiple_platforms_detection(
         self, mock_requests, mock_boto3, mock_imds_fetcher
     ):
-        """Test detection of multiple platforms simultaneously."""
-        # Mock IMDS to succeed for EC2
         mock_imds_instance = Mock()
         mock_response = Mock()
         mock_response.content = b'{"region": "us-east-1"}'
@@ -385,19 +346,16 @@ class TestDetectPlatforms:
         mock_imds_instance._fetch_metadata_token.return_value = "test-token"
         mock_imds_fetcher.return_value = mock_imds_instance
 
-        # Mock boto3 to return valid caller identity
         mock_sts_client = Mock()
         mock_sts_client.get_caller_identity.return_value = {
             "Arn": "arn:aws:iam::123456789012:user/test-user"
         }
         mock_boto3.client.return_value = mock_sts_client
 
-        # Configure mock requests
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
 
         result = detect_platforms()
-        # Should detect multiple platforms
         assert "is_aws_lambda" in result
         assert "is_ec2_instance" in result
         assert "has_aws_identity" in result
@@ -409,8 +367,6 @@ class TestDetectPlatforms:
     @patch("snowflake.connector.platform_detection.boto3")
     @patch("snowflake.connector.platform_detection.requests")
     def test_timeout_handling(self, mock_requests, mock_boto3, mock_imds_fetcher):
-        """Test timeout handling in platform detection."""
-        # Mock IMDS to timeout
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("Timeout")
         mock_imds_fetcher.return_value = mock_imds_instance
@@ -419,7 +375,6 @@ class TestDetectPlatforms:
             "Timeout"
         )
 
-        # Configure mock requests to timeout
         mock_requests.get.side_effect = requests.Timeout("Connection timeout")
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
@@ -432,8 +387,6 @@ class TestDetectPlatforms:
     @patch("snowflake.connector.platform_detection.boto3")
     @patch("snowflake.connector.platform_detection.requests")
     def test_http_error_handling(self, mock_requests, mock_boto3, mock_imds_fetcher):
-        """Test HTTP error handling in platform detection."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("HTTP Error")
         mock_imds_fetcher.return_value = mock_imds_instance
@@ -442,7 +395,6 @@ class TestDetectPlatforms:
             "HTTP Error"
         )
 
-        # Configure mock requests to return HTTP errors
         mock_requests.get.side_effect = requests.HTTPError("HTTP 500 Error")
         mock_requests.RequestException = requests.RequestException
         mock_requests.HTTPError = requests.HTTPError
@@ -455,18 +407,14 @@ class TestDetectPlatforms:
     @patch("snowflake.connector.platform_detection.boto3")
     @patch("snowflake.connector.platform_detection.requests")
     def test_invalid_arn_handling(self, mock_requests, mock_boto3, mock_imds_fetcher):
-        """Test handling of invalid ARN in AWS identity detection."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
 
-        # Mock boto3 to return invalid ARN
         mock_sts_client = Mock()
         mock_sts_client.get_caller_identity.return_value = {"Arn": "invalid-arn-format"}
         mock_boto3.client.return_value = mock_sts_client
 
-        # Configure mock requests
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
 
@@ -478,18 +426,14 @@ class TestDetectPlatforms:
     @patch("snowflake.connector.platform_detection.boto3")
     @patch("snowflake.connector.platform_detection.requests")
     def test_missing_arn_handling(self, mock_requests, mock_boto3, mock_imds_fetcher):
-        """Test handling of missing ARN in AWS identity detection."""
-        # Mock IMDS to fail
         mock_imds_instance = Mock()
         mock_imds_instance._get_request.side_effect = Exception("No IMDS")
         mock_imds_fetcher.return_value = mock_imds_instance
 
-        # Mock boto3 to return response without ARN
         mock_sts_client = Mock()
         mock_sts_client.get_caller_identity.return_value = {"UserId": "test-user"}
         mock_boto3.client.return_value = mock_sts_client
 
-        # Configure mock requests
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
 
