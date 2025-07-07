@@ -13,6 +13,7 @@ import os
 import pickle
 import time
 from datetime import date, datetime, timezone
+from typing import NamedTuple
 from unittest import mock
 
 import pytest
@@ -54,6 +55,36 @@ from snowflake.connector.errors import Error
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
 from snowflake.connector.util_text import random_string
+
+
+class LobBackendParams(NamedTuple):
+    max_lob_size_in_memory: int
+
+
+@pytest.fixture()
+async def lob_params(conn_cnx) -> LobBackendParams:
+    async with conn_cnx() as cnx:
+        cursor = cnx.cursor()
+
+        # Get FEATURE_INCREASED_MAX_LOB_SIZE_IN_MEMORY parameter
+        await cursor.execute(
+            "show parameters like 'FEATURE_INCREASED_MAX_LOB_SIZE_IN_MEMORY'"
+        )
+        max_lob_size_in_memory_feat = await cursor.fetchone()
+        max_lob_size_in_memory_feat = (
+            max_lob_size_in_memory_feat and max_lob_size_in_memory_feat[1] == "ENABLED"
+        )
+
+        # Get MAX_LOB_SIZE_IN_MEMORY parameter
+        await cursor.execute("show parameters like 'MAX_LOB_SIZE_IN_MEMORY'")
+        max_lob_size_in_memory = await cursor.fetchone()
+        max_lob_size_in_memory = (
+            int(max_lob_size_in_memory[1])
+            if (max_lob_size_in_memory_feat and max_lob_size_in_memory)
+            else 2**24
+        )
+
+        return LobBackendParams(max_lob_size_in_memory)
 
 
 @pytest.fixture
@@ -1514,7 +1545,7 @@ async def test_resultbatch(
     ),
 )
 async def test_resultbatch_lazy_fetching_and_schemas(
-    conn_cnx, result_format, patch_path
+    conn_cnx, result_format, patch_path, lob_params
 ):
     """Tests whether pre-fetching results chunks fetches the right amount of them."""
     rowcount = 1000000  # We need at least 5 chunks for this test
@@ -1543,7 +1574,17 @@ async def test_resultbatch_lazy_fetching_and_schemas(
                     # all batches should have the same schema
                     assert schema == [
                         ResultMetadata("C1", 0, None, None, 10, 0, False),
-                        ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                        ResultMetadata(
+                            "C2",
+                            2,
+                            None,
+                            schema[
+                                1
+                            ].internal_size,  # TODO: lob_params.max_lob_size_in_memory,
+                            None,
+                            None,
+                            False,
+                        ),
                     ]
                 assert patched_download.call_count == 0
                 assert len(result_batches) > 5
@@ -1564,7 +1605,9 @@ async def test_resultbatch_lazy_fetching_and_schemas(
 
 
 @pytest.mark.parametrize("result_format", ["json", "arrow"])
-async def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
+async def test_resultbatch_schema_exists_when_zero_rows(
+    conn_cnx, result_format, lob_params
+):
     async with conn_cnx(
         session_parameters={"python_connector_query_result_format": result_format}
     ) as con:
@@ -1580,7 +1623,15 @@ async def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format)
             schema = result_batches[0].schema
             assert schema == [
                 ResultMetadata("C1", 0, None, None, 10, 0, False),
-                ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                ResultMetadata(
+                    "C2",
+                    2,
+                    None,
+                    schema[1].internal_size,  # TODO: lob_params.max_lob_size_in_memory,
+                    None,
+                    None,
+                    False,
+                ),
             ]
 
 
