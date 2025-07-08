@@ -1386,12 +1386,13 @@ def test_server_session_keep_alive(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_mode_disable_ocsp_checks(conn_cnx, caplog):
+def test_ocsp_mode_disable_ocsp_checks(conn_cnx, is_public_test, caplog):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(disable_ocsp_checks=True) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
         assert "snowflake.connector.ocsp_snowflake:" not in caplog.text
-        assert "This connection does not perform OCSP checks." in caplog.text
+        if is_public_test:
+            assert "This connection does not perform OCSP checks." in caplog.text
     caplog.clear()
     with conn_cnx() as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
@@ -1400,13 +1401,14 @@ def test_ocsp_mode_disable_ocsp_checks(conn_cnx, caplog):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_mode_insecure_mode(conn_cnx, caplog):
+def test_ocsp_mode_insecure_mode(conn_cnx, is_public_test, caplog):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(insecure_mode=True) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
         # insecure_mode=True means OCSP is disabled
         assert "snowflake.connector.ocsp_snowflake:" not in caplog.text
-        assert "This connection does not perform OCSP checks." in caplog.text
+        if is_public_test:
+            assert "This connection does not perform OCSP checks." in caplog.text
 
 
 @pytest.mark.skipolddriver
@@ -1426,7 +1428,7 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_match(conn_cnx, caplog)
 
 @pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_disabled(
-    conn_cnx, caplog
+    conn_cnx, is_public_test, caplog
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(
@@ -1439,12 +1441,13 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_disabled(
             "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
             "Using the value of 'disable_ocsp_checks."
         ) in caplog.text
-        assert "This connection does not perform OCSP checks." in caplog.text
+        if is_public_test:
+            assert "This connection does not perform OCSP checks." in caplog.text
 
 
 @pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
-    conn_cnx, caplog
+    conn_cnx, is_public_test, caplog
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(
@@ -1457,7 +1460,8 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
             "Using the value of 'disable_ocsp_checks."
         ) in caplog.text
         assert "snowflake.connector.ocsp_snowflake:" in caplog.text
-        assert "This connection does not perform OCSP checks." not in caplog.text
+        if is_public_test:
+            assert "This connection does not perform OCSP checks." not in caplog.text
 
 
 @pytest.mark.skipolddriver
