@@ -300,7 +300,7 @@ def pandas_verify(cur, data, deserialize):
             ), f"Result value {value} should match input example {datum}."
 
 
-@pytest.mark.parametrize("datatype", ICEBERG_UNSUPPORTED_TYPES)
+@pytest.mark.parametrize("datatype", sorted(ICEBERG_UNSUPPORTED_TYPES))
 def test_iceberg_negative(datatype, conn_cnx, iceberg_support, structured_type_support):
     if not iceberg_support:
         pytest.skip("Test requires iceberg support.")
