@@ -140,6 +140,7 @@ def worker_specific_cache_dir(tmpdir, request):
         # Reset cache dir back to original state
         try:
             import snowflake.connector.ocsp_snowflake as ocsp_module
+
             ocsp_module.OCSPCache.reset_cache_dir()
         except ImportError:
             pass
