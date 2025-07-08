@@ -280,13 +280,30 @@ class FakeAwsEnvironment:
         return self.util_creds
 
     def sign_request(self, request: AWSRequest):
-        request.headers.add_header("X-Amz-Date", datetime.datetime.utcnow().isoformat())
-        request.headers.add_header("X-Amz-Security-Token", "<TOKEN>")
-        request.headers.add_header(
-            "Authorization",
-            "AWS4-HMAC-SHA256 Credential=<cred>, SignedHeaders=host;x-amz-date,"
-            " Signature=<sig>",
+        # Generate a proper-looking authorization header that matches what the real signer would produce
+        utc_now = datetime.datetime.utcnow()
+        amz_date = utc_now.strftime("%Y%m%dT%H%M%SZ")
+        date_string = utc_now.strftime("%Y%m%d")
+
+        # Add the same headers that the real signer would add
+        request.headers.add_header("X-Amz-Date", amz_date)
+        request.headers.add_header("X-Amz-Security-Token", self.util_creds.token)
+
+        # Generate signed headers list that matches what the real signer would include
+        header_keys = []
+        for key in sorted(request.headers.keys(), key=str.lower):
+            header_keys.append(key.lower())
+
+        signed_headers = ";".join(header_keys)
+        credential_scope = f"{date_string}/{self.region}/sts/aws4_request"
+
+        authorization = (
+            f"AWS4-HMAC-SHA256 "
+            f"Credential={self.util_creds.access_key}/{credential_scope}, "
+            f"SignedHeaders={signed_headers}, Signature=<sig>"
         )
+
+        request.headers.add_header("Authorization", authorization)
 
     def __enter__(self):
         # Preserve existing env and then set creds/region for util fallback
