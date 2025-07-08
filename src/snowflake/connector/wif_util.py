@@ -131,9 +131,6 @@ def extract_iss_and_sub_without_signature_verification(
     return claims["iss"], claims["sub"]
 
 
-# --------------------------------------------------------------------------- #
-# AWS helper utilities (token, credentials, region)                           #
-# --------------------------------------------------------------------------- #
 def _imds_v2_token(session_manager: SessionManager | None = None) -> str | None:
     res = try_metadata_service_call(
         method="PUT",

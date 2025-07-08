@@ -473,7 +473,7 @@ def test_internal_signer_vs_botocore_prefix(fake_aws_environment: FakeAwsEnviron
     new_prefix = new_hdr.split("Signature=")[0]
 
     # --- headers from real botocore SigV4Auth ----------------------------
-    creds = fake_aws_environment.util_creds  # boto Credentials
+    creds = fake_aws_environment.boto_creds  # boto Credentials
     region = fake_aws_environment.region
     url = (
         f"https://sts.{region}.amazonaws.com/"

@@ -291,8 +291,7 @@ class FakeAwsEnvironment:
         date_stamp = utc_now.strftime("%Y%m%d")
 
         request.headers["X-Amz-Date"] = amz_date
-        if self.util_creds.token:
-            request.headers["X-Amz-Security-Token"] = self.util_creds.token
+        request.headers["X-Amz-Security-Token"] = self.util_creds.token
 
         # Host header is already set by the test; add it if a future test forgets
         if "Host" not in request.headers:
