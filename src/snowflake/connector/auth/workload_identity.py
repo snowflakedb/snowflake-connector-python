@@ -4,6 +4,9 @@ import json
 import typing
 from enum import Enum, unique
 
+if typing.TYPE_CHECKING:
+    from snowflake.connector.connection import SnowflakeConnection
+
 from ..network import WORKLOAD_IDENTITY_AUTHENTICATOR
 from ..wif_util import (
     AttestationProvider,
@@ -74,7 +77,9 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         ).value
         body["data"]["TOKEN"] = self.attestation.credential
 
-    def prepare(self, *, conn, **kwargs: typing.Any) -> None:
+    def prepare(
+        self, *, conn: SnowflakeConnection | None, **kwargs: typing.Any
+    ) -> None:
         """Fetch the token."""
         self.attestation = create_attestation(
             self.provider,
