@@ -173,10 +173,11 @@ def test_explicit_aws_generates_unique_assertion_content(
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     auth_class.prepare(conn=None)
 
-    assert (
-        '{"_provider":"AWS","arn":"arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"}'
-        == auth_class.assertion_content
-    )
+    expected = {
+        "_provider": "AWS",
+        "region": fake_aws_environment.region,
+    }
+    assert json.loads(auth_class.assertion_content) == expected
 
 
 @pytest.mark.parametrize(
