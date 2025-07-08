@@ -41,10 +41,11 @@ except ImportError:
 
 logger = getLogger(__name__)
 
+
 def _get_worker_specific_schema():
     """Generate worker-specific schema name for parallel test execution."""
     base_uuid = str(uuid.uuid4()).replace("-", "_")
-    
+
     # Check if running in pytest-xdist parallel mode
     worker_id = os.getenv("PYTEST_XDIST_WORKER")
     if worker_id:
@@ -61,7 +62,9 @@ def _get_worker_specific_schema():
         else:
             return f"python_connector_tests_{base_uuid}"
 
+
 TEST_SCHEMA = _get_worker_specific_schema()
+
 
 if TEST_USING_VENDORED_ARROW:
     snowflake.connector.cursor.NANOARR_USAGE = (
