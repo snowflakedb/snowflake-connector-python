@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import os
+import socket
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Optional
 
 import pytest
 
@@ -148,3 +149,23 @@ def pytest_runtest_setup(item) -> None:
     if "auth" in test_tags:
         if os.getenv("RUN_AUTH_TESTS") != "true":
             pytest.skip("Skipping auth test in current environment")
+
+
+def find_free_port() -> int:
+    """Find a free port to avoid conflicts in parallel test environments."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        s.listen(1)
+        port = s.getsockname()[1]
+    return port
+
+
+def get_server_parameter_value(connection, parameter_name: str) -> Optional[str]:
+    """Get server parameter value, returns None if parameter doesn't exist."""
+    try:
+        with connection.cursor() as cur:
+            cur.execute(f"show parameters like '{parameter_name}'")
+            ret = cur.fetchone()
+            return ret[1] if ret else None
+    except Exception:
+        return None

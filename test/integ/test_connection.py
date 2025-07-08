@@ -111,6 +111,8 @@ def test_connection_without_database2(db_parameters):
 
 def test_with_config(db_parameters):
     """Creates a connection with the config parameter."""
+    from ..conftest import get_server_parameter_value
+
     config = {
         "user": db_parameters["user"],
         "password": db_parameters["password"],
@@ -125,7 +127,22 @@ def test_with_config(db_parameters):
     cnx = snowflake.connector.connect(**config)
     try:
         assert cnx, "invalid cnx"
-        assert not cnx.client_session_keep_alive  # default is False
+
+        # Check what the server default is to make test environment-aware
+        server_default_str = get_server_parameter_value(
+            cnx, "CLIENT_SESSION_KEEP_ALIVE"
+        )
+        if server_default_str:
+            server_default = server_default_str.lower() == "true"
+            # Test that connection respects server default when not explicitly set
+            assert (
+                cnx.client_session_keep_alive == server_default
+            ), f"Expected client_session_keep_alive={server_default} (server default), got {cnx.client_session_keep_alive}"
+        else:
+            # Fallback: if we can't determine server default, expect False
+            assert (
+                not cnx.client_session_keep_alive
+            ), "Expected client_session_keep_alive=False when server default unknown"
     finally:
         cnx.close()
 
