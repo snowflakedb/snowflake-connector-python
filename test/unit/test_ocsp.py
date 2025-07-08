@@ -88,11 +88,22 @@ def worker_specific_cache_dir(tmpdir, request):
     # Get worker ID for parallel execution (pytest-xdist)
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
 
+    # Store original cache dir environment variable
+    original_cache_dir = os.environ.get("SF_OCSP_RESPONSE_CACHE_DIR")
+
+    # Set worker-specific cache directory to prevent main cache file conflicts
+    worker_cache_dir = tmpdir.join(f"ocsp_cache_{worker_id}")
+    worker_cache_dir.ensure(dir=True)
+    os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = str(worker_cache_dir)
+
     # Only handle the OCSP_RESPONSE_VALIDATION_CACHE to prevent conflicts
     # Let tests manage SF_OCSP_RESPONSE_CACHE_DIR themselves if they need to
     try:
         import snowflake.connector.ocsp_snowflake as ocsp_module
         from snowflake.connector.cache import SFDictFileCache
+
+        # Reset cache dir to pick up the new environment variable
+        ocsp_module.OCSPCache.reset_cache_dir()
 
         # Create worker-specific validation cache file
         validation_cache_file = tmpdir.join(f"ocsp_validation_cache_{worker_id}.json")
@@ -119,6 +130,19 @@ def worker_specific_cache_dir(tmpdir, request):
     except ImportError:
         # If modules not available, just yield the directory
         yield str(tmpdir)
+    finally:
+        # Restore original cache directory environment variable
+        if original_cache_dir is not None:
+            os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = original_cache_dir
+        else:
+            os.environ.pop("SF_OCSP_RESPONSE_CACHE_DIR", None)
+
+        # Reset cache dir back to original state
+        try:
+            import snowflake.connector.ocsp_snowflake as ocsp_module
+            ocsp_module.OCSPCache.reset_cache_dir()
+        except ImportError:
+            pass
 
 
 def create_x509_cert(hash_algorithm):
