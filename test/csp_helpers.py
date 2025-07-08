@@ -97,11 +97,12 @@ class FakeMetadataService(ABC):
         """Patches the relevant HTTP calls when entering as a context manager."""
         self.reset_defaults()
         self.patchers = []
-        # requests.request is used by the direct metadata service API calls from our code. This is the main
+        # Session.request is used by the direct metadata service API calls from our code. This is the main
         # thing being faked here.
         self.patchers.append(
             mock.patch(
-                "snowflake.connector.vendored.requests.request", side_effect=self
+                "snowflake.connector.vendored.requests.Session.request",
+                side_effect=self,
             )
         )
         # HTTPConnection.request is used by the AWS boto libraries. We're not mocking those calls here, so we
