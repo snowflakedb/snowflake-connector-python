@@ -752,7 +752,7 @@ def test_escape(conn_local):
         assert len(extra_strings) == 0, f"Extra strings: {extra_strings}"
         assert actual_strings == expected_strings, "String sets don't match"
 
-        # Test 3: DELETE with positional parameters (test subset for code coverage)
+        # Test 3: DELETE with positional parameters (batched for efficiency)
         # This maintains the same DELETE parameter binding test as the original
         # We test a representative subset to maintain coverage while being efficient
         critical_test_strings = [
@@ -763,14 +763,23 @@ def test_escape(conn_local):
             teststrings[16],  # Backslash-x: "\\x"
         ]
 
-        for test_string in critical_test_strings:
-            # Test DELETE with positional parameter binding (same as original)
-            cur.execute("delete from %s where name=%%s" % TABLE1, test_string)
+        # Batch DELETE with positional parameters using executemany
+        # This tests the same positional parameter binding as the original individual DELETEs
+        cur.executemany(
+            "delete from %s where name=%%s" % TABLE1,
+            [(test_string,) for test_string in critical_test_strings],
+        )
 
-            # Verify the specific row was deleted
-            cur.execute("select count(*) from %s where name=%%s" % TABLE1, test_string)
-            count = cur.fetchone()[0]
-            assert count == 0, f"Failed to delete string: {test_string!r}"
+        # Batch verification: check that all critical strings were deleted
+        cur.execute(
+            "select name from %s where name in (%s)"
+            % (TABLE1, ",".join(["%s"] * len(critical_test_strings))),
+            critical_test_strings,
+        )
+        remaining_critical = cur.fetchall()
+        assert (
+            len(remaining_critical) == 0
+        ), f"Failed to delete strings: {[row[0] for row in remaining_critical]}"
 
         # Clean up remaining rows
         cur.execute("delete from %s" % TABLE1)
