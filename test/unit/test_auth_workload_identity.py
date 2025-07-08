@@ -1,11 +1,14 @@
 import json
 import logging
+import re
 from base64 import b64decode
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
 import jwt
 import pytest
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
 
 from snowflake.connector.auth import AuthByWorkloadIdentity
 from snowflake.connector.errors import ProgrammingError
@@ -17,12 +20,22 @@ from snowflake.connector.vendored.requests.exceptions import (
 from snowflake.connector.wif_util import (
     AZURE_ISSUER_PREFIXES,
     AttestationProvider,
+    get_aws_credentials,
     get_aws_sts_hostname,
 )
 
 from ..csp_helpers import FakeAwsEnvironment, FakeGceMetadataService, gen_dummy_id_token
 
 logger = logging.getLogger(__name__)
+
+
+_SIGV4_RE = re.compile(
+    r"^AWS4-HMAC-SHA256 "
+    r"Credential=[^/]+/\d{8}/[^/]+/sts/aws4_request, "
+    r"SignedHeaders=[a-z0-9\-;]+, "
+    r"Signature=[0-9a-f]{64}$",
+    re.IGNORECASE,
+)
 
 
 def extract_api_data(auth_class: AuthByWorkloadIdentity):
@@ -428,3 +441,62 @@ def test_autodetect_no_provider_raises_error(no_metadata_service):
     assert "No workload identity credential was found for 'auto-detect" in str(
         excinfo.value
     )
+
+
+def test_aws_token_authorization_header_format(
+    fake_aws_environment: FakeAwsEnvironment,
+):
+    """
+    The internal signer should still emit a well-formed SigV4 `Authorization`
+    header (same format that botocore would produce).
+    """
+    auth = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    auth.prepare()
+
+    headers = json.loads(b64decode(extract_api_data(auth)["TOKEN"]))["headers"]
+    assert _SIGV4_RE.match(headers["Authorization"])
+
+
+def test_internal_signer_vs_botocore_prefix(fake_aws_environment: FakeAwsEnvironment):
+    """
+    Compare the *static* parts of the Authorization header (algorithm,
+    Credential=…, SignedHeaders=…) between our pure-HTTP signer and the
+    reference implementation in botocore.  We ignore the Signature value
+    because it will differ when the dates differ.
+    """
+    # --- headers from the new HTTP-only path -----------------------------
+    auth = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    auth.prepare()
+    new_hdr = json.loads(b64decode(extract_api_data(auth)["TOKEN"]))["headers"][
+        "Authorization"
+    ]
+    new_prefix = new_hdr.split("Signature=")[0]
+
+    # --- headers from real botocore SigV4Auth ----------------------------
+    creds = fake_aws_environment.credentials  # boto Credentials
+    region = fake_aws_environment.region
+    url = (
+        f"https://sts.{region}.amazonaws.com/"
+        "?Action=GetCallerIdentity&Version=2011-06-15"
+    )
+
+    req = AWSRequest(method="POST", url=url)
+    req.headers["Host"] = f"sts.{region}.amazonaws.com"
+    req.headers["X-Snowflake-Audience"] = "snowflakecomputing.com"
+    SigV4Auth(creds, "sts", region).add_auth(req)
+    boto_prefix = req.headers["Authorization"].split("Signature=")[0]
+
+    # Credential=… and SignedHeaders=… should be identical
+    assert new_prefix == boto_prefix
+
+
+def test_get_aws_credentials_fallback_env(fake_aws_environment: FakeAwsEnvironment):
+    """
+    The util’s environment-variable fallback path should return exactly the
+    values we injected via FakeAwsEnvironment.
+    """
+
+    creds = get_aws_credentials()
+    assert creds.access_key == fake_aws_environment.util_creds.access_key
+    assert creds.secret_key == fake_aws_environment.util_creds.secret_key
+    assert creds.token == fake_aws_environment.util_creds.token

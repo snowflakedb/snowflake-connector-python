@@ -246,6 +246,79 @@ def get_aws_region(session_manager: SessionManager | None = None) -> str | None:
     return None
 
 
+def get_aws_arn(session_manager: SessionManager | None = None) -> str | None:
+    """Get the current AWS workload's ARN by calling GetCallerIdentity.
+
+    Note: This function makes a network call to AWS STS and is only used for
+    assertion content generation (logging and backward compatibility purposes).
+    The ARN is not required for authentication - it's just used as a unique
+    identifier for the workload in logs and assertion content.
+
+    Returns the ARN of the current AWS identity, or None if it cannot be determined.
+    """
+    credentials = get_aws_credentials(session_manager)
+    if not credentials:
+        logger.debug("No AWS credentials available for ARN lookup.")
+        return None
+
+    region = get_aws_region(session_manager)
+    if not region:
+        logger.debug("No AWS region available for ARN lookup.")
+        return None
+
+    try:
+        # Create the GetCallerIdentity request
+        sts_hostname = get_aws_sts_hostname(region)
+        url = f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15"
+
+        base_headers = {
+            "Content-Type": "application/x-amz-json-1.1",
+        }
+
+        signed_headers = aws_signature_v4_sign(
+            credentials=credentials,
+            method="POST",
+            url=url,
+            region=region,
+            service="sts",
+            headers=base_headers,
+        )
+
+        # Make the actual request to get caller identity
+        response = http_request(
+            method="POST",
+            url=url,
+            headers=signed_headers,
+            timeout_sec=10,
+            session_manager=session_manager,
+        )
+
+        if response and response.ok:
+            # Parse the XML response to extract the ARN
+            import xml.etree.ElementTree as ET
+
+            # Ensure content is bytes and decode it
+            content = response.content
+            if isinstance(content, bytes):
+                content_str = content.decode("utf-8")
+            else:
+                content_str = str(content) if content else ""
+
+            if content_str:
+                root = ET.fromstring(content_str)
+
+                # Find the Arn element in the response
+                for elem in root.iter():
+                    if elem.tag.endswith("Arn") and elem.text:
+                        return elem.text.strip()
+
+        logger.debug("Failed to get ARN from GetCallerIdentity response.")
+        return None
+    except Exception as e:
+        logger.debug(f"Error getting AWS ARN: {e}")
+        return None
+
+
 def get_aws_sts_hostname(region: str) -> str | None:
     """Constructs the AWS STS hostname for a given region.
 
@@ -412,10 +485,15 @@ def create_aws_attestation(
         "utf-8"
     )
 
+    # Get the ARN for user identifier components (used only for assertion content - logging and backward compatibility)
+    # The ARN is not required for authentication, but provides a unique identifier for the workload
+    arn = get_aws_arn(session_manager)
+    user_identifier_components = {"arn": arn} if arn else {}
+
     return WorkloadIdentityAttestation(
         AttestationProvider.AWS,
         credential,
-        {},  # No user identifier components needed - Snowflake will extract from the signed request
+        user_identifier_components,
     )
 
 
@@ -439,7 +517,13 @@ def create_gcp_attestation(
         logger.debug("GCP metadata server request was not successful.")
         return None
 
-    jwt_str = res.content.decode("utf-8")
+    # Ensure content is bytes and decode it
+    content = res.content
+    if isinstance(content, bytes):
+        jwt_str = content.decode("utf-8")
+    else:
+        jwt_str = str(content)
+
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     if not issuer or not subject:
         return None

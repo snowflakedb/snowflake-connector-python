@@ -325,6 +325,10 @@ class FakeAwsEnvironment:
                 "snowflake.connector.wif_util.get_aws_credentials",
                 side_effect=self.get_aws_credentials,
             ),
+            mock.patch(
+                "snowflake.connector.wif_util.get_aws_arn",
+                side_effect=self.get_arn,
+            ),
             # never contact IMDS for token
             mock.patch(
                 "snowflake.connector.wif_util._imds_v2_token", return_value=None
