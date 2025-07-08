@@ -7,47 +7,6 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.13.3(TBD)
-- v3.15(TBD)
-  - Bumped up min boto and botocore version to 1.24
-  - OCSP: terminate certificates chain traversal if a trusted certificate already reached
-
-- v3.14.1(April 21, 2025)
-  - Added support for Python 3.13.
-    - NOTE: Windows 64 support is still experimental and should not yet be used for production environments.
-  - Dropped support for Python 3.8.
-  - Added basic decimal floating-point type support.
-  - Added experimental authentication methods.
-  - Added support of GCS regional endpoints.
-  - Added support of GCS virtual urls. See more: https://cloud.google.com/storage/docs/request-endpoints#xml-api
-  - Added `client_fetch_threads` experimental parameter to better utilize threads for fetching query results.
-  - Added `check_arrow_conversion_error_on_every_column` connection property that can be set to `False` to restore previous behaviour in which driver will ignore errors until it occurs in the last column. This flag's purpose is to unblock workflows that may be impacted by the bugfix and will be removed in later releases.
-  - Lowered log levels from info to debug for some of the messages to make the output easier to follow.
-  - Allowed the connector to inherit a UUID4 generated upstream, provided in statement parameters (field: `requestId`), rather than automatically generate a UUID4 to use for the HTTP Request ID.
-  - Improved logging in urllib3, boto3, botocore - assured data masking even after migration to the external owned library in the future.
-  - Improved error message for client-side query cancellations due to timeouts.
-  - Improved security and robustness for the temporary credentials cache storage.
-  - Fixed a bug that caused driver to fail silently on `TO_DATE` arrow to python conversion when invalid date was followed by the correct one.
-  - Fixed expired S3 credentials update and increment retry when expired credentials are found.
-  - Deprecated `insecure_mode` connection property and replaced it with `disable_ocsp_checks` with the same behavior as the former property.
-
-- v3.14.0(March 03, 2025)
-  - Bumped pyOpenSSL dependency upper boundary from <25.0.0 to <26.0.0.
-  - Removed the workaround for a Python 2.7 bug.
-  - Added a <19.0.0 pin to pyarrow as a workaround to a bug affecting Azure Batch.
-  - Optimized distribution package lookup to speed up import.
-  - Fixed a bug where privatelink OCSP Cache url could not be determined if privatelink account name was specified in uppercase.
-  - Added support for iceberg tables to `write_pandas`.
-  - Fixed base64 encoded private key tests.
-  - Fixed a bug where file permission check happened on Windows.
-  - Added support for File types.
-  - Added `unsafe_file_write` connection parameter that restores the previous behaviour of saving files downloaded with GET with 644 permissions.
-  - Deprecated `insecure_mode` connection property and replaced it with `disable_ocsp_checks` with the same behavior as the former property.
-
-- v3.12.4(TBD)
-  - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
-  - Fixed a bug where OpenTelemetry header injection would sometimes cause Exceptions to be thrown.
-  - Fixed a bug where OCSP checks would throw TypeError and make mainly GCP blob storage unreachable.
 
 - v3.12.3(October 25,2024)
   - Improved the error message for SSL-related issues to provide clearer guidance when an SSL error occurs.
