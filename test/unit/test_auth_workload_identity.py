@@ -124,7 +124,7 @@ def test_explicit_oidc_no_token_raises_error():
 
 
 def test_explicit_aws_no_auth_raises_error(fake_aws_environment: FakeAwsEnvironment):
-    fake_aws_environment.credentials = None
+    fake_aws_environment.util_creds = None
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     with pytest.raises(ProgrammingError) as excinfo:
@@ -144,7 +144,7 @@ def test_explicit_aws_encodes_audience_host_signature_to_api(
     verify_aws_token(
         data["TOKEN"],
         fake_aws_environment.region,
-        expect_session_token=fake_aws_environment.credentials.token is not None,
+        expect_session_token=fake_aws_environment.util_creds.token is not None,
     )
 
 
@@ -310,14 +310,14 @@ def test_explicit_azure_v1_and_v2_issuers_accepted(fake_azure_metadata_service, 
     fake_azure_metadata_service.iss = issuer
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    auth_class.prepare()
+    auth_class.prepare(conn=None)
 
     assert issuer == json.loads(auth_class.assertion_content)["iss"]
 
 
 def test_explicit_azure_plumbs_token_to_api(fake_azure_metadata_service):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    auth_class.prepare()
+    auth_class.prepare(conn=None)
 
     assert extract_api_data(auth_class) == {
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
@@ -333,7 +333,7 @@ def test_explicit_azure_generates_unique_assertion_content(fake_azure_metadata_s
     fake_azure_metadata_service.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    auth_class.prepare()
+    auth_class.prepare(conn=None)
 
     assert (
         '{"_provider":"AZURE","iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"611ab25b-2e81-4e18-92a7-b21f2bebb269"}'
@@ -345,7 +345,7 @@ def test_explicit_azure_uses_default_entra_resource_if_unspecified(
     fake_azure_metadata_service,
 ):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    auth_class.prepare()
+    auth_class.prepare(conn=None)
 
     token = fake_azure_metadata_service.token
     parsed = jwt.decode(token, options={"verify_signature": False})
@@ -358,7 +358,7 @@ def test_explicit_azure_uses_explicit_entra_resource(fake_azure_metadata_service
     auth_class = AuthByWorkloadIdentity(
         provider=AttestationProvider.AZURE, entra_resource="api://non-standard"
     )
-    auth_class.prepare()
+    auth_class.prepare(conn=None)
 
     token = fake_azure_metadata_service.token
     parsed = jwt.decode(token, options={"verify_signature": False})
@@ -388,7 +388,7 @@ def test_autodetect_aws_present(
     no_metadata_service, fake_aws_environment: FakeAwsEnvironment
 ):
     auth_class = AuthByWorkloadIdentity(provider=None)
-    auth_class.prepare()
+    auth_class.prepare(conn=None)
 
     data = extract_api_data(auth_class)
     assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
@@ -396,13 +396,13 @@ def test_autodetect_aws_present(
     verify_aws_token(
         data["TOKEN"],
         fake_aws_environment.region,
-        expect_session_token=fake_aws_environment.credentials.token is not None,
+        expect_session_token=fake_aws_environment.util_creds.token is not None,
     )
 
 
 def test_autodetect_gcp_present(fake_gce_metadata_service: FakeGceMetadataService):
     auth_class = AuthByWorkloadIdentity(provider=None)
-    auth_class.prepare()
+    auth_class.prepare(conn=None)
 
     assert extract_api_data(auth_class) == {
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
@@ -413,7 +413,7 @@ def test_autodetect_gcp_present(fake_gce_metadata_service: FakeGceMetadataServic
 
 def test_autodetect_azure_present(fake_azure_metadata_service):
     auth_class = AuthByWorkloadIdentity(provider=None)
-    auth_class.prepare()
+    auth_class.prepare(conn=None)
 
     assert extract_api_data(auth_class) == {
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
@@ -425,7 +425,7 @@ def test_autodetect_azure_present(fake_azure_metadata_service):
 def test_autodetect_oidc_present(no_metadata_service):
     dummy_token = gen_dummy_id_token(sub="service-1", iss="issuer-1")
     auth_class = AuthByWorkloadIdentity(provider=None, token=dummy_token)
-    auth_class.prepare()
+    auth_class.prepare(conn=None)
 
     assert extract_api_data(auth_class) == {
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
@@ -437,7 +437,7 @@ def test_autodetect_oidc_present(no_metadata_service):
 def test_autodetect_no_provider_raises_error(no_metadata_service):
     auth_class = AuthByWorkloadIdentity(provider=None, token=None)
     with pytest.raises(ProgrammingError) as excinfo:
-        auth_class.prepare()
+        auth_class.prepare(conn=None)
     assert "No workload identity credential was found for 'auto-detect" in str(
         excinfo.value
     )
@@ -451,7 +451,7 @@ def test_aws_token_authorization_header_format(
     header (same format that botocore would produce).
     """
     auth = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
-    auth.prepare()
+    auth.prepare(conn=None)
 
     headers = json.loads(b64decode(extract_api_data(auth)["TOKEN"]))["headers"]
     assert _SIGV4_RE.match(headers["Authorization"])
@@ -466,14 +466,14 @@ def test_internal_signer_vs_botocore_prefix(fake_aws_environment: FakeAwsEnviron
     """
     # --- headers from the new HTTP-only path -----------------------------
     auth = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
-    auth.prepare()
+    auth.prepare(conn=None)
     new_hdr = json.loads(b64decode(extract_api_data(auth)["TOKEN"]))["headers"][
         "Authorization"
     ]
     new_prefix = new_hdr.split("Signature=")[0]
 
     # --- headers from real botocore SigV4Auth ----------------------------
-    creds = fake_aws_environment.credentials  # boto Credentials
+    creds = fake_aws_environment.util_creds  # boto Credentials
     region = fake_aws_environment.region
     url = (
         f"https://sts.{region}.amazonaws.com/"
@@ -497,6 +497,7 @@ def test_get_aws_credentials_fallback_env(fake_aws_environment: FakeAwsEnvironme
     """
 
     creds = get_aws_credentials()
+    assert fake_aws_environment.util_creds is not None
     assert creds.access_key == fake_aws_environment.util_creds.access_key
     assert creds.secret_key == fake_aws_environment.util_creds.secret_key
     assert creds.token == fake_aws_environment.util_creds.token
