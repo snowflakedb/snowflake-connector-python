@@ -17,6 +17,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed `write_pandas` special characters usage in the location name.
   - Fixed usage of `use_virtual_url` when building the location for gcs storage client.
   - Added support for Snowflake OAuth for local applications.
+  - Removed boto and botocore dependencies.
 
 - v3.15.0(Apr 29,2025)
   - Bumped up min boto and botocore version to 1.24.

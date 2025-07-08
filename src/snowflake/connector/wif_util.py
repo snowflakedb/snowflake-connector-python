@@ -15,8 +15,8 @@ import jwt
 
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
-from .http_client import request as http_request
 from .session_manager import SessionManager
+from .session_manager import request as http_request
 from .vendored import requests
 from .vendored.requests import Response
 

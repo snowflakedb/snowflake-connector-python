@@ -4,11 +4,11 @@ import collections
 import contextlib
 import itertools
 import logging
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable, Mapping
 
 from .compat import urlparse
 from .vendored import requests
-from .vendored.requests import Session
+from .vendored.requests import Response, Session
 from .vendored.requests.adapters import HTTPAdapter
 from .vendored.requests.exceptions import InvalidProxyURL
 from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
@@ -134,8 +134,11 @@ class SessionManager:
         return s
 
     @contextlib.contextmanager
-    def use_session(self, url: str | None = None):
-        if not self._use_pooling:
+    def use_session(
+        self, url: str | None = None, use_pooling: bool | None = None
+    ) -> Session:
+        use_pooling = use_pooling if use_pooling is not None else self._use_pooling
+        if not use_pooling:
             session = self.make_session()
             try:
                 yield session
@@ -150,6 +153,30 @@ class SessionManager:
             finally:
                 pool.return_session(session)
 
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout_sec: int | None = 3,
+        use_pooling: bool | None = None,
+        **kwargs: Any,
+    ) -> Response:
+        """Make a single HTTP request handled by this *SessionManager*.
+
+        This wraps :pymeth:`use_session` so callers don’t have to manage the
+        context manager themselves.
+        """
+        with self.use_session(url, use_pooling) as session:
+            return session.request(
+                method=method.upper(),
+                url=url,
+                headers=headers,
+                timeout=timeout_sec,
+                **kwargs,
+            )
+
     def close(self):
         for pool in self._sessions_map.values():
             pool.close()
@@ -160,3 +187,33 @@ class SessionManager:
             use_pooling=self._use_pooling if use_pooling is None else use_pooling,
             adapter_factory=self._adapter_factory,
         )
+
+
+def request(
+    method: str,
+    url: str,
+    *,
+    headers: Mapping[str, str] | None = None,
+    timeout_sec: int | None = 3,
+    session_manager: SessionManager | None = None,
+    use_pooling: bool | None = None,
+    **kwargs: Any,
+) -> Response:
+    """Convenience wrapper – *requires* an explicit ``session_manager``.
+
+    This keeps a one-liner API equivalent to the old
+    ``snowflake.connector.http_client.request`` helper.
+    """
+    if session_manager is None:
+        raise ValueError(
+            "session_manager is required - no default session manager available"
+        )
+
+    return session_manager.request(
+        method=method,
+        url=url,
+        headers=headers,
+        timeout_sec=timeout_sec,
+        use_pooling=use_pooling,
+        **kwargs,
+    )
