@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import datetime
 import json
 import logging
 import os
@@ -11,39 +12,46 @@ from urllib.parse import parse_qs, urlparse
 
 import jwt
 
+# Boto is left as a development-dependency - to be sure our http requests correspond to the appropriate behavior and old driver tests are passing in the future
+from botocore.awsrequest import AWSRequest
+from botocore.credentials import Credentials
+
 from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
 from snowflake.connector.vendored.requests.models import Response
-from snowflake.connector.wif_util import AwsCredentials  # light-weight creds
+from snowflake.connector.wif_util import AwsCredentials
 
 logger = logging.getLogger(__name__)
 
 
-# --------------------------------------------------------------------------- #
-# Helpers                                                                     #
-# --------------------------------------------------------------------------- #
 def gen_dummy_id_token(
-    sub: str = "test-subject",
-    iss: str = "test-issuer",
-    aud: str = "snowflakecomputing.com",
+    sub="test-subject", iss="test-issuer", aud="snowflakecomputing.com"
 ) -> str:
     """Generates a dummy ID token using the given subject and issuer."""
     now = int(time())
-    payload = {"sub": sub, "iss": iss, "aud": aud, "iat": now, "exp": now + 3600}
+    key = "secret"
+    payload = {
+        "sub": sub,
+        "iss": iss,
+        "aud": aud,
+        "iat": now,
+        "exp": now + 60 * 60,
+    }
     logger.debug(f"Generating dummy token with the following claims:\n{str(payload)}")
-    return jwt.encode(payload, key="secret", algorithm="HS256")
+    return jwt.encode(
+        payload=payload,
+        key=key,
+        algorithm="HS256",
+    )
 
 
 def build_response(content: bytes, status_code: int = 200) -> Response:
     """Builds a requests.Response object with the given status code and content."""
-    resp = Response()
-    resp.status_code = status_code
-    resp._content = content
-    return resp
+    response = Response()
+    response.status_code = status_code
+    response._content = content
+    return response
 
 
-# --------------------------------------------------------------------------- #
-# Generic metadata-service test harness                                       #
-# --------------------------------------------------------------------------- #
 class FakeMetadataService(ABC):
     """Base class for fake metadata service implementations."""
 
@@ -240,33 +248,48 @@ class FakeGceMetadataService(FakeMetadataService):
         return build_response(self.token.encode("utf-8"))
 
 
-# --------------------------------------------------------------------------- #
-# AWS environment fake                                                        #
-# --------------------------------------------------------------------------- #
 class FakeAwsEnvironment:
-    """Emulates the AWS environment-specific helpers used in wif_util.py."""
+    """Emulates AWS for both the legacy boto path and the new SDK-free helpers."""
 
-    def __init__(self) -> None:
+    def __init__(self):
+        # Defaults used for generating a token. Can be overriden in individual tests.
+        self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-abc123"
         self.region = "us-east-1"
-        self.credentials: AwsCredentials | None = AwsCredentials(
-            access_key="ak", secret_key="sk", token="SESSION_TOKEN"
+
+        # boto-style creds (used by old tests / patches)
+        self.boto_creds = Credentials("AKIA123", "SECRET123", token="SESSION_TOKEN")
+
+        # util-style creds (returned by get_aws_credentials)
+        self.util_creds = AwsCredentials(
+            access_key=self.boto_creds.access_key,
+            secret_key=self.boto_creds.secret_key,
+            token=self.boto_creds.token,
         )
 
-    # ------------------------------------------------------------------ #
-    # Helper getters (swallow any extra args like session_manager)       #
-    # ------------------------------------------------------------------ #
-    def get_region(self, *_, **__) -> str | None:
+    def get_region(self, *_, **__) -> str:
         return self.region
 
-    def get_credentials(self, *_, **__) -> AwsCredentials | None:
-        return self.credentials
+    def get_arn(self, *_, **__) -> str:
+        return self.arn
 
-    # ------------------------------------------------------------------ #
-    # Context-manager patching                                           #
-    # ------------------------------------------------------------------ #
+    def get_boto_credentials(self, *_, **__) -> Credentials | None:
+        return self.boto_creds
+
+    def get_aws_credentials(self, *_, **__) -> AwsCredentials | None:
+        return self.util_creds
+
+    def sign_request(self, request: AWSRequest):
+        request.headers.add_header("X-Amz-Date", datetime.datetime.utcnow().isoformat())
+        request.headers.add_header("X-Amz-Security-Token", "<TOKEN>")
+        request.headers.add_header(
+            "Authorization",
+            "AWS4-HMAC-SHA256 Credential=<cred>, SignedHeaders=host;x-amz-date,"
+            " Signature=<sig>",
+        )
+
     def __enter__(self):
-        # Save & override env vars
-        self._prev_env = {
+        # Preserve existing env and then set creds/region for util fallback
+        self._old_env = {
             k: os.environ.get(k)
             for k in (
                 "AWS_ACCESS_KEY_ID",
@@ -275,47 +298,50 @@ class FakeAwsEnvironment:
                 "AWS_REGION",
             )
         }
-        if self.credentials:
-            os.environ.update(
-                {
-                    "AWS_ACCESS_KEY_ID": self.credentials.access_key,
-                    "AWS_SECRET_ACCESS_KEY": self.credentials.secret_key,
-                    "AWS_SESSION_TOKEN": (self.credentials.token or ""),
-                }
-            )
-        os.environ["AWS_REGION"] = self.region
+        os.environ.update(
+            {
+                "AWS_ACCESS_KEY_ID": self.util_creds.access_key,
+                "AWS_SECRET_ACCESS_KEY": self.util_creds.secret_key,
+                "AWS_SESSION_TOKEN": self.util_creds.token or "",
+                "AWS_REGION": self.region,
+            }
+        )
 
-        self.patchers: list[mock._patch] = [
+        self.patchers = [
+            # boto patches - for old driver tests
             mock.patch(
-                "snowflake.connector.wif_util.get_aws_credentials",
-                side_effect=self.get_credentials,
+                "boto3.session.Session.get_credentials",
+                side_effect=self.get_boto_credentials,
             ),
+            mock.patch(
+                "botocore.auth.SigV4Auth.add_auth", side_effect=self.sign_request
+            ),
+            # http approach patches - for new driver tests
             mock.patch(
                 "snowflake.connector.wif_util.get_aws_region",
                 side_effect=self.get_region,
             ),
-            # Avoid real network for IMDS token
             mock.patch(
-                "snowflake.connector.wif_util._imds_v2_token",
-                return_value=None,
+                "snowflake.connector.wif_util.get_aws_credentials",
+                side_effect=self.get_aws_credentials,
             ),
-            # Block stray HTTP traffic
+            # never contact IMDS for token
             mock.patch(
-                "urllib3.connection.HTTPConnection.request",
-                side_effect=ConnectTimeout(),
+                "snowflake.connector.wif_util._imds_v2_token", return_value=None
             ),
         ]
 
-        for p in self.patchers:
-            p.__enter__()
+        for patcher in self.patchers:
+            patcher.__enter__()
         return self
 
-    def __exit__(self, *args):
-        for p in self.patchers:
-            p.__exit__(*args)
-        # Restore original env vars
-        for key, val in self._prev_env.items():
-            if val is None:
-                os.environ.pop(key, None)
+    def __exit__(self, *args, **kwargs):
+        for patcher in self.patchers:
+            patcher.__exit__(*args, **kwargs)
+
+        # restore previous env
+        for k, v in self._old_env.items():
+            if v is None:
+                os.environ.pop(k, None)
             else:
-                os.environ[key] = val
+                os.environ[k] = v
