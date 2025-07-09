@@ -576,7 +576,7 @@ class OCSPServer:
                             response.status_code,
                             sleep_time,
                         )
-                    time.sleep(sleep_time)
+                        time.sleep(sleep_time)
                 else:
                     logger.error(
                         "Failed to get OCSP response after %s attempt.", max_retry
@@ -1649,7 +1649,7 @@ class SnowflakeOCSP:
                             response.status_code,
                             sleep_time,
                         )
-                    time.sleep(sleep_time)
+                        time.sleep(sleep_time)
                 except Exception as ex:
                     if max_retry > 1:
                         sleep_time = next(backoff)
