@@ -48,7 +48,7 @@ def create_session(
         create_session(rest, num_sessions - 1, url)
 
 
-@mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
+@mock.patch("snowflake.connector.network.SessionManager.make_session")
 def test_no_url_multiple_sessions(make_session_mock):
     rest = SnowflakeRestful(connection=mock_conn)
 
@@ -56,16 +56,16 @@ def test_no_url_multiple_sessions(make_session_mock):
 
     assert make_session_mock.call_count == 2
 
-    assert list(rest._sessions_map.keys()) == [None]
+    assert list(rest.sessions_map.keys()) == [None]
 
-    session_pool = rest._sessions_map[None]
+    session_pool = rest.sessions_map[None]
     assert len(session_pool._idle_sessions) == 2
     assert len(session_pool._active_sessions) == 0
 
     close_sessions(rest, 1)
 
 
-@mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
+@mock.patch("snowflake.connector.network.SessionManager.make_session")
 def test_multiple_urls_multiple_sessions(make_session_mock):
     rest = SnowflakeRestful(connection=mock_conn)
 
@@ -74,18 +74,18 @@ def test_multiple_urls_multiple_sessions(make_session_mock):
 
     assert make_session_mock.call_count == 6
 
-    hostnames = list(rest._sessions_map.keys())
+    hostnames = list(rest.sessions_map.keys())
     for hostname in [hostname_1, hostname_2, None]:
         assert hostname in hostnames
 
-    for pool in rest._sessions_map.values():
+    for pool in rest.sessions_map.values():
         assert len(pool._idle_sessions) == 2
         assert len(pool._active_sessions) == 0
 
     close_sessions(rest, 3)
 
 
-@mock.patch("snowflake.connector.network.SnowflakeRestful.make_requests_session")
+@mock.patch("snowflake.connector.network.SessionManager.make_session")
 def test_multiple_urls_reuse_sessions(make_session_mock):
     rest = SnowflakeRestful(connection=mock_conn)
     for url in [url_1, url_2, url_3, None]:
@@ -96,12 +96,12 @@ def test_multiple_urls_reuse_sessions(make_session_mock):
     # only one session is created and reused thereafter
     assert make_session_mock.call_count == 3
 
-    hostnames = list(rest._sessions_map.keys())
+    hostnames = list(rest.sessions_map.keys())
     assert len(hostnames) == 3
     for hostname in [hostname_1, hostname_2, None]:
         assert hostname in hostnames
 
-    for pool in rest._sessions_map.values():
+    for pool in rest.sessions_map.values():
         assert len(pool._idle_sessions) == 1
         assert len(pool._active_sessions) == 0
 
