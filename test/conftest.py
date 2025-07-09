@@ -6,7 +6,7 @@ import socket
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
-from typing import Generator, Optional
+from typing import Generator
 
 import pytest
 
@@ -160,7 +160,7 @@ def find_free_port() -> int:
     return port
 
 
-def get_server_parameter_value(connection, parameter_name: str) -> Optional[str]:
+def get_server_parameter_value(connection, parameter_name: str) -> str | None:
     """Get server parameter value, returns None if parameter doesn't exist."""
     try:
         with connection.cursor() as cur:
