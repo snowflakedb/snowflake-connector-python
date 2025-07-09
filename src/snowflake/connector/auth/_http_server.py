@@ -69,9 +69,11 @@ class AuthHttpServer:
     def __init__(
         self,
         uri: str,
+        redirect_uri: str,
         buf_size: int = 16384,
     ) -> None:
         parsed_uri = urllib.parse.urlparse(uri)
+        parsed_redirect = urllib.parse.urlparse(redirect_uri)
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.buf_size = buf_size
         if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
@@ -123,6 +125,24 @@ class AuthHttpServer:
             query=parsed_uri.query,
             fragment=parsed_uri.fragment,
         )
+        if parsed_redirect.hostname in ("localhost", "127.0.0.1"):
+            logger.debug(
+                f"Redirect URI hostname is {parsed_redirect.hostname}, redirect port {parsed_redirect.port} will be changed to the server port {port}."
+            )
+            self._redirect_uri = urllib.parse.ParseResult(
+                scheme=parsed_redirect.scheme,
+                netloc=parsed_redirect.hostname + ":" + str(port),
+                path=parsed_redirect.path,
+                params=parsed_redirect.params,
+                query=parsed_redirect.query,
+                fragment=parsed_redirect.fragment,
+            )
+        else:
+            self._redirect_uri = parsed_redirect
+
+    @property
+    def redirect_uri(self) -> str:
+        return self._redirect_uri.geturl()
 
     @property
     def url(self) -> str:
