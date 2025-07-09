@@ -367,7 +367,7 @@ def test_oauth_code_custom_urls(
 
 
 @pytest.mark.skipolddriver
-@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 120)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_local_application_custom_urls_successful_flow(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
@@ -376,8 +376,6 @@ def test_oauth_code_local_application_custom_urls_successful_flow(
     monkeypatch,
     omit_oauth_urls_check,
 ) -> None:
-    from ..conftest import find_free_port
-
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
 
     wiremock_client.import_mapping(
@@ -391,10 +389,6 @@ def test_oauth_code_local_application_custom_urls_successful_flow(
         wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
     )
 
-    # Use dynamic port to avoid conflicts and higher timeout for all environments
-    free_port = find_free_port()
-    oauth_redirect_uri = f"http://localhost:{free_port}/snowflake/oauth-redirect"
-
     with mock.patch("webbrowser.open", new=webbrowser_mock.open):
         with mock.patch("secrets.token_urlsafe", return_value="abc123"):
             cnx = snowflake.connector.connect(
@@ -407,10 +401,9 @@ def test_oauth_code_local_application_custom_urls_successful_flow(
                 role="ANALYST",
                 oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/tokenrequest",
                 oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/authorization",
-                oauth_redirect_uri=oauth_redirect_uri,
+                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
                 host=wiremock_client.wiremock_host,
                 port=wiremock_client.wiremock_http_port,
-                external_browser_timeout=120,  # Higher timeout for all environments
             )
 
             assert cnx, "invalid cnx"
