@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover
 
 import jwt
 
-from ._aws_credentials import load_default_credentials
+from ._aws_credentials import get_region, load_default_credentials
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
 from .vendored import requests
@@ -117,14 +117,8 @@ def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[st
 
 
 def get_aws_region() -> str | None:
-    """Get the current AWS workload's region, if any."""
-    if "AWS_REGION" in os.environ:  # Lambda
-        return os.environ["AWS_REGION"]
-    else:  # EC2
-        if InstanceMetadataRegionFetcher is None:
-            logger.debug("botocore is not available; cannot determine region via IMDS.")
-            return None
-        return InstanceMetadataRegionFetcher().retrieve_region()
+    """Determine AWS region using our lightweight helper."""
+    return get_region()
 
 
 def get_aws_arn() -> str | None:

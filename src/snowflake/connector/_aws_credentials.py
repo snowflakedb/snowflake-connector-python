@@ -128,3 +128,35 @@ def load_default_credentials() -> Credentials | None:
         if creds is not None:
             return creds
     return None
+
+
+def get_region() -> str | None:
+    """Return the AWS region for the current workload, if it can be determined.
+
+    Resolution order:
+    1. `AWS_REGION` or `AWS_DEFAULT_REGION` env vars (commonly set in Lambda/ECS).
+    2. EC2 Instance Metadata Service (IMDS) – derive from availability zone.
+    """
+    # 1. Environment variables
+    env_region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+    if env_region:
+        return env_region
+
+    # 2. EC2 / on-prem metadata endpoint
+    token = _imds_v2_token()
+    headers = {"X-aws-ec2-metadata-token": token} if token else {}
+    try:
+        res = requests.get(
+            f"{_IMDS_BASE_URI}/latest/meta-data/placement/availability-zone",
+            headers=headers,
+            timeout=1,
+        )
+        if res.ok:
+            az = res.text.strip()
+            # availability zone is region + letter, e.g. us-east-1a → us-east-1
+            if len(az) >= 2 and az[-1].isalpha():
+                return az[:-1]
+    except Exception as exc:
+        logger.debug("Failed to fetch region from IMDS: %s", exc, exc_info=True)
+
+    return None
