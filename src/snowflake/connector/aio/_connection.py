@@ -11,6 +11,7 @@ import os
 import pathlib
 import sys
 import uuid
+import warnings
 from contextlib import suppress
 from io import StringIO
 from logging import getLogger
@@ -170,7 +171,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"],
             )
 
-        if ".privatelink.snowflakecomputing." in self.host:
+        if ".privatelink.snowflakecomputing." in self.host.lower():
             await SnowflakeConnection.setup_ocsp_privatelink(
                 self.application, self.host
             )
@@ -495,6 +496,26 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 connection_init_kwargs["application"] = os.environ[ENV_VAR_PARTNER]
             elif "streamlit" in sys.modules:
                 connection_init_kwargs["application"] = "streamlit"
+
+        if "insecure_mode" in connection_init_kwargs:
+            warn_message = "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
+            warnings.warn(
+                warn_message,
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+            if (
+                "disable_ocsp_checks" in connection_init_kwargs
+                and connection_init_kwargs["disable_ocsp_checks"]
+                != connection_init_kwargs["insecure_mode"]
+            ):
+                logger.warning(
+                    "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                    "Using the value of 'disable_ocsp_checks."
+                )
+            else:
+                self._disable_ocsp_checks = connection_init_kwargs["insecure_mode"]
 
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None
@@ -969,6 +990,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
     @staticmethod
     async def setup_ocsp_privatelink(app, hostname) -> None:
+        hostname = hostname.lower()
         async with SnowflakeConnection.OCSP_ENV_LOCK:
             ocsp_cache_server = f"http://ocsp.{hostname}/ocsp_response_cache.json"
             os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"] = ocsp_cache_server
