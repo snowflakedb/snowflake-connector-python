@@ -141,6 +141,7 @@ async def aio_connection(db_parameters):
         warehouse=db_parameters["warehouse"],
         protocol=db_parameters["protocol"],
         timezone="UTC",
+        role=db_parameters.get("role", None),
     )
     yield cnx
     await cnx.close()
