@@ -92,6 +92,11 @@ def is_public_testaccount() -> bool:
 
 
 @pytest.fixture(scope="session")
+def is_local_dev_setup(db_parameters) -> bool:
+    return db_parameters.get("is_local_dev_setup", False)
+
+
+@pytest.fixture(scope="session")
 def db_parameters() -> dict[str, str]:
     return get_db_parameters()
 
