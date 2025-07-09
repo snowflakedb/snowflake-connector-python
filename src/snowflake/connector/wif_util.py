@@ -7,12 +7,23 @@ from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum, unique
 
-import boto3
-import jwt
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-from botocore.utils import InstanceMetadataRegionFetcher
+try:
+    import boto3  # type: ignore
+except ImportError:  # pragma: no cover
+    boto3 = None  # type: ignore
 
+try:
+    from botocore.auth import SigV4Auth  # type: ignore
+    from botocore.awsrequest import AWSRequest  # type: ignore
+    from botocore.utils import InstanceMetadataRegionFetcher  # type: ignore
+except ImportError:  # pragma: no cover
+    SigV4Auth = None  # type: ignore
+    AWSRequest = None  # type: ignore
+    InstanceMetadataRegionFetcher = None  # type: ignore
+
+import jwt
+
+from ._aws_credentials import load_default_credentials
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
 from .vendored import requests
@@ -110,11 +121,19 @@ def get_aws_region() -> str | None:
     if "AWS_REGION" in os.environ:  # Lambda
         return os.environ["AWS_REGION"]
     else:  # EC2
+        if InstanceMetadataRegionFetcher is None:
+            logger.debug("botocore is not available; cannot determine region via IMDS.")
+            return None
         return InstanceMetadataRegionFetcher().retrieve_region()
 
 
 def get_aws_arn() -> str | None:
     """Get the current AWS workload's ARN, if any."""
+    if boto3 is None:
+        logger.debug(
+            "boto3 is not available; cannot call sts:GetCallerIdentity to fetch ARN."
+        )
+        return None
     caller_identity = boto3.client("sts").get_caller_identity()
     if not caller_identity or "Arn" not in caller_identity:
         return None
@@ -185,12 +204,14 @@ def get_aws_sts_hostname(region: str, partition: str) -> str | None:
         return None
 
 
+# Ensure that botocore components are available before attempting to generate an
+# AWS attestation.
 def create_aws_attestation() -> WorkloadIdentityAttestation | None:
     """Tries to create a workload identity attestation for AWS.
 
     If the application isn't running on AWS or no credentials were found, returns None.
     """
-    aws_creds = boto3.session.Session().get_credentials()
+    aws_creds = load_default_credentials()
     if not aws_creds:
         logger.debug("No AWS credentials were found.")
         return None
@@ -205,6 +226,10 @@ def create_aws_attestation() -> WorkloadIdentityAttestation | None:
     partition = get_aws_partition(arn)
     if not partition:
         logger.debug("No AWS partition was found.")
+        return None
+
+    if AWSRequest is None or SigV4Auth is None:
+        logger.debug("botocore is not available; cannot generate AWS attestation.")
         return None
 
     sts_hostname = get_aws_sts_hostname(region, partition)
