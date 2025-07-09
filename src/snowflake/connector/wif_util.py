@@ -26,6 +26,7 @@ import jwt
 from ._aws_credentials import get_region, load_default_credentials
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
+from .sign_v4 import sign_get_caller_identity
 from .vendored import requests
 from .vendored.requests import Response
 
@@ -227,22 +228,22 @@ def create_aws_attestation() -> WorkloadIdentityAttestation | None:
         return None
 
     sts_hostname = get_aws_sts_hostname(region, partition)
-    request = AWSRequest(
-        method="POST",
-        url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
-        headers={
-            "Host": sts_hostname,
-            "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
-        },
+
+    sts_url = f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15"
+    signed_headers = sign_get_caller_identity(
+        url=sts_url,
+        region=region,
+        access_key=aws_creds.access_key,
+        secret_key=aws_creds.secret_key,
+        session_token=aws_creds.token,
     )
 
-    SigV4Auth(aws_creds, "sts", region).add_auth(request)
-
     assertion_dict = {
-        "url": request.url,
-        "method": request.method,
-        "headers": dict(request.headers.items()),
+        "url": sts_url,
+        "method": "POST",
+        "headers": signed_headers,
     }
+
     credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
     return WorkloadIdentityAttestation(
         AttestationProvider.AWS, credential, {"arn": arn}
