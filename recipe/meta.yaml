@@ -55,6 +55,8 @@ requirements:
     - sortedcontainers >=2.4.0
     - platformdirs >=2.6.0,<5.0.0
     - tomlkit
+    - pandas
+    - pyarrow
   run_constrained:
     - pandas>=2.1.2,<3.0.0
     - pyarrow<19.0.0
