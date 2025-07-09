@@ -230,7 +230,7 @@ def create_aws_attestation() -> WorkloadIdentityAttestation | None:
     sts_hostname = get_aws_sts_hostname(region, partition)
 
     sts_url = f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15"
-    signed_headers = sign_get_caller_identity(
+    hdrs = sign_get_caller_identity(
         url=sts_url,
         region=region,
         access_key=aws_creds.access_key,
@@ -238,13 +238,8 @@ def create_aws_attestation() -> WorkloadIdentityAttestation | None:
         session_token=aws_creds.token,
     )
 
-    assertion_dict = {
-        "url": sts_url,
-        "method": "POST",
-        "headers": signed_headers,
-    }
-
-    credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
+    assertion_dict = {"url": sts_url, "method": "POST", "headers": hdrs}
+    credential = b64encode(json.dumps(assertion_dict).encode()).decode()
     return WorkloadIdentityAttestation(
         AttestationProvider.AWS, credential, {"arn": arn}
     )
