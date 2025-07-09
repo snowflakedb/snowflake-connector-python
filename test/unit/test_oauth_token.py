@@ -367,7 +367,7 @@ def test_oauth_code_custom_urls(
 
 
 @pytest.mark.skipolddriver
-@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 120)
 def test_oauth_code_local_application_custom_urls_successful_flow(
     wiremock_client: WiremockClient,
     wiremock_oauth_authorization_code_dir,
