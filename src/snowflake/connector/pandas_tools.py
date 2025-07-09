@@ -26,6 +26,7 @@ from ._utils import (
     get_temp_type_for_object,
     random_name_for_temp_object,
 )
+from .constants import _PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS
 from .cursor import SnowflakeCursor
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -352,8 +353,9 @@ def write_pandas(
             f"Invalid compression '{compression}', only acceptable values are: {compression_map.keys()}"
         )
 
+    # TODO(SNOW-1505026): Get rid of this when the BCR to always create scoped temp for intermediate results is done.
     _use_scoped_temp_object = (
-        conn._session_parameters.get("ENABLE_FIX_1375538", False)
+        conn._session_parameters.get(_PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS, False)
         if conn._session_parameters
         else False
     )
