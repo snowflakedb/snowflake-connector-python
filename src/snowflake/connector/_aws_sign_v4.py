@@ -1,4 +1,3 @@
-# wif_util/sign_v4.py
 from __future__ import annotations
 
 import datetime

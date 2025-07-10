@@ -8,11 +8,6 @@ from dataclasses import dataclass
 from enum import Enum, unique
 
 try:
-    import boto3  # type: ignore
-except ImportError:  # pragma: no cover
-    boto3 = None  # type: ignore
-
-try:
     from botocore.auth import SigV4Auth  # type: ignore
     from botocore.awsrequest import AWSRequest  # type: ignore
     from botocore.utils import InstanceMetadataRegionFetcher  # type: ignore
@@ -24,9 +19,9 @@ except ImportError:  # pragma: no cover
 import jwt
 
 from ._aws_credentials import get_region, load_default_credentials
+from ._aws_sign_v4 import sign_get_caller_identity
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
-from .sign_v4 import sign_get_caller_identity
 from .vendored import requests
 from .vendored.requests import Response
 
@@ -122,19 +117,6 @@ def get_aws_region() -> str | None:
     return get_region()
 
 
-def get_aws_arn() -> str | None:
-    """Get the current AWS workload's ARN, if any."""
-    if boto3 is None:
-        logger.debug(
-            "boto3 is not available; cannot call sts:GetCallerIdentity to fetch ARN."
-        )
-        return None
-    caller_identity = boto3.client("sts").get_caller_identity()
-    if not caller_identity or "Arn" not in caller_identity:
-        return None
-    return caller_identity["Arn"]
-
-
 def get_aws_partition(arn: str) -> str | None:
     """Get the current AWS partition from ARN, if any.
 
@@ -156,7 +138,7 @@ def get_aws_partition(arn: str) -> str | None:
     return None
 
 
-def get_aws_sts_hostname(region: str, partition: str) -> str | None:
+def get_aws_sts_hostname(region: str) -> str | None:
     """Constructs the AWS STS hostname for a given region and partition.
 
     Args:
@@ -172,77 +154,66 @@ def get_aws_sts_hostname(region: str, partition: str) -> str | None:
     - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
     - https://docs.aws.amazon.com/general/latest/gr/sts.html
     """
-    if (
-        not region
-        or not partition
-        or not isinstance(region, str)
-        or not isinstance(partition, str)
-    ):
-        return None
-
-    if partition == "aws":
-        # For the 'aws' partition, STS endpoints are generally regional
-        # except for the global endpoint (sts.amazonaws.com) which is
-        # generally resolved to us-east-1 under the hood by the SDKs
-        # when a region is not explicitly specified.
-        # However, for explicit regional endpoints, the format is sts.<region>.amazonaws.com
-        return f"sts.{region}.amazonaws.com"
-    elif partition == "aws-cn":
-        # China regions have a different domain suffix
+    partition = partition_from_region(region)
+    if partition is AWSPartition.CHINA:
         return f"sts.{region}.amazonaws.com.cn"
-    elif partition == "aws-us-gov":
-        return (
-            f"sts.{region}.amazonaws.com"  # GovCloud uses .com, but dedicated regions
-        )
+    elif partition is AWSPartition.BASE or partition is AWSPartition.GOV:
+        return f"sts.{region}.amazonaws.com"
     else:
-        logger.warning("Invalid AWS partition: %s", partition)
+        logger.warning("Invalid AWS partition: %s", region)
         return None
 
 
-# Ensure that botocore components are available before attempting to generate an
-# AWS attestation.
+class AWSPartition(str, Enum):
+    BASE = "aws"
+    CHINA = "aws-cn"
+    GOV = "aws-us-gov"
+
+
+def partition_from_region(region: str) -> AWSPartition:
+    if region.startswith("cn-"):
+        return AWSPartition.CHINA
+    if region.startswith("us-gov-"):
+        return AWSPartition.GOV
+    return AWSPartition.BASE
+
+
+def sts_host_from_region(region: str) -> str:
+    part = partition_from_region(region)
+    suffix = ".amazonaws.com.cn" if part is AWSPartition.CHINA else ".amazonaws.com"
+    return f"sts.{region}{suffix}"
+
+
 def create_aws_attestation() -> WorkloadIdentityAttestation | None:
-    """Tries to create a workload identity attestation for AWS.
-
-    If the application isn't running on AWS or no credentials were found, returns None.
-    """
-    aws_creds = load_default_credentials()
-    if not aws_creds:
-        logger.debug("No AWS credentials were found.")
+    creds = load_default_credentials()
+    if not creds:
+        logger.debug("No AWS credentials available.")
         return None
-    region = get_aws_region()
+
+    region = get_region()
     if not region:
-        logger.debug("No AWS region was found.")
-        return None
-    arn = get_aws_arn()
-    if not arn:
-        logger.debug("No AWS caller identity was found.")
-        return None
-    partition = get_aws_partition(arn)
-    if not partition:
-        logger.debug("No AWS partition was found.")
+        logger.debug("Region could not be determined.")
         return None
 
-    if AWSRequest is None or SigV4Auth is None:
-        logger.debug("botocore is not available; cannot generate AWS attestation.")
-        return None
-
-    sts_hostname = get_aws_sts_hostname(region, partition)
-
-    sts_url = f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15"
-    hdrs = sign_get_caller_identity(
+    sts_url = (
+        f"https://{sts_host_from_region(region)}"
+        "/?Action=GetCallerIdentity&Version=2011-06-15"
+    )
+    signed_headers = sign_get_caller_identity(
         url=sts_url,
         region=region,
-        access_key=aws_creds.access_key,
-        secret_key=aws_creds.secret_key,
-        session_token=aws_creds.token,
+        access_key=creds.access_key,
+        secret_key=creds.secret_key,
+        session_token=creds.token,
     )
 
-    assertion_dict = {"url": sts_url, "method": "POST", "headers": hdrs}
-    credential = b64encode(json.dumps(assertion_dict).encode()).decode()
-    return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"arn": arn}
-    )
+    attestation = b64encode(
+        json.dumps(
+            {"url": sts_url, "method": "POST", "headers": signed_headers}
+        ).encode()
+    ).decode()
+
+    return WorkloadIdentityAttestation(AttestationProvider.AWS, attestation, {})
 
 
 def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
