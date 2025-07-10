@@ -32,6 +32,8 @@ _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING = (
 
 REQUEST_ID_STATEMENT_PARAM_NAME = "requestId"
 
+def no_op():
+    pass
 
 def generate_random_alphanumeric(length: int = 10) -> str:
     return "".join(choice(ALPHANUMERIC) for _ in range(length))
