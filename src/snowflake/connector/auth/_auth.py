@@ -120,6 +120,7 @@ class Auth:
                     "LOGIN_TIMEOUT": login_timeout,
                     "NETWORK_TIMEOUT": network_timeout,
                     "SOCKET_TIMEOUT": socket_timeout,
+                    "PLATFORM": [],
                 },
             },
         }
