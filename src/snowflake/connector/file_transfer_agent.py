@@ -15,10 +15,10 @@ from logging import getLogger
 from time import time
 from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 
+from ._utils import _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import IS_WINDOWS
 from .constants import (
-    _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     AZURE_CHUNK_SIZE,
     AZURE_FS,
     CMD_TYPE_DOWNLOAD,

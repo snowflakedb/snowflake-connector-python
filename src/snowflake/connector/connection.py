@@ -29,6 +29,10 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
+from ._utils import (
+    _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+)
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
     Auth,
@@ -53,10 +57,8 @@ from .config_manager import CONFIG_MANAGER, _get_default_connection_params
 from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
-    _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     _DOMAIN_NAME_MAP,
     _OAUTH_DEFAULT_SCOPE,
-    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,

@@ -7,9 +7,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from snowflake.connector.connection import SnowflakeConnection
-from snowflake.connector.constants import (
-    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
-)
 from snowflake.connector.cursor import SnowflakeCursor
 from snowflake.connector.errors import ServiceUnavailableError
 
@@ -198,6 +195,10 @@ class TestUploadDownloadMethods(TestCase):
 
         It mainly verifies that when performing the specified task, we are using a FileTransferAgent with DoP cap as specified.
         """
+        from snowflake.connector._utils import (
+            _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+        )
+
         mock_conn = FakeConnection()
         setattr(
             mock_conn, f"_{_VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER}", dop_cap
