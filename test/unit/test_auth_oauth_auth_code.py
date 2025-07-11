@@ -4,7 +4,7 @@
 #
 
 import unittest.mock as mock
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
 import pytest
 
@@ -209,3 +209,69 @@ def test_eligible_for_default_client_credentials_via_constructor(
             assert_initialized_correctly()
     else:
         assert_initialized_correctly()
+
+
+@pytest.mark.parametrize("redirect_uri", ["https://redirect/uri"])
+@pytest.mark.parametrize("rtr_enabled", [True, False])
+def test_auth_oauth_auth_code_uses_redirect_uri(
+    redirect_uri, rtr_enabled: bool, omit_oauth_urls_check
+):
+    """Test that the redirect URI is used correctly in the OAuth authorization code flow."""
+    auth = AuthByOauthCode(
+        "app",
+        "clientId",
+        "clientSecret",
+        "auth_url",
+        "tokenRequestUrl",
+        redirect_uri,
+        "scope",
+        "host",
+        pkce_enabled=False,
+        enable_single_use_refresh_tokens=rtr_enabled,
+    )
+
+    def fake_get_request_token_response(_, fields: dict[str, str]):
+        if rtr_enabled:
+            assert fields.get("enable_single_use_refresh_tokens") == "true"
+        else:
+            assert "enable_single_use_refresh_tokens" not in fields
+        return ("access_token", "refresh_token")
+
+    with patch(
+        "snowflake.connector.auth.AuthByOauthCode._construct_authorization_request",
+        return_value="authorization_request",
+    ) as mock_construct_authorization_request:
+        with patch(
+            "snowflake.connector.auth.AuthByOauthCode._receive_authorization_callback",
+            return_value=("code", auth._state),
+        ):
+            with patch(
+                "snowflake.connector.auth.AuthByOauthCode._ask_authorization_callback_from_user",
+                return_value=("code", auth._state),
+            ):
+                with patch(
+                    "snowflake.connector.auth.AuthByOauthCode._get_request_token_response",
+                    side_effect=fake_get_request_token_response,
+                ) as mock_get_request_token_response:
+                    with patch(
+                        "snowflake.connector.auth._http_server.AuthHttpServer.redirect_uri",
+                        return_value=redirect_uri,
+                        new_callable=PropertyMock,
+                    ):
+                        auth.prepare(
+                            conn=None,
+                            authenticator=OAUTH_AUTHORIZATION_CODE,
+                            service_name=None,
+                            account="acc",
+                            user="user",
+                        )
+                        mock_construct_authorization_request.assert_called_once_with(
+                            redirect_uri
+                        )
+                        assert mock_get_request_token_response.call_count == 1
+                        assert (
+                            mock_get_request_token_response.call_args[0][1][
+                                "redirect_uri"
+                            ]
+                            == redirect_uri
+                        )
