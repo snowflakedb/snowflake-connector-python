@@ -24,7 +24,10 @@ def test_auth_callback_success(monkeypatch, dontwait, timeout, reuse_port) -> No
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", reuse_port)
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", dontwait)
     test_response: requests.Response | None = None
-    with AuthHttpServer("http://127.0.0.1/test_request") as callback_server:
+    with AuthHttpServer(
+        uri="http://127.0.0.1/test_request",
+        redirect_uri="http://127.0.0.1/test_request",
+    ) as callback_server:
 
         def request_callback():
             nonlocal test_response
@@ -57,7 +60,103 @@ def test_auth_callback_success(monkeypatch, dontwait, timeout, reuse_port) -> No
 def test_auth_callback_timeout(monkeypatch, dontwait, timeout, reuse_port) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", reuse_port)
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", dontwait)
-    with AuthHttpServer("http://127.0.0.1/test_request") as callback_server:
+    with AuthHttpServer(
+        uri="http://127.0.0.1/test_request",
+        redirect_uri="http://127.0.0.1/test_request",
+    ) as callback_server:
         block, client_socket = callback_server.receive_block(timeout=timeout)
         assert block is None
         assert client_socket is None
+
+
+@pytest.mark.parametrize(
+    "socket_host",
+    [
+        "127.0.0.1",
+        "localhost",
+    ],
+)
+@pytest.mark.parametrize(
+    "socket_port",
+    [
+        "",
+        ":0",
+        ":12345",
+    ],
+)
+@pytest.mark.parametrize(
+    "redirect_host",
+    [
+        "127.0.0.1",
+        "localhost",
+    ],
+)
+@pytest.mark.parametrize(
+    "redirect_port",
+    [
+        "",
+        ":0",
+        ":12345",
+    ],
+)
+@pytest.mark.parametrize(
+    "dontwait",
+    ["false", "true"],
+)
+@pytest.mark.parametrize("reuse_port", ["true", "false"])
+def test_auth_callback_server_updates_localhost_redirect_uri_port_to_match_socket_port(
+    monkeypatch,
+    socket_host,
+    socket_port,
+    redirect_host,
+    redirect_port,
+    dontwait,
+    reuse_port,
+) -> None:
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", reuse_port)
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", dontwait)
+    with AuthHttpServer(
+        uri=f"http://{socket_host}{socket_port}/test_request",
+        redirect_uri=f"http://{redirect_host}{redirect_port}/test_request",
+    ) as callback_server:
+        assert callback_server._redirect_uri.port == callback_server.port
+
+
+@pytest.mark.parametrize(
+    "socket_host",
+    [
+        "127.0.0.1",
+        "localhost",
+    ],
+)
+@pytest.mark.parametrize(
+    "socket_port",
+    [
+        "",
+        ":0",
+        ":12345",
+    ],
+)
+@pytest.mark.parametrize(
+    "redirect_port",
+    [
+        "",
+        ":0",
+        ":12345",
+    ],
+)
+@pytest.mark.parametrize(
+    "dontwait",
+    ["false", "true"],
+)
+@pytest.mark.parametrize("reuse_port", ["true", "false"])
+def test_auth_callback_server_does_not_updates_nonlocalhost_redirect_uri_port_to_match_socket_port(
+    monkeypatch, socket_host, socket_port, redirect_port, dontwait, reuse_port
+) -> None:
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", reuse_port)
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", dontwait)
+    redirect_uri = f"http://not_localhost{redirect_port}/test_request"
+    with AuthHttpServer(
+        uri=f"http://{socket_host}{socket_port}/test_request", redirect_uri=redirect_uri
+    ) as callback_server:
+        assert callback_server.redirect_uri == redirect_uri
