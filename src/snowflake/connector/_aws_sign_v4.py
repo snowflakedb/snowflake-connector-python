@@ -1,68 +1,105 @@
 from __future__ import annotations
 
-import datetime
-import hashlib
-import hmac
-import urllib.parse as _u
+import datetime as _dt
+import hashlib as _hashlib
+import hmac as _hmac
+import urllib.parse as _urlparse
 
-_ALGO = "AWS4-HMAC-SHA256"
-_EMPTY_HASH = hashlib.sha256(b"").hexdigest()
-_SAFE = "-_.~"
-
-
-def _h(key: bytes, msg: str) -> bytes:
-    return hmac.new(key, msg.encode(), hashlib.sha256).digest()
+_ALGORITHM: str = "AWS4-HMAC-SHA256"
+_EMPTY_PAYLOAD_SHA256: str = _hashlib.sha256(b"").hexdigest()
+_SAFE_CHARS: str = "-_.~"
 
 
-def _canonical_qs(qs: str) -> str:
-    pairs = _u.parse_qsl(qs, keep_blank_values=True)
+def _sign(key: bytes, msg: str) -> bytes:
+    """Return an HMAC-SHA256 of *msg* keyed with *key*."""
+    return _hmac.new(key, msg.encode(), _hashlib.sha256).digest()
+
+
+def _canonical_query_string(query: str) -> str:
+    """Return the query string in canonical (sorted & URL-escaped) form."""
+    pairs = _urlparse.parse_qsl(query, keep_blank_values=True)
     pairs.sort()
-    return "&".join(f"{_u.quote(k, _SAFE)}={_u.quote(v, _SAFE)}" for k, v in pairs)
+    return "&".join(
+        f"{_urlparse.quote(k, _SAFE_CHARS)}={_urlparse.quote(v, _SAFE_CHARS)}"
+        for k, v in pairs
+    )
 
 
-def sign_get_caller_identity(url, region, access_key, secret_key, session_token=None):
-    now = datetime.datetime.utcnow()
-    amz_d = now.strftime("%Y%m%dT%H%M%SZ")
-    date = now.strftime("%Y%m%d")
-    svc = "sts"
+def sign_get_caller_identity(
+    url: str,
+    region: str,
+    access_key: str,
+    secret_key: str,
+    session_token: str | None = None,
+) -> dict[str, str]:
+    """
+    Return the SigV4 headers needed for a presigned **POST** to AWS STS
+    `GetCallerIdentity`.
 
-    p = _u.urlparse(url)
-    hdrs = {
-        "host": p.netloc.lower(),
-        "x-amz-date": amz_d,
+    Parameters
+    ----------
+    url
+        The full STS endpoint with query parameters
+        (e.g. ``https://sts.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15``)
+    region
+        The AWS region used for signing (``us-east-1``, ``us-gov-west-1`` …).
+    access_key
+        AWS access-key ID.
+    secret_key
+        AWS secret-access key.
+    session_token
+        (Optional) session token for temporary credentials.
+    """
+    timestamp = _dt.datetime.utcnow()
+    amz_date = timestamp.strftime("%Y%m%dT%H%M%SZ")
+    short_date = timestamp.strftime("%Y%m%d")
+    service = "sts"
+
+    parsed = _urlparse.urlparse(url)
+
+    headers: dict[str, str] = {
+        "host": parsed.netloc.lower(),
+        "x-amz-date": amz_date,
         "x-snowflake-audience": "snowflakecomputing.com",
-        # "x-amz-content-sha256": _EMPTY_HASH,
     }
     if session_token:
-        hdrs["x-amz-security-token"] = session_token
+        headers["x-amz-security-token"] = session_token
 
-    # ----- canonical request -----
-    signed = ";".join(sorted(hdrs))
-    can_req = "\n".join(
-        [
+    # Canonical request
+    signed_headers = ";".join(sorted(headers))  # e.g. host;x-amz-date;...
+    canonical_request = "\n".join(
+        (
             "POST",
-            _u.quote(p.path or "/", safe="/"),
-            _canonical_qs(p.query),
-            "".join(f"{k}:{hdrs[k]}\n" for k in sorted(hdrs)),
-            signed,
-            _EMPTY_HASH,
-        ]
+            _urlparse.quote(parsed.path or "/", safe="/"),
+            _canonical_query_string(parsed.query),
+            "".join(f"{k}:{headers[k]}\n" for k in sorted(headers)),
+            signed_headers,
+            _EMPTY_PAYLOAD_SHA256,
+        )
     )
-    hash_can = hashlib.sha256(can_req.encode()).hexdigest()
+    canonical_request_hash = _hashlib.sha256(canonical_request.encode()).hexdigest()
 
-    # ----- string to sign -----
-    scope = f"{date}/{region}/{svc}/aws4_request"
-    sts = "\n".join([_ALGO, amz_d, scope, hash_can])
-
-    # ----- HMAC chain -----
-    k = _h(("AWS4" + secret_key).encode(), date)
-    k = _h(k, region)
-    k = _h(k, svc)
-    k = _h(k, "aws4_request")
-    sig = hmac.new(k, sts.encode(), hashlib.sha256).hexdigest()
-
-    hdrs["authorization"] = (
-        f"{_ALGO} Credential={access_key}/{scope}, "
-        f"SignedHeaders={signed}, Signature={sig}"
+    # String to sign
+    credential_scope = f"{short_date}/{region}/{service}/aws4_request"
+    string_to_sign = "\n".join(
+        (_ALGORITHM, amz_date, credential_scope, canonical_request_hash)
     )
-    return hdrs
+
+    # Signature
+    key_date = _sign(("AWS4" + secret_key).encode(), short_date)
+    key_region = _sign(key_date, region)
+    key_service = _sign(key_region, service)
+    key_signing = _sign(key_service, "aws4_request")
+    signature = _hmac.new(
+        key_signing, string_to_sign.encode(), _hashlib.sha256
+    ).hexdigest()
+
+    # Final Authorization header
+    headers["authorization"] = (
+        f"{_ALGORITHM} "
+        f"Credential={access_key}/{credential_scope}, "
+        f"SignedHeaders={signed_headers}, "
+        f"Signature={signature}"
+    )
+
+    return headers

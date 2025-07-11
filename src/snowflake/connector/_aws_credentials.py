@@ -2,7 +2,8 @@
 Lightweight AWS credential resolution without boto3.
 
 Resolves credentials in the order: environment → ECS/EKS task metadata → EC2 IMDSv2.
-Returns a minimal `Credentials` object that works with SigV4 signing helpers.
+Returns a minimal `SfAWSCredentials` object that can be passed to SigV4 signing
+helpers unchanged.
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ _IMDS_AZ_PATH = "/latest/meta-data/placement/availability-zone"
 
 
 @dataclass
-class Credentials:
+class SfAWSCredentials:
     """Minimal stand-in for ``botocore.credentials.Credentials``."""
 
     access_key: str
@@ -33,15 +34,14 @@ class Credentials:
     token: str | None = None
 
 
-def get_env_credentials() -> Credentials | None:
-    """Static credentials from environment variables."""
+def get_env_credentials() -> SfAWSCredentials | None:
     key, secret = os.getenv("AWS_ACCESS_KEY_ID"), os.getenv("AWS_SECRET_ACCESS_KEY")
     if key and secret:
-        return Credentials(key, secret, os.getenv("AWS_SESSION_TOKEN"))
+        return SfAWSCredentials(key, secret, os.getenv("AWS_SESSION_TOKEN"))
     return None
 
 
-def get_container_credentials(*, timeout: float) -> Credentials | None:
+def get_container_credentials(*, timeout: float) -> SfAWSCredentials | None:
     """Credentials from ECS/EKS task-metadata endpoint."""
     rel_uri = os.getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
     full_uri = os.getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI")
@@ -53,7 +53,7 @@ def get_container_credentials(*, timeout: float) -> Credentials | None:
         response = requests.get(url, timeout=timeout)
         if response.ok:
             data = response.json()
-            return Credentials(
+            return SfAWSCredentials(
                 data["AccessKeyId"], data["SecretAccessKey"], data.get("Token")
             )
     except (requests.Timeout, requests.ConnectionError, ValueError) as exc:
@@ -73,7 +73,7 @@ def _get_imds_v2_token(timeout: float) -> str | None:
         return None
 
 
-def get_imds_credentials(*, timeout: float) -> Credentials | None:
+def get_imds_credentials(*, timeout: float) -> SfAWSCredentials | None:
     """Instance-profile credentials from the EC2 metadata service."""
     token = _get_imds_v2_token(timeout)
     headers = {"X-aws-ec2-metadata-token": token} if token else {}
@@ -93,7 +93,7 @@ def get_imds_credentials(*, timeout: float) -> Credentials | None:
         )
         if cred_resp.ok:
             data = cred_resp.json()
-            return Credentials(
+            return SfAWSCredentials(
                 data["AccessKeyId"], data["SecretAccessKey"], data.get("Token")
             )
     except (requests.Timeout, requests.ConnectionError, ValueError) as exc:
@@ -101,9 +101,9 @@ def get_imds_credentials(*, timeout: float) -> Credentials | None:
     return None
 
 
-def load_default_credentials(timeout: float = 2.0) -> Credentials | None:
+def load_default_credentials(timeout: float = 2.0) -> SfAWSCredentials | None:
     """Resolve credentials using the default AWS chain (env → task → IMDS)."""
-    providers: tuple[Callable[[], Credentials | None], ...] = (
+    providers: tuple[Callable[[], SfAWSCredentials | None], ...] = (
         get_env_credentials,
         partial(get_container_credentials, timeout=timeout),
         partial(get_imds_credentials, timeout=timeout),
