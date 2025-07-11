@@ -84,7 +84,10 @@ class AuthHttpServer:
             else:
                 self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
-        port = parsed_uri.port or 0
+        if parsed_redirect.hostname in ("localhost", "127.0.0.1"):
+            port = parsed_redirect.port or 0
+        else:
+            port = parsed_uri.port or 0
         for attempt in range(1, self.DEFAULT_MAX_ATTEMPTS + 1):
             try:
                 self._socket.bind(
@@ -125,9 +128,12 @@ class AuthHttpServer:
             query=parsed_uri.query,
             fragment=parsed_uri.fragment,
         )
-        if parsed_redirect.hostname in ("localhost", "127.0.0.1"):
+        if (
+            parsed_redirect.hostname in ("localhost", "127.0.0.1")
+            and port != parsed_redirect.port
+        ):
             logger.debug(
-                f"Redirect URI hostname is {parsed_redirect.hostname}, redirect port {parsed_redirect.port} will be changed to the server port {port}."
+                f"Updating redirect port {parsed_redirect.port} to match the server port {port}."
             )
             self._redirect_uri = urllib.parse.ParseResult(
                 scheme=parsed_redirect.scheme,
