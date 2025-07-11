@@ -22,11 +22,11 @@ from snowflake.connector.options import pandas
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
 
 from ._utils import (
-    _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING,
     TempObjectType,
     get_temp_type_for_object,
     random_name_for_temp_object,
 )
+from .constants import _PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS
 from .cursor import SnowflakeCursor
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -353,19 +353,12 @@ def write_pandas(
             f"Invalid compression '{compression}', only acceptable values are: {compression_map.keys()}"
         )
 
+    # TODO(SNOW-1505026): Get rid of this when the BCR to always create scoped temp for intermediate results is done.
     _use_scoped_temp_object = (
-        conn._session_parameters.get(
-            _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, False
-        )
+        conn._session_parameters.get(_PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS, False)
         if conn._session_parameters
         else False
     )
-
-    """sfc-gh-yixie: scoped temp stage isn't required out side of a SP.
-    TODO: remove the following line when merging SP connector and Python Connector.
-    Make sure `create scoped temp stage` is supported when it's not run in a SP.
-    """
-    _use_scoped_temp_object = False
 
     if create_temp_table:
         warnings.warn(
