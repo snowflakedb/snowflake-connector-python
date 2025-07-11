@@ -138,6 +138,59 @@ def test_auth_callback_server_updates_localhost_redirect_uri_port_to_match_socke
     ],
 )
 @pytest.mark.parametrize(
+    "redirect_host",
+    [
+        "127.0.0.1",
+        "localhost",
+    ],
+)
+@pytest.mark.parametrize(
+    "redirect_port",
+    [
+        54321,
+        54320,
+    ],
+)
+@pytest.mark.parametrize(
+    "dontwait",
+    ["false", "true"],
+)
+@pytest.mark.parametrize("reuse_port", ["true", "false"])
+def test_auth_callback_server_uses_redirect_uri_port_when_specified(
+    monkeypatch,
+    socket_host,
+    socket_port,
+    redirect_host,
+    redirect_port,
+    dontwait,
+    reuse_port,
+) -> None:
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", reuse_port)
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", dontwait)
+    with AuthHttpServer(
+        uri=f"http://{socket_host}{socket_port}/test_request",
+        redirect_uri=f"http://{redirect_host}:{redirect_port}/test_request",
+    ) as callback_server:
+        assert callback_server.port == redirect_port
+        assert callback_server._redirect_uri.port == redirect_port
+
+
+@pytest.mark.parametrize(
+    "socket_host",
+    [
+        "127.0.0.1",
+        "localhost",
+    ],
+)
+@pytest.mark.parametrize(
+    "socket_port",
+    [
+        "",
+        ":0",
+        ":12345",
+    ],
+)
+@pytest.mark.parametrize(
     "redirect_port",
     [
         "",
