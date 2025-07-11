@@ -293,3 +293,58 @@ def test_strip_stage_prefix_from_dst_file_name_for_download():
         agent._strip_stage_prefix_from_dst_file_name_for_download.assert_called_with(
             file
         )
+
+
+# The server DoP cap is newly introduced and therefore should not be tested in
+# old drivers.
+@pytest.mark.skipolddriver
+def test_server_dop_cap(tmp_path):
+    file1 = tmp_path / "file1"
+    file2 = tmp_path / "file2"
+    file1.touch()
+    file2.touch()
+    # Positive case
+    rest_client = SnowflakeFileTransferAgent(
+        mock.MagicMock(autospec=SnowflakeCursor),
+        "PUT some_file.txt",
+        {
+            "data": {
+                "command": "UPLOAD",
+                "src_locations": [file1, file2],
+                "sourceCompression": "none",
+                "parallel": 8,
+                "stageInfo": {
+                    "creds": {},
+                    "location": "some_bucket",
+                    "region": "no_region",
+                    "locationType": "AZURE",
+                    "path": "remote_loc",
+                    "endPoint": "",
+                    "storageAccount": "storage_account",
+                },
+            },
+            "success": True,
+        },
+        snowflake_server_dop_cap_for_file_transfer=1,
+    )
+    with mock.patch(
+        "snowflake.connector.file_transfer_agent.ThreadPoolExecutor"
+    ) as tpe:
+        with mock.patch("snowflake.connector.file_transfer_agent.threading.Condition"):
+            with mock.patch(
+                "snowflake.connector.file_transfer_agent.TransferMetadata",
+                return_value=mock.Mock(
+                    num_files_started=0,
+                    num_files_completed=3,
+                ),
+            ):
+                try:
+                    rest_client.execute()
+                except AttributeError:
+                    pass
+
+    # We expect 3 thread pool executors to be created with thread count as 1,
+    # because we will create executors for network, preprocess and postprocess,
+    # and due to the server DoP cap, each of them will have a thread count
+    # of 1.
+    assert len(list(filter(lambda e: e.args == (1,), tpe.call_args_list))) == 3
