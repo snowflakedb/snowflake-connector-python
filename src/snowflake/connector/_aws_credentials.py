@@ -1,162 +1,135 @@
 """
 Lightweight AWS credential resolution without boto3.
 
-This replicates the standard AWS SDK credential chain (environment → container → EC2 IMDSv2).
-It purposely returns a `botocore.credentials.Credentials` instance so existing
-code that relies on `SigV4Auth` continues to work unchanged while we phase out
-boto3 usage incrementally.
+Resolves credentials in the order: environment → ECS/EKS task metadata → EC2 IMDSv2.
+Returns a minimal `Credentials` object that works with SigV4 signing helpers.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
+from functools import partial
+from typing import Callable
 
 from .vendored import requests
 
-try:
-    from botocore.credentials import Credentials  # type: ignore
-except Exception:  # pragma: no cover
-    # botocore is still available at this migration stage; if it isn’t we’ll
-    # replace it in a later step.
-    Credentials = None  # type: ignore
-
 logger = logging.getLogger(__name__)
 
-# Internal constants
-_ECS_CREDENTIALS_BASE_URI = "http://169.254.170.2"
-_IMDS_BASE_URI = "http://169.254.169.254"
+_ECS_CRED_BASE_URL = "http://169.254.170.2"
+_IMDS_BASE_URL = "http://169.254.169.254"
+_IMDS_TOKEN_PATH = "/latest/api/token"
+_IMDS_ROLE_PATH = "/latest/meta-data/iam/security-credentials/"
+_IMDS_AZ_PATH = "/latest/meta-data/placement/availability-zone"
 
 
-def _credentials_from_env() -> Credentials | None:
-    """Load credentials from environment variables."""
-    access_key = os.getenv("AWS_ACCESS_KEY_ID")
-    secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-    if access_key and secret_key:
-        token = os.getenv("AWS_SESSION_TOKEN")
-        return Credentials(access_key, secret_key, token) if Credentials else None
+@dataclass
+class Credentials:
+    """Minimal stand-in for ``botocore.credentials.Credentials``."""
+
+    access_key: str
+    secret_key: str
+    token: str | None = None
+
+
+def get_env_credentials() -> Credentials | None:
+    """Static credentials from environment variables."""
+    key, secret = os.getenv("AWS_ACCESS_KEY_ID"), os.getenv("AWS_SECRET_ACCESS_KEY")
+    if key and secret:
+        return Credentials(key, secret, os.getenv("AWS_SESSION_TOKEN"))
     return None
 
 
-def _credentials_from_container() -> Credentials | None:
-    """Retrieve credentials from ECS / EKS task metadata (IAM Roles for Tasks)."""
+def get_container_credentials(*, timeout: float) -> Credentials | None:
+    """Credentials from ECS/EKS task-metadata endpoint."""
     rel_uri = os.getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
     full_uri = os.getenv("AWS_CONTAINER_CREDENTIALS_FULL_URI")
     if not rel_uri and not full_uri:
         return None
-    creds_url = full_uri or f"{_ECS_CREDENTIALS_BASE_URI}{rel_uri}"
+
+    url = full_uri or f"{_ECS_CRED_BASE_URL}{rel_uri}"
     try:
-        res = requests.get(creds_url, timeout=2)
-        if res.ok:
-            data = res.json()
-            return (
-                Credentials(
-                    data["AccessKeyId"],
-                    data["SecretAccessKey"],
-                    data.get("Token"),
-                )
-                if Credentials
-                else None
+        response = requests.get(url, timeout=timeout)
+        if response.ok:
+            data = response.json()
+            return Credentials(
+                data["AccessKeyId"], data["SecretAccessKey"], data.get("Token")
             )
-    except Exception as exc:
-        logger.debug("Failed to fetch container credentials: %s", exc, exc_info=True)
+    except (requests.Timeout, requests.ConnectionError, ValueError) as exc:
+        logger.debug("ECS credential fetch failed: %s", exc, exc_info=True)
     return None
 
 
-def _imds_v2_token() -> str | None:
-    """Fetch an IMDSv2 session token (falls back silently if IMDSv1)."""
+def _get_imds_v2_token(timeout: float) -> str | None:
     try:
-        res = requests.put(
-            f"{_IMDS_BASE_URI}/latest/api/token",
+        response = requests.put(
+            f"{_IMDS_BASE_URL}{_IMDS_TOKEN_PATH}",
             headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
-            timeout=1,
+            timeout=timeout,
         )
-        if res.ok:
-            return res.text
-    except Exception:
-        pass
-    return None
-
-
-def _credentials_from_imds() -> Credentials | None:
-    """Retrieve credentials from the EC2 Instance Metadata Service (IMDS)."""
-    token = _imds_v2_token()
-    headers = {"X-aws-ec2-metadata-token": token} if token else {}
-    try:
-        role_res = requests.get(
-            f"{_IMDS_BASE_URI}/latest/meta-data/iam/security-credentials/",
-            headers=headers,
-            timeout=1,
-        )
-        if not role_res.ok:
-            return None
-        role_name = role_res.text.strip()
-        creds_res = requests.get(
-            f"{_IMDS_BASE_URI}/latest/meta-data/iam/security-credentials/{role_name}",
-            headers=headers,
-            timeout=1,
-        )
-        if not creds_res.ok:
-            return None
-        data = creds_res.json()
-        return (
-            Credentials(
-                data["AccessKeyId"],
-                data["SecretAccessKey"],
-                data.get("Token"),
-            )
-            if Credentials
-            else None
-        )
-    except Exception as exc:
-        logger.debug("Failed to fetch IMDS credentials: %s", exc, exc_info=True)
+        return response.text if response.ok else None
+    except (requests.Timeout, requests.ConnectionError):
         return None
 
 
-def load_default_credentials() -> Credentials | None:
-    """Attempt to load AWS credentials using the default resolution order.
+def get_imds_credentials(*, timeout: float) -> Credentials | None:
+    """Instance-profile credentials from the EC2 metadata service."""
+    token = _get_imds_v2_token(timeout)
+    headers = {"X-aws-ec2-metadata-token": token} if token else {}
 
-    Order: environment → ECS/EKS task role → EC2 instance profile (IMDS).
-    Returns `None` if no credentials are found.
-    """
-    for provider in (
-        _credentials_from_env,
-        _credentials_from_container,
-        _credentials_from_imds,
-    ):
-        creds = provider()
-        if creds is not None:
-            return creds
+    try:
+        role_resp = requests.get(
+            f"{_IMDS_BASE_URL}{_IMDS_ROLE_PATH}", headers=headers, timeout=timeout
+        )
+        if not role_resp.ok:
+            return None
+        role_name = role_resp.text.strip()
+
+        cred_resp = requests.get(
+            f"{_IMDS_BASE_URL}{_IMDS_ROLE_PATH}{role_name}",
+            headers=headers,
+            timeout=timeout,
+        )
+        if cred_resp.ok:
+            data = cred_resp.json()
+            return Credentials(
+                data["AccessKeyId"], data["SecretAccessKey"], data.get("Token")
+            )
+    except (requests.Timeout, requests.ConnectionError, ValueError) as exc:
+        logger.debug("IMDS credential fetch failed: %s", exc, exc_info=True)
     return None
 
 
-def get_region() -> str | None:
-    """Return the AWS region for the current workload, if it can be determined.
+def load_default_credentials(timeout: float = 2.0) -> Credentials | None:
+    """Resolve credentials using the default AWS chain (env → task → IMDS)."""
+    providers: tuple[Callable[[], Credentials | None], ...] = (
+        get_env_credentials,
+        partial(get_container_credentials, timeout=timeout),
+        partial(get_imds_credentials, timeout=timeout),
+    )
+    for try_fetch_credentials in providers:
+        credentials = try_fetch_credentials()
+        if credentials:
+            return credentials
+    return None
 
-    Resolution order:
-    1. `AWS_REGION` or `AWS_DEFAULT_REGION` env vars (commonly set in Lambda/ECS).
-    2. EC2 Instance Metadata Service (IMDS) – derive from availability zone.
-    """
-    # 1. Environment variables
-    env_region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
-    if env_region:
-        return env_region
 
-    # 2. EC2 / on-prem metadata endpoint
-    token = _imds_v2_token()
+def get_region(timeout: float = 1.0) -> str | None:
+    """Return the current AWS region if it can be discovered."""
+    if region := os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION"):
+        return region
+
+    token = _get_imds_v2_token(timeout)
     headers = {"X-aws-ec2-metadata-token": token} if token else {}
     try:
-        res = requests.get(
-            f"{_IMDS_BASE_URI}/latest/meta-data/placement/availability-zone",
-            headers=headers,
-            timeout=1,
+        response = requests.get(
+            f"{_IMDS_BASE_URL}{_IMDS_AZ_PATH}", headers=headers, timeout=timeout
         )
-        if res.ok:
-            az = res.text.strip()
-            # availability zone is region + letter, e.g. us-east-1a → us-east-1
-            if len(az) >= 2 and az[-1].isalpha():
-                return az[:-1]
-    except Exception as exc:
-        logger.debug("Failed to fetch region from IMDS: %s", exc, exc_info=True)
+        if response.ok:
+            az = response.text.strip()
+            return az[:-1] if az and az[-1].isalpha() else None
+    except (requests.Timeout, requests.ConnectionError) as exc:
+        logger.debug("IMDS region lookup failed: %s", exc, exc_info=True)
 
     return None
