@@ -1285,9 +1285,10 @@ def test_to_arrow_datatypes(enable_structured_types, conn_cnx):
                         cur.execute(f"alter session unset {param}")
 
 
-def test_simple_arrow_fetch(conn_cnx):
+@pytest.mark.parametrize("client_fetch_use_mp", [False, True])
+def test_simple_arrow_fetch(conn_cnx, client_fetch_use_mp):
     rowcount = 250_000
-    with conn_cnx() as cnx:
+    with conn_cnx(client_fetch_use_mp=client_fetch_use_mp) as cnx:
         with cnx.cursor() as cur:
             cur.execute(SQL_ENABLE_ARROW)
             cur.execute(
@@ -1316,8 +1317,9 @@ def test_simple_arrow_fetch(conn_cnx):
             assert lo == rowcount
 
 
-def test_arrow_zero_rows(conn_cnx):
-    with conn_cnx() as cnx:
+@pytest.mark.parametrize("client_fetch_use_mp", [False, True])
+def test_arrow_zero_rows(conn_cnx, client_fetch_use_mp):
+    with conn_cnx(client_fetch_use_mp=client_fetch_use_mp) as cnx:
         with cnx.cursor() as cur:
             cur.execute(SQL_ENABLE_ARROW)
             cur.execute("select 1::NUMBER(38,0) limit 0")

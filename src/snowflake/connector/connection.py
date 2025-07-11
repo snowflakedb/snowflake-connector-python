@@ -229,6 +229,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # snowflake
     "client_prefetch_threads": (4, int),  # snowflake
     "client_fetch_threads": (None, (type(None), int)),
+    "client_fetch_use_mp": (False, bool),
     "numpy": (False, bool),  # snowflake
     "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
@@ -339,7 +340,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-1825621: OAUTH implementation
     ),
-    "oauth_redirect_uri": ("http://127.0.0.1/", str),
+    "oauth_redirect_uri": ("http://127.0.0.1", str),
     "oauth_scope": (
         "",
         str,
@@ -428,7 +429,9 @@ class SnowflakeConnection:
             See the backoff_policies module for details and implementation examples.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
-        client_fetch_threads: Number of threads to fetch staged query results.
+        client_fetch_threads: Number of threads (or processes) to fetch staged query results.
+            If not specified, reuses client_prefetch_threads value.
+        client_fetch_use_mp: Enables multiprocessing for fetching query results in parallel.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
         application: Application name to communicate with Snowflake as. By default, this is "PythonConnector".
         errorhandler: Handler used with errors. By default, an exception will be raised on error.
@@ -700,6 +703,10 @@ class SnowflakeConnection:
         if value is not None:
             value = min(max(1, value), MAX_CLIENT_FETCH_THREADS)
         self._client_fetch_threads = value
+
+    @property
+    def client_fetch_use_mp(self) -> bool:
+        return self._client_fetch_use_mp
 
     @property
     def rest(self) -> SnowflakeRestful | None:

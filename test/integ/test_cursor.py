@@ -1581,11 +1581,13 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
         ("arrow", ArrowResultBatch),
     ),
 )
+@pytest.mark.parametrize("client_fetch_use_mp", [False, True])
 def test_resultbatch(
     conn_cnx,
     result_format,
     expected_chunk_type,
     capture_sf_telemetry,
+    client_fetch_use_mp,
 ):
     """This test checks the following things:
     1. After executing a query can we pickle the result batches
@@ -1598,7 +1600,8 @@ def test_resultbatch(
     with conn_cnx(
         session_parameters={
             "python_connector_query_result_format": result_format,
-        }
+        },
+        client_fetch_use_mp=client_fetch_use_mp,
     ) as con:
         with capture_sf_telemetry.patch_connection(con) as telemetry_data:
             with con.cursor() as cur:

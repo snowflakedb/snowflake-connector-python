@@ -111,6 +111,8 @@ def test_connection_without_database2(db_parameters):
 
 def test_with_config(db_parameters):
     """Creates a connection with the config parameter."""
+    from ..conftest import get_server_parameter_value
+
     config = {
         "user": db_parameters["user"],
         "password": db_parameters["password"],
@@ -125,7 +127,22 @@ def test_with_config(db_parameters):
     cnx = snowflake.connector.connect(**config)
     try:
         assert cnx, "invalid cnx"
-        assert not cnx.client_session_keep_alive  # default is False
+
+        # Check what the server default is to make test environment-aware
+        server_default_str = get_server_parameter_value(
+            cnx, "CLIENT_SESSION_KEEP_ALIVE"
+        )
+        if server_default_str:
+            server_default = server_default_str.lower() == "true"
+            # Test that connection respects server default when not explicitly set
+            assert (
+                cnx.client_session_keep_alive == server_default
+            ), f"Expected client_session_keep_alive={server_default} (server default), got {cnx.client_session_keep_alive}"
+        else:
+            # Fallback: if we can't determine server default, expect False
+            assert (
+                not cnx.client_session_keep_alive
+            ), "Expected client_session_keep_alive=False when server default unknown"
     finally:
         cnx.close()
 
@@ -1386,7 +1403,9 @@ def test_server_session_keep_alive(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_mode_disable_ocsp_checks(conn_cnx, is_public_test, caplog):
+def test_ocsp_mode_disable_ocsp_checks(
+    conn_cnx, is_public_test, is_local_dev_setup, caplog
+):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(disable_ocsp_checks=True) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
@@ -1395,7 +1414,7 @@ def test_ocsp_mode_disable_ocsp_checks(conn_cnx, is_public_test, caplog):
 
     with conn_cnx() as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
-        if is_public_test:
+        if is_public_test or is_local_dev_setup:
             assert "snowflake.connector.ocsp_snowflake" in caplog.text
             assert "This connection does not perform OCSP checks." not in caplog.text
         else:
@@ -1403,67 +1422,61 @@ def test_ocsp_mode_disable_ocsp_checks(conn_cnx, is_public_test, caplog):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_mode_insecure_mode(conn_cnx, is_public_test, caplog):
+def test_ocsp_mode_insecure_mode(conn_cnx, is_public_test, is_local_dev_setup, caplog):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(insecure_mode=True) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
-        if is_public_test:
-            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+        assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+        if is_public_test or is_local_dev_setup:
             assert "This connection does not perform OCSP checks." in caplog.text
-        else:
-            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
 
 
 @pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_match(
-    conn_cnx, is_public_test, caplog
+    conn_cnx, is_public_test, is_local_dev_setup, caplog
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(
         insecure_mode=True, disable_ocsp_checks=True
     ) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
-        if is_public_test:
-            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+        assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+        if is_public_test or is_local_dev_setup:
             assert (
                 "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
                 "Using the value of 'disable_ocsp_checks."
             ) not in caplog.text
             assert "This connection does not perform OCSP checks." in caplog.text
-        else:
-            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
 
 
 @pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_disabled(
-    conn_cnx, is_public_test, caplog
+    conn_cnx, is_public_test, is_local_dev_setup, caplog
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(
         insecure_mode=False, disable_ocsp_checks=True
     ) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
-        if is_public_test:
-            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+        assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+        if is_public_test or is_local_dev_setup:
             assert (
                 "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
                 "Using the value of 'disable_ocsp_checks."
             ) in caplog.text
             assert "This connection does not perform OCSP checks." in caplog.text
-        else:
-            assert "snowflake.connector.ocsp_snowflake" not in caplog.text
 
 
 @pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
-    conn_cnx, is_public_test, caplog
+    conn_cnx, is_public_test, is_local_dev_setup, caplog
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
     with conn_cnx(
         insecure_mode=True, disable_ocsp_checks=False
     ) as conn, conn.cursor() as cur:
         assert cur.execute("select 1").fetchall() == [(1,)]
-        if is_public_test:
+        if is_public_test or is_local_dev_setup:
             assert "snowflake.connector.ocsp_snowflake" in caplog.text
             assert (
                 "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
