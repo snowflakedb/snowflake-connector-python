@@ -149,6 +149,42 @@ def _sts_host_from_region(region: str) -> str:
     return f"sts.{region}{suffix}"
 
 
+def _try_get_arn_from_env_vars() -> str | None:
+    """Try to get ARN already exposed by the runtime (no extra network I/O).
+
+    •  `AWS_ROLE_ARN` – web-identity / many FaaS runtimes
+    •  `AWS_EC2_METADATA_ARN` – some IMDSv2 environments
+    •  `AWS_SESSION_ARN` – recent AWS SDKs export this when assuming a role
+    """
+    for possible_arn_env_var in (
+        "AWS_ROLE_ARN",
+        "AWS_EC2_METADATA_ARN",
+        "AWS_SESSION_ARN",
+    ):
+        value = os.getenv(possible_arn_env_var)
+        if value and value.startswith("arn:"):
+            return value
+    return None
+
+
+def try_compose_aws_user_identifier(region: str | None = None) -> dict[str, str]:
+    """Return an identifier for the running AWS workload.
+
+    Always includes the AWS *region*; adds an *arn* key only if one is already
+    discoverable via common environment variables.  Returns **{}** only if
+    the region cannot be determined."""
+    region = region or get_region()
+    if not region:
+        return {}
+
+    identifier: dict[str, str] = {"region": region}
+
+    if arn := _try_get_arn_from_env_vars():
+        identifier["arn"] = arn
+
+    return identifier
+
+
 def create_aws_attestation() -> WorkloadIdentityAttestation | None:
     """Return AWS attestation or *None* if we're not on AWS / creds missing."""
 
@@ -180,7 +216,10 @@ def create_aws_attestation() -> WorkloadIdentityAttestation | None:
         ).encode()
     ).decode()
 
-    return WorkloadIdentityAttestation(AttestationProvider.AWS, attestation, {})
+    user_identifier = try_compose_aws_user_identifier(region)
+    return WorkloadIdentityAttestation(
+        AttestationProvider.AWS, attestation, user_identifier
+    )
 
 
 def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
