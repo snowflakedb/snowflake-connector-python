@@ -17,8 +17,8 @@ from snowflake.connector.vendored.requests.exceptions import (
 from snowflake.connector.wif_util import (
     AZURE_ISSUER_PREFIXES,
     AttestationProvider,
-    get_aws_partition,
-    get_aws_sts_hostname,
+    _partition_from_region,
+    _sts_host_from_region,
 )
 
 from ..csp_helpers import FakeAwsEnvironment, FakeGceMetadataService, gen_dummy_id_token
@@ -47,15 +47,17 @@ def verify_aws_token(token: str, region: str):
     assert decoded_token["method"] == "POST"
 
     headers = decoded_token["headers"]
-    assert set(headers.keys()) == {
-        "Host",
-        "X-Snowflake-Audience",
-        "X-Amz-Date",
-        "X-Amz-Security-Token",
-        "Authorization",
+    headers_lc = {k.lower(): v for k, v in headers.items()}
+
+    expected_header_keys = {
+        "host",
+        "x-snowflake-audience",
+        "x-amz-date",
+        "authorization",
     }
-    assert headers["Host"] == f"sts.{region}.amazonaws.com"
-    assert headers["X-Snowflake-Audience"] == "snowflakecomputing.com"
+    assert set(headers_lc.keys()) == expected_header_keys
+    assert headers_lc["host"] == f"sts.{region}.amazonaws.com"
+    assert headers_lc["x-snowflake-audience"] == "snowflakecomputing.com"
 
 
 # -- OIDC Tests --
@@ -137,7 +139,7 @@ def test_explicit_aws_uses_regional_hostname(fake_aws_environment: FakeAwsEnviro
     data = extract_api_data(auth_class)
     decoded_token = json.loads(b64decode(data["TOKEN"]))
     hostname_from_url = urlparse(decoded_token["url"]).hostname
-    hostname_from_header = decoded_token["headers"]["Host"]
+    hostname_from_header = decoded_token["headers"]["host"]
 
     expected_hostname = "sts.antarctica-northeast-3.amazonaws.com"
     assert expected_hostname == hostname_from_url
@@ -147,83 +149,84 @@ def test_explicit_aws_uses_regional_hostname(fake_aws_environment: FakeAwsEnviro
 def test_explicit_aws_generates_unique_assertion_content(
     fake_aws_environment: FakeAwsEnvironment,
 ):
-    fake_aws_environment.arn = (
-        "arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"
-    )
+    # Change region to ensure assertion_content updates accordingly.
+    fake_aws_environment.region = "antarctica-northeast-3"
+
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     auth_class.prepare()
 
-    assert (
-        '{"_provider":"AWS","arn":"arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"}'
-        == auth_class.assertion_content
-    )
+    expected = '{"_provider":"AWS","region":"' + fake_aws_environment.region + '"}'
+    assert auth_class.assertion_content == expected
 
 
 @pytest.mark.parametrize(
-    "arn, expected_partition",
+    "arn_env_var",
     [
-        ("arn:aws:iam::123456789012:role/MyTestRole", "aws"),
-        (
-            "arn:aws-cn:ec2:cn-north-1:987654321098:instance/i-1234567890abcdef0",
-            "aws-cn",
-        ),
-        ("arn:aws-us-gov:s3:::my-gov-bucket", "aws-us-gov"),
-        ("arn:aws:s3:::my-bucket/my/key", "aws"),
-        ("arn:aws:lambda:us-east-1:123456789012:function:my-function", "aws"),
-        ("arn:aws:sns:eu-west-1:111122223333:my-topic", "aws"),
-        # Edge cases / Invalid inputs
-        ("invalid-arn", None),
-        ("arn::service:region:account:resource", None),  # Missing partition
-        ("arn:aws:iam:", "aws"),  # Incomplete ARN, but partition is present
-        ("", None),  # Empty string
-        (None, None),  # None input
-        (123, None),  # Non-string input
+        "AWS_ROLE_ARN",
+        "AWS_EC2_METADATA_ARN",
+        "AWS_SESSION_ARN",
     ],
 )
-def test_get_aws_partition_valid_and_invalid_arns(arn, expected_partition):
-    assert get_aws_partition(arn) == expected_partition
-
-
-@pytest.mark.parametrize(
-    "region, partition, expected_hostname",
-    [
-        # AWS partition
-        ("us-east-1", "aws", "sts.us-east-1.amazonaws.com"),
-        ("eu-west-2", "aws", "sts.eu-west-2.amazonaws.com"),
-        ("ap-southeast-1", "aws", "sts.ap-southeast-1.amazonaws.com"),
-        (
-            "us-east-1",
-            "aws",
-            "sts.us-east-1.amazonaws.com",
-        ),  # Redundant but good for coverage
-        # AWS China partition
-        ("cn-north-1", "aws-cn", "sts.cn-north-1.amazonaws.com.cn"),
-        ("cn-northwest-1", "aws-cn", "sts.cn-northwest-1.amazonaws.com.cn"),
-        ("", "aws-cn", None),  # No global endpoint for 'aws-cn' without region
-        # AWS GovCloud partition
-        ("us-gov-west-1", "aws-us-gov", "sts.us-gov-west-1.amazonaws.com"),
-        ("us-gov-east-1", "aws-us-gov", "sts.us-gov-east-1.amazonaws.com"),
-        ("", "aws-us-gov", None),  # No global endpoint for 'aws-us-gov' without region
-        # Invalid/Edge cases
-        ("us-east-1", "unknown-partition", None),  # Unknown partition
-        ("some-region", "invalid-partition", None),  # Invalid partition
-        (None, "aws", None),  # None region
-        ("us-east-1", None, None),  # None partition
-        (123, "aws", None),  # Non-string region
-        ("us-east-1", 456, None),  # Non-string partition
-        ("", "", None),  # Empty region and partition
-        ("us-east-1", "", None),  # Empty partition
-        (
-            "invalid-region",
-            "aws",
-            "sts.invalid-region.amazonaws.com",
-        ),  # Valid format, invalid region name
-    ],
-)
-def test_get_aws_sts_hostname_valid_and_invalid_inputs(
-    region, partition, expected_hostname
+def test_explicit_aws_includes_arn_when_env_present(
+    fake_aws_environment: FakeAwsEnvironment,
+    monkeypatch,
+    arn_env_var,
 ):
-    assert get_aws_sts_hostname(region, partition) == expected_hostname
+    dummy_arn = "arn:aws:sts::123456789012:assumed-role/MyRole/i-abcdef123456"
+    monkeypatch.setenv(arn_env_var, dummy_arn)
+
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    auth_class.prepare()
+
+    # Parse the JSON to ignore ordering.
+    assertion_data = json.loads(auth_class.assertion_content)
+
+    assert assertion_data["_provider"] == "AWS"
+    assert assertion_data["region"] == fake_aws_environment.region
+    assert assertion_data["arn"] == dummy_arn
+
+
+@pytest.mark.parametrize(
+    "region, expected_partition",
+    [
+        # — happy-path AWS commercial
+        ("us-east-1", "aws"),
+        ("eu-central-1", "aws"),
+        ("ap-south-1", "aws"),
+        # — China partitions
+        ("cn-north-1", "aws-cn"),
+        ("cn-northwest-1", "aws-cn"),
+        # — GovCloud partitions
+        ("us-gov-west-1", "aws-us-gov"),
+        ("us-gov-east-1", "aws-us-gov"),
+        # - Weird values also fall back to commercial
+        ("invalid-region", "aws"),
+        ("", "aws"),
+    ],
+)
+def test_partition_from_region(region, expected_partition):
+    assert _partition_from_region(region).value == expected_partition
+
+
+@pytest.mark.parametrize(
+    "region, expected_hostname",
+    [
+        # commercial partition
+        ("us-east-1", "sts.us-east-1.amazonaws.com"),
+        ("eu-west-2", "sts.eu-west-2.amazonaws.com"),
+        # China
+        ("cn-north-1", "sts.cn-north-1.amazonaws.com.cn"),
+        # GovCloud
+        ("us-gov-east-1", "sts.us-gov-east-1.amazonaws.com"),
+        # unknown but syntactically valid - still formatted
+        ("invalid-region", "sts.invalid-region.amazonaws.com"),
+        ("", None),
+        (None, None),
+        (123, None),
+    ],
+)
+def test_sts_host_from_region_valid_inputs(region, expected_hostname):
+    assert _sts_host_from_region(region) == expected_hostname
 
 
 # -- GCP Tests --

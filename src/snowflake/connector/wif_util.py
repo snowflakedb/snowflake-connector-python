@@ -134,7 +134,7 @@ def _partition_from_region(region: str) -> AWSPartition:
     return AWSPartition.BASE
 
 
-def _sts_host_from_region(region: str) -> str:
+def _sts_host_from_region(region: str) -> str | None:
     """
     Construct the STS endpoint hostname for *region* according to the
     regionalised-STS rules published by AWS.:contentReference[oaicite:2]{index=2}
@@ -144,6 +144,9 @@ def _sts_host_from_region(region: str) -> str:
     - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
     - https://docs.aws.amazon.com/general/latest/gr/sts.html
     """
+    if not region or not isinstance(region, str):
+        return None
+
     part = _partition_from_region(region)
     suffix = ".amazonaws.com.cn" if part is AWSPartition.CHINA else ".amazonaws.com"
     return f"sts.{region}{suffix}"

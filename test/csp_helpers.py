@@ -279,24 +279,14 @@ class FakeAwsEnvironment:
         self.patchers = []
         self.patchers.append(
             mock.patch(
-                "boto3.session.Session.get_credentials",
+                "snowflake.connector.wif_util.load_default_credentials",
                 side_effect=self.get_credentials,
             )
         )
         self.patchers.append(
             mock.patch(
-                "botocore.auth.SigV4Auth.add_auth", side_effect=self.sign_request
-            )
-        )
-        self.patchers.append(
-            mock.patch(
-                "snowflake.connector.wif_util.get_aws_region",
+                "snowflake.connector.wif_util.get_region",
                 side_effect=self.get_region,
-            )
-        )
-        self.patchers.append(
-            mock.patch(
-                "snowflake.connector.wif_util.get_aws_arn", side_effect=self.get_arn
             )
         )
         for patcher in self.patchers:
