@@ -189,3 +189,60 @@ class TestUploadDownloadMethods(TestCase):
         cursor.reset = MagicMock()
         cursor._init_result_and_meta = MagicMock()
         return cursor, fake_conn, mock_file_transfer_agent_instance
+
+    def _run_dop_cap_test(self, task, dop_cap):
+        """A helper to run dop cap test.
+
+        It mainly verifies that when performing the specified task, we are using a FileTransferAgent with DoP cap as specified.
+        """
+        from snowflake.connector._utils import (
+            _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+        )
+
+        mock_conn = FakeConnection()
+        setattr(
+            mock_conn, f"_{_VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER}", dop_cap
+        )
+
+        class FakeFileOperationParser:
+            def parse_file_operation(
+                self,
+                stage_location,
+                local_file_name,
+                target_directory,
+                command_type,
+                options,
+                has_source_from_stream=False,
+            ):
+                return {}
+
+        mock_cursor = SnowflakeCursor(mock_conn)
+        mock_conn._file_operation_parser = FakeFileOperationParser()
+        with patch.object(
+            mock_cursor, "_init_result_and_meta", return_value=None
+        ), patch(
+            "snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent"
+        ) as MockFileTransferAgent:
+            task(mock_cursor)
+            # Verify that when running the file operation, we are using FileTransferAgent with server DoP cap as 1.
+            _, kwargs = MockFileTransferAgent.call_args
+            assert dop_cap == kwargs["snowflake_server_dop_cap_for_file_transfer"]
+
+    def test_dop_cap_for_upload(self):
+        def task(cursor):
+            cursor._upload("/tmp/test.txt", "@st", {})
+
+        self._run_dop_cap_test(task, dop_cap=1)
+
+    def test_dop_cap_for_upload_stream(self):
+        def task(cursor):
+            mock_input_stream = MagicMock()
+            cursor._upload_stream(mock_input_stream, "@st", {})
+
+        self._run_dop_cap_test(task, dop_cap=1)
+
+    def test_dop_cap_for_download(self):
+        def task(cursor):
+            cursor._download("@st", "/tmp", {})
+
+        self._run_dop_cap_test(task, dop_cap=1)
