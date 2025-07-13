@@ -41,6 +41,18 @@ AWS_CREDENTIAL_ENV_KEYS = (
     "AWS_SESSION_ARN",
 )
 
+AZURE_ENV_KEYS = ("IDENTITY_ENDPOINT", "IDENTITY_HEADER")
+GCP_ENV_KEYS = (
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GOOGLE_CLOUD_PROJECT",
+    "GCLOUD_PROJECT",
+    "GCP_PROJECT",
+)
+CLOUD_ENV_KEYS = (
+    AWS_CREDENTIAL_ENV_KEYS + AWS_REGION_ENV_KEYS + AZURE_ENV_KEYS + GCP_ENV_KEYS
+)
+# ---------------------------------------------------------------------------
+
 
 def gen_dummy_id_token(
     sub: str = "test-subject",
@@ -83,12 +95,12 @@ class FakeMetadataService(ABC):
 
     @staticmethod
     def _clean_env_vars_for_scope() -> dict[str, str]:
-        """Return a mapping that blanks all AWS-specific env-vars.
+        """Return a mapping that blanks all known cloud-specific env-vars.
 
-        Used by Azure / GCP fakes so tests stay hermetic even when
-        executed inside a real AWS runner.
+        Ensures every fake starts from a pristine state, regardless of which
+        provider the CI runner itself resides on.
         """
-        return {k: "" for k in AWS_CREDENTIAL_ENV_KEYS + AWS_REGION_ENV_KEYS}
+        return {k: "" for k in CLOUD_ENV_KEYS}
 
     @abstractmethod
     def reset_defaults(self) -> None: ...
@@ -121,6 +133,12 @@ class FakeMetadataService(ABC):
     def __enter__(self):
         self.reset_defaults()
         self._context_stack = ExitStack()
+
+        # Blanket scrub of all cloud-specific env vars
+        self._context_stack.enter_context(
+            mock.patch.dict(os.environ, self._clean_env_vars_for_scope(), clear=False)
+        )
+
         self._context_stack.enter_context(
             mock.patch(
                 "snowflake.connector.vendored.requests.request",
@@ -157,38 +175,28 @@ class NoMetadataService(FakeMetadataService):
 class FakeAzureVmMetadataService(FakeMetadataService):
     """Emulates an environment with the Azure VM metadata service."""
 
-    VM_HOST = "169.254.169.254"
-    TOKEN_PATH = "/metadata/identity/oauth2/token"
+    AZURE_VM_METADATA_HOST = "169.254.169.254"
+    AZURE_VM_TOKEN_PATH = "/metadata/identity/oauth2/token"
 
     def reset_defaults(self) -> None:
         self.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
         self.iss = "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
 
-    def __enter__(self):
-        self._stack = contextlib.ExitStack()
-        self._stack.enter_context(
-            mock.patch.dict(os.environ, self._clean_env_vars_for_scope(), clear=False)
-        )
-        return super().__enter__()
-
-    def __exit__(self, *exc):
-        self._stack.close()
-        return super().__exit__(*exc)
-
     def is_expected_hostname(self, host: str | None) -> bool:
-        return host == self.__class__.VM_HOST
+        return host == self.__class__.AZURE_VM_METADATA_HOST
 
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
         if not (
             method == "GET"
-            and parsed_url.path == self.__class__.TOKEN_PATH
+            and parsed_url.path == self.__class__.AZURE_VM_TOKEN_PATH
             and headers.get(HDR_METADATA) == "True"
             and query_string.get("resource")
         ):
             raise HTTPError()
 
         logger.debug("Received request for Azure VM metadata service")
+
         resource = query_string["resource"][0]
         self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource)
         return build_response(json.dumps({"access_token": self.token}).encode())
@@ -197,14 +205,14 @@ class FakeAzureVmMetadataService(FakeMetadataService):
 class FakeAzureFunctionMetadataService(FakeMetadataService):
     """Emulates an environment with the Azure Function metadata service."""
 
-    IDENTITY_ENDPOINT = "http://169.254.255.2:8081/msi/token"
-    IDENTITY_HEADER = "FD80F6DA783A4881BE9FAFA365F58E7A"
+    AZURE_FUNCTION_IDENTITY_ENDPOINT = "http://169.254.255.2:8081/msi/token"
+    AZURE_FUNCTION_IDENTITY_HEADER = "FD80F6DA783A4881BE9FAFA365F58E7A"
 
     def reset_defaults(self) -> None:
         self.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
         self.iss = "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
-        self.identity_endpoint = self.__class__.IDENTITY_ENDPOINT
-        self.identity_header = self.__class__.IDENTITY_HEADER
+        self.identity_endpoint = self.__class__.AZURE_FUNCTION_IDENTITY_ENDPOINT
+        self.identity_header = self.__class__.AZURE_FUNCTION_IDENTITY_HEADER
         self.parsed_identity_endpoint = urlparse(self.identity_endpoint)
         self._stack: contextlib.ExitStack | None = None
 
@@ -241,12 +249,12 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
             and query_string["resource"]
         ):
             logger.warning(
-                f"Received malformed request: {method} {parsed_url.path} "
-                f"{str(headers)} {str(query_string)}"
+                f"Received malformed request: {method} {parsed_url.path} {headers} {query_string}"
             )
             raise HTTPError()
 
         logger.debug("Received request for Azure Functions metadata service")
+
         resource = query_string["resource"][0]
         self.token = gen_dummy_id_token(self.sub, self.iss, resource)
         return build_response(json.dumps({"access_token": self.token}).encode())
@@ -255,38 +263,28 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
 class FakeGceMetadataService(FakeMetadataService):
     """Simulates GCE metadata endpoint."""
 
-    METADATA_HOST = "169.254.169.254"
-    IDENTITY_PATH = "/computeMetadata/v1/instance/service-accounts/default/identity"
+    GCE_METADATA_HOST = "169.254.169.254"
+    GCE_IDENTITY_PATH = "/computeMetadata/v1/instance/service-accounts/default/identity"
 
     def reset_defaults(self) -> None:
         self.sub = "123"
         self.iss = "https://accounts.google.com"
 
-    def __enter__(self):
-        self._stack = contextlib.ExitStack()
-        self._stack.enter_context(
-            mock.patch.dict(os.environ, self._clean_env_vars_for_scope(), clear=False)
-        )
-        return super().__enter__()
-
-    def __exit__(self, *exc):
-        self._stack.close()
-        return super().__exit__(*exc)
-
     def is_expected_hostname(self, host: str | None) -> bool:
-        return host == self.__class__.METADATA_HOST
+        return host == self.__class__.GCE_METADATA_HOST
 
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
         if not (
             method == "GET"
-            and parsed_url.path == self.__class__.IDENTITY_PATH
+            and parsed_url.path == self.__class__.GCE_IDENTITY_PATH
             and headers.get(HDR_METADATA_FLAVOR) == "Google"
             and query_string.get("audience")
         ):
             raise HTTPError()
 
         logger.debug("Received request for GCE metadata service")
+
         audience = query_string["audience"][0]
         self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=audience)
         return build_response(self.token.encode())
@@ -389,6 +387,7 @@ class FakeAwsEnvironment:
     def region(self, new_region: str) -> None:
         self._region = new_region
         self._metadata.region = new_region
+
         if getattr(self, "_stack", None):
             for key in AWS_REGION_ENV_KEYS:
                 if key in os.environ:
@@ -413,6 +412,7 @@ class FakeAwsEnvironment:
                 side_effect=ConnectTimeout(),
             )
         )
+
         self._metadata.access_key = (
             self.credentials.access_key if self.credentials else None
         )
