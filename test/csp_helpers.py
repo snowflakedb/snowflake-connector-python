@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -22,6 +23,35 @@ from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTT
 from snowflake.connector.vendored.requests.models import Response
 
 logger = logging.getLogger(__name__)
+
+AZURE_VM_METADATA_HOST = "169.254.169.254"
+AZURE_VM_TOKEN_PATH = "/metadata/identity/oauth2/token"
+
+AZURE_FUNCTION_IDENTITY_ENDPOINT = "http://169.254.255.2:8081/msi/token"
+AZURE_FUNCTION_IDENTITY_HEADER = "FD80F6DA783A4881BE9FAFA365F58E7A"
+
+GCE_METADATA_HOST = "169.254.169.254"
+GCE_IDENTITY_PATH = "/computeMetadata/v1/instance/service-accounts/default/identity"
+
+AWS_REGION_ENV_KEYS = ("AWS_REGION", "AWS_DEFAULT_REGION")
+AWS_CONTAINER_CRED_ENV = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"
+AWS_LAMBDA_FUNCTION_ENV = "AWS_LAMBDA_FUNCTION_NAME"
+
+HDR_IDENTITY = "X-IDENTITY-HEADER"
+HDR_METADATA = "Metadata"
+HDR_METADATA_FLAVOR = "Metadata-Flavor"
+HDR_IMDS_TOKEN_TTL = "x-aws-ec2-metadata-token-ttl-seconds"
+IMDS_INSTANCE_IDENTITY_DOC = "/latest/dynamic/instance-identity/document"
+IMDS_REGION_PATH = "/latest/meta-data/placement/region"
+
+AWS_CREDENTIAL_ENV_KEYS = (
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AWS_ROLE_ARN",
+    "AWS_EC2_METADATA_ARN",
+    "AWS_SESSION_ARN",
+)
 
 
 def gen_dummy_id_token(
@@ -153,7 +183,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         self.iss = "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
 
     def is_expected_hostname(self, host: str | None) -> bool:
-        return host == "169.254.169.254"
+        return host == AZURE_VM_METADATA_HOST
 
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
@@ -161,8 +191,8 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         # Reject malformed requests.
         if not (
             method == "GET"
-            and parsed_url.path == "/metadata/identity/oauth2/token"
-            and headers.get("Metadata") == "True"
+            and parsed_url.path == AZURE_VM_TOKEN_PATH
+            and headers.get(HDR_METADATA) == "True"
             and query_string.get("resource")
         ):
             raise HTTPError()
@@ -171,7 +201,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
 
         resource = query_string["resource"][0]
         self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource)
-        return build_response(json.dumps({"access_token": self.token}).encode("utf-8"))
+        return build_response(json.dumps({"access_token": self.token}).encode())
 
 
 class FakeAzureFunctionMetadataService(FakeMetadataService):
@@ -181,25 +211,36 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
         # Defaults used for generating an Entra ID token. Can be overriden in individual tests.
         self.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
         self.iss = "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
-        self.identity_endpoint = "http://169.254.255.2:8081/msi/token"
-        self.identity_header = "FD80F6DA783A4881BE9FAFA365F58E7A"
+        self.identity_endpoint = AZURE_FUNCTION_IDENTITY_ENDPOINT
+        self.identity_header = AZURE_FUNCTION_IDENTITY_HEADER
         self.parsed_identity_endpoint = urlparse(self.identity_endpoint)
+        self._stack: contextlib.ExitStack | None = None
 
     def __enter__(self):
         # Inject the variables *without* touching os.environ directly
-        self._stack = mock.patch.dict(
-            os.environ,
-            {
-                "IDENTITY_ENDPOINT": self.identity_endpoint,
-                "IDENTITY_HEADER": self.identity_header,
-            },
-            clear=False,
+        self._stack = contextlib.ExitStack()
+        self._stack.enter_context(
+            mock.patch.dict(
+                os.environ,
+                {
+                    "IDENTITY_ENDPOINT": self.identity_endpoint,
+                    "IDENTITY_HEADER": self.identity_header,
+                },
+                clear=False,
+            )
         )
-        self._stack.start()
+        self._stack.enter_context(
+            mock.patch.dict(
+                os.environ,
+                {k: "" for k in AWS_CREDENTIAL_ENV_KEYS + AWS_REGION_ENV_KEYS},
+                clear=False,
+            )
+        )
+
         return super().__enter__()
 
     def __exit__(self, *exc):
-        self._stack.stop()
+        self._stack.close()
         return super().__exit__(*exc)
 
     def is_expected_hostname(self, host: str | None) -> bool:
@@ -212,7 +253,7 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
         if not (
             method == "GET"
             and parsed_url.path == self.parsed_identity_endpoint.path
-            and headers.get("X-IDENTITY-HEADER") == self.identity_header
+            and headers.get(HDR_IDENTITY) == self.identity_header
             and query_string["resource"]
         ):
             logger.warning(
@@ -236,7 +277,7 @@ class FakeGceMetadataService(FakeMetadataService):
         self.iss = "https://accounts.google.com"
 
     def is_expected_hostname(self, host: str | None) -> bool:
-        return host == "169.254.169.254"
+        return host == GCE_METADATA_HOST
 
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
@@ -244,9 +285,8 @@ class FakeGceMetadataService(FakeMetadataService):
         # Reject malformed requests.
         if not (
             method == "GET"
-            and parsed_url.path
-            == "/computeMetadata/v1/instance/service-accounts/default/identity"
-            and headers.get("Metadata-Flavor") == "Google"
+            and parsed_url.path == GCE_IDENTITY_PATH
+            and headers.get(HDR_METADATA_FLAVOR) == "Google"
             and query_string.get("audience")
         ):
             raise HTTPError()
@@ -255,7 +295,7 @@ class FakeGceMetadataService(FakeMetadataService):
 
         audience = query_string["audience"][0]
         self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=audience)
-        return build_response(self.token.encode("utf-8"))
+        return build_response(self.token.encode())
 
 
 class _AwsMetadataService(FakeMetadataService):
@@ -267,6 +307,7 @@ class _AwsMetadataService(FakeMetadataService):
         self.secret_key = "SK_TEST"
         self.session_token = "STS_TOKEN"
         self.imds_token = "IMDS_TOKEN"
+        self.region = "us-east-1"
 
     def is_expected_hostname(self, host: str | None) -> bool:
         return host in {
@@ -280,7 +321,7 @@ class _AwsMetadataService(FakeMetadataService):
         if method == "PUT" and url == f"{_IMDS_BASE_URL}{_IMDS_TOKEN_PATH}":
             return build_response(
                 self.imds_token.encode(),
-                headers={"x-aws-ec2-metadata-token-ttl-seconds": "21600"},
+                headers={HDR_IMDS_TOKEN_TTL: "21600"},
             )
 
         if method == "GET" and url == f"{_IMDS_BASE_URL}{_IMDS_ROLE_PATH}":
@@ -301,7 +342,7 @@ class _AwsMetadataService(FakeMetadataService):
             ).encode()
             return build_response(creds_json)
 
-        ecs_uri = os.getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
+        ecs_uri = os.getenv(AWS_CONTAINER_CRED_ENV)
         if ecs_uri and method == "GET" and url == f"{_ECS_CRED_BASE_URL}{ecs_uri}":
             creds_json = json.dumps(
                 {
@@ -311,6 +352,12 @@ class _AwsMetadataService(FakeMetadataService):
                 }
             ).encode()
             return build_response(creds_json)
+
+        if method == "GET" and url == f"{_IMDS_BASE_URL}{IMDS_REGION_PATH}":
+            return build_response(self.region.encode())
+
+        if method == "GET" and url == f"{_IMDS_BASE_URL}{IMDS_INSTANCE_IDENTITY_DOC}":
+            return build_response(json.dumps({"region": self.region}).encode())
 
         raise ConnectTimeout()
 
@@ -341,10 +388,10 @@ class FakeAwsEnvironment:
         patch them via ExitStack so they’re cleaned up on __exit__.
         """
         self._region = new_region
-
+        self._metadata.region = new_region
         if getattr(self, "_stack", None):
-            for key in ("AWS_REGION", "AWS_DEFAULT_REGION"):
-                if key in os.environ:  # patch only if present
+            for key in AWS_REGION_ENV_KEYS:
+                if key in os.environ:
                     self._stack.enter_context(
                         mock.patch.dict(os.environ, {key: new_region}, clear=False)
                     )
@@ -389,13 +436,11 @@ class FakeAwsEnvironment:
         self._metadata.session_token = (
             self.credentials.token if self.credentials else None
         )
+        self._metadata.region = self.region if self.region else None
 
         # Expose region & creds *only* via env vars so that the real helper
         #    chain can resolve them without monkey-patching.
-        env_for_chain = {
-            "AWS_REGION": self.region,
-            "AWS_DEFAULT_REGION": self.region,
-        }
+        env_for_chain = {key: self.region for key in AWS_REGION_ENV_KEYS}
         if self.credentials:
             env_for_chain["AWS_ACCESS_KEY_ID"] = self.credentials.access_key
             env_for_chain["AWS_SECRET_ACCESS_KEY"] = self.credentials.secret_key
@@ -427,7 +472,7 @@ class FakeAwsEcs(FakeAwsEnvironment):
         self._stack.enter_context(
             mock.patch.dict(
                 os.environ,
-                {"AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "/v2/credentials/test-id"},
+                {AWS_CONTAINER_CRED_ENV: "/v2/credentials/test-id"},
                 clear=False,
             )
         )
@@ -450,7 +495,7 @@ class FakeAwsLambda(FakeAwsEnvironment):
         self._stack.enter_context(
             mock.patch.dict(
                 os.environ,
-                {"AWS_LAMBDA_FUNCTION_NAME": "dummy-fn"},
+                {AWS_LAMBDA_FUNCTION_ENV: "dummy-fn"},
                 clear=False,
             )
         )
@@ -468,7 +513,7 @@ class FakeAwsNoCreds(FakeAwsEnvironment):
                     "AWS_ACCESS_KEY_ID": "",
                     "AWS_SECRET_ACCESS_KEY": "",
                     "AWS_SESSION_TOKEN": "",
-                    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI": "",
+                    AWS_CONTAINER_CRED_ENV: "",
                 },
                 clear=False,
             )
