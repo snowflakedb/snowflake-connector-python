@@ -485,7 +485,7 @@ def test_explicit_aws_region_falls_back_to_imds(imds_only_aws_environment):
 
 def test_autodetect_prefers_gcp_when_no_aws_env(fake_gce_metadata_service):
     """
-    No AWS env-vars + a responsive GCP metadata server  ⇒  GCP selected.
+    No AWS env-vars + a responsive GCP metadata server  -> GCP selected.
     """
     auth_class = AuthByWorkloadIdentity(provider=None)
     auth_class.prepare()

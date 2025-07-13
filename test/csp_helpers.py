@@ -100,10 +100,20 @@ class FakeMetadataService(ABC):
         return {k: "" for k in AWS_CREDENTIAL_ENV_KEYS + AWS_REGION_ENV_KEYS}
 
     @abstractmethod
-    def reset_defaults(self) -> None: ...
+    def reset_defaults(self) -> None:
+        """Resets any default values for test parameters.
+
+        This is called in the constructor and when entering as a context manager.
+        """
+        pass
 
     @abstractmethod
-    def is_expected_hostname(self, host: str | None) -> bool: ...
+    def is_expected_hostname(self, host: str | None) -> bool:
+        """Returns true if the passed hostname is the one at which this metadata service is listening.
+
+        Used to raise a ConnectTimeout for requests not targeted to this hostname.
+        """
+        pass
 
     @abstractmethod
     def handle_request(
@@ -112,9 +122,12 @@ class FakeMetadataService(ABC):
         parsed_url,
         headers,
         timeout,
-    ) -> Response: ...
+    ) -> Response:
+        """Main business logic for handling this request. Should return a Response object."""
+        pass
 
     def __call__(self, method, url, headers=None, timeout=None, **_kw):
+        """Entry-point for the requests monkey-patch."""
         headers = headers or {}
         parsed = urlparse(url)
         logger.debug("FakeMetadataService received %s %s %s", method, url, headers)
@@ -128,6 +141,7 @@ class FakeMetadataService(ABC):
         return self.handle_request(method.upper(), parsed, headers, timeout)
 
     def __enter__(self):
+        """Patches the relevant HTTP calls when entering as a context manager."""
         self.reset_defaults()
         self._context_stack = ExitStack()
         self._context_stack.enter_context(
@@ -164,6 +178,7 @@ class NoMetadataService(FakeMetadataService):
         return False
 
     def handle_request(self, *_):
+        # This should never be called because we always raise a ConnectTimeout.
         raise AssertionError(
             "This should never be called because we always raise a ConnectTimeout."
         )
@@ -173,6 +188,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
     """Emulates an environment with the Azure VM metadata service."""
 
     def reset_defaults(self) -> None:
+        # Defaults used for generating an Entra ID token. Can be overriden in individual tests.
         self.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
         self.iss = "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
 
@@ -193,6 +209,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
 
+        # Reject malformed requests.
         if not (
             method == "GET"
             and parsed_url.path == AZURE_VM_TOKEN_PATH
@@ -205,7 +222,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
 
         resource = query_string["resource"][0]
         self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource)
-        return build_response(json.dumps({"access_token": self.token}).encode())
+        return build_response(json.dumps({"access_token": self.token}).encode("utf-8"))
 
 
 class FakeAzureFunctionMetadataService(FakeMetadataService):
@@ -220,6 +237,7 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
 
     def __enter__(self):
         self._stack = contextlib.ExitStack()
+        # Inject the variables without touching os.environ directly
         self._stack.enter_context(
             mock.patch.dict(
                 os.environ,
@@ -246,6 +264,7 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
 
+        # Reject malformed requests.
         if not (
             method == "GET"
             and parsed_url.path == self.parsed_identity_endpoint.path
@@ -269,6 +288,7 @@ class FakeGceMetadataService(FakeMetadataService):
     """Simulates GCE metadata endpoint."""
 
     def reset_defaults(self) -> None:
+        # Defaults used for generating a token. Can be overriden in individual tests.
         self.sub = "123"
         self.iss = "https://accounts.google.com"
 
@@ -289,6 +309,7 @@ class FakeGceMetadataService(FakeMetadataService):
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
 
+        # Reject malformed requests.
         if not (
             method == "GET"
             and parsed_url.path == GCE_IDENTITY_PATH
@@ -370,11 +391,8 @@ class _AwsMetadataService(FakeMetadataService):
         ):
             return build_response(self.region.encode())
 
-        # New: availability-zone path (region extracted by stripping last char)
-        if (
-            method == "GET" and url == f"{_IMDS_BASE_URL}{self.__class__.IMDS_AZ_PATH}"
-        ):  # <-- new
-            return build_response(f"{self.region}a".encode())  # <-- new
+        if method == "GET" and url == f"{_IMDS_BASE_URL}{self.__class__.IMDS_AZ_PATH}":
+            return build_response(f"{self.region}a".encode())
 
         if (
             method == "GET"
@@ -392,6 +410,7 @@ class FakeAwsEnvironment:
     """
 
     def __init__(self):
+        # Defaults used for generating a token. Can be overriden in individual tests.
         self._region = "us-east-1"
         self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-34afe100cad287fab"
         self.credentials: Credentials | None = Credentials(
@@ -406,6 +425,9 @@ class FakeAwsEnvironment:
 
     @region.setter
     def region(self, new_region: str) -> None:
+        """Change runtime region and, if the env-vars already exist,
+        patch them via ExitStack so they’re cleaned up on __exit__.
+        """
         self._region = new_region
         self._metadata.region = new_region
 
@@ -417,6 +439,7 @@ class FakeAwsEnvironment:
                     )
 
     def _prepare_runtime(self):
+        """Sub-classes patch env / credentials here."""
         return None
 
     def __enter__(self):
@@ -441,6 +464,7 @@ class FakeAwsEnvironment:
             )
         )
 
+        # Keep the metadata stub in sync with the final credential set.
         self._metadata.access_key = (
             self.credentials.access_key if self.credentials else None
         )
@@ -463,6 +487,7 @@ class FakeAwsEnvironment:
             mock.patch.dict(os.environ, env_for_chain, clear=False)
         )
 
+        # Runtime-specific tweaks (may change creds / env).
         self._prepare_runtime()
         return self
 
@@ -492,6 +517,7 @@ class FakeAwsLambda(FakeAwsEnvironment):
 
     def __init__(self):
         super().__init__()
+        # Lambda always returns *session* credentials
         self.credentials = Credentials(
             access_key="ak",
             secret_key="sk",
@@ -499,6 +525,7 @@ class FakeAwsLambda(FakeAwsEnvironment):
         )
 
     def _prepare_runtime(self) -> None:
+        # Patch env vars via mock.patch.dict so nothing touches os.environ directly
         self._stack.enter_context(
             mock.patch.dict(
                 os.environ,
