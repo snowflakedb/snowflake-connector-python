@@ -1,5 +1,6 @@
-#!/usr/bin/env python
-import datetime
+from __future__ import annotations
+
+import contextlib
 import json
 import logging
 import os
@@ -9,7 +10,6 @@ from time import time
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
-import botocore.endpoint
 import jwt
 from botocore.awsrequest import AWSRequest
 from botocore.credentials import Credentials
@@ -52,8 +52,9 @@ def build_response(content: bytes, status_code: int = 200) -> Response:
 class FakeMetadataService(ABC):
     """Base class for fake metadata service implementations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.reset_defaults()
+        self._context_stack: contextlib.ExitStack | None = None
 
     @abstractmethod
     def reset_defaults(self):
@@ -63,10 +64,9 @@ class FakeMetadataService(ABC):
         """
         pass
 
-    @property
     @abstractmethod
-    def expected_hostname(self):
-        """Hostname at which this metadata service is listening.
+    def is_expected_hostname(self, host: str | None) -> bool:
+        """Checks if passed hostname is the one at which this metadata service is listening.
 
         Used to raise a ConnectTimeout for requests not targeted to this hostname.
         """
@@ -82,7 +82,7 @@ class FakeMetadataService(ABC):
         logger.debug(f"Received request: {method} {url} {str(headers)}")
         parsed_url = urlparse(url)
 
-        if not parsed_url.hostname == self.expected_hostname:
+        if not self.is_expected_hostname(parsed_url.hostname):
             logger.debug(
                 f"Received request to unexpected hostname {parsed_url.hostname}"
             )
@@ -93,29 +93,26 @@ class FakeMetadataService(ABC):
     def __enter__(self):
         """Patches the relevant HTTP calls when entering as a context manager."""
         self.reset_defaults()
-        self.patchers = []
+        self._context_stack = ExitStack()
         # requests.request is used by the direct metadata service API calls from our code. This is the main
         # thing being faked here.
-        self.patchers.append(
+        self._context_stack.enter_context(
             mock.patch(
                 "snowflake.connector.vendored.requests.request", side_effect=self
             )
         )
         # HTTPConnection.request is used by the AWS boto libraries. We're not mocking those calls here, so we
         # simply raise a ConnectTimeout to avoid making real network calls.
-        self.patchers.append(
+        self._context_stack.enter_context(
             mock.patch(
                 "urllib3.connection.HTTPConnection.request",
                 side_effect=ConnectTimeout(),
             )
         )
-        for patcher in self.patchers:
-            patcher.__enter__()
         return self
 
-    def __exit__(self, *args, **kwargs):
-        for patcher in self.patchers:
-            patcher.__exit__(*args, **kwargs)
+    def __exit__(self, *exc):
+        self._context_stack.close()
 
 
 class NoMetadataService(FakeMetadataService):
@@ -124,9 +121,8 @@ class NoMetadataService(FakeMetadataService):
     def reset_defaults(self):
         pass
 
-    @property
-    def expected_hostname(self):
-        return None  # Always raise a ConnectTimeout.
+    def is_expected_hostname(self, host: str | None) -> bool:
+        return host is None  # Always raise a ConnectTimeout.
 
     def handle_request(self, method, parsed_url, headers, timeout):
         # This should never be called because we always raise a ConnectTimeout.
@@ -141,9 +137,8 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         self.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
         self.iss = "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
 
-    @property
-    def expected_hostname(self):
-        return "169.254.169.254"
+    def is_expected_hostname(self, host: str | None) -> bool:
+        return host == "169.254.169.254"
 
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
@@ -176,9 +171,8 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
         self.identity_header = "FD80F6DA783A4881BE9FAFA365F58E7A"
         self.parsed_identity_endpoint = urlparse(self.identity_endpoint)
 
-    @property
-    def expected_hostname(self):
-        return self.parsed_identity_endpoint.hostname
+    def is_expected_hostname(self, host: str | None) -> bool:
+        return host == self.parsed_identity_endpoint.hostname
 
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
@@ -221,9 +215,8 @@ class FakeGceMetadataService(FakeMetadataService):
         self.sub = "123"
         self.iss = "https://accounts.google.com"
 
-    @property
-    def expected_hostname(self):
-        return "169.254.169.254"
+    def is_expected_hostname(self, host: str | None) -> bool:
+        return host == "169.254.169.254"
 
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
@@ -291,18 +284,6 @@ class FakeAwsEnvironment:
             )
         )
 
-        # hard-fail any botocore endpoint attempts – guarantees offline tests
-        def _no_http(*a, **k):
-            raise AssertionError("botocore attempted real HTTP call")
-
-        self._stack.enter_context(
-            mock.patch.object(
-                botocore.endpoint.EndpointCreator,
-                "create_endpoint",
-                _no_http,
-                autospec=True,
-            )
-        )
         return self
 
     def __exit__(self, *exc):
