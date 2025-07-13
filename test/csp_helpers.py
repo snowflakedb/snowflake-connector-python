@@ -323,7 +323,7 @@ class FakeAwsEnvironment:
 
     def __init__(self):
         # Defaults used for generating a token. Can be overriden in individual tests.
-        self.region = "us-east-1"
+        self._region = "us-east-1"
         self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-34afe100cad287fab"
         self.credentials: Credentials | None = Credentials(
             access_key="ak", secret_key="sk", token="tk"
@@ -331,33 +331,41 @@ class FakeAwsEnvironment:
         self._metadata = _AwsMetadataService()
         self._stack: ExitStack | None = None
 
+    @property
+    def region(self) -> str:
+        return self._region
+
+    @region.setter
+    def region(self, new_region: str) -> None:
+        """Change runtime region and, **if** the env-vars already exist,
+        patch them via ExitStack so they’re cleaned up on __exit__.
+        """
+        self._region = new_region
+
+        if getattr(self, "_stack", None):
+            for key in ("AWS_REGION", "AWS_DEFAULT_REGION"):
+                if key in os.environ:  # patch only if present
+                    self._stack.enter_context(
+                        mock.patch.dict(os.environ, {key: new_region}, clear=False)
+                    )
+
     def _prepare_runtime(self):
         """Sub-classes patch env / credentials here."""
         return None
 
-    def get_region(self):
-        return self.region
-
-    def get_arn(self):
-        return self.arn
-
-    def get_credentials(self):
-        return self.credentials
-
     def __enter__(self):
-        # sync stub with current creds
-        self._metadata.access_key = (
-            self.credentials.access_key if self.credentials else None
-        )
-        self._metadata.secret_key = (
-            self.credentials.secret_key if self.credentials else None
-        )
-        self._metadata.session_token = (
-            self.credentials.token if self.credentials else None
-        )
+        """Activate the fake AWS runtime.
 
+        * Only HTTP traffic is patched – no longer stubs `get_region`
+          or `load_default_credentials`.
+        * Region / credential discovery is driven entirely via
+          environment variables, so the real helper functions keep
+          working untouched.
+        """
         self._stack = ExitStack()
-        # patch connector helpers
+
+        # Patch outgoing HTTP calls that rely on `requests` or the low-level
+        #    urllib client, routing them to our metadata stub or timing-out.
         self._stack.enter_context(
             mock.patch(
                 "snowflake.connector.vendored.requests.request",
@@ -370,17 +378,35 @@ class FakeAwsEnvironment:
                 side_effect=ConnectTimeout(),
             )
         )
-        self._stack.enter_context(
-            mock.patch("snowflake.connector.wif_util.get_region", self.get_region)
+
+        # Keep the metadata stub in sync with the final credential set.
+        self._metadata.access_key = (
+            self.credentials.access_key if self.credentials else None
         )
-        self._stack.enter_context(
-            mock.patch(
-                "snowflake.connector.wif_util.load_default_credentials",
-                self.get_credentials,
-            )
+        self._metadata.secret_key = (
+            self.credentials.secret_key if self.credentials else None
+        )
+        self._metadata.session_token = (
+            self.credentials.token if self.credentials else None
         )
 
-        # runtime-specific tweaks
+        # Expose region & creds *only* via env vars so that the real helper
+        #    chain can resolve them without monkey-patching.
+        env_for_chain = {
+            "AWS_REGION": self.region,
+            "AWS_DEFAULT_REGION": self.region,
+        }
+        if self.credentials:
+            env_for_chain["AWS_ACCESS_KEY_ID"] = self.credentials.access_key
+            env_for_chain["AWS_SECRET_ACCESS_KEY"] = self.credentials.secret_key
+            if self.credentials.token:
+                env_for_chain["AWS_SESSION_TOKEN"] = self.credentials.token
+
+        self._stack.enter_context(
+            mock.patch.dict(os.environ, env_for_chain, clear=False)
+        )
+
+        # Runtime-specific tweaks (may change creds / env).
         self._prepare_runtime()
         return self
 
