@@ -43,6 +43,17 @@ def fake_aws_environment(request):
         yield env
 
 
+@pytest.fixture
+def imds_only_aws_environment(fake_aws_environment, monkeypatch):
+    """
+    Same fake runtime, but with AWS_REGION / AWS_DEFAULT_REGION removed
+    so the code *must* query IMDS to discover the region.
+    """
+    for key in ("AWS_REGION", "AWS_DEFAULT_REGION"):
+        monkeypatch.delenv(key, raising=False)
+    yield fake_aws_environment
+
+
 @pytest.fixture(params=[FakeAwsNoCreds], ids=["aws_no_creds"])
 def malformed_aws_environment(request):
     """Runtime where *no* credentials are discoverable (negative-path)."""

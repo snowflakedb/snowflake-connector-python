@@ -467,3 +467,28 @@ def test_autodetect_no_provider_raises_error(no_metadata_service):
     assert "No workload identity credential was found for 'auto-detect" in str(
         excinfo.value
     )
+
+
+def test_explicit_aws_region_falls_back_to_imds(imds_only_aws_environment):
+    """
+    When region env-vars are absent, the connector must discover the region via
+    the runtime metadata service (IMDS / task-metadata / lambda env).
+    """
+    # Advertise a non-default region through the fake metadata service
+    imds_only_aws_environment.region = "us-west-2"
+
+    auth = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    auth.prepare()
+
+    verify_aws_token(extract_api_data(auth)["TOKEN"], "us-west-2")
+
+
+def test_autodetect_prefers_gcp_when_no_aws_env(fake_gce_metadata_service):
+    """
+    No AWS env-vars + a responsive GCP metadata server  ⇒  GCP selected.
+    """
+    auth_class = AuthByWorkloadIdentity(provider=None)
+    auth_class.prepare()
+
+    assert extract_api_data(auth_class)["PROVIDER"] == "GCP"
+    assert extract_api_data(auth_class)["TOKEN"] == fake_gce_metadata_service.token

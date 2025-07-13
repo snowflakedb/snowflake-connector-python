@@ -63,7 +63,8 @@ def get_container_credentials(*, timeout: float) -> SfAWSCredentials | None:
 
 def _get_imds_v2_token(timeout: float) -> str | None:
     try:
-        response = requests.put(
+        response = requests.request(
+            "PUT",
             f"{_IMDS_BASE_URL}{_IMDS_TOKEN_PATH}",
             headers={"X-aws-ec2-metadata-token-ttl-seconds": "21600"},
             timeout=timeout,
@@ -123,8 +124,8 @@ def get_region(timeout: float = 1.0) -> str | None:
     token = _get_imds_v2_token(timeout)
     headers = {"X-aws-ec2-metadata-token": token} if token else {}
     try:
-        response = requests.get(
-            f"{_IMDS_BASE_URL}{_IMDS_AZ_PATH}", headers=headers, timeout=timeout
+        response = requests.request(
+            "GET", f"{_IMDS_BASE_URL}{_IMDS_AZ_PATH}", headers=headers, timeout=timeout
         )
         if response.ok:
             az = response.text.strip()
