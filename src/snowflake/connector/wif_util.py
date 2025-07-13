@@ -1,20 +1,22 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import logging
 import os
 from base64 import b64encode
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum, unique
+from urllib.parse import parse_qsl, quote, urlparse
 
-import boto3
 import jwt
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-from botocore.utils import InstanceMetadataRegionFetcher
 
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
+from .session_manager import SessionManager
+from .session_manager import request as http_request
 from .vendored import requests
 from .vendored.requests import Response
 
@@ -62,16 +64,38 @@ class WorkloadIdentityAttestation:
     user_identifier_components: dict
 
 
+@dataclass
+class AwsCredentials:
+    """AWS credentials container."""
+
+    access_key: str
+    secret_key: str
+    token: str | None = None
+
+
 def try_metadata_service_call(
-    method: str, url: str, headers: dict, timeout_sec: int = 3
+    method: str,
+    url: str,
+    headers: dict,
+    timeout_sec: int = 3,
+    session_manager: SessionManager | None = None,
 ) -> Response | None:
     """Tries to make a HTTP request to the metadata service with the given URL, method, headers and timeout.
 
     If we receive an error response or any exceptions are raised, returns None. Otherwise returns the response.
     """
     try:
-        res: Response = requests.request(
-            method=method, url=url, headers=headers, timeout=timeout_sec
+        # If no session_manager provided, create a basic one for this call
+        if session_manager is None:
+            session_manager = SessionManager(use_pooling=False)
+
+        res: Response = http_request(
+            method=method,
+            url=url,
+            headers=headers,
+            timeout_sec=timeout_sec,
+            session_manager=session_manager,
+            use_pooling=False,  # IMDS calls are rare → don't pollute pool
         )
         if not res.ok:
             return None
@@ -80,7 +104,9 @@ def try_metadata_service_call(
     return res
 
 
-def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[str, str]:
+def extract_iss_and_sub_without_signature_verification(
+    jwt_str: str,
+) -> tuple[str | None, str | None]:
     """Extracts the 'iss' and 'sub' claims from the given JWT, without verifying the signature.
 
     Note: the real token verification (including signature verification) happens on the Snowflake side. The driver doesn't have
@@ -105,132 +131,295 @@ def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[st
     return claims["iss"], claims["sub"]
 
 
-def get_aws_region() -> str | None:
-    """Get the current AWS workload's region, if any."""
-    if "AWS_REGION" in os.environ:  # Lambda
-        return os.environ["AWS_REGION"]
-    else:  # EC2
-        return InstanceMetadataRegionFetcher().retrieve_region()
+def _imds_v2_token(session_manager: SessionManager | None = None) -> str | None:
+    res = try_metadata_service_call(
+        method="PUT",
+        url="http://169.254.169.254/latest/api/token",
+        headers={"X-aws-ec2-metadata-token-ttl-seconds": "300"},
+        session_manager=session_manager,
+    )
+    return res.text.strip() if res else None
 
 
-def get_aws_arn() -> str | None:
-    """Get the current AWS workload's ARN, if any."""
-    caller_identity = boto3.client("sts").get_caller_identity()
-    if not caller_identity or "Arn" not in caller_identity:
-        return None
-    return caller_identity["Arn"]
+def get_aws_credentials(
+    session_manager: SessionManager | None = None,
+) -> AwsCredentials | None:
+    """Get AWS credentials from environment variables or instance metadata.
 
-
-def get_aws_partition(arn: str) -> str | None:
-    """Get the current AWS partition from ARN, if any.
-
-    Args:
-        arn (str): The Amazon Resource Name (ARN) string.
-
-    Returns:
-        str | None: The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov')
-                    if found, otherwise None.
-
-    Reference: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html.
+    Implements the AWS credential chain without using boto3.
     """
-    if not arn or not isinstance(arn, str):
-        return None
-    parts = arn.split(":")
-    if len(parts) > 1 and parts[0] == "arn" and parts[1]:
-        return parts[1]
-    logger.warning("Invalid AWS ARN: %s", arn)
+    # Try environment variables first
+    access_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+    session_token = os.environ.get("AWS_SESSION_TOKEN")
+
+    if access_key and secret_key:
+        return AwsCredentials(access_key, secret_key, session_token)
+
+    # Try instance metadata service (IMDSv2)
+    try:
+        token = _imds_v2_token(session_manager)
+        if token is None:
+            logger.debug("Failed to get IMDSv2 token from metadata service.")
+            return None
+
+        token_hdr = {"X-aws-ec2-metadata-token": token} if token else {}
+
+        # Get the security credentials from the metadata service
+        res = try_metadata_service_call(
+            method="GET",
+            url="http://169.254.169.254/latest/meta-data/iam/security-credentials/",
+            headers=token_hdr,
+            session_manager=session_manager,
+        )
+        if res is None:
+            logger.debug("Failed to get IAM role list from metadata service.")
+            return None
+
+        role_name = res.text.strip()
+        if not role_name:
+            logger.debug("No IAM role found in metadata service.")
+            return None
+
+        # Get credentials for the role
+        res = try_metadata_service_call(
+            method="GET",
+            url=f"http://169.254.169.254/latest/meta-data/iam/security-credentials/{role_name}",
+            headers=token_hdr,
+            session_manager=session_manager,
+        )
+        if res is None:
+            logger.debug("Failed to get IAM role credentials from metadata service.")
+            return None
+
+        creds_data = res.json()
+        access_key = creds_data.get("AccessKeyId")
+        secret_key = creds_data.get("SecretAccessKey")
+        token = creds_data.get("Token")
+
+        if access_key and secret_key:
+            return AwsCredentials(access_key, secret_key, token)
+    except Exception as e:
+        logger.debug(f"Error getting AWS credentials from metadata service: {e}")
+
     return None
 
 
-def get_aws_sts_hostname(region: str, partition: str) -> str | None:
-    """Constructs the AWS STS hostname for a given region and partition.
+def get_aws_region(session_manager: SessionManager | None = None) -> str | None:
+    """Get the current AWS workload's region, if any."""
+    region = os.environ.get("AWS_REGION")
+    if region:
+        return region
+
+    try:
+        token = _imds_v2_token(session_manager)
+        if token is None:
+            logger.debug("Failed to get IMDSv2 token from metadata service.")
+            return None
+
+        token_hdr = {"X-aws-ec2-metadata-token": token} if token else {}
+
+        # Get region from metadata service
+        res = try_metadata_service_call(
+            method="GET",
+            url="http://169.254.169.254/latest/meta-data/placement/region",
+            headers=token_hdr,
+            session_manager=session_manager,
+        )
+        if res is not None:
+            return res.text.strip()
+
+        res = try_metadata_service_call(
+            method="GET",
+            url="http://169.254.169.254/latest/meta-data/placement/availability-zone",
+            headers=token_hdr,
+            session_manager=session_manager,
+        )
+        if res is not None:
+            return res.text.strip()[:-1]
+    except Exception as e:
+        logger.debug(f"Error getting AWS region from metadata service: {e}")
+
+    return None
+
+
+def get_aws_sts_hostname(region: str) -> str | None:
+    """Constructs the AWS STS hostname for a given region.
+
+    * China regions (`cn-*`) → sts.<region>.amazonaws.com.cn
+    * All other regions      → sts.<region>.amazonaws.com
+    * Any invalid input      → None
 
     Args:
         region (str): The AWS region (e.g., 'us-east-1', 'cn-north-1').
-        partition (str): The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov').
 
     Returns:
-        str | None: The AWS STS hostname (e.g., 'sts.us-east-1.amazonaws.com')
-                    if a valid hostname can be constructed, otherwise None.
+        str: The AWS STS hostname (e.g., 'sts.us-east-1.amazonaws.com')
 
     References:
     - https://docs.aws.amazon.com/sdkref/latest/guide/feature-sts-regionalized-endpoints.html
     - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
     - https://docs.aws.amazon.com/general/latest/gr/sts.html
     """
-    if (
-        not region
-        or not partition
-        or not isinstance(region, str)
-        or not isinstance(partition, str)
-    ):
+
+    if not region or not isinstance(region, str):
         return None
 
-    if partition == "aws":
-        # For the 'aws' partition, STS endpoints are generally regional
-        # except for the global endpoint (sts.amazonaws.com) which is
-        # generally resolved to us-east-1 under the hood by the SDKs
-        # when a region is not explicitly specified.
-        # However, for explicit regional endpoints, the format is sts.<region>.amazonaws.com
-        return f"sts.{region}.amazonaws.com"
-    elif partition == "aws-cn":
+    if region.startswith("cn-"):
         # China regions have a different domain suffix
         return f"sts.{region}.amazonaws.com.cn"
-    elif partition == "aws-us-gov":
-        return (
-            f"sts.{region}.amazonaws.com"  # GovCloud uses .com, but dedicated regions
-        )
     else:
-        logger.warning("Invalid AWS partition: %s", partition)
-        return None
+        # Standard AWS regions
+        return f"sts.{region}.amazonaws.com"
 
 
-def create_aws_attestation() -> WorkloadIdentityAttestation | None:
+def _aws_percent_encode(s: str) -> str:
+    return quote(s, safe="~")
+
+
+def _canonical_query(query: str) -> str:
+    if not query:
+        return ""
+    pairs = sorted(parse_qsl(query, keep_blank_values=True))
+    return "&".join(
+        f"{_aws_percent_encode(k)}={_aws_percent_encode(v)}" for k, v in pairs
+    )
+
+
+def aws_signature_v4_sign(
+    credentials: AwsCredentials,
+    method: str,
+    url: str,
+    region: str,
+    service: str,
+    headers: dict,
+    payload: str = "",
+) -> dict:
+    """Sign an AWS request using Signature Version 4.
+
+    Based on the C# implementation in AwsSignature4Signer.cs.
+    """
+    parsed_url = urlparse(url)
+
+    utc_now = datetime.now(timezone.utc)
+    amz_date = utc_now.strftime("%Y%m%dT%H%M%SZ")
+    date_string = utc_now.strftime("%Y%m%d")
+
+    headers_lower = {k.lower(): str(v).strip() for k, v in headers.items()}
+    headers_lower["host"] = parsed_url.netloc
+    headers_lower["x-amz-date"] = amz_date
+    if credentials.token:
+        headers_lower["x-amz-security-token"] = credentials.token
+
+    sorted_header_keys = sorted(headers_lower.keys())
+    canonical_headers = "".join(f"{k}:{headers_lower[k]}\n" for k in sorted_header_keys)
+    signed_headers = ";".join(sorted_header_keys)
+
+    canonical_querystring = _canonical_query(parsed_url.query)
+    payload_hash = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    canonical_request = (
+        f"{method}\n"
+        f"{parsed_url.path or '/'}\n"
+        f"{canonical_querystring}\n"
+        f"{canonical_headers}"
+        f"{signed_headers}\n"
+        f"{payload_hash}"
+    )
+
+    algorithm = "AWS4-HMAC-SHA256"
+    credential_scope = f"{date_string}/{region}/{service}/aws4_request"
+    string_to_sign = (
+        f"{algorithm}\n"
+        f"{amz_date}\n"
+        f"{credential_scope}\n"
+        f"{hashlib.sha256(canonical_request.encode('utf-8')).hexdigest()}"
+    )
+
+    def hmac_sha256(key: bytes, msg: str) -> bytes:
+        return hmac.new(key, msg.encode("utf-8"), hashlib.sha256).digest()
+
+    k_date = hmac_sha256(f"AWS4{credentials.secret_key}".encode(), date_string)
+    k_region = hmac_sha256(k_date, region)
+    k_service = hmac_sha256(k_region, service)
+    k_signing = hmac_sha256(k_service, "aws4_request")
+
+    signature = hmac.new(
+        k_signing, string_to_sign.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+
+    authorization = (
+        f"{algorithm} "
+        f"Credential={credentials.access_key}/{credential_scope}, "
+        f"SignedHeaders={signed_headers}, Signature={signature}"
+    )
+
+    final_headers = headers.copy()
+    final_headers["Host"] = parsed_url.netloc
+    final_headers["X-Amz-Date"] = amz_date
+    if credentials.token:
+        final_headers["X-Amz-Security-Token"] = credentials.token
+    final_headers["Authorization"] = authorization
+
+    return final_headers
+
+
+def create_aws_attestation(
+    session_manager: SessionManager | None = None,
+) -> WorkloadIdentityAttestation | None:
     """Tries to create a workload identity attestation for AWS.
 
     If the application isn't running on AWS or no credentials were found, returns None.
     """
-    aws_creds = boto3.session.Session().get_credentials()
-    if not aws_creds:
+    credentials = get_aws_credentials(session_manager)
+    if not credentials:
         logger.debug("No AWS credentials were found.")
         return None
-    region = get_aws_region()
+
+    region = get_aws_region(session_manager)
     if not region:
         logger.debug("No AWS region was found.")
         return None
-    arn = get_aws_arn()
-    if not arn:
-        logger.debug("No AWS caller identity was found.")
-        return None
-    partition = get_aws_partition(arn)
-    if not partition:
-        logger.debug("No AWS partition was found.")
-        return None
 
-    sts_hostname = get_aws_sts_hostname(region, partition)
-    request = AWSRequest(
-        method="POST",
-        url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
-        headers={
-            "Host": sts_hostname,
-            "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
-        },
-    )
+    # Create the GetCallerIdentity request
+    sts_hostname = get_aws_sts_hostname(region)
+    url = f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15"
 
-    SigV4Auth(aws_creds, "sts", region).add_auth(request)
-
-    assertion_dict = {
-        "url": request.url,
-        "method": request.method,
-        "headers": dict(request.headers.items()),
+    base_headers = {
+        "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
     }
-    credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
+
+    signed_headers = aws_signature_v4_sign(
+        credentials=credentials,
+        method="POST",
+        url=url,
+        region=region,
+        service="sts",
+        headers=base_headers,
+    )
+
+    # Create attestation request
+    attestation_request = {
+        "method": "POST",
+        "url": url,
+        "headers": signed_headers,
+    }
+
+    credential = b64encode(json.dumps(attestation_request).encode("utf-8")).decode(
+        "utf-8"
+    )
+    user_identifier_components = {"region": region}
+
     return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"arn": arn}
+        AttestationProvider.AWS,
+        credential,
+        user_identifier_components,
     )
 
 
-def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
+def create_gcp_attestation(
+    session_manager: SessionManager | None = None,
+) -> WorkloadIdentityAttestation | None:
     """Tries to create a workload identity attestation for GCP.
 
     If the application isn't running on GCP or no credentials were found, returns None.
@@ -241,13 +430,20 @@ def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
         headers={
             "Metadata-Flavor": "Google",
         },
+        session_manager=session_manager,
     )
     if res is None:
         # Most likely we're just not running on GCP, which may be expected.
         logger.debug("GCP metadata server request was not successful.")
         return None
 
-    jwt_str = res.content.decode("utf-8")
+    # Ensure content is bytes and decode it
+    content = res.content
+    if isinstance(content, bytes):
+        jwt_str = content.decode("utf-8")
+    else:
+        jwt_str = str(content)
+
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     if not issuer or not subject:
         return None
@@ -263,6 +459,7 @@ def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
 
 def create_azure_attestation(
     snowflake_entra_resource: str,
+    session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation | None:
     """Tries to create a workload identity attestation for Azure.
 
@@ -296,6 +493,7 @@ def create_azure_attestation(
         method="GET",
         url=f"{url_without_query_string}?{query_params}",
         headers=headers,
+        session_manager=session_manager,
     )
     if res is None:
         # Most likely we're just not running on Azure, which may be expected.
@@ -346,7 +544,9 @@ def create_oidc_attestation(token: str | None) -> WorkloadIdentityAttestation | 
 
 
 def create_autodetect_attestation(
-    entra_resource: str, token: str | None = None
+    entra_resource: str,
+    token: str | None = None,
+    session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation | None:
     """Tries to create an attestation using the auto-detected runtime environment.
 
@@ -356,15 +556,15 @@ def create_autodetect_attestation(
     if attestation:
         return attestation
 
-    attestation = create_aws_attestation()
+    attestation = create_azure_attestation(entra_resource, session_manager)
     if attestation:
         return attestation
 
-    attestation = create_azure_attestation(entra_resource)
+    attestation = create_aws_attestation(session_manager)
     if attestation:
         return attestation
 
-    attestation = create_gcp_attestation()
+    attestation = create_gcp_attestation(session_manager)
     if attestation:
         return attestation
 
@@ -375,6 +575,7 @@ def create_attestation(
     provider: AttestationProvider | None,
     entra_resource: str | None = None,
     token: str | None = None,
+    session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
 
@@ -384,18 +585,23 @@ def create_attestation(
     If an explicit entra_resource was provided to the connector, this will be used. Otherwise, the default Snowflake Entra resource will be used.
     """
     entra_resource = entra_resource or DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
+    session_manager = (
+        session_manager.clone() if session_manager else SessionManager(use_pooling=True)
+    )
 
-    attestation: WorkloadIdentityAttestation = None
+    attestation: WorkloadIdentityAttestation | None = None
     if provider == AttestationProvider.AWS:
-        attestation = create_aws_attestation()
+        attestation = create_aws_attestation(session_manager)
     elif provider == AttestationProvider.AZURE:
-        attestation = create_azure_attestation(entra_resource)
+        attestation = create_azure_attestation(entra_resource, session_manager)
     elif provider == AttestationProvider.GCP:
-        attestation = create_gcp_attestation()
+        attestation = create_gcp_attestation(session_manager)
     elif provider == AttestationProvider.OIDC:
         attestation = create_oidc_attestation(token)
     elif provider is None:
-        attestation = create_autodetect_attestation(entra_resource, token)
+        attestation = create_autodetect_attestation(
+            entra_resource, token, session_manager
+        )
 
     if not attestation:
         provider_str = "auto-detect" if provider is None else provider.value

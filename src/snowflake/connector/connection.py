@@ -721,6 +721,11 @@ class SnowflakeConnection:
         return self._rest
 
     @property
+    def session_manager(self):
+        """Access to the connection's SessionManager for making HTTP requests."""
+        return self._rest.session_manager if self._rest else None
+
+    @property
     def application(self) -> str:
         return self._application
 
