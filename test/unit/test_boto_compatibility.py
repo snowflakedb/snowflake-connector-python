@@ -119,7 +119,7 @@ def test_sts_host_from_region_matches_botocore(
 ):
     sf_host = _sts_host_from_region(region)
 
-    # Force botocore into **regional** mode so that it doesn’t fall back to the
+    # Force botocore into regional mode so that it doesn’t fall back to the
     # legacy global host (sts.amazonaws.com) for the particular regions (like us-east-1).
     # Both approaches work correctly.
     monkeypatch.setenv("AWS_STS_REGIONAL_ENDPOINTS", "regional")

@@ -33,11 +33,11 @@ def sign_get_caller_identity(
     session_token: str | None = None,
 ) -> dict[str, str]:
     """
-    Return the SigV4 headers needed for a presigned **POST** to AWS STS
+    Return the SigV4 headers needed for a presigned POST to AWS STS
     `GetCallerIdentity`.
 
-    Parameters
-    ----------
+    Parameters:
+
     url
         The full STS endpoint with query parameters
         (e.g. ``https://sts.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15``)

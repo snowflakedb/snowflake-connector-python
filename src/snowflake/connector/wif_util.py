@@ -3,9 +3,9 @@ from __future__ import annotations
 """Workload‑identity attestation helpers.
 
 This module builds the attestation token that the Snowflake Python connector
-sends when Authenticating with *Workload Identity Federation* (WIF).
-It supports AWS, Azure, GCP and generic OIDC environments **without** pulling
-in heavy SDKs such as *botocore* – we only need a small presigned STS request
+sends when Authenticating with Workload Identity Federation (WIF).
+It supports AWS, Azure, GCP and generic OIDC environments without pulling
+in heavy SDKs such as botocore – we only need a small presigned STS request
 for AWS and a couple of metadata‑server calls for Azure / GCP.
 """
 
@@ -66,7 +66,7 @@ class AttestationProvider(Enum):
 @dataclass
 class WorkloadIdentityAttestation:
     provider: AttestationProvider
-    credential: str  # **base64** JSON blob – provider‑specific
+    credential: str  # base64 JSON blob – provider‑specific
     user_identifier_components: dict[str, Any]
 
 
@@ -136,7 +136,7 @@ def _partition_from_region(region: str) -> AWSPartition:
 
 def _sts_host_from_region(region: str) -> str | None:
     """
-    Construct the STS endpoint hostname for *region* according to the
+    Construct the STS endpoint hostname for region according to the
     regionalised-STS rules published by AWS.:contentReference[oaicite:2]{index=2}
 
     References:
@@ -173,8 +173,8 @@ def _try_get_arn_from_env_vars() -> str | None:
 def try_compose_aws_user_identifier(region: str | None = None) -> dict[str, str]:
     """Return an identifier for the running AWS workload.
 
-    Always includes the AWS *region*; adds an *arn* key only if one is already
-    discoverable via common environment variables.  Returns **{}** only if
+    Always includes the AWS region; adds an *arn* key only if one is already
+    discoverable via common environment variables.  Returns {} only if
     the region cannot be determined."""
     region = region or get_region()
     if not region:
@@ -189,7 +189,7 @@ def try_compose_aws_user_identifier(region: str | None = None) -> dict[str, str]
 
 
 def create_aws_attestation() -> WorkloadIdentityAttestation | None:
-    """Return AWS attestation or *None* if we're not on AWS / creds missing."""
+    """Return AWS attestation or None if we're not on AWS / creds missing."""
 
     creds = load_default_credentials()
     if not creds:
