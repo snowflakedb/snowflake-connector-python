@@ -28,7 +28,7 @@ def freeze_utcnow(monkeypatch: pytest.MonkeyPatch):
 
     class _FrozenDateTime(datetime.datetime):
         @classmethod
-        def utcnow(cls):  # type: ignore[override]
+        def utcnow(cls):
             return fixed
 
     monkeypatch.setattr(datetime, "datetime", _FrozenDateTime)
@@ -159,7 +159,7 @@ def test_region_env_var_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_region_env_var_legacy(monkeypatch: pytest.MonkeyPatch) -> None:
     """
-    AWS_REGION is *ignored* by botocore currently, but should be introduced in the future: https://docs.aws.amazon.com/sdkref/latest/guide/feature-region.html
+    AWS_REGION is ignored by botocore currently, but should be introduced in the future: https://docs.aws.amazon.com/sdkref/latest/guide/feature-region.html
     Therefore for now we set it as env_var for the driver and pass via explicit parameter to botocore.
     """
     desired_region = "ca-central-1"
