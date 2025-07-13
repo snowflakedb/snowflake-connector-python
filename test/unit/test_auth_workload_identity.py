@@ -34,30 +34,36 @@ def extract_api_data(auth_class: AuthByWorkloadIdentity):
 
 
 def verify_aws_token(token: str, region: str):
-    """Performs some basic checks on a 'token' produced for AWS, to ensure it includes the expected fields."""
-    decoded_token = json.loads(b64decode(token))
+    """Accepts both SigV4 variants (with / without session token)."""
+    decoded_payload = json.loads(b64decode(token))
 
-    parsed_url = urlparse(decoded_token["url"])
-    assert parsed_url.scheme == "https"
-    assert parsed_url.hostname == f"sts.{region}.amazonaws.com"
-    query_string = parse_qs(parsed_url.query)
-    assert query_string.get("Action")[0] == "GetCallerIdentity"
-    assert query_string.get("Version")[0] == "2011-06-15"
+    # URL validation
+    sts_request_url = urlparse(decoded_payload["url"])
+    assert sts_request_url.scheme == "https"
+    assert sts_request_url.hostname == f"sts.{region}.amazonaws.com"
 
-    assert decoded_token["method"] == "POST"
+    query_params = parse_qs(sts_request_url.query)
+    assert query_params["Action"][0] == "GetCallerIdentity"
+    assert query_params["Version"][0] == "2011-06-15"
 
-    headers = decoded_token["headers"]
-    headers_lc = {k.lower(): v for k, v in headers.items()}
+    # Method validation
+    assert decoded_payload["method"] == "POST"
 
-    expected_header_keys = {
+    # Header validation
+    headers = {k.lower(): v for k, v in decoded_payload["headers"].items()}
+
+    mandatory_headers = {
         "host",
         "x-snowflake-audience",
         "x-amz-date",
         "authorization",
     }
-    assert set(headers_lc.keys()) == expected_header_keys
-    assert headers_lc["host"] == f"sts.{region}.amazonaws.com"
-    assert headers_lc["x-snowflake-audience"] == "snowflakecomputing.com"
+    optional_headers = {"x-amz-security-token"}
+
+    assert mandatory_headers.issubset(headers)
+    assert set(headers).issubset(mandatory_headers | optional_headers)
+    assert headers["host"] == f"sts.{region}.amazonaws.com"
+    assert headers["x-snowflake-audience"] == "snowflakecomputing.com"
 
 
 # -- OIDC Tests --
@@ -109,8 +115,10 @@ def test_explicit_oidc_no_token_raises_error():
 # -- AWS Tests --
 
 
-def test_explicit_aws_no_auth_raises_error(fake_aws_environment: FakeAwsEnvironment):
-    fake_aws_environment.credentials = None
+def test_explicit_aws_no_auth_raises_error(
+    malformed_aws_environment: FakeAwsEnvironment,
+):
+    malformed_aws_environment.credentials = None
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     with pytest.raises(ProgrammingError) as excinfo:
