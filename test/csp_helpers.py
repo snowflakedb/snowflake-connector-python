@@ -4,10 +4,12 @@ import json
 import logging
 import os
 from abc import ABC, abstractmethod
+from contextlib import ExitStack
 from time import time
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
+import botocore.endpoint
 import jwt
 from botocore.awsrequest import AWSRequest
 from botocore.credentials import Credentials
@@ -275,24 +277,33 @@ class FakeAwsEnvironment:
         )
 
     def __enter__(self):
-        # Patch the relevant functions to do what we want.
-        self.patchers = []
-        self.patchers.append(
+        self._stack = ExitStack()
+        # patch connector helpers
+        self._stack.enter_context(
             mock.patch(
                 "snowflake.connector.wif_util.load_default_credentials",
                 side_effect=self.get_credentials,
             )
         )
-        self.patchers.append(
+        self._stack.enter_context(
             mock.patch(
-                "snowflake.connector.wif_util.get_region",
-                side_effect=self.get_region,
+                "snowflake.connector.wif_util.get_region", side_effect=self.get_region
             )
         )
-        for patcher in self.patchers:
-            patcher.__enter__()
+
+        # hard-fail any botocore endpoint attempts – guarantees offline tests
+        def _no_http(*a, **k):
+            raise AssertionError("botocore attempted real HTTP call")
+
+        self._stack.enter_context(
+            mock.patch.object(
+                botocore.endpoint.EndpointCreator,
+                "create_endpoint",
+                _no_http,
+                autospec=True,
+            )
+        )
         return self
 
-    def __exit__(self, *args, **kwargs):
-        for patcher in self.patchers:
-            patcher.__exit__(*args, **kwargs)
+    def __exit__(self, *exc):
+        self._stack.close()
