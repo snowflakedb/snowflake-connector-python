@@ -1,26 +1,26 @@
 from __future__ import annotations
 
-import datetime as _dt
-import hashlib as _hashlib
-import hmac as _hmac
-import urllib.parse as _urlparse
+import datetime
+import hashlib
+import hmac
+import urllib.parse as urlparse
 
 _ALGORITHM: str = "AWS4-HMAC-SHA256"
-_EMPTY_PAYLOAD_SHA256: str = _hashlib.sha256(b"").hexdigest()
+_EMPTY_PAYLOAD_SHA256: str = hashlib.sha256(b"").hexdigest()
 _SAFE_CHARS: str = "-_.~"
 
 
 def _sign(key: bytes, msg: str) -> bytes:
     """Return an HMAC-SHA256 of *msg* keyed with *key*."""
-    return _hmac.new(key, msg.encode(), _hashlib.sha256).digest()
+    return hmac.new(key, msg.encode(), hashlib.sha256).digest()
 
 
 def _canonical_query_string(query: str) -> str:
     """Return the query string in canonical (sorted & URL-escaped) form."""
-    pairs = _urlparse.parse_qsl(query, keep_blank_values=True)
+    pairs = urlparse.parse_qsl(query, keep_blank_values=True)
     pairs.sort()
     return "&".join(
-        f"{_urlparse.quote(k, _SAFE_CHARS)}={_urlparse.quote(v, _SAFE_CHARS)}"
+        f"{urlparse.quote(k, _SAFE_CHARS)}={urlparse.quote(v, _SAFE_CHARS)}"
         for k, v in pairs
     )
 
@@ -50,12 +50,12 @@ def sign_get_caller_identity(
     session_token
         (Optional) session token for temporary credentials.
     """
-    timestamp = _dt.datetime.utcnow()
+    timestamp = datetime.datetime.utcnow()
     amz_date = timestamp.strftime("%Y%m%dT%H%M%SZ")
     short_date = timestamp.strftime("%Y%m%d")
     service = "sts"
 
-    parsed = _urlparse.urlparse(url)
+    parsed = urlparse.urlparse(url)
 
     headers: dict[str, str] = {
         "host": parsed.netloc.lower(),
@@ -70,14 +70,14 @@ def sign_get_caller_identity(
     canonical_request = "\n".join(
         (
             "POST",
-            _urlparse.quote(parsed.path or "/", safe="/"),
+            urlparse.quote(parsed.path or "/", safe="/"),
             _canonical_query_string(parsed.query),
             "".join(f"{k}:{headers[k]}\n" for k in sorted(headers)),
             signed_headers,
             _EMPTY_PAYLOAD_SHA256,
         )
     )
-    canonical_request_hash = _hashlib.sha256(canonical_request.encode()).hexdigest()
+    canonical_request_hash = hashlib.sha256(canonical_request.encode()).hexdigest()
 
     # String to sign
     credential_scope = f"{short_date}/{region}/{service}/aws4_request"
@@ -90,8 +90,8 @@ def sign_get_caller_identity(
     key_region = _sign(key_date, region)
     key_service = _sign(key_region, service)
     key_signing = _sign(key_service, "aws4_request")
-    signature = _hmac.new(
-        key_signing, string_to_sign.encode(), _hashlib.sha256
+    signature = hmac.new(
+        key_signing, string_to_sign.encode(), hashlib.sha256
     ).hexdigest()
 
     # Final Authorization header
