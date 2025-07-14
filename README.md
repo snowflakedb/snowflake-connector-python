@@ -81,3 +81,35 @@ conn = snowflake.connector.connect(
 )
 conn.telemetry_enabled = False
 ```
+
+## Asyncio Support
+
+Asyncio support is introduced in version 3.13.0a1. This feature is currently in alpha stage, and future releases may include breaking changes as we continue to refine and improve the implementation.
+
+### Installation requirements
+
+```bash
+pip install "snowflake-connector-python[aio]"
+```
+
+### Quickstart
+
+To start using the asyncio functionality, refer to the following example:
+
+```python
+import asyncio
+import snowflake.connector.aio
+connection_parameters = {
+  # fill in your connection parameters
+}
+
+async def main():
+  async with snowflake.connector.aio.SnowflakeConnection(
+    **connection_parameters
+  ) as conn, conn.cursor() as cur:
+      await cur.execute("SELECT 1")
+      res = await cur.fetchone()
+      assert res == (1, )
+
+asyncio.run(main())
+```
