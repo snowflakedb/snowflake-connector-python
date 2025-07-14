@@ -18,7 +18,7 @@ logger = getLogger(__name__)
 class AuthByKeyPair(AuthByPluginAsync, AuthByKeyPairSync):
     def __init__(
         self,
-        private_key: bytes | RSAPrivateKey,
+        private_key: bytes | str | RSAPrivateKey,
         lifetime_in_seconds: int = AuthByKeyPairSync.LIFETIME,
         **kwargs,
     ) -> None:
