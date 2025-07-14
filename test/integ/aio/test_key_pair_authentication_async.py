@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import uuid
 
 import pytest
@@ -78,6 +79,11 @@ async def test_different_key_length(is_public_test, request, conn_cnx, db_parame
             )
 
             db_config["private_key"] = private_key_der
+            async with snowflake.connector.aio.SnowflakeConnection(**db_config) as _:
+                pass
+
+            # Ensure the base64-encoded version also works
+            db_config["private_key"] = base64.b64encode(private_key_der).decode()
             async with snowflake.connector.aio.SnowflakeConnection(**db_config) as _:
                 pass
 
