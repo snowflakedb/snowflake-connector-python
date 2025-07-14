@@ -37,7 +37,6 @@ def test_pat_authenticator_creates_auth_by_pat(monkeypatch):
     """Test that using PROGRAMMATIC_ACCESS_TOKEN authenticator creates AuthByPAT instance."""
     import snowflake.connector
 
-    # Mock the network request - this prevents actual network calls and connection errors
     def mock_post_request(request, url, headers, json_body, **kwargs):
         return {
             "success": True,
@@ -50,7 +49,6 @@ def test_pat_authenticator_creates_auth_by_pat(monkeypatch):
             },
         }
 
-    # Apply the mock using monkeypatch
     monkeypatch.setattr(
         snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
     )
@@ -67,6 +65,5 @@ def test_pat_authenticator_creates_auth_by_pat(monkeypatch):
 
     # Verify that the auth_class is an instance of AuthByPAT
     assert isinstance(conn.auth_class, AuthByPAT)
-    # Note: assertion_content is None after connect() because secrets are cleared for security
 
     conn.close()
