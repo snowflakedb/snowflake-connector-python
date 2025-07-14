@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import time
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
@@ -246,3 +247,52 @@ class TestUploadDownloadMethods(TestCase):
             cursor._download("@st", "/tmp", {})
 
         self._run_dop_cap_test(task, dop_cap=1)
+
+
+def test_cursor_execute_empty_command_with_dataframe_ast(caplog):
+    """Test that empty command is allowed if dataframe AST is present."""
+    fake_conn = FakeConnection()
+    fake_conn._rest = MagicMock()
+    fake_conn._paramstyle = "qmark"  # Sets is_pyformat to False
+    fake_conn._process_params_qmarks = MagicMock(return_value=None)
+
+    cursor = SnowflakeCursor(fake_conn)
+
+    # Test empty command with dataframe AST
+    with caplog.at_level(logging.DEBUG):
+        # Mock the _execute_helper to prevent actual execution
+        with patch.object(
+            cursor, "_execute_helper"
+        ) as mock_execute_helper, patch.object(  # Mock the _init_result_and_meta to avoid complex result processing
+            cursor, "_init_result_and_meta"
+        ):
+            mock_execute_helper.return_value = {
+                "success": True,
+                "data": {
+                    "queryId": "test-query-id",
+                    "sqlState": "00000",
+                    "rowtype": [],
+                    "queryResultFormat": "json",
+                    "total": 0,
+                },
+            }
+
+            # Test empty command with dataframe AST
+            result = cursor.execute("", _dataframe_ast="test_dataframe_ast")
+            assert result is not None
+            assert "dataframe ast: [test_dataframe_ast]" in caplog.text
+            assert "execute: no query is given to execute" not in caplog.text
+
+            # Test empty command without dataframe AST
+            caplog.clear()
+            result = cursor.execute("")
+            assert result is None
+            assert "execute: no query is given to execute" in caplog.text
+            assert "dataframe ast:" not in caplog.text
+
+            # Test None command without dataframe AST
+            caplog.clear()
+            result = cursor.execute(None)
+            assert result is None
+            assert "execute: no query is given to execute" in caplog.text
+            assert "dataframe ast:" not in caplog.text
