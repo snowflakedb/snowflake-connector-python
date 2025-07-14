@@ -5,7 +5,10 @@ import pytest
 from snowflake.connector.telemetry_oob import TelemetryService
 
 from ..csp_helpers import (
-    FakeAwsEnvironment,
+    FakeAwsEc2,
+    FakeAwsEcs,
+    FakeAwsLambda,
+    FakeAwsNoCreds,
     FakeAzureFunctionMetadataService,
     FakeAzureVmMetadataService,
     FakeGceMetadataService,
@@ -30,10 +33,31 @@ def no_metadata_service():
         yield server
 
 
+@pytest.fixture(
+    params=[FakeAwsEc2, FakeAwsEcs, FakeAwsLambda],
+    ids=["aws_ec2", "aws_ecs", "aws_lambda"],
+)
+def fake_aws_environment(request):
+    """Runtimes that *do* expose credentials."""
+    with request.param() as env:
+        yield env
+
+
 @pytest.fixture
-def fake_aws_environment():
-    """Emulates the AWS environment, returning dummy credentials."""
-    with FakeAwsEnvironment() as env:
+def imds_only_aws_environment(fake_aws_environment, monkeypatch):
+    """
+    Same fake runtime, but with AWS_REGION / AWS_DEFAULT_REGION removed
+    so the code *must* query IMDS to discover the region.
+    """
+    for key in ("AWS_REGION", "AWS_DEFAULT_REGION"):
+        monkeypatch.delenv(key, raising=False)
+    yield fake_aws_environment
+
+
+@pytest.fixture(params=[FakeAwsNoCreds], ids=["aws_no_creds"])
+def malformed_aws_environment(request):
+    """Runtime where *no* credentials are discoverable (negative-path)."""
+    with request.param() as env:
         yield env
 
 
