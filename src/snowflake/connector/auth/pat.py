@@ -13,6 +13,7 @@ class AuthByPAT(AuthByPlugin):
         super().__init__(**kwargs)
         self._pat_token: str | None = pat_token
 
+    @property
     def type_(self) -> AuthType:
         return AuthType.PAT
 
