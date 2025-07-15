@@ -572,3 +572,19 @@ def test_ssl_error_hint(caplog):
         exc.value, OperationalError
     )
     assert "SSL error" in caplog.text and _CONNECTIVITY_ERR_MSG in caplog.text
+
+
+def test_otel_error_message(caplog, mock_post_requests):
+    """This test assumes that OpenTelemetry is not installed when tests are running."""
+    with mock.patch("snowflake.connector.network.SnowflakeRestful._post_request"):
+        with caplog.at_level(logging.DEBUG):
+            with fake_connector():
+                ...
+    assert caplog.records
+    important_records = [
+        record
+        for record in caplog.records
+        if "Opentelemtry otel injection failed" in record.message
+    ]
+    assert len(important_records) == 1
+    assert important_records[0].exc_text is not None

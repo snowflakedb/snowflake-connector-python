@@ -62,6 +62,21 @@ def test_cursor_attribute():
     assert cursor.lastrowid is None
 
 
+def test_query_can_be_empty_with_dataframe_ast():
+    def mock_is_closed(*args, **kwargs):
+        return False
+
+    fake_conn = FakeConnection()
+    fake_conn.is_closed = mock_is_closed
+    cursor = SnowflakeCursor(fake_conn)
+    # when `dataframe_ast` is not presented, the execute function return None
+    assert cursor.execute("") is None
+    # when `dataframe_ast` is presented, it should not return `None`
+    # but raise `AttributeError` since `_paramstyle` is not set in FakeConnection.
+    with pytest.raises(AttributeError):
+        cursor.execute("", _dataframe_ast="ABCD")
+
+
 @patch("snowflake.connector.cursor.SnowflakeCursor._SnowflakeCursor__cancel_query")
 def test_cursor_execute_timeout(mockCancelQuery):
     def mock_cmd_query(*args, **kwargs):

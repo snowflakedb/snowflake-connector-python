@@ -532,10 +532,14 @@ class SnowflakeCursor(SnowflakeCursorSync):
 
         if _do_reset:
             self.reset()
-        command = command.strip(" \t\n\r") if command else None
+        command = command.strip(" \t\n\r") if command else ""
         if not command:
-            logger.warning("execute: no query is given to execute")
-            return None
+            if _dataframe_ast:
+                logger.debug("dataframe ast: [%s]", _dataframe_ast)
+            else:
+                logger.warning("execute: no query is given to execute")
+                return None
+
         logger.debug("query: [%s]", self._format_query_for_log(command))
 
         _statement_params = _statement_params or dict()
