@@ -36,6 +36,8 @@ class Error(Exception):
         done_format_msg: bool | None = None,
         connection: SnowflakeConnection | None = None,
         cursor: SnowflakeCursor | None = None,
+        errtype: TelemetryField = TelemetryField.SQL_EXCEPTION,
+        send_telemetry: bool = True,
     ) -> None:
         super().__init__(msg)
         self.msg = msg
@@ -44,6 +46,8 @@ class Error(Exception):
         self.sqlstate = sqlstate or "n/a"
         self.sfqid = sfqid
         self.query = query
+        self.errtype = errtype
+        self.send_telemetry = send_telemetry
 
         if self.msg:
             # TODO: If there's a message then check to see if errno (and maybe sqlstate)
@@ -74,7 +78,9 @@ class Error(Exception):
 
         # We want to skip the last frame/line in the traceback since it is the current frame
         self.telemetry_traceback = self.generate_telemetry_stacktrace()
-        self.exception_telemetry(msg, cursor, connection)
+
+        if self.send_telemetry:
+            self.exception_telemetry(msg, cursor, connection)
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -131,6 +137,8 @@ class Error(Exception):
             telemetry_data_dict[TelemetryField.KEY_REASON.value] = telemetry_msg
         if self.errno:
             telemetry_data_dict[TelemetryField.KEY_ERROR_NUMBER.value] = str(self.errno)
+        if self.msg:
+            telemetry_data_dict[TelemetryField.KEY_ERROR_MESSAGE.value] = self.msg
 
         return telemetry_data_dict
 
@@ -147,9 +155,7 @@ class Error(Exception):
             and not connection._telemetry.is_closed
         ):
             # Send with in-band telemetry
-            telemetry_data[TelemetryField.KEY_TYPE.value] = (
-                TelemetryField.SQL_EXCEPTION.value
-            )
+            telemetry_data[TelemetryField.KEY_TYPE.value] = self.errtype.value
             telemetry_data[TelemetryField.KEY_SOURCE.value] = connection.application
             telemetry_data[TelemetryField.KEY_EXCEPTION.value] = self.__class__.__name__
             ts = get_time_millis()
@@ -415,9 +421,16 @@ class NotSupportedError(DatabaseError):
 class RevocationCheckError(OperationalError):
     """Exception for errors during certificate revocation check."""
 
-    # We already send OCSP exception events
-    def exception_telemetry(self, msg, cursor, connection) -> None:
-        pass
+    def __init__(self, **kwargs) -> None:
+        send_telemetry = False
+        if "send_telemetry" in kwargs.keys():
+            send_telemetry = kwargs.pop("send_telemetry")
+        Error.__init__(
+            self,
+            errtype=TelemetryField.OCSP_EXCEPTION,
+            send_telemetry=send_telemetry,
+            **kwargs,
+        )
 
 
 # internal errors
