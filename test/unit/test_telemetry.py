@@ -256,7 +256,9 @@ def test_raising_error_generates_telemetry_event_when_connection_is_present():
         )
 
     mock_connection._log_telemetry.assert_called_once()
-    verify_telemetry_data(mock_connection._log_telemetry.call_args[0][0])
+    assert_telemetry_data_for_revocation_check_error(
+        mock_connection._log_telemetry.call_args[0][0]
+    )
 
 
 def test_raising_error_with_send_telemetry_off_does_not_generate_telemetry_event_when_connection_is_present():
@@ -296,7 +298,9 @@ def test_request_throws_revocation_check_error():
                 retry_ctx,
             )
         mock_restful._connection._log_telemetry.assert_called_once()
-        verify_telemetry_data(mock_connection._log_telemetry.call_args[0][0])
+        assert_telemetry_data_for_revocation_check_error(
+            mock_connection._log_telemetry.call_args[0][0]
+        )
 
 
 def get_mocked_telemetry_connection(telemetry_enabled: bool = True) -> Mock:
@@ -314,7 +318,7 @@ def get_mocked_telemetry_connection(telemetry_enabled: bool = True) -> Mock:
     return mock_connection
 
 
-def verify_telemetry_data(telemetry_data: TelemetryData):
+def assert_telemetry_data_for_revocation_check_error(telemetry_data: TelemetryData):
     assert telemetry_data.message[TelemetryField.KEY_DRIVER_TYPE.value] == CLIENT_NAME
     assert (
         telemetry_data.message[TelemetryField.KEY_DRIVER_VERSION.value]
