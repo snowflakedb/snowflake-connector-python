@@ -422,9 +422,7 @@ class RevocationCheckError(OperationalError):
     """Exception for errors during certificate revocation check."""
 
     def __init__(self, **kwargs) -> None:
-        send_telemetry = False
-        if "send_telemetry" in kwargs.keys():
-            send_telemetry = kwargs.pop("send_telemetry")
+        send_telemetry = kwargs.pop("send_telemetry", False)
         Error.__init__(
             self,
             errtype=TelemetryField.OCSP_EXCEPTION,
