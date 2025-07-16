@@ -340,6 +340,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             await self._add_heartbeat()
 
     async def _add_heartbeat(self) -> None:
+        """Add a periodic heartbeat query in order to keep connection alive."""
         if not self._heartbeat_task:
             self._heartbeat_task = HeartBeatTimer(
                 self.client_session_keep_alive_heartbeat_frequency, self._heartbeat_tick
@@ -348,7 +349,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         logger.debug("started heartbeat")
 
     async def _heartbeat_tick(self) -> None:
-        """Execute a hearbeat if connection isn't closed yet."""
+        """Execute a heartbeat if connection isn't closed yet."""
         if not self.is_closed():
             logger.debug("heartbeating!")
             await self.rest._heartbeat()
@@ -1003,3 +1004,21 @@ class SnowflakeConnection(SnowflakeConnectionSync):
     async def rollback(self) -> None:
         """Rolls back the current transaction."""
         await self.cursor().execute("ROLLBACK")
+
+    async def is_valid(self) -> bool:
+        """This function tries to answer the question: Is this connection still good for sending queries?
+        Attempts to validate the connections both on the TCP/IP and Session levels."""
+        logger.debug("validating connection and session")
+        if self.is_closed():
+            logger.debug("connection is already closed and not valid")
+            return False
+
+        try:
+            logger.debug("trying to heartbeat into the session to validate")
+            hb_result = await self.rest._heartbeat()
+            session_valid = hb_result.get("success")
+            logger.debug("session still valid? %s", session_valid)
+            return bool(session_valid)
+        except Exception as e:
+            logger.debug("session could not be validated due to exception: %s", e)
+            return False
