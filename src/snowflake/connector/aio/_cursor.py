@@ -517,6 +517,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
         _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
+        _force_qmark_paramstyle: bool = False,
         _dataframe_ast: str | None = None,
     ) -> Self | dict[str, Any] | None:
         if _exec_async:
@@ -562,7 +563,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             "dataframe_ast": _dataframe_ast,
         }
 
-        if self._connection.is_pyformat:
+        if self._connection.is_pyformat and not _force_qmark_paramstyle:
             query = await self._preprocess_pyformat_query(command, params)
         else:
             # qmark and numeric paramstyle
@@ -802,7 +803,9 @@ class SnowflakeCursor(SnowflakeCursorSync):
         else:
             if re.search(";/s*$", command) is None:
                 command = command + "; "
-            if self._connection.is_pyformat:
+            if self._connection.is_pyformat and not kwargs.get(
+                "_force_qmark_paramstyle", False
+            ):
                 processed_queries = [
                     await self._preprocess_pyformat_query(command, params)
                     for params in seqparams
