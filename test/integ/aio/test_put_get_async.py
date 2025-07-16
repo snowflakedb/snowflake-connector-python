@@ -223,3 +223,39 @@ async def test_transfer_error_message(tmp_path, aio_connection):
                     )
                 )
             ).fetchall()
+
+
+@pytest.mark.skipolddriver
+async def test_put_md5(tmp_path, aio_connection):
+    """This test uploads a single and a multi part file and makes sure that md5 is populated."""
+    # Generate random files and folders
+    small_folder = tmp_path / "small"
+    big_folder = tmp_path / "big"
+    small_folder.mkdir()
+    big_folder.mkdir()
+    generate_k_lines_of_n_files(3, 1, tmp_dir=str(small_folder))
+    # This generates a ~342 MB file to trigger a multipart upload
+    generate_k_lines_of_n_files(3_000_000, 1, tmp_dir=str(big_folder))
+
+    small_test_file = small_folder / "file0"
+    big_test_file = big_folder / "file0"
+
+    stage_name = random_string(5, "test_put_md5_")
+    # Use the async connection for PUT/LS operations
+    await aio_connection.connect()
+    async with aio_connection.cursor() as cur:
+        await cur.execute(f"create temporary stage {stage_name}")
+
+        small_filename_in_put = str(small_test_file).replace("\\", "/")
+        big_filename_in_put = str(big_test_file).replace("\\", "/")
+
+        await cur.execute(
+            f"PUT 'file://{small_filename_in_put}' @{stage_name}/small AUTO_COMPRESS = FALSE"
+        )
+        await cur.execute(
+            f"PUT 'file://{big_filename_in_put}' @{stage_name}/big AUTO_COMPRESS = FALSE"
+        )
+
+        res = await cur.execute(f"LS @{stage_name}")
+
+    assert all(map(lambda e: e[2] is not None, await res.fetchall()))
