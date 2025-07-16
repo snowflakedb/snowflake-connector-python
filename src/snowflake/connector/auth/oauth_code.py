@@ -8,6 +8,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import secrets
 import socket
 import time
@@ -117,7 +118,12 @@ class AuthByOauthCode(AuthByOAuthBase):
     ) -> (str | None, str | None):
         """Web Browser based Authentication."""
         logger.debug("authenticating with OAuth authorization code flow")
-        with AuthHttpServer(self._redirect_uri) as callback_server:
+        with AuthHttpServer(
+            uri=os.environ.get("SNOWFLAKE_OAUTH_SOCKET_ADDRESS", "http://localhost")
+            + ":"
+            + os.environ.get("SNOWFLAKE_OAUTH_SOCKET_PORT", "0"),
+            redirect_uri=self._redirect_uri,
+        ) as callback_server:
             code = self._do_authorization_request(callback_server, conn)
             return self._do_token_request(code, callback_server, conn)
 
@@ -260,7 +266,7 @@ You can close this window now and go back where you started from.
         connection: SnowflakeConnection,
     ) -> str | None:
         authorization_request = self._construct_authorization_request(
-            callback_server.url
+            callback_server.redirect_uri
         )
         logger.debug("step 1: going to open authorization URL")
         print(
@@ -314,7 +320,7 @@ You can close this window now and go back where you started from.
         fields = {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": callback_server.url,
+            "redirect_uri": callback_server.redirect_uri,
         }
         if self._enable_single_use_refresh_tokens:
             fields["enable_single_use_refresh_tokens"] = "true"
