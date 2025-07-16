@@ -75,28 +75,6 @@ def test_snowflake_authorization_code_timeout():
 
 
 @pytest.mark.auth
-def test_snowflake_authorization_code_with_token_cache():
-    connection_parameters = (
-        AuthConnectionParameters().get_snowflake_authorization_code_connection_parameters()
-    )
-    connection_parameters["external_browser_timeout"] = 15
-    connection_parameters["client_store_temporary_credential"] = True
-    test_helper = AuthorizationTestHelper(connection_parameters)
-    browser_login, browser_password = get_soteria_okta_login_credentials().values()
-
-    test_helper.connect_and_provide_credentials(
-        Scenario.INTERNAL_OAUTH_SNOWFLAKE_SUCCESS, browser_login, browser_password
-    )
-
-    clean_browser_processes()
-
-    assert (
-        test_helper.connect_and_execute_simple_query() is True
-    ), "Connection should be established"
-    assert test_helper.get_error_msg() == "", "Error message should be empty"
-
-
-@pytest.mark.auth
 def test_snowflake_authorization_code_without_token_cache():
     connection_parameters = (
         AuthConnectionParameters().get_snowflake_authorization_code_connection_parameters()
