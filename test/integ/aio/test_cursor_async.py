@@ -145,6 +145,7 @@ def _type_from_description(named_access: bool):
 
 async def test_insert_select(conn, db_parameters, caplog):
     """Inserts and selects integer data."""
+    caplog.set_level(logging.DEBUG)
     async with conn() as cnx:
         c = cnx.cursor()
         try:
@@ -188,6 +189,7 @@ async def test_insert_select(conn, db_parameters, caplog):
 
 async def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
     """Inserts a record and select it by a separate connection."""
+    caplog.set_level(logging.DEBUG)
     async with conn() as cnx:
         result = await cnx.cursor().execute(
             "insert into {name}(aa) values({value})".format(
@@ -918,6 +920,7 @@ async def test_fetchmany(conn, db_parameters, caplog):
             assert c.rowcount == 6, "number of records"
 
         async with cnx.cursor() as c:
+            caplog.set_level(logging.DEBUG)
             await c.execute(f"select aa from {table_name} order by aa desc")
             assert "Number of results in first chunk: 6" in caplog.text
 
