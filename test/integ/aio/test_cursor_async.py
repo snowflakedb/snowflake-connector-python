@@ -746,6 +746,45 @@ async def test_vector(conn_cnx, is_public_test):
             assert len(data) == 0
 
 
+async def test_file(conn_cnx):
+    """Variant including JSON object."""
+    name_file = random_string(5, "test_file_")
+    async with conn_cnx(
+        session_parameters={
+            "ENABLE_FILE_DATA_TYPE": True,
+        },
+    ) as cnx:
+        async with cnx.cursor() as cur:
+            await cur.execute(
+                f"create temporary table {name_file} as select "
+                f"TO_FILE(OBJECT_CONSTRUCT('RELATIVE_PATH', 'some_new_file.jpeg', 'STAGE', '@myStage', "
+                f"'STAGE_FILE_URL', 'some_new_file.jpeg', 'SIZE', 123, 'ETAG', 'xxx', 'CONTENT_TYPE', 'image/jpeg', "
+                f"'LAST_MODIFIED', '2025-01-01')) as file_col"
+            )
+
+            expected_data = [
+                {
+                    "RELATIVE_PATH": "some_new_file.jpeg",
+                    "STAGE": "@myStage",
+                    "STAGE_FILE_URL": "some_new_file.jpeg",
+                    "SIZE": 123,
+                    "ETAG": "xxx",
+                    "CONTENT_TYPE": "image/jpeg",
+                    "LAST_MODIFIED": "2025-01-01",
+                }
+            ]
+
+        async with cnx.cursor() as cur:
+            # Test with FILE return type
+            result = await cur.execute(f"select * from {name_file}")
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "FILE"
+            data = await result.fetchall()
+            for raw_data in data:
+                row = json.loads(raw_data[0])
+                assert row in expected_data
+
+
 async def test_invalid_bind_data_type(conn_cnx):
     """Invalid bind data type."""
     async with conn_cnx() as cnx:
