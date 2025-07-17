@@ -1659,3 +1659,30 @@ async def test_is_valid(conn_cnx):
         assert conn
         assert await conn.is_valid() is True
     assert await conn.is_valid() is False
+
+
+async def test_no_auth_connection_negative_case():
+    # AuthNoAuth does not exist in old drivers, so we import at test level to
+    # skip importing it for old driver tests.
+    from test.integ.aio.conftest import create_connection
+
+    from snowflake.connector.aio.auth._no_auth import AuthNoAuth
+
+    no_auth = AuthNoAuth()
+
+    # Create a no-auth connection in an invalid way.
+    # We do not fail connection establishment because there is no validated way
+    # to tell whether the no-auth is a valid use case or not. But it is
+    # effectively protected because invalid no-auth will fail to run any query.
+    conn = await create_connection("default", auth_class=no_auth)
+
+    # Make sure we are indeed passing the no-auth configuration to the
+    # connection.
+    assert isinstance(conn.auth_class, AuthNoAuth)
+
+    # We expect a failure here when executing queries, because invalid no-auth
+    # connection is not able to run any query
+    with pytest.raises(DatabaseError, match="Connection is closed"):
+        await conn.execute_string("select 1")
+
+    await conn.close()
