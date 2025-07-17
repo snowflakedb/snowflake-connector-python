@@ -11,7 +11,7 @@ from .vendored import requests
 from .wif_util import DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
 
 
-def is_ec2_instance(timeout=0.5):
+def is_ec2_instance(timeout=0.2):
     try:
         fetcher = IMDSFetcher(timeout=timeout, num_attempts=2)
         document = fetcher._get_request(
@@ -47,7 +47,7 @@ def has_aws_identity():
         return False
 
 
-def is_azure_vm(timeout=0.5):
+def is_azure_vm(timeout=0.2):
     try:
         token_resp = requests.get(
             "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
@@ -69,7 +69,7 @@ def is_azure_function():
 
 
 def is_managed_identity_available_on_azure_vm(
-    resource=DEFAULT_ENTRA_SNOWFLAKE_RESOURCE, timeout=0.5
+    resource=DEFAULT_ENTRA_SNOWFLAKE_RESOURCE, timeout=0.2
 ):
     endpoint = f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={resource}"
     headers = {"Metadata": "true"}
@@ -88,7 +88,7 @@ def has_azure_managed_identity(on_azure_vm, on_azure_function):
     return False
 
 
-def is_gce_vm(timeout=0.5):
+def is_gce_vm(timeout=0.2):
     try:
         response = requests.get("http://metadata.google.internal", timeout=timeout)
         return response.headers.get("Metadata-Flavor") == "Google"
@@ -106,7 +106,7 @@ def is_gce_cloud_run_job():
     return all(var in os.environ for var in job_vars)
 
 
-def has_gcp_identity(timeout=0.5):
+def has_gcp_identity(timeout=0.2):
     try:
         response = requests.get(
             "http://metadata/computeMetadata/v1/instance/service-accounts/default/email",
