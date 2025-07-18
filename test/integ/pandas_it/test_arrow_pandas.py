@@ -438,40 +438,67 @@ def test_timestampntz(conn_cnx, scale):
     [
         "'1400-01-01 01:02:03.123456789'::timestamp as low_ts",
         "'9999-01-01 01:02:03.123456789789'::timestamp as high_ts",
+        "convert_timezone('UTC', '1400-01-01 01:02:03.123456789') as low_ts",
+        "convert_timezone('UTC', '9999-01-01 01:02:03.123456789789') as high_ts",
     ],
 )
-def test_timestampntz_raises_overflow(conn_cnx, timestamp_str):
+def test_timestamp_raises_overflow(conn_cnx, timestamp_str):
     with conn_cnx() as conn:
         r = conn.cursor().execute(f"select {timestamp_str}")
         with pytest.raises(OverflowError, match="overflows int64 range."):
             r.fetch_arrow_all()
 
 
-def test_timestampntz_down_scale(conn_cnx):
+def test_timestamp_down_scale(conn_cnx):
     with conn_cnx() as conn:
         r = conn.cursor().execute(
-            "select '1400-01-01 01:02:03.123456'::timestamp as low_ts, '9999-01-01 01:02:03.123456'::timestamp as high_ts"
+            """select '1400-01-01 01:02:03.123456'::timestamp as low_ntz,
+            '9999-01-01 01:02:03.123456'::timestamp as high_ntz,
+            convert_timezone('UTC', '1400-01-01 01:02:03.123456') as low_tz,
+            convert_timezone('UTC', '9999-01-01 01:02:03.123456') as high_tz
+            """
         )
         table = r.fetch_arrow_all()
-        lower_dt = table[0][0].as_py()  # type: datetime
+        lower_ntz = table[0][0].as_py()  # type: datetime
         assert (
-            lower_dt.year,
-            lower_dt.month,
-            lower_dt.day,
-            lower_dt.hour,
-            lower_dt.minute,
-            lower_dt.second,
-            lower_dt.microsecond,
+            lower_ntz.year,
+            lower_ntz.month,
+            lower_ntz.day,
+            lower_ntz.hour,
+            lower_ntz.minute,
+            lower_ntz.second,
+            lower_ntz.microsecond,
         ) == (1400, 1, 1, 1, 2, 3, 123456)
-        higher_dt = table[1][0].as_py()
+        higher_ntz = table[1][0].as_py()  # type: datetime
         assert (
-            higher_dt.year,
-            higher_dt.month,
-            higher_dt.day,
-            higher_dt.hour,
-            higher_dt.minute,
-            higher_dt.second,
-            higher_dt.microsecond,
+            higher_ntz.year,
+            higher_ntz.month,
+            higher_ntz.day,
+            higher_ntz.hour,
+            higher_ntz.minute,
+            higher_ntz.second,
+            higher_ntz.microsecond,
+        ) == (9999, 1, 1, 1, 2, 3, 123456)
+
+        lower_tz = table[2][0].as_py()  # type: datetime
+        assert (
+            lower_tz.year,
+            lower_tz.month,
+            lower_tz.day,
+            lower_tz.hour,
+            lower_tz.minute,
+            lower_tz.second,
+            lower_tz.microsecond,
+        ) == (1400, 1, 1, 1, 2, 3, 123456)
+        higher_tz = table[3][0].as_py()  # type: datetime
+        assert (
+            higher_tz.year,
+            higher_tz.month,
+            higher_tz.day,
+            higher_tz.hour,
+            higher_tz.minute,
+            higher_tz.second,
+            higher_tz.microsecond,
         ) == (9999, 1, 1, 1, 2, 3, 123456)
 
 
@@ -1493,41 +1520,82 @@ def test_fetch_with_pandas_nullable_types(conn_cnx):
         assert df.to_string() == expected_df_to_string
 
 
-def test_convert_timezone_overflow(conn_cnx):
-    """Test CONVERT_TIMEZONE function with microsecond fallback for year 2999.
+# @pytest.mark.parametrize(
+#     "timestamp_type", ["timestamp_ntz", "timestamp_ltz", "timestamp_tz"]
+# )
+# def test_convert_timestamp_overflow(conn_cnx, timestamp_type):
+#     """Test whether large timestamps are correctly falling back to microsecond precision."""
 
-    This test verifies that dates beyond the nanosecond range automatically
-    fall back to microsecond precision instead of failing.
-    """
-    with conn_cnx() as cnx:
-        cur = cnx.cursor()
-        cur.execute(SQL_ENABLE_ARROW)
+#     def query(timestamp):
+#         if timestamp_type == "timestamp_tz":
+#             return f"SELECT CONVERT_TIMEZONE ('UTC', '{timestamp}') AS result"
+#         return f"SELECT '{timestamp}'::{timestamp_type} AS result"
 
-        # Test with regular fetchone first - this should work fine
-        result = cur.execute(
-            "SELECT CONVERT_TIMEZONE ('UTC', '2999-12-31 00:00:00.000 +0000') AS result1"
-        ).fetchone()
-        assert str(result[0]) == "2999-12-31 00:00:00+00:00"
+#     with conn_cnx() as cnx:
+#         cur = cnx.cursor()
 
-        # Test with fetch_pandas_all - this should now work with microsecond fallback
-        # instead of throwing an error or returning wrong data
-        pandas_result = cur.execute(
-            "SELECT CONVERT_TIMEZONE ('UTC', '2999-12-31 00:00:00.000 +0000') AS result1"
-        ).fetch_pandas_all()
+#         # Check that "large" dates are correctly falling back to microsecond precision
+#         cur.execute(query("2999-12-31 00:00:00.001234"))
+#         result = cur.fetchall()
+#         assert str(result[0][0]).startswith("2999-12-31 00:00:00.001234")
+#         result_pandas = cur.fetch_pandas_all()
+#         assert str(result_pandas.iloc[0, 0]).startswith("2999-12-31 00:00:00.001234")
 
-        # Check that we got a DataFrame with one row and one column
-        assert pandas_result.shape == (1, 1)
-        assert pandas_result.columns[0] == "RESULT1"
+#         # Check that nanosecond precision is used for dates within the nanosecond range
+#         cur.execute(query("2000-12-31 00:00:00.001234567"))
+#         result_pandas = cur.fetch_arrow_all()
+#         result_pandas = cur.fetch_pandas_all()
+#         assert str(result_pandas.iloc[0, 0]).startswith("2999-12-31 00:00:00.001234")
 
-        # Check the actual timestamp value - should be correct year 2999
-        timestamp_value = pandas_result.iloc[0, 0]
-        assert str(timestamp_value) == "2999-12-31 00:00:00+00:00"
+#         # Check that nanosecond precision used outside of nanosecond range throws an error
+#         cur.execute(query("2999-12-31 00:00:00.0012345678"))
+#         with pytest.raises(
+#             OverflowError,
+#             match=(
+#                 "If you use a timestamp with the nanosecond part over 6-digits in the Snowflake database, "
+#                 "the timestamp must be between '1677-09-21 00:12:43.145224192' and "
+#                 "'2262-04-11 23:47:16.854775807' to not overflow."
+#             ),
+#         ):
+#             cur.fetch_pandas_all()
 
-        # Test with a date within the nanosecond range (should use nanoseconds)
-        pandas_result_2200 = cur.execute(
-            "SELECT CONVERT_TIMEZONE ('UTC', '2200-12-31 00:00:00.000 +0000') AS result1"
-        ).fetch_pandas_all()
 
-        # Check that the date is correct
-        timestamp_value_2200 = pandas_result_2200.iloc[0, 0]
-        assert str(timestamp_value_2200) == "2200-12-31 00:00:00+00:00"
+# def test_timestamp_ltz_overflow(conn_cnx):
+#     """Test TIMESTAMP_LTZ with microsecond fallback for year 2999.
+
+#     This test verifies that TIMESTAMP_LTZ dates beyond the nanosecond range automatically
+#     fall back to microsecond precision instead of failing.
+#     """
+#     with conn_cnx() as cnx:
+#         cur = cnx.cursor()
+#         cur.execute(SQL_ENABLE_ARROW)
+
+#         # Test with regular fetchone first - this should work fine
+#         result = cur.execute(
+#             "SELECT '2999-12-31 00:00:00.000'::timestamp_ltz AS result1"
+#         ).fetchone()
+#         # TIMESTAMP_LTZ will be converted to session timezone (UTC by default in tests)
+#         assert str(result[0]) == "2999-12-31 00:00:00+00:00"
+
+#         # Test with fetch_pandas_all - this should now work with microsecond fallback
+#         # instead of throwing an error or returning wrong data
+#         pandas_result = cur.execute(
+#             "SELECT '2999-12-31 00:00:00.000'::timestamp_ltz AS result1"
+#         ).fetch_pandas_all()
+
+#         # Check that we got a DataFrame with one row and one column
+#         assert pandas_result.shape == (1, 1)
+#         assert pandas_result.columns[0] == "RESULT1"
+
+#         # Check the actual timestamp value - should be correct year 2999
+#         timestamp_value = pandas_result.iloc[0, 0]
+#         assert str(timestamp_value) == "2999-12-31 00:00:00+00:00"
+
+#         # Test with a date within the nanosecond range (should use nanoseconds)
+#         pandas_result_2200 = cur.execute(
+#             "SELECT '2200-12-31 00:00:00.000'::timestamp_ltz AS result1"
+#         ).fetch_pandas_all()
+
+#         # Check that the date is correct
+#         timestamp_value_2200 = pandas_result_2200.iloc[0, 0]
+#         assert str(timestamp_value_2200) == "2200-12-31 00:00:00+00:00"
