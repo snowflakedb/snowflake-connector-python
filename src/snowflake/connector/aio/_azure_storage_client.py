@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ from ..azure_storage_client import (
 from ..compat import quote
 from ..constants import FileHeader, ResultStatus
 from ..encryption_util import EncryptionMetadata
+from ..util_text import get_md5
 from ._storage_client import SnowflakeStorageClient as SnowflakeStorageClientAsync
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -29,6 +31,7 @@ if TYPE_CHECKING:  # pragma: no cover
 from ..azure_storage_client import (
     ENCRYPTION_DATA,
     MATDESC,
+    SFCDIGEST,
     TOKEN_EXPIRATION_ERR_MESSAGE,
 )
 
@@ -118,7 +121,7 @@ class SnowflakeAzureRestClient(
                 )
             )
             return FileHeader(
-                digest=r.headers.get("x-ms-meta-sfcdigest"),
+                digest=r.headers.get(SFCDIGEST),
                 content_length=int(r.headers.get("Content-Length")),
                 encryption_metadata=encryption_metadata,
             )
@@ -176,7 +179,27 @@ class SnowflakeAzureRestClient(
             part = ET.Element("Latest")
             part.text = block_id
             root.append(part)
-        headers = {"x-ms-blob-content-encoding": "utf-8"}
+        # SNOW-1778088: We need to calculate the MD5 sum of this file for Azure Blob storage
+        new_stream = not bool(self.meta.src_stream or self.meta.intermediate_stream)
+        fd = (
+            self.meta.src_stream
+            or self.meta.intermediate_stream
+            or open(self.meta.real_src_file_name, "rb")
+        )
+        try:
+            if not new_stream:
+                # Reset position in file
+                fd.seek(0)
+            file_content = fd.read()
+        finally:
+            if new_stream:
+                fd.close()
+        headers = {
+            "x-ms-blob-content-encoding": "utf-8",
+            "x-ms-blob-content-md5": base64.b64encode(get_md5(file_content)).decode(
+                "utf-8"
+            ),
+        }
         azure_metadata = self._prepare_file_metadata()
         headers.update(azure_metadata)
         retry_id = "COMPLETE"

@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from .compat import PKCS5_OFFSET, PKCS5_PAD, PKCS5_UNPAD
 from .constants import UTF8, EncryptionMetadata, MaterialDescriptor, kilobyte
+from .file_util import owner_rw_opener
 from .util_text import random_string
 
 block_size = int(algorithms.AES.block_size / 8)  # in bytes
@@ -213,7 +214,7 @@ class SnowflakeEncryptionUtil:
 
         logger.debug("encrypted file: %s, tmp file: %s", in_filename, temp_output_file)
         with open(in_filename, "rb") as infile:
-            with open(temp_output_file, "wb") as outfile:
+            with open(temp_output_file, "wb", opener=owner_rw_opener) as outfile:
                 SnowflakeEncryptionUtil.decrypt_stream(
                     metadata, encryption_material, infile, outfile, chunk_size
                 )

@@ -19,6 +19,7 @@ exclude license_header.txt
 exclude tox.ini
 exclude mypy.ini
 exclude .clang-format
+exclude .wiremock/*
 
 prune ci
 prune benchmark

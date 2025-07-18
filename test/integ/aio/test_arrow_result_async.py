@@ -23,17 +23,17 @@ pytestmark = [
     pytest.mark.skipolddriver,  # old test driver tests won't run this module
 ]
 
-
 from test.integ.test_arrow_result import (
     DATATYPE_TEST_CONFIGURATIONS,
     ICEBERG_CONFIG,
+    ICEBERG_ENVIRONMENTS,
     ICEBERG_STRUCTURED_REPRS,
-    ICEBERG_SUPPORTED,
     ICEBERG_UNSUPPORTED_TYPES,
     PANDAS_REPRS,
     PANDAS_STRUCTURED_REPRS,
     SEMI_STRUCTURED_REPRS,
-    STRUCTURED_TYPES_SUPPORTED,
+    STRUCTURED_TYPE_ENVIRONMENTS,
+    current_account,
     dumps,
     get_random_seed,
     no_arrow_iterator_ext,
@@ -41,6 +41,20 @@ from test.integ.test_arrow_result import (
     random_string,
     serialize,
 )
+
+
+@pytest.fixture(scope="module")
+def structured_type_support(module_conn_cnx):
+    with module_conn_cnx() as conn:
+        supported = current_account(conn.cursor()) in STRUCTURED_TYPE_ENVIRONMENTS
+    return supported
+
+
+@pytest.fixture(scope="module")
+def iceberg_support(module_conn_cnx):
+    with module_conn_cnx() as conn:
+        supported = current_account(conn.cursor()) in ICEBERG_ENVIRONMENTS
+    return supported
 
 
 async def datatype_verify(cur, data, deserialize):
@@ -80,12 +94,13 @@ async def verify_datatypes(
     query,
     examples,
     schema,
+    structured_type_support,
     iceberg=False,
     pandas=False,
     deserialize=False,
 ):
     table_name = f"arrow_datatype_test_verifaction_table_{random_string(5)}"
-    async with structured_type_wrapped_conn(conn_cnx) as conn:
+    async with structured_type_wrapped_conn(conn_cnx, structured_type_support) as conn:
         try:
             await conn.cursor().execute("alter session set use_cached_result=false")
             iceberg_table, iceberg_config = (
@@ -105,9 +120,9 @@ async def verify_datatypes(
 
 
 @asynccontextmanager
-async def structured_type_wrapped_conn(conn_cnx):
+async def structured_type_wrapped_conn(conn_cnx, structured_type_support):
     parameters = {}
-    if STRUCTURED_TYPES_SUPPORTED:
+    if structured_type_support:
         parameters = {
             "python_connector_query_result_format": "arrow",
             "ENABLE_STRUCTURED_TYPES_IN_CLIENT_RESPONSE": True,
@@ -121,13 +136,15 @@ async def structured_type_wrapped_conn(conn_cnx):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not ICEBERG_SUPPORTED, reason="Iceberg not supported in this environment."
-)
 @pytest.mark.parametrize("datatype", ICEBERG_UNSUPPORTED_TYPES)
-async def test_iceberg_negative(datatype, conn_cnx):
+async def test_iceberg_negative(
+    datatype, conn_cnx, iceberg_support, structured_type_support
+):
+    if not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
+
     table_name = f"arrow_datatype_test_verification_table_{random_string(5)}"
-    async with structured_type_wrapped_conn(conn_cnx) as conn:
+    async with structured_type_wrapped_conn(conn_cnx, structured_type_support) as conn:
         try:
             with pytest.raises(ProgrammingError):
                 await conn.cursor().execute(
@@ -141,7 +158,18 @@ async def test_iceberg_negative(datatype, conn_cnx):
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-async def test_datatypes(datatype, examples, iceberg, pandas, conn_cnx):
+async def test_datatypes(
+    datatype,
+    examples,
+    iceberg,
+    pandas,
+    conn_cnx,
+    iceberg_support,
+    structured_type_support,
+):
+    if iceberg and not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
+
     json_values = re.escape(json.dumps(examples, default=serialize))
     query = f"""
     SELECT
@@ -154,7 +182,13 @@ async def test_datatypes(datatype, examples, iceberg, pandas, conn_cnx):
     if datatype == "VARIANT":
         examples = [dumps(ex) for ex in examples]
     await verify_datatypes(
-        conn_cnx, query, examples, f"(col {datatype})", iceberg, pandas
+        conn_cnx,
+        query,
+        examples,
+        f"(col {datatype})",
+        structured_type_support,
+        iceberg,
+        pandas,
     )
 
 
@@ -162,10 +196,21 @@ async def test_datatypes(datatype, examples, iceberg, pandas, conn_cnx):
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-async def test_array(datatype, examples, iceberg, pandas, conn_cnx):
+async def test_array(
+    datatype,
+    examples,
+    iceberg,
+    pandas,
+    conn_cnx,
+    iceberg_support,
+    structured_type_support,
+):
+    if iceberg and not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
+
     json_values = re.escape(json.dumps(examples, default=serialize))
 
-    if STRUCTURED_TYPES_SUPPORTED:
+    if structured_type_support:
         col_type = f"array({datatype})"
         if datatype == "VARIANT":
             examples = [dumps(ex) if ex else ex for ex in examples]
@@ -187,17 +232,20 @@ async def test_array(datatype, examples, iceberg, pandas, conn_cnx):
         query,
         (examples,),
         f"(col {col_type})",
+        structured_type_support,
         iceberg,
         pandas,
-        not STRUCTURED_TYPES_SUPPORTED,
+        not structured_type_support,
     )
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not STRUCTURED_TYPES_SUPPORTED, reason="Testing structured type feature."
-)
-async def test_structured_type_binds(conn_cnx):
+async def test_structured_type_binds(
+    conn_cnx, iceberg_support, structured_type_support
+):
+    if not structured_type_support:
+        pytest.skip("Test requires structured type support.")
+
     original_style = snowflake.connector.paramstyle
     snowflake.connector.paramstyle = "qmark"
     data = (
@@ -210,7 +258,7 @@ async def test_structured_type_binds(conn_cnx):
     json_data = [json.dumps(d) for d in data]
     schema = "(num number, arr_b array(boolean), map map(varchar, int), obj object(city varchar, population float), arr_f array(float))"
     table_name = f"arrow_structured_type_binds_test_{random_string(5)}"
-    async with structured_type_wrapped_conn(conn_cnx) as conn:
+    async with structured_type_wrapped_conn(conn_cnx, structured_type_support) as conn:
         try:
             await conn.cursor().execute("alter session set enable_bind_stage_v2=Enable")
             await conn.cursor().execute(
@@ -235,14 +283,25 @@ async def test_structured_type_binds(conn_cnx):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not STRUCTURED_TYPES_SUPPORTED, reason="map type not supported in this environment"
-)
 @pytest.mark.parametrize("key_type", ["varchar", "number"])
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-async def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
+async def test_map(
+    key_type,
+    datatype,
+    examples,
+    iceberg,
+    pandas,
+    conn_cnx,
+    iceberg_support,
+    structured_type_support,
+):
+    if not structured_type_support:
+        pytest.skip("Test requires structured type support.")
+    if iceberg and not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
+
     if iceberg and key_type == "number":
         pytest.skip("Iceberg does not support number keys.")
     data = {str(i) if key_type == "varchar" else i: ex for i, ex in enumerate(examples)}
@@ -272,6 +331,7 @@ async def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
                 query,
                 [data],
                 f"(col map({key_type}, {datatype}))",
+                structured_type_support,
                 iceberg,
                 pandas,
             )
@@ -281,8 +341,10 @@ async def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
             query,
             [data],
             f"(col map({key_type}, {datatype}))",
+            structured_type_support,
             iceberg,
             pandas,
+            not structured_type_support,
         )
 
 
@@ -290,12 +352,22 @@ async def test_map(key_type, datatype, examples, iceberg, pandas, conn_cnx):
 @pytest.mark.parametrize(
     "datatype,examples,iceberg,pandas", DATATYPE_TEST_CONFIGURATIONS
 )
-async def test_object(datatype, examples, iceberg, pandas, conn_cnx):
+async def test_object(
+    datatype,
+    examples,
+    iceberg,
+    pandas,
+    conn_cnx,
+    iceberg_support,
+    structured_type_support,
+):
+    if iceberg and not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
     fields = [f"{datatype}_{i}" for i in range(len(examples))]
     data = {k: v for k, v in zip(fields, examples)}
     json_string = re.escape(json.dumps(data, default=serialize))
 
-    if STRUCTURED_TYPES_SUPPORTED:
+    if structured_type_support:
         schema = ", ".join(f"{field} {datatype}" for field in fields)
         col_type = f"object({schema})"
         if datatype == "VARIANT":
@@ -323,6 +395,7 @@ async def test_object(datatype, examples, iceberg, pandas, conn_cnx):
                 query,
                 [expected_data],
                 f"(col {col_type})",
+                structured_type_support,
                 iceberg,
                 pandas,
             )
@@ -332,19 +405,24 @@ async def test_object(datatype, examples, iceberg, pandas, conn_cnx):
             query,
             [expected_data],
             f"(col {col_type})",
+            structured_type_support,
             iceberg,
             pandas,
-            not STRUCTURED_TYPES_SUPPORTED,
+            not structured_type_support,
         )
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(
-    not STRUCTURED_TYPES_SUPPORTED, reason="map type not supported in this environment"
-)
 @pytest.mark.parametrize("pandas", [True, False] if pandas_available else [False])
 @pytest.mark.parametrize("iceberg", [True, False])
-async def test_nested_types(conn_cnx, iceberg, pandas):
+async def test_nested_types(
+    conn_cnx, iceberg, pandas, iceberg_support, structured_type_support
+):
+    if not structured_type_support:
+        pytest.skip("Test requires structured type support.")
+    if iceberg and not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
+
     data = {"child": [{"key1": {"struct_field": "value"}}]}
     json_string = re.escape(json.dumps(data, default=serialize))
     query = f"""
@@ -364,6 +442,7 @@ async def test_nested_types(conn_cnx, iceberg, pandas):
         query,
         [data],
         "(col object(child array(map (varchar, object(struct_field varchar)))))",
+        structured_type_support,
         iceberg,
         pandas,
     )

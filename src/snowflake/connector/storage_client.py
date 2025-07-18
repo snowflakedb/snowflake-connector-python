@@ -329,6 +329,11 @@ class SnowflakeStorageClient(ABC):
                 f"{verb} with url {url} failed for exceeding maximum retries."
             )
 
+    def _open_intermediate_dst_path(self, mode):
+        if not self.intermediate_dst_path.exists():
+            self.intermediate_dst_path.touch(mode=0o600)
+        return self.intermediate_dst_path.open(mode)
+
     def prepare_download(self) -> None:
         # TODO: add nicer error message for when target directory is not writeable
         #  but this should be done before we get here
@@ -352,13 +357,13 @@ class SnowflakeStorageClient(ABC):
                 self.num_of_chunks = ceil(file_header.content_length / self.chunk_size)
 
         # Preallocate encrypted file.
-        with self.intermediate_dst_path.open("wb+") as fd:
+        with self._open_intermediate_dst_path("wb+") as fd:
             fd.truncate(self.meta.src_file_size)
 
     def write_downloaded_chunk(self, chunk_id: int, data: bytes) -> None:
         """Writes given data to the temp location starting at chunk_id * chunk_size."""
         # TODO: should we use chunking and write content in smaller chunks?
-        with self.intermediate_dst_path.open("rb+") as fd:
+        with self._open_intermediate_dst_path("rb+") as fd:
             fd.seek(self.chunk_size * chunk_id)
             fd.write(data)
 

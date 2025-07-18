@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import logging
 import random
 import re
@@ -289,3 +291,15 @@ def random_string(
     """
     random_part = "".join([random.Random().choice(choices) for _ in range(length)])
     return "".join([prefix, random_part, suffix])
+
+
+def _base64_bytes_to_str(x) -> str | None:
+    return base64.b64encode(x).decode("utf-8") if x else None
+
+
+def get_md5(text: str | bytes) -> bytes:
+    if isinstance(text, str):
+        text = text.encode("utf-8")
+    md5 = hashlib.md5()
+    md5.update(text)
+    return md5.digest()

@@ -261,7 +261,7 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
                 self.num_of_chunks = ceil(file_header.content_length / self.chunk_size)
 
         # Preallocate encrypted file.
-        with self.intermediate_dst_path.open("wb+") as fd:
+        with self._open_intermediate_dst_path("wb+") as fd:
             fd.truncate(self.meta.src_file_size)
 
     async def upload_chunk(self, chunk_id: int) -> None:

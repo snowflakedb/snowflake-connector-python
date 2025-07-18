@@ -52,6 +52,7 @@ from ..errors import (
     ProgrammingError,
     ServiceUnavailableError,
 )
+from ..file_util import owner_rw_opener
 from ..network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
@@ -625,7 +626,11 @@ def flush_temporary_credentials() -> None:
         )
     try:
         with open(
-            TEMPORARY_CREDENTIAL_FILE, "w", encoding="utf-8", errors="ignore"
+            TEMPORARY_CREDENTIAL_FILE,
+            "w",
+            encoding="utf-8",
+            errors="ignore",
+            opener=owner_rw_opener,
         ) as f:
             json.dump(TEMPORARY_CREDENTIAL, f)
     except Exception as ex:

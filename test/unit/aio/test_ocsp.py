@@ -87,19 +87,20 @@ async def _asyncio_connect(url, timeout=5):
 
 @pytest.fixture(autouse=True)
 def random_ocsp_response_validation_cache():
+    RANDOM_FILENAME_SUFFIX_LEN = 10
     file_path = {
         "linux": os.path.join(
             "~",
             ".cache",
             "snowflake",
-            f"ocsp_response_validation_cache{random_string()}",
+            f"ocsp_response_validation_cache{random_string(RANDOM_FILENAME_SUFFIX_LEN)}",
         ),
         "darwin": os.path.join(
             "~",
             "Library",
             "Caches",
             "Snowflake",
-            f"ocsp_response_validation_cache{random_string()}",
+            f"ocsp_response_validation_cache{random_string(RANDOM_FILENAME_SUFFIX_LEN)}",
         ),
         "windows": os.path.join(
             "~",
@@ -107,7 +108,7 @@ def random_ocsp_response_validation_cache():
             "Local",
             "Snowflake",
             "Caches",
-            f"ocsp_response_validation_cache{random_string()}",
+            f"ocsp_response_validation_cache{random_string(RANDOM_FILENAME_SUFFIX_LEN)}",
         ),
     }
     yield SFDictFileCache(

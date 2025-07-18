@@ -1,6 +1,11 @@
 ARG BASE_IMAGE=quay.io/pypa/manylinux2014_x86_64
 FROM $BASE_IMAGE
 
+RUN yum install -y java-11-openjdk
+
+# Our dependencies rely on the Rust toolchain being available in the build-time environment (https://github.com/pyca/cryptography/issues/5771)
+RUN yum -y install rust cargo
+
 # This is to solve permission issue, read https://denibertovic.com/posts/handling-permissions-with-docker-volumes/
 ARG GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64
 ENV GOSU_PATH $GOSU_URL
@@ -12,6 +17,5 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 WORKDIR /home/user
 RUN chmod 777 /home/user
-ENV PATH="${PATH}:/opt/python/cp37-cp37m/bin:/opt/python/cp38-cp38/bin/:/opt/python/cp39-cp39/bin/:/opt/python/cp310-cp310/bin/:/opt/python/cp311-cp311/bin/:/opt/python/cp312-cp312/bin/"
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
