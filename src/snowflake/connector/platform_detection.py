@@ -123,7 +123,7 @@ def is_github_action():
     return "GITHUB_ACTIONS" in os.environ
 
 
-def detect_platforms(timeout: int | float) -> list[str]:
+def detect_platforms(timeout: int | float | None) -> list[str]:
     if timeout is None:
         timeout = 0.2
 
