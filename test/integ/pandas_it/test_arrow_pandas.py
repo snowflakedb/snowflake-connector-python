@@ -1491,3 +1491,43 @@ def test_fetch_with_pandas_nullable_types(conn_cnx):
         df = cursor_table.fetch_pandas_all(types_mapper=dtype_mapping.get)
         pandas._testing.assert_series_equal(df.dtypes, expected_dtypes)
         assert df.to_string() == expected_df_to_string
+
+
+def test_convert_timezone_overflow(conn_cnx):
+    """Test CONVERT_TIMEZONE function with microsecond fallback for year 2999.
+
+    This test verifies that dates beyond the nanosecond range automatically
+    fall back to microsecond precision instead of failing.
+    """
+    with conn_cnx() as cnx:
+        cur = cnx.cursor()
+        cur.execute(SQL_ENABLE_ARROW)
+
+        # Test with regular fetchone first - this should work fine
+        result = cur.execute(
+            "SELECT CONVERT_TIMEZONE ('UTC', '2999-12-31 00:00:00.000 +0000') AS result1"
+        ).fetchone()
+        assert str(result[0]) == "2999-12-31 00:00:00+00:00"
+
+        # Test with fetch_pandas_all - this should now work with microsecond fallback
+        # instead of throwing an error or returning wrong data
+        pandas_result = cur.execute(
+            "SELECT CONVERT_TIMEZONE ('UTC', '2999-12-31 00:00:00.000 +0000') AS result1"
+        ).fetch_pandas_all()
+
+        # Check that we got a DataFrame with one row and one column
+        assert pandas_result.shape == (1, 1)
+        assert pandas_result.columns[0] == "RESULT1"
+
+        # Check the actual timestamp value - should be correct year 2999
+        timestamp_value = pandas_result.iloc[0, 0]
+        assert str(timestamp_value) == "2999-12-31 00:00:00+00:00"
+
+        # Test with a date within the nanosecond range (should use nanoseconds)
+        pandas_result_2200 = cur.execute(
+            "SELECT CONVERT_TIMEZONE ('UTC', '2200-12-31 00:00:00.000 +0000') AS result1"
+        ).fetch_pandas_all()
+
+        # Check that the date is correct
+        timestamp_value_2200 = pandas_result_2200.iloc[0, 0]
+        assert str(timestamp_value_2200) == "2200-12-31 00:00:00+00:00"

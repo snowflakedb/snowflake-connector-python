@@ -855,6 +855,50 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
   ArrowSchemaInit(newSchema);
   newSchema->flags &=
       (field->schema->flags & ARROW_FLAG_NULLABLE);  // map to nullable()
+
+  // Find epoch and fraction arrays
+  ArrowArrayView* epochArray;
+  ArrowArrayView* fractionArray;
+  for (int64_t i = 0; i < field->schema->n_children; i++) {
+    ArrowSchema* c_schema = field->schema->children[i];
+    if (std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
+      epochArray = columnArray->children[i];
+    } else if (std::strcmp(c_schema->name,
+                           internal::FIELD_NAME_FRACTION.c_str()) == 0) {
+      fractionArray = columnArray->children[i];
+    } else {
+      // do nothing
+    }
+  }
+
+  // Calculate has_overflow_to_downscale for timestamps that would overflow
+  bool has_overflow_to_downscale = false;
+  if (scale > 6 && byteLength == 16) {
+    int powTenSB4 = sf::internal::powTenSB4[9];
+    for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
+      if (!ArrowArrayViewIsNull(columnArray, rowIdx)) {
+        int64_t epoch = ArrowArrayViewGetIntUnsafe(epochArray, rowIdx);
+        int64_t fraction = ArrowArrayViewGetIntUnsafe(fractionArray, rowIdx);
+        if (epoch > (INT64_MAX / powTenSB4) ||
+            epoch < (INT64_MIN / powTenSB4)) {
+          if (fraction % 1000 != 0) {
+            std::string errorInfo = Logger::formatString(
+                "The total number of nanoseconds %d%d overflows int64 range. "
+                "If you use a timestamp with "
+                "the nanosecond part over 6-digits in the Snowflake database, "
+                "the timestamp must be "
+                "between '1677-09-21 00:12:43.145224192' and '2262-04-11 "
+                "23:47:16.854775807' to not overflow.",
+                epoch, fraction);
+            throw std::overflow_error(errorInfo.c_str());
+          } else {
+            has_overflow_to_downscale = true;
+          }
+        }
+      }
+    }
+  }
+
   auto timeunit = NANOARROW_TIME_UNIT_SECOND;
   if (scale == 0) {
     timeunit = NANOARROW_TIME_UNIT_SECOND;
@@ -863,7 +907,9 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
   } else if (scale <= 6) {
     timeunit = NANOARROW_TIME_UNIT_MICRO;
   } else {
-    timeunit = NANOARROW_TIME_UNIT_NANO;
+    // Use microsecond precision if we detected overflow, otherwise nanosecond
+    timeunit = has_overflow_to_downscale ? NANOARROW_TIME_UNIT_MICRO
+                                         : NANOARROW_TIME_UNIT_NANO;
   }
 
   if (!timezone.empty()) {
@@ -893,20 +939,6 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
                     "from schema : %s, error code: %d",
                     ArrowErrorMessage(&error), returnCode);
 
-  ArrowArrayView* epochArray;
-  ArrowArrayView* fractionArray;
-  for (int64_t i = 0; i < field->schema->n_children; i++) {
-    ArrowSchema* c_schema = field->schema->children[i];
-    if (std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
-      epochArray = columnArray->children[i];
-    } else if (std::strcmp(c_schema->name,
-                           internal::FIELD_NAME_FRACTION.c_str()) == 0) {
-      fractionArray = columnArray->children[i];
-    } else {
-      // do nothing
-    }
-  }
-
   for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
     if (!ArrowArrayViewIsNull(columnArray, rowIdx)) {
       if (byteLength == 8) {
@@ -920,8 +952,14 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
           returnCode = ArrowArrayAppendInt(
               newArray, epoch * sf::internal::powTenSB4[6 - scale]);
         } else {
-          returnCode = ArrowArrayAppendInt(
-              newArray, epoch * sf::internal::powTenSB4[9 - scale]);
+          // Handle overflow by falling back to microsecond precision
+          if (has_overflow_to_downscale) {
+            returnCode = ArrowArrayAppendInt(
+                newArray, epoch * sf::internal::powTenSB4[6]);
+          } else {
+            returnCode = ArrowArrayAppendInt(
+                newArray, epoch * sf::internal::powTenSB4[9 - scale]);
+          }
         }
         SF_CHECK_ARROW_RC(returnCode,
                           "[Snowflake Exception] error appending int to "
@@ -941,8 +979,14 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
               newArray, epoch * sf::internal::powTenSB4[6] +
                             fraction / sf::internal::powTenSB4[3]);
         } else {
-          returnCode = ArrowArrayAppendInt(
-              newArray, epoch * sf::internal::powTenSB4[9] + fraction);
+          // Handle overflow by falling back to microsecond precision
+          if (has_overflow_to_downscale) {
+            returnCode = ArrowArrayAppendInt(
+                newArray, epoch * sf::internal::powTenSB4[6] + fraction / 1000);
+          } else {
+            returnCode = ArrowArrayAppendInt(
+                newArray, epoch * sf::internal::powTenSB4[9] + fraction);
+          }
         }
         SF_CHECK_ARROW_RC(returnCode,
                           "[Snowflake Exception] error appending int to "
