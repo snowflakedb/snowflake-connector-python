@@ -138,7 +138,7 @@ class OCSPResponseValidationResult(NamedTuple):
                     f" the original error error class and message are {exc_class} and {exception_dict['msg']}"
                 )
                 return RevocationCheckError(
-                    f"Got error {str(deserialize_exc)} while deserializing ocsp cache, please try "
+                    msg=f"Got error {str(deserialize_exc)} while deserializing ocsp cache, please try "
                     f"cleaning up the "
                     f"OCSP cache under directory {OCSP_RESPONSE_VALIDATION_CACHE.file_path}",
                     errno=ER_OCSP_RESPONSE_LOAD_FAILURE,
@@ -572,7 +572,7 @@ class OCSPServer:
                             response.status_code,
                             sleep_time,
                         )
-                    time.sleep(sleep_time)
+                        time.sleep(sleep_time)
                 else:
                     logger.error(
                         "Failed to get OCSP response after %s attempt.", max_retry
@@ -1652,7 +1652,7 @@ class SnowflakeOCSP:
                             response.status_code,
                             sleep_time,
                         )
-                    time.sleep(sleep_time)
+                        time.sleep(sleep_time)
                 except Exception as ex:
                     if max_retry > 1:
                         sleep_time = next(backoff)

@@ -216,3 +216,14 @@ class AuthConnectionParameters:
         config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
 
         return config
+
+    def get_pat_with_external_session_connection_parameters(
+        self, external_session_id: str
+    ) -> dict[str, str]:
+        config = self.basic_config.copy()
+
+        config["authenticator"] = "PROGRAMMATIC_ACCESS_TOKEN_WITH_EXTERNAL_SESSION"
+        config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
+        config["external_session_id"] = external_session_id
+
+        return config

@@ -37,6 +37,8 @@ _CHINA_HOSTNAME_TLD = "cn"
 _TOP_LEVEL_DOMAIN_REGEX = r"\.[a-zA-Z]{1,63}$"
 _SNOWFLAKE_HOST_SUFFIX_REGEX = r"snowflakecomputing(\.[a-zA-Z]{1,63}){1,2}$"
 
+_PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS = "ENABLE_FIX_1375538"
+
 
 class FieldType(NamedTuple):
     name: str
