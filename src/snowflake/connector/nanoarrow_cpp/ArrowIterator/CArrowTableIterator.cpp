@@ -657,7 +657,7 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
   ArrowArrayView* epochArray = nullptr;
   ArrowArrayView* fractionArray = nullptr;
   bool has_overflow_to_downscale = false;
-  if (field->type == NANOARROW_TYPE_STRUCT) {
+  if (scale > 6 && field->type == NANOARROW_TYPE_STRUCT) {
     for (int64_t i = 0; i < field->schema->n_children; i++) {
       ArrowSchema* c_schema = field->schema->children[i];
       if (std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) ==
@@ -670,10 +670,8 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
         // do nothing
       }
     }
-    if (scale > 6) {
-      has_overflow_to_downscale = _checkNanosecondTimestampOverflowAndDownscale(
-          columnArray, epochArray, fractionArray);
-    }
+    has_overflow_to_downscale = _checkNanosecondTimestampOverflowAndDownscale(
+        columnArray, epochArray, fractionArray);
   }
 
   if (scale <= 6) {
