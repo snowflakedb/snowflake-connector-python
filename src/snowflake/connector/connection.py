@@ -23,7 +23,6 @@ from functools import partial
 from io import StringIO
 from logging import getLogger
 from threading import Lock
-from time import strptime
 from types import TracebackType
 from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
 from uuid import UUID
@@ -45,6 +44,7 @@ from .auth import (
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
+    AuthNoAuth,
 )
 from .auth.idtoken import AuthByIdToken
 from .backoff_policies import exponential_backoff
@@ -99,6 +99,7 @@ from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
+    NO_AUTH_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
@@ -307,9 +308,6 @@ APPLICATION_RE = re.compile(r"[\w\d_]+")
 # adding the exception class to Connection class
 for m in [method for method in dir(errors) if callable(getattr(errors, method))]:
     setattr(sys.modules[__name__], m, getattr(errors, m))
-
-# Workaround for https://bugs.python.org/issue7980
-strptime("20150102030405", "%Y%m%d%H%M%S")
 
 logger = getLogger(__name__)
 
@@ -1255,9 +1253,15 @@ class SnowflakeConnection:
             with open(token_file_path) as f:
                 self._token = f.read()
 
+        # Set of authenticators allowing empty user.
+        empty_user_allowed_authenticators = {OAUTH_AUTHENTICATOR, NO_AUTH_AUTHENTICATOR}
+
         if not (self._master_token and self._session_token):
-            if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
-                # OAuth Authentication does not require a username
+            if (
+                not self.user
+                and self._authenticator not in empty_user_allowed_authenticators
+            ):
+                # OAuth and NoAuth Authentications does not require a username
                 Error.errorhandler_wrapper(
                     self,
                     None,
@@ -1286,14 +1290,15 @@ class SnowflakeConnection:
                     {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
                 )
 
-        if not self._account:
+        # Only AuthNoAuth allows account to be omitted.
+        if not self._account and not isinstance(self.auth_class, AuthNoAuth):
             Error.errorhandler_wrapper(
                 self,
                 None,
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if "." in self._account:
+        if self._account and "." in self._account:
             self._account = parse_account(self._account)
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(

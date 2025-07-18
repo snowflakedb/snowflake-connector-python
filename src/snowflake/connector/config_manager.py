@@ -330,7 +330,8 @@ class ConfigManager:
                 continue
 
             if (
-                sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
+                not IS_WINDOWS  # Skip checking on Windows
+                and sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
                 # Same check as openssh does for permissions
                 # https://github.com/openssh/openssh-portable/blob/2709809fd616a0991dc18e3a58dea10fb383c3f0/readconf.c#LL2264C1-L2264C1
                 and filep.stat().st_mode & READABLE_BY_OTHERS != 0
@@ -341,12 +342,7 @@ class ConfigManager:
                     and filep.stat().st_uid != os.getuid()
                 )
             ):
-                # for non-Windows, suggest change to 0600 permissions.
-                chmod_message = (
-                    f'.\n * To change owner, run `chown $USER "{str(filep)}"`.\n * To restrict permissions, run `chmod 0600 "{str(filep)}"`.\n'
-                    if not IS_WINDOWS
-                    else ""
-                )
+                chmod_message = f'.\n * To change owner, run `chown $USER "{str(filep)}"`.\n * To restrict permissions, run `chmod 0600 "{str(filep)}"`.\n'
 
                 warn(f"Bad owner or permissions on {str(filep)}{chmod_message}")
             LOGGER.debug(f"reading configuration file from {str(filep)}")

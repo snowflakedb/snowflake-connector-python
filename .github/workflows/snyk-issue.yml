@@ -15,19 +15,19 @@ jobs:
   snyk:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout Action
-      uses: actions/checkout@v3
+    - name: checkout action
+      uses: actions/checkout@v4
       with:
         repository: snowflakedb/whitesource-actions
-        token: ${{ secrets.whitesource_action_token }}
+        token: ${{ secrets.WHITESOURCE_ACTION_TOKEN }}
         path: whitesource-actions
-    - name: Set Env
-      run: echo "repo=$(basename $GITHUB_REPOSITORY)" >> $GITHUB_ENV
+    - name: set-env
+      run: echo "REPO=$(basename $GITHUB_REPOSITORY)" >> $GITHUB_ENV
     - name: Jira Creation
       uses: ./whitesource-actions/snyk-issue
       with:
-        snyk_org: ${{ secrets.snyk_org_id_public_repo }}
-        snyk_token:  ${{ secrets.snyk_github_integration_token_public_repo }}
-        jira_token: ${{ secrets.jira_token_public_repo }}
+        snyk_org: ${{ secrets.SNYK_ORG_ID_PUBLIC_REPO }}
+        snyk_token:  ${{ secrets.SNYK_GITHUB_INTEGRATION_TOKEN_PUBLIC_REPO }}
+        jira_token: ${{ secrets.JIRA_TOKEN_PUBLIC_REPO }}
       env:
-        gh_token: ${{ secrets.github_token }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
