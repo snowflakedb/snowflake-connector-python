@@ -1412,72 +1412,79 @@ class SnowflakeOCSP:
 
     def _lazy_read_ca_bundle(self) -> None:
         """Reads the local cabundle file and cache it in memory."""
-        SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK.acquire(
+        lock_acquired = SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK.acquire(
             timeout=self._root_certs_dict_lock_timeout
         )
-        try:
-            if SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
-                # return if already loaded
-                return
-
+        if lock_acquired:
             try:
-                ca_bundle = environ.get("REQUESTS_CA_BUNDLE") or environ.get(
-                    "CURL_CA_BUNDLE"
-                )
-                if ca_bundle and path.exists(ca_bundle):
-                    # if the user/application specifies cabundle.
-                    self.read_cert_bundle(ca_bundle)
-                else:
-                    import sys
+                if SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
+                    # return if already loaded
+                    return
 
-                    # This import that depends on these libraries is to import certificates from them,
-                    # we would like to have these as up to date as possible.
-                    from requests import certs
-
-                    if (
-                        hasattr(certs, "__file__")
-                        and path.exists(certs.__file__)
-                        and path.exists(
-                            path.join(path.dirname(certs.__file__), "cacert.pem")
-                        )
-                    ):
-                        # if cacert.pem exists next to certs.py in request
-                        # package.
-                        ca_bundle = path.join(
-                            path.dirname(certs.__file__), "cacert.pem"
-                        )
+                try:
+                    ca_bundle = environ.get("REQUESTS_CA_BUNDLE") or environ.get(
+                        "CURL_CA_BUNDLE"
+                    )
+                    if ca_bundle and path.exists(ca_bundle):
+                        # if the user/application specifies cabundle.
                         self.read_cert_bundle(ca_bundle)
-                    elif hasattr(sys, "_MEIPASS"):
-                        # if pyinstaller includes cacert.pem
-                        cabundle_candidates = [
-                            ["botocore", "vendored", "requests", "cacert.pem"],
-                            ["requests", "cacert.pem"],
-                            ["cacert.pem"],
-                        ]
-                        for filename in cabundle_candidates:
-                            ca_bundle = path.join(sys._MEIPASS, *filename)
-                            if path.exists(ca_bundle):
-                                self.read_cert_bundle(ca_bundle)
-                                break
-                        else:
-                            logger.error("No cabundle file is found in _MEIPASS")
-                    try:
-                        import certifi
+                    else:
+                        import sys
 
-                        self.read_cert_bundle(certifi.where())
-                    except Exception:
-                        logger.debug("no certifi is installed. ignored.")
+                        # This import that depends on these libraries is to import certificates from them,
+                        # we would like to have these as up to date as possible.
+                        from requests import certs
 
-            except Exception as e:
-                logger.error("Failed to read ca_bundle: %s", e)
+                        if (
+                            hasattr(certs, "__file__")
+                            and path.exists(certs.__file__)
+                            and path.exists(
+                                path.join(path.dirname(certs.__file__), "cacert.pem")
+                            )
+                        ):
+                            # if cacert.pem exists next to certs.py in request
+                            # package.
+                            ca_bundle = path.join(
+                                path.dirname(certs.__file__), "cacert.pem"
+                            )
+                            self.read_cert_bundle(ca_bundle)
+                        elif hasattr(sys, "_MEIPASS"):
+                            # if pyinstaller includes cacert.pem
+                            cabundle_candidates = [
+                                ["botocore", "vendored", "requests", "cacert.pem"],
+                                ["requests", "cacert.pem"],
+                                ["cacert.pem"],
+                            ]
+                            for filename in cabundle_candidates:
+                                ca_bundle = path.join(sys._MEIPASS, *filename)
+                                if path.exists(ca_bundle):
+                                    self.read_cert_bundle(ca_bundle)
+                                    break
+                            else:
+                                logger.error("No cabundle file is found in _MEIPASS")
+                        try:
+                            import certifi
 
-            if not SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
-                logger.error(
-                    "No CA bundle file is found in the system. "
-                    "Set REQUESTS_CA_BUNDLE to the file."
-                )
-        finally:
-            SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK.release()
+                            self.read_cert_bundle(certifi.where())
+                        except Exception:
+                            logger.debug("no certifi is installed. ignored.")
+
+                except Exception as e:
+                    logger.error("Failed to read ca_bundle: %s", e)
+
+                if not SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
+                    logger.error(
+                        "No CA bundle file is found in the system. "
+                        "Set REQUESTS_CA_BUNDLE to the file."
+                    )
+            finally:
+                SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK.release()
+        else:
+            logger.info(
+                "Failed to acquire lock for ROOT_CERTIFICATES_DICT_LOCK. "
+                "Skipping reading CA bundle."
+            )
+            return
 
     @staticmethod
     def _calculate_tolerable_validity(this_update: float, next_update: float) -> int:
