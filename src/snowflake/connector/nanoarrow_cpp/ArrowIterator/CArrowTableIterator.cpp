@@ -600,6 +600,45 @@ void CArrowTableIterator::convertTimeColumn_nanoarrow(
   ArrowArrayMove(newArray, columnArray->array);
 }
 
+/**
+ * Helper function to detect nanosecond timestamp overflow and determine if
+ * downscaling to microseconds is needed.
+ * @param columnArray The Arrow array containing the timestamp data
+ * @param epochArray The Arrow array containing epoch values
+ * @param fractionArray The Arrow array containing fraction values
+ * @return true if overflow was detected and downscaling to microseconds is
+ * safe, false otherwise
+ * @throws std::overflow_error if overflow is detected but downscaling would
+ * lose precision
+ */
+static bool _checkNanosecondTimestampOverflowAndDownscale(
+    ArrowArrayView* columnArray, ArrowArrayView* epochArray,
+    ArrowArrayView* fractionArray) {
+  int powTenSB4 = sf::internal::powTenSB4[9];
+  for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
+    if (!ArrowArrayViewIsNull(columnArray, rowIdx)) {
+      int64_t epoch = ArrowArrayViewGetIntUnsafe(epochArray, rowIdx);
+      int64_t fraction = ArrowArrayViewGetIntUnsafe(fractionArray, rowIdx);
+      if (epoch > (INT64_MAX / powTenSB4) || epoch < (INT64_MIN / powTenSB4)) {
+        if (fraction % 1000 != 0) {
+          std::string errorInfo = Logger::formatString(
+              "The total number of nanoseconds %d%d overflows int64 range. "
+              "If you use a timestamp with "
+              "the nanosecond part over 6-digits in the Snowflake database, "
+              "the timestamp must be "
+              "between '1677-09-21 00:12:43.145224192' and '2262-04-11 "
+              "23:47:16.854775807' to not overflow.",
+              epoch, fraction);
+          throw std::overflow_error(errorInfo.c_str());
+        } else {
+          return true;  // Safe to downscale
+        }
+      }
+    }
+  }
+  return false;
+}
+
 void CArrowTableIterator::convertTimestampColumn_nanoarrow(
     ArrowSchemaView* field, ArrowArrayView* columnArray, const int scale,
     const std::string timezone) {
@@ -614,11 +653,11 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
   newSchema->flags &=
       (field->schema->flags & ARROW_FLAG_NULLABLE);  // map to nullable()
 
-  // calculate has_overflow_to_downscale
+  // Find epoch and fraction arrays for overflow detection
+  ArrowArrayView* epochArray = nullptr;
+  ArrowArrayView* fractionArray = nullptr;
   bool has_overflow_to_downscale = false;
-  if (scale > 6 && field->type == NANOARROW_TYPE_STRUCT) {
-    ArrowArrayView* epochArray;
-    ArrowArrayView* fractionArray;
+  if (field->type == NANOARROW_TYPE_STRUCT) {
     for (int64_t i = 0; i < field->schema->n_children; i++) {
       ArrowSchema* c_schema = field->schema->children[i];
       if (std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) ==
@@ -631,29 +670,9 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
         // do nothing
       }
     }
-
-    int powTenSB4 = sf::internal::powTenSB4[9];
-    for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
-      if (!ArrowArrayViewIsNull(columnArray, rowIdx)) {
-        int64_t epoch = ArrowArrayViewGetIntUnsafe(epochArray, rowIdx);
-        int64_t fraction = ArrowArrayViewGetIntUnsafe(fractionArray, rowIdx);
-        if (epoch > (INT64_MAX / powTenSB4) ||
-            epoch < (INT64_MIN / powTenSB4)) {
-          if (fraction % 1000 != 0) {
-            std::string errorInfo = Logger::formatString(
-                "The total number of nanoseconds %d%d overflows int64 range. "
-                "If you use a timestamp with "
-                "the nanosecond part over 6-digits in the Snowflake database, "
-                "the timestamp must be "
-                "between '1677-09-21 00:12:43.145224192' and '2262-04-11 "
-                "23:47:16.854775807' to not overflow.",
-                epoch, fraction);
-            throw std::overflow_error(errorInfo.c_str());
-          } else {
-            has_overflow_to_downscale = true;
-          }
-        }
-      }
+    if (scale > 6) {
+      has_overflow_to_downscale = _checkNanosecondTimestampOverflowAndDownscale(
+          columnArray, epochArray, fractionArray);
     }
   }
 
@@ -857,8 +876,8 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
       (field->schema->flags & ARROW_FLAG_NULLABLE);  // map to nullable()
 
   // Find epoch and fraction arrays
-  ArrowArrayView* epochArray;
-  ArrowArrayView* fractionArray;
+  ArrowArrayView* epochArray = nullptr;
+  ArrowArrayView* fractionArray = nullptr;
   for (int64_t i = 0; i < field->schema->n_children; i++) {
     ArrowSchema* c_schema = field->schema->children[i];
     if (std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) == 0) {
@@ -871,32 +890,11 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
     }
   }
 
-  // Calculate has_overflow_to_downscale for timestamps that would overflow
+  // Check for timestamp overflow and determine if downscaling is needed
   bool has_overflow_to_downscale = false;
   if (scale > 6 && byteLength == 16) {
-    int powTenSB4 = sf::internal::powTenSB4[9];
-    for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
-      if (!ArrowArrayViewIsNull(columnArray, rowIdx)) {
-        int64_t epoch = ArrowArrayViewGetIntUnsafe(epochArray, rowIdx);
-        int64_t fraction = ArrowArrayViewGetIntUnsafe(fractionArray, rowIdx);
-        if (epoch > (INT64_MAX / powTenSB4) ||
-            epoch < (INT64_MIN / powTenSB4)) {
-          if (fraction % 1000 != 0) {
-            std::string errorInfo = Logger::formatString(
-                "The total number of nanoseconds %d%d overflows int64 range. "
-                "If you use a timestamp with "
-                "the nanosecond part over 6-digits in the Snowflake database, "
-                "the timestamp must be "
-                "between '1677-09-21 00:12:43.145224192' and '2262-04-11 "
-                "23:47:16.854775807' to not overflow.",
-                epoch, fraction);
-            throw std::overflow_error(errorInfo.c_str());
-          } else {
-            has_overflow_to_downscale = true;
-          }
-        }
-      }
-    }
+    has_overflow_to_downscale = _checkNanosecondTimestampOverflowAndDownscale(
+        columnArray, epochArray, fractionArray);
   }
 
   auto timeunit = NANOARROW_TIME_UNIT_SECOND;
