@@ -5,10 +5,19 @@ on:
 
 jobs:
   run-pytest:
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         cloud-provider: [aws, azure, gcp]
+        os:
+          - image: ubuntu-latest
+            id: lububuntu
+          - image: windows-latest
+            id: windows
+          - image: macos-latest
+            id: macos
+        python-version: ["3.10"]
+    name: Custom pytest on ${{ matrix.os.id }}-py${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    runs-on: ${{ matrix.os.image }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -16,7 +25,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v4 # for wiremock
+        with:
+          java-version: 11
+          distribution: 'temurin'
+          java-package: 'jre'
+
+      - name: Fetch Wiremock
+        shell: bash
+        run: curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
 
       - name: Setup parameters file
         shell: bash
@@ -25,15 +45,15 @@ jobs:
         run: |
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
-      - name: Setup private key file
+
+      - name: Setup private key file (old)
         shell: bash
         env:
           PYTHON_PRIVATE_KEY_SECRET: ${{ secrets.PYTHON_PRIVATE_KEY_SECRET }}
         run: |
           gpg --quiet --batch --yes --decrypt --passphrase="$PYTHON_PRIVATE_KEY_SECRET" \
           .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
-
-#      - name: Setup private key file
+#      - name: Setup private key file (main)
 #        shell: bash
 #        env:
 #          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
@@ -43,8 +63,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install ".[development,aio,secure-local-storage]"
+          python -m pip install uv
+          python -m uv pip install ".[development,aio,secure-local-storage,pandas]"
 
       - name: Run pytest
         run: |
-          pytest -vvv -k "file_permission" .
+          pytest -n auto -vv test_programmatic_access_token_async.py
