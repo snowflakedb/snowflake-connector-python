@@ -8,10 +8,30 @@ import pytest
 
 import snowflake.connector.telemetry
 from snowflake.connector.description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
-from src.snowflake.connector.errorcode import ER_OCSP_RESPONSE_UNAVAILABLE
-from src.snowflake.connector.errors import RevocationCheckError
+from src.snowflake.connector.compat import (
+    BAD_GATEWAY,
+    BAD_REQUEST,
+    FORBIDDEN,
+    INTERNAL_SERVER_ERROR,
+    SERVICE_UNAVAILABLE,
+    UNAUTHORIZED,
+)
+from src.snowflake.connector.errorcode import (
+    ER_HTTP_GENERAL_ERROR,
+    ER_OCSP_RESPONSE_UNAVAILABLE,
+)
+from src.snowflake.connector.errors import (
+    BadGatewayError,
+    BadRequest,
+    ForbiddenError,
+    HttpError,
+    InternalServerError,
+    RevocationCheckError,
+    ServiceUnavailableError,
+)
 from src.snowflake.connector.network import SnowflakeRestful
 from src.snowflake.connector.telemetry import TelemetryData, TelemetryField
+from src.snowflake.connector.vendored.requests import Session
 
 
 def test_telemetry_data_to_dict():
@@ -276,11 +296,7 @@ def test_raising_error_with_send_telemetry_off_does_not_generate_telemetry_event
 
 
 def test_request_throws_revocation_check_error():
-    retry_ctx = Mock()
-    retry_ctx.current_retry_count = 0
-    retry_ctx.timeout = 10
-    retry_ctx.add_retry_params.return_value = "https://example.com"
-
+    retry_ctx = get_retry_ctx()
     mock_connection = get_mocked_telemetry_connection()
 
     with mock.patch.object(SnowflakeRestful, "_request_exec") as _request_exec_mocked:
@@ -297,10 +313,94 @@ def test_request_throws_revocation_check_error():
                 None,
                 retry_ctx,
             )
-        mock_restful._connection._log_telemetry.assert_called_once()
+        mock_connection._log_telemetry.assert_called_once()
         assert_telemetry_data_for_revocation_check_error(
             mock_connection._log_telemetry.call_args[0][0]
         )
+
+
+@pytest.mark.parametrize(
+    "status_code",
+    [
+        UNAUTHORIZED,  # 401 - non-retryable
+        404,  # Not Found - non-retryable
+        402,  # Payment Required - non-retryable
+        406,  # Not Acceptable - non-retryable
+        409,  # Conflict - non-retryable
+        410,  # Gone - non-retryable
+    ],
+)
+def test_request_throws_http_exception_for_non_retryable(status_code):
+    retry_ctx = get_retry_ctx()
+    mock_connection = get_mocked_telemetry_connection()
+
+    mock_response = Mock()
+    mock_response.status_code = status_code
+    mock_response.reason = f"HTTP {status_code} Error"
+    mock_response.close = Mock()
+
+    with mock.patch.object(Session, "request") as request_mocked:
+        request_mocked.return_value = mock_response
+        mock_restful = SnowflakeRestful(connection=mock_connection)
+
+        with pytest.raises(HttpError):
+            mock_restful._request_exec_wrapper(
+                Session(),
+                "GET",
+                "https://example.com/path",
+                {},
+                None,
+                retry_ctx,
+            )
+        mock_connection._log_telemetry.assert_called_once()
+        assert_telemetry_data_for_http_error(
+            mock_connection._log_telemetry.call_args[0][0], status_code
+        )
+
+
+@pytest.mark.parametrize(
+    "status_code,expected_exception",
+    [
+        (INTERNAL_SERVER_ERROR, InternalServerError),  # 500
+        (BAD_GATEWAY, BadGatewayError),  # 502
+        (SERVICE_UNAVAILABLE, ServiceUnavailableError),  # 503
+        (BAD_REQUEST, BadRequest),  # 400 - retryable
+        (FORBIDDEN, ForbiddenError),
+    ],
+)
+def test_request_throws_http_exception_for_retryable(status_code, expected_exception):
+    retry_ctx = get_retry_ctx()
+    mock_connection = get_mocked_telemetry_connection()
+
+    mock_response = Mock()
+    mock_response.status_code = status_code
+    mock_response.reason = f"HTTP {status_code} Error"
+    mock_response.close = Mock()
+
+    with mock.patch.object(Session, "request") as request_mocked:
+        request_mocked.return_value = mock_response
+        mock_restful = SnowflakeRestful(connection=mock_connection)
+
+        with pytest.raises(expected_exception):
+            mock_restful._request_exec_wrapper(
+                Session(),
+                "GET",
+                "https://example.com/path",
+                {},
+                None,
+                retry_ctx,
+            )
+
+
+def get_retry_ctx() -> Mock:
+    retry_ctx = Mock()
+    retry_ctx.current_retry_count = 0
+    retry_ctx.timeout = 10
+    retry_ctx.add_retry_params.return_value = "https://example.com/path"
+    retry_ctx.should_retry = False
+    retry_ctx.current_sleep_time = 1.0
+    retry_ctx.remaining_time_millis = 5000
+    return retry_ctx
 
 
 def get_mocked_telemetry_connection(telemetry_enabled: bool = True) -> Mock:
@@ -308,6 +408,12 @@ def get_mocked_telemetry_connection(telemetry_enabled: bool = True) -> Mock:
     mock_connection.application = "test_application"
     mock_connection.telemetry_enabled = telemetry_enabled
     mock_connection.is_closed = False
+    mock_connection.socket_timeout = None
+    mock_connection.messages = []
+
+    from src.snowflake.connector.errors import Error
+
+    mock_connection.errorhandler = Error.default_errorhandler
 
     mock_connection._log_telemetry = Mock()
 
@@ -338,6 +444,66 @@ def assert_telemetry_data_for_revocation_check_error(telemetry_data: TelemetryDa
     )
     assert (
         "Response unavailable"
+        in telemetry_data.message[TelemetryField.KEY_ERROR_MESSAGE.value]
+    )
+    assert TelemetryField.KEY_STACKTRACE.value in telemetry_data.message
+    assert TelemetryField.KEY_REASON.value in telemetry_data.message
+
+
+def assert_telemetry_data_for_http_error(
+    telemetry_data: TelemetryData, status_code: int
+):
+    assert telemetry_data.message[TelemetryField.KEY_DRIVER_TYPE.value] == CLIENT_NAME
+    assert (
+        telemetry_data.message[TelemetryField.KEY_DRIVER_VERSION.value]
+        == SNOWFLAKE_CONNECTOR_VERSION
+    )
+    assert telemetry_data.message[TelemetryField.KEY_SOURCE.value] == "test_application"
+    assert (
+        telemetry_data.message[TelemetryField.KEY_TYPE.value]
+        == TelemetryField.HTTP_EXCEPTION.value
+    )
+    assert telemetry_data.message[TelemetryField.KEY_ERROR_NUMBER.value] == str(
+        ER_HTTP_GENERAL_ERROR + status_code
+    )
+    assert telemetry_data.message[TelemetryField.KEY_EXCEPTION.value] == "HttpError"
+    assert (
+        str(status_code)
+        in telemetry_data.message[TelemetryField.KEY_ERROR_MESSAGE.value]
+    )
+    assert TelemetryField.KEY_STACKTRACE.value in telemetry_data.message
+    assert TelemetryField.KEY_REASON.value in telemetry_data.message
+
+
+def assert_telemetry_data_for_retryable_http_error(
+    telemetry_data: TelemetryData, status_code: int
+):
+    assert telemetry_data.message[TelemetryField.KEY_DRIVER_TYPE.value] == CLIENT_NAME
+    assert (
+        telemetry_data.message[TelemetryField.KEY_DRIVER_VERSION.value]
+        == SNOWFLAKE_CONNECTOR_VERSION
+    )
+    assert telemetry_data.message[TelemetryField.KEY_SOURCE.value] == "test_application"
+    assert (
+        telemetry_data.message[TelemetryField.KEY_TYPE.value]
+        == TelemetryField.HTTP_EXCEPTION.value
+    )
+    # For retryable errors, the error number is just the status code
+    assert telemetry_data.message[TelemetryField.KEY_ERROR_NUMBER.value] == str(
+        status_code
+    )
+    # Exception type depends on status code
+    expected_exception_name = {
+        INTERNAL_SERVER_ERROR: "InternalServerError",
+        BAD_GATEWAY: "BadGatewayError",
+        SERVICE_UNAVAILABLE: "ServiceUnavailableError",
+    }.get(status_code, "InternalServerError")
+    assert (
+        telemetry_data.message[TelemetryField.KEY_EXCEPTION.value]
+        == expected_exception_name
+    )
+    assert (
+        str(status_code)
         in telemetry_data.message[TelemetryField.KEY_ERROR_MESSAGE.value]
     )
     assert TelemetryField.KEY_STACKTRACE.value in telemetry_data.message
