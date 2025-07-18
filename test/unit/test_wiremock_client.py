@@ -8,7 +8,6 @@ try:
 except ImportError:
     import requests
 
-
 from ..wiremock.wiremock_utils import WiremockClient
 
 
