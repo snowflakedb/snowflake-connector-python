@@ -11,9 +11,9 @@ from .vendored import requests
 from .wif_util import DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
 
 
-def is_ec2_instance(timeout=0.2):
+def is_ec2_instance(timeout):
     try:
-        fetcher = IMDSFetcher(timeout=timeout, num_attempts=2)
+        fetcher = IMDSFetcher(timeout=timeout, num_attempts=1)
         document = fetcher._get_request(
             "/latest/dynamic/instance-identity/document",
             None,
@@ -47,7 +47,7 @@ def has_aws_identity():
         return False
 
 
-def is_azure_vm(timeout=0.2):
+def is_azure_vm(timeout):
     try:
         token_resp = requests.get(
             "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
@@ -69,7 +69,7 @@ def is_azure_function():
 
 
 def is_managed_identity_available_on_azure_vm(
-    resource=DEFAULT_ENTRA_SNOWFLAKE_RESOURCE, timeout=0.2
+    timeout, resource=DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
 ):
     endpoint = f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={resource}"
     headers = {"Metadata": "true"}
@@ -80,15 +80,15 @@ def is_managed_identity_available_on_azure_vm(
         return False
 
 
-def has_azure_managed_identity(on_azure_vm, on_azure_function):
+def has_azure_managed_identity(on_azure_vm, on_azure_function, timeout):
     if on_azure_function:
         return bool(os.environ.get("IDENTITY_HEADER"))
     if on_azure_vm:
-        return is_managed_identity_available_on_azure_vm()
+        return is_managed_identity_available_on_azure_vm(timeout)
     return False
 
 
-def is_gce_vm(timeout=0.2):
+def is_gce_vm(timeout):
     try:
         response = requests.get("http://metadata.google.internal", timeout=timeout)
         return response.headers.get("Metadata-Flavor") == "Google"
@@ -106,7 +106,7 @@ def is_gce_cloud_run_job():
     return all(var in os.environ for var in job_vars)
 
 
-def has_gcp_identity(timeout=0.2):
+def has_gcp_identity(timeout):
     try:
         response = requests.get(
             "http://metadata/computeMetadata/v1/instance/service-accounts/default/email",
@@ -123,25 +123,28 @@ def is_github_action():
     return "GITHUB_ACTIONS" in os.environ
 
 
-def detect_platforms() -> list[str]:
+def detect_platforms(timeout: int | float) -> list[str]:
+    if timeout is None:
+        timeout = 0.2
+
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {
-            "is_ec2_instance": executor.submit(is_ec2_instance),
+            "is_ec2_instance": executor.submit(is_ec2_instance, timeout),
             "is_aws_lambda": executor.submit(is_aws_lambda),
             "has_aws_identity": executor.submit(has_aws_identity),
-            "is_azure_vm": executor.submit(is_azure_vm),
+            "is_azure_vm": executor.submit(is_azure_vm, timeout),
             "is_azure_function": executor.submit(is_azure_function),
-            "is_gce_vm": executor.submit(is_gce_vm),
+            "is_gce_vm": executor.submit(is_gce_vm, timeout),
             "is_gce_cloud_run_service": executor.submit(is_gce_cloud_run_service),
             "is_gce_cloud_run_job": executor.submit(is_gce_cloud_run_job),
-            "has_gcp_identity": executor.submit(has_gcp_identity),
+            "has_gcp_identity": executor.submit(has_gcp_identity, timeout),
             "is_github_action": executor.submit(is_github_action),
         }
 
         platforms = {key: future.result() for key, future in futures.items()}
 
     platforms["azure_managed_identity"] = has_azure_managed_identity(
-        platforms["is_azure_vm"], platforms["is_azure_function"]
+        platforms["is_azure_vm"], platforms["is_azure_function"], timeout
     )
 
     detected_platforms = [
