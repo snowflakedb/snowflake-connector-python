@@ -5,6 +5,7 @@ import logging
 import os
 from base64 import b64encode
 from dataclasses import dataclass
+from collections import defaultdict
 from enum import Enum, unique
 
 import boto3
@@ -384,18 +385,18 @@ def create_attestation(
     If an explicit entra_resource was provided to the connector, this will be used. Otherwise, the default Snowflake Entra resource will be used.
     """
     entra_resource = entra_resource or DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
-
-    attestation: WorkloadIdentityAttestation = None
-    if provider == AttestationProvider.AWS:
-        attestation = create_aws_attestation()
-    elif provider == AttestationProvider.AZURE:
-        attestation = create_azure_attestation(entra_resource)
-    elif provider == AttestationProvider.GCP:
-        attestation = create_gcp_attestation()
-    elif provider == AttestationProvider.OIDC:
-        attestation = create_oidc_attestation(token)
-    elif provider is None:
-        attestation = create_autodetect_attestation(entra_resource, token)
+    
+    provider_map = (
+        lambda: None,
+        {
+            AttestationProvider.AWS: lambda: create_aws_attestation(),
+            AttestationProvider.AZURE: lambda: create_azure_attestation(entra_resource),
+            AttestationProvider.GCP: lambda: create_gcp_attestation(),
+            AttestationProvider.OIDC: lambda: create_oidc_attestation(token),
+            None: lambda: create_autodetect_attestation(entra_resource, token)
+        }
+    )
+    attestation: WorkloadIdentityAttestation = provider_map(provider)
 
     if not attestation:
         provider_str = "auto-detect" if provider is None else provider.value
