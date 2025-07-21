@@ -30,7 +30,7 @@ from snowflake.connector.errorcode import (
     ER_NO_ACCOUNT_NAME,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from snowflake.connector.errors import Error, InterfaceError
+from snowflake.connector.errors import Error, HttpError
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
@@ -530,7 +530,7 @@ def test_drop_create_user(conn_cnx, db_parameters):
 @pytest.mark.timeout(15)
 @pytest.mark.skipolddriver
 def test_invalid_account_timeout():
-    with pytest.raises(InterfaceError):
+    with pytest.raises(HttpError):
         snowflake.connector.connect(
             account="bogus", user="test", password="test", login_timeout=5
         )
@@ -569,7 +569,7 @@ def test_eu_connection(tmpdir):
     import os
 
     os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED"] = "true"
-    with pytest.raises(InterfaceError):
+    with pytest.raises(HttpError):
         # must reach Snowflake
         snowflake.connector.connect(
             account="testaccount1234",
@@ -593,7 +593,7 @@ def test_us_west_connection(tmpdir):
     Notes:
         Region is deprecated.
     """
-    with pytest.raises(InterfaceError):
+    with pytest.raises(HttpError):
         # must reach Snowflake
         snowflake.connector.connect(
             account="testaccount1234",
