@@ -1034,12 +1034,15 @@ class SnowflakeRestful:
             time.sleep(float(retry_ctx.current_sleep_time))
             retry_ctx.increment()
 
-            reason = cause.errno if cause.errno is not None else 0
-            reason = (
-                reason - ER_HTTP_GENERAL_ERROR
-                if reason >= ER_HTTP_GENERAL_ERROR
-                else reason
-            )
+            reason = getattr(cause, "errno", 0)
+            if reason is None:
+                reason = 0
+            else:
+                reason = (
+                    reason - ER_HTTP_GENERAL_ERROR
+                    if reason >= ER_HTTP_GENERAL_ERROR
+                    else reason
+                )
             retry_ctx.retry_reason = reason
 
             if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
