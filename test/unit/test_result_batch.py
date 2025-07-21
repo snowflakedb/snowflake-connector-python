@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from snowflake.connector import DatabaseError, InterfaceError
+from snowflake.connector import DatabaseError
 from snowflake.connector.compat import (
     BAD_GATEWAY,
     BAD_REQUEST,
@@ -23,13 +23,14 @@ from snowflake.connector.compat import (
 )
 from snowflake.connector.errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
-    ER_FAILED_TO_REQUEST,
+    ER_HTTP_GENERAL_ERROR,
 )
 from snowflake.connector.errors import (
     BadGatewayError,
     BadRequest,
     ForbiddenError,
     GatewayTimeoutError,
+    HttpError,
     InternalServerError,
     MethodNotAllowed,
     OtherHTTPRetryableError,
@@ -127,10 +128,10 @@ def test_non_200_response_download(status_code):
         mock_get.return_value = create_mock_response(status_code)
 
         with mock.patch("time.sleep", return_value=None):
-            with pytest.raises(InterfaceError) as ex:
+            with pytest.raises(HttpError) as ex:
                 _ = result_batch._download()
             error = ex.value
-            assert error.errno == ER_FAILED_TO_REQUEST
+            assert error.errno == ER_HTTP_GENERAL_ERROR + status_code
             assert error.sqlstate == SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
         assert mock_get.call_count == MAX_DOWNLOAD_RETRY
 
