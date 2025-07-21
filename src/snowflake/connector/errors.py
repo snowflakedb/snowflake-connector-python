@@ -8,6 +8,7 @@ import traceback
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
+from .errorcode import ER_HTTP_GENERAL_ERROR
 from .secret_detector import SecretDetector
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
@@ -382,6 +383,15 @@ class InterfaceError(Error):
     pass
 
 
+class HttpError(Error):
+    def __init__(self, **kwargs) -> None:
+        Error.__init__(
+            self,
+            errtype=TelemetryField.HTTP_EXCEPTION,
+            **kwargs,
+        )
+
+
 class DatabaseError(Error):
     """Exception for errors related to the database."""
 
@@ -447,7 +457,8 @@ class InternalServerError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 500: Internal Server Error",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -460,7 +471,8 @@ class ServiceUnavailableError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 503: Service Unavailable",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -473,7 +485,8 @@ class GatewayTimeoutError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 504: Gateway Timeout",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -486,7 +499,8 @@ class ForbiddenError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 403: Forbidden",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -499,7 +513,8 @@ class RequestTimeoutError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 408: Request Timeout",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -512,7 +527,8 @@ class BadRequest(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 400: Bad Request",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -525,7 +541,8 @@ class BadGatewayError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 502: Bad Gateway",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -538,7 +555,8 @@ class MethodNotAllowed(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 405: Method not allowed",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -551,7 +569,8 @@ class TooManyRequests(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or "HTTP 429: Too Many Requests",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
@@ -576,7 +595,8 @@ class OtherHTTPRetryableError(Error):
         Error.__init__(
             self,
             msg=kwargs.get("msg") or f"HTTP {code}",
-            errno=kwargs.get("errno"),
+            errno=ER_HTTP_GENERAL_ERROR + kwargs.get("errno", 0),
+            errtype=TelemetryField.HTTP_EXCEPTION,
             sqlstate=kwargs.get("sqlstate"),
             sfqid=kwargs.get("sfqid"),
         )
