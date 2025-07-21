@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError, URLError
 
+import urllib3
+
 from ..errorcode import (
     ER_FAILED_TO_REQUEST,
     ER_IDP_CONNECTION_ERROR,
@@ -22,7 +24,6 @@ from ..errors import Error, ProgrammingError
 from ..network import OAUTH_AUTHENTICATOR
 from ..secret_detector import SecretDetector
 from ..token_cache import TokenCache, TokenKey, TokenType
-from ..vendored import urllib3
 from .by_plugin import AuthByPlugin, AuthType
 
 if TYPE_CHECKING:

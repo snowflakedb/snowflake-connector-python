@@ -6,9 +6,10 @@ import shutil
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
+import requests
+
 from .constants import FileHeader, ResultStatus
 from .storage_client import SnowflakeStorageClient
-from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta

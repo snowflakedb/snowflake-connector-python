@@ -9,14 +9,14 @@ from enum import Enum, unique
 
 import boto3
 import jwt
+import requests
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from botocore.utils import InstanceMetadataRegionFetcher
+from requests import Response
 
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
-from .vendored import requests
-from .vendored.requests import Response
 
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"

@@ -10,12 +10,13 @@ from queue import Queue
 from threading import Lock
 from typing import Any
 
+import requests
+
 from .compat import OK
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from .secret_detector import SecretDetector
 from .telemetry import TelemetryField, generate_telemetry_data_dict
 from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
-from .vendored import requests
 
 logger = logging.getLogger(__name__)
 

@@ -9,6 +9,7 @@ from enum import Enum, unique
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
 
+import requests
 from typing_extensions import Self
 
 from .arrow_context import ArrowConverterContext
@@ -28,7 +29,6 @@ from .options import installed_pandas
 from .options import pyarrow as pa
 from .secret_detector import SecretDetector
 from .time_util import TimerContextManager
-from .vendored import requests
 
 logger = getLogger(__name__)
 
@@ -38,11 +38,11 @@ DOWNLOAD_TIMEOUT = 7  # seconds
 if TYPE_CHECKING:  # pragma: no cover
     from pandas import DataFrame
     from pyarrow import DataType, Table
+    from requests import Response
 
     from .connection import SnowflakeConnection
     from .converter import SnowflakeConverterType
     from .cursor import ResultMetadataV2, SnowflakeCursor
-    from .vendored.requests import Response
 
 
 # emtpy pyarrow type array corresponding to FIELD_TYPES
@@ -131,7 +131,10 @@ def create_batches_from_response(
     else:
         rowset_b64 = data.get("rowsetBase64")
         arrow_context = ArrowConverterContext(cursor._connection._session_parameters)
+
     if "chunks" in data:
+        if os.getenv("GET_CHUNKS_FROM") and _format == "arrow":
+            data = json.load(open(os.getenv("GET_CHUNKS_FROM")))
         if os.getenv("PUT_CHUNKS_INTO"):
             with open(os.getenv("PUT_CHUNKS_INTO"), "w") as chunks_f:
                 json.dump(data, chunks_f)
@@ -694,6 +697,12 @@ class ArrowResultBatch(ResultBatch):
         self, iter_unit: IterUnit, connection: SnowflakeConnection | None = None
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table]:
         """Create an iterator for the ResultBatch. Used by get_arrow_iter."""
+
+        if not self._local and self._remote_chunk_info.url.startswith("file://"):
+            self._data = open(
+                self._remote_chunk_info.url[len("file://") :], "rb"
+            ).read()
+
         if self._local:
             try:
                 return self._from_data(
@@ -786,5 +795,6 @@ class ArrowResultBatch(ResultBatch):
     def populate_data(
         self, connection: SnowflakeConnection | None = None, **kwargs
     ) -> Self:
-        self._data = self._download(connection=connection).content
+        if not self._data:
+            self._data = self._download(connection=connection).content
         return self

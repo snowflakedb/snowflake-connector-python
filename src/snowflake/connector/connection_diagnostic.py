@@ -16,11 +16,11 @@ from urllib.request import getproxies
 
 import certifi
 import OpenSSL
+import urllib3
 
 from .compat import IS_WINDOWS, urlparse
 from .cursor import SnowflakeCursor
 from .url_util import extract_top_level_domain_from_hostname
-from .vendored import urllib3
 
 logger = getLogger(__name__)
 

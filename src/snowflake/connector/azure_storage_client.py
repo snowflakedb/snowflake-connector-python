@@ -10,12 +10,13 @@ from random import choice
 from string import hexdigits
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+import requests
+
 from .compat import quote
 from .constants import FileHeader, ResultStatus
 from .encryption_util import EncryptionMetadata
 from .storage_client import SnowflakeStorageClient
 from .util_text import get_md5
-from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential

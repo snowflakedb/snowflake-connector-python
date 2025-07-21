@@ -16,13 +16,13 @@ from typing import Any
 
 import certifi
 import OpenSSL.SSL
+from urllib3 import connection as connection_
+from urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
+from urllib3.util import ssl_ as ssl_
 
 from .constants import OCSPMode
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
-from .vendored.urllib3 import connection as connection_
-from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
-from .vendored.urllib3.util import ssl_ as ssl_
 
 DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
 FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE

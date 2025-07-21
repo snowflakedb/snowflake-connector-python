@@ -15,13 +15,25 @@ from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 import OpenSSL.SSL
+import requests
+from requests import Response, Session
+from requests.adapters import HTTPAdapter
+from requests.auth import AuthBase
+from requests.exceptions import (
+    ConnectionError,
+    ConnectTimeout,
+    InvalidProxyURL,
+    ReadTimeout,
+    SSLError,
+)
+from requests.models import PreparedRequest
+from requests.utils import prepend_scheme_if_needed, select_proxy
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+from urllib3.exceptions import ProtocolError
+from urllib3.poolmanager import ProxyManager
+from urllib3.util.url import parse_url
 
 from snowflake.connector.secret_detector import SecretDetector
-from snowflake.connector.vendored.requests.models import PreparedRequest
-from snowflake.connector.vendored.urllib3.connectionpool import (
-    HTTPConnectionPool,
-    HTTPSConnectionPool,
-)
 
 from . import ssl_wrap_socket
 from .compat import (
@@ -95,21 +107,6 @@ from .time_util import (
     get_time_millis,
 )
 from .tool.probe_connection import probe_connection
-from .vendored import requests
-from .vendored.requests import Response, Session
-from .vendored.requests.adapters import HTTPAdapter
-from .vendored.requests.auth import AuthBase
-from .vendored.requests.exceptions import (
-    ConnectionError,
-    ConnectTimeout,
-    InvalidProxyURL,
-    ReadTimeout,
-    SSLError,
-)
-from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
-from .vendored.urllib3.exceptions import ProtocolError
-from .vendored.urllib3.poolmanager import ProxyManager
-from .vendored.urllib3.util.url import parse_url
 
 if TYPE_CHECKING:
     from .connection import SnowflakeConnection
@@ -118,7 +115,7 @@ logger = logging.getLogger(__name__)
 """
 Monkey patch for PyOpenSSL Socket wrapper
 """
-ssl_wrap_socket.inject_into_urllib3()
+# ssl_wrap_socket.inject_into_urllib3()
 
 # known applications
 APPLICATION_SNOWSQL = "SnowSQL"

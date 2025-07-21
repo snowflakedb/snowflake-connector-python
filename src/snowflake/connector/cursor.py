@@ -750,6 +750,11 @@ class SnowflakeCursor:
                 logger.debug("cancelled timebomb in finally")
 
         if "data" in ret and "parameters" in ret["data"]:
+            with open("/home/mmishchenko/return_dumps_w_parameters.txt", "a") as dump_f:
+                import json
+
+                json.dump(ret, dump_f, indent=2)
+                dump_f.write("\n")
             parameters = ret["data"].get("parameters", list())
             # Set session parameters for cursor object
             for kv in parameters:

@@ -9,6 +9,7 @@ from logging import getLogger
 from operator import itemgetter
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+import requests
 from cryptography.hazmat.primitives import hashes, hmac
 
 from .compat import quote, urlparse
@@ -20,7 +21,6 @@ from .constants import (
 )
 from .encryption_util import EncryptionMetadata
 from .storage_client import SnowflakeStorageClient, remove_content_encoding
-from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -71,6 +71,12 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             credentials=credentials,
             unsafe_file_write=unsafe_file_write,
         )
+        with open("/home/mmishchenko/s3_gov_stage_info.json", "w") as stage_info_f:
+            import json
+
+            json.dump(stage_info, stage_info_f, indent=2)
+            stage_info_f.write(f"use_accelerate_endpoint={use_accelerate_endpoint}\n")
+            stage_info_f.write(f"use_s3_regional_url={use_s3_regional_url}\n")
         # Signature version V4
         # Addressing style Virtual Host
         self.region_name: str = stage_info["region"]

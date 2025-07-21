@@ -14,6 +14,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 import OpenSSL
+import requests
+from requests import ConnectionError, Timeout
+from urllib3 import HTTPResponse
 
 from .constants import (
     HTTP_HEADER_CONTENT_ENCODING,
@@ -25,9 +28,6 @@ from .constants import (
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
-from .vendored import requests
-from .vendored.requests import ConnectionError, Timeout
-from .vendored.urllib3 import HTTPResponse
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential

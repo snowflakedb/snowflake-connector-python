@@ -6,6 +6,8 @@ import os
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+import requests
+
 from ._sql_util import is_put_statement
 from .compat import quote
 from .constants import (
@@ -17,7 +19,6 @@ from .constants import (
 )
 from .encryption_util import EncryptionMetadata
 from .storage_client import SnowflakeStorageClient
-from .vendored import requests
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
