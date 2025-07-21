@@ -1346,7 +1346,7 @@ def iterate_over_test_chunk(
 
 
 @pytest.mark.skipif(
-    not no_arrow_iterator_ext, reason="test requires arrow_iterator extension"
+    no_arrow_iterator_ext, reason="test requires arrow_iterator extension"
 )
 @pytest.mark.parametrize(
     "timestamp_type", ["timestamp_ntz", "timestamp_ltz", "timestamp_tz"]
