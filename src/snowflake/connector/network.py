@@ -40,6 +40,7 @@ from .compat import (
     IncompleteRead,
     urlencode,
     urlparse,
+    urlsplit,
 )
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
@@ -65,6 +66,7 @@ from .errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_FAILED_TO_RENEW_SESSION,
     ER_FAILED_TO_REQUEST,
+    ER_HTTP_GENERAL_ERROR,
     ER_RETRYABLE_CODE,
 )
 from .errors import (
@@ -74,7 +76,7 @@ from .errors import (
     Error,
     ForbiddenError,
     GatewayTimeoutError,
-    InterfaceError,
+    HttpError,
     InternalServerError,
     MethodNotAllowed,
     OperationalError,
@@ -236,10 +238,10 @@ def raise_failed_request_error(
     Error.errorhandler_wrapper(
         connection,
         None,
-        InterfaceError,
+        HttpError,
         {
-            "msg": f"{response.status_code} {response.reason}: {method} {url}",
-            "errno": ER_FAILED_TO_REQUEST,
+            "msg": f"{response.status_code} {response.reason}: {method} {urlsplit(url).netloc}{urlsplit(url).path}",
+            "errno": ER_HTTP_GENERAL_ERROR + response.status_code,
             "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
         },
     )
@@ -1033,6 +1035,14 @@ class SnowflakeRestful:
             retry_ctx.increment()
 
             reason = getattr(cause, "errno", 0)
+            if reason is None:
+                reason = 0
+            else:
+                reason = (
+                    reason - ER_HTTP_GENERAL_ERROR
+                    if reason >= ER_HTTP_GENERAL_ERROR
+                    else reason
+                )
             retry_ctx.retry_reason = reason
 
             if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
