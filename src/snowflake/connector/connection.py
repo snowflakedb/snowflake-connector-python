@@ -686,6 +686,14 @@ class SnowflakeConnection:
         self._validate_client_session_keep_alive_heartbeat_frequency()
 
     @property
+    def platform_detection_timeout(self) -> int | float | None:
+        return self._platform_detection_timeout
+
+    @platform_detection_timeout.setter
+    def platform_detection_timeout(self, value) -> None:
+        self._platform_detection_timeout = value
+
+    @property
     def client_prefetch_threads(self) -> int:
         return (
             self._client_prefetch_threads
