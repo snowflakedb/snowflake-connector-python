@@ -30,7 +30,7 @@ from snowflake.connector.errorcode import (
     ER_NO_ACCOUNT_NAME,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from snowflake.connector.errors import Error, HttpError
+from snowflake.connector.errors import Error
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
@@ -53,6 +53,11 @@ try:
     from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
 except ImportError:  # Keep olddrivertest from breaking
     ER_FAILED_PROCESSING_QMARK = 252012
+
+try:
+    from snowflake.connector.errors import HttpError
+except ImportError:
+    pass
 
 
 def test_basic(conn_testaccount):
