@@ -14,7 +14,6 @@ from src.snowflake.connector.compat import (
     FORBIDDEN,
     INTERNAL_SERVER_ERROR,
     SERVICE_UNAVAILABLE,
-    UNAUTHORIZED,
 )
 from src.snowflake.connector.errorcode import (
     ER_HTTP_GENERAL_ERROR,
@@ -322,7 +321,7 @@ def test_request_throws_revocation_check_error():
 @pytest.mark.parametrize(
     "status_code",
     [
-        UNAUTHORIZED,  # 401 - non-retryable
+        401,  # 401 - non-retryable
         404,  # Not Found - non-retryable
         402,  # Payment Required - non-retryable
         406,  # Not Acceptable - non-retryable
