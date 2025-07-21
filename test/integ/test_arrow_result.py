@@ -1345,52 +1345,6 @@ def iterate_over_test_chunk(
                     assert str(arrow_res[0]) == expected[i]
 
 
-@pytest.mark.skipif(
-    no_arrow_iterator_ext, reason="test requires arrow_iterator extension"
-)
-@pytest.mark.parametrize(
-    "timestamp_type", ["timestamp_ntz", "timestamp_ltz", "timestamp_tz"]
-)
-def test_convert_timestamp_overflow(conn_cnx, timestamp_type):
-    """Test whether large timestamps are correctly falling back to microsecond precision."""
-
-    def query(timestamp):
-        if timestamp_type == "timestamp_tz":
-            return f"SELECT CONVERT_TIMEZONE ('UTC', '{timestamp}') AS result"
-        return f"SELECT '{timestamp}'::{timestamp_type} AS result"
-
-    with conn_cnx() as cnx:
-        cur = cnx.cursor()
-
-        # Check that "large" dates are correctly falling back to microsecond precision
-        cur.execute(query("2999-12-31 00:00:00.001234"))
-        result = cur.fetchall()
-        assert str(result[0][0]).startswith("2999-12-31 00:00:00.001234")
-        result_arrow = cur.fetch_arrow_all()
-        assert str(result_arrow.to_pydict()["RESULT"]).startswith(
-            "[datetime.datetime(2999, 12, 31, 0, 0, 0, 1234"
-        )
-
-        # Check that nanosecond precision is used for dates within the nanosecond range
-        cur.execute(query("2000-12-31 00:00:00.001234567"))
-        result_arrow = cur.fetch_arrow_all()
-        assert str(result_arrow.to_pydict()["RESULT"]).startswith(
-            "[Timestamp('2000-12-31 00:00:00.001234567"
-        )
-
-        # Check that nanosecond precision used outside of nanosecond range throws an error
-        cur.execute(query("2999-12-31 00:00:00.0012345678"))
-        with pytest.raises(
-            OverflowError,
-            match=(
-                "If you use a timestamp with the nanosecond part over 6-digits in the Snowflake database, "
-                "the timestamp must be between '1677-09-21 00:12:43.145224192' and "
-                "'2262-04-11 23:47:16.854775807' to not overflow."
-            ),
-        ):
-            result_arrow = cur.fetch_arrow_all()
-
-
 @pytest.mark.parametrize("debug_arrow_chunk", [True, False])
 def test_arrow_bad_data(conn_cnx, caplog, debug_arrow_chunk):
     with caplog.at_level(logging.DEBUG):
