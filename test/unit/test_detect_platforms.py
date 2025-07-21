@@ -36,8 +36,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert result == []
 
     @patch.dict(os.environ, {}, clear=True)
@@ -58,8 +59,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "is_ec2_instance" in result
 
     @patch.dict(os.environ, {"LAMBDA_TASK_ROOT": "/var/task"}, clear=True)
@@ -77,8 +79,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "is_aws_lambda" in result
 
     @patch.dict(os.environ, {}, clear=True)
@@ -98,8 +101,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "has_aws_identity" in result
 
     @patch.dict(os.environ, {}, clear=True)
@@ -125,8 +129,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = mock_get_side_effect
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "is_azure_vm" in result
 
     @patch.dict(
@@ -154,8 +159,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "is_azure_function" in result
 
     @patch.dict(
@@ -184,8 +190,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "is_azure_function" in result
         assert "azure_managed_identity" in result
 
@@ -214,8 +221,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = mock_get_side_effect
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "is_gce_vm" in result
 
     @patch.dict(
@@ -243,8 +251,10 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
+        mock_requests.Timeout = requests.Timeout
         assert "is_gce_cloud_run_service" in result
 
     @patch.dict(
@@ -268,8 +278,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "is_gce_cloud_run_job" in result
 
     @patch.dict(os.environ, {}, clear=True)
@@ -297,8 +308,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = mock_get_side_effect
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "has_gcp_identity" in result
 
     @patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}, clear=True)
@@ -318,8 +330,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "is_github_action" in result
 
     @patch.dict(
@@ -354,8 +367,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "is_aws_lambda" in result
         assert "is_ec2_instance" in result
         assert "has_aws_identity" in result
@@ -379,8 +393,11 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
-        assert result == []
+        result = detect_platforms(timeout=None)
+        assert "is_azure_vm_timeout" in result
+        assert "is_gce_vm_timeout" in result
+        assert "has_gcp_identity_timeout" in result
+        assert "azure_managed_identity_timeout" in result
 
     @patch.dict(os.environ, {}, clear=True)
     @patch("snowflake.connector.platform_detection.IMDSFetcher")
@@ -397,9 +414,10 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.HTTPError("HTTP 500 Error")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
         mock_requests.HTTPError = requests.HTTPError
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert result == []
 
     @patch.dict(os.environ, {}, clear=True)
@@ -417,8 +435,9 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "has_aws_identity" not in result
 
     @patch.dict(os.environ, {}, clear=True)
@@ -436,6 +455,35 @@ class TestDetectPlatforms:
 
         mock_requests.get.side_effect = requests.RequestException("No metadata")
         mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms()
+        result = detect_platforms(timeout=None)
         assert "has_aws_identity" not in result
+
+    @patch.dict(
+        os.environ,
+        {"LAMBDA_TASK_ROOT": "/var/task", "GITHUB_ACTIONS": "true"},
+        clear=True,
+    )
+    @patch("snowflake.connector.platform_detection.IMDSFetcher")
+    @patch("snowflake.connector.platform_detection.boto3")
+    @patch("snowflake.connector.platform_detection.requests")
+    def test_custom_timeout_parameter(
+        self, mock_requests, mock_boto3, mock_imds_fetcher
+    ):
+        mock_imds_instance = Mock()
+        mock_imds_instance._get_request.side_effect = Exception("No IMDS")
+        mock_imds_fetcher.return_value = mock_imds_instance
+
+        mock_boto3.client.return_value.get_caller_identity.side_effect = Exception(
+            "No AWS"
+        )
+
+        mock_requests.get.side_effect = requests.RequestException("No metadata")
+        mock_requests.RequestException = requests.RequestException
+        mock_requests.Timeout = requests.Timeout
+
+        result = detect_platforms(timeout=5.0)
+
+        assert "is_aws_lambda" in result
+        assert "is_github_action" in result
