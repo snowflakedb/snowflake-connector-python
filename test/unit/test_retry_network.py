@@ -29,7 +29,7 @@ from snowflake.connector.errors import (
     DatabaseError,
     Error,
     ForbiddenError,
-    InterfaceError,
+    HttpError,
     OperationalError,
     OtherHTTPRetryableError,
     ServiceUnavailableError,
@@ -217,7 +217,7 @@ def test_request_exec():
 
     # unauthorized
     type(request_mock).status_code = PropertyMock(return_value=UNAUTHORIZED)
-    with pytest.raises(InterfaceError):
+    with pytest.raises(HttpError):
         rest._request_exec(session=session, **default_parameters)
 
     # unauthorized with catch okta unauthorized error

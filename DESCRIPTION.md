@@ -7,6 +7,10 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.16.1(TBD)
+  - Added in-band OCSP exception telemetry.
+  - Added in-band HTTP exception telemetry.
+
 - v3.16.0(July 04,2025)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4.
   - Added Windows support for Python 3.13.
