@@ -277,7 +277,7 @@ jobs:
           TOX_PARALLEL_NO_SPINNER: 1
 
           # To specify the test name (in single test mode) pass this env variable:
-          SINGLE_TEST_NAME: test/integ/test_put_get_medium.py::test_copy_get
+          SINGLE_TEST_NAME: test/integ/test_large_put.py::test_put_copy_large_files
 
 
           # Proxy environment variables
