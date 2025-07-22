@@ -746,35 +746,44 @@ def test_get_empty_file(tmp_path, conn_cnx):
             assert not empty_file.exists()
 
 
+@pytest.mark.parametrize("auto_compress", ["TRUE", "FALSE"])
 @pytest.mark.skipolddriver
 @pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
-def test_get_file_permission(tmp_path, conn_cnx, caplog):
+def test_get_file_permission(tmp_path, conn_cnx, caplog, auto_compress):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
     stage_name = random_string(5, "test_get_file_permission_")
+
     with conn_cnx() as cnx:
         with cnx.cursor() as cur:
             cur.execute(f"create temporary stage {stage_name}")
             filename_in_put = str(test_file).replace("\\", "/")
             cur.execute(
-                f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS=FALSE",
+                f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS={auto_compress}",
             )
+            test_file.unlink()
 
             with caplog.at_level(logging.ERROR):
                 cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
             assert "FileNotFoundError" not in caplog.text
+            assert len(list(tmp_path.iterdir())) == 1
+            downloaded_file = next(tmp_path.iterdir())
 
             default_mask = os.umask(0)
             os.umask(default_mask)
 
             assert (
-                oct(os.stat(test_file).st_mode)[-3:] == oct(0o600 & ~default_mask)[-3:]
+                oct(os.stat(downloaded_file).st_mode)[-3:]
+                == oct(0o600 & ~default_mask)[-3:]
             )
 
 
+@pytest.mark.parametrize("auto_compress", ["TRUE", "FALSE"])
 @pytest.mark.skipolddriver
 @pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
-def test_get_unsafe_file_permission_when_flag_set(tmp_path, conn_cnx, caplog):
+def test_get_unsafe_file_permission_when_flag_set(
+    tmp_path, conn_cnx, caplog, auto_compress
+):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
     stage_name = random_string(5, "test_get_file_permission_")
@@ -784,12 +793,15 @@ def test_get_unsafe_file_permission_when_flag_set(tmp_path, conn_cnx, caplog):
             cur.execute(f"create temporary stage {stage_name}")
             filename_in_put = str(test_file).replace("\\", "/")
             cur.execute(
-                f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS=FALSE",
+                f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS={auto_compress}",
             )
+            test_file.unlink()
 
             with caplog.at_level(logging.ERROR):
                 cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
             assert "FileNotFoundError" not in caplog.text
+            assert len(list(tmp_path.iterdir())) == 1
+            downloaded_file = next(tmp_path.iterdir())
 
             # get the default mask, usually it is 0o022
             default_mask = os.umask(0)
@@ -797,7 +809,8 @@ def test_get_unsafe_file_permission_when_flag_set(tmp_path, conn_cnx, caplog):
             # files by default are given the permission 644 (Octal)
             # umask is for denial, we need to negate
             assert (
-                oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
+                oct(os.stat(downloaded_file).st_mode)[-3:]
+                == oct(0o666 & ~default_mask)[-3:]
             )
         cnx.unsafe_file_write = False
 
