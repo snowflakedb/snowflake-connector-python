@@ -282,6 +282,7 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
         cnx.close()
 
 
+@pytest.mark.skipolddriver
 def test_platform_detection_timeout(db_parameters):
     """Tests platform detection timeout.
 
@@ -306,7 +307,6 @@ def test_platform_detection_timeout(db_parameters):
         cnx.close()
 
 
-@pytest.mark.skipolddriver
 def test_bad_db(db_parameters):
     """Attempts to use a bad DB."""
     cnx = snowflake.connector.connect(
