@@ -43,7 +43,9 @@ class SecretDetector(logging.Formatter):
         r'"privateKeyData": "([a-z0-9/+=\\n]{10,})"', flags=re.MULTILINE | re.IGNORECASE
     )
     CONNECTION_TOKEN_PATTERN = re.compile(
-        r"(token|assertion content)" r"([\'\"\s:= ]+)" r"([a-z0-9=/_\-\+\.]{8,})",
+        r"(token|assertion content)"  # covers masterToken as well due to ignorecase
+        r"([\'\"\s:=]+)"
+        r"([a-z0-9=/_:\-\+\.]{8,})",
         flags=re.IGNORECASE,
     )
 
