@@ -560,6 +560,7 @@ def test_client_creds_successful_flow(
     wiremock_oauth_client_creds_dir,
     wiremock_generic_mappings_dir,
     monkeypatch,
+    temp_cache,
 ) -> None:
     wiremock_client.import_mapping(
         wiremock_oauth_client_creds_dir / "successful_flow.json"
@@ -570,6 +571,15 @@ def test_client_creds_successful_flow(
     wiremock_client.add_mapping(
         wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
     )
+    user = "testUser"
+    access_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
+    )
+    refresh_token_key = TokenKey(
+        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
+    )
+    temp_cache.store(access_token_key, "unused-access-token-123")
+    temp_cache.store(refresh_token_key, "unused-refresh-token-123")
     with mock.patch("secrets.token_urlsafe", return_value="abc123"):
         cnx = snowflake.connector.connect(
             user="testUser",
@@ -582,10 +592,17 @@ def test_client_creds_successful_flow(
             oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
             host=wiremock_client.wiremock_host,
             port=wiremock_client.wiremock_http_port,
+            oauth_enable_refresh_tokens=True,
+            client_store_temporary_credential=True,
         )
 
         assert cnx, "invalid cnx"
         cnx.close()
+    # cached tokens are expected not to change since Client Credenials must not use token cache
+    cached_access_token = temp_cache.retrieve(access_token_key)
+    cached_refresh_token = temp_cache.retrieve(refresh_token_key)
+    assert cached_access_token == "unused-access-token-123"
+    assert cached_refresh_token == "unused-refresh-token-123"
 
 
 @pytest.mark.skipolddriver
@@ -624,58 +641,6 @@ def test_client_creds_token_request_error(
         assert str(execinfo.value).endswith(
             "Invalid HTTP request from web browser. Idp authentication could have failed."
         )
-
-
-@pytest.mark.skipolddriver
-def test_client_creds_successful_refresh_token_flow(
-    wiremock_client: WiremockClient,
-    wiremock_oauth_refresh_token_dir,
-    wiremock_generic_mappings_dir,
-    monkeypatch,
-    temp_cache,
-) -> None:
-    wiremock_client.import_mapping(
-        wiremock_generic_mappings_dir / "snowflake_login_failed.json"
-    )
-    wiremock_client.add_mapping(
-        wiremock_oauth_refresh_token_dir / "refresh_successful.json"
-    )
-    wiremock_client.add_mapping(
-        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
-    )
-    wiremock_client.add_mapping(
-        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
-    )
-    user = "testUser"
-    access_token_key = TokenKey(
-        user, wiremock_client.wiremock_host, TokenType.OAUTH_ACCESS_TOKEN
-    )
-    refresh_token_key = TokenKey(
-        user, wiremock_client.wiremock_host, TokenType.OAUTH_REFRESH_TOKEN
-    )
-    temp_cache.store(access_token_key, "expired-access-token-123")
-    temp_cache.store(refresh_token_key, "refresh-token-123")
-    cnx = snowflake.connector.connect(
-        user=user,
-        authenticator="OAUTH_CLIENT_CREDENTIALS",
-        oauth_client_id="123",
-        account="testAccount",
-        protocol="http",
-        role="ANALYST",
-        oauth_client_secret="testClientSecret",
-        oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
-        host=wiremock_client.wiremock_host,
-        port=wiremock_client.wiremock_http_port,
-        oauth_enable_refresh_tokens=True,
-        client_store_temporary_credential=True,
-    )
-    assert cnx, "invalid cnx"
-    cnx.close()
-
-    new_access_token = temp_cache.retrieve(access_token_key)
-    new_refresh_token = temp_cache.retrieve(refresh_token_key)
-    assert new_access_token == "access-token-123"
-    assert new_refresh_token == "refresh-token-123"
 
 
 @pytest.mark.skipolddriver
@@ -729,8 +694,8 @@ def test_client_creds_expired_refresh_token_flow(
     )
     assert cnx, "invalid cnx"
     cnx.close()
-
-    new_access_token = temp_cache.retrieve(access_token_key)
-    new_refresh_token = temp_cache.retrieve(refresh_token_key)
-    assert new_access_token == "access-token-123"
-    assert new_refresh_token == "refresh-token-123"
+    # the cache state is expected not to change, since Client Credentials must not use token caching
+    cached_access_token = temp_cache.retrieve(access_token_key)
+    cached_refresh_token = temp_cache.retrieve(refresh_token_key)
+    assert cached_access_token == "expired-access-token-123"
+    assert cached_refresh_token == "expired-refresh-token-123"
