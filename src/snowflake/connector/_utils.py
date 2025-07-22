@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import string
 from enum import Enum
+from inspect import stack
 from random import choice
 from threading import Timer
 from uuid import UUID
@@ -68,3 +69,12 @@ class _TrackedQueryCancellationTimer(Timer):
     def run(self):
         super().run()
         self.executed = True
+
+
+def get_application_path() -> str:
+    """Get the path of the application script using the connector."""
+    try:
+        outermost_frame = stack()[-1]
+        return outermost_frame.filename
+    except Exception:
+        return "unknown"
