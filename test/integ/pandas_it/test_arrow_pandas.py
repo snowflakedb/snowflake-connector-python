@@ -438,40 +438,67 @@ def test_timestampntz(conn_cnx, scale):
     [
         "'1400-01-01 01:02:03.123456789'::timestamp as low_ts",
         "'9999-01-01 01:02:03.123456789789'::timestamp as high_ts",
+        "convert_timezone('UTC', '1400-01-01 01:02:03.123456789') as low_ts",
+        "convert_timezone('UTC', '9999-01-01 01:02:03.123456789789') as high_ts",
     ],
 )
-def test_timestampntz_raises_overflow(conn_cnx, timestamp_str):
+def test_timestamp_raises_overflow(conn_cnx, timestamp_str):
     with conn_cnx() as conn:
         r = conn.cursor().execute(f"select {timestamp_str}")
         with pytest.raises(OverflowError, match="overflows int64 range."):
             r.fetch_arrow_all()
 
 
-def test_timestampntz_down_scale(conn_cnx):
+def test_timestamp_down_scale(conn_cnx):
     with conn_cnx() as conn:
         r = conn.cursor().execute(
-            "select '1400-01-01 01:02:03.123456'::timestamp as low_ts, '9999-01-01 01:02:03.123456'::timestamp as high_ts"
+            """select '1400-01-01 01:02:03.123456'::timestamp as low_ntz,
+            '9999-01-01 01:02:03.123456'::timestamp as high_ntz,
+            convert_timezone('UTC', '1400-01-01 01:02:03.123456') as low_tz,
+            convert_timezone('UTC', '9999-01-01 01:02:03.123456') as high_tz
+            """
         )
         table = r.fetch_arrow_all()
-        lower_dt = table[0][0].as_py()  # type: datetime
+        lower_ntz = table[0][0].as_py()  # type: datetime
         assert (
-            lower_dt.year,
-            lower_dt.month,
-            lower_dt.day,
-            lower_dt.hour,
-            lower_dt.minute,
-            lower_dt.second,
-            lower_dt.microsecond,
+            lower_ntz.year,
+            lower_ntz.month,
+            lower_ntz.day,
+            lower_ntz.hour,
+            lower_ntz.minute,
+            lower_ntz.second,
+            lower_ntz.microsecond,
         ) == (1400, 1, 1, 1, 2, 3, 123456)
-        higher_dt = table[1][0].as_py()
+        higher_ntz = table[1][0].as_py()  # type: datetime
         assert (
-            higher_dt.year,
-            higher_dt.month,
-            higher_dt.day,
-            higher_dt.hour,
-            higher_dt.minute,
-            higher_dt.second,
-            higher_dt.microsecond,
+            higher_ntz.year,
+            higher_ntz.month,
+            higher_ntz.day,
+            higher_ntz.hour,
+            higher_ntz.minute,
+            higher_ntz.second,
+            higher_ntz.microsecond,
+        ) == (9999, 1, 1, 1, 2, 3, 123456)
+
+        lower_tz = table[2][0].as_py()  # type: datetime
+        assert (
+            lower_tz.year,
+            lower_tz.month,
+            lower_tz.day,
+            lower_tz.hour,
+            lower_tz.minute,
+            lower_tz.second,
+            lower_tz.microsecond,
+        ) == (1400, 1, 1, 1, 2, 3, 123456)
+        higher_tz = table[3][0].as_py()  # type: datetime
+        assert (
+            higher_tz.year,
+            higher_tz.month,
+            higher_tz.day,
+            higher_tz.hour,
+            higher_tz.minute,
+            higher_tz.second,
+            higher_tz.microsecond,
         ) == (9999, 1, 1, 1, 2, 3, 123456)
 
 
