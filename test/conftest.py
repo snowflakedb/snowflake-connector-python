@@ -76,6 +76,8 @@ def pytest_collection_modifyitems(items) -> None:
         item_path = Path(str(item.fspath)).parent
         relative_path = item_path.relative_to(top_test_dir)
         for part in relative_path.parts:
+            if part.endswith("_it"):
+                part = part[:-3]
             item.add_marker(part)
             if part in ("unit", "pandas"):
                 item.add_marker("skipolddriver")
@@ -146,3 +148,14 @@ def pytest_runtest_setup(item) -> None:
     if "auth" in test_tags:
         if os.getenv("RUN_AUTH_TESTS") != "true":
             pytest.skip("Skipping auth test in current environment")
+
+
+def get_server_parameter_value(connection, parameter_name: str) -> str | None:
+    """Get server parameter value, returns None if parameter doesn't exist."""
+    try:
+        with connection.cursor() as cur:
+            cur.execute(f"show parameters like '{parameter_name}'")
+            ret = cur.fetchone()
+            return ret[1] if ret else None
+    except Exception:
+        return None

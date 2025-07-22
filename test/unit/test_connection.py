@@ -21,7 +21,7 @@ import snowflake.connector
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
 from snowflake.connector.errors import (
     Error,
-    InterfaceError,
+    HttpError,
     OperationalError,
     ProgrammingError,
 )
@@ -194,12 +194,23 @@ def test_partner_env_var(mock_post_requests):
 
 
 @pytest.mark.skipolddriver
-def test_imported_module(mock_post_requests):
-    with patch.dict(sys.modules, {"streamlit": "foo"}):
-        assert fake_connector().application == "streamlit"
+@pytest.mark.parametrize(
+    "sys_modules,application",
+    [
+        ({"streamlit": None}, "streamlit"),
+        (
+            {"ipykernel": None, "jupyter_core": None, "jupyter_client": None},
+            "jupyter_notebook",
+        ),
+        ({"snowbooks": None}, "snowflake_notebook"),
+    ],
+)
+def test_imported_module(mock_post_requests, sys_modules, application):
+    with patch.dict(sys.modules, sys_modules):
+        assert fake_connector().application == application
 
     assert (
-        mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == "streamlit"
+        mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == application
     )
 
 
@@ -354,7 +365,7 @@ def test_invalid_backoff_policy():
         # passing a non-generator function should not work
         _ = fake_connector(backoff_policy=lambda: None)
 
-    with pytest.raises(InterfaceError):
+    with pytest.raises(HttpError):
         # passing a generator function should make it pass config and error during connection
         _ = fake_connector(backoff_policy=zero_backoff)
 

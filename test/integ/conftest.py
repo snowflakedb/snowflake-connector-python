@@ -41,10 +41,30 @@ except ImportError:
 
 logger = getLogger(__name__)
 
-if RUNNING_ON_GH:
-    TEST_SCHEMA = "GH_JOB_{}".format(str(uuid.uuid4()).replace("-", "_"))
-else:
-    TEST_SCHEMA = "python_connector_tests_" + str(uuid.uuid4()).replace("-", "_")
+
+def _get_worker_specific_schema():
+    """Generate worker-specific schema name for parallel test execution."""
+    base_uuid = str(uuid.uuid4()).replace("-", "_")
+
+    # Check if running in pytest-xdist parallel mode
+    worker_id = os.getenv("PYTEST_XDIST_WORKER")
+    if worker_id:
+        # Use worker ID to ensure unique schema per worker
+        worker_suffix = worker_id.replace("-", "_")
+        if RUNNING_ON_GH:
+            return f"GH_JOB_{worker_suffix}_{base_uuid}"
+        else:
+            return f"python_connector_tests_{worker_suffix}_{base_uuid}"
+    else:
+        # Single worker mode (original behavior)
+        if RUNNING_ON_GH:
+            return f"GH_JOB_{base_uuid}"
+        else:
+            return f"python_connector_tests_{base_uuid}"
+
+
+TEST_SCHEMA = _get_worker_specific_schema()
+
 
 if TEST_USING_VENDORED_ARROW:
     snowflake.connector.cursor.NANOARR_USAGE = (
@@ -92,6 +112,11 @@ def is_public_testaccount() -> bool:
 
 
 @pytest.fixture(scope="session")
+def is_local_dev_setup(db_parameters) -> bool:
+    return db_parameters.get("is_local_dev_setup", False)
+
+
+@pytest.fixture(scope="session")
 def db_parameters() -> dict[str, str]:
     return get_db_parameters()
 
@@ -131,8 +156,15 @@ def get_db_parameters(connection_name: str = "default") -> dict[str, Any]:
         print_help()
         sys.exit(2)
 
-    # a unique table name
-    ret["name"] = "python_tests_" + str(uuid.uuid4()).replace("-", "_")
+    # a unique table name (worker-specific for parallel execution)
+    base_uuid = str(uuid.uuid4()).replace("-", "_")
+    worker_id = os.getenv("PYTEST_XDIST_WORKER")
+    if worker_id:
+        # Include worker ID to prevent conflicts between parallel workers
+        worker_suffix = worker_id.replace("-", "_")
+        ret["name"] = f"python_tests_{worker_suffix}_{base_uuid}"
+    else:
+        ret["name"] = f"python_tests_{base_uuid}"
     ret["name_wh"] = ret["name"] + "wh"
 
     ret["schema"] = TEST_SCHEMA

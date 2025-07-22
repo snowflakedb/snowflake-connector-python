@@ -14,6 +14,10 @@ curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wire
 python3 -m venv fips_env
 source fips_env/bin/activate
 pip install -U setuptools pip
+
+# Install pytest-xdist for parallel execution
+pip install pytest-xdist
+
 pip install "${CONNECTOR_WHL}[pandas,secure-local-storage,development]"
 
 echo "!!! Environment description !!!"
@@ -24,6 +28,8 @@ python -c  "from cryptography.hazmat.backends.openssl import backend;print('Cryp
 pip freeze
 
 cd $CONNECTOR_DIR
-pytest -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test
+
+# Run tests in parallel using pytest-xdist
+pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test
 
 deactivate

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from os import chmod, path
 from unittest import mock
+from unittest.mock import patch
 
 import pytest
 
@@ -252,3 +253,98 @@ def test_iobound_limit(tmp_path):
                     pass
     # 2 IObound TPEs should be created for 3 files limited to 2
     assert len(list(filter(lambda e: e.args == (2,), tpe.call_args_list))) == 2
+
+
+def test_strip_stage_prefix_from_dst_file_name_for_download():
+    """Verifies that _strip_stage_prefix_from_dst_file_name_for_download is called when initializing file meta.
+
+    Workloads like sproc will need to monkeypatch _strip_stage_prefix_from_dst_file_name_for_download on the server side
+    to maintain its behavior. So we add this unit test to make sure that we do not accidentally refactor this method and
+    break sproc workloads.
+    """
+    file = "test.txt"
+    agent = SnowflakeFileTransferAgent(
+        mock.MagicMock(autospec=SnowflakeCursor),
+        "GET @stage_foo/test.txt file:///tmp",
+        {
+            "data": {
+                "localLocation": "/tmp",
+                "command": "DOWNLOAD",
+                "autoCompress": False,
+                "src_locations": [file],
+                "sourceCompression": "none",
+                "stageInfo": {
+                    "creds": {},
+                    "location": "",
+                    "locationType": "S3",
+                    "path": "remote_loc",
+                },
+            },
+            "success": True,
+        },
+    )
+    agent._parse_command()
+    with patch.object(
+        agent,
+        "_strip_stage_prefix_from_dst_file_name_for_download",
+        return_value="mock value",
+    ):
+        agent._init_file_metadata()
+        agent._strip_stage_prefix_from_dst_file_name_for_download.assert_called_with(
+            file
+        )
+
+
+# The server DoP cap is newly introduced and therefore should not be tested in
+# old drivers.
+@pytest.mark.skipolddriver
+def test_server_dop_cap(tmp_path):
+    file1 = tmp_path / "file1"
+    file2 = tmp_path / "file2"
+    file1.touch()
+    file2.touch()
+    # Positive case
+    rest_client = SnowflakeFileTransferAgent(
+        mock.MagicMock(autospec=SnowflakeCursor),
+        "PUT some_file.txt",
+        {
+            "data": {
+                "command": "UPLOAD",
+                "src_locations": [file1, file2],
+                "sourceCompression": "none",
+                "parallel": 8,
+                "stageInfo": {
+                    "creds": {},
+                    "location": "some_bucket",
+                    "region": "no_region",
+                    "locationType": "AZURE",
+                    "path": "remote_loc",
+                    "endPoint": "",
+                    "storageAccount": "storage_account",
+                },
+            },
+            "success": True,
+        },
+        snowflake_server_dop_cap_for_file_transfer=1,
+    )
+    with mock.patch(
+        "snowflake.connector.file_transfer_agent.ThreadPoolExecutor"
+    ) as tpe:
+        with mock.patch("snowflake.connector.file_transfer_agent.threading.Condition"):
+            with mock.patch(
+                "snowflake.connector.file_transfer_agent.TransferMetadata",
+                return_value=mock.Mock(
+                    num_files_started=0,
+                    num_files_completed=3,
+                ),
+            ):
+                try:
+                    rest_client.execute()
+                except AttributeError:
+                    pass
+
+    # We expect 3 thread pool executors to be created with thread count as 1,
+    # because we will create executors for network, preprocess and postprocess,
+    # and due to the server DoP cap, each of them will have a thread count
+    # of 1.
+    assert len(list(filter(lambda e: e.args == (1,), tpe.call_args_list))) == 3
