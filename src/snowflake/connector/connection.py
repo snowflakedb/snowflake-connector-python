@@ -305,6 +305,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # SNOW-1817982: limit iobound TPE sizes when executing PUT/GET
+    "unsafe_file_write": (
+        False,
+        bool,
+    ),  # SNOW-1944208: add unsafe write flag
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -1242,11 +1246,6 @@ class SnowflakeConnection:
                 self._port = "443"
             if "protocol" not in kwargs:
                 self._protocol = "https"
-
-        if "unsafe_file_write" in kwargs:
-            self._unsafe_file_write = kwargs["unsafe_file_write"]
-        else:
-            self._unsafe_file_write = False
 
         logger.info(
             f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), 'GLOBAL')} Snowflake domain"
