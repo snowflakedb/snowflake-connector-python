@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v3.16.1(TBD)
   - Added in-band OCSP exception telemetry.
+  - Disabled token caching for OAuth Client Credentials authentication
   - Added in-band HTTP exception telemetry.
   - Fixed a bug where timezoned timestamps fetched as pandas.DataFrame or pyarrow.Table would overflow for the sake of unnecessary precision. In the case where an overflow cannot be prevented a clear error will be raised now.
 
