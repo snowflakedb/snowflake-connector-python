@@ -29,6 +29,10 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
+from ._utils import (
+    _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+)
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
     Auth,
@@ -229,6 +233,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # snowflake
     "client_prefetch_threads": (4, int),  # snowflake
     "client_fetch_threads": (None, (type(None), int)),
+    "client_fetch_use_mp": (False, bool),
     "numpy": (False, bool),  # snowflake
     "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
@@ -368,6 +373,14 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-2096721: External (Spark) session ID
     ),
+    "unsafe_file_write": (
+        False,
+        bool,
+    ),  # SNOW-1944208: add unsafe write flag
+    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER: (
+        _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
+        int,  # type
+    ),  # snowflake internal
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -428,7 +441,9 @@ class SnowflakeConnection:
             See the backoff_policies module for details and implementation examples.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
-        client_fetch_threads: Number of threads to fetch staged query results.
+        client_fetch_threads: Number of threads (or processes) to fetch staged query results.
+            If not specified, reuses client_prefetch_threads value.
+        client_fetch_use_mp: Enables multiprocessing for fetching query results in parallel.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
         application: Application name to communicate with Snowflake as. By default, this is "PythonConnector".
         errorhandler: Handler used with errors. By default, an exception will be raised on error.
@@ -700,6 +715,10 @@ class SnowflakeConnection:
         if value is not None:
             value = min(max(1, value), MAX_CLIENT_FETCH_THREADS)
         self._client_fetch_threads = value
+
+    @property
+    def client_fetch_use_mp(self) -> bool:
+        return self._client_fetch_use_mp
 
     @property
     def rest(self) -> SnowflakeRestful | None:
@@ -1394,11 +1413,6 @@ class SnowflakeConnection:
         if "account" in kwargs:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
-
-        if "unsafe_file_write" in kwargs:
-            self._unsafe_file_write = kwargs["unsafe_file_write"]
-        else:
-            self._unsafe_file_write = False
 
         logger.info(
             f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), 'GLOBAL')} Snowflake domain"

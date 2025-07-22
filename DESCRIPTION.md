@@ -7,17 +7,20 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.16(TBD)
-  - Bumped numpy dependency from <2.1.0 to <=2.2.4
-  - Added Windows support for Python 3.13.
-  - Add `bulk_upload_chunks` parameter to `write_pandas` function. Setting this parameter to True changes the behaviour of write_pandas function to first write all the data chunks to the local disk and then perform the wildcard upload of the chunks folder to the stage. In default behaviour the chunks are being saved, uploaded and deleted one by one.
-  - Added support for new authentication mechanism PAT with external session ID
+- v3.16.1(TBD)
+  - Added in-band OCSP exception telemetry.
+  - Added in-band HTTP exception telemetry.
+  - Fixed a bug where timezoned timestamps fetched as pandas.DataFrame or pyarrow.Table would overflow for the sake of unnecessary precision. In the case where an overflow cannot be prevented a clear error will be raised now.
 
-- v3.15.1(May 20, 2025)
+- v3.16.0(July 04,2025)
+  - Bumped numpy dependency from <2.1.0 to <=2.2.4.
+  - Added Windows support for Python 3.13.
+  - Added `bulk_upload_chunks` parameter to `write_pandas` function. Setting this parameter to True changes the behaviour of write_pandas function to first write all the data chunks to the local disk and then perform the wildcard upload of the chunks folder to the stage. In default behaviour the chunks are being saved, uploaded and deleted one by one.
+  - Added support for new authentication mechanism PAT with external session ID.
+  - Added `client_fetch_use_mp` parameter that enables multiprocessed fetching of result batches.
   - Added basic arrow support for Interval types.
-  - Fix `write_pandas` special characters usage in the location name.
-  - Fix usage of `use_virtual_url` when building the location for gcs storage client.
-  - Bind cryptography to <=44.0.3 to avoid issues with 45.0.0.
+  - Fixed `write_pandas` special characters usage in the location name.
+  - Fixed usage of `use_virtual_url` when building the location for gcs storage client.
   - Added support for Snowflake OAuth for local applications.
 
 - v3.15.0(Apr 29,2025)

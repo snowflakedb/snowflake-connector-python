@@ -15,6 +15,7 @@ from logging import getLogger
 from time import time
 from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 
+from ._utils import _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import IS_WINDOWS
 from .constants import (
@@ -355,6 +356,7 @@ class SnowflakeFileTransferAgent:
         use_s3_regional_url: bool = False,
         iobound_tpe_limit: int | None = None,
         unsafe_file_write: bool = False,
+        snowflake_server_dop_cap_for_file_transfer=_DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -387,6 +389,9 @@ class SnowflakeFileTransferAgent:
         self._credentials: StorageCredential | None = None
         self._iobound_tpe_limit = iobound_tpe_limit
         self._unsafe_file_write = unsafe_file_write
+        self._snowflake_server_dop_cap_for_file_transfer = (
+            snowflake_server_dop_cap_for_file_transfer
+        )
 
     def execute(self) -> None:
         self._parse_command()
@@ -443,12 +448,16 @@ class SnowflakeFileTransferAgent:
             result.result_status = result.result_status.value
 
     def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
-        iobound_tpe_limit = min(len(metas), os.cpu_count())
+        iobound_tpe_limit = min(
+            len(metas), os.cpu_count(), self._snowflake_server_dop_cap_for_file_transfer
+        )
         logger.debug("Decided IO-bound TPE size: %d", iobound_tpe_limit)
         if self._iobound_tpe_limit is not None:
             logger.debug("IO-bound TPE size is limited to: %d", self._iobound_tpe_limit)
             iobound_tpe_limit = min(iobound_tpe_limit, self._iobound_tpe_limit)
-        max_concurrency = self._parallel
+        max_concurrency = min(
+            self._parallel, self._snowflake_server_dop_cap_for_file_transfer
+        )
         network_tpe = ThreadPoolExecutor(max_concurrency)
         preprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
         postprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
@@ -1062,11 +1071,14 @@ class SnowflakeFileTransferAgent:
             for idx, file_name in enumerate(self._src_files):
                 if not file_name:
                     continue
-                first_path_sep = file_name.find("/")
                 dst_file_name = (
-                    file_name[first_path_sep + 1 :]
+                    self._strip_stage_prefix_from_dst_file_name_for_download(file_name)
+                )
+                first_path_sep = dst_file_name.find("/")
+                dst_file_name = (
+                    dst_file_name[first_path_sep + 1 :]
                     if first_path_sep >= 0
-                    else file_name
+                    else dst_file_name
                 )
                 url = None
                 if self._presigned_urls and idx < len(self._presigned_urls):
@@ -1201,3 +1213,12 @@ class SnowflakeFileTransferAgent:
                 else:
                     m.dst_file_name = m.name
                     m.dst_compression_type = None
+
+    def _strip_stage_prefix_from_dst_file_name_for_download(self, dst_file_name):
+        """Strips the stage prefix from dst_file_name for download.
+
+        Note that this is no-op in most cases, and therefore we return as is.
+        But for some workloads they will monkeypatch this method to add their
+        stripping logic.
+        """
+        return dst_file_name
