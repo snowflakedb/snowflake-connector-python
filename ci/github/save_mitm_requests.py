@@ -5,6 +5,9 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+MAX_RESPONSE_BODY_CHARS = 2000  # or any limit you prefer
+
+
 # Import SecretDetector directly without package initialization
 secret_detector_path = (
     Path(__file__).parent
@@ -275,9 +278,11 @@ try:
             "duration_ms",
             "request_headers",
             "response_headers",
+            "response_body",
             "error_message",
         ]
     )
+
     f.flush()
     logger.info("Header written and flushed successfully")
 except Exception as file_error:
@@ -313,6 +318,15 @@ def response(flow):
 
         # Write row to CSV with safe string conversion
         timestamp = datetime.now().isoformat()
+
+        # Truncated and masked response body
+        try:
+            raw_body = flow.response.content or b""
+            decoded_body = safe_str(raw_body, max_length=MAX_RESPONSE_BODY_CHARS)
+            masked_body = SecretDetector.mask_secrets(decoded_body).masked_text
+        except Exception as e:
+            masked_body = f"[RESPONSE BODY ERROR: {type(e).__name__}]"
+
         writer.writerow(
             [
                 safe_str(timestamp),
@@ -328,6 +342,7 @@ def response(flow):
                 safe_str(duration_ms),
                 safe_str(request_headers),
                 safe_str(response_headers),
+                safe_str(masked_body),
                 "",  # No error for successful requests
             ]
         )
@@ -370,6 +385,7 @@ def response(flow):
                 "",  # Empty duration for errors
                 "",  # Empty request headers for errors
                 "",  # Empty response headers for errors
+                "",  # Empty body
                 safe_str(
                     SecretDetector.mask_secrets(str(e)).masked_text
                 ),  # Error message
