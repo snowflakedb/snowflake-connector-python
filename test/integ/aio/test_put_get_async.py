@@ -22,12 +22,14 @@ try:
 except ImportError:
     from test.randomize import random_string
 
-from test.generate_test_files import generate_k_lines_of_n_files
-
 try:
-    from ..parameters import CONNECTION_PARAMETERS_ADMIN
+    from src.snowflake.connector.compat import IS_WINDOWS
 except ImportError:
-    CONNECTION_PARAMETERS_ADMIN = {}
+    import platform
+
+    IS_WINDOWS = platform.system() == "Windows"
+
+from test.generate_test_files import generate_k_lines_of_n_files
 
 THIS_DIR = path.dirname(path.realpath(__file__))
 
@@ -154,7 +156,9 @@ async def test_get_empty_file(tmp_path, aio_connection):
     assert not empty_file.exists()
 
 
-async def test_get_file_permission(tmp_path, aio_connection, caplog):
+@pytest.mark.parametrize("auto_compress", ["TRUE", "FALSE"])
+@pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
+async def test_get_file_permission(tmp_path, aio_connection, caplog, auto_compress):
     test_file = tmp_path / "data.csv"
     test_file.write_text("1,2,3\n")
     stage_name = random_string(5, "test_get_empty_file_")
@@ -163,19 +167,54 @@ async def test_get_file_permission(tmp_path, aio_connection, caplog):
     await cur.execute(f"create temporary stage {stage_name}")
     filename_in_put = str(test_file).replace("\\", "/")
     await cur.execute(
-        f"PUT 'file://{filename_in_put}' @{stage_name}",
+        f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS={auto_compress}",
     )
+    test_file.unlink()
 
     with caplog.at_level(logging.ERROR):
         await cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
     assert "FileNotFoundError" not in caplog.text
+    assert len(list(tmp_path.iterdir())) == 1
+    downloaded_file = next(tmp_path.iterdir())
 
     # get the default mask, usually it is 0o022
     default_mask = os.umask(0)
     os.umask(default_mask)
-    # files by default are given the permission 644 (Octal)
+    # files by default are given the permission 600 (Octal)
     # umask is for denial, we need to negate
-    assert oct(os.stat(test_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
+    assert oct(os.stat(downloaded_file).st_mode)[-3:] == oct(0o600 & ~default_mask)[-3:]
+
+
+@pytest.mark.parametrize("auto_compress", ["TRUE", "FALSE"])
+@pytest.mark.skipif(IS_WINDOWS, reason="not supported on Windows")
+async def test_get_unsafe_file_permission_when_flag_set(
+    tmp_path, aio_connection, caplog, auto_compress
+):
+    test_file = tmp_path / "data.csv"
+    test_file.write_text("1,2,3\n")
+    stage_name = random_string(5, "test_get_empty_file_")
+    await aio_connection.connect()
+    aio_connection.unsafe_file_write = True
+    cur = aio_connection.cursor()
+    await cur.execute(f"create temporary stage {stage_name}")
+    filename_in_put = str(test_file).replace("\\", "/")
+    await cur.execute(
+        f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS={auto_compress}",
+    )
+    test_file.unlink()
+
+    with caplog.at_level(logging.ERROR):
+        await cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
+    assert "FileNotFoundError" not in caplog.text
+    assert len(list(tmp_path.iterdir())) == 1
+    downloaded_file = next(tmp_path.iterdir())
+
+    # get the default mask, usually it is 0o022
+    default_mask = os.umask(0)
+    os.umask(default_mask)
+    # when unsafe_file_write is set, permission is 644 (Octal)
+    # umask is for denial, we need to negate
+    assert oct(os.stat(downloaded_file).st_mode)[-3:] == oct(0o666 & ~default_mask)[-3:]
 
 
 async def test_get_multiple_files_with_same_name(tmp_path, aio_connection, caplog):
