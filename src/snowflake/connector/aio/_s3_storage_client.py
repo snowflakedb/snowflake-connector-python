@@ -48,6 +48,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
         chunk_size: int,
         use_accelerate_endpoint: bool | None = None,
         use_s3_regional_url: bool = False,
+        unsafe_file_write: bool = False,
     ) -> None:
         """Rest client for S3 storage.
 
@@ -60,6 +61,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
             stage_info=stage_info,
             chunk_size=chunk_size,
             credentials=credentials,
+            unsafe_file_write=unsafe_file_write,
         )
         # Signature version V4
         # Addressing style Virtual Host
