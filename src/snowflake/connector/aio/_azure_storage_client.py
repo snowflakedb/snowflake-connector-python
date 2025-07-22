@@ -50,6 +50,7 @@ class SnowflakeAzureRestClient(
         chunk_size: int,
         stage_info: dict[str, Any],
         use_s3_regional_url: bool = False,
+        unsafe_file_write: bool = False,
     ) -> None:
         SnowflakeAzureRestClientSync.__init__(
             self,
@@ -57,6 +58,7 @@ class SnowflakeAzureRestClient(
             stage_info=stage_info,
             chunk_size=chunk_size,
             credentials=credentials,
+            unsafe_file_write=unsafe_file_write,
         )
 
     async def _has_expired_token(self, response: aiohttp.ClientResponse) -> bool:

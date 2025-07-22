@@ -62,24 +62,26 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
         multipart_threshold: int | None = None,
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
+        unsafe_file_write: bool = False,
     ) -> None:
         super().__init__(
-            cursor,
-            command,
-            ret,
-            put_callback,
-            put_azure_callback,
-            put_callback_output_stream,
-            get_callback,
-            get_azure_callback,
-            get_callback_output_stream,
-            show_progress_bar,
-            raise_put_get_error,
-            force_put_overwrite,
-            skip_upload_on_content_match,
-            multipart_threshold,
-            source_from_stream,
-            use_s3_regional_url,
+            cursor=cursor,
+            command=command,
+            ret=ret,
+            put_callback=put_callback,
+            put_azure_callback=put_azure_callback,
+            put_callback_output_stream=put_callback_output_stream,
+            get_callback=get_callback,
+            get_azure_callback=get_azure_callback,
+            get_callback_output_stream=get_callback_output_stream,
+            show_progress_bar=show_progress_bar,
+            raise_put_get_error=raise_put_get_error,
+            force_put_overwrite=force_put_overwrite,
+            skip_upload_on_content_match=skip_upload_on_content_match,
+            multipart_threshold=multipart_threshold,
+            source_from_stream=source_from_stream,
+            use_s3_regional_url=use_s3_regional_url,
+            unsafe_file_write=unsafe_file_write,
         )
 
     async def execute(self) -> None:
@@ -271,6 +273,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 meta,
                 self._stage_info,
                 4 * megabyte,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == AZURE_FS:
             return SnowflakeAzureRestClient(
@@ -279,6 +282,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 AZURE_CHUNK_SIZE,
                 self._stage_info,
                 use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == S3_FS:
             client = SnowflakeS3RestClient(
@@ -288,6 +292,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 chunk_size=_chunk_size_calculator(meta.src_file_size),
                 use_accelerate_endpoint=self._use_accelerate_endpoint,
                 use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
             await client.transfer_accelerate_config(self._use_accelerate_endpoint)
             return client
@@ -299,6 +304,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 self._cursor._connection,
                 self._command,
                 use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
             if client.security_token:
                 logger.debug(f"len(GCS_ACCESS_TOKEN): {len(client.security_token)}")

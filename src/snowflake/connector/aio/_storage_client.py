@@ -37,6 +37,7 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
         chunked_transfer: bool | None = True,
         credentials: StorageCredential | None = None,
         max_retry: int = 5,
+        unsafe_file_write: bool = False,
     ) -> None:
         SnowflakeStorageClientSync.__init__(
             self,
@@ -46,6 +47,7 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
             chunked_transfer=chunked_transfer,
             credentials=credentials,
             max_retry=max_retry,
+            unsafe_file_write=unsafe_file_write,
         )
 
     @abstractmethod
@@ -162,6 +164,7 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
                     meta.encryption_material,
                     str(self.intermediate_dst_path),
                     tmp_dir=self.tmp_dir,
+                    unsafe_file_write=self.unsafe_file_write,
                 )
                 shutil.move(tmp_dst_file_name, self.full_dst_file_name)
                 self.intermediate_dst_path.unlink()
