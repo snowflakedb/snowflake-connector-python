@@ -569,7 +569,7 @@ async def test_client_creds_oauth_type_async():
     )
     body = {"data": {}}
     await auth.update_body(body)
-    assert body["data"]["OAUTH_TYPE"] == "client_credentials"
+    assert body["data"]["OAUTH_TYPE"] == "oauth_client_credentials"
 
 
 @pytest.mark.skipolddriver
