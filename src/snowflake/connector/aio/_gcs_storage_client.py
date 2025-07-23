@@ -39,6 +39,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
         cnx: SnowflakeConnection,
         command: str,
         use_s3_regional_url: bool = False,
+        unsafe_file_write: bool = False,
     ) -> None:
         """Creates a client object with given stage credentials.
 
@@ -55,6 +56,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
             chunk_size=-1,
             credentials=credentials,
             chunked_transfer=False,
+            unsafe_file_write=unsafe_file_write,
         )
         self.stage_info = stage_info
         self._command = command

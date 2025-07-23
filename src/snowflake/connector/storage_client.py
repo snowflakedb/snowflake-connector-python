@@ -77,6 +77,7 @@ class SnowflakeStorageClient(ABC):
         chunked_transfer: bool | None = True,
         credentials: StorageCredential | None = None,
         max_retry: int = 5,
+        unsafe_file_write: bool = False,
     ) -> None:
         self.meta = meta
         self.stage_info = stage_info
@@ -115,6 +116,7 @@ class SnowflakeStorageClient(ABC):
         self.failed_transfers: int = 0
         # only used when PRESIGNED_URL expires
         self.last_err_is_presigned_url = False
+        self.unsafe_file_write = unsafe_file_write
 
     def compress(self) -> None:
         if self.meta.require_compress:
@@ -376,7 +378,7 @@ class SnowflakeStorageClient(ABC):
                 # For storage utils that do not have the privilege of
                 # getting the metadata early, both object and metadata
                 # are downloaded at once. In which case, the file meta will
-                # be updated with all the metadata that we need and
+                # be updated with all the metadata that we need, and
                 # then we can call get_file_header to get just that and also
                 # preserve the idea of getting metadata in the first place.
                 # One example of this is the utils that use presigned url
@@ -390,6 +392,7 @@ class SnowflakeStorageClient(ABC):
                     meta.encryption_material,
                     str(self.intermediate_dst_path),
                     tmp_dir=self.tmp_dir,
+                    unsafe_file_write=self.unsafe_file_write,
                 )
                 shutil.move(tmp_dst_file_name, self.full_dst_file_name)
                 self.intermediate_dst_path.unlink()
