@@ -1,7 +1,10 @@
+import logging
 import pathlib
 from unittest.mock import MagicMock
 
 import pytest
+
+from snowflake.connector.errors import ProgrammingError
 
 try:
     from snowflake.connector import SnowflakeConnection
@@ -104,6 +107,7 @@ def test_put_via_cursor_handles_307_403(
     conn_cnx_wiremock,
     tmp_path,
     object_name,
+    caplog,
 ):
     """Execute a real `PUT` through the connection and ensure the driver copes with
     307 redirect followed by 403 on HEAD requests to S3 (it should raise
@@ -132,16 +136,17 @@ def test_put_via_cursor_handles_307_403(
     test_file.write_text("dummy data")
     wiremock_client.add_mapping(
         wiremock_queries_dir / "put_file_successful.json",
-        placeholders={"{{SRC_FILE}}": test_file.as_uri()},
+        placeholders={"{{SRC_FILE}}": str(test_file)},
     )
 
     conn = conn_cnx_wiremock()
 
     with conn as cxn:
         cur = cxn.cursor()
-        # No need to create stage; use @~ (user stage)
         put_sql = f"PUT file://{test_file} @~/{object_name} AUTO_COMPRESS=FALSE"
-        # with pytest.raises(requests.exceptions.HTTPError):
-        #     cur.execute(put_sql)
-
-        cur.execute(put_sql)
+        with caplog.at_level(logging.DEBUG):
+            with pytest.raises(ProgrammingError) as exc_info:
+                cur.execute(put_sql)
+            assert exc_info.value.errno == 253003
+            assert 'GET / HTTP/1.1" 403' in caplog.text
+            assert 'HTTP/1.1" 307 0' in caplog.text

@@ -29,6 +29,16 @@ def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
         yield client
 
 
+@pytest.fixture(scope="session")
+def wiremock_auth_dir(wiremock_mapping_dir) -> pathlib.Path:
+    return wiremock_mapping_dir / "auth"
+
+
+@pytest.fixture(scope="session")
+def wiremock_queries_dir(wiremock_mapping_dir) -> pathlib.Path:
+    return wiremock_mapping_dir / "queries"
+
+
 @pytest.fixture
 def default_db_wiremock_parameters(wiremock_client: WiremockClient) -> dict[str, Any]:
     db_params = {

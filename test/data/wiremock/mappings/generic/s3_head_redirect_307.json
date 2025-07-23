@@ -1,0 +1,14 @@
+{
+  "scenarioName": "S3 HEAD Redirect 307",
+  "request": {
+    "method": "HEAD",
+    "url": "/path/MANIFEST.yml"
+  },
+  "response": {
+    "status": 307,
+    "headers": {
+      "Location": "/regional/path/MANIFEST.yml",
+      "x-amz-bucket-region": "us-west-2"
+    }
+  }
+}

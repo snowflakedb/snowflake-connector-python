@@ -1,0 +1,60 @@
+{
+  "scenarioName": "Successful PUT file flow",
+  "request": {
+    "urlPathPattern": "/queries/v1/query-request.*",
+    "method": "POST"
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": {
+      "data": {
+        "command": "UPLOAD",
+        "stageInfo": {
+          "locationType": "S3",
+          "location": "bucket/path",
+          "region": "us-west-2",
+          "creds": {
+            "AWS_SECRET_KEY": "",
+            "AWS_KEY_ID": "",
+            "AWS_TOKEN": ""
+          },
+          "endPoint": null
+        },
+        "src_locations": [
+          "{{SRC_FILE}}"
+        ],
+        "overwrite": true,
+        "autoCompress": false,
+        "sourceCompression": "auto_detect",
+        "parallel": 1,
+        "rowtype": [
+          {
+            "name": "status",
+            "database": "",
+            "schema": "",
+            "table": "",
+            "type": "text",
+            "length": null,
+            "scale": null,
+            "precision": null,
+            "nullable": true,
+            "byteLength": null,
+            "collation": null
+          }
+        ],
+        "rowset": [
+          [
+            "1 File(s) uploaded."
+          ]
+        ],
+        "total": 1,
+        "returned": 1,
+        "queryId": "01bdc644-010a-put0-0000-cbd10359b1f6",
+        "queryResultFormat": "json"
+      },
+      "code": null,
+      "message": null,
+      "success": true
+    }
+  }
+}

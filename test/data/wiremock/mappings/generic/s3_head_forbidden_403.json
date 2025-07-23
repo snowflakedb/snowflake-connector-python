@@ -1,0 +1,10 @@
+{
+  "scenarioName": "S3 HEAD Forbidden 403",
+  "request": {
+    "method": "HEAD",
+    "url": "/regional/path/MANIFEST.yml"
+  },
+  "response": {
+    "status": 403
+  }
+}

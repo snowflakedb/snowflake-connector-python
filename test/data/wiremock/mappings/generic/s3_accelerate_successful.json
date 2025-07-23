@@ -1,0 +1,19 @@
+{
+  "scenarioName": "S3 Accelerate Config Successful",
+  "request": {
+    "urlPathPattern": "/",
+    "method": "GET",
+    "queryParameters": {
+      "accelerate": {
+        "matches": ""
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": "<AccelerateConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Status>Enabled</Status></AccelerateConfiguration>",
+    "headers": {
+      "Content-Type": "application/xml"
+    }
+  }
+}
