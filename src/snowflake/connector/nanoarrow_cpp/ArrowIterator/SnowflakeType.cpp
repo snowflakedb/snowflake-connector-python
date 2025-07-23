@@ -17,6 +17,7 @@ std::unordered_map<std::string, SnowflakeType::Type>
         {"DOUBLE PRECISION", SnowflakeType::Type::REAL},
         {"DOUBLE", SnowflakeType::Type::REAL},
         {"FIXED", SnowflakeType::Type::FIXED},
+        {"DECFLOAT", SnowflakeType::Type::DECFLOAT},
         {"FLOAT", SnowflakeType::Type::REAL},
         {"MAP", SnowflakeType::Type::MAP},
         {"OBJECT", SnowflakeType::Type::OBJECT},
