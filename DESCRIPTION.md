@@ -7,6 +7,14 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.16.1(TBD)
+  - Added in-band OCSP exception telemetry.
+  - Added `APPLICATION_PATH` within `CLIENT_ENVIRONMENT` to distinguish between multiple scripts using the PythonConnector in the same environment.
+  - Disabled token caching for OAuth Client Credentials authentication
+  - Added in-band HTTP exception telemetry.
+  - Fixed a bug where timezoned timestamps fetched as pandas.DataFrame or pyarrow.Table would overflow for the sake of unnecessary precision. In the case where an overflow cannot be prevented a clear error will be raised now.
+  - Fix OAuth authenticator values.
+
 - v3.16.0(July 04,2025)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4.
   - Added Windows support for Python 3.13.

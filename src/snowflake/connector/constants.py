@@ -37,6 +37,8 @@ _CHINA_HOSTNAME_TLD = "cn"
 _TOP_LEVEL_DOMAIN_REGEX = r"\.[a-zA-Z]{1,63}$"
 _SNOWFLAKE_HOST_SUFFIX_REGEX = r"snowflakecomputing(\.[a-zA-Z]{1,63}){1,2}$"
 
+_PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS = "ENABLE_FIX_1375538"
+
 
 class FieldType(NamedTuple):
     name: str
@@ -438,5 +440,5 @@ _CONNECTIVITY_ERR_MSG = (
 )
 
 _OAUTH_DEFAULT_SCOPE = "session:role:{role}"
-OAUTH_TYPE_AUTHORIZATION_CODE = "authorization_code"
-OAUTH_TYPE_CLIENT_CREDENTIALS = "client_credentials"
+OAUTH_TYPE_AUTHORIZATION_CODE = "oauth_authorization_code"
+OAUTH_TYPE_CLIENT_CREDENTIALS = "oauth_client_credentials"

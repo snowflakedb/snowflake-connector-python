@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import string
 from enum import Enum
+from inspect import stack
 from random import choice
 from threading import Timer
 from uuid import UUID
@@ -32,6 +33,15 @@ _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING = (
 
 REQUEST_ID_STATEMENT_PARAM_NAME = "requestId"
 
+# Default server side cap on Degree of Parallelism for file transfer
+# This default value is set to 2^30 (~ 10^9), such that it will not
+# throttle regular sessions.
+_DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER = 1 << 30
+# Variable name of server DoP cap for file transfer
+_VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER = (
+    "snowflake_server_dop_cap_for_file_transfer"
+)
+
 
 def generate_random_alphanumeric(length: int = 10) -> str:
     return "".join(choice(ALPHANUMERIC) for _ in range(length))
@@ -60,6 +70,15 @@ def is_uuid4(str_or_uuid: str | UUID) -> bool:
     return uuid_str == str_or_uuid
 
 
+def _snowflake_max_parallelism_for_file_transfer(connection):
+    """Returns the server side cap on max parallelism for file transfer for the given connection."""
+    return getattr(
+        connection,
+        f"_{_VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER}",
+        _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+    )
+
+
 class _TrackedQueryCancellationTimer(Timer):
     def __init__(self, interval, function, args=None, kwargs=None):
         super().__init__(interval, function, args, kwargs)
@@ -68,3 +87,12 @@ class _TrackedQueryCancellationTimer(Timer):
     def run(self):
         super().run()
         self.executed = True
+
+
+def get_application_path() -> str:
+    """Get the path of the application script using the connector."""
+    try:
+        outermost_frame = stack()[-1]
+        return outermost_frame.filename
+    except Exception:
+        return "unknown"
