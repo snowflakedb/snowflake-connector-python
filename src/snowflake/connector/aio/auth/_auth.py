@@ -43,6 +43,7 @@ from ...network import (
     ReauthenticationRequest,
 )
 from ...sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+from ._no_auth import AuthNoAuth
 
 if TYPE_CHECKING:
     from ._by_plugin import AuthByPlugin
@@ -75,6 +76,10 @@ class Auth(AuthSync):
                 " request issue in github: https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose"
             )
         logger.debug("authenticate")
+
+        # For no-auth connection, authentication is no-op, and we can return early here.
+        if isinstance(auth_instance, AuthNoAuth):
+            return {}
 
         if timeout is None:
             timeout = auth_instance.timeout

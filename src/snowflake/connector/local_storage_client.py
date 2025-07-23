@@ -26,8 +26,11 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
         meta: SnowflakeFileMeta,
         stage_info: dict[str, Any],
         chunk_size: int,
+        unsafe_file_write: bool = False,
     ) -> None:
-        super().__init__(meta, stage_info, chunk_size)
+        super().__init__(
+            meta, stage_info, chunk_size, unsafe_file_write=unsafe_file_write
+        )
         self.data_file = meta.src_file_name
         self.full_dst_file_name: str = os.path.join(
             stage_info["location"], os.path.basename(meta.dst_file_name)

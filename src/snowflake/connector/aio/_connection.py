@@ -60,6 +60,7 @@ from ..network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
+    NO_AUTH_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
@@ -87,6 +88,7 @@ from .auth import (
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
+    AuthNoAuth,
 )
 
 logger = getLogger(__name__)
@@ -318,6 +320,8 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
+            elif self._authenticator == NO_AUTH_AUTHENTICATOR:
+                self.auth_class = AuthNoAuth()
             else:
                 # okta URL, e.g., https://<account>.okta.com/
                 self.auth_class = AuthByOkta(
