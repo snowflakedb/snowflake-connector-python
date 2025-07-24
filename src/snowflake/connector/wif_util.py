@@ -123,12 +123,13 @@ def get_aws_region() -> str | None:
     if "AWS_REGION" in os.environ:  # Lambda
         return os.environ["AWS_REGION"]
     else:  # EC2
-        # TODO: add here proxy settings + customization of headers
+        # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
         return InstanceMetadataRegionFetcher().retrieve_region()
 
 
 def get_aws_arn() -> str | None:
     """Get the current AWS workload's ARN, if any."""
+    # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
     caller_identity = boto3.client("sts").get_caller_identity()
     if not caller_identity or "Arn" not in caller_identity:
         return None
@@ -206,6 +207,7 @@ def create_aws_attestation(
 
     If the application isn't running on AWS or no credentials were found, returns None.
     """
+    # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
     aws_creds = boto3.session.Session().get_credentials()
     if not aws_creds:
         logger.debug("No AWS credentials were found.")
