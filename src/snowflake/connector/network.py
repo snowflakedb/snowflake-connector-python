@@ -8,7 +8,7 @@ import re
 import time
 import uuid
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import OpenSSL.SSL
 
@@ -91,7 +91,6 @@ from .time_util import (
 from .tool.probe_connection import probe_connection
 from .vendored import requests
 from .vendored.requests import Response
-from .vendored.requests.adapters import HTTPAdapter
 from .vendored.requests.auth import AuthBase
 from .vendored.requests.exceptions import (
     ConnectionError,
@@ -308,7 +307,6 @@ class SnowflakeRestful:
         protocol: str = "http",
         inject_client_pause: int = 0,
         connection: SnowflakeConnection | None = None,
-        adapter_factory: Callable[[], HTTPAdapter] | None = None,
     ) -> None:
         self._host = host
         self._port = port
@@ -316,14 +314,6 @@ class SnowflakeRestful:
         self._inject_client_pause = inject_client_pause
         self._connection = connection
         self._lock_token = Lock()
-        self._session_manager = SessionManager(
-            use_pooling=(
-                not self._connection.disable_request_pooling
-                if self._connection
-                else True
-            ),
-            adapter_factory=adapter_factory,
-        )
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
         ssl_wrap_socket.FEATURE_OCSP_MODE = (
@@ -389,8 +379,9 @@ class SnowflakeRestful:
         return f"{self._protocol}://{self._host}:{self._port}"
 
     @property
-    def session_manager(self) -> SessionManager:
-        return self._session_manager
+    def session_manager(self) -> SessionManager | None:
+        """Access to the connection's SessionManager for making HTTP requests."""
+        return self._connection.session_manager if self._connection else None
 
     @property
     def sessions_map(self) -> dict[str, SessionPool]:

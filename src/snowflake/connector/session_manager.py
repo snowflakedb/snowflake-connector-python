@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import abc
 import collections
 import contextlib
 import itertools
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Generator, Mapping
 
 from .compat import urlparse
 from .vendored import requests
 from .vendored.requests import Response, Session
-from .vendored.requests.adapters import HTTPAdapter
+from .vendored.requests.adapters import BaseAdapter, HTTPAdapter
 from .vendored.requests.exceptions import InvalidProxyURL
 from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
+from .vendored.urllib3 import PoolManager
 from .vendored.urllib3.poolmanager import ProxyManager
 from .vendored.urllib3.util.url import parse_url
 
@@ -24,6 +26,8 @@ logger = logging.getLogger(__name__)
 REQUESTS_RETRY = 1  # requests library builtin retry
 
 
+# TODO; its important that each separate session manager creates its own adapters - because they are storing internally PoolManagers - which shouldnt be reused if not in scope of the same adapter.
+# TODO: add tests for this lift ticket - making sure
 class ProxySupportAdapter(HTTPAdapter):
     """This Adapter creates proper headers for Proxy CONNECT messages."""
 
@@ -58,6 +62,17 @@ class ProxySupportAdapter(HTTPAdapter):
             conn = self.poolmanager.connection_from_url(url)
 
         return conn
+
+
+class AdapterFactory(abc.ABC):
+    @abc.abstractmethod
+    def __call__(self, *args, **kwargs) -> BaseAdapter:
+        raise NotImplementedError()
+
+
+class ProxySupportAdapterFactory(AdapterFactory):
+    def __call__(self, *args, **kwargs) -> ProxySupportAdapter:
+        return ProxySupportAdapter(*args, **kwargs)
 
 
 class SessionPool:
@@ -103,16 +118,15 @@ class SessionPool:
         self._idle_sessions.clear()
 
 
+# TODO: class NetworkMediator ?
 class SessionManager:
     def __init__(
         self,
         use_pooling: bool = True,
-        adapter_factory: (
-            Callable[..., HTTPAdapter] | None
-        ) = lambda *args, **kwargs: None,
+        adapter_factory: Callable[..., HTTPAdapter] | None = None,
     ):
         self._use_pooling = use_pooling
-        self._adapter_factory = adapter_factory or ProxySupportAdapter
+        self._adapter_factory = adapter_factory or ProxySupportAdapterFactory()
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
         )
@@ -121,22 +135,47 @@ class SessionManager:
     def sessions_map(self) -> dict[str, SessionPool]:
         return self._sessions_map
 
-    def _mount_adapter(self, session: requests.Session) -> None:
-        adapter = self._adapter_factory(max_retries=REQUESTS_RETRY)
-        if adapter is not None:
-            session.mount("http://", adapter)
-            session.mount("https://", adapter)
+    @staticmethod
+    def get_session_pool_manager(session: Session, url: str) -> PoolManager | None:
+        # TODO: add this maybe (check if proxy manager is different than pool_manager)
+        adapter_for_url: HTTPAdapter = session.get_adapter(url)
+        try:
+            return adapter_for_url.poolmanager
+        except AttributeError as no_pool_manager_error:
+            error_message = f"Unable to get pool manager from session for {url}: {no_pool_manager_error}"
+            logger.error(error_message)
+            if not isinstance(adapter_for_url, HTTPAdapter):
+                logger.warning(
+                    f"Adapter was expected to be an HTTPAdapter, got {adapter_for_url.__class__.__name__}"
+                )
+            else:
+                logger.debug(
+                    "Adapter was expected an HTTPAdapter but didn't have attribute 'poolmanager'. This is unexpected behavior."
+                )
+            raise ValueError(error_message)
+
+    def _mount_adapters(self, session: requests.Session) -> None:
+        try:
+            adapter = self._adapter_factory(max_retries=REQUESTS_RETRY)
+            if adapter is not None:
+                session.mount("http://", adapter)
+                session.mount("https://", adapter)
+        except (TypeError, AttributeError) as no_adapter_factory_exception:
+            logger.info(
+                "No adapter factory found. Using session without adapter. Exception: %s",
+                no_adapter_factory_exception,
+            )
+            return
 
     def make_session(self) -> Session:
-        s = requests.Session()
-        self._mount_adapter(s)
-        s._reuse_count = itertools.count()
-        return s
+        session = requests.Session()
+        self._mount_adapters(session)
+        return session
 
     @contextlib.contextmanager
     def use_session(
         self, url: str | None = None, use_pooling: bool | None = None
-    ) -> Session:
+    ) -> Generator[Session, Any, None]:
         use_pooling = use_pooling if use_pooling is not None else self._use_pooling
         if not use_pooling:
             session = self.make_session()
@@ -181,11 +220,21 @@ class SessionManager:
         for pool in self._sessions_map.values():
             pool.close()
 
-    def clone(self, *, use_pooling: bool | None = None) -> SessionManager:
-        """Return an independent manager that reuses the adapter_factory."""
+    def clone(
+        self,
+        *,
+        use_pooling: bool | None = None,
+        adapter_factory: AdapterFactory | None = None,
+    ) -> SessionManager:
+        """Return an independent manager that reuses the adapter_factory.
+        The 'clone' and the 'original' do not share the sessions map, but by default share the same settings and adapter_factory.
+        Those can be overridden using the method's arguments.
+        """
         return SessionManager(
             use_pooling=self._use_pooling if use_pooling is None else use_pooling,
-            adapter_factory=self._adapter_factory,
+            adapter_factory=(
+                self._adapter_factory if adapter_factory is None else adapter_factory
+            ),
         )
 
 
