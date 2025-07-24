@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-from __future__ import annotations
-
 import datetime
 import json
 import logging
@@ -11,14 +9,11 @@ from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
 import jwt
-
-# Boto is left as a development-dependency - to be sure our http requests correspond to the appropriate behavior and old driver tests are passing in the future
 from botocore.awsrequest import AWSRequest
 from botocore.credentials import Credentials
 
 from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
 from snowflake.connector.vendored.requests.models import Response
-from snowflake.connector.wif_util import AwsCredentials
 
 logger = logging.getLogger(__name__)
 
@@ -97,12 +92,11 @@ class FakeMetadataService(ABC):
         """Patches the relevant HTTP calls when entering as a context manager."""
         self.reset_defaults()
         self.patchers = []
-        # Session.request is used by the direct metadata service API calls from our code. This is the main
+        # requests.request is used by the direct metadata service API calls from our code. This is the main
         # thing being faked here.
         self.patchers.append(
             mock.patch(
-                "snowflake.connector.vendored.requests.Session.request",
-                side_effect=self,
+                "snowflake.connector.vendored.requests.request", side_effect=self
             )
         )
         # HTTPConnection.request is used by the AWS boto libraries. We're not mocking those calls here, so we
@@ -250,113 +244,61 @@ class FakeGceMetadataService(FakeMetadataService):
 
 
 class FakeAwsEnvironment:
-    """Emulates AWS for both the legacy boto path and the new SDK-free helpers."""
+    """Emulates the AWS environment-specific functions used in wif_util.py.
+
+    Unlike the other metadata services, the HTTP calls made by AWS are deep within boto libaries, so
+    emulating them here would be complex and fragile. Instead, we emulate the higher-level functions
+    called by the connector code.
+    """
 
     def __init__(self):
         # Defaults used for generating a token. Can be overriden in individual tests.
-        self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-abc123"
+        self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-34afe100cad287fab"
         self.region = "us-east-1"
+        self.credentials = Credentials(access_key="ak", secret_key="sk")
 
-        # boto-style creds (used by old tests / patches)
-        self.boto_creds = Credentials("AKIA123", "SECRET123", token="SESSION_TOKEN")
-
-        # util-style creds (returned by get_aws_credentials)
-        self.util_creds = AwsCredentials(
-            access_key=self.boto_creds.access_key,
-            secret_key=self.boto_creds.secret_key,
-            token=self.boto_creds.token,
-        )
-
-    def get_region(self, *_, **__) -> str:
+    def get_region(self):
         return self.region
 
-    def get_arn(self, *_, **__) -> str:
+    def get_arn(self):
         return self.arn
 
-    def get_boto_credentials(self, *_, **__) -> Credentials | None:
-        return self.boto_creds
+    def get_credentials(self):
+        return self.credentials
 
-    def get_aws_credentials(self, *_, **__) -> AwsCredentials | None:
-        return self.util_creds
-
-    def sign_request(self, request: AWSRequest) -> None:
-        """
-        Fake replacement for botocore SigV4Auth.add_auth that produces the same
-        *static* parts of the Authorization header (everything before
-        `Signature=`).
-        """
-        # Add the headers a real signer would inject
-        utc_now = datetime.datetime.utcnow()
-        amz_date = utc_now.strftime("%Y%m%dT%H%M%SZ")
-        date_stamp = utc_now.strftime("%Y%m%d")
-
-        request.headers["X-Amz-Date"] = amz_date
-        request.headers["X-Amz-Security-Token"] = self.util_creds.token
-
-        # Host header is already set by the test; add it if a future test forgets
-        if "Host" not in request.headers:
-            request.headers["Host"] = urlparse(request.url).netloc
-
-        # Build the signed-headers list
-        signed_headers = ";".join(sorted(h.lower() for h in request.headers.keys()))
-
-        credential_scope = f"{date_stamp}/{self.region}/sts/aws4_request"
-
-        request.headers["Authorization"] = (
-            "AWS4-HMAC-SHA256 "
-            f"Credential={self.util_creds.access_key}/{credential_scope}, "
-            f"SignedHeaders={signed_headers}, Signature=<sig>"
+    def sign_request(self, request: AWSRequest):
+        request.headers.add_header("X-Amz-Date", datetime.time().isoformat())
+        request.headers.add_header("X-Amz-Security-Token", "<TOKEN>")
+        request.headers.add_header(
+            "Authorization",
+            f"AWS4-HMAC-SHA256 Credential=<cred>, SignedHeaders={';'.join(request.headers.keys())}, Signature=<sig>",
         )
 
     def __enter__(self):
-        # Preserve existing env and then set creds/region for util fallback
-        self._old_env = {
-            k: os.environ.get(k)
-            for k in (
-                "AWS_ACCESS_KEY_ID",
-                "AWS_SECRET_ACCESS_KEY",
-                "AWS_SESSION_TOKEN",
-                "AWS_REGION",
-            )
-        }
-        os.environ.update(
-            {
-                "AWS_ACCESS_KEY_ID": self.util_creds.access_key,
-                "AWS_SECRET_ACCESS_KEY": self.util_creds.secret_key,
-                "AWS_SESSION_TOKEN": self.util_creds.token or "",
-                "AWS_REGION": self.region,
-            }
-        )
-
-        self.patchers = [
-            # boto patches - for old driver tests
+        # Patch the relevant functions to do what we want.
+        self.patchers = []
+        self.patchers.append(
             mock.patch(
                 "boto3.session.Session.get_credentials",
-                side_effect=self.get_boto_credentials,
-            ),
+                side_effect=self.get_credentials,
+            )
+        )
+        self.patchers.append(
             mock.patch(
                 "botocore.auth.SigV4Auth.add_auth", side_effect=self.sign_request
-            ),
-            # http approach patches - for new driver tests
+            )
+        )
+        self.patchers.append(
             mock.patch(
                 "snowflake.connector.wif_util.get_aws_region",
                 side_effect=self.get_region,
-            ),
+            )
+        )
+        self.patchers.append(
             mock.patch(
-                "snowflake.connector.wif_util.get_aws_credentials",
-                side_effect=self.get_aws_credentials,
-            ),
-            mock.patch(
-                "snowflake.connector.wif_util.get_aws_arn",
-                side_effect=self.get_arn,
-                create=True,
-            ),
-            # never contact IMDS for token
-            mock.patch(
-                "snowflake.connector.wif_util._imds_v2_token", return_value=None
-            ),
-        ]
-
+                "snowflake.connector.wif_util.get_aws_arn", side_effect=self.get_arn
+            )
+        )
         for patcher in self.patchers:
             patcher.__enter__()
         return self
@@ -364,10 +306,3 @@ class FakeAwsEnvironment:
     def __exit__(self, *args, **kwargs):
         for patcher in self.patchers:
             patcher.__exit__(*args, **kwargs)
-
-        # restore previous env
-        for k, v in self._old_env.items():
-            if v is None:
-                os.environ.pop(k, None)
-            else:
-                os.environ[k] = v
