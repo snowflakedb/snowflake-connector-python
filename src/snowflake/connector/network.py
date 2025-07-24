@@ -79,7 +79,7 @@ from .errors import (
     ServiceUnavailableError,
     TooManyRequests,
 )
-from .session_manager import SessionManager, SessionPool
+from .session_manager import ProxySupportAdapterFactory, SessionManager, SessionPool
 from .sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
     SQLSTATE_CONNECTION_REJECTED,
@@ -315,6 +315,11 @@ class SnowflakeRestful:
         self._protocol = protocol
         self._inject_client_pause = inject_client_pause
         self._connection = connection
+        self._session_manager = (
+            connection.session_manager
+            if connection
+            else SessionManager(adapter_factory=ProxySupportAdapterFactory())
+        )
         self._lock_token = Lock()
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
@@ -381,9 +386,8 @@ class SnowflakeRestful:
         return f"{self._protocol}://{self._host}:{self._port}"
 
     @property
-    def session_manager(self) -> SessionManager | None:
-        """Access to the connection's SessionManager for making HTTP requests."""
-        return self._connection.session_manager if self._connection else None
+    def session_manager(self) -> SessionManager:
+        return self._session_manager
 
     @property
     def sessions_map(self) -> dict[str, SessionPool]:
@@ -399,7 +403,7 @@ class SnowflakeRestful:
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
 
-        self._session_manager.close()
+        self.session_manager.close()
 
     def request(
         self,

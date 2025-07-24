@@ -130,6 +130,22 @@ class SessionManager:
         )
 
     @property
+    def use_pooling(self) -> bool:
+        return self._use_pooling
+
+    @use_pooling.setter
+    def use_pooling(self, value: bool) -> None:
+        self._use_pooling = value
+
+    @property
+    def adapter_factory(self) -> AdapterFactory:
+        return self._adapter_factory
+
+    @adapter_factory.setter
+    def adapter_factory(self, value: AdapterFactory) -> None:
+        self._adapter_factory = value
+
+    @property
     def sessions_map(self) -> dict[str, SessionPool]:
         return self._sessions_map
 

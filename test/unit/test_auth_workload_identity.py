@@ -240,7 +240,8 @@ def test_get_aws_sts_hostname_valid_and_invalid_inputs(
 def test_explicit_gcp_metadata_server_error_raises_auth_error(exception):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.GCP)
     with mock.patch(
-        "snowflake.connector.vendored.requests.request", side_effect=exception
+        "snowflake.connector.vendored.requests.sessions.Session.request",
+        side_effect=exception,
     ):
         with pytest.raises(ProgrammingError) as excinfo:
             auth_class.prepare(conn=None)
@@ -298,7 +299,8 @@ def test_explicit_gcp_generates_unique_assertion_content(
 def test_explicit_azure_metadata_server_error_raises_auth_error(exception):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
     with mock.patch(
-        "snowflake.connector.vendored.requests.request", side_effect=exception
+        "snowflake.connector.vendored.requests.sessions.Session.request",
+        side_effect=exception,
     ):
         with pytest.raises(ProgrammingError) as excinfo:
             auth_class.prepare(conn=None)
