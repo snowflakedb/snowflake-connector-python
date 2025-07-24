@@ -374,6 +374,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-2096721: External (Spark) session ID
     ),
+    "unsafe_file_write": (
+        False,
+        bool,
+    ),  # SNOW-1944208: add unsafe write flag
     _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER: (
         _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
         int,  # type
@@ -1268,12 +1272,6 @@ class SnowflakeConnection:
                         host=self.host, port=self.port
                     ),
                     scope=self._oauth_scope,
-                    token_cache=(
-                        auth.get_token_cache()
-                        if self._client_store_temporary_credential
-                        else None
-                    ),
-                    refresh_token_enabled=self._oauth_enable_refresh_tokens,
                     connection=self,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
@@ -1417,11 +1415,6 @@ class SnowflakeConnection:
         if "account" in kwargs:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
-
-        if "unsafe_file_write" in kwargs:
-            self._unsafe_file_write = kwargs["unsafe_file_write"]
-        else:
-            self._unsafe_file_write = False
 
         logger.info(
             f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), 'GLOBAL')} Snowflake domain"
