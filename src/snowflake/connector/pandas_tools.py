@@ -398,7 +398,7 @@ def write_pandas(
     # use_logical_type should be True when dataframe contains datetimes with timezone.
     # https://github.com/snowflakedb/snowflake-connector-python/issues/1687
     if not use_logical_type and any(
-        [pandas.api.types.is_datetime64tz_dtype(df[c]) for c in df.columns]
+        [isinstance(df[c], pandas.DatetimeTZDtype) for c in df.columns]
     ):
         warnings.warn(
             "Dataframe contains a datetime with timezone column, but "
