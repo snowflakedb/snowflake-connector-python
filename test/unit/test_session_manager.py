@@ -44,7 +44,7 @@ def create_session(
     """
     if num_sessions == 0:
         return
-    with rest.session_manager.use_session(url):
+    with rest.session_manager.use_requests_session(url):
         create_session(rest, num_sessions - 1, url)
 
 

@@ -8,7 +8,7 @@ import re
 import time
 import uuid
 from threading import Lock
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generator
 
 import OpenSSL.SSL
 
@@ -92,7 +92,7 @@ from .time_util import (
 )
 from .tool.probe_connection import probe_connection
 from .vendored import requests
-from .vendored.requests import Response
+from .vendored.requests import Response, Session
 from .vendored.requests.auth import AuthBase
 from .vendored.requests.exceptions import (
     ConnectionError,
@@ -1187,5 +1187,8 @@ class SnowflakeRestful:
         except Exception as err:
             raise err
 
-    def _use_requests_session(self, url=None):
-        return self._session_manager.use_session(url)
+    def _use_requests_session(self, url=None) -> Generator[Session, Any, None]:
+        """
+        Method kept for backward compatibility.
+        """
+        return self.session_manager.use_requests_session(url)

@@ -173,7 +173,7 @@ class SessionManager:
         return session
 
     @contextlib.contextmanager
-    def use_session(
+    def use_requests_session(
         self, url: str | bytes | None = None, use_pooling: bool | None = None
     ) -> Generator[Session, Any, None]:
         use_pooling = use_pooling if use_pooling is not None else self._use_pooling
@@ -207,7 +207,7 @@ class SessionManager:
         This wraps :pymeth:`use_session` so callers don’t have to manage the
         context manager themselves.
         """
-        with self.use_session(url, use_pooling) as session:
+        with self.use_requests_session(url, use_pooling) as session:
             return session.request(
                 method=method.upper(),
                 url=url,
