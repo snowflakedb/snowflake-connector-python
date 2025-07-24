@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 
+from .._utils import get_application_path
 from ..compat import urlencode
 from ..constants import (
     DAY_IN_SECONDS,
@@ -112,6 +113,7 @@ class Auth:
                 "LOGIN_NAME": user,
                 "CLIENT_ENVIRONMENT": {
                     "APPLICATION": application,
+                    "APPLICATION_PATH": get_application_path(),
                     "OS": OPERATING_SYSTEM,
                     "OS_VERSION": PLATFORM,
                     "PYTHON_VERSION": PYTHON_VERSION,
