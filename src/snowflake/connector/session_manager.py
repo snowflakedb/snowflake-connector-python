@@ -26,8 +26,6 @@ logger = logging.getLogger(__name__)
 REQUESTS_RETRY = 1  # requests library builtin retry
 
 
-# TODO; its important that each separate session manager creates its own adapters - because they are storing internally PoolManagers - which shouldnt be reused if not in scope of the same adapter.
-# TODO: add tests for this lift ticket - making sure
 class ProxySupportAdapter(HTTPAdapter):
     """This Adapter creates proper headers for Proxy CONNECT messages."""
 
@@ -156,6 +154,7 @@ class SessionManager:
 
     def _mount_adapters(self, session: requests.Session) -> None:
         try:
+            # Its important that each separate session manager creates its own adapters - because they are storing internally PoolManagers - which shouldn't be reused if not in scope of the same adapter.
             adapter = self._adapter_factory(max_retries=REQUESTS_RETRY)
             if adapter is not None:
                 session.mount("http://", adapter)

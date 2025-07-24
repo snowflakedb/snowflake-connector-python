@@ -235,7 +235,7 @@ class AuthByOkta(AuthByPlugin):
             "username": user,
             "password": password,
         }
-        ret = conn._rest.fetch(
+        ret = conn.rest.fetch(
             "post",
             token_url,
             headers,
@@ -285,7 +285,7 @@ class AuthByOkta(AuthByPlugin):
                     HTTP_HEADER_ACCEPT: "*/*",
                 }
                 remaining_timeout = timeout_time - time.time() if timeout_time else None
-                response_html = conn._rest.fetch(
+                response_html = conn.rest.fetch(
                     "get",
                     sso_url,
                     headers,
