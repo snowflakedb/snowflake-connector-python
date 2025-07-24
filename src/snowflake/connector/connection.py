@@ -511,10 +511,8 @@ class SnowflakeConnection:
             PLATFORM,
         )
 
-        self._session_manager: SessionManager = SessionManager(
-            use_pooling=(not self.disable_request_pooling),
-        )
-        self._rest = None
+        self._session_manager: SessionManager | None = None
+        self._rest: SnowflakeRestful | None = None
         for name, (value, _) in DEFAULT_CONFIGURATION.items():
             setattr(self, f"_{name}", value)
 
@@ -890,6 +888,10 @@ class SnowflakeConnection:
         logger.debug("connect")
         if len(kwargs) > 0:
             self.__config(**kwargs)
+
+        self._session_manager = SessionManager(
+            use_pooling=(not self.disable_request_pooling),
+        )
 
         if self.enable_connection_diag:
             exceptions_dict = {}

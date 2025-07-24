@@ -325,8 +325,8 @@ class ResultBatch(abc.ABC):
                         "timeout": DOWNLOAD_TIMEOUT,
                     }
                     # Try to reuse a connection if possible
-                    if connection and connection._rest is not None:
-                        with connection._rest._use_requests_session() as session:
+                    if connection and connection.session_manager is not None:
+                        with connection.session_manager.use_session() as session:
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )

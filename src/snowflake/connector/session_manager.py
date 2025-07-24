@@ -174,7 +174,7 @@ class SessionManager:
 
     @contextlib.contextmanager
     def use_session(
-        self, url: str | None = None, use_pooling: bool | None = None
+        self, url: str | bytes | None = None, use_pooling: bool | None = None
     ) -> Generator[Session, Any, None]:
         use_pooling = use_pooling if use_pooling is not None else self._use_pooling
         if not use_pooling:
