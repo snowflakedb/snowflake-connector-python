@@ -421,7 +421,8 @@ def test_invalid_default_parameters(db_parameters):
         # must not success
         snowflake.connector.connect(
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             host=db_parameters["host"],
             port=db_parameters["port"],
             account=db_parameters["account"],
@@ -435,7 +436,8 @@ def test_invalid_default_parameters(db_parameters):
         # must not success
         snowflake.connector.connect(
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             host=db_parameters["host"],
             port=db_parameters["port"],
             account=db_parameters["account"],
@@ -449,7 +451,8 @@ def test_invalid_default_parameters(db_parameters):
         # must not success
         snowflake.connector.connect(
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             host=db_parameters["host"],
             port=db_parameters["port"],
             account=db_parameters["account"],
@@ -465,7 +468,8 @@ def test_invalid_default_parameters(db_parameters):
         # must not success
         snowflake.connector.connect(
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             host=db_parameters["host"],
             port=db_parameters["port"],
             account=db_parameters["account"],
@@ -554,7 +558,8 @@ def test_invalid_proxy(db_parameters):
             protocol="http",
             account="testaccount",
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             host=db_parameters["host"],
             port=db_parameters["port"],
             login_timeout=5,
@@ -660,7 +665,8 @@ def test_disable_request_pooling(db_parameters):
     """Creates a connection with client_session_keep_alive parameter."""
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],
@@ -894,7 +900,8 @@ def test_invalid_connection_parameter(db_parameters, name, value, exc_warn):
         conn_params = {
             "account": db_parameters["account"],
             "user": db_parameters["user"],
-            "password": db_parameters["password"],
+            "authenticator": db_parameters["authenticator"],
+            "private_key_file": db_parameters["private_key_file"],
             "schema": db_parameters["schema"],
             "database": db_parameters["database"],
             "protocol": db_parameters["protocol"],
@@ -923,7 +930,8 @@ def test_invalid_connection_parameters_turned_off(db_parameters):
         conn_params = {
             "account": db_parameters["account"],
             "user": db_parameters["user"],
-            "password": db_parameters["password"],
+            "authenticator": db_parameters["authenticator"],
+            "private_key_file": db_parameters["private_key_file"],
             "schema": db_parameters["schema"],
             "database": db_parameters["database"],
             "protocol": db_parameters["protocol"],
@@ -953,7 +961,8 @@ def test_invalid_connection_parameters_only_warns(db_parameters):
         conn_params = {
             "account": db_parameters["account"],
             "user": db_parameters["user"],
-            "password": db_parameters["password"],
+            "authenticator": db_parameters["authenticator"],
+            "private_key_file": db_parameters["private_key_file"],
             "schema": db_parameters["schema"],
             "database": db_parameters["database"],
             "protocol": db_parameters["protocol"],
