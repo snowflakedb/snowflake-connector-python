@@ -83,7 +83,7 @@ DEFAULT_PARAMETERS: dict[str, Any] = {
     "host": "<host>",
     "port": "443",
     "authenticator": "<authenticator>",
-    "private_key": "<private_key_file>",
+    "private_key": "<private_key>",
 }
 
 
