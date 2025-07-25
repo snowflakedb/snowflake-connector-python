@@ -8,6 +8,7 @@ import time
 from datetime import date, datetime
 from datetime import time as dt_t
 from datetime import timedelta, timezone, tzinfo
+from decimal import Decimal
 from functools import partial
 from logging import getLogger
 from math import ceil
@@ -22,6 +23,12 @@ from .errorcode import ER_NOT_SUPPORT_DATA_TYPE
 from .errors import ProgrammingError
 from .sfbinaryformat import binary_to_python, binary_to_snowflake
 from .sfdatetime import sfdatetime_total_seconds_from_timedelta
+from .type_wrappers import (
+    snowflake_array,
+    snowflake_map,
+    snowflake_object,
+    snowflake_variant,
+)
 
 if TYPE_CHECKING:
     from numpy import bool_, int64
@@ -80,6 +87,8 @@ PYTHON_TO_SNOWFLAKE_TYPE = {
 
 # Type alias
 SnowflakeConverterType = Callable[[Any], Any]
+
+JSON_FORMAT_STR = "json"
 
 
 def convert_datetime_to_epoch(dt: datetime) -> float:
@@ -145,6 +154,12 @@ def _adjust_fraction_of_nanoseconds(value: str, max_fraction: int, scale: int) -
 def _generate_tzinfo_from_tzoffset(tzoffset_minutes: int) -> tzinfo:
     """Generates tzinfo object from tzoffset."""
     return pytz.FixedOffset(tzoffset_minutes)
+
+
+def infer_snowflake_type(value: Any) -> str | None:
+    """Returns Snowflake data type for the value. This is used for qmark parameter style."""
+    type_name = value.__class__.__name__.lower()
+    return PYTHON_TO_SNOWFLAKE_TYPE.get(type_name)
 
 
 class SnowflakeConverter:
@@ -355,11 +370,6 @@ class SnowflakeConverter:
     ) -> Callable:
         return lambda value: value in ("1", "TRUE")
 
-    def snowflake_type(self, value: Any) -> str | None:
-        """Returns Snowflake data type for the value. This is used for qmark parameter style."""
-        type_name = value.__class__.__name__.lower()
-        return PYTHON_TO_SNOWFLAKE_TYPE.get(type_name)
-
     def to_snowflake_bindings(self, snowflake_type: str, value: Any) -> str:
         """Converts Python data to snowflake data for qmark and numeric parameter style.
 
@@ -370,9 +380,31 @@ class SnowflakeConverter:
             snowflake_type, value
         )
 
+    def to_snowflake_bindings_dict(
+        self, snowflake_type: str, value: Any
+    ) -> dict[str, Any]:
+        """Converts Python data to snowflake bindings dict dor qmark and numeric parameter style.
+
+        The output is bound in a query in the server side.
+        """
+        type_name = value.__class__.__name__.lower()
+        return getattr(self, f"_{type_name}_to_snowflake_bindings_dict")(
+            snowflake_type, value
+        )
+
     def _str_to_snowflake_bindings(self, _, value: str) -> str:
         # NOTE: str type is always taken as a text data and never binary
         return str(value)
+
+    def _str_to_snowflake_bindings_dict(
+        self, snowflake_type: str, value: str
+    ) -> dict[str, Any]:
+        return {
+            "type": snowflake_type,
+            "value": str(value),
+            "schema": None,
+            "fmt": JSON_FORMAT_STR,
+        }
 
     def _date_to_snowflake_bindings_in_bulk_insertion(self, value: date) -> str:
         # notes: this is for date type bulk insertion, it's different from non-bulk date type insertion flow
@@ -402,6 +434,14 @@ class SnowflakeConverter:
 
     def _nonetype_to_snowflake_bindings(self, *_) -> None:
         return None
+
+    def _nonetype_to_snowflake_bindings_dict(self, *_) -> dict[str, Any]:
+        return {
+            "type": "ANY",
+            "value": None,
+            "schema": None,
+            "format": JSON_FORMAT_STR,
+        }
 
     def _date_to_snowflake_bindings(self, _, value: date) -> str:
         # this is for date type non-bulk insertion, it's different from bulk date type insertion flow
@@ -473,6 +513,183 @@ class SnowflakeConverter:
         return (
             str(hours * 3600 + mins * 60 + secs) + f"{value.microseconds:06d}" + "000"
         )
+
+    def _python_object_to_structured_type_field(self, value: Any) -> Any:
+        """Converts a Python object to a structured type field."""
+        if isinstance(value, datetime):
+            return value.strftime("%a, %d %b %Y %H:%M:%S %Z")
+        elif isinstance(value, date):
+            return value.strftime("%Y-%m-%d")
+        elif isinstance(value, time.struct_time) or isinstance(value, dt_t):
+            return time.strftime("%a, %d %b %Y %H:%M:%S %Z", value)
+        elif isinstance(value, timedelta):
+            return self._timedelta_to_snowflake_bindings("TIME", value)
+        elif isinstance(value, bytes) or isinstance(value, bytearray):
+            return self._bytes_to_snowflake_bindings(None, value)
+        elif isinstance(value, numpy.int64):
+            return int(value)
+        elif isinstance(value, Decimal):
+            return float(value)
+        elif isinstance(value, snowflake_array):
+            return self._snowflake_array_to_snowflake_bindings(value)
+        elif isinstance(value, snowflake_object):
+            return self._snowflake_object_to_snowflake_bindings(value)
+        else:
+            return value
+
+    def _snowflake_array_to_snowflake_bindings(
+        self, value: snowflake_array
+    ) -> list[Any]:
+        if not value:
+            return []
+
+        converted_values = []
+        # TODO: is this an edge case that needs to be handled
+
+        if value.original_type == bytearray:
+            # bytearray when converted to snowflake_array becomes an array of int. The reasonable expectation would be
+            # for it to be binded as an array of individual bytes the same way as array of bytes value is binded.
+            return [self._bytes_to_snowflake_bindings(None, bytes([v])) for v in value]
+
+        for v in value:
+            if isinstance(v, snowflake_object):
+                converted_values.append(self._snowflake_object_to_snowflake_bindings(v))
+            elif isinstance(v, snowflake_array):
+                converted_values.append(self._snowflake_array_to_snowflake_bindings(v))
+            else:
+                converted_values.append(self._python_object_to_structured_type_field(v))
+
+        return converted_values
+
+    def _snowflake_array_to_snowflake_bindings_dict(
+        self, _, value: snowflake_array
+    ) -> dict[str, Any]:
+        if not value:
+            return {
+                "type": "ARRAY",
+                "value": "[]",
+                "fmt": JSON_FORMAT_STR,
+                "schema": None,
+            }
+
+        return {
+            "type": "ARRAY",
+            "value": json.dumps(self._snowflake_array_to_snowflake_bindings(value)),
+            "fmt": JSON_FORMAT_STR,
+        }
+
+    def _snowflake_object_to_snowflake_bindings(
+        self, value: snowflake_object
+    ) -> dict[str, Any]:
+        if not value:
+            return {}
+
+        converted_object = {}
+
+        for key, v in value.items():
+            if type(key) is not str:
+                logger.info(
+                    "snowflake_object key %s is not a string. Converting to string.",
+                    key,
+                )
+                key = str(key)
+
+            converted_object[key] = self._python_object_to_structured_type_field(v)
+
+        return converted_object
+
+    def _snowflake_object_to_snowflake_bindings_dict(
+        self, _, value: snowflake_object
+    ) -> dict[str, Any]:
+        if not value:
+            return {
+                "type": "OBJECT",
+                "value": "{}",
+                "fmt": JSON_FORMAT_STR,
+                "schema": None,
+            }
+
+        return {
+            "type": "OBJECT",
+            "value": json.dumps(self._snowflake_object_to_snowflake_bindings(value)),
+            "fmt": JSON_FORMAT_STR,
+            "schema": None,
+        }
+
+    def _snowflake_variant_to_snowflake_bindings_dict(
+        self, _, value: snowflake_variant
+    ) -> dict[str, Any]:
+        return {
+            "type": "VARIANT",
+            "value": json.dumps(value.value),
+            "fmt": JSON_FORMAT_STR,
+            "schema": None,
+        }
+
+    def _snowflake_map_to_snowflake_bindings(
+        self, value: snowflake_map
+    ) -> dict[Any, Any]:
+        """Converts snowflake_map to a dictionary for binding."""
+        if not value:
+            return {}
+
+        converted_map = {}
+        key_type = None
+        value_type = None
+        for key, v in value.items():
+            new_key_type = infer_snowflake_type(key)
+            new_value_type = infer_snowflake_type(v)
+
+            if key_type and new_key_type != key_type:
+                raise ValueError("Keys in snowflake_map must be of the same type.")
+            else:
+                key_type = new_key_type
+
+            if value_type and new_value_type != value_type:
+                raise ValueError("Values in snowflake_map must be of the same type.")
+            else:
+                value_type = new_value_type
+
+            if key in converted_map:
+                logger.warning(
+                    "Duplicate key found in snowflake_map: %s. Overwriting the value.",
+                    key,
+                )
+            converted_map[key] = self._python_object_to_structured_type_field(v)
+
+        return converted_map
+
+    def _snowflake_map_to_snowflake_bindings_dict(
+        self, _, value: snowflake_map
+    ) -> dict[str, Any]:
+        if not value:
+            return {
+                "type": "OBJECT",
+                "value": "{}",
+                "fmt": JSON_FORMAT_STR,
+                "schema": None,
+            }
+
+        return {
+            "type": "OBJECT",
+            "value": json.dumps(self._snowflake_map_to_snowflake_bindings(value)),
+            "nullable": True,
+            "fmt": JSON_FORMAT_STR,
+            "schema": {
+                "type": "MAP",
+                "nullable": True,
+                "fields": [
+                    {
+                        "type": value.key_type,
+                        **value.key_attributes,
+                    },
+                    {
+                        "type": value.value_type,
+                        **value.value_attributes,
+                    },
+                ],
+            },
+        }
 
     def to_snowflake(self, value: Any) -> Any:
         """Converts Python data to Snowflake data for pyformat/format style.
@@ -690,7 +907,7 @@ class SnowflakeConverter:
                 # to_csv_bindings is only used in bulk insertion logic
                 val = self._date_to_snowflake_bindings_in_bulk_insertion(value)
             else:
-                _type = self.snowflake_type(value)
+                _type = infer_snowflake_type(value)
                 val = self.to_snowflake_bindings(_type, value)
         return self.escape_for_csv(val)
 

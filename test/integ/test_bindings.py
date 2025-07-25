@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import calendar
+import json
+import math
 import tempfile
 import time
 from datetime import date, datetime
@@ -13,9 +15,16 @@ from unittest.mock import patch
 import pendulum
 import pytest
 import pytz
+from numpy import long
 
 from snowflake.connector.converter import convert_datetime_to_epoch
 from snowflake.connector.errors import ForbiddenError, ProgrammingError
+from snowflake.connector.type_wrappers import (
+    snowflake_array,
+    snowflake_map,
+    snowflake_object,
+    snowflake_variant,
+)
 
 try:
     from snowflake.connector.util_text import random_string
@@ -695,3 +704,293 @@ def test_timestamp_bindings(
                     assert r[0].replace(tzinfo=None) == expected.replace(tzinfo=None)
                 else:
                     assert r[0] == expected
+
+
+@pytest.mark.skipolddriver
+def test_binding_variant(conn_cnx):
+    pytest.skip("Server-side binding of VARIANT type is not supported")
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        snowflake_type = "VARIANT"
+        cursor.execute(f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
+        cursor.execute(bind_query, params=(snowflake_variant(None),))
+        cursor.execute(bind_query, params=(snowflake_variant(""),))
+        cursor.execute(bind_query, params=(snowflake_variant([1, 2, 3]),))
+        cursor.execute(
+            bind_query,
+            params=(snowflake_variant("{'a': 1, 'b': 2, 'c': 3}"),),
+        )
+        cursor.execute(
+            bind_query,
+            params=(snowflake_variant({"a": 1, "b": 2, "c": 3}),),
+        )
+
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
+
+        assert results[0][0] is None
+        assert results[1][0] is None
+        assert json.loads(results[2][0]) == [1, 2, 3]
+        assert json.loads(results[3][0]) == {"a": 1, "b": 2, "c": 3}
+        assert json.loads(results[4][0]) == {"a": 1, "b": 2, "c": 3}
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "write_value, read_value",
+    [
+        ([], []),
+        ([None], [None]),
+        ([1, 2, 3], [1, 2, 3]),
+        (["a", "b", "c"], ["a", "b", "c"]),
+        ([1, "2", 3], [1, "2", 3]),
+        (
+            [
+                datetime.strptime("2020-01-01", "%Y-%m-%d"),
+                datetime.strptime("2020-01-02", "%Y-%m-%d"),
+            ],
+            [
+                "Wed, 01 Jan 2020 00:00:00 ",
+                "Thu, 02 Jan 2020 00:00:00 ",
+            ],
+        ),
+        (
+            [
+                time.strptime("30 Nov 00", "%d %b %y"),
+                time.strptime("30 Nov 01", "%d %b %y"),
+            ],
+            [
+                "Thu, 30 Nov 2000 00:00:00 ",
+                "Fri, 30 Nov 2001 00:00:00 ",
+            ],
+        ),
+        (
+            [
+                timedelta(days=365),
+                timedelta(hours=1),
+            ],
+            ["31536000000000000", "3600000000000"],
+        ),
+        ([True, False, True], [True, False, True]),
+        ([b"123", b"HEX", b"3"], ["313233", "484558", "33"]),
+        (
+            [long(10), long(-2147483647), long(2147483647)],
+            [10, -2147483647, 2147483647],
+        ),
+        ([math.pi, 1.1, 1.2], [3.141592653589793, 1.1, 1.2]),
+        ([Decimal(10.10), Decimal(-5.001), Decimal(-5.5)], [10.1, -5.001, -5.5]),
+        ([bytearray(b"abc"), bytearray(b"def")], ["616263", "646566"]),
+        (bytearray(b"123"), ["31", "32", "33"]),
+        ([1, snowflake_array([1, 2, 3])], [1, [1, 2, 3]]),
+        (
+            [1, snowflake_object({"a": 1, "b": 2, "c": 3})],
+            [1, {"a": 1, "b": 2, "c": 3}],
+        ),
+    ],
+    ids=[
+        "empty_array",
+        "array_with_nulls",
+        "array_with_integers",
+        "array_with_strings",
+        "array_with_mixed_types",
+        "array_with_dates",
+        "array_with_times",
+        "array_with_timedeltas",
+        "array_with_booleans",
+        "array_with_bytes",
+        "array_with_long_integers",
+        "array_with_floats",
+        "array_with_decimals",
+        "array_with_bytearrays",
+        "array_with_bytearray_single_value",
+        "nested_array",
+        "nested_object",
+    ],
+)
+def test_binding_array_without_schema(conn_cnx, write_value, read_value):
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 ARRAY);")
+        cursor.execute(bind_query, params=(snowflake_array(write_value),))
+
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
+
+        assert json.loads(results[0][0]) == read_value
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "write_value, read_value",
+    [
+        (None, {}),
+        ({}, {}),
+        ({"a": 1, "b": 2, "c": 3}, {"a": 1, "b": 2, "c": 3}),
+        ({1: 1, 2: 2, "c": 3}, {"1": 1, "2": 2, "c": 3}),
+        (
+            {"Jan 1st 2020": datetime.strptime("2020-01-01", "%Y-%m-%d")},
+            {"Jan 1st 2020": "Wed, 01 Jan 2020 00:00:00 "},
+        ),
+        (
+            {
+                "Nov 30th 2000": time.strptime("30 Nov 00", "%d %b %y"),
+                "Nov 30th 2001": time.strptime("30 Nov 01", "%d %b %y"),
+            },
+            {
+                "Nov 30th 2000": "Thu, 30 Nov 2000 00:00:00 ",
+                "Nov 30th 2001": "Fri, 30 Nov 2001 00:00:00 ",
+            },
+        ),
+        (
+            {
+                "year": timedelta(days=365),
+                "hour": timedelta(hours=1),
+            },
+            {"year": "31536000000000000", "hour": "3600000000000"},
+        ),
+        ({"a": True, "b": False, "c": False}, {"a": True, "b": False, "c": False}),
+        ({1: b"123", 2: b"HEX", 3: b"3"}, {"1": "313233", "2": "484558", "3": "33"}),
+        (
+            {1: long(10), 2: long(-2147483647), 3: long(2147483647)},
+            {"1": 10, "2": -2147483647, "3": 2147483647},
+        ),
+        ({1: math.pi, 2: 1.1, 3: 1.2}, {"1": math.pi, "2": 1.1, "3": 1.2}),
+        (
+            {1: Decimal(10.10), 2: Decimal(-5.001), 3: Decimal(-5.5)},
+            {"1": 10.1, "2": -5.001, "3": -5.5},
+        ),
+        (
+            {1: bytearray(b"abc"), 2: bytearray(b"def")},
+            {"1": "616263", "2": "646566"},
+        ),
+        ({1: [1, 2, 3]}, {"1": [1, 2, 3]}),
+        ({1: {1: 1, 2: 2, 3: 3}}, {"1": {"1": 1, "2": 2, "3": 3}}),
+    ],
+    ids=[
+        "none_object",
+        "empty_object",
+        "object_with_integers",
+        "object_with_mixed_types",
+        "object_with_dates",
+        "object_with_times",
+        "object_with_timedeltas",
+        "object_with_booleans",
+        "object_with_bytes",
+        "object_with_long_integers",
+        "object_with_floats",
+        "object_with_decimals",
+        "object_with_bytearrays",
+        "nested_array",
+        "nested_object",
+    ],
+)
+def test_binding_object_without_schema(conn_cnx, write_value, read_value):
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 OBJECT);")
+        cursor.execute(bind_query, params=(snowflake_object(write_value),))
+
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
+
+        assert json.loads(results[0][0]) == read_value
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "snowflake_type, write_value, read_value",
+    [
+        ("MAP(NUMBER, NUMBER)", {}, {}),
+        # TODO: JSON format quotes keys, so even though the keys are integers, the assertion needs to expect strings
+        ("MAP(NUMBER, NUMBER)", {1: 1, 2: 2, 3: 3}, {"1": 1, "2": 2, "3": 3}),
+        ("MAP(TEXT, NUMBER)", {"1": 1, "2": 2, "3": 3}, {"1": 1, "2": 2, "3": 3}),
+        ("MAP(NUMBER, TEXT)", {1: "1", 2: "2", 3: "3"}, {"1": "1", "2": "2", "3": "3"}),
+        (
+            "MAP(TEXT, DATE)",
+            {"a": datetime.strptime("2020-01-01", "%Y-%m-%d").date()},
+            {"a": "2020-01-01"},
+        ),
+        (
+            "MAP(TEXT, TIMESTAMP_NTZ)",
+            {"a": datetime.strptime("2020-01-01", "%Y-%m-%d")},
+            {"a": "Wed, 01 Jan 2020 00:00:00 Z"},
+        ),
+        (
+            "MAP(TEXT, TIME)",
+            {"year": timedelta(days=365), "hour": timedelta(hours=1)},
+            {"year": "31536000000000000", "hour": "3600000000000"},
+        ),
+        (
+            "MAP(TEXT, BOOLEAN)",
+            {"a": True, "b": False, "c": True},
+            {"a": True, "b": False, "c": True},
+        ),
+        (
+            "MAP(TEXT, BINARY)",
+            {"1": b"123", "2": b"HEX", "3": b"3"},
+            {"1": "313233", "2": "484558", "3": "33"},
+        ),
+        (
+            "MAP(TEXT, NUMBER)",
+            {"1": long(10), "2": long(-2147483647), "3": long(2147483647)},
+            {"1": 10, "2": -2147483647, "3": 2147483647},
+        ),
+    ],
+    ids=[
+        "empty_map",
+        "map_number_number",
+        "map_text_number",
+        "map_number_text",
+        "map_text_date",
+        "map_text_timestamp_ntz",
+        "map_text_timedelta",
+        "map_text_boolean",
+        "map_text_binary",
+        "map_text_long",
+    ],
+)
+def test_binding_structured_map(conn_cnx, snowflake_type, write_value, read_value):
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        cursor.execute(f"CREATE OR REPLACE TABLE TEST_TABLE1 (col1 {snowflake_type});")
+        cursor.execute(bind_query, params=(snowflake_map(write_value),))
+
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchone()
+
+        print(write_value, read_value)
+        assert json.loads(results[0]) == read_value
+
+
+@pytest.mark.skipolddriver
+def test_structured_array_binding_timestamp(conn_cnx):
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        cursor.execute(
+            "CREATE OR REPLACE TABLE TEST_TABLE1 (col1 ARRAY(TIMESTAMP_LTZ))"
+        )
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_array(
+                    [datetime.strptime("2020-01-01", "%Y-%m-%d")],
+                ),
+            ),
+        )
+        result = cursor.execute("SELECT col1 FROM TEST_TABLE1").fetchone()
+
+        assert json.loads(result[0]) == ["Wed, 01 Jan 2020 00:00:00 Z"]
+
+
+@pytest.mark.skipolddriver
+def test_structured_array_binding(conn_cnx):
+    bind_query = "INSERT INTO TEST_TABLE1 SELECT (?)"
+    with conn_cnx(paramstyle="qmark") as cnx, cnx.cursor() as cursor:
+        cursor.execute("CREATE OR REPLACE TABLE TEST_TABLE1 (col1 ARRAY(BINARY))")
+        cursor.execute(
+            bind_query,
+            params=(
+                snowflake_array(
+                    [bytearray(b"abc"), b"1", b"2"],
+                ),
+            ),
+        )
+        results = cursor.execute("SELECT * FROM TEST_TABLE1").fetchall()
+
+        assert json.loads(results[0][0]) == ["616263", "31", "32"]
