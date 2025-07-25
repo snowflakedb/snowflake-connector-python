@@ -97,7 +97,7 @@ CONNECTION_PARAMETERS = {
     'database': 'testdb',
     'schema': 'public',
     'authenticator': 'KEY_PAIR_AUTHENTICATOR',
-    'private_key': '/path/to/private_key.p8',
+    'private_key': 'your_private_key',
 }
 """
     )
@@ -221,7 +221,7 @@ def init_test_schema(db_parameters) -> Generator[None]:
         "account": db_parameters["account"],
         "protocol": db_parameters["protocol"],
         "authenticator": db_parameters["authenticator"],
-        "private_key_file": get_private_key(db_parameters["private_key_file"]),
+        "private_key": get_private_key(db_parameters["private_key_file"]),
     }
 
     # Role may be needed when running on preprod, but is not present on Jenkins jobs
