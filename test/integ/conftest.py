@@ -6,10 +6,12 @@ import sys
 import time
 import uuid
 from contextlib import contextmanager
+from cryptography.hazmat.primitives import serialization
 from logging import getLogger
 from typing import Any, Callable, ContextManager, Generator
 
 import pytest
+import serialization
 
 import snowflake.connector
 from snowflake.connector.compat import IS_WINDOWS
@@ -75,7 +77,6 @@ if TEST_USING_VENDORED_ARROW:
 DEFAULT_PARAMETERS: dict[str, Any] = {
     "account": "<account_name>",
     "user": "<user_name>",
-    "password": "<password>",
     "database": "<database_name>",
     "schema": "<schema_name>",
     "protocol": "https",
@@ -93,7 +94,6 @@ def print_help() -> None:
 CONNECTION_PARAMETERS = {
     'account': 'testaccount',
     'user': 'user1',
-    'password': 'test',
     'database': 'testdb',
     'schema': 'public',
     'authenticator': 'KEY_PAIR_AUTHENTICATOR',
@@ -194,6 +194,19 @@ def get_db_parameters(connection_name: str = "default") -> dict[str, Any]:
     return ret
 
 
+def get_private_key(private_key_file: str) -> bytes:
+    with open(private_key_file, "rb") as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(),
+            password=None
+        )
+    return private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def init_test_schema(db_parameters) -> Generator[None]:
     """Initializes and destroys the schema specific to this pytest session.
@@ -208,7 +221,7 @@ def init_test_schema(db_parameters) -> Generator[None]:
         "account": db_parameters["account"],
         "protocol": db_parameters["protocol"],
         "authenticator": db_parameters["authenticator"],
-        "private_key_file": db_parameters["private_key_file"],
+        "private_key_file": get_private_key(db_parameters["private_key_file"]),
     }
 
     # Role may be needed when running on preprod, but is not present on Jenkins jobs
