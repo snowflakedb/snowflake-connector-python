@@ -482,7 +482,6 @@ ratio number(6,2))
         with conn_cnx(
             user=db_parameters["user"],
             account=db_parameters["account"],
-            password=db_parameters["password"],
         ) as cnx:
             run(cnx, "drop table if exists {name}")
 

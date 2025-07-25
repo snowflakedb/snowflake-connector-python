@@ -22,12 +22,13 @@ def test_session_parameters(db_parameters):
         protocol=db_parameters["protocol"],
         account=db_parameters["account"],
         user=db_parameters["user"],
-        password=db_parameters["password"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         database=db_parameters["database"],
         schema=db_parameters["schema"],
         session_parameters={"TIMEZONE": "UTC"},
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
     )
     ret = connection.cursor().execute("show parameters like 'TIMEZONE'").fetchone()
     assert ret[1] == "UTC"
@@ -48,7 +49,8 @@ def test_client_session_keep_alive(db_parameters, conn_cnx):
         protocol=db_parameters["sf_protocol"],
         account=db_parameters["sf_account"],
         user=db_parameters["sf_user"],
-        password=db_parameters["sf_password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["sf_host"],
         port=db_parameters["sf_port"],
     )
@@ -93,11 +95,12 @@ def create_client_connection(db_parameters: object, val: bool) -> object:
         protocol=db_parameters["protocol"],
         account=db_parameters["account"],
         user=db_parameters["user"],
-        password=db_parameters["password"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         database=db_parameters["database"],
         schema=db_parameters["schema"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         client_session_keep_alive=val,
     )
     return connection

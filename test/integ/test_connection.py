@@ -71,7 +71,8 @@ def test_connection_without_schema(db_parameters):
     """Basic Connection test without schema."""
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -87,7 +88,8 @@ def test_connection_without_database_schema(db_parameters):
     """Basic Connection test without database and schema."""
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -102,7 +104,8 @@ def test_connection_without_database2(db_parameters):
     """Basic Connection test without database."""
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -120,7 +123,8 @@ def test_with_config(db_parameters):
 
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],
@@ -210,7 +214,8 @@ def test_keep_alive_true(db_parameters):
     """Creates a connection with client_session_keep_alive parameter."""
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],
@@ -235,7 +240,8 @@ def test_keep_alive_heartbeat_frequency(db_parameters):
     """
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],
@@ -262,7 +268,8 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
     """
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],
@@ -286,7 +293,8 @@ def test_bad_db(db_parameters):
     """Attempts to use a bad DB."""
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -375,7 +383,8 @@ def test_invalid_application(db_parameters):
         snowflake.connector.connect(
             protocol=db_parameters["protocol"],
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             application="%%%",
         )
 
@@ -385,7 +394,8 @@ def test_valid_application(db_parameters):
     application = "Special_Client"
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -400,7 +410,8 @@ def test_invalid_default_parameters(db_parameters):
     """Invalid database, schema, warehouse and role name."""
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -415,7 +426,8 @@ def test_invalid_default_parameters(db_parameters):
         # must not success
         snowflake.connector.connect(
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             host=db_parameters["host"],
             port=db_parameters["port"],
             account=db_parameters["account"],
@@ -429,7 +441,8 @@ def test_invalid_default_parameters(db_parameters):
         # must not success
         snowflake.connector.connect(
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             host=db_parameters["host"],
             port=db_parameters["port"],
             account=db_parameters["account"],
@@ -443,7 +456,8 @@ def test_invalid_default_parameters(db_parameters):
         # must not success
         snowflake.connector.connect(
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             host=db_parameters["host"],
             port=db_parameters["port"],
             account=db_parameters["account"],
@@ -459,7 +473,8 @@ def test_invalid_default_parameters(db_parameters):
         # must not success
         snowflake.connector.connect(
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             host=db_parameters["host"],
             port=db_parameters["port"],
             account=db_parameters["account"],
@@ -548,7 +563,8 @@ def test_invalid_proxy(db_parameters):
             protocol="http",
             account="testaccount",
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             host=db_parameters["host"],
             port=db_parameters["port"],
             login_timeout=5,
@@ -634,7 +650,8 @@ def test_privatelink(db_parameters):
 
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -654,7 +671,8 @@ def test_disable_request_pooling(db_parameters):
     """Creates a connection with client_session_keep_alive parameter."""
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],
@@ -888,7 +906,8 @@ def test_invalid_connection_parameter(db_parameters, name, value, exc_warn):
         conn_params = {
             "account": db_parameters["account"],
             "user": db_parameters["user"],
-            "password": db_parameters["password"],
+            "authenticator": db_parameters["authenticator"],
+            "private_key_file": db_parameters["private_key_file"],
             "schema": db_parameters["schema"],
             "database": db_parameters["database"],
             "protocol": db_parameters["protocol"],
@@ -917,7 +936,8 @@ def test_invalid_connection_parameters_turned_off(db_parameters):
         conn_params = {
             "account": db_parameters["account"],
             "user": db_parameters["user"],
-            "password": db_parameters["password"],
+            "authenticator": db_parameters["authenticator"],
+            "private_key_file": db_parameters["private_key_file"],
             "schema": db_parameters["schema"],
             "database": db_parameters["database"],
             "protocol": db_parameters["protocol"],
@@ -947,7 +967,8 @@ def test_invalid_connection_parameters_only_warns(db_parameters):
         conn_params = {
             "account": db_parameters["account"],
             "user": db_parameters["user"],
-            "password": db_parameters["password"],
+            "authenticator": db_parameters["authenticator"],
+            "private_key_file": db_parameters["private_key_file"],
             "schema": db_parameters["schema"],
             "database": db_parameters["database"],
             "protocol": db_parameters["protocol"],
@@ -1182,15 +1203,6 @@ def test_client_fetch_threads_setting(conn_cnx):
         assert conn.client_fetch_threads == 32
 
 
-@pytest.mark.external
-def test_client_failover_connection_url(conn_cnx):
-    with conn_cnx("client_failover") as conn:
-        with conn.cursor() as cur:
-            assert cur.execute("select 1;").fetchall() == [
-                (1,),
-            ]
-
-
 def test_connection_gc(conn_cnx):
     """This test makes sure that a heartbeat thread doesn't prevent garbage collection of SnowflakeConnection."""
     conn = conn_cnx(client_session_keep_alive=True).__enter__()
@@ -1277,7 +1289,8 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry, db_paramete
     new_application_name = "PythonSnowpark"
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],

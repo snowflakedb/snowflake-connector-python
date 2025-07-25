@@ -75,12 +75,13 @@ if TEST_USING_VENDORED_ARROW:
 DEFAULT_PARAMETERS: dict[str, Any] = {
     "account": "<account_name>",
     "user": "<user_name>",
-    "password": "<password>",
     "database": "<database_name>",
     "schema": "<schema_name>",
     "protocol": "https",
     "host": "<host>",
     "port": "443",
+    "authenticator": "<authenticator>",
+    "private_key_file": "<private_key_file>",
 }
 
 
@@ -91,9 +92,10 @@ def print_help() -> None:
 CONNECTION_PARAMETERS = {
     'account': 'testaccount',
     'user': 'user1',
-    'password': 'test',
     'database': 'testdb',
     'schema': 'public',
+    'authenticator': 'KEY_PAIR_AUTHENTICATOR',
+    'private_key_file': '/path/to/private_key.p8',
 }
 """
     )
@@ -198,12 +200,13 @@ def init_test_schema(db_parameters) -> Generator[None]:
     """
     connection_params = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "database": db_parameters["database"],
         "account": db_parameters["account"],
         "protocol": db_parameters["protocol"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
     }
 
     # Role may be needed when running on preprod, but is not present on Jenkins jobs
