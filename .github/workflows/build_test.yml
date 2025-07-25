@@ -170,19 +170,160 @@ jobs:
         run: python -m pip install -U setuptools pip wheel
       - name: Install tox
         run: python -m pip install tox>=4
+
+      - name: Install mitmproxy
+        run: python -m pip install mitmproxy
+      - name: Start mitmdump proxy
+        run: |
+          echo "Starting proxy..."
+          nohup mitmdump --mode regular --listen-port 18453 \
+            -s ci/github/save_mitm_requests.py \
+            --set termlog_verbosity=warn &
+          echo "PROXY_PID=$!" >> $GITHUB_ENV
+
+          # Wait for proxy to be ready
+          for i in {1..10}; do
+            if curl -s --connect-timeout 3 http://127.0.0.1:18453 > /dev/null 2>&1; then
+              echo "Proxy is ready"
+              break
+            fi
+            sleep 1
+          done
+
+          # Force mitmproxy to generate CA cert and test script capture
+          curl -x http://127.0.0.1:18453 "https://example.com/?this_request_will_not_occur_in_real_driver_operation=true&github_actions_proxy_test=true&purpose=mitmproxy_verification_and_cert_creation" -k || true
+
+          # Give script a moment to process the request
+          sleep 3
+
+          # Check if the proxy script is working
+          script_working=false
+
+          # Check log file exists
+          if [ ! -f "mitm_script.log" ]; then
+            echo "❌ FATAL: mitm_script.log not created - proxy script failed to start"
+            exit 1
+          fi
+
+          echo "✅ Log file created, checking contents..."
+          cat mitm_script.log
+
+          # Check if the example.com request was captured in CSV
+          if [ -f "test_requests.csv" ]; then
+            echo "✅ CSV file created"
+            if grep -q "example.com" test_requests.csv; then
+              echo "✅ example.com request captured - script is working!"
+              script_working=true
+            else
+              echo "❌ example.com request NOT found in CSV"
+              echo "CSV contents:"
+              cat test_requests.csv
+            fi
+          else
+            echo "❌ CSV file not created"
+          fi
+
+          # Fail pipeline if proxy script isn't capturing requests
+          if [ "$script_working" = false ]; then
+            echo "❌ FATAL: Proxy script is not capturing requests properly"
+            echo "Log file contents:"
+            cat mitm_script.log
+            exit 1
+          fi
+
+          # Wait for CA cert to be created
+          timeout=30
+          while [ ! -f ~/.mitmproxy/mitmproxy-ca-cert.pem ] && [ $timeout -gt 0 ]; do
+            echo "Waiting for CA cert... ($timeout seconds left)"
+            sleep 1
+            timeout=$((timeout - 1))
+          done
+
+          if [ ! -f ~/.mitmproxy/mitmproxy-ca-cert.pem ]; then
+            echo "CA certificate was not created!"
+            echo "Contents of ~/.mitmproxy/:"
+            ls -la ~/.mitmproxy/ || echo "Directory doesn't exist"
+            exit 1
+          fi
+          echo "CA certificate found, proxy running and ready"
+        shell: bash
+
+      - name: Export mitmproxy CA cert
+        run: |
+          mkdir -p ~/ca-cert
+          cp ~/.mitmproxy/mitmproxy-ca-cert.pem ~/ca-cert/
+          echo "CA cert copied to ~/ca-cert/"
+        shell: bash
+
+      - name: Set proxy variables
+        run: |
+          # Set proxy variables for subsequent steps
+          echo "HTTP_PROXY=http://127.0.0.1:18453" >> $GITHUB_ENV
+          echo "HTTPS_PROXY=http://127.0.0.1:18453" >> $GITHUB_ENV
+          echo "http_proxy=http://127.0.0.1:18453" >> $GITHUB_ENV
+          echo "https_proxy=http://127.0.0.1:18453" >> $GITHUB_ENV
+          echo "REQUESTS_CA_BUNDLE=$HOME/ca-cert/mitmproxy-ca-cert.pem" >> $GITHUB_ENV
+        shell: bash
+
       - name: Run tests
        # To run a single test on GHA use the below command:
-#        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
-        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
+#         run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
 
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
-         # To specify the test name (in single test mode) pass this env variable:
-#          SINGLE_TEST_NAME: test/path/filename.py::test_name
+
+          # To specify the test name (in single test mode) pass this env variable:
+          SINGLE_TEST_NAME: test/integ/test_large_put.py::test_put_copy_large_files
+
+
+          # Proxy environment variables
+          HTTP_PROXY: ${{ env.HTTP_PROXY }}
+          HTTPS_PROXY: ${{ env.HTTPS_PROXY }}
+          REQUESTS_CA_BUNDLE: ${{ env.REQUESTS_CA_BUNDLE }}
         shell: bash
+      - name: Stop mitmdump proxy
+        if: always() && env.PROXY_PID
+        run: |
+          echo "Stopping proxy after test execution..."
+          if [ -n "$PROXY_PID" ]; then
+            if kill -0 $PROXY_PID 2>/dev/null; then
+              echo "Stopping proxy with PID $PROXY_PID"
+              kill $PROXY_PID || true
+              # Wait for process to stop gracefully
+              for i in {1..10}; do
+                if ! kill -0 $PROXY_PID 2>/dev/null; then
+                  echo "Proxy stopped gracefully"
+                  break
+                fi
+                sleep 1
+              done
+              # Force kill if still running
+              if kill -0 $PROXY_PID 2>/dev/null; then
+                echo "Force killing proxy"
+                kill -9 $PROXY_PID || true
+              fi
+            else
+              echo "Proxy process not running"
+            fi
+          else
+            echo "No proxy PID found in environment"
+          fi
+
+          echo "Proxy stopped"
+
+          # Clear proxy environment variables for subsequent steps
+          echo "HTTP_PROXY=" >> $GITHUB_ENV
+          echo "HTTPS_PROXY=" >> $GITHUB_ENV
+          echo "http_proxy=" >> $GITHUB_ENV
+          echo "https_proxy=" >> $GITHUB_ENV
+          echo "REQUESTS_CA_BUNDLE=" >> $GITHUB_ENV
+          echo "Proxy environment variables cleared"
+        shell: bash
+
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
         shell: bash
@@ -199,6 +340,16 @@ jobs:
           name: junit_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
             .tox/junit.*.xml
+
+      - name: Upload mitmproxy artifacts
+        if: always() && env.PROXY_PID
+        uses: actions/upload-artifact@v4
+        with:
+          name: mitmproxy-artifacts-${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            test_requests.csv
+            mitm_script.log
+
 
   test-olddriver:
     name: Old Driver Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
