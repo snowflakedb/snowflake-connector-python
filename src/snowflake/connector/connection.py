@@ -119,6 +119,7 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
+from .session_manager import SessionManager
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
@@ -510,7 +511,8 @@ class SnowflakeConnection:
             PLATFORM,
         )
 
-        self._rest = None
+        self._session_manager: SessionManager | None = None
+        self._rest: SnowflakeRestful | None = None
         for name, (value, _) in DEFAULT_CONFIGURATION.items():
             setattr(self, f"_{name}", value)
 
@@ -877,11 +879,19 @@ class SnowflakeConnection:
     def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
         self._check_arrow_conversion_error_on_every_column = value
 
+    @property
+    def session_manager(self) -> SessionManager:
+        return self._session_manager
+
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
         if len(kwargs) > 0:
             self.__config(**kwargs)
+
+        self._session_manager = SessionManager(
+            use_pooling=(not self.disable_request_pooling),
+        )
 
         if self.enable_connection_diag:
             exceptions_dict = {}
