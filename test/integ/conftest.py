@@ -11,7 +11,6 @@ from typing import Any, Callable, ContextManager, Generator
 
 import pytest
 import serialization
-from cryptography.hazmat.primitives import serialization
 
 import snowflake.connector
 from snowflake.connector.compat import IS_WINDOWS
