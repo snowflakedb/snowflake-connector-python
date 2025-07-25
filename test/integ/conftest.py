@@ -83,7 +83,7 @@ DEFAULT_PARAMETERS: dict[str, Any] = {
     "host": "<host>",
     "port": "443",
     "authenticator": "<authenticator>",
-    "private_key_file": "<private_key_file>",
+    "private_key": "<private_key_file>",
 }
 
 
@@ -97,7 +97,7 @@ CONNECTION_PARAMETERS = {
     'database': 'testdb',
     'schema': 'public',
     'authenticator': 'KEY_PAIR_AUTHENTICATOR',
-    'private_key_file': '/path/to/private_key.p8',
+    'private_key': '/path/to/private_key.p8',
 }
 """
     )
