@@ -279,7 +279,7 @@ class FileTokenCache(TokenCache):
                 FileTokenCache.validate_cache_dir(directory)
                 return directory
             except _FileTokenCacheError as e:
-                logger.debug(
+                _warn(
                     f"Cache directory validation failed for {str(directory)} due to error '{e}'. Skipping it in cache directory lookup."
                 )
                 return None
