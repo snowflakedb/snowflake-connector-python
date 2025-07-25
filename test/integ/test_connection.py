@@ -71,7 +71,8 @@ def test_connection_without_schema(db_parameters):
     """Basic Connection test without schema."""
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -87,7 +88,8 @@ def test_connection_without_database_schema(db_parameters):
     """Basic Connection test without database and schema."""
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -102,7 +104,8 @@ def test_connection_without_database2(db_parameters):
     """Basic Connection test without database."""
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -286,7 +289,8 @@ def test_bad_db(db_parameters):
     """Attempts to use a bad DB."""
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -385,7 +389,8 @@ def test_valid_application(db_parameters):
     application = "Special_Client"
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -400,7 +405,8 @@ def test_invalid_default_parameters(db_parameters):
     """Invalid database, schema, warehouse and role name."""
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],

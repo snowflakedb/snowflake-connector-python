@@ -135,7 +135,8 @@ def test_commit(db_parameters):
     con = snowflake.connector.connect(
         account=db_parameters["account"],
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         protocol=db_parameters["protocol"],

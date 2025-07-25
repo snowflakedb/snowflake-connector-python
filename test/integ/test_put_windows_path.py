@@ -20,7 +20,6 @@ def test_abc(conn_cnx, tmpdir, db_parameters):
     with conn_cnx(
         user=db_parameters["user"],
         account=db_parameters["account"],
-        password=db_parameters["password"],
     ) as con:
         rec = con.cursor().execute(f"put {fileURI} @~/{subdir}0/").fetchall()
         assert rec[0][6] == "UPLOADED"
