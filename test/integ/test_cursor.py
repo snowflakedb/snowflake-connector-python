@@ -237,7 +237,8 @@ def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
 
     cnx2 = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -315,7 +316,8 @@ def test_insert_timestamp_select(conn, db_parameters):
 
     cnx2 = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -573,7 +575,8 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
 
     cnx2 = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],

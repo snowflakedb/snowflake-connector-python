@@ -123,7 +123,8 @@ def test_with_config(db_parameters):
 
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],
@@ -213,7 +214,8 @@ def test_keep_alive_true(db_parameters):
     """Creates a connection with client_session_keep_alive parameter."""
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],
@@ -238,7 +240,8 @@ def test_keep_alive_heartbeat_frequency(db_parameters):
     """
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],
@@ -265,7 +268,8 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
     """
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],
@@ -379,7 +383,8 @@ def test_invalid_application(db_parameters):
         snowflake.connector.connect(
             protocol=db_parameters["protocol"],
             user=db_parameters["user"],
-            password=db_parameters["password"],
+            authenticator=db_parameters["authenticator"],
+            private_key_file=db_parameters["private_key_file"],
             application="%%%",
         )
 
@@ -645,7 +650,8 @@ def test_privatelink(db_parameters):
 
     cnx = snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],
@@ -1292,7 +1298,8 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry, db_paramete
     new_application_name = "PythonSnowpark"
     config = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "account": db_parameters["account"],
