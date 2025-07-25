@@ -129,3 +129,8 @@ src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow_arrow_iterator.cpp
 # Prober files
 prober/parameters.json
 prober/snowflake_prober.egg-info/
+
+# SSH private key for WIF tests
+ci/wif/parameters/rsa_wif_aws_azure
+ci/wif/parameters/rsa_wif_gcp
+ci/wif/parameters/parameters_wif.json
