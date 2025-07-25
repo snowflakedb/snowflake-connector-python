@@ -202,7 +202,6 @@ def init_test_schema(db_parameters) -> Generator[None]:
     """
     connection_params = {
         "user": db_parameters["user"],
-        "password": db_parameters["password"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "database": db_parameters["database"],
