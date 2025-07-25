@@ -163,7 +163,7 @@ jobs:
         env:
           PYTHON_PRIVATE_KEY_SECRET: ${{ secrets.PYTHON_PRIVATE_KEY_SECRET }}
         run: |
-          gpg --quiet --batch --yes --decrypt --passphrase="PYTHON_PRIVATE_KEY_SECRET" \
+          gpg --quiet --batch --yes --decrypt --passphrase="$PYTHON_PRIVATE_KEY_SECRET" \
           .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
@@ -241,7 +241,7 @@ jobs:
         env:
           PYTHON_PRIVATE_KEY_SECRET: ${{ secrets.PYTHON_PRIVATE_KEY_SECRET }}
         run: |
-          gpg --quiet --batch --yes --decrypt --passphrase="PYTHON_PRIVATE_KEY_SECRET" \
+          gpg --quiet --batch --yes --decrypt --passphrase="$PYTHON_PRIVATE_KEY_SECRET" \
           .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Upgrade setuptools, pip and wheel
         run: python -m pip install -U setuptools pip wheel
@@ -309,7 +309,7 @@ jobs:
         env:
           PYTHON_PRIVATE_KEY_SECRET: ${{ secrets.PYTHON_PRIVATE_KEY_SECRET }}
         run: |
-          gpg --quiet --batch --yes --decrypt --passphrase="PYTHON_PRIVATE_KEY_SECRET" \
+          gpg --quiet --batch --yes --decrypt --passphrase="$PYTHON_PRIVATE_KEY_SECRET" \
           .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
@@ -369,7 +369,7 @@ jobs:
         env:
           PYTHON_PRIVATE_KEY_SECRET: ${{ secrets.PYTHON_PRIVATE_KEY_SECRET }}
         run: |
-          gpg --quiet --batch --yes --decrypt --passphrase="PYTHON_PRIVATE_KEY_SECRET" \
+          gpg --quiet --batch --yes --decrypt --passphrase="$PYTHON_PRIVATE_KEY_SECRET" \
           .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
