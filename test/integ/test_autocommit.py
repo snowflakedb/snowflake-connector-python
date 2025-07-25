@@ -176,7 +176,8 @@ CREATE TABLE {name} (c1 boolean)
 
     with snowflake.connector.connect(
         user=db_parameters["user"],
-        password=db_parameters["password"],
+        authenticator=db_parameters["authenticator"],
+        private_key_file=db_parameters["private_key_file"],
         host=db_parameters["host"],
         port=db_parameters["port"],
         account=db_parameters["account"],

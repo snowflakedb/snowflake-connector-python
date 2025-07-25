@@ -69,14 +69,14 @@ def test_connection_context_manager(request, db_parameters):
     db_config = {
         "protocol": db_parameters["protocol"],
         "account": db_parameters["account"],
+        "authenticator": db_parameters["authenticator"],
+        "private_key_file": db_parameters["private_key_file"],
         "user": db_parameters["user"],
         "host": db_parameters["host"],
         "port": db_parameters["port"],
         "database": db_parameters["database"],
         "schema": db_parameters["schema"],
         "timezone": "UTC",
-        "authenticator": db_parameters["authenticator"],
-        "private_key": db_parameters["private_key_file"],
     }
 
     def fin():
