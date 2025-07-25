@@ -10,6 +10,7 @@ from logging import getLogger
 from typing import Any, Callable, ContextManager, Generator
 
 import pytest
+from cryptography.hazmat.primitives import serialization
 
 import snowflake.connector
 from snowflake.connector.compat import IS_WINDOWS
@@ -194,7 +195,12 @@ def get_db_parameters(connection_name: str = "default") -> dict[str, Any]:
 
 def get_private_key(private_key_file: str) -> bytes:
     with open(private_key_file, "rb") as key_file:
-        return key_file.read()
+        private_key = serialization.load_pem_private_key(key_file.read(), password=None)
+    return private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
 
 
 @pytest.fixture(scope="session", autouse=True)
