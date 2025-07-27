@@ -43,7 +43,7 @@ try:
     from snowflake.connector.result_batch import MAX_DOWNLOAD_RETRY, JSONResultBatch
     from snowflake.connector.vendored import requests  # NOQA
 
-    REQUEST_MODULE_PATH = "snowflake.connector.vendored.requests"
+    REQUEST_MODULE_PATH = "snowflake.connector.vendored.requests.sessions.Session"
 except ImportError:
     MAX_DOWNLOAD_RETRY = None
     JSONResultBatch = None
