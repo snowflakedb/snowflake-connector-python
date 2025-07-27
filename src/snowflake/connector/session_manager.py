@@ -128,43 +128,43 @@ class _RequestVerbsUsingSessionMixin:
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout_sec: int | None = 3,
+        timeout: int | None = 3,
         use_pooling: bool | None = None,
         **kwargs,
     ):
         with self.use_requests_session(url, use_pooling) as session:
-            return session.get(url, headers=headers, timeout=timeout_sec, **kwargs)
+            return session.get(url, headers=headers, timeout=timeout, **kwargs)
 
     def options(
         self,
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout_sec: int | None = 3,
+        timeout: int | None = 3,
         use_pooling: bool | None = None,
         **kwargs,
     ):
         with self.use_requests_session(url, use_pooling) as session:
-            return session.options(url, headers=headers, timeout=timeout_sec, **kwargs)
+            return session.options(url, headers=headers, timeout=timeout, **kwargs)
 
     def head(
         self,
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout_sec: int | None = 3,
+        timeout: int | None = 3,
         use_pooling: bool | None = None,
         **kwargs,
     ):
         with self.use_requests_session(url, use_pooling) as session:
-            return session.head(url, headers=headers, timeout=timeout_sec, **kwargs)
+            return session.head(url, headers=headers, timeout=timeout, **kwargs)
 
     def post(
         self,
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout_sec: int | None = 3,
+        timeout: int | None = 3,
         use_pooling: bool | None = None,
         data=None,
         json=None,
@@ -174,7 +174,7 @@ class _RequestVerbsUsingSessionMixin:
             return session.post(
                 url,
                 headers=headers,
-                timeout=timeout_sec,
+                timeout=timeout,
                 data=data,
                 json=json,
                 **kwargs,
@@ -185,14 +185,14 @@ class _RequestVerbsUsingSessionMixin:
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout_sec: int | None = 3,
+        timeout: int | None = 3,
         use_pooling: bool | None = None,
         data=None,
         **kwargs,
     ):
         with self.use_requests_session(url, use_pooling) as session:
             return session.put(
-                url, headers=headers, timeout=timeout_sec, data=data, **kwargs
+                url, headers=headers, timeout=timeout, data=data, **kwargs
             )
 
     def patch(
@@ -200,14 +200,14 @@ class _RequestVerbsUsingSessionMixin:
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout_sec: int | None = 3,
+        timeout: int | None = 3,
         use_pooling: bool | None = None,
         data=None,
         **kwargs,
     ):
         with self.use_requests_session(url, use_pooling) as session:
             return session.patch(
-                url, headers=headers, timeout=timeout_sec, data=data, **kwargs
+                url, headers=headers, timeout=timeout, data=data, **kwargs
             )
 
     def delete(
@@ -215,12 +215,12 @@ class _RequestVerbsUsingSessionMixin:
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout_sec: int | None = 3,
+        timeout: int | None = 3,
         use_pooling: bool | None = None,
         **kwargs,
     ):
         with self.use_requests_session(url, use_pooling) as session:
-            return session.delete(url, headers=headers, timeout=timeout_sec, **kwargs)
+            return session.delete(url, headers=headers, timeout=timeout, **kwargs)
 
 
 class SessionManager(_RequestVerbsUsingSessionMixin):
