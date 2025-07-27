@@ -53,6 +53,8 @@ from snowflake.connector.errorcode import (
 )
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
+from snowflake.connector.session_manager import SessionManager
+from snowflake.connector.ssl_wrap_socket import get_current_session_manager
 
 from . import constants
 from .backoff_policies import exponential_backoff
@@ -546,7 +548,11 @@ class OCSPServer:
                 if sf_cache_server_url is not None:
                     url = sf_cache_server_url
 
-            with generic_requests.Session() as session:
+            # Obtain SessionManager from ssl_wrap_socket context var if available
+            session_manager = get_current_session_manager().clone(
+                use_pooling=False
+            ) or SessionManager(use_pooling=False)
+            with session_manager.use_requests_session() as session:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
                 backoff = exponential_backoff()()

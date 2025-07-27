@@ -121,6 +121,9 @@ from .network import (
 )
 from .session_manager import SessionManager
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
+from .ssl_wrap_socket import (
+    set_current_session_manager as set_current_session_manager_for_ssl,
+)
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
@@ -892,6 +895,15 @@ class SnowflakeConnection:
         self._session_manager = SessionManager(
             use_pooling=(not self.disable_request_pooling),
         )
+        try:
+            # Set context var for OCSP downloads to use this manager. Can be removed once OCSP is deprecated.
+            self._ocsp_sm_context_var_old_token = set_current_session_manager_for_ssl(
+                self._session_manager
+            )
+        except Exception:
+            logger.debug(
+                "Could not set current SessionManager in ssl_wrap_socket", exc_info=True
+            )
 
         if self.enable_connection_diag:
             exceptions_dict = {}
@@ -931,6 +943,15 @@ class SnowflakeConnection:
                     raise Exception(str(exceptions_dict))
         else:
             self.__open_connection()
+
+        try:
+            # Reet context var for OCSP downloads to use this manager. Can be removed once OCSP is deprecated.
+            from .ssl_wrap_socket import reset_current_session_manager as _reset_sm
+
+            if hasattr(self, "_ocsp_sm_context_var_old_token"):
+                _reset_sm(self._ocsp_sm_context_var_old_token)
+        except Exception:
+            logger.debug("Failed to reset OCSP SessionManager context", exc_info=True)
 
     def close(self, retry: bool = True) -> None:
         """Closes the connection."""
