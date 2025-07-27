@@ -1283,6 +1283,8 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
+                if not self._token and self._password:
+                    self._token = self._password
                 self.auth_class = AuthByPAT(self._token)
             elif self._authenticator == PAT_WITH_EXTERNAL_SESSION:
                 # We don't need to do a POST to /v1/login-request to get session and master tokens at the startup
