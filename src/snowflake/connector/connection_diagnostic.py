@@ -566,6 +566,7 @@ class ConnectionDiagnostic:
             # Using a URL that does not exist is a check for a transparent proxy
             cert_reqs = "CERT_NONE"
             urllib3.disable_warnings()
+            # TODO(SNOW-2229148): This outgoing request should be refactored to use SessionManager.
             if self.proxy_host is None:
                 http = urllib3.PoolManager(cert_reqs=cert_reqs)
             else:
@@ -732,6 +733,7 @@ class ConnectionDiagnostic:
                                     f"wpad: {wpad}",
                                 )
                                 # Let's see if we can get the wpad proxy info
+                                # TODO(SNOW-2229148): Replace PoolManager with SessionManager extracted from connection instance.
                                 http = urllib3.PoolManager(timeout=10.0)
                                 url = f"http://{wpad}/wpad.dat"
                                 try:

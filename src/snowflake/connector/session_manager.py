@@ -116,7 +116,6 @@ class SessionPool:
         self._idle_sessions.clear()
 
 
-# TODO: class NetworkMediator ?
 class SessionManager:
     def __init__(
         self,
@@ -151,7 +150,6 @@ class SessionManager:
 
     @staticmethod
     def get_session_pool_manager(session: Session, url: str) -> PoolManager | None:
-        # TODO: add this maybe (check if proxy manager is different than pool_manager)
         adapter_for_url: HTTPAdapter = session.get_adapter(url)
         try:
             return adapter_for_url.poolmanager
@@ -213,7 +211,7 @@ class SessionManager:
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout_sec: int | None = 3,
+        timeout: int | None = 3,
         use_pooling: bool | None = None,
         **kwargs: Any,
     ) -> Response:
@@ -227,7 +225,7 @@ class SessionManager:
                 method=method.upper(),
                 url=url,
                 headers=headers,
-                timeout=timeout_sec,
+                timeout=timeout,
                 **kwargs,
             )
 
@@ -258,7 +256,7 @@ def request(
     url: str,
     *,
     headers: Mapping[str, str] | None = None,
-    timeout_sec: int | None = 3,
+    timeout: int | None = 3,
     session_manager: SessionManager | None = None,
     use_pooling: bool | None = None,
     **kwargs: Any,
@@ -277,7 +275,7 @@ def request(
         method=method,
         url=url,
         headers=headers,
-        timeout_sec=timeout_sec,
+        timeout=timeout,
         use_pooling=use_pooling,
         **kwargs,
     )

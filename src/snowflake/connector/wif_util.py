@@ -68,7 +68,7 @@ def try_metadata_service_call(
     method: str,
     url: str,
     headers: dict,
-    timeout_sec: int = 3,
+    timeout: int = 3,
     session_manager: SessionManager | None = None,
 ) -> Response | None:
     """Tries to make a HTTP request to the metadata service with the given URL, method, headers and timeout.
@@ -80,7 +80,7 @@ def try_metadata_service_call(
             method=method,
             url=url,
             headers=headers,
-            timeout_sec=timeout_sec,
+            timeout=timeout,
             session_manager=session_manager,
             use_pooling=False,
         )
