@@ -309,17 +309,20 @@ class SnowflakeRestful:
         protocol: str = "http",
         inject_client_pause: int = 0,
         connection: SnowflakeConnection | None = None,
+        session_manager: SessionManager | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._protocol = protocol
         self._inject_client_pause = inject_client_pause
         self._connection = connection
-        self._session_manager = (
-            connection.session_manager
-            if connection
-            else SessionManager(adapter_factory=ProxySupportAdapterFactory())
-        )
+        if session_manager is None:
+            session_manager = (
+                connection.session_manager
+                if (connection and connection.session_manager)
+                else SessionManager(adapter_factory=ProxySupportAdapterFactory())
+            )
+        self._session_manager = session_manager
         self._lock_token = Lock()
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)

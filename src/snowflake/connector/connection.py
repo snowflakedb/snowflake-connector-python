@@ -1100,6 +1100,7 @@ class SnowflakeConnection:
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
             connection=self,
+            session_manager=self.session_manager,
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 
