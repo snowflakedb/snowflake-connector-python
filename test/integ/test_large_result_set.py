@@ -1,14 +1,12 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
+import logging
 from unittest.mock import Mock
 
 import pytest
 
+from snowflake.connector.secret_detector import SecretDetector
 from snowflake.connector.telemetry import TelemetryField
 
 NUMBER_OF_ROWS = 50000
@@ -115,8 +113,9 @@ def test_query_large_result_set_n_threads(
 
 @pytest.mark.aws
 @pytest.mark.skipolddriver
-def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
+def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, caplog):
     """[s3] Gets Large Result set."""
+    caplog.set_level(logging.DEBUG)
     sql = "select * from {name} order by 1".format(name=db_parameters["name"])
     with conn_cnx() as cnx:
         telemetry_data = []
@@ -165,3 +164,19 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
                 "Expected three telemetry logs (one per query) "
                 "for log type {}".format(field.value)
             )
+
+        aws_request_present = False
+        expected_token_prefix = "X-Amz-Signature="
+        for line in caplog.text.splitlines():
+            if expected_token_prefix in line:
+                aws_request_present = True
+                # getattr is used to stay compatible with old driver - before SECRET_STARRED_MASK_STR was added
+                assert (
+                    expected_token_prefix
+                    + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
+                    in line
+                ), "connectionpool logger is leaking sensitive information"
+
+        assert (
+            aws_request_present
+        ), "AWS URL was not found in logs, so it can't be assumed that no leaks happened in it"

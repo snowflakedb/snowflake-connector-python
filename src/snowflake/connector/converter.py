@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import binascii
@@ -28,7 +24,7 @@ from .sfbinaryformat import binary_to_python, binary_to_snowflake
 from .sfdatetime import sfdatetime_total_seconds_from_timedelta
 
 if TYPE_CHECKING:
-    from numpy import int64
+    from numpy import bool_, int64
 
 try:
     import numpy
@@ -202,6 +198,12 @@ class SnowflakeConverter:
                     return int(value)
 
             return conv
+
+    def _DECFLOAT_numpy_to_python(self, ctx: dict[str, Any]) -> Callable:
+        return numpy.float64
+
+    def _DECFLOAT_to_python(self, ctx: dict[str, Any]) -> Callable:
+        return decimal.Decimal
 
     def _REAL_to_python(self, _: dict[str, str | None] | dict[str, str]) -> Callable:
         return float
@@ -499,8 +501,8 @@ class SnowflakeConverter:
 
     _bytearray_to_snowflake = _bytes_to_snowflake
 
-    def _bool_to_snowflake(self, value: bool) -> bool:
-        return value
+    def _bool_to_snowflake(self, value: bool | bool_) -> bool:
+        return bool(value)
 
     def _bool__to_snowflake(self, value) -> bool:
         return bool(value)
@@ -630,6 +632,9 @@ class SnowflakeConverter:
     def __numpy_to_snowflake(self, value):
         return value
 
+    def _float16_to_snowflake(self, value):
+        return float(value)
+
     _int8_to_snowflake = __numpy_to_snowflake
     _int16_to_snowflake = __numpy_to_snowflake
     _int32_to_snowflake = __numpy_to_snowflake
@@ -638,9 +643,8 @@ class SnowflakeConverter:
     _uint16_to_snowflake = __numpy_to_snowflake
     _uint32_to_snowflake = __numpy_to_snowflake
     _uint64_to_snowflake = __numpy_to_snowflake
-    _float16_to_snowflake = __numpy_to_snowflake
-    _float32_to_snowflake = __numpy_to_snowflake
-    _float64_to_snowflake = __numpy_to_snowflake
+    _float32_to_snowflake = _float16_to_snowflake
+    _float64_to_snowflake = _float16_to_snowflake
 
     def _datetime64_to_snowflake(self, value) -> str:
         return str(value) + "+00:00"

@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import atexit
@@ -33,17 +29,25 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
+from ._utils import (
+    _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+)
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
     Auth,
     AuthByDefault,
     AuthByKeyPair,
     AuthByOAuth,
+    AuthByOauthCode,
+    AuthByOauthCredentials,
     AuthByOkta,
     AuthByPAT,
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
+    AuthByWorkloadIdentity,
+    AuthNoAuth,
 )
 from .auth.idtoken import AuthByIdToken
 from .backoff_policies import exponential_backoff
@@ -54,6 +58,8 @@ from .connection_diagnostic import ConnectionDiagnostic
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
+    _OAUTH_DEFAULT_SCOPE,
+    ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -79,13 +85,16 @@ from .description import (
     PYTHON_VERSION,
     SNOWFLAKE_CONNECTOR_VERSION,
 )
+from .direct_file_operation_utils import FileOperationParser, StreamDownloader
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
+    ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_BACKOFF_POLICY,
     ER_INVALID_VALUE,
+    ER_INVALID_WIF_SETTINGS,
     ER_NO_ACCOUNT_NAME,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
@@ -98,10 +107,15 @@ from .network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
+    NO_AUTH_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
+    OAUTH_AUTHORIZATION_CODE,
+    OAUTH_CLIENT_CREDENTIALS,
+    PAT_WITH_EXTERNAL_SESSION,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
+    WORKLOAD_IDENTITY_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
 )
@@ -110,9 +124,11 @@ from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
+from .wif_util import AttestationProvider
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
+MAX_CLIENT_FETCH_THREADS = 1024
 DEFAULT_BACKOFF_POLICY = exponential_backoff()
 
 
@@ -161,13 +177,13 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "user": ("", str),  # standard
     "password": ("", str),  # standard
     "host": ("127.0.0.1", str),  # standard
-    "port": (8080, (int, str)),  # standard
+    "port": (443, (int, str)),  # standard
     "database": (None, (type(None), str)),  # standard
     "proxy_host": (None, (type(None), str)),  # snowflake
     "proxy_port": (None, (type(None), str)),  # snowflake
     "proxy_user": (None, (type(None), str)),  # snowflake
     "proxy_password": (None, (type(None), str)),  # snowflake
-    "protocol": ("http", str),  # snowflake
+    "protocol": ("https", str),  # snowflake
     "warehouse": (None, (type(None), str)),  # snowflake
     "region": (None, (type(None), str)),  # snowflake
     "account": (None, (type(None), str)),  # snowflake
@@ -180,18 +196,21 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), int),
     ),  # network timeout (infinite by default)
     "socket_timeout": (None, (type(None), int)),
+    "external_browser_timeout": (120, int),
     "backoff_policy": (DEFAULT_BACKOFF_POLICY, Callable),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), bytes, str, RSAPrivateKey)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
-    "token": (None, (type(None), str)),  # OAuth/JWT/PAT Token
+    "token": (None, (type(None), str)),  # OAuth/JWT/PAT/OIDC Token
     "token_file_path": (
         None,
         (type(None), str, bytes),
-    ),  # OAuth/JWT/PAT Token file path
+    ),  # OAuth/JWT/PAT/OIDC Token file path
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
+    "workload_identity_provider": (None, (type(None), AttestationProvider)),
+    "workload_identity_entra_resource": (None, (type(None), str)),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -202,7 +221,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     # add the new client type to the server to support these features.
     "internal_application_name": (CLIENT_NAME, (type(None), str)),
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
-    "insecure_mode": (False, bool),  # Error security fix requirement
+    "disable_ocsp_checks": (False, bool),
     "ocsp_fail_open": (True, bool),  # fail open on ocsp issues, default true
     "inject_client_pause": (0, int),  # snowflake internal
     "session_parameters": (None, (type(None), dict)),  # snowflake session parameters
@@ -213,6 +232,8 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), int),
     ),  # snowflake
     "client_prefetch_threads": (4, int),  # snowflake
+    "client_fetch_threads": (None, (type(None), int)),
+    "client_fetch_use_mp": (False, bool),
     "numpy": (False, bool),  # snowflake
     "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
@@ -303,6 +324,63 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # SNOW-1817982: limit iobound TPE sizes when executing PUT/GET
+    "oauth_client_id": (
+        None,
+        (type(None), str),
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_client_secret": (
+        None,
+        (type(None), str),
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_authorization_url": (
+        "https://{host}:{port}/oauth/authorize",
+        str,
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_token_request_url": (
+        "https://{host}:{port}/oauth/token-request",
+        str,
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_redirect_uri": ("http://127.0.0.1", str),
+    "oauth_scope": (
+        "",
+        str,
+        # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_disable_pkce": (
+        False,
+        bool,
+        # SNOW-1825621: OAUTH PKCE
+    ),
+    "oauth_enable_refresh_tokens": (
+        False,
+        bool,
+    ),
+    "oauth_enable_single_use_refresh_tokens": (
+        False,
+        bool,
+        # Client-side opt-in to single-use refresh tokens.
+    ),
+    "check_arrow_conversion_error_on_every_column": (
+        True,
+        bool,
+    ),  # SNOW-XXXXX: remove the check_arrow_conversion_error_on_every_column flag
+    "external_session_id": (
+        None,
+        str,
+        # SNOW-2096721: External (Spark) session ID
+    ),
+    "unsafe_file_write": (
+        False,
+        bool,
+    ),  # SNOW-1944208: add unsafe write flag
+    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER: (
+        _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
+        int,  # type
+    ),  # snowflake internal
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -327,8 +405,10 @@ class SnowflakeConnection:
     Use connect(..) to get the object.
 
     Attributes:
-        insecure_mode: Whether or not the connection is in insecure mode. Insecure mode means that the connection
-            validates the TLS certificate but doesn't check revocation status.
+        insecure_mode (deprecated): Whether or not the connection is in OCSP disabled mode. It means that the connection
+            validates the TLS certificate but doesn't check revocation status with OCSP provider.
+        disable_ocsp_checks: Whether or not the connection is in OCSP disabled mode. It means that the connection
+            validates the TLS certificate but doesn't check revocation status with OCSP provider.
         ocsp_fail_open: Whether or not the connection is in fail open mode. Fail open mode decides if TLS certificates
             continue to be validated. Revoked certificates are blocked. Any other exceptions are disregarded.
         session_id: The session ID of the connection.
@@ -361,6 +441,9 @@ class SnowflakeConnection:
             See the backoff_policies module for details and implementation examples.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
+        client_fetch_threads: Number of threads (or processes) to fetch staged query results.
+            If not specified, reuses client_prefetch_threads value.
+        client_fetch_use_mp: Enables multiprocessing for fetching query results in parallel.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
         application: Application name to communicate with Snowflake as. By default, this is "PythonConnector".
         errorhandler: Handler used with errors. By default, an exception will be raised on error.
@@ -379,6 +462,8 @@ class SnowflakeConnection:
         server_session_keep_alive: When true, the connector does not destroy the session on the Snowflake server side
           before the connector shuts down. Default value is false.
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
+        unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
+        check_arrow_conversion_error_on_every_column: When true, the error check after the conversion from arrow to python types will happen for every column in the row. This is a new behaviour which fixes the bug that caused the type errors to trigger silently when occurring at any place other than last column in a row. To revert the previous (faulty) behaviour, please set this flag to false.
     """
 
     OCSP_ENV_LOCK = Lock()
@@ -433,10 +518,28 @@ class SnowflakeConnection:
         is_kwargs_empty = not kwargs
 
         if "application" not in kwargs:
-            if ENV_VAR_PARTNER in os.environ.keys():
-                kwargs["application"] = os.environ[ENV_VAR_PARTNER]
-            elif "streamlit" in sys.modules:
-                kwargs["application"] = "streamlit"
+            app = self._detect_application()
+            if app:
+                kwargs["application"] = app
+
+        if "insecure_mode" in kwargs:
+            warn_message = "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
+            warnings.warn(
+                warn_message,
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+            if (
+                "disable_ocsp_checks" in kwargs
+                and kwargs["disable_ocsp_checks"] != kwargs["insecure_mode"]
+            ):
+                logger.warning(
+                    "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
+                    "Using the value of 'disable_ocsp_checks."
+                )
+            else:
+                self._disable_ocsp_checks = kwargs["insecure_mode"]
 
         self.converter = None
         self.query_context_cache: QueryContextCache | None = None
@@ -469,19 +572,27 @@ class SnowflakeConnection:
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
+        # Set up the file operation parser and stream downloader.
+        self._file_operation_parser = FileOperationParser(self)
+        self._stream_downloader = StreamDownloader(self)
+
+    # Deprecated
     @property
     def insecure_mode(self) -> bool:
-        return self._insecure_mode
+        return self._disable_ocsp_checks
+
+    @property
+    def disable_ocsp_checks(self) -> bool:
+        return self._disable_ocsp_checks
 
     @property
     def ocsp_fail_open(self) -> bool:
         return self._ocsp_fail_open
 
     def _ocsp_mode(self) -> OCSPMode:
-        """OCSP mode. INSEC
-        URE, FAIL_OPEN or FAIL_CLOSED."""
-        if self.insecure_mode:
-            return OCSPMode.INSECURE
+        """OCSP mode. DISABLE_OCSP_CHECKS, FAIL_OPEN or FAIL_CLOSED."""
+        if self.disable_ocsp_checks:
+            return OCSPMode.DISABLE_OCSP_CHECKS
         elif self.ocsp_fail_open:
             return OCSPMode.FAIL_OPEN
         else:
@@ -500,8 +611,8 @@ class SnowflakeConnection:
         return self._host
 
     @property
-    def port(self) -> int | str:  # TODO: shouldn't be a string
-        return self._port
+    def port(self) -> int:
+        return int(self._port)
 
     @property
     def region(self) -> str | None:
@@ -594,6 +705,20 @@ class SnowflakeConnection:
     def client_prefetch_threads(self, value) -> None:
         self._client_prefetch_threads = value
         self._validate_client_prefetch_threads()
+
+    @property
+    def client_fetch_threads(self) -> int | None:
+        return self._client_fetch_threads
+
+    @client_fetch_threads.setter
+    def client_fetch_threads(self, value: None | int) -> None:
+        if value is not None:
+            value = min(max(1, value), MAX_CLIENT_FETCH_THREADS)
+        self._client_fetch_threads = value
+
+    @property
+    def client_fetch_use_mp(self) -> bool:
+        return self._client_fetch_use_mp
 
     @property
     def rest(self) -> SnowflakeRestful | None:
@@ -736,6 +861,22 @@ class SnowflakeConnection:
     def iobound_tpe_limit(self) -> int | None:
         return self._iobound_tpe_limit
 
+    @property
+    def unsafe_file_write(self) -> bool:
+        return self._unsafe_file_write
+
+    @unsafe_file_write.setter
+    def unsafe_file_write(self, value: bool) -> None:
+        self._unsafe_file_write = value
+
+    @property
+    def check_arrow_conversion_error_on_every_column(self) -> bool:
+        return self._check_arrow_conversion_error_on_every_column
+
+    @check_arrow_conversion_error_on_every_column.setter
+    def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
+        self._check_arrow_conversion_error_on_every_column = value
+
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
@@ -796,16 +937,16 @@ class SnowflakeConnection:
             self._cancel_heartbeat()
 
             # close telemetry first, since it needs rest to send remaining data
-            logger.info("closed")
+            logger.debug("closed")
             self._telemetry.close(send_on_close=bool(retry and self.telemetry_enabled))
             if (
                 self._all_async_queries_finished()
                 and not self._server_session_keep_alive
             ):
-                logger.info("No async queries seem to be running, deleting session")
+                logger.debug("No async queries seem to be running, deleting session")
                 self.rest.delete_session(retry=retry)
             else:
-                logger.info(
+                logger.debug(
                     "There are {} async queries still running, not deleting session".format(
                         len(self._async_sfqids)
                     )
@@ -904,7 +1045,7 @@ class SnowflakeConnection:
         remove_comments: bool = False,
         cursor_class: SnowflakeCursor = SnowflakeCursor,
         **kwargs,
-    ) -> Generator[SnowflakeCursor, None, None]:
+    ) -> Generator[SnowflakeCursor]:
         """Executes a stream of SQL statements. This is a non-standard convenient method."""
         split_statements_list = split_statements(
             stream, remove_comments=remove_comments
@@ -1048,7 +1189,7 @@ class SnowflakeConnection:
                     self.auth_class = AuthByWebBrowser(
                         application=self.application,
                         protocol=self._protocol,
-                        host=self.host,
+                        host=self.host,  # TODO: delete this?
                         port=self.port,
                         timeout=self.login_timeout,
                         backoff_generator=self._backoff_generator,
@@ -1084,6 +1225,47 @@ class SnowflakeConnection:
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
+            elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
+                if self._role and (self._oauth_scope == ""):
+                    # if role is known then let's inject it into scope
+                    self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
+                self.auth_class = AuthByOauthCode(
+                    application=self.application,
+                    client_id=self._oauth_client_id,
+                    client_secret=self._oauth_client_secret,
+                    host=self.host,
+                    authentication_url=self._oauth_authorization_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    token_request_url=self._oauth_token_request_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    redirect_uri=self._oauth_redirect_uri,
+                    scope=self._oauth_scope,
+                    pkce_enabled=not self._oauth_disable_pkce,
+                    token_cache=(
+                        auth.get_token_cache()
+                        if self._client_store_temporary_credential
+                        else None
+                    ),
+                    refresh_token_enabled=self._oauth_enable_refresh_tokens,
+                    external_browser_timeout=self._external_browser_timeout,
+                    enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
+                )
+            elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
+                if self._role and (self._oauth_scope == ""):
+                    # if role is known then let's inject it into scope
+                    self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
+                self.auth_class = AuthByOauthCredentials(
+                    application=self.application,
+                    client_id=self._oauth_client_id,
+                    client_secret=self._oauth_client_secret,
+                    token_request_url=self._oauth_token_request_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    scope=self._oauth_scope,
+                    connection=self,
+                )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                     self._client_request_mfa_token if IS_LINUX else True
@@ -1102,6 +1284,29 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
                 self.auth_class = AuthByPAT(self._token)
+            elif self._authenticator == PAT_WITH_EXTERNAL_SESSION:
+                # We don't need to do a POST to /v1/login-request to get session and master tokens at the startup
+                # time. PAT with external (Spark) session ID creates a new session when it encounters the unique
+                # (PAT, external session ID) combination for the first time and then onwards use the (PAT, external
+                # session id) as a key to identify and authenticate the session. So we bypass actual AuthN here.
+                self.auth_class = AuthNoAuth()
+                self._rest.set_pat_and_external_session(
+                    self._token, self._external_session_id
+                )
+            elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
+                self._check_experimental_authentication_flag()
+                # Standardize the provider enum.
+                if self._workload_identity_provider and isinstance(
+                    self._workload_identity_provider, str
+                ):
+                    self._workload_identity_provider = AttestationProvider.from_string(
+                        self._workload_identity_provider
+                    )
+                self.auth_class = AuthByWorkloadIdentity(
+                    provider=self._workload_identity_provider,
+                    token=self._token,
+                    entra_resource=self._workload_identity_entra_resource,
+                )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
                 self.auth_class = AuthByOkta(
@@ -1202,10 +1407,6 @@ class SnowflakeConnection:
         if "account" in kwargs:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
-            if "port" not in kwargs:
-                self._port = "443"
-            if "protocol" not in kwargs:
-                self._protocol = "https"
 
         logger.info(
             f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), 'GLOBAL')} Snowflake domain"
@@ -1225,6 +1426,8 @@ class SnowflakeConnection:
                 KEY_PAIR_AUTHENTICATOR,
                 OAUTH_AUTHENTICATOR,
                 USR_PWD_MFA_AUTHENTICATOR,
+                WORKLOAD_IDENTITY_AUTHENTICATOR,
+                PAT_WITH_EXTERNAL_SESSION,
             ]:
                 self._authenticator = auth_tmp
 
@@ -1234,9 +1437,21 @@ class SnowflakeConnection:
             with open(token_file_path) as f:
                 self._token = f.read()
 
+        # Set of authenticators allowing empty user.
+        empty_user_allowed_authenticators = {
+            OAUTH_AUTHENTICATOR,
+            NO_AUTH_AUTHENTICATOR,
+            WORKLOAD_IDENTITY_AUTHENTICATOR,
+            PROGRAMMATIC_ACCESS_TOKEN,
+            PAT_WITH_EXTERNAL_SESSION,
+        }
+
         if not (self._master_token and self._session_token):
-            if not self.user and self._authenticator != OAUTH_AUTHENTICATOR:
-                # OAuth Authentication does not require a username
+            if (
+                not self.user
+                and self._authenticator not in empty_user_allowed_authenticators
+            ):
+                # Some authenticators do not require a username
                 Error.errorhandler_wrapper(
                     self,
                     None,
@@ -1247,14 +1462,37 @@ class SnowflakeConnection:
             if self._private_key or self._private_key_file:
                 self._authenticator = KEY_PAIR_AUTHENTICATOR
 
+            workload_identity_dependent_options = [
+                "workload_identity_provider",
+                "workload_identity_entra_resource",
+            ]
+            for dependent_option in workload_identity_dependent_options:
+                if (
+                    self.__getattribute__(f"_{dependent_option}") is not None
+                    and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR
+                ):
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"{dependent_option} was set but authenticator was not set to {WORKLOAD_IDENTITY_AUTHENTICATOR}",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
+
             if (
                 self.auth_class is None
                 and self._authenticator
                 not in (
                     EXTERNAL_BROWSER_AUTHENTICATOR,
                     OAUTH_AUTHENTICATOR,
+                    OAUTH_AUTHORIZATION_CODE,
+                    OAUTH_CLIENT_CREDENTIALS,
                     KEY_PAIR_AUTHENTICATOR,
                     PROGRAMMATIC_ACCESS_TOKEN,
+                    WORKLOAD_IDENTITY_AUTHENTICATOR,
+                    PAT_WITH_EXTERNAL_SESSION,
                 )
                 and not self._password
             ):
@@ -1265,14 +1503,15 @@ class SnowflakeConnection:
                     {"msg": "Password is empty", "errno": ER_NO_PASSWORD},
                 )
 
-        if not self._account:
+        # Only AuthNoAuth allows account to be omitted.
+        if not self._account and not isinstance(self.auth_class, AuthNoAuth):
             Error.errorhandler_wrapper(
                 self,
                 None,
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if "." in self._account:
+        if self._account and "." in self._account:
             self._account = parse_account(self._account)
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(
@@ -1289,7 +1528,7 @@ class SnowflakeConnection:
             )
 
         if self.ocsp_fail_open:
-            logger.info(
+            logger.debug(
                 "This connection is in OCSP Fail Open Mode. "
                 "TLS Certificates would be checked for validity "
                 "and revocation status. Any other Certificate "
@@ -1298,12 +1537,10 @@ class SnowflakeConnection:
                 "connectivity."
             )
 
-        if self.insecure_mode:
-            logger.info(
-                "THIS CONNECTION IS IN INSECURE MODE. IT "
-                "MEANS THE CERTIFICATE WILL BE VALIDATED BUT THE "
-                "CERTIFICATE REVOCATION STATUS WILL NOT BE "
-                "CHECKED."
+        if self.disable_ocsp_checks:
+            logger.debug(
+                "This connection runs with disabled OCSP checks. "
+                "Revocation status of the certificate will not be checked against OCSP Responder."
             )
 
     def cmd_query(
@@ -1402,9 +1639,13 @@ class SnowflakeConnection:
         except ReauthenticationRequest as ex:
             # cached id_token expiration error, we have cleaned id_token and try to authenticate again
             logger.debug("ID token expired. Reauthenticating...: %s", ex)
-            if isinstance(auth_instance, AuthByIdToken):
-                # Note: SNOW-733835 IDToken auth needs to authenticate through
-                #  SSO if it has expired
+            if type(auth_instance) in (
+                AuthByIdToken,
+                AuthByOauthCode,
+                AuthByOauthCredentials,
+            ):
+                # IDToken and OAuth auth need to authenticate through
+                # SSO if its credential has expired
                 self._reauthenticate()
             else:
                 self._authenticate(auth_instance)
@@ -2005,3 +2246,29 @@ class SnowflakeConnection:
         except Exception as e:
             logger.debug("session could not be validated due to exception: %s", e)
             return False
+
+    def _check_experimental_authentication_flag(self) -> None:
+        if os.getenv(ENV_VAR_EXPERIMENTAL_AUTHENTICATION, "false").lower() != "true":
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable true to use the '{self._authenticator}' authenticator.",
+                    "errno": ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
+                },
+            )
+
+    @staticmethod
+    def _detect_application() -> None | str:
+        if ENV_VAR_PARTNER in os.environ.keys():
+            return os.environ[ENV_VAR_PARTNER]
+        if "streamlit" in sys.modules:
+            return "streamlit"
+        if all(
+            (jpmod in sys.modules)
+            for jpmod in ("ipykernel", "jupyter_core", "jupyter_client")
+        ):
+            return "jupyter_notebook"
+        if "snowbooks" in sys.modules:
+            return "snowflake_notebook"

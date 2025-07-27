@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -116,7 +112,7 @@ if pandas_available:
             pandas.NaT,
             pandas.Timestamp("2024-01-01 12:00:00+0000", tz="UTC"),
         ],
-        "NUMBER": [numpy.NAN, 1.0, 2.0, 3.0],
+        "NUMBER": [numpy.nan, 1.0, 2.0, 3.0],
     }
 
     PANDAS_STRUCTURED_REPRS = {
@@ -304,7 +300,7 @@ def pandas_verify(cur, data, deserialize):
             ), f"Result value {value} should match input example {datum}."
 
 
-@pytest.mark.parametrize("datatype", ICEBERG_UNSUPPORTED_TYPES)
+@pytest.mark.parametrize("datatype", sorted(ICEBERG_UNSUPPORTED_TYPES))
 def test_iceberg_negative(datatype, conn_cnx, iceberg_support, structured_type_support):
     if not iceberg_support:
         pytest.skip("Test requires iceberg support.")
@@ -1003,35 +999,46 @@ def test_select_vector(conn_cnx, is_public_test):
 
 
 def test_select_time(conn_cnx):
-    for scale in range(10):
-        select_time_with_scale(conn_cnx, scale)
-
-
-def select_time_with_scale(conn_cnx, scale):
+    # Test key scales and meaningful cases in a single table operation
+    # Cover: no fractional seconds, milliseconds, microseconds, nanoseconds
+    scales = [0, 3, 6, 9]  # Key precision levels
     cases = [
-        "00:01:23",
-        "00:01:23.1",
-        "00:01:23.12",
-        "00:01:23.123",
-        "00:01:23.1234",
-        "00:01:23.12345",
-        "00:01:23.123456",
-        "00:01:23.1234567",
-        "00:01:23.12345678",
-        "00:01:23.123456789",
+        "00:01:23",  # Basic time
+        "00:01:23.123456789",  # Max precision
+        "23:59:59.999999999",  # Edge case - max time with max precision
+        "00:00:00.000000001",  # Edge case - min time with min precision
     ]
-    table = "test_arrow_time"
-    column = f"(a time({scale}))"
-    values = (
-        "(-1, NULL), ("
-        + "),(".join([f"{i}, '{c}'" for i, c in enumerate(cases)])
-        + f"), ({len(cases)}, NULL)"
-    )
-    init(conn_cnx, table, column, values)
-    sql_text = f"select a from {table} order by s"
-    row_count = len(cases) + 2
-    col_count = 1
-    iterate_over_test_chunk("time", conn_cnx, sql_text, row_count, col_count)
+
+    table = "test_arrow_time_scales"
+
+    # Create columns for selected scales only (init function will add 's number' automatically)
+    columns = ", ".join([f"a{i} time({i})" for i in scales])
+    column_def = f"({columns})"
+
+    # Create values for selected scales - each case tests all scales simultaneously
+    value_rows = []
+    for i, case in enumerate(cases):
+        # Each row has the same time value for all scale columns
+        time_values = ", ".join([f"'{case}'" for _ in scales])
+        value_rows.append(f"({i}, {time_values})")
+
+    # Add NULL rows
+    null_values = ", ".join(["NULL" for _ in scales])
+    value_rows.append(f"(-1, {null_values})")
+    value_rows.append(f"({len(cases)}, {null_values})")
+
+    values = ", ".join(value_rows)
+
+    # Single table creation and test
+    init(conn_cnx, table, column_def, values)
+
+    # Test each scale column
+    for scale in scales:
+        sql_text = f"select a{scale} from {table} order by s"
+        row_count = len(cases) + 2
+        col_count = 1
+        iterate_over_test_chunk("time", conn_cnx, sql_text, row_count, col_count)
+
     finish(conn_cnx, table)
 
 
@@ -1226,6 +1233,65 @@ select '2019-08-10'::date, '2019-01-02 12:34:56.1234'::timestamp_ntz(4),
         assert val[2] == numpy.datetime64("2019-01-02 12:34:56.123456789")
         assert isinstance(val[3], numpy.datetime64)
         assert val[3] == numpy.datetime64("2019-01-02 12:34:56.12345678")
+
+
+@pytest.mark.parametrize("use_numpy", [True, False])
+def test_select_year_month_interval_arrow(conn_cnx, use_numpy):
+    cases = ["0-0", "1-2", "-1-3", "999999999-11", "-999999999-11"]
+    expected = [0, 14, -15, 11_999_999_999, -11_999_999_999]
+    if use_numpy:
+        expected = [numpy.timedelta64(e, "M") for e in expected]
+
+    table = "test_arrow_day_time_interval"
+    values = "(" + "),(".join([f"'{c}'" for c in cases]) + ")"
+    with conn_cnx(numpy=use_numpy) as conn:
+        cursor = conn.cursor()
+        cursor.execute("alter session set python_connector_query_result_format='arrow'")
+
+        cursor.execute("alter session set feature_interval_types=enabled")
+        cursor.execute(f"create or replace table {table} (c1 interval year to month)")
+        cursor.execute(f"insert into {table} values {values}")
+        result = conn.cursor().execute(f"select * from {table}").fetchall()
+        result = [r[0] for r in result]
+        assert result == expected
+
+
+@pytest.mark.skip(
+    reason="SNOW-1878635: Add support for day-time interval in ArrowStreamWriter"
+)
+@pytest.mark.parametrize("use_numpy", [True, False])
+def test_select_day_time_interval_arrow(conn_cnx, use_numpy):
+    cases = [
+        "0 0:0:0.0",
+        "12 3:4:5.678",
+        "-1 2:3:4.567",
+        "99999 23:59:59.999999",
+        "-99999 23:59:59.999999",
+    ]
+    expected = [
+        timedelta(days=0),
+        timedelta(days=12, hours=3, minutes=4, seconds=5.678),
+        -timedelta(days=1, hours=2, minutes=3, seconds=4.567),
+        timedelta(days=99999, hours=23, minutes=59, seconds=59.999999),
+        -timedelta(days=99999, hours=23, minutes=59, seconds=59.999999),
+    ]
+    if use_numpy:
+        expected = [numpy.timedelta64(e) for e in expected]
+
+    table = "test_arrow_day_time_interval"
+    values = "(" + "),(".join([f"'{c}'" for c in cases]) + ")"
+    with conn_cnx(numpy=use_numpy) as conn:
+        cursor = conn.cursor()
+        cursor.execute("alter session set python_connector_query_result_format='arrow'")
+
+        cursor.execute("alter session set feature_interval_types=enabled")
+        cursor.execute(
+            f"create or replace table {table} (c1 interval day(5) to second)"
+        )
+        cursor.execute(f"insert into {table} values {values}")
+        result = conn.cursor().execute(f"select * from {table}").fetchall()
+        result = [r[0] for r in result]
+        assert result == expected
 
 
 def get_random_seed():

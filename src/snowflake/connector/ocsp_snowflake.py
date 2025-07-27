@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import codecs
@@ -142,7 +138,7 @@ class OCSPResponseValidationResult(NamedTuple):
                     f" the original error error class and message are {exc_class} and {exception_dict['msg']}"
                 )
                 return RevocationCheckError(
-                    f"Got error {str(deserialize_exc)} while deserializing ocsp cache, please try "
+                    msg=f"Got error {str(deserialize_exc)} while deserializing ocsp cache, please try "
                     f"cleaning up the "
                     f"OCSP cache under directory {OCSP_RESPONSE_VALIDATION_CACHE.file_path}",
                     errno=ER_OCSP_RESPONSE_LOAD_FAILURE,
@@ -331,7 +327,7 @@ class OCSPTelemetryData:
         self.cache_enabled = False
         self.cache_hit = False
         self.fail_open = False
-        self.insecure_mode = False
+        self.disable_ocsp_checks = False
 
     def set_event_sub_type(self, event_sub_type: str) -> None:
         """
@@ -380,8 +376,12 @@ class OCSPTelemetryData:
     def set_fail_open(self, fail_open) -> None:
         self.fail_open = fail_open
 
+    # Deprecated
     def set_insecure_mode(self, insecure_mode) -> None:
-        self.insecure_mode = insecure_mode
+        self.disable_ocsp_checks = insecure_mode
+
+    def set_disable_ocsp_checks(self, disable_ocsp_checks) -> None:
+        self.disable_ocsp_checks = disable_ocsp_checks
 
     def generate_telemetry_data(
         self, event_type: str, urgent: bool = False
@@ -396,7 +396,7 @@ class OCSPTelemetryData:
                 TelemetryField.KEY_OOB_OCSP_REQUEST_BASE64.value: self.ocsp_req,
                 TelemetryField.KEY_OOB_OCSP_RESPONDER_URL.value: self.ocsp_url,
                 TelemetryField.KEY_OOB_ERROR_MESSAGE.value: self.error_msg,
-                TelemetryField.KEY_OOB_INSECURE_MODE.value: self.insecure_mode,
+                TelemetryField.KEY_OOB_INSECURE_MODE.value: self.disable_ocsp_checks,
                 TelemetryField.KEY_OOB_FAIL_OPEN.value: self.fail_open,
                 TelemetryField.KEY_OOB_CACHE_ENABLED.value: self.cache_enabled,
                 TelemetryField.KEY_OOB_CACHE_HIT.value: self.cache_hit,
@@ -572,7 +572,7 @@ class OCSPServer:
                             response.status_code,
                             sleep_time,
                         )
-                    time.sleep(sleep_time)
+                        time.sleep(sleep_time)
                 else:
                     logger.error(
                         "Failed to get OCSP response after %s attempt.", max_retry
@@ -1091,7 +1091,7 @@ class SnowflakeOCSP:
         cert_map = {}
         telemetry_data = OCSPTelemetryData()
         telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_SERVER_ENABLED)
-        telemetry_data.set_insecure_mode(False)
+        telemetry_data.set_disable_ocsp_checks(False)
         telemetry_data.set_sfc_peer_host(cert_filename)
         telemetry_data.set_fail_open(self.is_enabled_fail_open())
         try:
@@ -1137,7 +1137,7 @@ class SnowflakeOCSP:
 
         telemetry_data = OCSPTelemetryData()
         telemetry_data.set_cache_enabled(self.OCSP_CACHE_SERVER.CACHE_SERVER_ENABLED)
-        telemetry_data.set_insecure_mode(False)
+        telemetry_data.set_disable_ocsp_checks(False)
         telemetry_data.set_sfc_peer_host(hostname)
         telemetry_data.set_fail_open(self.is_enabled_fail_open())
 
@@ -1224,15 +1224,10 @@ class SnowflakeOCSP:
         return self.FAIL_OPEN
 
     @staticmethod
-    def print_fail_open_warning(ocsp_log) -> None:
-        static_warning = (
-            "WARNING!!! Using fail-open to connect. Driver is connecting to an "
-            "HTTPS endpoint without OCSP based Certificate Revocation checking "
-            "as it could not obtain a valid OCSP Response to use from the CA OCSP "
-            "responder. Details:"
-        )
-        ocsp_warning = f"{static_warning} \n {ocsp_log}"
-        logger.warning(ocsp_warning)
+    def print_fail_open_debug(ocsp_log) -> None:
+        static_debug = "OCSP responder didn't respond correctly. Assuming certificate is not revoked. Details: "
+        ocsp_debug = f"{static_debug} \n {ocsp_log}"
+        logger.debug(ocsp_debug)
 
     def validate_by_direct_connection(
         self,
@@ -1320,7 +1315,7 @@ class SnowflakeOCSP:
                 )
                 return ex_obj
             else:
-                SnowflakeOCSP.print_fail_open_warning(
+                SnowflakeOCSP.print_fail_open_debug(
                     telemetry_data.generate_telemetry_data("RevocationCheckFailure")
                 )
                 return None
@@ -1650,7 +1645,7 @@ class SnowflakeOCSP:
                             response.status_code,
                             sleep_time,
                         )
-                    time.sleep(sleep_time)
+                        time.sleep(sleep_time)
                 except Exception as ex:
                     if max_retry > 1:
                         sleep_time = next(backoff)

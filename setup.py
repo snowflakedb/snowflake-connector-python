@@ -1,7 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2019 Snowflake Computing Inc. All rights reserved.
-#
 
 import os
 import sys
@@ -101,10 +98,12 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                         "CArrowIterator.cpp",
                         "CArrowTableIterator.cpp",
                         "DateConverter.cpp",
+                        "DecFloatConverter.cpp",
                         "DecimalConverter.cpp",
                         "FixedSizeListConverter.cpp",
                         "FloatConverter.cpp",
                         "IntConverter.cpp",
+                        "IntervalConverter.cpp",
                         "MapConverter.cpp",
                         "ObjectConverter.cpp",
                         "SnowflakeType.cpp",

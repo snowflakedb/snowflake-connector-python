@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import errno
@@ -33,7 +29,7 @@ from snowflake.connector.errors import (
     DatabaseError,
     Error,
     ForbiddenError,
-    InterfaceError,
+    HttpError,
     OperationalError,
     OtherHTTPRetryableError,
     ServiceUnavailableError,
@@ -221,7 +217,7 @@ def test_request_exec():
 
     # unauthorized
     type(request_mock).status_code = PropertyMock(return_value=UNAUTHORIZED)
-    with pytest.raises(InterfaceError):
+    with pytest.raises(HttpError):
         rest._request_exec(session=session, **default_parameters)
 
     # unauthorized with catch okta unauthorized error
@@ -303,7 +299,9 @@ def test_fetch():
     def fake_request_exec(**kwargs):
         headers = kwargs.get("headers")
         cnt = headers["cnt"]
-        time.sleep(3)
+        time.sleep(
+            0.1
+        )  # Realistic network delay simulation without excessive test slowdown
         if cnt.c <= 1:
             # the first two raises failure
             cnt.c += 1
@@ -320,25 +318,27 @@ def test_fetch():
 
     # first two attempts will fail but third will success
     cnt.reset()
-    ret = rest.fetch(timeout=10, **default_parameters)
+    ret = rest.fetch(timeout=5, **default_parameters)
     assert ret == {"success": True, "data": "valid data"}
     assert not rest._connection.errorhandler.called  # no error
 
     # first attempt to reach timeout even if the exception is retryable
     cnt.reset()
-    ret = rest.fetch(timeout=1, **default_parameters)
+    ret = rest.fetch(
+        timeout=0.001, **default_parameters
+    )  # Timeout well before 0.1s sleep completes
     assert ret == {}
     assert rest._connection.errorhandler.called  # error
 
     # not retryable excpetion
     cnt.set(NOT_RETRYABLE)
     with pytest.raises(NotRetryableException):
-        rest.fetch(timeout=7, **default_parameters)
+        rest.fetch(timeout=5, **default_parameters)
 
     # first attempt fails and will not retry
     cnt.reset()
     default_parameters["no_retry"] = True
-    ret = rest.fetch(timeout=10, **default_parameters)
+    ret = rest.fetch(timeout=5, **default_parameters)
     assert ret == {}
     assert cnt.c == 1  # failed on first call - did not retry
     assert rest._connection.errorhandler.called  # error

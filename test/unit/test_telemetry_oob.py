@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import time
@@ -14,7 +10,7 @@ from snowflake.connector.telemetry_oob import TelemetryService
 TEST_RACE_CONDITION_THREAD_COUNT = 2
 TEST_RACE_CONDITION_DELAY_SECONDS = 1
 telemetry_data = {}
-exception = RevocationCheckError("Test OCSP Revocation error")
+exception = RevocationCheckError(msg="Test OCSP Revocation error")
 event_type = "Test OCSP Exception"
 stack_trace = [
     "Traceback (most recent call last):\n",

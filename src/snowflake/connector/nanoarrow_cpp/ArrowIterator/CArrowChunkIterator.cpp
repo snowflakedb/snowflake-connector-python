@@ -1,7 +1,3 @@
-//
-// Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-//
-
 #include "CArrowChunkIterator.hpp"
 
 #include <memory>
@@ -12,10 +8,12 @@
 #include "BinaryConverter.hpp"
 #include "BooleanConverter.hpp"
 #include "DateConverter.hpp"
+#include "DecFloatConverter.hpp"
 #include "DecimalConverter.hpp"
 #include "FixedSizeListConverter.hpp"
 #include "FloatConverter.hpp"
 #include "IntConverter.hpp"
+#include "IntervalConverter.hpp"
 #include "MapConverter.hpp"
 #include "ObjectConverter.hpp"
 #include "StringConverter.hpp"
@@ -26,7 +24,8 @@ namespace sf {
 
 CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes,
                                          int64_t arrow_bytes_size,
-                                         PyObject* use_numpy)
+                                         PyObject* use_numpy,
+                                         PyObject* check_error_on_every_column)
     : CArrowIterator(arrow_bytes, arrow_bytes_size),
       m_latestReturnedRow(nullptr),
       m_context(context) {
@@ -38,6 +37,7 @@ CArrowChunkIterator::CArrowChunkIterator(PyObject* context, char* arrow_bytes,
   m_rowCountInBatch = 0;
   m_latestReturnedRow.reset();
   m_useNumpy = PyObject_IsTrue(use_numpy);
+  m_checkErrorOnEveryColumn = PyObject_IsTrue(check_error_on_every_column);
 
   m_batchCount = m_ipcArrowArrayVec.size();
   m_columnCount = m_batchCount > 0 ? m_ipcArrowSchema->n_children : 0;
@@ -91,6 +91,9 @@ void CArrowChunkIterator::createRowPyObject() {
     PyTuple_SET_ITEM(
         m_latestReturnedRow.get(), i,
         m_currentBatchConverters[i]->toPyObject(m_rowIndexInBatch));
+    if (m_checkErrorOnEveryColumn && py::checkPyError()) {
+      return;
+    }
   }
   return;
 }
@@ -471,6 +474,42 @@ std::shared_ptr<sf::IColumnConverter> getConverterFromSchema(
       break;
     }
 
+    case SnowflakeType::Type::DECFLOAT: {
+      converter = std::make_shared<sf::DecFloatConverter>(*array, schemaView,
+                                                          *context, useNumpy);
+      break;
+    }
+
+    case SnowflakeType::Type::INTERVAL_YEAR_MONTH: {
+      converter = std::make_shared<sf::IntervalYearMonthConverter>(
+          array, context, useNumpy);
+      break;
+    }
+
+    case SnowflakeType::Type::INTERVAL_DAY_TIME: {
+      switch (schemaView.type) {
+        case NANOARROW_TYPE_INT64:
+          converter = std::make_shared<sf::IntervalDayTimeConverterInt>(
+              array, context, useNumpy);
+          break;
+        case NANOARROW_TYPE_DECIMAL128:
+          converter = std::make_shared<sf::IntervalDayTimeConverterDecimal>(
+              array, context, useNumpy);
+          break;
+        default: {
+          std::string errorInfo = Logger::formatString(
+              "[Snowflake Exception] unknown arrow internal data type(%d) "
+              "for OBJECT data in %s",
+              NANOARROW_TYPE_ENUM_STRING[schemaView.type],
+              schemaView.schema->name);
+          logger->error(__FILE__, __func__, __LINE__, errorInfo.c_str());
+          PyErr_SetString(PyExc_Exception, errorInfo.c_str());
+          break;
+        }
+      }
+      break;
+    }
+
     default: {
       std::string errorInfo = Logger::formatString(
           "[Snowflake Exception] unknown snowflake data type : %d", st);
@@ -498,7 +537,8 @@ DictCArrowChunkIterator::DictCArrowChunkIterator(PyObject* context,
                                                  char* arrow_bytes,
                                                  int64_t arrow_bytes_size,
                                                  PyObject* use_numpy)
-    : CArrowChunkIterator(context, arrow_bytes, arrow_bytes_size, use_numpy) {}
+    : CArrowChunkIterator(context, arrow_bytes, arrow_bytes_size, use_numpy,
+                          Py_False) {}
 
 void DictCArrowChunkIterator::createRowPyObject() {
   m_latestReturnedRow.reset(PyDict_New());

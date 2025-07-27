@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import decimal
@@ -13,6 +9,7 @@ import pickle
 import string
 import tempfile
 import time
+import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
@@ -130,6 +127,31 @@ b binary)
         )
 
     return conn_cnx
+
+
+class LobBackendParams(NamedTuple):
+    max_lob_size_in_memory: int
+
+
+@pytest.fixture()
+def lob_params(conn_cnx) -> LobBackendParams:
+    with conn_cnx() as cnx:
+        (max_lob_size_in_memory_feat, max_lob_size_in_memory) = (
+            (cnx.cursor().execute(f"show parameters like '{lob_param}'").fetchone())
+            for lob_param in (
+                "FEATURE_INCREASED_MAX_LOB_SIZE_IN_MEMORY",
+                "MAX_LOB_SIZE_IN_MEMORY",
+            )
+        )
+        max_lob_size_in_memory_feat = (
+            max_lob_size_in_memory_feat and max_lob_size_in_memory_feat[1] == "ENABLED"
+        )
+        max_lob_size_in_memory = (
+            int(max_lob_size_in_memory[1])
+            if (max_lob_size_in_memory_feat and max_lob_size_in_memory)
+            else 2**24
+        )
+        return LobBackendParams(max_lob_size_in_memory)
 
 
 def _check_results(cursor, results):
@@ -702,6 +724,46 @@ def test_geometry(conn_cnx):
 
 
 @pytest.mark.skipolddriver
+def test_file(conn_cnx):
+    """Variant including JSON object."""
+    name_file = random_string(5, "test_file_")
+    with conn_cnx(
+        session_parameters={
+            "ENABLE_FILE_DATA_TYPE": True,
+        },
+    ) as cnx:
+        with cnx.cursor() as cur:
+            cur.execute(
+                f"create temporary table {name_file} as select "
+                f"TO_FILE(OBJECT_CONSTRUCT('RELATIVE_PATH', 'some_new_file.jpeg', 'STAGE', '@myStage', "
+                f"'STAGE_FILE_URL', 'some_new_file.jpeg', 'SIZE', 123, 'ETAG', 'xxx', 'CONTENT_TYPE', 'image/jpeg', "
+                f"'LAST_MODIFIED', '2025-01-01')) as file_col"
+            )
+
+            expected_data = [
+                {
+                    "RELATIVE_PATH": "some_new_file.jpeg",
+                    "STAGE": "@myStage",
+                    "STAGE_FILE_URL": "some_new_file.jpeg",
+                    "SIZE": 123,
+                    "ETAG": "xxx",
+                    "CONTENT_TYPE": "image/jpeg",
+                    "LAST_MODIFIED": "2025-01-01",
+                }
+            ]
+
+        with cnx.cursor() as cur:
+            # Test with FILE return type
+            result = cur.execute(f"select * from {name_file}")
+            for metadata in [cur.description, cur._description_internal]:
+                assert FIELD_ID_TO_NAME[metadata[0].type_code] == "FILE"
+            data = result.fetchall()
+            for raw_data in data:
+                row = json.loads(raw_data[0])
+                assert row in expected_data
+
+
+@pytest.mark.skipolddriver
 def test_vector(conn_cnx, is_public_test):
     if is_public_test:
         pytest.xfail(
@@ -763,6 +825,7 @@ def test_invalid_bind_data_type(conn_cnx):
             cnx.cursor().execute("select 1 from dual where 1=%s", ([1, 2, 3],))
 
 
+@pytest.mark.skipolddriver
 def test_timeout_query(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as c:
@@ -773,8 +836,29 @@ def test_timeout_query(conn_cnx):
                 )
             assert err.value.errno == 604, (
                 "Invalid error code"
-                and "SQL execution was cancelled by the client due to a timeout"
+                and "SQL execution was cancelled by the client due to a timeout. Error message received from the server: SQL execution canceled"
                 in err.value.msg
+            )
+
+            with pytest.raises(errors.ProgrammingError) as err:
+                # we can not precisely control the timing to send cancel query request right after server
+                # executes the query but before returning the results back to client
+                # it depends on python scheduling and server processing speed, so we mock here
+                with mock.patch(
+                    "snowflake.connector.cursor._TrackedQueryCancellationTimer",
+                    autospec=True,
+                ) as mock_timebomb:
+                    mock_timebomb.return_value.executed = True
+                    c.execute(
+                        "select 123'",
+                        timeout=0.1,
+                    )
+            assert c._timebomb.executed is True and err.value.errno == 1003, (
+                "Invalid error code"
+                and "SQL compilation error:\nsyntax error line 1 at position 10 unexpected '''."
+                in err.value.msg
+                and "SQL execution was cancelled by the client due to a timeout"
+                not in err.value.msg
             )
 
 
@@ -1499,11 +1583,13 @@ def test__log_telemetry_job_data(conn_cnx, caplog):
         ("arrow", ArrowResultBatch),
     ),
 )
+@pytest.mark.parametrize("client_fetch_use_mp", [False, True])
 def test_resultbatch(
     conn_cnx,
     result_format,
     expected_chunk_type,
     capture_sf_telemetry,
+    client_fetch_use_mp,
 ):
     """This test checks the following things:
     1. After executing a query can we pickle the result batches
@@ -1516,7 +1602,8 @@ def test_resultbatch(
     with conn_cnx(
         session_parameters={
             "python_connector_query_result_format": result_format,
-        }
+        },
+        client_fetch_use_mp=client_fetch_use_mp,
     ) as con:
         with capture_sf_telemetry.patch_connection(con) as telemetry_data:
             with con.cursor() as cur:
@@ -1569,7 +1656,9 @@ def test_resultbatch(
         ("arrow", "snowflake.connector.result_batch.ArrowResultBatch.create_iter"),
     ),
 )
-def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_path):
+def test_resultbatch_lazy_fetching_and_schemas(
+    conn_cnx, result_format, patch_path, lob_params
+):
     """Tests whether pre-fetching results chunks fetches the right amount of them."""
     rowcount = 1000000  # We need at least 5 chunks for this test
     with conn_cnx(
@@ -1597,7 +1686,17 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
                     # all batches should have the same schema
                     assert schema == [
                         ResultMetadata("C1", 0, None, None, 10, 0, False),
-                        ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                        ResultMetadata(
+                            "C2",
+                            2,
+                            None,
+                            schema[
+                                1
+                            ].internal_size,  # TODO: lob_params.max_lob_size_in_memory,
+                            None,
+                            None,
+                            False,
+                        ),
                     ]
                 assert patched_download.call_count == 0
                 assert len(result_batches) > 5
@@ -1618,7 +1717,7 @@ def test_resultbatch_lazy_fetching_and_schemas(conn_cnx, result_format, patch_pa
 
 @pytest.mark.skipolddriver(reason="new feature in v2.5.0")
 @pytest.mark.parametrize("result_format", ["json", "arrow"])
-def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
+def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format, lob_params):
     with conn_cnx(
         session_parameters={"python_connector_query_result_format": result_format}
     ) as con:
@@ -1634,7 +1733,15 @@ def test_resultbatch_schema_exists_when_zero_rows(conn_cnx, result_format):
             schema = result_batches[0].schema
             assert schema == [
                 ResultMetadata("C1", 0, None, None, 10, 0, False),
-                ResultMetadata("C2", 2, None, 16777216, None, None, False),
+                ResultMetadata(
+                    "C2",
+                    2,
+                    None,
+                    schema[1].internal_size,  # TODO: lob_params.max_lob_size_in_memory,
+                    None,
+                    None,
+                    False,
+                ),
             ]
 
 
@@ -1683,6 +1790,24 @@ def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_method):
                 ),
             ):
                 fetch_next_fn()
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("result_format", ("json", "arrow"))
+def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
+    """Tests whether the year 10000 is out of range exception is raised as expected."""
+    with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: result_format
+        }
+    ) as con:
+        with con.cursor() as cur:
+            cur.execute("select TO_DATE('10000-01-01'), TO_DATE('9999-01-01')")
+            with pytest.raises(
+                InterfaceError,
+                match="out of range",
+            ):
+                cur.fetchall()
 
 
 @pytest.mark.skipolddriver
@@ -1846,73 +1971,35 @@ def test_nanoarrow_usage_deprecation():
             in str(record[2].message)
         )
 
+@pytest.mark.parametrize(
+    "request_id",
+    [
+        "THIS IS NOT VALID",
+        uuid.uuid1(),
+        uuid.uuid3(uuid.NAMESPACE_URL, "www.snowflake.com"),
+        uuid.uuid5(uuid.NAMESPACE_URL, "www.snowflake.com"),
+    ],
+)
+def test_custom_request_id_negative(request_id, conn_cnx):
 
-def _generate_lob(length: int) -> str:
-    base = string.printable.replace(",", "").replace("\n", "")
-    times, reminder = length // len(base), length % len(base)
-    return base * times + base[:reminder]
-
-
-_MB = 1024 * 1024
-_LOB_SIZES = [(2**x) * 16 * _MB for x in range(4)]
-_LOB_RESULT_FORMATS = ["Arrow", "JSON"]
-_LOB_TABLE = "my_lob_test"
-
-
-@pytest.mark.parametrize("lob_size", _LOB_SIZES)
-@pytest.mark.parametrize("result_format", _LOB_RESULT_FORMATS)
-def test_lob_insert_select(conn_cnx, lob_size, result_format):
-    with conn_cnx(
-        session_parameters={
-            "ALLOW_LARGE_LOBS_IN_EXTERNAL_SCAN": True,
-            "python_connector_query_result_format": result_format,
-        },
-    ) as con, con.cursor() as cur:
-        cur.execute(f"create or replace table {_LOB_TABLE}(c1 varchar({lob_size}))")
-        lob = _generate_lob(lob_size)
-        cur.execute(
-            f"insert into {_LOB_TABLE} values (?)",
-            params=(lob,),
-            _force_qmark_paramstyle=True,
-        )
-        fetched_lob = cur.execute(f"select c1 from {_LOB_TABLE}").fetchall()[0][0]
-        assert lob == fetched_lob
-        cur.execute(f"drop table if exists {_LOB_TABLE}")
+    # Ensure that invalid request_ids (non uuid4) do not compromise interface.
+    with pytest.raises(ValueError, match="requestId"):
+        with conn_cnx() as con:
+            with con.cursor() as cur:
+                cur.execute(
+                    "select seq4() as foo from table(generator(rowcount=>5))",
+                    _statement_params={"requestId": request_id},
+                )
 
 
-@pytest.mark.parametrize("lob_size", _LOB_SIZES)
-@pytest.mark.parametrize("result_format", _LOB_RESULT_FORMATS)
-def test_lob_put_get(conn_cnx, lob_size, result_format):
-    with conn_cnx(
-        session_parameters={
-            "ALLOW_LARGE_LOBS_IN_EXTERNAL_SCAN": True,
-            "python_connector_query_result_format": result_format,
-        },
-    ) as con, con.cursor() as cur:
-        cur.execute(f"create or replace table {_LOB_TABLE}(c1 varchar({lob_size}))")
-        lob = _generate_lob(lob_size)
-        with tempfile.NamedTemporaryFile("w", suffix=".csv") as tmp_input:
-            tmp_input.write(lob)
-            tmp_input.flush()
-            file_path = tmp_input.name
-            escaped_file_path = file_path.replace("\\", "\\\\")
-            file_name = os.path.basename(file_path)
-            put_result = cur.execute(
-                f"PUT 'file://{escaped_file_path}' @%{_LOB_TABLE}"
-            ).fetchall()[0]
-            assert put_result[0] == file_name
-            assert put_result[1] == file_name + ".gz"
-            assert put_result[5] == "GZIP"
-            assert put_result[6] == "UPLOADED"
+def test_custom_request_id(conn_cnx):
+    request_id = uuid.uuid4()
 
-            ls_result = cur.execute(f"ls @%{_LOB_TABLE}").fetchall()[0]
-            assert ls_result[0] == file_name + ".gz"
-
+    with conn_cnx() as con:
+        with con.cursor() as cur:
             cur.execute(
-                f"copy into {_LOB_TABLE} from @%{_LOB_TABLE} file_format=(type=csv compression='gzip')"
+                "select seq4() as foo from table(generator(rowcount=>5))",
+                _statement_params={"requestId": request_id},
             )
 
-            fetched_lob = cur.execute(f"select c1 from {_LOB_TABLE}").fetchall()[0][0]
-            assert lob == fetched_lob
-
-            cur.execute(f"drop table if exists {_LOB_TABLE}")
+            assert cur._sfqid is not None, "Query must execute successfully."

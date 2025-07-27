@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import binascii
@@ -19,8 +15,9 @@ from logging import getLogger
 from time import time
 from typing import IO, TYPE_CHECKING, Any, Callable, TypeVar
 
+from ._utils import _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER
 from .azure_storage_client import SnowflakeAzureRestClient
-from .compat import GET_CWD, IS_WINDOWS
+from .compat import IS_WINDOWS
 from .constants import (
     AZURE_CHUNK_SIZE,
     AZURE_FS,
@@ -319,6 +316,9 @@ class StorageCredential:
     def update(self, cur_timestamp) -> None:
         with self.lock:
             if cur_timestamp < self.timestamp:
+                logger.debug(
+                    "Omitting renewal of storage token, as it already happened."
+                )
                 return
             logger.debug("Renewing expired storage token.")
             ret = self.connection.cursor()._execute_helper(self._command)
@@ -355,6 +355,8 @@ class SnowflakeFileTransferAgent:
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
         iobound_tpe_limit: int | None = None,
+        unsafe_file_write: bool = False,
+        snowflake_server_dop_cap_for_file_transfer=_DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -386,6 +388,10 @@ class SnowflakeFileTransferAgent:
         self._use_s3_regional_url = use_s3_regional_url
         self._credentials: StorageCredential | None = None
         self._iobound_tpe_limit = iobound_tpe_limit
+        self._unsafe_file_write = unsafe_file_write
+        self._snowflake_server_dop_cap_for_file_transfer = (
+            snowflake_server_dop_cap_for_file_transfer
+        )
 
     def execute(self) -> None:
         self._parse_command()
@@ -442,12 +448,16 @@ class SnowflakeFileTransferAgent:
             result.result_status = result.result_status.value
 
     def transfer(self, metas: list[SnowflakeFileMeta]) -> None:
-        iobound_tpe_limit = min(len(metas), os.cpu_count())
+        iobound_tpe_limit = min(
+            len(metas), os.cpu_count(), self._snowflake_server_dop_cap_for_file_transfer
+        )
         logger.debug("Decided IO-bound TPE size: %d", iobound_tpe_limit)
         if self._iobound_tpe_limit is not None:
             logger.debug("IO-bound TPE size is limited to: %d", self._iobound_tpe_limit)
             iobound_tpe_limit = min(iobound_tpe_limit, self._iobound_tpe_limit)
-        max_concurrency = self._parallel
+        max_concurrency = min(
+            self._parallel, self._snowflake_server_dop_cap_for_file_transfer
+        )
         network_tpe = ThreadPoolExecutor(max_concurrency)
         preprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
         postprocess_tpe = ThreadPoolExecutor(iobound_tpe_limit)
@@ -536,7 +546,7 @@ class SnowflakeFileTransferAgent:
         ) -> None:
             # Note: chunk_id is 0 based while num_of_chunks is count
             logger.debug(
-                f"Chunk {chunk_id}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
+                f"Chunk(id: {chunk_id}) {chunk_id+1}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
             )
             with cv_chunk_process:
                 transfer_metadata.chunks_in_queue -= 1
@@ -673,6 +683,7 @@ class SnowflakeFileTransferAgent:
                 meta,
                 self._stage_info,
                 4 * megabyte,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == AZURE_FS:
             return SnowflakeAzureRestClient(
@@ -680,7 +691,7 @@ class SnowflakeFileTransferAgent:
                 self._credentials,
                 AZURE_CHUNK_SIZE,
                 self._stage_info,
-                use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == S3_FS:
             return SnowflakeS3RestClient(
@@ -690,6 +701,7 @@ class SnowflakeFileTransferAgent:
                 _chunk_size_calculator(meta.src_file_size),
                 use_accelerate_endpoint=self._use_accelerate_endpoint,
                 use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == GCS_FS:
             return SnowflakeGCSRestClient(
@@ -698,7 +710,7 @@ class SnowflakeFileTransferAgent:
                 self._stage_info,
                 self._cursor._connection,
                 self._command,
-                use_s3_regional_url=self._use_s3_regional_url,
+                unsafe_file_write=self._unsafe_file_write,
             )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 
@@ -836,17 +848,17 @@ class SnowflakeFileTransferAgent:
         for file_name in locations:
             if self._command_type == CMD_TYPE_UPLOAD:
                 file_name = os.path.expanduser(file_name)
-                if not os.path.isabs(file_name):
-                    file_name = os.path.join(GET_CWD(), file_name)
                 if (
                     IS_WINDOWS
                     and len(file_name) > 2
                     and file_name[0] == "/"
                     and file_name[2] == ":"
                 ):
-                    # Windows path: /C:/data/file1.txt where it starts with slash
-                    # followed by a drive letter and colon.
+                    # Since python 3.13 os.path.isabs returns different values for URI or paths starting with a '/' etc. on Windows (https://github.com/python/cpython/issues/125283)
+                    # Windows path: /C:/data/file1.txt is not treated as absolute - could be prefixed with another Windows driver's letter and colon.
                     file_name = file_name[1:]
+                if not os.path.isabs(file_name):
+                    file_name = os.path.abspath(file_name)
                 files = glob.glob(file_name)
                 canonical_locations += files
             else:
@@ -1059,11 +1071,14 @@ class SnowflakeFileTransferAgent:
             for idx, file_name in enumerate(self._src_files):
                 if not file_name:
                     continue
-                first_path_sep = file_name.find("/")
                 dst_file_name = (
-                    file_name[first_path_sep + 1 :]
+                    self._strip_stage_prefix_from_dst_file_name_for_download(file_name)
+                )
+                first_path_sep = dst_file_name.find("/")
+                dst_file_name = (
+                    dst_file_name[first_path_sep + 1 :]
                     if first_path_sep >= 0
-                    else file_name
+                    else dst_file_name
                 )
                 url = None
                 if self._presigned_urls and idx < len(self._presigned_urls):
@@ -1198,3 +1213,12 @@ class SnowflakeFileTransferAgent:
                 else:
                     m.dst_file_name = m.name
                     m.dst_compression_type = None
+
+    def _strip_stage_prefix_from_dst_file_name_for_download(self, dst_file_name):
+        """Strips the stage prefix from dst_file_name for download.
+
+        Note that this is no-op in most cases, and therefore we return as is.
+        But for some workloads they will monkeypatch this method to add their
+        stripping logic.
+        """
+        return dst_file_name

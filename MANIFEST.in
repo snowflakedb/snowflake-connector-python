@@ -19,6 +19,7 @@ exclude license_header.txt
 exclude tox.ini
 exclude mypy.ini
 exclude .clang-format
+exclude .wiremock/*
 
 prune ci
 prune benchmark
@@ -27,3 +28,4 @@ prune tested_requirements
 prune src/snowflake/connector/nanoarrow_cpp/scripts
 prune __pycache__
 prune samples
+prune prober

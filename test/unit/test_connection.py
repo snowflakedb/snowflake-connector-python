@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import json
@@ -25,11 +21,12 @@ import snowflake.connector
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
 from snowflake.connector.errors import (
     Error,
-    InterfaceError,
+    HttpError,
     OperationalError,
     ProgrammingError,
 )
 from snowflake.connector.network import SnowflakeRestful
+from snowflake.connector.wif_util import AttestationProvider
 
 from ..randomize import random_string
 from .mock_utils import mock_request_with_action, zero_backoff
@@ -95,6 +92,13 @@ def mock_post_requests(monkeypatch):
     )
 
     return request_body
+
+
+def write_temp_file(file_path: Path, contents: str) -> Path:
+    """Write the given string text to the given path, chmods it to be accessible, and returns the same path."""
+    file_path.write_text(contents)
+    file_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    return file_path
 
 
 def test_connect_with_service_name(mock_post_requests):
@@ -190,12 +194,23 @@ def test_partner_env_var(mock_post_requests):
 
 
 @pytest.mark.skipolddriver
-def test_imported_module(mock_post_requests):
-    with patch.dict(sys.modules, {"streamlit": "foo"}):
-        assert fake_connector().application == "streamlit"
+@pytest.mark.parametrize(
+    "sys_modules,application",
+    [
+        ({"streamlit": None}, "streamlit"),
+        (
+            {"ipykernel": None, "jupyter_core": None, "jupyter_client": None},
+            "jupyter_notebook",
+        ),
+        ({"snowbooks": None}, "snowflake_notebook"),
+    ],
+)
+def test_imported_module(mock_post_requests, sys_modules, application):
+    with patch.dict(sys.modules, sys_modules):
+        assert fake_connector().application == application
 
     assert (
-        mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == "streamlit"
+        mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == application
     )
 
 
@@ -350,7 +365,7 @@ def test_invalid_backoff_policy():
         # passing a non-generator function should not work
         _ = fake_connector(backoff_policy=lambda: None)
 
-    with pytest.raises(InterfaceError):
+    with pytest.raises(HttpError):
         # passing a generator function should make it pass config and error during connection
         _ = fake_connector(backoff_policy=zero_backoff)
 
@@ -588,3 +603,119 @@ def test_otel_error_message(caplog, mock_post_requests):
     ]
     assert len(important_records) == 1
     assert important_records[0].exc_text is not None
+
+
+@pytest.mark.parametrize(
+    "dependent_param,value",
+    [
+        ("workload_identity_provider", "AWS"),
+        (
+            "workload_identity_entra_resource",
+            "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
+        ),
+    ],
+)
+def test_cannot_set_dependent_params_without_wlid_authenticator(
+    mock_post_requests, dependent_param, value
+):
+    with pytest.raises(ProgrammingError) as excinfo:
+        snowflake.connector.connect(
+            user="user",
+            account="account",
+            password="password",
+            **{dependent_param: value},
+        )
+    assert (
+        f"{dependent_param} was set but authenticator was not set to WORKLOAD_IDENTITY"
+        in str(excinfo.value)
+    )
+
+
+def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
+    with pytest.raises(ProgrammingError) as excinfo:
+        snowflake.connector.connect(
+            account="account", authenticator="WORKLOAD_IDENTITY"
+        )
+    assert (
+        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable true to use the 'WORKLOAD_IDENTITY' authenticator"
+        in str(excinfo.value)
+    )
+
+
+def test_connection_params_are_plumbed_into_authbyworkloadidentity(monkeypatch):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
+
+        conn = snowflake.connector.connect(
+            account="my_account_1",
+            workload_identity_provider=AttestationProvider.AWS,
+            workload_identity_entra_resource="api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
+            token="my_token",
+            authenticator="WORKLOAD_IDENTITY",
+        )
+        assert conn.auth_class.provider == AttestationProvider.AWS
+        assert (
+            conn.auth_class.entra_resource
+            == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        )
+        assert conn.auth_class.token == "my_token"
+
+
+def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
+    monkeypatch, tmp_path
+):
+    token_file = write_temp_file(tmp_path / "token.txt", contents="my_token")
+    # On Windows, this path includes backslashes which will result in errors while parsing the TOML.
+    # Escape the backslashes to ensure it parses correctly.
+    token_file_path_escaped = str(token_file).replace("\\", "\\\\")
+    connections_file = write_temp_file(
+        tmp_path / "connections.toml",
+        contents=dedent(
+            f"""\
+        [default]
+        account = "my_account_1"
+        authenticator = "WORKLOAD_IDENTITY"
+        workload_identity_provider = "OIDC"
+        workload_identity_entra_resource = "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        token_file_path = "{token_file_path_escaped}"
+        """
+        ),
+    )
+
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
+
+        conn = snowflake.connector.connect(connections_file_path=connections_file)
+        assert conn.auth_class.provider == AttestationProvider.OIDC
+        assert (
+            conn.auth_class.entra_resource
+            == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
+        )
+        assert conn.auth_class.token == "my_token"
+
+
+@pytest.mark.parametrize("rtr_enabled", [True, False])
+def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
+    monkeypatch, rtr_enabled: bool
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
+
+        conn = snowflake.connector.connect(
+            account="my_account_1",
+            user="user",
+            oauth_client_id="client_id",
+            oauth_client_secret="client_secret",
+            authenticator="OAUTH_AUTHORIZATION_CODE",
+            oauth_enable_single_use_refresh_tokens=rtr_enabled,
+        )
+        assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled

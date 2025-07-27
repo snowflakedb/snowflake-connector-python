@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import os
@@ -45,10 +41,30 @@ except ImportError:
 
 logger = getLogger(__name__)
 
-if RUNNING_ON_GH:
-    TEST_SCHEMA = "GH_JOB_{}".format(str(uuid.uuid4()).replace("-", "_"))
-else:
-    TEST_SCHEMA = "python_connector_tests_" + str(uuid.uuid4()).replace("-", "_")
+
+def _get_worker_specific_schema():
+    """Generate worker-specific schema name for parallel test execution."""
+    base_uuid = str(uuid.uuid4()).replace("-", "_")
+
+    # Check if running in pytest-xdist parallel mode
+    worker_id = os.getenv("PYTEST_XDIST_WORKER")
+    if worker_id:
+        # Use worker ID to ensure unique schema per worker
+        worker_suffix = worker_id.replace("-", "_")
+        if RUNNING_ON_GH:
+            return f"GH_JOB_{worker_suffix}_{base_uuid}"
+        else:
+            return f"python_connector_tests_{worker_suffix}_{base_uuid}"
+    else:
+        # Single worker mode (original behavior)
+        if RUNNING_ON_GH:
+            return f"GH_JOB_{base_uuid}"
+        else:
+            return f"python_connector_tests_{base_uuid}"
+
+
+TEST_SCHEMA = _get_worker_specific_schema()
+
 
 if TEST_USING_VENDORED_ARROW:
     snowflake.connector.cursor.NANOARR_USAGE = (
@@ -96,6 +112,11 @@ def is_public_testaccount() -> bool:
 
 
 @pytest.fixture(scope="session")
+def is_local_dev_setup(db_parameters) -> bool:
+    return db_parameters.get("is_local_dev_setup", False)
+
+
+@pytest.fixture(scope="session")
 def db_parameters() -> dict[str, str]:
     return get_db_parameters()
 
@@ -135,8 +156,15 @@ def get_db_parameters(connection_name: str = "default") -> dict[str, Any]:
         print_help()
         sys.exit(2)
 
-    # a unique table name
-    ret["name"] = "python_tests_" + str(uuid.uuid4()).replace("-", "_")
+    # a unique table name (worker-specific for parallel execution)
+    base_uuid = str(uuid.uuid4()).replace("-", "_")
+    worker_id = os.getenv("PYTEST_XDIST_WORKER")
+    if worker_id:
+        # Include worker ID to prevent conflicts between parallel workers
+        worker_suffix = worker_id.replace("-", "_")
+        ret["name"] = f"python_tests_{worker_suffix}_{base_uuid}"
+    else:
+        ret["name"] = f"python_tests_{base_uuid}"
     ret["name_wh"] = ret["name"] + "wh"
 
     ret["schema"] = TEST_SCHEMA
@@ -163,21 +191,27 @@ def get_db_parameters(connection_name: str = "default") -> dict[str, Any]:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def init_test_schema(db_parameters) -> Generator[None, None, None]:
+def init_test_schema(db_parameters) -> Generator[None]:
     """Initializes and destroys the schema specific to this pytest session.
 
     This is automatically called per test session.
     """
-    ret = db_parameters
-    with snowflake.connector.connect(
-        user=ret["user"],
-        password=ret["password"],
-        host=ret["host"],
-        port=ret["port"],
-        database=ret["database"],
-        account=ret["account"],
-        protocol=ret["protocol"],
-    ) as con:
+    connection_params = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "database": db_parameters["database"],
+        "account": db_parameters["account"],
+        "protocol": db_parameters["protocol"],
+    }
+
+    # Role may be needed when running on preprod, but is not present on Jenkins jobs
+    optional_role = db_parameters.get("role")
+    if optional_role is not None:
+        connection_params.update(role=optional_role)
+
+    with snowflake.connector.connect(**connection_params) as con:
         con.cursor().execute(f"CREATE SCHEMA IF NOT EXISTS {TEST_SCHEMA}")
         yield
         con.cursor().execute(f"DROP SCHEMA IF EXISTS {TEST_SCHEMA}")
@@ -186,7 +220,7 @@ def init_test_schema(db_parameters) -> Generator[None, None, None]:
 def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
     """Creates a connection using the parameters defined in parameters.py.
 
-    You can select from the different connections by supplying the appropiate
+    You can select from the different connections by supplying the appropriate
     connection_name parameter and then anything else supplied will overwrite the values
     from parameters.py.
     """
@@ -200,7 +234,7 @@ def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
 def db(
     connection_name: str = "default",
     **kwargs,
-) -> Generator[SnowflakeConnection, None, None]:
+) -> Generator[SnowflakeConnection]:
     if not kwargs.get("timezone"):
         kwargs["timezone"] = "UTC"
     if not kwargs.get("converter_class"):
@@ -216,7 +250,7 @@ def db(
 def negative_db(
     connection_name: str = "default",
     **kwargs,
-) -> Generator[SnowflakeConnection, None, None]:
+) -> Generator[SnowflakeConnection]:
     if not kwargs.get("timezone"):
         kwargs["timezone"] = "UTC"
     if not kwargs.get("converter_class"):

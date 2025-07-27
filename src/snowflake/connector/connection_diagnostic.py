@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -583,7 +579,7 @@ class ConnectionDiagnostic:
                     cert_reqs=cert_reqs,
                 )
             resp = http.request(
-                "GET", "https://ireallyshouldnotexistatallanywhere.com", timeout=10.0
+                "GET", "https://nonexistentdomain.invalid", timeout=10.0
             )
 
             # squid does not throw exception.  Check HTML

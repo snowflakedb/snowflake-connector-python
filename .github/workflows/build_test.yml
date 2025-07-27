@@ -9,9 +9,7 @@ on:
             - v*
     pull_request:
         branches:
-            - master
-            - main
-            - prep-**
+            - '**'
     workflow_dispatch:
         inputs:
           logLevel:
@@ -20,6 +18,11 @@ on:
             required: true
           tags:
             description: "Test scenario tags"
+
+concurrency:
+  # older builds for the same pull request number or branch should be cancelled
+  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 
 jobs:
   lint:
@@ -30,7 +33,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.8'
+          python-version: '3.9'
       - name: Display Python version
         run: python -c "import sys; import os; print(\"\n\".join(os.environ[\"PATH\"].split(os.pathsep))); print(sys.version); print(sys.executable);"
       - name: Upgrade setuptools, pip and wheel
@@ -51,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -70,17 +73,17 @@ jobs:
     strategy:
       matrix:
         os:
-          - image: ubuntu-20.04
+          - image: ubuntu-latest
             id: manylinux_x86_64
-          - image: ubuntu-20.04
+          - image: ubuntu-latest
             id: manylinux_aarch64
-          - image: windows-2019
+          - image: windows-latest
             id: win_amd64
           - image: macos-latest
             id: macosx_x86_64
           - image: macos-latest
             id: macosx_arm64
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     name: Build ${{ matrix.os.id }}-py${{ matrix.python-version }}
     runs-on: ${{ matrix.os.image }}
     steps:
@@ -99,7 +102,7 @@ jobs:
           platforms: all
       - uses: actions/checkout@v4
       - name: Building wheel
-        uses: pypa/cibuildwheel@v2.16.5
+        uses: pypa/cibuildwheel@v2.21.3
         env:
           CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os.id }}
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
@@ -126,10 +129,11 @@ jobs:
            download_name: manylinux_x86_64
          - image_name: macos-latest
            download_name: macosx_x86_64
-         - image_name: windows-2019
+         - image_name: windows-latest
            download_name: win_amd64
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         cloud-provider: [aws, azure, gcp]
+
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -138,6 +142,15 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
+      - name: Set up Java
+        uses: actions/setup-java@v4 # for wiremock
+        with:
+          java-version: 11
+          distribution: 'temurin'
+          java-package: 'jre'
+      - name: Fetch Wiremock
+        shell: bash
+        run: curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output .wiremock/wiremock-standalone.jar
       - name: Setup parameters file
         shell: bash
         env:
@@ -158,12 +171,17 @@ jobs:
       - name: Install tox
         run: python -m pip install tox>=4
       - name: Run tests
-        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
+       # To run a single test on GHA use the below command:
+#        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
+
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
+         # To specify the test name (in single test mode) pass this env variable:
+#          SINGLE_TEST_NAME: test/path/filename.py::test_name
         shell: bash
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
@@ -175,6 +193,12 @@ jobs:
           path: |
             .tox/.coverage
             .tox/coverage.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          include-hidden-files: true
+          name: junit_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            .tox/junit.*.xml
 
   test-olddriver:
     name: Old Driver Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
@@ -184,9 +208,11 @@ jobs:
       fail-fast: false
       matrix:
         os:
-         - image_name: ubuntu-latest
+         # Because old the version 3.0.2 of snowflake-connector-python depends on oscrypto which causes conflicts with higher versions of libssl
+         # TODO: It can be changed to ubuntu-latest, when python sf connector version in tox is above 3.4.0
+         - image_name: ubuntu-22.04
            download_name: linux
-        python-version: [3.8]
+        python-version: [3.9]
         cloud-provider: [aws]
     steps:
       - uses: actions/checkout@v4
@@ -225,7 +251,7 @@ jobs:
         os:
          - image_name: ubuntu-latest
            download_name: linux
-        python-version: [3.8]
+        python-version: [3.9]
         cloud-provider: [aws]
     steps:
       - uses: actions/checkout@v4
@@ -248,7 +274,7 @@ jobs:
         shell: bash
 
   test-fips:
-    name: Test FIPS linux-3.8-${{ matrix.cloud-provider }}
+    name: Test FIPS linux-3.9-${{ matrix.cloud-provider }}
     needs: build
     runs-on: ubuntu-latest
     strategy:
@@ -267,7 +293,7 @@ jobs:
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
         with:
-          name: manylinux_x86_64_py3.8
+          name: manylinux_x86_64_py3.9
           path: dist
       - name: Show wheels downloaded
         run: ls -lh dist
@@ -275,7 +301,7 @@ jobs:
       - name: Run tests
         run: ./ci/test_fips_docker.sh
         env:
-          PYTHON_VERSION: 3.8
+          PYTHON_VERSION: 3.9
           cloud_provider: ${{ matrix.cloud-provider }}
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
@@ -283,10 +309,16 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           include-hidden-files: true
-          name: coverage_linux-fips-3.8-${{ matrix.cloud-provider }}
+          name: coverage_linux-fips-3.9-${{ matrix.cloud-provider }}
           path: |
             .coverage
             coverage.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          include-hidden-files: true
+          name: junit_linux-fips-3.9-${{ matrix.cloud-provider }}
+          path: |
+            junit.*.xml
 
   test-lambda:
     name: Test Lambda linux-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
@@ -295,7 +327,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         cloud-provider: [aws]
     steps:
       - name: Set shortver
@@ -334,6 +366,12 @@ jobs:
           path: |
             .coverage.py${{ env.shortver }}-lambda-ci
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          include-hidden-files: true
+          name: junit_linux-lambda-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            junit.py${{ env.shortver }}-lambda-ci-dev.xml
 
   combine-coverage:
     if: ${{ success() || failure() }}
@@ -348,7 +386,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.8'
+          python-version: '3.9'
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
       - name: Upgrade setuptools and pip
@@ -368,6 +406,21 @@ jobs:
               dst_file = dst_dir / ".coverage.{}".format(src_file.parent.name[9:])
               print("{} copy to {}".format(src_file, dst_file))
               shutil.copy(str(src_file), str(dst_file))'
+      - name: Collect all JUnit XML files to one dir
+        run: |
+          python -c '
+          from pathlib import Path
+          import shutil
+
+          src_dir = Path("artifacts")
+          dst_dir = Path(".") / "junit_results"
+          dst_dir.mkdir()
+          # Collect all JUnit XML files with different naming patterns
+          for pattern in ["*/junit.*.xml", "*/junit.py*-lambda-ci-dev.xml"]:
+              for src_file in src_dir.glob(pattern):
+                  dst_file = dst_dir / src_file.name
+                  print("{} copy to {}".format(src_file, dst_file))
+                  shutil.copy(str(src_file), str(dst_file))'
       - name: Combine coverages
         run: python -m tox run -e coverage
       - name: Publish html coverage
@@ -386,3 +439,9 @@ jobs:
         with:
           files: .tox/coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: junit_results/junit.*.xml

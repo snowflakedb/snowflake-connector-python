@@ -37,7 +37,7 @@ jobs:
           summary: '${{ github.event.issue.title }}'
           description: |
             ${{ github.event.issue.body }} \\ \\ _Created from GitHub Action_ for ${{ github.event.issue.html_url }}
-          fields: '{"customfield_11401":{"id":"14723"},"assignee":{"id":"712020:e1f41916-da57-4fe8-b317-116d5229aa51"},"components":[{"id":"16413"}], "labels": ["oss"], "priority": {"id": "10001"} }'
+          fields: '{"customfield_11401":{"id":"14723"},"assignee":{"id":"712020:e527ae71-55cc-4e02-9217-1ca4ca8028a2"},"components":[{"id":"16413"}], "labels": ["oss"], "priority": {"id": "10001"} }'
 
       - name: Update GitHub Issue
         uses: ./jira/gajira-issue-update

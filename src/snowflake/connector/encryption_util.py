@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -195,6 +191,7 @@ class SnowflakeEncryptionUtil:
         in_filename: str,
         chunk_size: int = 64 * kilobyte,
         tmp_dir: str | None = None,
+        unsafe_file_write: bool = False,
     ) -> str:
         """Decrypts a file and stores the output in the temporary directory.
 
@@ -213,8 +210,10 @@ class SnowflakeEncryptionUtil:
             temp_output_file = os.path.join(tmp_dir, temp_output_file)
 
         logger.debug("encrypted file: %s, tmp file: %s", in_filename, temp_output_file)
+
+        file_opener = None if unsafe_file_write else owner_rw_opener
         with open(in_filename, "rb") as infile:
-            with open(temp_output_file, "wb", opener=owner_rw_opener) as outfile:
+            with open(temp_output_file, "wb", opener=file_opener) as outfile:
                 SnowflakeEncryptionUtil.decrypt_stream(
                     metadata, encryption_material, infile, outfile, chunk_size
                 )

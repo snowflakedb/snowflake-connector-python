@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -116,6 +112,7 @@ class AuthByWebBrowser(AuthByPlugin):
         """Web Browser based Authentication."""
         logger.debug("authenticating by Web Browser")
 
+        # TODO: switch to the new AuthHttpServer class instead of doing this manually
         socket_connection = self._socket(socket.AF_INET, socket.SOCK_STREAM)
 
         if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
@@ -127,18 +124,19 @@ class AuthByWebBrowser(AuthByPlugin):
                 socket_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
         try:
+            hostname = os.getenv("SF_AUTH_SOCKET_ADDR", "localhost")
             try:
                 socket_connection.bind(
                     (
-                        os.getenv("SF_AUTH_SOCKET_ADDR", "localhost"),
+                        hostname,
                         int(os.getenv("SF_AUTH_SOCKET_PORT", 0)),
                     )
                 )
             except socket.gaierror as ex:
                 if ex.args[0] == socket.EAI_NONAME:
                     raise OperationalError(
-                        msg="localhost is not found. Ensure /etc/hosts has "
-                        "localhost entry.",
+                        msg=f"{hostname} is not found. Ensure /etc/hosts has "
+                        f"{hostname} entry.",
                         errno=ER_NO_HOSTNAME_FOUND,
                     )
                 else:

@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import base64
@@ -128,7 +124,7 @@ def test_different_key_length(is_public_test, request, conn_cnx, db_parameters):
                 pass
 
             # Ensure the base64-encoded version also works
-            db_config["private_key"] = base64.b64encode(private_key_der)
+            db_config["private_key"] = base64.b64encode(private_key_der).decode()
             with snowflake.connector.connect(**db_config) as _:
                 pass
 

@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import collections.abc
@@ -24,14 +20,13 @@ from typing import (
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
-from snowflake.connector.util_text import random_string
 
 from ._utils import (
-    _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING,
     TempObjectType,
     get_temp_type_for_object,
     random_name_for_temp_object,
 )
+from .constants import _PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS
 from .cursor import SnowflakeCursor
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -62,19 +57,24 @@ def build_location_helper(
     database: str | None, schema: str | None, name: str, quote_identifiers: bool
 ) -> str:
     """Helper to format table/stage/file format's location."""
-    if quote_identifiers:
-        location = (
-            (('"' + database + '".') if database else "")
-            + (('"' + schema + '".') if schema else "")
-            + ('"' + name + '"')
-        )
-    else:
-        location = (
-            (database + "." if database else "")
-            + (schema + "." if schema else "")
-            + name
-        )
+    location = (
+        (_escape_part_location(database, quote_identifiers) + "." if database else "")
+        + (_escape_part_location(schema, quote_identifiers) + "." if schema else "")
+        + _escape_part_location(name, quote_identifiers)
+    )
     return location
+
+
+def _escape_part_location(part: str, should_quote: bool) -> str:
+    if "'" in part:
+        should_quote = True
+    if should_quote:
+        if not part.startswith('"'):
+            part = '"' + part
+        if not part.endswith('"'):
+            part = part + '"'
+
+    return part
 
 
 def _do_create_temp_stage(
@@ -107,11 +107,7 @@ def _create_temp_stage(
     overwrite: bool,
     use_scoped_temp_object: bool = False,
 ) -> str:
-    stage_name = (
-        random_name_for_temp_object(TempObjectType.STAGE)
-        if use_scoped_temp_object
-        else random_string()
-    )
+    stage_name = random_name_for_temp_object(TempObjectType.STAGE)
     stage_location = build_location_helper(
         database=database,
         schema=schema,
@@ -178,11 +174,7 @@ def _create_temp_file_format(
     sql_use_logical_type: str,
     use_scoped_temp_object: bool = False,
 ) -> str:
-    file_format_name = (
-        random_name_for_temp_object(TempObjectType.FILE_FORMAT)
-        if use_scoped_temp_object
-        else random_string()
-    )
+    file_format_name = random_name_for_temp_object(TempObjectType.FILE_FORMAT)
     file_format_location = build_location_helper(
         database=database,
         schema=schema,
@@ -268,6 +260,7 @@ def write_pandas(
     table_type: Literal["", "temp", "temporary", "transient"] = "",
     use_logical_type: bool | None = None,
     iceberg_config: dict[str, str] | None = None,
+    bulk_upload_chunks: bool = False,
     **kwargs: Any,
 ) -> tuple[
     bool,
@@ -339,6 +332,8 @@ def write_pandas(
                 * base_location: the base directory that snowflake can write iceberg metadata and files to
                 * catalog_sync: optionally sets the catalog integration configured for Polaris Catalog
                 * storage_serialization_policy: specifies the storage serialization policy for the table
+        bulk_upload_chunks: If set to True, the upload will use the wildcard upload method.
+            This is a faster method of uploading but instead of uploading and cleaning up each chunk separately it will upload all chunks at once and then clean up locally stored chunks.
 
 
 
@@ -358,19 +353,12 @@ def write_pandas(
             f"Invalid compression '{compression}', only acceptable values are: {compression_map.keys()}"
         )
 
+    # TODO(SNOW-1505026): Get rid of this when the BCR to always create scoped temp for intermediate results is done.
     _use_scoped_temp_object = (
-        conn._session_parameters.get(
-            _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, False
-        )
+        conn._session_parameters.get(_PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS, False)
         if conn._session_parameters
         else False
     )
-
-    """sfc-gh-yixie: scoped temp stage isn't required out side of a SP.
-    TODO: remove the following line when merging SP connector and Python Connector.
-    Make sure `create scoped temp stage` is supported when it's not run in a SP.
-    """
-    _use_scoped_temp_object = False
 
     if create_temp_table:
         warnings.warn(
@@ -386,6 +374,10 @@ def write_pandas(
         raise ValueError(
             "Unsupported table type. Expected table types: temp/temporary, transient"
         )
+
+    if table_type.lower() in ["temp", "temporary"]:
+        # Add scoped keyword when applicable.
+        table_type = get_temp_type_for_object(_use_scoped_temp_object).lower()
 
     if chunk_size is None:
         chunk_size = len(df)
@@ -441,25 +433,26 @@ def write_pandas(
             chunk_path = os.path.join(tmp_folder, f"file{i}.txt")
             # Dump chunk into parquet file
             chunk.to_parquet(chunk_path, compression=compression, **kwargs)
-            # Upload parquet file
-            upload_sql = (
-                "PUT /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-                "'file://{path}' ? PARALLEL={parallel}"
-            ).format(
-                path=chunk_path.replace("\\", "\\\\").replace("'", "\\'"),
-                parallel=parallel,
+            if not bulk_upload_chunks:
+                # Upload parquet file chunk right away
+                path = chunk_path.replace("\\", "\\\\").replace("'", "\\'")
+                cursor._upload(
+                    local_file_name=f"'file://{path}'",
+                    stage_location="@" + stage_location,
+                    options={"parallel": parallel, "source_compression": "auto_detect"},
+                )
+
+                # Remove chunk file
+                os.remove(chunk_path)
+
+        if bulk_upload_chunks:
+            # Upload tmp directory with parquet chunks
+            path = tmp_folder.replace("\\", "\\\\").replace("'", "\\'")
+            cursor._upload(
+                local_file_name=f"'file://{path}/*'",
+                stage_location="@" + stage_location,
+                options={"parallel": parallel, "source_compression": "auto_detect"},
             )
-            params = ("@" + stage_location,)
-            logger.debug(f"uploading files with '{upload_sql}', params: %s", params)
-            cursor.execute(
-                upload_sql,
-                _is_internal=True,
-                _force_qmark_paramstyle=True,
-                params=params,
-                num_statements=1,
-            )
-            # Remove chunk file
-            os.remove(chunk_path)
 
     # in Snowflake, all parquet data is stored in a single column, $1, so we must select columns explicitly
     # see (https://docs.snowflake.com/en/user-guide/script-data-load-transform-parquet.html)
@@ -477,6 +470,7 @@ def write_pandas(
         drop_sql = f"DROP {object_type.upper()} IF EXISTS identifier(?) /* Python:snowflake.connector.pandas_tools.write_pandas() */"
         params = (name,)
         logger.debug(f"dropping {object_type} with '{drop_sql}'. params: %s", params)
+
         cursor.execute(
             drop_sql,
             _is_internal=True,
@@ -520,7 +514,11 @@ def write_pandas(
         target_table_location = build_location_helper(
             database,
             schema,
-            random_string() if (overwrite and auto_create_table) else table_name,
+            (
+                random_name_for_temp_object(TempObjectType.TABLE)
+                if (overwrite and auto_create_table)
+                else table_name
+            ),
             quote_identifiers,
         )
 
@@ -574,10 +572,11 @@ def write_pandas(
                 num_statements=1,
             )
 
+        copy_stage_location = "@" + stage_location.replace("'", "\\'")
         copy_into_sql = (
             f"COPY INTO identifier(?) /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
             f"({columns}) "
-            f"FROM (SELECT {parquet_columns} FROM @{stage_location}) "
+            f"FROM (SELECT {parquet_columns} FROM '{copy_stage_location}') "
             f"FILE_FORMAT=("
             f"TYPE=PARQUET "
             f"COMPRESSION={compression_map[compression]}"
@@ -586,7 +585,10 @@ def write_pandas(
             f") "
             f"PURGE=TRUE ON_ERROR=?"
         )
-        params = (target_table_location, on_error)
+        params = (
+            target_table_location,
+            on_error,
+        )
         logger.debug(f"copying into with '{copy_into_sql}'. params: %s", params)
         copy_results = cursor.execute(
             copy_into_sql,

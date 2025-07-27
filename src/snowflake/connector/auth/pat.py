@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import typing
@@ -17,6 +13,7 @@ class AuthByPAT(AuthByPlugin):
         super().__init__(**kwargs)
         self._pat_token: str | None = pat_token
 
+    @property
     def type_(self) -> AuthType:
         return AuthType.PAT
 
