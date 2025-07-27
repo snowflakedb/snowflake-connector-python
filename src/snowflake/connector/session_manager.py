@@ -116,130 +116,12 @@ class SessionPool:
         self._idle_sessions.clear()
 
 
-class SessionManager:
-    def __init__(
-        self,
-        use_pooling: bool = True,
-        adapter_factory: Callable[..., HTTPAdapter] | None = None,
-    ):
-        self._use_pooling = use_pooling
-        self._adapter_factory = adapter_factory or ProxySupportAdapterFactory()
-        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
-            lambda: SessionPool(self)
-        )
-
-    @property
-    def use_pooling(self) -> bool:
-        return self._use_pooling
-
-    @use_pooling.setter
-    def use_pooling(self, value: bool) -> None:
-        self._use_pooling = value
-
-    @property
-    def adapter_factory(self) -> AdapterFactory:
-        return self._adapter_factory
-
-    @adapter_factory.setter
-    def adapter_factory(self, value: AdapterFactory) -> None:
-        self._adapter_factory = value
-
-    @property
-    def sessions_map(self) -> dict[str, SessionPool]:
-        return self._sessions_map
-
-    @staticmethod
-    def get_session_pool_manager(session: Session, url: str) -> PoolManager | None:
-        # TODO: add this maybe
-        #  (check if proxy manager is different than pool_manager)
-        # TODO: upewnic sie ze nie powinienem podawac proxy manager tam gdzie kiedys byl pool manager (skoro omijamy self.send a jednak proxy byly ustawione)
-
-        # TODO: do proxy zaczalbym od testow i pisania takich, ktore nie przechodza bez tego PR dla proxy
-        adapter_for_url: HTTPAdapter = session.get_adapter(url)
-        try:
-            return adapter_for_url.poolmanager
-        except AttributeError as no_pool_manager_error:
-            error_message = f"Unable to get pool manager from session for {url}: {no_pool_manager_error}"
-            logger.error(error_message)
-            if not isinstance(adapter_for_url, HTTPAdapter):
-                logger.warning(
-                    f"Adapter was expected to be an HTTPAdapter, got {adapter_for_url.__class__.__name__}"
-                )
-            else:
-                logger.debug(
-                    "Adapter was expected an HTTPAdapter but didn't have attribute 'poolmanager'. This is unexpected behavior."
-                )
-            raise ValueError(error_message)
-
-    def _mount_adapters(self, session: requests.Session) -> None:
-        try:
-            # Its important that each separate session manager creates its own adapters - because they are storing internally PoolManagers - which shouldn't be reused if not in scope of the same adapter.
-            adapter = self._adapter_factory(max_retries=REQUESTS_RETRY)
-            if adapter is not None:
-                session.mount("http://", adapter)
-                session.mount("https://", adapter)
-        except (TypeError, AttributeError) as no_adapter_factory_exception:
-            logger.info(
-                "No adapter factory found. Using session without adapter. Exception: %s",
-                no_adapter_factory_exception,
-            )
-            return
-
-    def make_session(self) -> Session:
-        session = requests.Session()
-        self._mount_adapters(session)
-        return session
-
-    @contextlib.contextmanager
-    def use_requests_session(
-        self, url: str | bytes | None = None, use_pooling: bool | None = None
-    ) -> Generator[Session, Any, None]:
-        use_pooling = use_pooling if use_pooling is not None else self._use_pooling
-        if not use_pooling:
-            session = self.make_session()
-            try:
-                yield session
-            finally:
-                session.close()
-        else:
-            hostname = urlparse(url).hostname if url else None
-            pool = self._sessions_map[hostname]
-            session = pool.get_session()
-            try:
-                yield session
-            finally:
-                pool.return_session(session)
-
-    # ------------------------------------------------------------------
-    # Convenience verb helpers that defer to requests.Session helpers so
-    # their original default-argument behaviour (e.g. HEAD sets
-    # allow_redirects=False) is preserved. These wrappers simply manage
-    # the SessionManager's usage of pooled/non-pooled sessions and then
-    # hand off to the corresponding session.<verb>() method.
-    # ------------------------------------------------------------------
-    def request(
-        self,
-        method: str,
-        url: str,
-        *,
-        headers: Mapping[str, str] | None = None,
-        timeout: int | None = 3,
-        use_pooling: bool | None = None,
-        **kwargs: Any,
-    ) -> Response:
-        """Make a single HTTP request handled by this *SessionManager*.
-
-        This wraps :pymeth:`use_session` so callers don’t have to manage the
-        context manager themselves.
-        """
-        with self.use_requests_session(url, use_pooling) as session:
-            return session.request(
-                method=method.upper(),
-                url=url,
-                headers=headers,
-                timeout=timeout,
-                **kwargs,
-            )
+class _RequestVerbsUsingSessionMixin:
+    """
+    Mixin that provides HTTP methods (get, post, put, etc.) mirroring requests.Session, maintaining their default argument behavior (e.g., HEAD uses allow_redirects=False).
+    These wrappers manage the SessionManager's use of pooled/non-pooled sessions and delegate the actual request to the corresponding session.<verb>() method.
+    The subclass must implement use_requests_session to yield a *requests.Session* instance.
+    """
 
     def get(
         self,
@@ -250,7 +132,6 @@ class SessionManager:
         use_pooling: bool | None = None,
         **kwargs,
     ):
-        """Send a GET request (allow_redirects=True by default via requests)."""
         with self.use_requests_session(url, use_pooling) as session:
             return session.get(url, headers=headers, timeout=timeout_sec, **kwargs)
 
@@ -340,6 +221,120 @@ class SessionManager:
     ):
         with self.use_requests_session(url, use_pooling) as session:
             return session.delete(url, headers=headers, timeout=timeout_sec, **kwargs)
+
+
+class SessionManager(_RequestVerbsUsingSessionMixin):
+    def __init__(
+        self,
+        use_pooling: bool = True,
+        adapter_factory: Callable[..., HTTPAdapter] | None = None,
+    ):
+        self._use_pooling = use_pooling
+        self._adapter_factory = adapter_factory or ProxySupportAdapterFactory()
+        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
+            lambda: SessionPool(self)
+        )
+
+    @property
+    def use_pooling(self) -> bool:
+        return self._use_pooling
+
+    @use_pooling.setter
+    def use_pooling(self, value: bool) -> None:
+        self._use_pooling = value
+
+    @property
+    def adapter_factory(self) -> AdapterFactory:
+        return self._adapter_factory
+
+    @adapter_factory.setter
+    def adapter_factory(self, value: AdapterFactory) -> None:
+        self._adapter_factory = value
+
+    @property
+    def sessions_map(self) -> dict[str, SessionPool]:
+        return self._sessions_map
+
+    @staticmethod
+    def get_session_pool_manager(session: Session, url: str) -> PoolManager | None:
+        adapter_for_url: HTTPAdapter = session.get_adapter(url)
+        try:
+            return adapter_for_url.poolmanager
+        except AttributeError as no_pool_manager_error:
+            error_message = f"Unable to get pool manager from session for {url}: {no_pool_manager_error}"
+            logger.error(error_message)
+            if not isinstance(adapter_for_url, HTTPAdapter):
+                logger.warning(
+                    f"Adapter was expected to be an HTTPAdapter, got {adapter_for_url.__class__.__name__}"
+                )
+            else:
+                logger.debug(
+                    "Adapter was expected an HTTPAdapter but didn't have attribute 'poolmanager'. This is unexpected behavior."
+                )
+            raise ValueError(error_message)
+
+    def _mount_adapters(self, session: requests.Session) -> None:
+        try:
+            # Its important that each separate session manager creates its own adapters - because they are storing internally PoolManagers - which shouldn't be reused if not in scope of the same adapter.
+            adapter = self._adapter_factory(max_retries=REQUESTS_RETRY)
+            if adapter is not None:
+                session.mount("http://", adapter)
+                session.mount("https://", adapter)
+        except (TypeError, AttributeError) as no_adapter_factory_exception:
+            logger.info(
+                "No adapter factory found. Using session without adapter. Exception: %s",
+                no_adapter_factory_exception,
+            )
+            return
+
+    def make_session(self) -> Session:
+        session = requests.Session()
+        self._mount_adapters(session)
+        return session
+
+    @contextlib.contextmanager
+    def use_requests_session(
+        self, url: str | bytes | None = None, use_pooling: bool | None = None
+    ) -> Generator[Session, Any, None]:
+        use_pooling = use_pooling if use_pooling is not None else self._use_pooling
+        if not use_pooling:
+            session = self.make_session()
+            try:
+                yield session
+            finally:
+                session.close()
+        else:
+            hostname = urlparse(url).hostname if url else None
+            pool = self._sessions_map[hostname]
+            session = pool.get_session()
+            try:
+                yield session
+            finally:
+                pool.return_session(session)
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout: int | None = 3,
+        use_pooling: bool | None = None,
+        **kwargs: Any,
+    ) -> Response:
+        """Make a single HTTP request handled by this *SessionManager*.
+
+        This wraps :pymeth:`use_session` so callers don’t have to manage the
+        context manager themselves.
+        """
+        with self.use_requests_session(url, use_pooling) as session:
+            return session.request(
+                method=method.upper(),
+                url=url,
+                headers=headers,
+                timeout=timeout,
+                **kwargs,
+            )
 
     def close(self):
         for pool in self._sessions_map.values():
