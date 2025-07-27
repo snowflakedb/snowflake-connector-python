@@ -150,6 +150,11 @@ class SessionManager:
 
     @staticmethod
     def get_session_pool_manager(session: Session, url: str) -> PoolManager | None:
+        # TODO: add this maybe
+        #  (check if proxy manager is different than pool_manager)
+        # TODO: upewnic sie ze nie powinienem podawac proxy manager tam gdzie kiedys byl pool manager (skoro omijamy self.send a jednak proxy byly ustawione)
+
+        # TODO: do proxy zaczalbym od testow i pisania takich, ktore nie przechodza bez tego PR dla proxy
         adapter_for_url: HTTPAdapter = session.get_adapter(url)
         try:
             return adapter_for_url.poolmanager
@@ -205,6 +210,13 @@ class SessionManager:
             finally:
                 pool.return_session(session)
 
+    # ------------------------------------------------------------------
+    # Convenience verb helpers that defer to requests.Session helpers so
+    # their original default-argument behaviour (e.g. HEAD sets
+    # allow_redirects=False) is preserved. These wrappers simply manage
+    # the SessionManager's usage of pooled/non-pooled sessions and then
+    # hand off to the corresponding session.<verb>() method.
+    # ------------------------------------------------------------------
     def request(
         self,
         method: str,
@@ -228,6 +240,106 @@ class SessionManager:
                 timeout=timeout,
                 **kwargs,
             )
+
+    def get(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout_sec: int | None = 3,
+        use_pooling: bool | None = None,
+        **kwargs,
+    ):
+        """Send a GET request (allow_redirects=True by default via requests)."""
+        with self.use_requests_session(url, use_pooling) as session:
+            return session.get(url, headers=headers, timeout=timeout_sec, **kwargs)
+
+    def options(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout_sec: int | None = 3,
+        use_pooling: bool | None = None,
+        **kwargs,
+    ):
+        with self.use_requests_session(url, use_pooling) as session:
+            return session.options(url, headers=headers, timeout=timeout_sec, **kwargs)
+
+    def head(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout_sec: int | None = 3,
+        use_pooling: bool | None = None,
+        **kwargs,
+    ):
+        with self.use_requests_session(url, use_pooling) as session:
+            return session.head(url, headers=headers, timeout=timeout_sec, **kwargs)
+
+    def post(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout_sec: int | None = 3,
+        use_pooling: bool | None = None,
+        data=None,
+        json=None,
+        **kwargs,
+    ):
+        with self.use_requests_session(url, use_pooling) as session:
+            return session.post(
+                url,
+                headers=headers,
+                timeout=timeout_sec,
+                data=data,
+                json=json,
+                **kwargs,
+            )
+
+    def put(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout_sec: int | None = 3,
+        use_pooling: bool | None = None,
+        data=None,
+        **kwargs,
+    ):
+        with self.use_requests_session(url, use_pooling) as session:
+            return session.put(
+                url, headers=headers, timeout=timeout_sec, data=data, **kwargs
+            )
+
+    def patch(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout_sec: int | None = 3,
+        use_pooling: bool | None = None,
+        data=None,
+        **kwargs,
+    ):
+        with self.use_requests_session(url, use_pooling) as session:
+            return session.patch(
+                url, headers=headers, timeout=timeout_sec, data=data, **kwargs
+            )
+
+    def delete(
+        self,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout_sec: int | None = 3,
+        use_pooling: bool | None = None,
+        **kwargs,
+    ):
+        with self.use_requests_session(url, use_pooling) as session:
+            return session.delete(url, headers=headers, timeout=timeout_sec, **kwargs)
 
     def close(self):
         for pool in self._sessions_map.values():
