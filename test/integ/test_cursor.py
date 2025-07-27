@@ -6,6 +6,8 @@ import json
 import logging
 import os
 import pickle
+import string
+import tempfile
 import time
 import uuid
 from datetime import date, datetime, timezone
@@ -1968,7 +1970,6 @@ def test_nanoarrow_usage_deprecation():
             and "snowflake.connector.cursor.NanoarrowUsage has been deprecated"
             in str(record[2].message)
         )
-
 
 @pytest.mark.parametrize(
     "request_id",
