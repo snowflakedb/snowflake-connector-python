@@ -377,6 +377,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # SNOW-1944208: add unsafe write flag
+    "unsafe_skip_file_permissions_check": (
+        False,
+        bool,
+    ),  # SNOW-2127911: add flag to opt-out file permissions check
     _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER: (
         _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
         int,  # type

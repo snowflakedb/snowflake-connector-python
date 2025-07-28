@@ -58,7 +58,7 @@ def _warn(warning: str) -> None:
 
 class TokenCache(ABC):
     @staticmethod
-    def make() -> TokenCache:
+    def make(skip_file_permissions_check: bool = False) -> TokenCache:
         if IS_MACOS or IS_WINDOWS:
             if not installed_keyring:
                 _warn(
@@ -71,7 +71,7 @@ class TokenCache(ABC):
             return KeyringTokenCache()
 
         if IS_LINUX:
-            cache = FileTokenCache.make()
+            cache = FileTokenCache.make(skip_file_permissions_check)
             if cache:
                 return cache
             else:
@@ -128,23 +128,30 @@ class _CacheFileWriteError(_FileTokenCacheError):
 
 class FileTokenCache(TokenCache):
     @staticmethod
-    def make() -> FileTokenCache | None:
-        cache_dir = FileTokenCache.find_cache_dir()
+    def make(skip_file_permissions_check: bool = False) -> FileTokenCache | None:
+        cache_dir = FileTokenCache.find_cache_dir(skip_file_permissions_check)
         if cache_dir is None:
             logging.getLogger(__name__).debug(
                 "Failed to find suitable cache directory for token cache. File based token cache initialization failed."
             )
             return None
         else:
-            return FileTokenCache(cache_dir)
+            return FileTokenCache(
+                cache_dir, skip_file_permissions_check=skip_file_permissions_check
+            )
 
-    def __init__(self, cache_dir: Path) -> None:
+    def __init__(
+        self, cache_dir: Path, skip_file_permissions_check: bool = False
+    ) -> None:
         self.logger = logging.getLogger(__name__)
         self.cache_dir: Path = cache_dir
+        self._skip_file_permissions_check = skip_file_permissions_check
 
     def store(self, key: TokenKey, token: str) -> None:
         try:
-            FileTokenCache.validate_cache_dir(self.cache_dir)
+            FileTokenCache.validate_cache_dir(
+                self.cache_dir, self._skip_file_permissions_check
+            )
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
                 cache["tokens"][key.hash_key()] = token
@@ -158,7 +165,9 @@ class FileTokenCache(TokenCache):
 
     def retrieve(self, key: TokenKey) -> str | None:
         try:
-            FileTokenCache.validate_cache_dir(self.cache_dir)
+            FileTokenCache.validate_cache_dir(
+                self.cache_dir, self._skip_file_permissions_check
+            )
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
                 token = cache["tokens"].get(key.hash_key(), None)
@@ -178,7 +187,9 @@ class FileTokenCache(TokenCache):
 
     def remove(self, key: TokenKey) -> None:
         try:
-            FileTokenCache.validate_cache_dir(self.cache_dir)
+            FileTokenCache.validate_cache_dir(
+                self.cache_dir, self._skip_file_permissions_check
+            )
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
                 cache["tokens"].pop(key.hash_key(), None)
@@ -244,7 +255,7 @@ class FileTokenCache(TokenCache):
                 os.close(fd)
 
     @staticmethod
-    def find_cache_dir() -> Path | None:
+    def find_cache_dir(skip_file_permissions_check: bool = False) -> Path | None:
         def lookup_env_dir(env_var: str, subpath_segments: list[str]) -> Path | None:
             env_val = os.getenv(env_var)
             if env_val is None:
@@ -276,7 +287,9 @@ class FileTokenCache(TokenCache):
                 directory.mkdir(exist_ok=True, mode=0o700)
 
             try:
-                FileTokenCache.validate_cache_dir(directory)
+                FileTokenCache.validate_cache_dir(
+                    directory, skip_file_permissions_check
+                )
                 return directory
             except _FileTokenCacheError as e:
                 _warn(
@@ -298,7 +311,9 @@ class FileTokenCache(TokenCache):
         return None
 
     @staticmethod
-    def validate_cache_dir(cache_dir: Path | None) -> None:
+    def validate_cache_dir(
+        cache_dir: Path | None, skip_file_permissions_check: bool = False
+    ) -> None:
         try:
             statinfo = cache_dir.stat()
 
@@ -308,17 +323,18 @@ class FileTokenCache(TokenCache):
             if not stat.S_ISDIR(statinfo.st_mode):
                 raise _InvalidCacheDirError(f"Cache dir {cache_dir} is not a directory")
 
-            permissions = stat.S_IMODE(statinfo.st_mode)
-            if permissions != 0o700:
-                raise _PermissionsTooWideError(
-                    f"Cache dir {cache_dir} has incorrect permissions. {permissions:o} != 0700"
-                )
+            if not skip_file_permissions_check:
+                permissions = stat.S_IMODE(statinfo.st_mode)
+                if permissions != 0o700:
+                    raise _PermissionsTooWideError(
+                        f"Cache dir {cache_dir} has incorrect permissions. {permissions:o} != 0700"
+                    )
 
-            euid = os.geteuid()
-            if statinfo.st_uid != euid:
-                raise _OwnershipError(
-                    f"Cache dir {cache_dir} has incorrect owner. {euid} != {statinfo.st_uid}"
-                )
+                euid = os.geteuid()
+                if statinfo.st_uid != euid:
+                    raise _OwnershipError(
+                        f"Cache dir {cache_dir} has incorrect owner. {euid} != {statinfo.st_uid}"
+                    )
 
         except FileNotFoundError:
             raise _CacheDirNotFoundError(
