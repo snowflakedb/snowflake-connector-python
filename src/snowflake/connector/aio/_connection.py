@@ -301,6 +301,8 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
+                if not self._token and self._password:
+                    self._token = self._password
                 self.auth_class = AuthByPAT(self._token)
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
