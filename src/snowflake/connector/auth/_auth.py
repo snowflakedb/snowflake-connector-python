@@ -548,7 +548,9 @@ class Auth:
 
     def get_token_cache(self) -> TokenCache:
         if self._token_cache is None:
-            self._token_cache = TokenCache.make()
+            self._token_cache = TokenCache.make(
+                skip_file_permissions_check=self._rest._connection._unsafe_skip_file_permissions_check
+            )
         return self._token_cache
 
 

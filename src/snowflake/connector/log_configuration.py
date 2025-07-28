@@ -12,14 +12,16 @@ LOG_FILE_NAME = "python-connector.log"
 
 
 class EasyLoggingConfigPython:
-    def __init__(self):
+    def __init__(self, skip_config_file_permissions_check: bool = False):
         self.path: str | None = None
         self.level: str | None = None
         self.save_logs: bool = False
-        self.parse_config_file()
+        self.parse_config_file(skip_config_file_permissions_check)
 
-    def parse_config_file(self):
-        CONFIG_MANAGER.read_config()
+    def parse_config_file(self, skip_config_file_permissions_check: bool = False):
+        CONFIG_MANAGER.read_config(
+            skip_file_permissions_check=skip_config_file_permissions_check
+        )
         data = CONFIG_MANAGER.conf_file_cache
         if log := data.get("log"):
             self.save_logs = log.get("save_logs", False)
