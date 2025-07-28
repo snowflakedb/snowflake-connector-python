@@ -43,11 +43,13 @@ try:
     from snowflake.connector.result_batch import MAX_DOWNLOAD_RETRY, JSONResultBatch
     from snowflake.connector.vendored import requests  # NOQA
 
-    REQUEST_MODULE_PATH = "snowflake.connector.vendored.requests.sessions.Session"
+    SESSION_FROM_REQUEST_MODULE_PATH = (
+        "snowflake.connector.vendored.requests.sessions.Session"
+    )
 except ImportError:
     MAX_DOWNLOAD_RETRY = None
     JSONResultBatch = None
-    REQUEST_MODULE_PATH = "requests"
+    SESSION_FROM_REQUEST_MODULE_PATH = "requests.sessions.Session"
     TooManyRequests = None
     TOO_MANY_REQUESTS = None
 from snowflake.connector.sqlstate import (
@@ -62,7 +64,7 @@ result_batch = (
 )
 
 
-@mock.patch(REQUEST_MODULE_PATH + ".get")
+@mock.patch(SESSION_FROM_REQUEST_MODULE_PATH + ".get")
 def test_ok_response_download(mock_get):
     mock_get.return_value = create_mock_response(200)
 
@@ -92,7 +94,7 @@ def test_ok_response_download(mock_get):
 def test_retryable_response_download(errcode, error_class):
     """This test checks that responses which are deemed 'retryable' are handled correctly."""
     # retryable exceptions
-    with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
+    with mock.patch(SESSION_FROM_REQUEST_MODULE_PATH + ".get") as mock_get:
         mock_get.return_value = create_mock_response(errcode)
 
         with mock.patch("time.sleep", return_value=None):
@@ -108,7 +110,7 @@ def test_retryable_response_download(errcode, error_class):
 
 def test_unauthorized_response_download():
     """This tests that the Unauthorized response (401 status code) is handled correctly."""
-    with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
+    with mock.patch(SESSION_FROM_REQUEST_MODULE_PATH + ".get") as mock_get:
         mock_get.return_value = create_mock_response(UNAUTHORIZED)
 
         with mock.patch("time.sleep", return_value=None):
@@ -124,7 +126,7 @@ def test_unauthorized_response_download():
 @pytest.mark.parametrize("status_code", [201, 302])
 def test_non_200_response_download(status_code):
     """This test checks that "success" codes which are not 200 still retry."""
-    with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
+    with mock.patch(SESSION_FROM_REQUEST_MODULE_PATH + ".get") as mock_get:
         mock_get.return_value = create_mock_response(status_code)
 
         with mock.patch("time.sleep", return_value=None):
@@ -137,7 +139,7 @@ def test_non_200_response_download(status_code):
 
 
 def test_retries_until_success():
-    with mock.patch(REQUEST_MODULE_PATH + ".get") as mock_get:
+    with mock.patch(SESSION_FROM_REQUEST_MODULE_PATH + ".get") as mock_get:
         error_codes = [BAD_REQUEST, UNAUTHORIZED, 201]
         # There is an OK added to the list of responses so that there is a success
         # and the retry loop ends.

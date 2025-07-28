@@ -116,7 +116,6 @@ ssl_wrap_socket.inject_into_urllib3()
 APPLICATION_SNOWSQL = "SnowSQL"
 
 # requests parameters
-REQUESTS_RETRY = 1  # requests library builtin retry
 DEFAULT_SOCKET_CONNECT_TIMEOUT = 1 * 60  # don't reduce less than 45 seconds
 
 # return codes
