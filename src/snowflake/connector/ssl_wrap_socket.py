@@ -14,7 +14,7 @@ from contextvars import ContextVar
 from functools import wraps
 from inspect import getfullargspec as get_args
 from socket import socket
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import certifi
 import OpenSSL.SSL
@@ -22,10 +22,7 @@ import OpenSSL.SSL
 from .constants import OCSPMode
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
-
-if TYPE_CHECKING:
-    from .session_manager import SessionManager
-
+from .session_manager import SessionManager
 from .vendored.urllib3 import connection as connection_
 from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
 from .vendored.urllib3.util import ssl_ as ssl_
