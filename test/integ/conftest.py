@@ -15,6 +15,7 @@ import snowflake.connector
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.connection import DefaultConverterClass
 
+from src.snowflake.connector.test_util import RUNNING_ON_JENKINS
 from .. import running_on_public_ci
 from ..parameters import CONNECTION_PARAMETERS
 
@@ -28,6 +29,7 @@ if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
     from snowflake.connector import SnowflakeConnection
 
 RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
+RUNNING_ON_JENKINS = os.getenv("JENKINS_HOME") is not None
 TEST_USING_VENDORED_ARROW = os.getenv("TEST_USING_VENDORED_ARROW") == "true"
 
 if not isinstance(CONNECTION_PARAMETERS["host"], str):
@@ -72,17 +74,29 @@ if TEST_USING_VENDORED_ARROW:
     )
 
 
-DEFAULT_PARAMETERS: dict[str, Any] = {
-    "account": "<account_name>",
-    "user": "<user_name>",
-    "database": "<database_name>",
-    "schema": "<schema_name>",
-    "protocol": "https",
-    "host": "<host>",
-    "port": "443",
-    "authenticator": "<authenticator>",
-    "private_key_file": "<private_key_file>",
-}
+if RUNNING_ON_JENKINS:
+    DEFAULT_PARAMETERS: dict[str, Any] = {
+        "account": "<account_name>",
+        "user": "<user_name>",
+        "password": "<password>",
+        "database": "<database_name>",
+        "schema": "<schema_name>",
+        "protocol": "https",
+        "host": "<host>",
+        "port": "443",
+    }
+else:
+    DEFAULT_PARAMETERS: dict[str, Any] = {
+        "account": "<account_name>",
+        "user": "<user_name>",
+        "database": "<database_name>",
+        "schema": "<schema_name>",
+        "protocol": "https",
+        "host": "<host>",
+        "port": "443",
+        "authenticator": "<authenticator>",
+        "private_key_file": "<private_key_file>"
+    }
 
 
 def print_help() -> None:
@@ -198,16 +212,27 @@ def init_test_schema(db_parameters) -> Generator[None]:
 
     This is automatically called per test session.
     """
-    connection_params = {
-        "user": db_parameters["user"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "database": db_parameters["database"],
-        "account": db_parameters["account"],
-        "protocol": db_parameters["protocol"],
-        "authenticator": db_parameters["authenticator"],
-        "private_key_file": db_parameters["private_key_file"],
-    }
+    if RUNNING_ON_GH:
+        connection_params = {
+            "user": db_parameters["user"],
+            "host": db_parameters["host"],
+            "port": db_parameters["port"],
+            "database": db_parameters["database"],
+            "account": db_parameters["account"],
+            "protocol": db_parameters["protocol"],
+            "authenticator": db_parameters["authenticator"],
+            "private_key_file": db_parameters["private_key_file"],
+        }
+    else:
+        connection_params = {
+            "user": db_parameters["user"],
+            "password": db_parameters["password"],
+            "host": db_parameters["host"],
+            "port": db_parameters["port"],
+            "database": db_parameters["database"],
+            "account": db_parameters["account"],
+            "protocol": db_parameters["protocol"],
+        }
 
     # Role may be needed when running on preprod, but is not present on Jenkins jobs
     optional_role = db_parameters.get("role")
