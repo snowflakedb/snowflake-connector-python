@@ -13,12 +13,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable
 
 from ...auth import Auth as AuthSync
-from ...auth._auth import (
-    AUTHENTICATION_REQUEST_KEY_WHITELIST,
-    ID_TOKEN,
-    MFA_TOKEN,
-    delete_temporary_credential,
-)
+from ...auth._auth import AUTHENTICATION_REQUEST_KEY_WHITELIST
 from ...compat import urlencode
 from ...constants import (
     HTTP_HEADER_ACCEPT,
@@ -43,6 +38,7 @@ from ...network import (
     ReauthenticationRequest,
 )
 from ...sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+from ...token_cache import TokenType
 from ._no_auth import AuthNoAuth
 
 if TYPE_CHECKING:
@@ -280,7 +276,9 @@ class Auth(AuthSync):
                 # clear stored id_token if failed to connect because of id_token
                 # raise an exception for reauth without id_token
                 self._rest.id_token = None
-                delete_temporary_credential(self._rest._host, user, ID_TOKEN)
+                self.delete_temporary_credential(
+                    self._rest._host, user, TokenType.ID_TOKEN
+                )
                 raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=ret["message"],
@@ -301,7 +299,9 @@ class Auth(AuthSync):
             from . import AuthByUsrPwdMfa
 
             if isinstance(auth_instance, AuthByUsrPwdMfa):
-                delete_temporary_credential(self._rest._host, user, MFA_TOKEN)
+                self.delete_temporary_credential(
+                    self._rest._host, user, TokenType.MFA_TOKEN
+                )
             Error.errorhandler_wrapper(
                 self._rest._connection,
                 None,
