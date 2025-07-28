@@ -3,24 +3,25 @@ from __future__ import annotations
 import os
 from unittest.mock import Mock, patch
 
-import requests
+import pytest
 
 from snowflake.connector.platform_detection import detect_platforms
+from src.snowflake.connector.vendored import requests
+from src.snowflake.connector.vendored.requests import Response
 
 
-class MockResponse:
-    def __init__(self, status_code=200, content=b"", text="", headers=None):
-        self.status_code = status_code
-        self.content = content
-        self.text = text
-        self.headers = headers or {}
-
-    def raise_for_status(self):
-        if self.status_code >= 400:
-            raise requests.HTTPError(f"HTTP {self.status_code} Error")
+def build_response(status_code=200, headers=None):
+    response = Response()
+    response.status_code = status_code
+    response.headers = headers
+    return response
 
 
 class TestDetectPlatforms:
+    @pytest.fixture(autouse=True)
+    def teardown(self):
+        detect_platforms.cache_clear()  # clear cache after each test
+
     @patch.dict(os.environ, {}, clear=True)
     @patch("snowflake.connector.platform_detection.IMDSFetcher")
     @patch("snowflake.connector.platform_detection.boto3")
@@ -38,7 +39,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert result == []
 
     @patch.dict(os.environ, {}, clear=True)
@@ -61,7 +62,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "is_ec2_instance" in result
 
     @patch.dict(os.environ, {"LAMBDA_TASK_ROOT": "/var/task"}, clear=True)
@@ -81,7 +82,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "is_aws_lambda" in result
 
     @patch.dict(os.environ, {}, clear=True)
@@ -103,7 +104,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "has_aws_identity" in result
 
     @patch.dict(os.environ, {}, clear=True)
@@ -119,11 +120,11 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        mock_azure_response = MockResponse(status_code=200)
+        azure_response = build_response(status_code=200)
 
         def mock_get_side_effect(url, **kwargs):
             if "169.254.169.254" in url:
-                return mock_azure_response
+                return azure_response
             else:
                 raise requests.RequestException("No metadata")
 
@@ -131,7 +132,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "is_azure_vm" in result
 
     @patch.dict(
@@ -161,7 +162,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "is_azure_function" in result
 
     @patch.dict(
@@ -192,7 +193,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "is_azure_function" in result
         assert "azure_managed_identity" in result
 
@@ -209,13 +210,13 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        mock_gce_response = MockResponse(
+        gce_response = build_response(
             status_code=200, headers={"Metadata-Flavor": "Google"}
         )
 
         def mock_get_side_effect(url, **kwargs):
             if "metadata.google.internal" in url:
-                return mock_gce_response
+                return gce_response
             else:
                 raise requests.RequestException("No metadata")
 
@@ -223,7 +224,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "is_gce_vm" in result
 
     @patch.dict(
@@ -253,7 +254,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         mock_requests.Timeout = requests.Timeout
         assert "is_gce_cloud_run_service" in result
 
@@ -280,7 +281,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "is_gce_cloud_run_job" in result
 
     @patch.dict(os.environ, {}, clear=True)
@@ -296,13 +297,11 @@ class TestDetectPlatforms:
             "No AWS"
         )
 
-        mock_gcp_response = MockResponse(
-            status_code=200, text="test-service-account@project.iam.gserviceaccount.com"
-        )
+        gcp_response = build_response(status_code=200)
 
         def mock_get_side_effect(url, **kwargs):
             if "metadata/computeMetadata" in url:
-                return mock_gcp_response
+                return gcp_response
             else:
                 raise requests.RequestException("No metadata")
 
@@ -310,7 +309,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "has_gcp_identity" in result
 
     @patch.dict(os.environ, {"GITHUB_ACTIONS": "true"}, clear=True)
@@ -332,7 +331,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "is_github_action" in result
 
     @patch.dict(
@@ -369,7 +368,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "is_aws_lambda" in result
         assert "is_ec2_instance" in result
         assert "has_aws_identity" in result
@@ -393,7 +392,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "is_azure_vm_timeout" in result
         assert "is_gce_vm_timeout" in result
         assert "has_gcp_identity_timeout" in result
@@ -417,7 +416,7 @@ class TestDetectPlatforms:
         mock_requests.Timeout = requests.Timeout
         mock_requests.HTTPError = requests.HTTPError
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert result == []
 
     @patch.dict(os.environ, {}, clear=True)
@@ -437,7 +436,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "has_aws_identity" not in result
 
     @patch.dict(os.environ, {}, clear=True)
@@ -457,7 +456,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=None)
+        result = detect_platforms(timeout_seconds=None)
         assert "has_aws_identity" not in result
 
     @patch.dict(
@@ -483,7 +482,7 @@ class TestDetectPlatforms:
         mock_requests.RequestException = requests.RequestException
         mock_requests.Timeout = requests.Timeout
 
-        result = detect_platforms(timeout=5.0)
+        result = detect_platforms(timeout_seconds=5.0)
 
         assert "is_aws_lambda" in result
         assert "is_github_action" in result
