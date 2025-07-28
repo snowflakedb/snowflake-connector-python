@@ -707,13 +707,12 @@ def test_invalid_connection_parameter(conn_cnx, name, value, exc_warn):
             if name != "no_such_parameter":  # Skip check for fake parameters
                 param_exists = hasattr(conn, "_" + name)
                 assert param_exists, f"Real parameter {name} should exist on connection"
-            
+
         filtered_w = [
             warning for warning in w if warning.category != DeprecationWarning
         ]
         specific_warnings = [
-            warning for warning in filtered_w 
-            if str(exc_warn) in str(warning.message)
+            warning for warning in filtered_w if str(exc_warn) in str(warning.message)
         ]
         assert len(specific_warnings) >= 1
         assert str(specific_warnings[0].message) == str(exc_warn)
@@ -939,11 +938,11 @@ def test_autocommit(conn_cnx, auto_commit):
             # Execute operations inside the mock scope
             with conn.cursor() as cur:
                 cur.execute(f"alter session set autocommit = {auto_commit}")
-            
+
             # For autocommit=False, the connection context manager should call commit on exit
             # We need to trigger this by exiting the connection context
             pass
-        
+
         # Check commit behavior after the mock patch (but connection is still active)
         if auto_commit:
             assert not mocked_commit.called
