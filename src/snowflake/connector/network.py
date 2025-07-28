@@ -834,7 +834,7 @@ class SnowflakeRestful:
         include_retry_reason = self._connection._enable_retry_reason_in_query_response
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
-        with self._use_requests_session(full_url) as session:
+        with self.use_requests_session(full_url) as session:
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,
                 _include_retry_reason=include_retry_reason,
@@ -1194,8 +1194,5 @@ class SnowflakeRestful:
         except Exception as err:
             raise err
 
-    def _use_requests_session(self, url=None) -> Generator[Session, Any, None]:
-        """
-        Method kept for backward compatibility.
-        """
+    def use_requests_session(self, url=None) -> Generator[Session, Any, None]:
         return self.session_manager.use_requests_session(url)

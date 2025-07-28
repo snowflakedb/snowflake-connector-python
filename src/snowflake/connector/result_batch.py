@@ -26,8 +26,8 @@ from .network import (
 from .options import installed_pandas
 from .options import pyarrow as pa
 from .secret_detector import SecretDetector
+from .session_manager import SessionManager
 from .time_util import TimerContextManager
-from .vendored import requests
 
 logger = getLogger(__name__)
 
@@ -326,16 +326,17 @@ class ResultBatch(abc.ABC):
                     }
                     # Try to reuse a connection if possible
                     if connection and connection.session_manager is not None:
-                        with connection.session_manager.use_requests_session() as session:
+                        with connection.rest.use_requests_session() as session:
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
                             response = session.request("get", **request_data)
                     else:
                         logger.debug(
-                            f"downloading result batch id: {self.id} with new session"
+                            f"downloading result batch id: {self.id} with new session through a local Session Manager"
                         )
-                        response = requests.get(**request_data)
+                        local_session_manager = SessionManager(use_pooling=False)
+                        response = local_session_manager.get(**request_data)
 
                     if response.status_code == OK:
                         logger.debug(
