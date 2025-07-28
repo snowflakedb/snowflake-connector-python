@@ -493,8 +493,14 @@ class SnowflakeConnection:
         If overwriting values from the default connection is desirable, supply
         the name explicitly.
         """
+        self._unsafe_skip_file_permissions_check = kwargs.get(
+            "unsafe_skip_file_permissions_check", False
+        )
         # initiate easy logging during every connection
         easy_logging = EasyLoggingConfigPython()
+        easy_logging.parse_config_file(
+            skip_config_file_permissions_check=self._unsafe_skip_file_permissions_check
+        )
         easy_logging.create_log()
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
@@ -553,7 +559,9 @@ class SnowflakeConnection:
             for i, s in enumerate(CONFIG_MANAGER._slices):
                 if s.section == "connections":
                     CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
-                    CONFIG_MANAGER.read_config()
+                    CONFIG_MANAGER.read_config(
+                        skip_file_permissions_check=self._unsafe_skip_file_permissions_check
+                    )
                     break
         if connection_name is not None:
             connections = CONFIG_MANAGER["connections"]
