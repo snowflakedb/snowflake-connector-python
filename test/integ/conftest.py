@@ -252,16 +252,20 @@ def init_test_schema(db_parameters) -> Generator[None]:
             if private_key_file:
                 with open(private_key_file, "rb") as f:
                     private_key_content = f.read()
-                connection_params.update({
-                    "authenticator": "SNOWFLAKE_JWT",
-                    "private_key": private_key_content,
-                })
+                connection_params.update(
+                    {
+                        "authenticator": "SNOWFLAKE_JWT",
+                        "private_key": private_key_content,
+                    }
+                )
         else:
             # New driver expects private_key_file and KEY_PAIR_AUTHENTICATOR
-            connection_params.update({
-                "authenticator": db_parameters["authenticator"],
-                "private_key_file": db_parameters["private_key_file"],
-            })
+            connection_params.update(
+                {
+                    "authenticator": db_parameters["authenticator"],
+                    "private_key_file": db_parameters["private_key_file"],
+                }
+            )
 
     # Role may be needed when running on preprod, but is not present on Jenkins jobs
     optional_role = db_parameters.get("role")
@@ -289,12 +293,16 @@ def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
         if RUNNING_OLD_DRIVER:
             # Old driver (3.1.0) expects private_key as bytes and SNOWFLAKE_JWT authenticator
             private_key_file = ret.get("private_key_file")
-            if private_key_file and "private_key" not in ret:  # Don't override if private_key already set
+            if (
+                private_key_file and "private_key" not in ret
+            ):  # Don't override if private_key already set
                 with open(private_key_file, "rb") as f:
                     private_key_content = f.read()
                 ret["authenticator"] = "SNOWFLAKE_JWT"
                 ret["private_key"] = private_key_content
-                ret.pop("private_key_file", None)  # Remove private_key_file for old driver
+                ret.pop(
+                    "private_key_file", None
+                )  # Remove private_key_file for old driver
 
     connection = snowflake.connector.connect(**ret)
     return connection
