@@ -368,10 +368,8 @@ def request(
     use_pooling: bool | None = None,
     **kwargs: Any,
 ) -> Response:
-    """Convenience wrapper – *requires* an explicit ``session_manager``.
-
-    This keeps a one-liner API equivalent to the old
-    ``snowflake.connector.http_client.request`` helper.
+    """
+    Convenience wrapper – requires an explicit ``session_manager``.
     """
     if session_manager is None:
         raise ValueError(

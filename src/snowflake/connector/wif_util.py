@@ -16,7 +16,6 @@ from botocore.utils import InstanceMetadataRegionFetcher
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
 from .session_manager import SessionManager
-from .session_manager import request as http_request
 from .vendored import requests
 from .vendored.requests import Response
 
@@ -76,12 +75,11 @@ def try_metadata_service_call(
     If we receive an error response or any exceptions are raised, returns None. Otherwise returns the response.
     """
     try:
-        res: Response = http_request(
+        res: Response = session_manager.request(
             method=method,
             url=url,
             headers=headers,
             timeout=timeout,
-            session_manager=session_manager,
             use_pooling=False,
         )
         if not res.ok:

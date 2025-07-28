@@ -945,7 +945,7 @@ class SnowflakeConnection:
             self.__open_connection()
 
         try:
-            # Reet context var for OCSP downloads to use this manager. Can be removed once OCSP is deprecated.
+            # Reset context var for OCSP downloads to use this manager. Can be removed once OCSP is deprecated.
             from .ssl_wrap_socket import reset_current_session_manager as _reset_sm
 
             if hasattr(self, "_ocsp_sm_context_var_old_token"):
