@@ -212,7 +212,8 @@ class FileTokenCache(TokenCache):
         json_data = {"tokens": {}}
         try:
             fd = os.open(self.cache_file(), os.O_RDONLY)
-            self._ensure_permissions(fd, 0o600)
+            if not self._skip_file_permissions_check:
+                self._ensure_permissions(fd, 0o600)
             size = os.lseek(fd, 0, os.SEEK_END)
             os.lseek(fd, 0, os.SEEK_SET)
             data = os.read(fd, size)
@@ -245,7 +246,8 @@ class FileTokenCache(TokenCache):
             fd = os.open(
                 self.cache_file(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
             )
-            self._ensure_permissions(fd, 0o600)
+            if not self._skip_file_permissions_check:
+                self._ensure_permissions(fd, 0o600)
             os.write(fd, codecs.encode(json.dumps(json_data), "utf-8"))
             return json_data
         except OSError as e:
