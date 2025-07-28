@@ -102,7 +102,7 @@ class Auth:
         login_timeout: int | None = None,
         network_timeout: int | None = None,
         socket_timeout: int | None = None,
-        platform_detection_timeout: int | float | None = None,
+        platform_detection_timeout: float | None = None,
     ):
         return {
             "data": {
@@ -124,7 +124,9 @@ class Auth:
                     "LOGIN_TIMEOUT": login_timeout,
                     "NETWORK_TIMEOUT": network_timeout,
                     "SOCKET_TIMEOUT": socket_timeout,
-                    "PLATFORM": detect_platforms(timeout=platform_detection_timeout),
+                    "PLATFORM": detect_platforms(
+                        timeout_seconds=platform_detection_timeout
+                    ),
                 },
             },
         }
@@ -180,7 +182,7 @@ class Auth:
             self._rest._connection.login_timeout,
             self._rest._connection._network_timeout,
             self._rest._connection._socket_timeout,
-            self._rest._connection._platform_detection_timeout,
+            self._rest._connection._platform_detection_timeout_seconds,
         )
 
         body = copy.deepcopy(body_template)
