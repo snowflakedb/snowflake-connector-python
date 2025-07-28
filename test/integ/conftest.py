@@ -11,6 +11,15 @@ from typing import Any, Callable, ContextManager, Generator
 
 import pytest
 
+# Add cryptography imports for private key handling
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+)
+
 import snowflake.connector
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.connection import DefaultConverterClass
@@ -31,6 +40,43 @@ RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
 RUNNING_ON_JENKINS = os.getenv("JENKINS_URL") is not None
 RUNNING_OLD_DRIVER = os.getenv("TOX_ENV_NAME") == "olddriver"
 TEST_USING_VENDORED_ARROW = os.getenv("TEST_USING_VENDORED_ARROW") == "true"
+
+
+def _get_private_key_bytes_for_olddriver(private_key_file: str) -> bytes:
+    """Load private key file and convert to DER format bytes for olddriver compatibility.
+
+    The olddriver expects private keys in DER format as bytes.
+    This function handles both PEM and DER input formats.
+    """
+    with open(private_key_file, "rb") as key_file:
+        key_data = key_file.read()
+
+    # Try to load as PEM first, then DER
+    try:
+        # Try PEM format first
+        private_key = serialization.load_pem_private_key(
+            key_data,
+            password=None,
+            backend=default_backend(),
+        )
+    except ValueError:
+        try:
+            # Try DER format
+            private_key = serialization.load_der_private_key(
+                key_data,
+                password=None,
+                backend=default_backend(),
+            )
+        except ValueError as e:
+            raise ValueError(f"Could not load private key from {private_key_file}: {e}")
+
+    # Convert to DER format bytes as expected by olddriver
+    return private_key.private_bytes(
+        encoding=Encoding.DER,
+        format=PrivateFormat.PKCS8,
+        encryption_algorithm=NoEncryption(),
+    )
+
 
 if not isinstance(CONNECTION_PARAMETERS["host"], str):
     raise Exception("default host is not a string in parameters.py")
@@ -250,12 +296,13 @@ def init_test_schema(db_parameters) -> Generator[None]:
             # Old driver expects private_key as bytes and SNOWFLAKE_JWT authenticator
             private_key_file = db_parameters.get("private_key_file")
             if private_key_file:
-                with open(private_key_file, "rb") as f:
-                    private_key_content = f.read()
+                private_key_bytes = _get_private_key_bytes_for_olddriver(
+                    private_key_file
+                )
                 connection_params.update(
                     {
                         "authenticator": "SNOWFLAKE_JWT",
-                        "private_key": private_key_content,
+                        "private_key": private_key_bytes,
                     }
                 )
         else:
@@ -296,10 +343,11 @@ def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
             if (
                 private_key_file and "private_key" not in ret
             ):  # Don't override if private_key already set
-                with open(private_key_file, "rb") as f:
-                    private_key_content = f.read()
+                private_key_bytes = _get_private_key_bytes_for_olddriver(
+                    private_key_file
+                )
                 ret["authenticator"] = "SNOWFLAKE_JWT"
-                ret["private_key"] = private_key_content
+                ret["private_key"] = private_key_bytes
                 ret.pop(
                     "private_key_file", None
                 )  # Remove private_key_file for old driver
