@@ -4,7 +4,6 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 
-import snowflake.connector
 from snowflake.connector.converter import ZERO_EPOCH
 from snowflake.connector.converter_null import SnowflakeNoConverterToPython
 

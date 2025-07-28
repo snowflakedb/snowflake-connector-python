@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import snowflake.connector
-
 
 def exe0(cnx, sql):
     return cnx.cursor().execute(sql)
