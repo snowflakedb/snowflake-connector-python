@@ -22,7 +22,6 @@ from typing import Any, NamedTuple
 # We use regular requests and urlib3 when we reach out to do OCSP checks, basically in this very narrow
 # part of the code where we want to call out to check for revoked certificates,
 # we don't want to use our hardened version of requests.
-import requests as generic_requests
 from asn1crypto.ocsp import CertId, OCSPRequest, SingleResponse
 from asn1crypto.x509 import Certificate
 from OpenSSL.SSL import Connection
@@ -1624,7 +1623,11 @@ class SnowflakeOCSP:
         if not self.is_enabled_fail_open():
             sf_max_retry = SnowflakeOCSP.CA_OCSP_RESPONDER_MAX_RETRY_FC
 
-        with generic_requests.Session() as session:
+        # Obtain SessionManager from ssl_wrap_socket context var if available
+        session_manager = get_current_session_manager().clone(
+            use_pooling=False
+        ) or SessionManager(use_pooling=False)
+        with session_manager.use_requests_session() as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = exponential_backoff()()
