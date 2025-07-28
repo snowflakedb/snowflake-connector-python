@@ -29,6 +29,7 @@ if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
 
 RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
 RUNNING_ON_JENKINS = os.getenv("JENKINS_URL") is not None
+RUNNING_OLD_DRIVER = os.getenv("TOX_ENV_NAME") == "olddriver"
 TEST_USING_VENDORED_ARROW = os.getenv("TEST_USING_VENDORED_ARROW") == "true"
 
 if not isinstance(CONNECTION_PARAMETERS["host"], str):
@@ -85,17 +86,30 @@ if RUNNING_ON_JENKINS:
         "port": "443",
     }
 else:
-    DEFAULT_PARAMETERS: dict[str, Any] = {
-        "account": "<account_name>",
-        "user": "<user_name>",
-        "database": "<database_name>",
-        "schema": "<schema_name>",
-        "protocol": "https",
-        "host": "<host>",
-        "port": "443",
-        "authenticator": "<authenticator>",
-        "private_key_file": "<private_key_file>",
-    }
+    if RUNNING_OLD_DRIVER:
+        DEFAULT_PARAMETERS: dict[str, Any] = {
+            "account": "<account_name>",
+            "user": "<user_name>",
+            "database": "<database_name>",
+            "schema": "<schema_name>",
+            "protocol": "https",
+            "host": "<host>",
+            "port": "443",
+            "authenticator": "SNOWFLAKE_JWT",
+            "private_key_file": "<private_key_file>",
+        }
+    else:
+        DEFAULT_PARAMETERS: dict[str, Any] = {
+            "account": "<account_name>",
+            "user": "<user_name>",
+            "database": "<database_name>",
+            "schema": "<schema_name>",
+            "protocol": "https",
+            "host": "<host>",
+            "port": "443",
+            "authenticator": "<authenticator>",
+            "private_key_file": "<private_key_file>",
+        }
 
 
 def print_help() -> None:
@@ -229,9 +243,25 @@ def init_test_schema(db_parameters) -> Generator[None]:
             "database": db_parameters["database"],
             "account": db_parameters["account"],
             "protocol": db_parameters["protocol"],
-            "authenticator": db_parameters["authenticator"],
-            "private_key_file": db_parameters["private_key_file"],
         }
+
+        # Handle private key authentication differently for old vs new driver
+        if RUNNING_OLD_DRIVER:
+            # Old driver expects private_key as bytes and SNOWFLAKE_JWT authenticator
+            private_key_file = db_parameters.get("private_key_file")
+            if private_key_file:
+                with open(private_key_file, "rb") as f:
+                    private_key_content = f.read()
+                connection_params.update({
+                    "authenticator": "SNOWFLAKE_JWT",
+                    "private_key": private_key_content,
+                })
+        else:
+            # New driver expects private_key_file and KEY_PAIR_AUTHENTICATOR
+            connection_params.update({
+                "authenticator": db_parameters["authenticator"],
+                "private_key_file": db_parameters["private_key_file"],
+            })
 
     # Role may be needed when running on preprod, but is not present on Jenkins jobs
     optional_role = db_parameters.get("role")
@@ -253,6 +283,19 @@ def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
     """
     ret = get_db_parameters(connection_name)
     ret.update(kwargs)
+
+    # Handle private key authentication differently for old vs new driver (only if not on Jenkins)
+    if not RUNNING_ON_JENKINS and "private_key_file" in ret:
+        if RUNNING_OLD_DRIVER:
+            # Old driver (3.1.0) expects private_key as bytes and SNOWFLAKE_JWT authenticator
+            private_key_file = ret.get("private_key_file")
+            if private_key_file and "private_key" not in ret:  # Don't override if private_key already set
+                with open(private_key_file, "rb") as f:
+                    private_key_content = f.read()
+                ret["authenticator"] = "SNOWFLAKE_JWT"
+                ret["private_key"] = private_key_content
+                ret.pop("private_key_file", None)  # Remove private_key_file for old driver
+
     connection = snowflake.connector.connect(**ret)
     return connection
 
