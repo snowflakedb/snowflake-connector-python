@@ -8,24 +8,21 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector.compat import IS_LINUX
+from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
 try:
     from snowflake.connector.options import installed_keyring
 except ImportError:
     # if installed_keyring is unavailable, we set it as True to skip the test
     installed_keyring = True
-try:
-    from snowflake.connector.auth import delete_temporary_credential
-except ImportError:
-    delete_temporary_credential = None
+
 
 MFA_TOKEN = "MFATOKEN"
 
 
 @pytest.mark.skipif(
-    IS_LINUX or installed_keyring or not delete_temporary_credential,
-    reason="Required test env is Mac/Win with no pre-installed keyring package"
-    "and available delete_temporary_credential.",
+    IS_LINUX or installed_keyring,
+    reason="Required test env is Mac/Win with no pre-installed keyring package",
 )
 @patch("snowflake.connector.network.SnowflakeRestful._post_request")
 def test_mfa_no_local_secure_storage(mockSnowflakeRestfulPostRequest):
@@ -87,8 +84,12 @@ def test_mfa_no_local_secure_storage(mockSnowflakeRestfulPostRequest):
         "host": "testaccount.snowflakecomputing.com",
     }
 
-    delete_temporary_credential(
-        host=conn_cfg["host"], user=conn_cfg["user"], cred_type=MFA_TOKEN
+    TokenCache.make().remove(
+        TokenKey(
+            conn_cfg["host"],
+            conn_cfg["user"],
+            TokenType.MFA_TOKEN,
+        )
     )
 
     # first connection, no mfa token cache

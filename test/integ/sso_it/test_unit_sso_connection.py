@@ -4,26 +4,18 @@ from __future__ import annotations
 import os
 from unittest.mock import Mock, patch
 
-import pytest
-
 import snowflake.connector
+from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
 try:
     from snowflake.connector.compat import IS_MACOS
 except ImportError:
     IS_MACOS = False
-try:
-    from snowflake.connector.auth import delete_temporary_credential
-except ImportError:
-    delete_temporary_credential = None
+
 
 ID_TOKEN = "ID_TOKEN"
 
 
-@pytest.mark.skipif(
-    delete_temporary_credential is None,
-    reason="delete_temporary_credential is not available.",
-)
 @patch("snowflake.connector.auth_webbrowser.AuthByWebBrowser.authenticate")
 @patch("snowflake.connector.network.SnowflakeRestful._post_request")
 def test_connect_externalbrowser(
@@ -115,7 +107,7 @@ def test_connect_externalbrowser(
         authenticator = "externalbrowser"
         host = "testaccount.snowflakecomputing.com"
 
-        delete_temporary_credential(host=host, user=user, cred_type=ID_TOKEN)
+        TokenCache.make().remove(TokenKey(host, user, TokenType.ID_TOKEN))
 
         # first connection
         con = snowflake.connector.connect(
