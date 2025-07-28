@@ -397,7 +397,5 @@ def detect_platforms(timeout_seconds: float | None) -> list[str]:
             detected_platforms.append(platform_name)
         elif detection_state == _DetectionState.TIMEOUT:
             detected_platforms.append(f"{platform_name}_timeout")
-        elif detection_state == _DetectionState.NOT_DETECTED:
-            pass
 
     return detected_platforms
