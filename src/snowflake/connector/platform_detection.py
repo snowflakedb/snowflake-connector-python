@@ -363,6 +363,7 @@ def is_github_action():
 def detect_platforms(timeout_seconds: float | None) -> list[str]:
     """
     Detect all potential platforms that the current environment may be running on.
+    Swallows all exceptions and returns an empty list if any exception occurs to not affect main driver functionality.
 
     Args:
         timeout_seconds: Timeout value for platform detection requests. Defaults to 0.2 seconds
@@ -370,35 +371,39 @@ def detect_platforms(timeout_seconds: float | None) -> list[str]:
 
     Returns:
         list[str]: List of detected platform names. Platforms that timed out will have
-                  "_timeout" suffix appended to their name.
+                  "_timeout" suffix appended to their name. Returns empty list if any
+                  exception occurs during detection.
     """
-    if timeout_seconds is None:
-        timeout_seconds = 0.2
+    try:
+        if timeout_seconds is None:
+            timeout_seconds = 0.2
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {
-            "is_ec2_instance": executor.submit(is_ec2_instance, timeout_seconds),
-            "is_aws_lambda": executor.submit(is_aws_lambda),
-            "has_aws_identity": executor.submit(has_aws_identity, timeout_seconds),
-            "is_azure_vm": executor.submit(is_azure_vm, timeout_seconds),
-            "is_azure_function": executor.submit(is_azure_function),
-            "azure_managed_identity": executor.submit(
-                has_azure_managed_identity, timeout_seconds
-            ),
-            "is_gce_vm": executor.submit(is_gce_vm, timeout_seconds),
-            "is_gce_cloud_run_service": executor.submit(is_gce_cloud_run_service),
-            "is_gce_cloud_run_job": executor.submit(is_gce_cloud_run_job),
-            "has_gcp_identity": executor.submit(has_gcp_identity, timeout_seconds),
-            "is_github_action": executor.submit(is_github_action),
-        }
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                "is_ec2_instance": executor.submit(is_ec2_instance, timeout_seconds),
+                "is_aws_lambda": executor.submit(is_aws_lambda),
+                "has_aws_identity": executor.submit(has_aws_identity, timeout_seconds),
+                "is_azure_vm": executor.submit(is_azure_vm, timeout_seconds),
+                "is_azure_function": executor.submit(is_azure_function),
+                "azure_managed_identity": executor.submit(
+                    has_azure_managed_identity, timeout_seconds
+                ),
+                "is_gce_vm": executor.submit(is_gce_vm, timeout_seconds),
+                "is_gce_cloud_run_service": executor.submit(is_gce_cloud_run_service),
+                "is_gce_cloud_run_job": executor.submit(is_gce_cloud_run_job),
+                "has_gcp_identity": executor.submit(has_gcp_identity, timeout_seconds),
+                "is_github_action": executor.submit(is_github_action),
+            }
 
-        platforms = {key: future.result() for key, future in futures.items()}
+            platforms = {key: future.result() for key, future in futures.items()}
 
-    detected_platforms = []
-    for platform_name, detection_state in platforms.items():
-        if detection_state == _DetectionState.DETECTED:
-            detected_platforms.append(platform_name)
-        elif detection_state == _DetectionState.TIMEOUT:
-            detected_platforms.append(f"{platform_name}_timeout")
+        detected_platforms = []
+        for platform_name, detection_state in platforms.items():
+            if detection_state == _DetectionState.DETECTED:
+                detected_platforms.append(platform_name)
+            elif detection_state == _DetectionState.TIMEOUT:
+                detected_platforms.append(f"{platform_name}_timeout")
 
-    return detected_platforms
+        return detected_platforms
+    except Exception:
+        return []
