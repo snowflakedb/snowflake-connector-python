@@ -317,7 +317,6 @@ def has_gcp_identity(timeout_seconds: float):
 
     Args:
         timeout_seconds: Timeout value for the metadata service request.
-
     Returns:
         _DetectionState: DETECTED if valid GCP identity exists, TIMEOUT if request
                         times out, NOT_DETECTED otherwise.
@@ -328,9 +327,10 @@ def has_gcp_identity(timeout_seconds: float):
             headers={"Metadata-Flavor": "Google"},
             timeout=timeout_seconds,
         )
-        response.raise_for_status()
         return (
-            _DetectionState.DETECTED if response.text else _DetectionState.NOT_DETECTED
+            _DetectionState.DETECTED
+            if response.status_code == 200
+            else _DetectionState.NOT_DETECTED
         )
     except requests.Timeout:
         return _DetectionState.TIMEOUT
