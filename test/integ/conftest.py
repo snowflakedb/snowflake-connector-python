@@ -29,7 +29,6 @@ if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
     from snowflake.connector import SnowflakeConnection
 
 RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
-RUNNING_ON_JENKINS = os.getenv("JENKINS_HOME") is not None
 TEST_USING_VENDORED_ARROW = os.getenv("TEST_USING_VENDORED_ARROW") == "true"
 
 if not isinstance(CONNECTION_PARAMETERS["host"], str):
