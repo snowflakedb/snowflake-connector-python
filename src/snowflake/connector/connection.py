@@ -497,8 +497,7 @@ class SnowflakeConnection:
             "unsafe_skip_file_permissions_check", False
         )
         # initiate easy logging during every connection
-        easy_logging = EasyLoggingConfigPython()
-        easy_logging.parse_config_file(
+        easy_logging = EasyLoggingConfigPython(
             skip_config_file_permissions_check=self._unsafe_skip_file_permissions_check
         )
         easy_logging.create_log()
