@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import re
 import time
 
 import pytest
@@ -45,7 +46,6 @@ def test_basic_store(tmpdir, monkeypatch):
     cache.cache_file().unlink(missing_ok=True)
 
 
-@pytest.mark.skipif(not IS_LINUX, reason="The test is only for Linux platform")
 def test_delete_specific_item(tmpdir, monkeypatch):
     monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
     cache = FileTokenCache.make()
@@ -110,16 +110,47 @@ def test_cache_dir_does_not_exist(tmpdir, monkeypatch):
     assert cache_dir is None
 
 
-def test_cache_dir_incorrect_permissions(tmpdir, monkeypatch):
+def test_cache_dir_incorrect_permissions(tmpdir, monkeypatch, capsys):
     directory = pathlib.Path(str(tmpdir)) / "dir"
     directory.unlink(missing_ok=True)
-    directory.touch(0o777)
+    directory.mkdir()
+    directory.chmod(0o777)
     monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(directory))
     monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
     monkeypatch.delenv("HOME", raising=False)
     cache_dir = FileTokenCache.find_cache_dir()
     assert cache_dir is None
-    directory.unlink()
+    # warning is visible on stderr
+    stderr_output = capsys.readouterr().err
+    assert re.search(
+        r"\/dir has incorrect permissions\. \d+ != 0700\'\. Skipping it in cache directory lookup",
+        stderr_output,
+    )
+    directory.rmdir()
+
+
+def test_cache_dir_incorrect_permissions_with_skip_file_permissions_check(
+    tmpdir, monkeypatch, capsys
+):
+    directory = pathlib.Path(str(tmpdir)) / "dir"
+    directory.unlink(missing_ok=True)
+    directory.mkdir()
+    directory.chmod(0o777)
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(directory))
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("HOME", raising=False)
+    cache_dir = FileTokenCache.find_cache_dir(skip_file_permissions_check=True)
+    assert cache_dir == directory
+    # warning is not visible on stderr
+    stderr_output = capsys.readouterr().err
+    assert (
+        re.search(
+            r"\/dir has incorrect permissions\. \d+ != 0700\'\. Skipping it in cache directory lookup",
+            stderr_output,
+        )
+        is None
+    )
+    directory.rmdir()
 
 
 def test_cache_file_incorrect_permissions(tmpdir, monkeypatch):
@@ -132,6 +163,21 @@ def test_cache_file_incorrect_permissions(tmpdir, monkeypatch):
     cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
     assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
     assert len(cache.cache_file().read_text("utf-8")) == 0
+    cache.cache_file().unlink()
+
+
+def test_cache_file_incorrect_permission_with_skip_file_permissions_check(
+    tmpdir, monkeypatch
+):
+    monkeypatch.setenv("SF_TEMPORARY_CREDENTIAL_CACHE_DIR", str(tmpdir))
+    cache = FileTokenCache.make(skip_file_permissions_check=True)
+    assert cache
+    cache.cache_file().unlink(missing_ok=True)
+    cache.cache_file().touch(0o777)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) is None
+    cache.store(TokenKey(HOST_0, USER_0, CRED_TYPE_0), CRED_0)
+    assert cache.retrieve(TokenKey(HOST_0, USER_0, CRED_TYPE_0)) == CRED_0
+    assert len(cache.cache_file().read_text("utf-8")) > 0
     cache.cache_file().unlink()
 
 

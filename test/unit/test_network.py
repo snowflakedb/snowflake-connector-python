@@ -7,10 +7,11 @@ from test.unit.mock_utils import mock_connection
 
 import pytest
 
+from snowflake.connector.errors import HttpError
 from src.snowflake.connector.network import SnowflakeRestfulJsonEncoder
 
 try:
-    from snowflake.connector import Error, InterfaceError
+    from snowflake.connector import Error
     from snowflake.connector.network import SnowflakeRestful
     from snowflake.connector.vendored.requests import HTTPError, Response
 except ImportError:
@@ -64,9 +65,9 @@ def test_fetch():
             == {}
         )
         assert rest.fetch(**default_parameters, no_retry=True) == {}
-        # if no retry is set to False, the function raises an InterfaceError
-        with pytest.raises(InterfaceError) as exc:
-            assert rest.fetch(**default_parameters, no_retry=False)
+        # if no retry is set to False, the function raises an HttpError
+        with pytest.raises(HttpError):
+            rest.fetch(**default_parameters, no_retry=False)
 
 
 @pytest.mark.parametrize(
