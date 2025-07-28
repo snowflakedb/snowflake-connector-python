@@ -22,6 +22,20 @@ class _DetectionState(Enum):
 
 
 def is_ec2_instance(timeout):
+    """
+    Check if the current environment is running on an AWS EC2 instance.
+
+    If we query the AWS Instance Metadata Service (IMDS) for the instance identity document
+    and receive content back, then we assume we are running on an EC2 instance.
+    This function is compatible with IMDSv1 and IMDSv2 since we send the token in the request.
+    It will ignore the token if on IMDSv1 and use the token if on IMDSv2.
+
+    Args:
+        timeout: Timeout value for the metadata service request.
+
+    Returns:
+        _DetectionState: DETECTED if running on EC2, NOT_DETECTED otherwise.
+    """
     try:
         fetcher = IMDSFetcher(timeout=timeout, num_attempts=1)
         document = fetcher._get_request(
@@ -39,6 +53,15 @@ def is_ec2_instance(timeout):
 
 
 def is_aws_lambda():
+    """
+    Check if the current environment is running in AWS Lambda.
+
+    If we check for the LAMBDA_TASK_ROOT environment variable and it exists,
+    then we assume we are running in AWS Lambda.
+
+    Returns:
+        _DetectionState: DETECTED if LAMBDA_TASK_ROOT env var exists, NOT_DETECTED otherwise.
+    """
     return (
         _DetectionState.DETECTED
         if "LAMBDA_TASK_ROOT" in os.environ
@@ -47,6 +70,15 @@ def is_aws_lambda():
 
 
 def is_valid_arn_for_wif(arn: str) -> bool:
+    """
+    Validate if an AWS ARN is suitable for Web Identity Federation (WIF).
+
+    Args:
+        arn: The AWS ARN string to validate.
+
+    Returns:
+        bool: True if ARN is valid for WIF, False otherwise.
+    """
     patterns = [
         r"^arn:[^:]+:iam::[^:]+:user/.+$",
         r"^arn:[^:]+:sts::[^:]+:assumed-role/.+$",
@@ -55,6 +87,18 @@ def is_valid_arn_for_wif(arn: str) -> bool:
 
 
 def has_aws_identity(timeout):
+    """
+    Check if the current environment has a valid AWS identity for authentication.
+
+    If we retrieve an ARN from the caller identity and it is a valid WIF ARN,
+    then we assume we have a valid AWS identity for authentication.
+
+    Args:
+        timeout: Timeout value for AWS API calls.
+
+    Returns:
+        _DetectionState: DETECTED if valid AWS identity exists, NOT_DETECTED otherwise.
+    """
     try:
         config = Config(
             connect_timeout=timeout,
@@ -75,6 +119,19 @@ def has_aws_identity(timeout):
 
 
 def is_azure_vm(timeout):
+    """
+    Check if the current environment is running on an Azure Virtual Machine.
+
+    If we query the Azure Instance Metadata Service and receive an HTTP 200 response,
+    then we assume we are running on an Azure VM.
+
+    Args:
+        timeout: Timeout value for the metadata service request.
+
+    Returns:
+        _DetectionState: DETECTED if on Azure VM, TIMEOUT if request times out,
+                        NOT_DETECTED otherwise.
+    """
     try:
         token_resp = requests.get(
             "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
@@ -93,6 +150,17 @@ def is_azure_vm(timeout):
 
 
 def is_azure_function():
+    """
+    Check if the current environment is running in Azure Functions.
+
+    If we check for Azure Functions environment variables (FUNCTIONS_WORKER_RUNTIME,
+    FUNCTIONS_EXTENSION_VERSION, AzureWebJobsStorage) and they all exist,
+    then we assume we are running in Azure Functions.
+
+    Returns:
+        _DetectionState: DETECTED if all Azure Functions env vars are present,
+                        NOT_DETECTED otherwise.
+    """
     service_vars = [
         "FUNCTIONS_WORKER_RUNTIME",
         "FUNCTIONS_EXTENSION_VERSION",
@@ -108,6 +176,21 @@ def is_azure_function():
 def is_managed_identity_available_on_azure_vm(
     timeout, resource=DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
 ):
+    """
+    Check if Azure Managed Identity is available and accessible on an Azure VM.
+
+    If we attempt to mint an access token from the Azure Instance Metadata Service
+    managed identity endpoint and receive an HTTP 200 response,
+    then we assume managed identity is available.
+
+    Args:
+        timeout: Timeout value for the metadata service request.
+        resource: The Azure resource URI to request a token for.
+
+    Returns:
+        _DetectionState: DETECTED if managed identity is available, TIMEOUT if request
+                        times out, NOT_DETECTED otherwise.
+    """
     endpoint = f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={resource}"
     headers = {"Metadata": "true"}
     try:
@@ -124,6 +207,24 @@ def is_managed_identity_available_on_azure_vm(
 
 
 def has_azure_managed_identity(on_azure_vm, on_azure_function, timeout):
+    """
+    Determine if Azure Managed Identity is available in the current environment.
+
+    If we are on Azure Functions and the IDENTITY_HEADER environment variable exists,
+    then we assume managed identity is available.
+    If we are on an Azure VM and can mint an access token from the managed identity endpoint,
+    then we assume managed identity is available.
+    Assumes timeout state if either VM or Function detection timed out.
+
+    Args:
+        on_azure_vm: Detection state for Azure VM.
+        on_azure_function: Detection state for Azure Function.
+        timeout: Timeout value for managed identity checks.
+
+    Returns:
+        _DetectionState: DETECTED if managed identity is available, TIMEOUT if
+                        detection timed out, NOT_DETECTED otherwise.
+    """
     if on_azure_function == _DetectionState.DETECTED:
         return (
             _DetectionState.DETECTED
@@ -141,6 +242,19 @@ def has_azure_managed_identity(on_azure_vm, on_azure_function, timeout):
 
 
 def is_gce_vm(timeout):
+    """
+    Check if the current environment is running on Google Compute Engine (GCE).
+
+    If we query the Google metadata server and receive a response with the
+    "Metadata-Flavor: Google" header, then we assume we are running on GCE.
+
+    Args:
+        timeout: Timeout value for the metadata service request.
+
+    Returns:
+        _DetectionState: DETECTED if on GCE, TIMEOUT if request times out,
+                        NOT_DETECTED otherwise.
+    """
     try:
         response = requests.get("http://metadata.google.internal", timeout=timeout)
         return (
@@ -155,6 +269,16 @@ def is_gce_vm(timeout):
 
 
 def is_gce_cloud_run_service():
+    """
+    Check if the current environment is running in Google Cloud Run service.
+
+    If we check for Cloud Run service environment variables (K_SERVICE, K_REVISION,
+    K_CONFIGURATION) and they all exist, then we assume we are running in Cloud Run service.
+
+    Returns:
+        _DetectionState: DETECTED if all Cloud Run service env vars are present,
+                        NOT_DETECTED otherwise.
+    """
     service_vars = ["K_SERVICE", "K_REVISION", "K_CONFIGURATION"]
     return (
         _DetectionState.DETECTED
@@ -164,6 +288,16 @@ def is_gce_cloud_run_service():
 
 
 def is_gce_cloud_run_job():
+    """
+    Check if the current environment is running in Google Cloud Run job.
+
+    If we check for Cloud Run job environment variables (CLOUD_RUN_JOB, CLOUD_RUN_EXECUTION)
+    and they both exist, then we assume we are running in a Cloud Run job.
+
+    Returns:
+        _DetectionState: DETECTED if all Cloud Run job env vars are present,
+                        NOT_DETECTED otherwise.
+    """
     job_vars = ["CLOUD_RUN_JOB", "CLOUD_RUN_EXECUTION"]
     return (
         _DetectionState.DETECTED
@@ -173,6 +307,19 @@ def is_gce_cloud_run_job():
 
 
 def has_gcp_identity(timeout):
+    """
+    Check if the current environment has a valid Google Cloud Platform identity.
+
+    If we query the GCP metadata service for the default service account email
+    and receive a non-empty response, then we assume we have a valid GCP identity.
+
+    Args:
+        timeout: Timeout value for the metadata service request.
+
+    Returns:
+        _DetectionState: DETECTED if valid GCP identity exists, TIMEOUT if request
+                        times out, NOT_DETECTED otherwise.
+    """
     try:
         response = requests.get(
             "http://metadata/computeMetadata/v1/instance/service-accounts/default/email",
@@ -190,6 +337,15 @@ def has_gcp_identity(timeout):
 
 
 def is_github_action():
+    """
+    Check if the current environment is running in GitHub Actions.
+
+    If we check for the GITHUB_ACTIONS environment variable and it exists,
+    then we assume we are running in GitHub Actions.
+
+    Returns:
+        _DetectionState: DETECTED if GITHUB_ACTIONS env var exists, NOT_DETECTED otherwise.
+    """
     return (
         _DetectionState.DETECTED
         if "GITHUB_ACTIONS" in os.environ
@@ -198,6 +354,17 @@ def is_github_action():
 
 
 def detect_platforms(timeout: int | float | None) -> list[str]:
+    """
+    Detect all potential platforms that the current environment may be running on.
+
+    Args:
+        timeout: Timeout value for platform detection requests. Defaults to 0.2 seconds
+                if None is provided.
+
+    Returns:
+        list[str]: List of detected platform names. Platforms that timed out will have
+                  "_timeout" suffix appended to their name.
+    """
     if timeout is None:
         timeout = 0.2
 
