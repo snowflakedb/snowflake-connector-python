@@ -26,8 +26,8 @@ from .network import (
 from .options import installed_pandas
 from .options import pyarrow as pa
 from .secret_detector import SecretDetector
-from .session_manager import SessionManager
 from .time_util import TimerContextManager
+from .vendored import requests
 
 logger = getLogger(__name__)
 
@@ -166,7 +166,6 @@ def create_batches_from_response(
                     column_converters,
                     cursor._use_dict_result,
                     json_result_force_utf8_decoding=cursor._connection._json_result_force_utf8_decoding,
-                    connection=cursor._connection,
                 )
                 for c in chunks
             ]
@@ -181,7 +180,6 @@ def create_batches_from_response(
                     cursor._connection._numpy,
                     schema,
                     cursor._connection._arrow_number_to_decimal,
-                    connection=cursor._connection,
                 )
                 for c in chunks
             ]
@@ -194,7 +192,6 @@ def create_batches_from_response(
             schema,
             column_converters,
             cursor._use_dict_result,
-            connection=cursor._connection,
         )
     elif rowset_b64 is not None:
         first_chunk = ArrowResultBatch.from_data(
@@ -205,7 +202,6 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
-            connection=cursor._connection,
         )
     else:
         logger.error(f"Don't know how to construct ResultBatches from response: {data}")
@@ -217,7 +213,6 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
-            connection=cursor._connection,
         )
 
     return [first_chunk] + rest_of_chunks
@@ -251,7 +246,6 @@ class ResultBatch(abc.ABC):
         remote_chunk_info: RemoteChunkInfo | None,
         schema: Sequence[ResultMetadataV2],
         use_dict_result: bool,
-        connection: SnowflakeConnection | None = None,
     ) -> None:
         self.rowcount = rowcount
         self._chunk_headers = chunk_headers
@@ -261,7 +255,6 @@ class ResultBatch(abc.ABC):
             [s._to_result_metadata_v1() for s in schema] if schema is not None else None
         )
         self._use_dict_result = use_dict_result
-        self._connection = connection
         self._metrics: dict[str, int] = {}
         self._data: str | list[tuple[Any, ...]] | None = None
         if self._remote_chunk_info:
@@ -316,7 +309,6 @@ class ResultBatch(abc.ABC):
     ) -> Response:
         """Downloads the data that the ``ResultBatch`` is pointing at."""
         sleep_timer = 1
-        connection = connection or self._connection
         backoff = (
             connection._backoff_generator
             if connection is not None
@@ -341,10 +333,9 @@ class ResultBatch(abc.ABC):
                             response = session.request("get", **request_data)
                     else:
                         logger.debug(
-                            f"downloading result batch id: {self.id} with SessionManager fallback"
+                            f"downloading result batch id: {self.id} with new session"
                         )
-                        local_session_manager = SessionManager(use_pooling=False)
-                        response = local_session_manager.get(**request_data)
+                        response = requests.get(**request_data)
 
                     if response.status_code == OK:
                         logger.debug(
@@ -444,7 +435,6 @@ class JSONResultBatch(ResultBatch):
         use_dict_result: bool,
         *,
         json_result_force_utf8_decoding: bool = False,
-        connection: SnowflakeConnection | None = None,
     ) -> None:
         super().__init__(
             rowcount,
@@ -452,7 +442,6 @@ class JSONResultBatch(ResultBatch):
             remote_chunk_info,
             schema,
             use_dict_result,
-            connection,
         )
         self._json_result_force_utf8_decoding = json_result_force_utf8_decoding
         self.column_converters = column_converters
@@ -465,7 +454,6 @@ class JSONResultBatch(ResultBatch):
         schema: Sequence[ResultMetadataV2],
         column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
-        connection: SnowflakeConnection | None = None,
     ):
         """Initializes a ``JSONResultBatch`` from static, local data."""
         new_chunk = cls(
@@ -475,7 +463,6 @@ class JSONResultBatch(ResultBatch):
             schema,
             column_converters,
             use_dict_result,
-            connection=connection,
         )
         new_chunk._data = new_chunk._parse(data)
         return new_chunk
@@ -614,7 +601,6 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadataV2],
         number_to_decimal: bool,
-        connection: SnowflakeConnection | None = None,
     ) -> None:
         super().__init__(
             rowcount,
@@ -622,7 +608,6 @@ class ArrowResultBatch(ResultBatch):
             remote_chunk_info,
             schema,
             use_dict_result,
-            connection,
         )
         self._context = context
         self._numpy = numpy
@@ -685,7 +670,6 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadataV2],
         number_to_decimal: bool,
-        connection: SnowflakeConnection | None = None,
     ):
         """Initializes an ``ArrowResultBatch`` from static, local data."""
         new_chunk = cls(
@@ -697,7 +681,6 @@ class ArrowResultBatch(ResultBatch):
             numpy,
             schema,
             number_to_decimal,
-            connection=connection,
         )
         new_chunk._data = data
 
