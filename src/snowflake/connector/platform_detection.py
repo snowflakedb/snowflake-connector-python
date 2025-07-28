@@ -11,7 +11,6 @@ from botocore.config import Config
 from botocore.utils import IMDSFetcher
 
 from .vendored import requests
-from .wif_util import DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
 
 
 class _DetectionState(Enum):
@@ -175,7 +174,7 @@ def is_azure_function():
 
 
 def is_managed_identity_available_on_azure_vm(
-    timeout_seconds, resource=DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
+    timeout_seconds, resource="https://management.azure.com/"
 ):
     """
     Check if Azure Managed Identity is available and accessible on an Azure VM.
