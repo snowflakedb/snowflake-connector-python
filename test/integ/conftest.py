@@ -14,8 +14,8 @@ import pytest
 import snowflake.connector
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.connection import DefaultConverterClass
-
 from src.snowflake.connector.test_util import RUNNING_ON_JENKINS
+
 from .. import running_on_public_ci
 from ..parameters import CONNECTION_PARAMETERS
 
@@ -95,7 +95,7 @@ else:
         "host": "<host>",
         "port": "443",
         "authenticator": "<authenticator>",
-        "private_key_file": "<private_key_file>"
+        "private_key_file": "<private_key_file>",
     }
 
 
@@ -232,7 +232,6 @@ def init_test_schema(db_parameters) -> Generator[None]:
             "protocol": db_parameters["protocol"],
             "authenticator": db_parameters["authenticator"],
             "private_key_file": db_parameters["private_key_file"],
-
         }
 
     # Role may be needed when running on preprod, but is not present on Jenkins jobs
