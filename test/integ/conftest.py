@@ -212,7 +212,17 @@ def init_test_schema(db_parameters) -> Generator[None]:
 
     This is automatically called per test session.
     """
-    if RUNNING_ON_GH:
+    if RUNNING_ON_JENKINS:
+        connection_params = {
+            "user": db_parameters["user"],
+            "password": db_parameters["password"],
+            "host": db_parameters["host"],
+            "port": db_parameters["port"],
+            "database": db_parameters["database"],
+            "account": db_parameters["account"],
+            "protocol": db_parameters["protocol"],
+        }
+    else:
         connection_params = {
             "user": db_parameters["user"],
             "host": db_parameters["host"],
@@ -222,16 +232,7 @@ def init_test_schema(db_parameters) -> Generator[None]:
             "protocol": db_parameters["protocol"],
             "authenticator": db_parameters["authenticator"],
             "private_key_file": db_parameters["private_key_file"],
-        }
-    else:
-        connection_params = {
-            "user": db_parameters["user"],
-            "password": db_parameters["password"],
-            "host": db_parameters["host"],
-            "port": db_parameters["port"],
-            "database": db_parameters["database"],
-            "account": db_parameters["account"],
-            "protocol": db_parameters["protocol"],
+
         }
 
     # Role may be needed when running on preprod, but is not present on Jenkins jobs
