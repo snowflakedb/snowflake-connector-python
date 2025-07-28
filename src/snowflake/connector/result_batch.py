@@ -166,7 +166,7 @@ def create_batches_from_response(
                     column_converters,
                     cursor._use_dict_result,
                     json_result_force_utf8_decoding=cursor._connection._json_result_force_utf8_decoding,
-                    connection=cursor._connection,
+                    session_manager=cursor._connection.session_manager,
                 )
                 for c in chunks
             ]
@@ -181,7 +181,7 @@ def create_batches_from_response(
                     cursor._connection._numpy,
                     schema,
                     cursor._connection._arrow_number_to_decimal,
-                    connection=cursor._connection,
+                    session_manager=cursor._connection.session_manager,
                 )
                 for c in chunks
             ]
@@ -194,7 +194,7 @@ def create_batches_from_response(
             schema,
             column_converters,
             cursor._use_dict_result,
-            connection=cursor._connection,
+            session_manager=cursor._connection.session_manager,
         )
     elif rowset_b64 is not None:
         first_chunk = ArrowResultBatch.from_data(
@@ -205,7 +205,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
-            connection=cursor._connection,
+            session_manager=cursor._connection.session_manager,
         )
     else:
         logger.error(f"Don't know how to construct ResultBatches from response: {data}")
@@ -217,7 +217,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
-            connection=cursor._connection,
+            session_manager=cursor._connection.session_manager,
         )
 
     return [first_chunk] + rest_of_chunks
@@ -251,7 +251,7 @@ class ResultBatch(abc.ABC):
         remote_chunk_info: RemoteChunkInfo | None,
         schema: Sequence[ResultMetadataV2],
         use_dict_result: bool,
-        connection: SnowflakeConnection | None = None,
+        session_manager: SessionManager | None = None,
     ) -> None:
         self.rowcount = rowcount
         self._chunk_headers = chunk_headers
@@ -261,7 +261,7 @@ class ResultBatch(abc.ABC):
             [s._to_result_metadata_v1() for s in schema] if schema is not None else None
         )
         self._use_dict_result = use_dict_result
-        self._connection = connection
+        self._session_manager = session_manager
         self._metrics: dict[str, int] = {}
         self._data: str | list[tuple[Any, ...]] | None = None
         if self._remote_chunk_info:
@@ -316,7 +316,6 @@ class ResultBatch(abc.ABC):
     ) -> Response:
         """Downloads the data that the ``ResultBatch`` is pointing at."""
         sleep_timer = 1
-        connection = connection or self._connection
         backoff = (
             connection._backoff_generator
             if connection is not None
@@ -333,19 +332,26 @@ class ResultBatch(abc.ABC):
                         "timeout": DOWNLOAD_TIMEOUT,
                     }
                     # Try to reuse a connection if possible
+
                     if (
                         connection
                         and connection.rest
                         and connection.rest.session_manager is not None
                     ):
+                        # If connection was explicitly passed and not closed yet - we can reuse SessionManager with session pooling
                         with connection.rest.use_requests_session() as session:
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
                             response = session.request("get", **request_data)
+                    elif self._conn_session_manager_no_pool is not None:
+                        # If connection is not accessible or was already closed, but cursors are now used to fetch the data - we will only reuse the http setup (through cloned SessionManager without session pooling)
+                        with self._session_manager.use_requests_session() as session:
+                            response = session.request("get", **request_data)
                     else:
+                        # If there was no session manager cloned, then we are using a default Session Manager setup, since it is very unlikely to enter this part outside of testing
                         logger.debug(
-                            f"downloading result batch id: {self.id} with new session through a local Session Manager"
+                            f"downloading result batch id: {self.id} with new session through local session manager"
                         )
                         local_session_manager = SessionManager(use_pooling=False)
                         response = local_session_manager.get(**request_data)
@@ -448,7 +454,7 @@ class JSONResultBatch(ResultBatch):
         use_dict_result: bool,
         *,
         json_result_force_utf8_decoding: bool = False,
-        connection: SnowflakeConnection | None = None,
+        session_manager: SessionManager | None = None,
     ) -> None:
         super().__init__(
             rowcount,
@@ -456,7 +462,7 @@ class JSONResultBatch(ResultBatch):
             remote_chunk_info,
             schema,
             use_dict_result,
-            connection,
+            session_manager,
         )
         self._json_result_force_utf8_decoding = json_result_force_utf8_decoding
         self.column_converters = column_converters
@@ -469,7 +475,7 @@ class JSONResultBatch(ResultBatch):
         schema: Sequence[ResultMetadataV2],
         column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
-        connection: SnowflakeConnection | None = None,
+        session_manager: SessionManager | None = None,
     ):
         """Initializes a ``JSONResultBatch`` from static, local data."""
         new_chunk = cls(
@@ -479,7 +485,7 @@ class JSONResultBatch(ResultBatch):
             schema,
             column_converters,
             use_dict_result,
-            connection=connection,
+            session_manager=session_manager,
         )
         new_chunk._data = new_chunk._parse(data)
         return new_chunk
@@ -618,7 +624,7 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadataV2],
         number_to_decimal: bool,
-        connection: SnowflakeConnection | None = None,
+        session_manager: SessionManager | None = None,
     ) -> None:
         super().__init__(
             rowcount,
@@ -626,7 +632,7 @@ class ArrowResultBatch(ResultBatch):
             remote_chunk_info,
             schema,
             use_dict_result,
-            connection,
+            session_manager,
         )
         self._context = context
         self._numpy = numpy
@@ -689,7 +695,7 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadataV2],
         number_to_decimal: bool,
-        connection: SnowflakeConnection | None = None,
+        session_manager: SessionManager | None = None,
     ):
         """Initializes an ``ArrowResultBatch`` from static, local data."""
         new_chunk = cls(
@@ -701,7 +707,7 @@ class ArrowResultBatch(ResultBatch):
             numpy,
             schema,
             number_to_decimal,
-            connection=connection,
+            session_manager=session_manager,
         )
         new_chunk._data = data
 

@@ -357,6 +357,21 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
             ),
         )
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        # `_sessions_map` contains a defaultdict with a lambda referencing `self`,
+        # which is not pickle-able.  Convert to a regular dict for serialization.
+        state["_sessions_map_items"] = list(state.pop("_sessions_map").items())
+        return state
+
+    def __setstate__(self, state):
+        # Restore attributes except sessions_map
+        sessions_items = state.pop("_sessions_map_items", [])
+        self.__dict__.update(state)
+        self._sessions_map = collections.defaultdict(lambda: SessionPool(self))
+        for host, pool in sessions_items:
+            self._sessions_map[host] = pool
+
 
 def request(
     method: str,
