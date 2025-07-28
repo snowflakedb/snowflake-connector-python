@@ -206,7 +206,7 @@ def is_managed_identity_available_on_azure_vm(
         return _DetectionState.NOT_DETECTED
 
 
-def has_azure_managed_identity(on_azure_vm, on_azure_function, timeout_seconds: float):
+def has_azure_managed_identity(timeout_seconds: float):
     """
     Determine if Azure Managed Identity is available in the current environment.
 
@@ -215,27 +215,31 @@ def has_azure_managed_identity(on_azure_vm, on_azure_function, timeout_seconds: 
     If we are on an Azure VM and can mint an access token from the managed identity endpoint,
     then we assume managed identity is available.
     Assumes timeout state if either VM or Function detection timed out.
+    Otherwise, assumes it is not available
 
     Args:
-        on_azure_vm: Detection state for Azure VM.
-        on_azure_function: Detection state for Azure Function.
         timeout_seconds: Timeout value for managed identity checks.
 
     Returns:
         _DetectionState: DETECTED if managed identity is available, TIMEOUT if
                         detection timed out, NOT_DETECTED otherwise.
     """
-    if on_azure_function == _DetectionState.DETECTED:
-        return (
-            _DetectionState.DETECTED
-            if os.environ.get("IDENTITY_HEADER")
-            else _DetectionState.NOT_DETECTED
-        )
-    if on_azure_vm == _DetectionState.DETECTED:
-        return is_managed_identity_available_on_azure_vm(timeout_seconds)
+    has_azure_function_managed_identity = (
+        _DetectionState.DETECTED
+        if os.environ.get("IDENTITY_HEADER")
+        else _DetectionState.NOT_DETECTED
+    )
+    has_azure_vm_managed_identity = is_managed_identity_available_on_azure_vm(
+        timeout_seconds
+    )
     if (
-        on_azure_vm == _DetectionState.TIMEOUT
-        or on_azure_function == _DetectionState.TIMEOUT
+        has_azure_vm_managed_identity == _DetectionState.DETECTED
+        or has_azure_function_managed_identity == _DetectionState.DETECTED
+    ):
+        return _DetectionState.DETECTED
+    if (
+        has_azure_vm_managed_identity == _DetectionState.TIMEOUT
+        or has_azure_function_managed_identity == _DetectionState.TIMEOUT
     ):
         return _DetectionState.TIMEOUT
     return _DetectionState.NOT_DETECTED
@@ -378,6 +382,9 @@ def detect_platforms(timeout_seconds: float | None) -> list[str]:
             "has_aws_identity": executor.submit(has_aws_identity, timeout_seconds),
             "is_azure_vm": executor.submit(is_azure_vm, timeout_seconds),
             "is_azure_function": executor.submit(is_azure_function),
+            "azure_managed_identity": executor.submit(
+                has_azure_managed_identity, timeout_seconds
+            ),
             "is_gce_vm": executor.submit(is_gce_vm, timeout_seconds),
             "is_gce_cloud_run_service": executor.submit(is_gce_cloud_run_service),
             "is_gce_cloud_run_job": executor.submit(is_gce_cloud_run_job),
@@ -386,10 +393,6 @@ def detect_platforms(timeout_seconds: float | None) -> list[str]:
         }
 
         platforms = {key: future.result() for key, future in futures.items()}
-
-    platforms["azure_managed_identity"] = has_azure_managed_identity(
-        platforms["is_azure_vm"], platforms["is_azure_function"], timeout_seconds
-    )
 
     detected_platforms = []
     for platform_name, detection_state in platforms.items():
