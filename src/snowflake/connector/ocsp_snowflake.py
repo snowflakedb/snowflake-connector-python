@@ -1623,10 +1623,16 @@ class SnowflakeOCSP:
         if not self.is_enabled_fail_open():
             sf_max_retry = SnowflakeOCSP.CA_OCSP_RESPONDER_MAX_RETRY_FC
 
-        # Obtain SessionManager from ssl_wrap_socket context var if available
-        session_manager = get_current_session_manager().clone(
-            use_pooling=False
-        ) or SessionManager(use_pooling=False)
+        # Obtain SessionManager from ssl_wrap_socket context var if available;
+        # if none is set (e.g. standalone OCSP unit tests), fall back to a fresh
+        # instance. Clone first to inherit adapter/proxy config without sharing
+        # pools.
+        context_session_manager = get_current_session_manager()
+        session_manager: SessionManager = (
+            context_session_manager.clone(use_pooling=False)
+            if context_session_manager is not None
+            else SessionManager(use_pooling=False)
+        )
         with session_manager.use_requests_session() as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
