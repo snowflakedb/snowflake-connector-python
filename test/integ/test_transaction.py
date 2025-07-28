@@ -65,22 +65,9 @@ def test_transaction(conn_cnx, db_parameters):
         assert total == 13824, "total integer"
 
 
-def test_connection_context_manager(request, db_parameters):
-    db_config = {
-        "protocol": db_parameters["protocol"],
-        "account": db_parameters["account"],
-        "authenticator": db_parameters["authenticator"],
-        "private_key_file": db_parameters["private_key_file"],
-        "user": db_parameters["user"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "database": db_parameters["database"],
-        "schema": db_parameters["schema"],
-        "timezone": "UTC",
-    }
-
+def test_connection_context_manager(request, db_parameters, conn_cnx):
     def fin():
-        with snowflake.connector.connect(**db_config) as cnx:
+        with conn_cnx(timezone="UTC") as cnx:
             cnx.cursor().execute(
                 """
 DROP TABLE IF EXISTS {name}
@@ -92,7 +79,7 @@ DROP TABLE IF EXISTS {name}
     request.addfinalizer(fin)
 
     try:
-        with snowflake.connector.connect(**db_config) as cnx:
+        with conn_cnx(timezone="UTC") as cnx:
             cnx.autocommit(False)
             cnx.cursor().execute(
                 """
@@ -149,7 +136,7 @@ SELECT WRONG SYNTAX QUERY
     except snowflake.connector.Error:
         # syntax error should be caught here
         # and the last change must have been rollbacked
-        with snowflake.connector.connect(**db_config) as cnx:
+        with conn_cnx(timezone="UTC") as cnx:
             ret = (
                 cnx.cursor()
                 .execute(

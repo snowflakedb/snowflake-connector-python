@@ -144,28 +144,18 @@ DROP TABLE IF EXISTS {name}
             )
 
 
-def test_autocommit_parameters(db_parameters):
+def test_autocommit_parameters(conn_cnx, db_parameters):
     """Tests autocommit parameter.
 
     Args:
+        conn_cnx: Connection fixture from conftest.
         db_parameters: Database parameters.
     """
 
     def exe(cnx, sql):
         return cnx.cursor().execute(sql.format(name=db_parameters["name"]))
 
-    with snowflake.connector.connect(
-        user=db_parameters["user"],
-        authenticator=db_parameters["authenticator"],
-        private_key_file=db_parameters["private_key_file"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        schema=db_parameters["schema"],
-        database=db_parameters["database"],
-        autocommit=False,
-    ) as cnx:
+    with conn_cnx(autocommit=False) as cnx:
         exe(
             cnx,
             """
@@ -174,18 +164,7 @@ CREATE TABLE {name} (c1 boolean)
         )
         _run_autocommit_off(cnx, db_parameters)
 
-    with snowflake.connector.connect(
-        user=db_parameters["user"],
-        authenticator=db_parameters["authenticator"],
-        private_key_file=db_parameters["private_key_file"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        schema=db_parameters["schema"],
-        database=db_parameters["database"],
-        autocommit=True,
-    ) as cnx:
+    with conn_cnx(autocommit=True) as cnx:
         _run_autocommit_on(cnx, db_parameters)
         exe(
             cnx,
