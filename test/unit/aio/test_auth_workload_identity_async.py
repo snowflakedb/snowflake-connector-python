@@ -11,6 +11,7 @@ from urllib.parse import parse_qs, urlparse
 import jwt
 import pytest
 
+from snowflake.connector.aio._wif_util import AttestationProvider
 from snowflake.connector.aio.auth import AuthByWorkloadIdentity
 from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.network import WORKLOAD_IDENTITY_AUTHENTICATOR
@@ -19,7 +20,6 @@ from snowflake.connector.vendored.requests.exceptions import (
     HTTPError,
     Timeout,
 )
-from snowflake.connector.wif_util import AttestationProvider
 
 from ...csp_helpers import (
     FakeAwsEnvironment,
