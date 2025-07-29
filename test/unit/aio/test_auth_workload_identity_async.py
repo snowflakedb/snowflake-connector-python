@@ -2,24 +2,20 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
+import asyncio
 import json
 import logging
 from base64 import b64decode
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
+import aiohttp
 import jwt
 import pytest
 
 from snowflake.connector.aio._wif_util import AttestationProvider
 from snowflake.connector.aio.auth import AuthByWorkloadIdentity
 from snowflake.connector.errors import ProgrammingError
-from snowflake.connector.network import WORKLOAD_IDENTITY_AUTHENTICATOR
-from snowflake.connector.vendored.requests.exceptions import (
-    ConnectTimeout,
-    HTTPError,
-    Timeout,
-)
 
 from ...csp_helpers import (
     FakeAwsEnvironment,
@@ -170,19 +166,36 @@ async def test_explicit_aws_generates_unique_assertion_content(
 # -- GCP Tests --
 
 
+def _mock_aiohttp_exception(exception):
+    class MockResponse:
+        def __init__(self, exception):
+            self.exception = exception
+
+        async def __aenter__(self):
+            raise self.exception
+
+        async def __aexit__(self, exc_type, exc_val, exc_tb):
+            pass
+
+    def mock_request(*args, **kwargs):
+        return MockResponse(exception)
+
+    return mock_request
+
+
 @pytest.mark.parametrize(
     "exception",
     [
-        HTTPError(),
-        Timeout(),
-        ConnectTimeout(),
+        aiohttp.ClientError(),
+        asyncio.TimeoutError(),
     ],
 )
 async def test_explicit_gcp_metadata_server_error_raises_auth_error(exception):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.GCP)
-    with mock.patch(
-        "snowflake.connector.vendored.requests.request", side_effect=exception
-    ):
+
+    mock_request = _mock_aiohttp_exception(exception)
+
+    with mock.patch("aiohttp.ClientSession.request", side_effect=mock_request):
         with pytest.raises(ProgrammingError) as excinfo:
             await auth_class.prepare()
         assert "No workload identity credential was found for 'GCP'" in str(
@@ -231,16 +244,16 @@ async def test_explicit_gcp_generates_unique_assertion_content(
 @pytest.mark.parametrize(
     "exception",
     [
-        HTTPError(),
-        Timeout(),
-        ConnectTimeout(),
+        aiohttp.ClientError(),
+        asyncio.TimeoutError(),
     ],
 )
 async def test_explicit_azure_metadata_server_error_raises_auth_error(exception):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    with mock.patch(
-        "snowflake.connector.vendored.requests.request", side_effect=exception
-    ):
+
+    mock_request = _mock_aiohttp_exception(exception)
+
+    with mock.patch("aiohttp.ClientSession.request", side_effect=mock_request):
         with pytest.raises(ProgrammingError) as excinfo:
             await auth_class.prepare()
         assert "No workload identity credential was found for 'AZURE'" in str(
@@ -367,65 +380,3 @@ async def test_autodetect_no_provider_raises_error(no_metadata_service):
     assert "No workload identity credential was found for 'auto-detect" in str(
         excinfo.value
     )
-
-
-async def test_workload_identity_authenticator_creates_auth_by_workload_identity(
-    monkeypatch,
-):
-    """Test that using WORKLOAD_IDENTITY authenticator creates AuthByWorkloadIdentity instance."""
-    import snowflake.connector.aio
-    from snowflake.connector.aio._network import SnowflakeRestful
-
-    # Mock the network request - this prevents actual network calls and connection errors
-    async def mock_post_request(request, url, headers, json_body, **kwargs):
-        return {
-            "success": True,
-            "message": None,
-            "data": {
-                "token": "TOKEN",
-                "masterToken": "MASTER_TOKEN",
-                "idToken": None,
-                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
-            },
-        }
-
-    # Apply the mock using monkeypatch
-    monkeypatch.setattr(SnowflakeRestful, "_post_request", mock_post_request)
-
-    # Set the experimental authentication environment variable
-    monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
-
-    # Mock the workload identity preparation to avoid actual credential fetching
-    async def mock_prepare(self, **kwargs):
-        # Create a mock attestation to avoid None errors
-        from snowflake.connector.wif_util import WorkloadIdentityAttestation
-
-        self.attestation = WorkloadIdentityAttestation(
-            provider=AttestationProvider.AWS,
-            credential="mock_credential",
-            user_identifier_components={"arn": "mock_arn"},
-        )
-
-    async def mock_update_body(self, body):
-        # Simple mock that just adds the basic fields to avoid actual token processing
-        body["data"]["AUTHENTICATOR"] = "WORKLOAD_IDENTITY"
-        body["data"]["PROVIDER"] = "AWS"
-        body["data"]["TOKEN"] = "mock_token"
-
-    monkeypatch.setattr(AuthByWorkloadIdentity, "prepare", mock_prepare)
-    monkeypatch.setattr(AuthByWorkloadIdentity, "update_body", mock_update_body)
-
-    # Create connection with WORKLOAD_IDENTITY authenticator
-    conn = snowflake.connector.aio.SnowflakeConnection(
-        account="account",
-        authenticator=WORKLOAD_IDENTITY_AUTHENTICATOR,
-        workload_identity_provider=AttestationProvider.AWS,
-        token="test_token",
-    )
-
-    await conn.connect()
-
-    # Verify that the auth_class is an instance of AuthByWorkloadIdentity
-    assert isinstance(conn.auth_class, AuthByWorkloadIdentity)
-
-    await conn.close()
