@@ -18,6 +18,7 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
+from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.connection import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
     SnowflakeConnection,
@@ -1664,3 +1665,56 @@ def test_file_utils_sanity_check():
     conn = create_connection("default")
     assert hasattr(conn._file_operation_parser, "parse_file_operation")
     assert hasattr(conn._stream_downloader, "download_as_stream")
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
+def test_unsafe_skip_file_permissions_check_skips_config_permissions_check(
+    db_parameters, tmp_path
+):
+    """Test that unsafe_skip_file_permissions_check flag bypasses permission checks on config files."""
+    # Write config file and set unsafe permissions (readable by others)
+    tmp_config_file = tmp_path / "config.toml"
+    tmp_config_file.write_text("[log]\n" "save_logs = false\n" 'level = "INFO"\n')
+    tmp_config_file.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IROTH)
+
+    def _run_select_1(unsafe_skip_file_permissions_check: bool):
+        warnings.simplefilter("always")
+        # Connect directly with db_parameters, using custom config file path
+        # We need to modify CONFIG_MANAGER to point to our test file
+        from snowflake.connector.config_manager import CONFIG_MANAGER
+
+        original_file_path = CONFIG_MANAGER.file_path
+        try:
+            CONFIG_MANAGER.file_path = tmp_config_file
+            CONFIG_MANAGER.conf_file_cache = None  # Force re-read
+            with snowflake.connector.connect(
+                **db_parameters,
+                unsafe_skip_file_permissions_check=unsafe_skip_file_permissions_check,
+            ) as conn:
+                with conn.cursor() as cur:
+                    result = cur.execute("select 1;").fetchall()
+                    assert result == [(1,)]
+        finally:
+            CONFIG_MANAGER.file_path = original_file_path
+            CONFIG_MANAGER.conf_file_cache = None
+
+    # Without the flag - should trigger permission warnings
+    with warnings.catch_warnings(record=True) as warning_list:
+        _run_select_1(unsafe_skip_file_permissions_check=False)
+    permission_warnings = [
+        w for w in warning_list if "Bad owner or permissions" in str(w.message)
+    ]
+    assert (
+        len(permission_warnings) > 0
+    ), "Expected permission warning when unsafe_skip_file_permissions_check=False"
+
+    # With the flag - should bypass permission checks and not show warnings
+    with warnings.catch_warnings(record=True) as warning_list:
+        _run_select_1(unsafe_skip_file_permissions_check=True)
+    permission_warnings = [
+        w for w in warning_list if "Bad owner or permissions" in str(w.message)
+    ]
+    assert (
+        len(permission_warnings) == 0
+    ), "Expected no permission warning when unsafe_skip_file_permissions_check=True"
