@@ -35,6 +35,7 @@ from ..connection import SnowflakeConnection as SnowflakeConnectionSync
 from ..connection import _get_private_bytes_from_file
 from ..constants import (
     _CONNECTIVITY_ERR_MSG,
+    ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -55,6 +56,7 @@ from ..errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_VALUE,
+    ER_INVALID_WIF_SETTINGS,
 )
 from ..network import (
     DEFAULT_AUTHENTICATOR,
@@ -64,12 +66,14 @@ from ..network import (
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
+    WORKLOAD_IDENTITY_AUTHENTICATOR,
     ReauthenticationRequest,
 )
 from ..sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from ..telemetry import TelemetryData, TelemetryField
 from ..time_util import get_time_millis
 from ..util_text import split_statements
+from ..wif_util import AttestationProvider
 from ._cursor import SnowflakeCursor
 from ._description import CLIENT_NAME
 from ._network import SnowflakeRestful
@@ -87,6 +91,7 @@ from .auth import (
     AuthByPlugin,
     AuthByUsrPwdMfa,
     AuthByWebBrowser,
+    AuthByWorkloadIdentity,
 )
 
 logger = getLogger(__name__)
@@ -319,6 +324,29 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     mfa_token=self.rest.mfa_token,
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
+                )
+            elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
+                if ENV_VAR_EXPERIMENTAL_AUTHENTICATION not in os.environ:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{WORKLOAD_IDENTITY_AUTHENTICATOR}' authenticator.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
+                # Standardize the provider enum.
+                if self._workload_identity_provider and isinstance(
+                    self._workload_identity_provider, str
+                ):
+                    self._workload_identity_provider = AttestationProvider.from_string(
+                        self._workload_identity_provider
+                    )
+                self.auth_class = AuthByWorkloadIdentity(
+                    provider=self._workload_identity_provider,
+                    token=self._token,
+                    entra_resource=self._workload_identity_entra_resource,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
