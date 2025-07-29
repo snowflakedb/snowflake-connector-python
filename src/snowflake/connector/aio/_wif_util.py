@@ -8,50 +8,22 @@ import asyncio
 import json
 import logging
 import os
-from base64 import b64encode
-from dataclasses import dataclass
-from enum import Enum, unique
 
 import aiohttp
-import boto3
-import jwt
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-from botocore.utils import InstanceMetadataRegionFetcher
 
 from ..errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from ..errors import ProgrammingError
+from ..wif_util import (
+    DEFAULT_ENTRA_SNOWFLAKE_RESOURCE,
+    SNOWFLAKE_AUDIENCE,
+    AttestationProvider,
+    WorkloadIdentityAttestation,
+    create_aws_attestation,
+    create_oidc_attestation,
+    extract_iss_and_sub_without_signature_verification,
+)
 
 logger = logging.getLogger(__name__)
-SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
-# TODO: use real app ID or domain name once it's available.
-DEFAULT_ENTRA_SNOWFLAKE_RESOURCE = "NOT REAL - WILL BREAK"
-
-
-@unique
-class AttestationProvider(Enum):
-    """A WIF provider implementation that can produce an attestation."""
-
-    AWS = "AWS"
-    """Provider that builds an encoded pre-signed GetCallerIdentity request using the current workload's IAM role."""
-    AZURE = "AZURE"
-    """Provider that requests an OAuth access token for the workload's managed identity."""
-    GCP = "GCP"
-    """Provider that requests an ID token for the workload's attached service account."""
-    OIDC = "OIDC"
-    """Provider that looks for an OIDC ID token."""
-
-    @staticmethod
-    def from_string(provider: str) -> AttestationProvider:
-        """Converts a string to a strongly-typed enum value of AttestationProvider."""
-        return AttestationProvider[provider.upper()]
-
-
-@dataclass
-class WorkloadIdentityAttestation:
-    provider: AttestationProvider
-    credential: str
-    user_identifier_components: dict
 
 
 async def try_metadata_service_call(
@@ -75,88 +47,6 @@ async def try_metadata_service_call(
                 return response
     except (aiohttp.ClientError, asyncio.TimeoutError):
         return None
-
-
-def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[str, str]:
-    """Extracts the 'iss' and 'sub' claims from the given JWT, without verifying the signature.
-
-    Note: the real token verification (including signature verification) happens on the Snowflake side. The driver doesn't have
-    the keys to verify these JWTs, and in any case that's not where the security boundary is drawn.
-
-    We only decode the JWT here to get some basic claims, which will be used for a) a quick smoke test to ensure we got the right
-    issuer, and b) to find the unique user being asserted and populate assertion_content. The latter may be used for logging
-    and possibly caching.
-
-    If there are any errors in parsing the token or extracting iss and sub, this will return (None, None).
-    """
-    try:
-        claims = jwt.decode(jwt_str, options={"verify_signature": False})
-    except jwt.exceptions.InvalidTokenError:
-        logger.warning("Token is not a valid JWT.", exc_info=True)
-        return None, None
-
-    if not ("iss" in claims and "sub" in claims):
-        logger.warning("Token is missing 'iss' or 'sub' claims.")
-        return None, None
-
-    return claims["iss"], claims["sub"]
-
-
-def get_aws_region() -> str | None:
-    """Get the current AWS workload's region, if any."""
-    if "AWS_REGION" in os.environ:  # Lambda
-        return os.environ["AWS_REGION"]
-    else:  # EC2
-        return InstanceMetadataRegionFetcher().retrieve_region()
-
-
-def get_aws_arn() -> str | None:
-    """Get the current AWS workload's ARN, if any."""
-    caller_identity = boto3.client("sts").get_caller_identity()
-    if not caller_identity or "Arn" not in caller_identity:
-        return None
-    return caller_identity["Arn"]
-
-
-def create_aws_attestation() -> WorkloadIdentityAttestation | None:
-    """Tries to create a workload identity attestation for AWS.
-
-    If the application isn't running on AWS or no credentials were found, returns None.
-    """
-    aws_creds = boto3.session.Session().get_credentials()
-    if not aws_creds:
-        logger.debug("No AWS credentials were found.")
-        return None
-    region = get_aws_region()
-    if not region:
-        logger.debug("No AWS region was found.")
-        return None
-    arn = get_aws_arn()
-    if not arn:
-        logger.debug("No AWS caller identity was found.")
-        return None
-
-    sts_hostname = f"sts.{region}.amazonaws.com"
-    request = AWSRequest(
-        method="POST",
-        url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
-        headers={
-            "Host": sts_hostname,
-            "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
-        },
-    )
-
-    SigV4Auth(aws_creds, "sts", region).add_auth(request)
-
-    assertion_dict = {
-        "url": request.url,
-        "method": request.method,
-        "headers": dict(request.headers.items()),
-    }
-    credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
-    return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"arn": arn}
-    )
 
 
 async def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
@@ -253,24 +143,6 @@ async def create_azure_attestation(
 
     return WorkloadIdentityAttestation(
         AttestationProvider.AZURE, jwt_str, {"iss": issuer, "sub": subject}
-    )
-
-
-def create_oidc_attestation(token: str | None) -> WorkloadIdentityAttestation | None:
-    """Tries to create an attestation using the given token.
-
-    If this is not populated, returns None.
-    """
-    if not token:
-        logger.debug("No OIDC token was specified.")
-        return None
-
-    issuer, subject = extract_iss_and_sub_without_signature_verification(token)
-    if not issuer or not subject:
-        return None
-
-    return WorkloadIdentityAttestation(
-        AttestationProvider.OIDC, token, {"iss": issuer, "sub": subject}
     )
 
 
