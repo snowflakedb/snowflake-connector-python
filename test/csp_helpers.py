@@ -12,7 +12,11 @@ import jwt
 from botocore.awsrequest import AWSRequest
 from botocore.credentials import Credentials
 
-from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
+from snowflake.connector.vendored.requests.exceptions import (
+    ConnectTimeout,
+    HTTPError,
+    RequestException,
+)
 from snowflake.connector.vendored.requests.models import Response
 
 logger = logging.getLogger(__name__)
@@ -39,11 +43,12 @@ def gen_dummy_id_token(
     )
 
 
-def build_response(content: bytes, status_code: int = 200) -> Response:
+def build_response(content: bytes, status_code: int = 200, headers=None) -> Response:
     """Builds a requests.Response object with the given status code and content."""
     response = Response()
     response.status_code = status_code
     response._content = content
+    response.headers = headers
     return response
 
 
@@ -63,28 +68,35 @@ class FakeMetadataService(ABC):
 
     @property
     @abstractmethod
-    def expected_hostname(self):
-        """Hostname at which this metadata service is listening.
+    def expected_hostnames(self):
+        """Hostnames at which this metadata service is listening.
 
         Used to raise a ConnectTimeout for requests not targeted to this hostname.
         """
         pass
 
-    @abstractmethod
     def handle_request(self, method, parsed_url, headers, timeout):
-        """Main business logic for handling this request. Should return a Response object."""
-        pass
+        return ConnectTimeout()
+
+    def handle_unexpected_hostname(self):
+        return ConnectTimeout()
+
+    def _handle_get(self, url, headers=None, timeout=None):
+        """Handles requests.get() calls by converting them to request() format."""
+        if headers is None:
+            headers = {}
+        return self.__call__(method="GET", url=url, headers=headers, timeout=timeout)
 
     def __call__(self, method, url, headers, timeout):
         """Entry point for the requests mock."""
         logger.debug(f"Received request: {method} {url} {str(headers)}")
         parsed_url = urlparse(url)
 
-        if not parsed_url.hostname == self.expected_hostname:
+        if parsed_url.hostname not in self.expected_hostnames:
             logger.debug(
                 f"Received request to unexpected hostname {parsed_url.hostname}"
             )
-            raise ConnectTimeout()
+            raise self.handle_unexpected_hostname()
 
         return self.handle_request(method, parsed_url, headers, timeout)
 
@@ -97,6 +109,12 @@ class FakeMetadataService(ABC):
         self.patchers.append(
             mock.patch(
                 "snowflake.connector.vendored.requests.request", side_effect=self
+            )
+        )
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.vendored.requests.get",
+                side_effect=self._handle_get,
             )
         )
         # HTTPConnection.request is used by the AWS boto libraries. We're not mocking those calls here, so we
@@ -116,18 +134,36 @@ class FakeMetadataService(ABC):
             patcher.__exit__(*args, **kwargs)
 
 
-class NoMetadataService(FakeMetadataService):
-    """Emulates an environment without any metadata service."""
+class UnavailableMetadataService(FakeMetadataService):
+    """Emulates an environment where all metadata services unavailable."""
 
     def reset_defaults(self):
         pass
 
     @property
-    def expected_hostname(self):
-        return None  # Always raise a ConnectTimeout.
+    def expected_hostnames(self):
+        return []  # Always raise a ConnectTimeout.
 
     def handle_request(self, method, parsed_url, headers, timeout):
         # This should never be called because we always raise a ConnectTimeout.
+        pass
+
+
+class BrokenMetadataService(FakeMetadataService):
+    """Emulates an environment where all metadata services cannot be connected to."""
+
+    def reset_defaults(self):
+        pass
+
+    def handle_unexpected_hostname(self):
+        return RequestException()
+
+    @property
+    def expected_hostnames(self):
+        return []  # Always raise a RequestException.
+
+    def handle_request(self, method, parsed_url, headers, timeout):
+        # This should never be called because we always raise a RequestException.
         pass
 
 
@@ -140,26 +176,34 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         self.iss = "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
 
     @property
-    def expected_hostname(self):
-        return "169.254.169.254"
+    def expected_hostnames(self):
+        return ["169.254.169.254"]
 
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
 
-        # Reject malformed requests.
-        if not (
+        logger.debug("Received request for Azure VM metadata service")
+
+        if (
+            method == "GET"
+            and parsed_url.path == "/metadata/instance"
+            and headers.get("Metadata") == "True"
+        ):
+            return build_response(content=b"", status_code=200)
+        elif (
             method == "GET"
             and parsed_url.path == "/metadata/identity/oauth2/token"
             and headers.get("Metadata") == "True"
             and query_string["resource"]
         ):
+            resource = query_string["resource"][0]
+            self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource)
+            return build_response(
+                json.dumps({"access_token": self.token}).encode("utf-8")
+            )
+        else:
+            # Reject malformed requests.
             raise HTTPError()
-
-        logger.debug("Received request for Azure VM metadata service")
-
-        resource = query_string["resource"][0]
-        self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource)
-        return build_response(json.dumps({"access_token": self.token}).encode("utf-8"))
 
 
 class FakeAzureFunctionMetadataService(FakeMetadataService):
@@ -172,11 +216,14 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
 
         self.identity_endpoint = "http://169.254.255.2:8081/msi/token"
         self.identity_header = "FD80F6DA783A4881BE9FAFA365F58E7A"
+        self.functions_worker_runtime = "python"
+        self.functions_extension_version = "~4"
+        self.azure_web_jobs_storage = "DefaultEndpointsProtocol=https;AccountName=test"
         self.parsed_identity_endpoint = urlparse(self.identity_endpoint)
 
     @property
-    def expected_hostname(self):
-        return self.parsed_identity_endpoint.hostname
+    def expected_hostnames(self):
+        return [self.parsed_identity_endpoint.hostname]
 
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
@@ -203,11 +250,17 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
         # In addition to the normal patching, we need to set the environment variables that Azure Functions would set.
         os.environ["IDENTITY_ENDPOINT"] = self.identity_endpoint
         os.environ["IDENTITY_HEADER"] = self.identity_header
+        os.environ["FUNCTIONS_WORKER_RUNTIME"] = self.functions_worker_runtime
+        os.environ["FUNCTIONS_EXTENSION_VERSION"] = self.functions_extension_version
+        os.environ["AzureWebJobsStorage"] = self.azure_web_jobs_storage
         return super().__enter__()
 
     def __exit__(self, *args, **kwargs):
         os.environ.pop("IDENTITY_ENDPOINT")
         os.environ.pop("IDENTITY_HEADER")
+        os.environ.pop("FUNCTIONS_WORKER_RUNTIME")
+        os.environ.pop("FUNCTIONS_EXTENSION_VERSION")
+        os.environ.pop("AzureWebJobsStorage")
         return super().__exit__(*args, **kwargs)
 
 
@@ -220,42 +273,140 @@ class FakeGceMetadataService(FakeMetadataService):
         self.iss = "https://accounts.google.com"
 
     @property
-    def expected_hostname(self):
-        return "169.254.169.254"
+    def expected_hostnames(self):
+        return ["169.254.169.254", "metadata.google.internal"]
 
     def handle_request(self, method, parsed_url, headers, timeout):
         query_string = parse_qs(parsed_url.query)
 
-        # Reject malformed requests.
-        if not (
+        logger.debug("Received request for GCE metadata service")
+
+        if method == "GET" and parsed_url.path == "":
+            return build_response(
+                b"", status_code=200, headers={"Metadata-Flavor": "Google"}
+            )
+        elif (
+            method == "GET"
+            and parsed_url.path
+            == "/computeMetadata/v1/instance/service-accounts/default/email"
+            and headers.get("Metadata-Flavor") == "Google"
+        ):
+            return build_response(b"", status_code=200)
+        elif (
             method == "GET"
             and parsed_url.path
             == "/computeMetadata/v1/instance/service-accounts/default/identity"
             and headers.get("Metadata-Flavor") == "Google"
             and query_string["audience"]
         ):
+            audience = query_string["audience"][0]
+            self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=audience)
+            return build_response(self.token.encode("utf-8"))
+        else:
+            # Reject malformed requests.
             raise HTTPError()
 
-        logger.debug("Received request for GCE metadata service")
 
-        audience = query_string["audience"][0]
-        self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=audience)
-        return build_response(self.token.encode("utf-8"))
+class FakeGceCloudRunServiceService(FakeMetadataService):
+    """Emulates an environment with the GCE Cloud Run Service metadata service."""
+
+    @property
+    def expected_hostnames(self):
+        # Raise connection timeout since we don't have anything to mock currently
+        return []
+
+    def handle_request(self, method, parsed_url, headers, timeout):
+        pass
+
+    def reset_defaults(self):
+        self.k_service = "test-service"
+        self.k_revision = "test-revision"
+        self.k_configuration = "test-configuration"
+
+    def __enter__(self):
+        # We need to set the environment variables that GCE Cloud Run Service would set.
+        os.environ["K_SERVICE"] = self.k_service
+        os.environ["K_REVISION"] = self.k_revision
+        os.environ["K_CONFIGURATION"] = self.k_configuration
+        return super().__enter__()
+
+    def __exit__(self, *args, **kwargs):
+        os.environ.pop("K_SERVICE")
+        os.environ.pop("K_REVISION")
+        os.environ.pop("K_CONFIGURATION")
+        return super().__exit__(*args, **kwargs)
+
+
+class FakeGceCloudRunJobService(FakeMetadataService):
+    """Emulates an environment with the GCE Cloud Run Job metadata service."""
+
+    @property
+    def expected_hostnames(self):
+        return []
+
+    def handle_request(self, method, parsed_url, headers, timeout):
+        pass
+
+    def reset_defaults(self):
+        self.cloud_run_job = "test-job"
+        self.cloud_run_execution = "test-execution"
+
+    def __enter__(self):
+        # We need to set the environment variables that GCE Cloud Run Service would set.
+        os.environ["CLOUD_RUN_JOB"] = self.cloud_run_job
+        os.environ["CLOUD_RUN_EXECUTION"] = self.cloud_run_execution
+        return super().__enter__()
+
+    def __exit__(self, *args, **kwargs):
+        os.environ.pop("CLOUD_RUN_JOB")
+        os.environ.pop("CLOUD_RUN_EXECUTION")
+        return super().__exit__(*args, **kwargs)
+
+
+class FakeGitHubActionsService(FakeMetadataService):
+    """Emulates an environment with the GitHub Actions metadata service."""
+
+    @property
+    def expected_hostnames(self):
+        return []
+
+    def handle_request(self, method, parsed_url, headers, timeout):
+        pass
+
+    def reset_defaults(self):
+        self.github_actions = "github-actions"
+
+    def __enter__(self):
+        # We need to set the environment variables that GCE Cloud Run Service would set.
+        os.environ["GITHUB_ACTIONS"] = self.github_actions
+        return super().__enter__()
+
+    def __exit__(self, *args, **kwargs):
+        os.environ.pop("GITHUB_ACTIONS")
+        return super().__exit__(*args, **kwargs)
 
 
 class FakeAwsEnvironment:
-    """Emulates the AWS environment-specific functions used in wif_util.py.
+    """Emulates the AWS environment-specific functions used in wif_util.py and platform detection.py.
 
     Unlike the other metadata services, the HTTP calls made by AWS are deep within boto libaries, so
     emulating them here would be complex and fragile. Instead, we emulate the higher-level functions
     called by the connector code.
     """
 
+    LAMBDA_TASK_ROOT_ENVIRONMENT_VARIABLE_NAME = "LAMBDA_TASK_ROOT"
+
     def __init__(self):
         # Defaults used for generating a token. Can be overriden in individual tests.
         self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-34afe100cad287fab"
+        self.caller_identity = {"Arn": self.arn}
         self.region = "us-east-1"
         self.credentials = Credentials(access_key="ak", secret_key="sk")
+        self.instance_document = (
+            b'{"region": "us-east-1", "instanceId": "i-1234567890abcdef0"}'
+        )
+        self.metadata_token = "test-token"
+        self.lambda_task_root = "/var/task"
 
     def get_region(self):
         return self.region
@@ -274,7 +425,22 @@ class FakeAwsEnvironment:
             f"AWS4-HMAC-SHA256 Credential=<cred>, SignedHeaders={';'.join(request.headers.keys())}, Signature=<sig>",
         )
 
+    def fetcher_get_request(self, url_path, retry_fun, token):
+        return build_response(self.instance_document)
+
+    def fetcher_fetch_metadata_token(self):
+        return self.metadata_token
+
+    def boto3_client(self, *args, **kwargs):
+        mock_client = mock.Mock()
+        mock_client.get_caller_identity.return_value = self.caller_identity
+        return mock_client
+
     def __enter__(self):
+        os.environ[self.LAMBDA_TASK_ROOT_ENVIRONMENT_VARIABLE_NAME] = (
+            self.lambda_task_root
+        )
+
         # Patch the relevant functions to do what we want.
         self.patchers = []
         self.patchers.append(
@@ -299,10 +465,29 @@ class FakeAwsEnvironment:
                 "snowflake.connector.wif_util.get_aws_arn", side_effect=self.get_arn
             )
         )
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.platform_detection.IMDSFetcher._get_request",
+                side_effect=self.fetcher_get_request,
+            )
+        )
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.platform_detection.IMDSFetcher._fetch_metadata_token",
+                side_effect=self.fetcher_fetch_metadata_token,
+            )
+        )
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.platform_detection.boto3.client",
+                side_effect=self.boto3_client,
+            )
+        )
         for patcher in self.patchers:
             patcher.__enter__()
         return self
 
     def __exit__(self, *args, **kwargs):
+        os.environ.pop(self.LAMBDA_TASK_ROOT_ENVIRONMENT_VARIABLE_NAME)
         for patcher in self.patchers:
             patcher.__exit__(*args, **kwargs)

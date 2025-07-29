@@ -5,11 +5,15 @@ import pytest
 from snowflake.connector.telemetry_oob import TelemetryService
 
 from ..csp_helpers import (
+    BrokenMetadataService,
     FakeAwsEnvironment,
     FakeAzureFunctionMetadataService,
     FakeAzureVmMetadataService,
+    FakeGceCloudRunJobService,
+    FakeGceCloudRunServiceService,
     FakeGceMetadataService,
-    NoMetadataService,
+    FakeGitHubActionsService,
+    UnavailableMetadataService,
 )
 
 
@@ -24,9 +28,16 @@ def disable_oob_telemetry():
 
 
 @pytest.fixture
-def no_metadata_service():
+def unavailable_metadata_service():
+    """Emulates an environment where all metadata services unavailable."""
+    with UnavailableMetadataService() as server:
+        yield server
+
+
+@pytest.fixture
+def broken_metadata_service():
     """Emulates an environment without any metadata service."""
-    with NoMetadataService() as server:
+    with BrokenMetadataService() as server:
         yield server
 
 
@@ -48,7 +59,42 @@ def fake_azure_metadata_service(request):
 
 
 @pytest.fixture
+def fake_azure_vm_metadata_service():
+    """Fixture that emulates only the Azure VM metadata service."""
+    with FakeAzureVmMetadataService() as server:
+        yield server
+
+
+@pytest.fixture
+def fake_azure_function_metadata_service():
+    """Fixture that emulates only the Azure Function metadata service."""
+    with FakeAzureFunctionMetadataService() as server:
+        yield server
+
+
+@pytest.fixture
 def fake_gce_metadata_service():
     """Emulates the GCE metadata service, returning a dummy token."""
     with FakeGceMetadataService() as server:
+        yield server
+
+
+@pytest.fixture
+def fake_gce_cloud_run_service_metadata_service():
+    """Emulates the GCE Cloud Run Service metadata service."""
+    with FakeGceCloudRunServiceService() as server:
+        yield server
+
+
+@pytest.fixture
+def fake_gce_cloud_run_job_metadata_service():
+    """Emulates the GCE Cloud Job metadata service."""
+    with FakeGceCloudRunJobService() as server:
+        yield server
+
+
+@pytest.fixture
+def fake_github_actions_metadata_service():
+    """Emulates the GitHub Actions metadata service."""
+    with FakeGitHubActionsService() as server:
         yield server

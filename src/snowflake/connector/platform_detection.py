@@ -135,7 +135,7 @@ def is_azure_vm(timeout_seconds: float):
     try:
         token_resp = requests.get(
             "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
-            headers={"Metadata": "true"},
+            headers={"Metadata": "True"},
             timeout=timeout_seconds,
         )
         return (
@@ -327,7 +327,7 @@ def has_gcp_identity(timeout_seconds: float):
     """
     try:
         response = requests.get(
-            "http://metadata/computeMetadata/v1/instance/service-accounts/default/email",
+            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email",
             headers={"Metadata-Flavor": "Google"},
             timeout=timeout_seconds,
         )
