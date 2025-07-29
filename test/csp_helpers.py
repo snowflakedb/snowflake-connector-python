@@ -92,6 +92,51 @@ class FakeMetadataService(ABC):
 
         return self.handle_request(method, parsed_url, headers, timeout)
 
+    def _async_request(self, method, url, headers=None, timeout=None):
+        """Entry point for the aiohttp mock."""
+        logger.debug(f"Received async request: {method} {url} {str(headers)}")
+        parsed_url = urlparse(url)
+
+        # Create async context manager for aiohttp response
+        class AsyncResponseContextManager:
+            def __init__(self, response):
+                self.response = response
+
+            async def __aenter__(self):
+                return self.response
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+
+        # Create aiohttp-compatible response mock
+        class AsyncResponse:
+            def __init__(self, requests_response):
+                self.ok = requests_response.ok
+                self.status = requests_response.status_code
+                self._content = requests_response.content
+
+            async def read(self):
+                return self._content
+
+        if not parsed_url.hostname == self.expected_hostname:
+            logger.debug(
+                f"Received async request to unexpected hostname {parsed_url.hostname}"
+            )
+            import aiohttp
+
+            raise aiohttp.ClientError()
+
+        # Get the response from the subclass handler, catch exceptions and convert them
+        try:
+            sync_response = self.handle_request(method, parsed_url, headers, timeout)
+            async_response = AsyncResponse(sync_response)
+            return AsyncResponseContextManager(async_response)
+        except (HTTPError, ConnectTimeout) as e:
+            import aiohttp
+
+            # Convert requests exceptions to aiohttp exceptions so they get caught properly
+            raise aiohttp.ClientError() from e
+
     def __enter__(self):
         """Patches the relevant HTTP calls when entering as a context manager."""
         self.reset_defaults()
@@ -102,6 +147,10 @@ class FakeMetadataService(ABC):
             mock.patch(
                 "snowflake.connector.vendored.requests.request", side_effect=self
             )
+        )
+        # Mock aiohttp for async requests
+        self.patchers.append(
+            mock.patch("aiohttp.ClientSession.request", side_effect=self._async_request)
         )
         # HTTPConnection.request is used by the AWS boto libraries. We're not mocking those calls here, so we
         # simply raise a ConnectTimeout to avoid making real network calls.
@@ -271,7 +320,9 @@ class FakeAwsEnvironment:
         return self.credentials
 
     def sign_request(self, request: AWSRequest):
-        request.headers.add_header("X-Amz-Date", datetime.time().isoformat())
+        request.headers.add_header(
+            "X-Amz-Date", datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        )
         request.headers.add_header("X-Amz-Security-Token", "<TOKEN>")
         request.headers.add_header(
             "Authorization",
@@ -301,6 +352,19 @@ class FakeAwsEnvironment:
         self.patchers.append(
             mock.patch(
                 "snowflake.connector.wif_util.get_aws_arn", side_effect=self.get_arn
+            )
+        )
+        # Also patch the async versions
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.aio._wif_util.get_aws_region",
+                side_effect=self.get_region,
+            )
+        )
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.aio._wif_util.get_aws_arn",
+                side_effect=self.get_arn,
             )
         )
         for patcher in self.patchers:
