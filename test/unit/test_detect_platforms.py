@@ -152,3 +152,35 @@ class TestDetectPlatforms:
         fake_aws_environment.caller_identity = {"UserId": "test-user"}
         result = detect_platforms(timeout_seconds=None)
         assert "has_aws_identity" not in result
+
+    def test_azure_managed_identity_wrong_issuer(self, fake_azure_vm_metadata_service):
+        fake_azure_vm_metadata_service.iss = "https://fake-issuer.com"
+        result = detect_platforms(timeout_seconds=None)
+        assert "azure_managed_identity" not in result
+
+    def test_azure_function_missing_identity_endpoint(self, broken_metadata_service):
+        result = detect_platforms(timeout_seconds=None)
+        assert "is_azure_function" not in result
+
+    def test_aws_ec2_empty_instance_document(
+        self, broken_metadata_service, fake_aws_environment
+    ):
+        fake_aws_environment.instance_document = b""
+        result = detect_platforms(timeout_seconds=None)
+        assert "is_ec2_instance" not in result
+
+    def test_aws_lambda_empty_task_root(self, broken_metadata_service):
+        result = detect_platforms(timeout_seconds=None)
+        assert "is_aws_lambda" not in result
+
+    def test_github_actions_missing_environment_variable(self, broken_metadata_service):
+        result = detect_platforms(timeout_seconds=None)
+        assert "is_github_action" not in result
+
+    def test_gce_cloud_run_service_missing_k_service(self, broken_metadata_service):
+        result = detect_platforms(timeout_seconds=None)
+        assert "is_gce_cloud_run_service" not in result
+
+    def test_gce_cloud_run_job_missing_cloud_run_job(self, broken_metadata_service):
+        result = detect_platforms(timeout_seconds=None)
+        assert "is_gce_cloud_run_job" not in result

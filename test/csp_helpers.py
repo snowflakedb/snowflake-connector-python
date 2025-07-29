@@ -394,8 +394,6 @@ class FakeAwsEnvironment:
     called by the connector code.
     """
 
-    LAMBDA_TASK_ROOT_ENVIRONMENT_VARIABLE_NAME = "LAMBDA_TASK_ROOT"
-
     def __init__(self):
         # Defaults used for generating a token. Can be overriden in individual tests.
         self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-34afe100cad287fab"
@@ -437,9 +435,7 @@ class FakeAwsEnvironment:
         return mock_client
 
     def __enter__(self):
-        os.environ[self.LAMBDA_TASK_ROOT_ENVIRONMENT_VARIABLE_NAME] = (
-            self.lambda_task_root
-        )
+        os.environ["LAMBDA_TASK_ROOT"] = self.lambda_task_root
 
         # Patch the relevant functions to do what we want.
         self.patchers = []
@@ -488,6 +484,6 @@ class FakeAwsEnvironment:
         return self
 
     def __exit__(self, *args, **kwargs):
-        os.environ.pop(self.LAMBDA_TASK_ROOT_ENVIRONMENT_VARIABLE_NAME)
+        os.environ.pop("LAMBDA_TASK_ROOT")
         for patcher in self.patchers:
             patcher.__exit__(*args, **kwargs)
