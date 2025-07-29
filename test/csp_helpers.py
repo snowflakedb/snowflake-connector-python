@@ -354,19 +354,7 @@ class FakeAwsEnvironment:
                 "snowflake.connector.wif_util.get_aws_arn", side_effect=self.get_arn
             )
         )
-        # Also patch the async versions
-        self.patchers.append(
-            mock.patch(
-                "snowflake.connector.aio._wif_util.get_aws_region",
-                side_effect=self.get_region,
-            )
-        )
-        self.patchers.append(
-            mock.patch(
-                "snowflake.connector.aio._wif_util.get_aws_arn",
-                side_effect=self.get_arn,
-            )
-        )
+        # Note: No need to patch async versions anymore since async now imports from sync
         for patcher in self.patchers:
             patcher.__enter__()
         return self
