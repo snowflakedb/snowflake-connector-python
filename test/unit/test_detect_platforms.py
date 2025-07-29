@@ -16,6 +16,7 @@ def build_response(status_code=200, headers=None):
 class TestDetectPlatforms:
     @pytest.fixture(autouse=True)
     def teardown(self):
+        yield
         detect_platforms.cache_clear()  # clear cache after each test
 
     def test_no_platforms_detected(self, broken_metadata_service):
