@@ -317,7 +317,7 @@ def test_invalid_default_parameters(conn_cnx):
     not CONNECTION_PARAMETERS_ADMIN,
     reason="The user needs a privilege of create warehouse.",
 )
-def test_drop_create_user(conn_cnx, db):
+def test_drop_create_user(conn_cnx):
     """Drops and creates user."""
     with conn_cnx() as cnx:
 
