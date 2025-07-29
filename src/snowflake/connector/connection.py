@@ -394,6 +394,14 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-2096721: External (Spark) session ID
     ),
+    "unsafe_file_write": (
+        False,
+        bool,
+    ),  # SNOW-1944208: add unsafe write flag
+    "unsafe_skip_file_permissions_check": (
+        False,
+        bool,
+    ),  # SNOW-2127911: add flag to opt-out file permissions check
     _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER: (
         _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
         int,  # type
@@ -507,8 +515,13 @@ class SnowflakeConnection:
         If overwriting values from the default connection is desirable, supply
         the name explicitly.
         """
+        self._unsafe_skip_file_permissions_check = kwargs.get(
+            "unsafe_skip_file_permissions_check", False
+        )
         # initiate easy logging during every connection
-        easy_logging = EasyLoggingConfigPython()
+        easy_logging = EasyLoggingConfigPython(
+            skip_config_file_permissions_check=self._unsafe_skip_file_permissions_check
+        )
         easy_logging.create_log()
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
@@ -567,7 +580,9 @@ class SnowflakeConnection:
             for i, s in enumerate(CONFIG_MANAGER._slices):
                 if s.section == "connections":
                     CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
-                    CONFIG_MANAGER.read_config()
+                    CONFIG_MANAGER.read_config(
+                        skip_file_permissions_check=self._unsafe_skip_file_permissions_check
+                    )
                     break
         if connection_name is not None:
             connections = CONFIG_MANAGER["connections"]
@@ -1335,12 +1350,6 @@ class SnowflakeConnection:
                         host=self.host, port=self.port
                     ),
                     scope=self._oauth_scope,
-                    token_cache=(
-                        auth.get_token_cache()
-                        if self._client_store_temporary_credential
-                        else None
-                    ),
-                    refresh_token_enabled=self._oauth_enable_refresh_tokens,
                     connection=self,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
@@ -1484,8 +1493,6 @@ class SnowflakeConnection:
         if "account" in kwargs:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
-
-        self._unsafe_file_write = kwargs.get("unsafe_file_write", False)
 
         self._headers_customizers = kwargs.get("headers_customizers", [])
         if self._headers_customizers:
