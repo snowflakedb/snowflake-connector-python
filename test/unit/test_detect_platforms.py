@@ -32,8 +32,19 @@ class TestDetectPlatforms:
         result = detect_platforms(timeout_seconds=None)
         assert "is_aws_lambda" in result
 
+    @pytest.mark.parametrize(
+        "arn",
+        [
+            "arn:aws:iam::123456789012:user/John",
+            "arn:aws:sts::123456789012:assumed-role/Accounting-Role/Jane",
+        ],
+        ids=[
+            "user",
+            "assumed_role",
+        ],
+    )
     def test_aws_identity_detection(
-        self, broken_metadata_service, fake_aws_environment
+        self, broken_metadata_service, fake_aws_environment, arn
     ):
         result = detect_platforms(timeout_seconds=None)
         assert "has_aws_identity" in result
