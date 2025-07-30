@@ -4,13 +4,15 @@ import os
 import re
 from concurrent.futures.thread import ThreadPoolExecutor
 from enum import Enum
-from functools import cache
 
 import boto3
 from botocore.config import Config
 from botocore.utils import IMDSFetcher
 
 from .vendored import requests
+
+# TODO: add this back
+# from functools import cache
 
 
 class _DetectionState(Enum):
@@ -359,7 +361,8 @@ def is_github_action():
     )
 
 
-@cache
+# TODO: add cache back in once I verify this is the root cause issue
+# @cache
 def detect_platforms(timeout_seconds: float | None) -> list[str]:
     """
     Detect all potential platforms that the current environment may be running on.
