@@ -332,6 +332,8 @@ class FakeAwsEnvironment:
     def __enter__(self):
         # Patch the relevant functions to do what we want.
         self.patchers = []
+
+        # Patch sync boto3 calls
         self.patchers.append(
             mock.patch(
                 "boto3.session.Session.get_credentials",
@@ -354,7 +356,44 @@ class FakeAwsEnvironment:
                 "snowflake.connector.wif_util.get_aws_arn", side_effect=self.get_arn
             )
         )
-        # Note: No need to patch async versions anymore since async now imports from sync
+
+        # Patch async aioboto3 calls (for when aioboto3 is used directly)
+        async def async_get_credentials():
+            return self.credentials
+
+        async def async_get_caller_identity():
+            return {"Arn": self.arn}
+
+        # Mock aioboto3.Session.get_credentials (IS async)
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.aio._wif_util.aioboto3.Session.get_credentials",
+                side_effect=async_get_credentials,
+            )
+        )
+
+        # Mock the async STS client for direct aioboto3 usage
+        class MockStsClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc_val, exc_tb):
+                pass
+
+            async def get_caller_identity(self):
+                return await async_get_caller_identity()
+
+        def mock_session_client(service_name):
+            if service_name == "sts":
+                return MockStsClient()
+            return None
+
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.aio._wif_util.aioboto3.Session.client",
+                side_effect=mock_session_client,
+            )
+        )
         for patcher in self.patchers:
             patcher.__enter__()
         return self
