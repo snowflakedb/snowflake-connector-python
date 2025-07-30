@@ -6,6 +6,7 @@ import os
 from abc import ABC, abstractmethod
 from time import time
 from unittest import mock
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 import jwt
@@ -81,6 +82,10 @@ class FakeMetadataService(ABC):
     def handle_unexpected_hostname(self):
         return ConnectTimeout()
 
+    def get_environment_variables(self) -> dict[str, str]:
+        """Returns a dictionary of environment variables to patch in to fake the metadata service."""
+        return {}
+
     def _handle_get(self, url, headers=None, timeout=None):
         """Handles requests.get() calls by converting them to request() format."""
         if headers is None:
@@ -125,6 +130,7 @@ class FakeMetadataService(ABC):
                 side_effect=ConnectTimeout(),
             )
         )
+        self.patchers.append(patch.dict(os.environ, self.get_environment_variables()))
         for patcher in self.patchers:
             patcher.__enter__()
         return self
@@ -246,22 +252,14 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
         self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource)
         return build_response(json.dumps({"access_token": self.token}).encode("utf-8"))
 
-    def __enter__(self):
-        # In addition to the normal patching, we need to set the environment variables that Azure Functions would set.
-        os.environ["IDENTITY_ENDPOINT"] = self.identity_endpoint
-        os.environ["IDENTITY_HEADER"] = self.identity_header
-        os.environ["FUNCTIONS_WORKER_RUNTIME"] = self.functions_worker_runtime
-        os.environ["FUNCTIONS_EXTENSION_VERSION"] = self.functions_extension_version
-        os.environ["AzureWebJobsStorage"] = self.azure_web_jobs_storage
-        return super().__enter__()
-
-    def __exit__(self, *args, **kwargs):
-        os.environ.pop("IDENTITY_ENDPOINT")
-        os.environ.pop("IDENTITY_HEADER")
-        os.environ.pop("FUNCTIONS_WORKER_RUNTIME")
-        os.environ.pop("FUNCTIONS_EXTENSION_VERSION")
-        os.environ.pop("AzureWebJobsStorage")
-        return super().__exit__(*args, **kwargs)
+    def get_environment_variables(self) -> dict[str, str]:
+        return {
+            "IDENTITY_ENDPOINT": self.identity_endpoint,
+            "IDENTITY_HEADER": self.identity_header,
+            "FUNCTIONS_WORKER_RUNTIME": self.functions_worker_runtime,
+            "FUNCTIONS_EXTENSION_VERSION": self.functions_extension_version,
+            "AzureWebJobsStorage": self.azure_web_jobs_storage,
+        }
 
 
 class FakeGceMetadataService(FakeMetadataService):
@@ -323,18 +321,12 @@ class FakeGceCloudRunServiceService(FakeMetadataService):
         self.k_revision = "test-revision"
         self.k_configuration = "test-configuration"
 
-    def __enter__(self):
-        # We need to set the environment variables that GCE Cloud Run Service would set.
-        os.environ["K_SERVICE"] = self.k_service
-        os.environ["K_REVISION"] = self.k_revision
-        os.environ["K_CONFIGURATION"] = self.k_configuration
-        return super().__enter__()
-
-    def __exit__(self, *args, **kwargs):
-        os.environ.pop("K_SERVICE")
-        os.environ.pop("K_REVISION")
-        os.environ.pop("K_CONFIGURATION")
-        return super().__exit__(*args, **kwargs)
+    def get_environment_variables(self) -> dict[str, str]:
+        return {
+            "K_SERVICE": self.k_service,
+            "K_REVISION": self.k_revision,
+            "K_CONFIGURATION": self.k_configuration,
+        }
 
 
 class FakeGceCloudRunJobService(FakeMetadataService):
@@ -351,16 +343,11 @@ class FakeGceCloudRunJobService(FakeMetadataService):
         self.cloud_run_job = "test-job"
         self.cloud_run_execution = "test-execution"
 
-    def __enter__(self):
-        # We need to set the environment variables that GCE Cloud Run Service would set.
-        os.environ["CLOUD_RUN_JOB"] = self.cloud_run_job
-        os.environ["CLOUD_RUN_EXECUTION"] = self.cloud_run_execution
-        return super().__enter__()
-
-    def __exit__(self, *args, **kwargs):
-        os.environ.pop("CLOUD_RUN_JOB")
-        os.environ.pop("CLOUD_RUN_EXECUTION")
-        return super().__exit__(*args, **kwargs)
+    def get_environment_variables(self) -> dict[str, str]:
+        return {
+            "CLOUD_RUN_JOB": self.cloud_run_job,
+            "CLOUD_RUN_EXECUTION": self.cloud_run_execution,
+        }
 
 
 class FakeGitHubActionsService(FakeMetadataService):
@@ -376,14 +363,8 @@ class FakeGitHubActionsService(FakeMetadataService):
     def reset_defaults(self):
         self.github_actions = "github-actions"
 
-    def __enter__(self):
-        # We need to set the environment variables that GCE Cloud Run Service would set.
-        os.environ["GITHUB_ACTIONS"] = self.github_actions
-        return super().__enter__()
-
-    def __exit__(self, *args, **kwargs):
-        os.environ.pop("GITHUB_ACTIONS")
-        return super().__exit__(*args, **kwargs)
+    def get_environment_variables(self) -> dict[str, str]:
+        return {"GITHUB_ACTIONS": self.github_actions}
 
 
 class FakeAwsEnvironment:
