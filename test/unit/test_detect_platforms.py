@@ -21,9 +21,7 @@ class TestDetectPlatforms:
     def teardown(self):
         with patch.dict(os.environ, clear=True):
             yield
-
-    #     TODO: add this back probably once I verify caching is causing the test failures
-    #     detect_platforms.cache_clear()  # clear cache after each test
+            detect_platforms.cache_clear()  # clear cache after each test
 
     def test_no_platforms_detected(self, broken_metadata_service):
         result = detect_platforms(timeout_seconds=None)
