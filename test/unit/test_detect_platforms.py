@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from unittest.mock import patch
+
 import pytest
 
 from snowflake.connector.platform_detection import detect_platforms
@@ -14,10 +17,12 @@ def build_response(status_code=200, headers=None):
 
 
 class TestDetectPlatforms:
-    # TODO: add this back probably once I verify caching is causing the test failures
-    # @pytest.fixture(autouse=True)
-    # def teardown(self):
-    #     yield
+    @pytest.fixture(autouse=True)
+    def teardown(self):
+        with patch.dict(os.environ, clear=True):
+            yield
+
+    #     TODO: add this back probably once I verify caching is causing the test failures
     #     detect_platforms.cache_clear()  # clear cache after each test
 
     def test_no_platforms_detected(self, broken_metadata_service):

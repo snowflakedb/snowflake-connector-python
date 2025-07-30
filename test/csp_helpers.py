@@ -130,6 +130,8 @@ class FakeMetadataService(ABC):
                 side_effect=ConnectTimeout(),
             )
         )
+        # Patch the environment variables to fake the metadata service
+        # Note that this doesn't clear, so it's additive to the existing environment.
         self.patchers.append(patch.dict(os.environ, self.get_environment_variables()))
         for patcher in self.patchers:
             patcher.__enter__()
