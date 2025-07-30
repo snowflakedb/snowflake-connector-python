@@ -19,13 +19,13 @@ from ._utils import _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER
 from .azure_storage_client import SnowflakeAzureRestClient
 from .compat import IS_WINDOWS
 from .constants import (
-    _PYTHON_RERAISE_FILE_TRANSFER_WORK_FN_ERROR_AS_IS,
     AZURE_CHUNK_SIZE,
     AZURE_FS,
     CMD_TYPE_DOWNLOAD,
     CMD_TYPE_UPLOAD,
     GCS_FS,
     LOCAL_FS,
+    RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION,
     S3_DEFAULT_CHUNK_SIZE,
     S3_FS,
     S3_MAX_OBJECT_SIZE,
@@ -628,13 +628,15 @@ class SnowflakeFileTransferAgent:
                 logger.error(f"An exception was raised in {repr(work)}", exc_info=True)
                 file_meta.error_details = e
                 result = (False, e)
-                # If the parameter is enabled, notify the main thread of work
+                # If the reraise is enabled, notify the main thread of work
                 # function error, with the concrete exception stored aside in
                 # exception_caught_in_work, such that towards the end of
                 # the transfer call, we reraise the error as is immediately
                 # instead of continuing the execution after transfer.
-                if self._cursor.connection._session_parameters.get(
-                    _PYTHON_RERAISE_FILE_TRANSFER_WORK_FN_ERROR_AS_IS, False
+                if getattr(
+                    self._cursor.connection,
+                    f"_{RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION}",
+                    False,
                 ):
                     with cv_main_thread:
                         nonlocal exception_caught_in_work

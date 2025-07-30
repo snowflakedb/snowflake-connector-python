@@ -357,17 +357,19 @@ def _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, reraise_param_
         tuple: (agent, test_exception, mock_client, mock_create_client)
     """
     from snowflake.connector.constants import (
-        _PYTHON_RERAISE_FILE_TRANSFER_WORK_FN_ERROR_AS_IS,
+        RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION,
     )
 
     file1 = tmp_path / "file1"
     file1.write_text("test content")
 
-    # Mock cursor with session parameter
+    # Mock cursor with connection attribute
     mock_cursor = mock.MagicMock(autospec=SnowflakeCursor)
-    mock_cursor.connection._session_parameters = {
-        _PYTHON_RERAISE_FILE_TRANSFER_WORK_FN_ERROR_AS_IS: reraise_param_value
-    }
+    setattr(
+        mock_cursor.connection,
+        f"_{RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION}",
+        reraise_param_value,
+    )
 
     # Create file transfer agent
     agent = SnowflakeFileTransferAgent(
@@ -421,8 +423,11 @@ def _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, reraise_param_
     return agent, test_exception, mock_client, mock_create_client
 
 
+# Skip for old drivers because the connection config of
+# reraise_error_in_file_transfer_work_function is newly introduced.
+@pytest.mark.skipolddriver
 def test_python_reraise_file_transfer_work_fn_error_as_is(tmp_path):
-    """Tests that when _PYTHON_RERAISE_FILE_TRANSFER_WORK_FN_ERROR_AS_IS is True,
+    """Tests that when reraise_error_in_file_transfer_work_function config is True,
     exceptions are reraised immediately without continuing execution after transfer().
     """
     agent, test_exception, mock_client, mock_create_client_patch = (
@@ -432,8 +437,8 @@ def test_python_reraise_file_transfer_work_fn_error_as_is(tmp_path):
     with mock_create_client_patch as mock_create_client:
         mock_create_client.return_value = mock_client
 
-        # Test that with the parameter
-        # _PYTHON_RERAISE_FILE_TRANSFER_WORK_FN_ERROR_AS_IS as True, the
+        # Test that with the connection config
+        # reraise_error_in_file_transfer_work_function is True, the
         # exception is reraised immediately in main thread of transfer.
         with pytest.raises(Exception) as exc_info:
             agent.transfer(agent._file_metadata)
@@ -445,9 +450,12 @@ def test_python_reraise_file_transfer_work_fn_error_as_is(tmp_path):
         mock_client.prepare_upload.assert_called_once()
 
 
-def test_python_reraise_file_transfer_work_fn_error_as_is_false(tmp_path):
-    """Tests that when _PYTHON_RERAISE_FILE_TRANSFER_WORK_FN_ERROR_AS_IS is False (default),
-    exceptions are stored in file metadata but execution continues.
+# Skip for old drivers because the connection config of
+# reraise_error_in_file_transfer_work_function is newly introduced.
+@pytest.mark.skipolddriver
+def test_python_not_reraise_file_transfer_work_fn_error_as_is(tmp_path):
+    """Tests that when reraise_error_in_file_transfer_work_function config is False (default),
+    where exceptions are stored in file metadata but execution continues.
     """
     agent, test_exception, mock_client, mock_create_client_patch = (
         _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, False)
@@ -456,8 +464,8 @@ def test_python_reraise_file_transfer_work_fn_error_as_is_false(tmp_path):
     with mock_create_client_patch as mock_create_client:
         mock_create_client.return_value = mock_client
 
-        # Verify that with the parameter
-        # _PYTHON_RERAISE_FILE_TRANSFER_WORK_FN_ERROR_AS_IS as False, the
+        # Verify that with the connection config
+        # reraise_error_in_file_transfer_work_function is False, the
         # exception is not reraised (but instead stored in file metadata).
         agent.transfer(agent._file_metadata)
 
