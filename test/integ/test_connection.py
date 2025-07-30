@@ -299,11 +299,11 @@ def test_platform_detection_timeout(db_parameters):
         "database": db_parameters["database"],
         "protocol": db_parameters["protocol"],
         "timezone": "UTC",
-        "platform_detection_timeout": 2.5,
+        "platform_detection_timeout_seconds": 2.5,
     }
     cnx = snowflake.connector.connect(**config)
     try:
-        assert cnx.platform_detection_timeout == 2.5
+        assert cnx.platform_detection_timeout_seconds == 2.5
     finally:
         cnx.close()
 
