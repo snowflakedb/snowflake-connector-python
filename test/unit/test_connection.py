@@ -721,6 +721,9 @@ def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
         assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled
 
 
+# Skip for old drivers because the connection config of
+# reraise_error_in_file_transfer_work_function is newly introduced.
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize("reraise_enabled", [True, False, None])
 def test_reraise_error_in_file_transfer_work_function_config(
     reraise_enabled: bool | None,
