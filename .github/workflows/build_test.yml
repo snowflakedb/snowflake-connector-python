@@ -193,6 +193,12 @@ jobs:
           path: |
             .tox/.coverage
             .tox/coverage.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          include-hidden-files: true
+          name: junit_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            .tox/junit.*.xml
 
   test-olddriver:
     name: Old Driver Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
@@ -307,6 +313,12 @@ jobs:
           path: |
             .coverage
             coverage.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          include-hidden-files: true
+          name: junit_linux-fips-3.9-${{ matrix.cloud-provider }}
+          path: |
+            junit.*.xml
 
   test-lambda:
     name: Test Lambda linux-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
@@ -354,6 +366,12 @@ jobs:
           path: |
             .coverage.py${{ env.shortver }}-lambda-ci
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
+      - uses: actions/upload-artifact@v4
+        with:
+          include-hidden-files: true
+          name: junit_linux-lambda-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            junit.py${{ env.shortver }}-lambda-ci-dev.xml
 
   combine-coverage:
     if: ${{ success() || failure() }}
@@ -388,6 +406,21 @@ jobs:
               dst_file = dst_dir / ".coverage.{}".format(src_file.parent.name[9:])
               print("{} copy to {}".format(src_file, dst_file))
               shutil.copy(str(src_file), str(dst_file))'
+      - name: Collect all JUnit XML files to one dir
+        run: |
+          python -c '
+          from pathlib import Path
+          import shutil
+
+          src_dir = Path("artifacts")
+          dst_dir = Path(".") / "junit_results"
+          dst_dir.mkdir()
+          # Collect all JUnit XML files with different naming patterns
+          for pattern in ["*/junit.*.xml", "*/junit.py*-lambda-ci-dev.xml"]:
+              for src_file in src_dir.glob(pattern):
+                  dst_file = dst_dir / src_file.name
+                  print("{} copy to {}".format(src_file, dst_file))
+                  shutil.copy(str(src_file), str(dst_file))'
       - name: Combine coverages
         run: python -m tox run -e coverage
       - name: Publish html coverage
@@ -406,3 +439,9 @@ jobs:
         with:
           files: .tox/coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: junit_results/junit.*.xml
