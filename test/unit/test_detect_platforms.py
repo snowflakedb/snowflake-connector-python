@@ -16,10 +16,12 @@ def build_response(status_code=200, headers=None):
     return response
 
 
+@pytest.mark.xdist_group(name="serial_tests")
 class TestDetectPlatforms:
     @pytest.fixture(autouse=True)
     def teardown(self):
         with patch.dict(os.environ, clear=True):
+            detect_platforms.cache_clear()  # clear cache before each test
             yield
             detect_platforms.cache_clear()  # clear cache after each test
 
