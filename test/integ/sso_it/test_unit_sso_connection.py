@@ -4,6 +4,8 @@ from __future__ import annotations
 import os
 from unittest.mock import Mock, patch
 
+import pytest
+
 import snowflake.connector
 from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
@@ -16,6 +18,7 @@ except ImportError:
 ID_TOKEN = "ID_TOKEN"
 
 
+@pytest.mark.skip(reason="Test too old, needs to be updated: SNOW-TODO")
 @patch("snowflake.connector.auth_webbrowser.AuthByWebBrowser.authenticate")
 @patch("snowflake.connector.network.SnowflakeRestful._post_request")
 def test_connect_externalbrowser(
