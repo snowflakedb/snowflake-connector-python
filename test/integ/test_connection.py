@@ -1470,3 +1470,27 @@ def test_unsafe_skip_file_permissions_check_skips_config_permissions_check(
     assert (
         len(permission_warnings) == 0
     ), "Expected no permission warning when unsafe_skip_file_permissions_check=True"
+
+
+# The property snowflake_version is newly introduced and therefore should not be tested on old drivers.
+@pytest.mark.skipolddriver
+def test_snowflake_version():
+    import re
+
+    conn = create_connection("default")
+    # Assert that conn has a snowflake_version attribute
+    assert hasattr(
+        conn, "snowflake_version"
+    ), "conn should have a snowflake_version attribute"
+
+    # Assert that conn.snowflake_version is a string.
+    assert isinstance(
+        conn.snowflake_version, str
+    ), f"snowflake_version should be a string, but got {type(conn.snowflake_version)}"
+
+    # Assert that conn.snowflake_version is in the format of "x.y.z", where
+    # x, y and z are numbers.
+    version_pattern = r"^\d+\.\d+\.\d+$"
+    assert re.match(
+        version_pattern, conn.snowflake_version
+    ), f"snowflake_version should match pattern 'x.y.z', but got '{conn.snowflake_version}'"

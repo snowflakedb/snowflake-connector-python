@@ -15,6 +15,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug where timezoned timestamps fetched as pandas.DataFrame or pyarrow.Table would overflow for the sake of unnecessary precision. In the case where an overflow cannot be prevented a clear error will be raised now.
   - Fix OAuth authenticator values.
   - Add `unsafe_skip_file_permissions_check` flag to skip file permissions check on cache and config.
+  - Introduce snowflake_version property to the connection
 
 - v3.16.0(July 04,2025)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4.
