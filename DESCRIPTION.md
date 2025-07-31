@@ -7,6 +7,13 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.17(TBD)
+  - Bumped numpy dependency from <2.1.0 to <=2.2.4
+  - Added Windows support for Python 3.13.
+  - Add `bulk_upload_chunks` parameter to `write_pandas` function. Setting this parameter to True changes the behaviour of write_pandas function to first write all the data chunks to the local disk and then perform the wildcard upload of the chunks folder to the stage. In default behaviour the chunks are being saved, uploaded and deleted one by one.
+  - Add `headers_customizers` parameter to the `connect` function. Setting this parameter allows enriching outgoing request headers using a list of customizers. Only header enrichment is supported — modifying query parameters or overwriting the existing headers is not allowed.
+  - Added support for new authentication mechanism PAT with external session ID
+
 - v3.16.1(TBD)
   - Added in-band OCSP exception telemetry.
   - Added `APPLICATION_PATH` within `CLIENT_ENVIRONMENT` to distinguish between multiple scripts using the PythonConnector in the same environment.

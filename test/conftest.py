@@ -5,6 +5,12 @@ import os
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
+
+try:
+    from test.test_utils.cross_module_fixtures.http_fixtures import *  # NOQA
+except (ImportError, NameError):
+    pass
+from test.test_utils.cross_module_fixtures.wiremock_fixtures import *  # NOQA
 from typing import Generator
 
 import pytest
