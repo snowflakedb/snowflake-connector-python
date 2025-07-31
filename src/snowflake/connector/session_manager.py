@@ -31,7 +31,6 @@ class HttpConfig(NamedTuple):
     adapter_factory: Callable[..., HTTPAdapter]
     use_pooling: bool = True
     max_retries: int | None = REQUESTS_RETRY
-    default_timeout: float | None = 3.0
 
     def copy_with(self, **overrides: Any) -> HttpConfig:
         return self._replace(**overrides)
