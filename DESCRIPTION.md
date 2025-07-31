@@ -7,7 +7,8 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.16.1(TBD)
+- v3.17(TBD)
+  - Removed boto and botocore dependencies.
   - Added in-band OCSP exception telemetry.
   - Added `APPLICATION_PATH` within `CLIENT_ENVIRONMENT` to distinguish between multiple scripts using the PythonConnector in the same environment.
   - Disabled token caching for OAuth Client Credentials authentication

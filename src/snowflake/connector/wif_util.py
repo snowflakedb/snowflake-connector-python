@@ -1,18 +1,26 @@
 from __future__ import annotations
 
+"""Workload‑identity attestation helpers.
+
+This module builds the attestation token that the Snowflake Python connector
+sends when Authenticating with Workload Identity Federation (WIF).
+It supports AWS, Azure, GCP and generic OIDC environments without pulling
+in heavy SDKs such as botocore – we only need a small presigned STS request
+for AWS and a couple of metadata‑server calls for Azure / GCP.
+"""
+
 import json
 import logging
 import os
 from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum, unique
+from typing import Any
 
-import boto3
 import jwt
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-from botocore.utils import InstanceMetadataRegionFetcher
 
+from ._aws_credentials import get_region, load_default_credentials
+from ._aws_sign_v4 import sign_get_caller_identity
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
 from .vendored import requests
@@ -51,36 +59,36 @@ class AttestationProvider(Enum):
 
     @staticmethod
     def from_string(provider: str) -> AttestationProvider:
-        """Converts a string to a strongly-typed enum value of AttestationProvider."""
+        """Converts a string to a strongly-typed enum value of :class:`AttestationProvider`."""
         return AttestationProvider[provider.upper()]
 
 
 @dataclass
 class WorkloadIdentityAttestation:
     provider: AttestationProvider
-    credential: str
-    user_identifier_components: dict
+    credential: str  # base64 JSON blob – provider‑specific
+    user_identifier_components: dict[str, Any]
 
 
 def try_metadata_service_call(
-    method: str, url: str, headers: dict, timeout_sec: int = 3
+    method: str, url: str, headers: dict[str, str], *, timeout: int = 3
 ) -> Response | None:
-    """Tries to make a HTTP request to the metadata service with the given URL, method, headers and timeout.
+    """Tries to make a HTTP request to the metadata service with the given URL, method, headers and timeout in seconds.
 
     If we receive an error response or any exceptions are raised, returns None. Otherwise returns the response.
     """
     try:
         res: Response = requests.request(
-            method=method, url=url, headers=headers, timeout=timeout_sec
+            method=method, url=url, headers=headers, timeout=timeout
         )
-        if not res.ok:
-            return None
+        return res if res.ok else None
     except requests.RequestException:
         return None
-    return res
 
 
-def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[str, str]:
+def extract_iss_and_sub_without_signature_verification(
+    jwt_str: str,
+) -> tuple[str | None, str | None]:
     """Extracts the 'iss' and 'sub' claims from the given JWT, without verifying the signature.
 
     Note: the real token verification (including signature verification) happens on the Snowflake side. The driver doesn't have
@@ -92,141 +100,128 @@ def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[st
 
     If there are any errors in parsing the token or extracting iss and sub, this will return (None, None).
     """
-    try:
-        claims = jwt.decode(jwt_str, options={"verify_signature": False})
-    except jwt.exceptions.InvalidTokenError:
-        logger.warning("Token is not a valid JWT.", exc_info=True)
+    claims = _decode_jwt_without_validation(jwt_str)
+    if claims is None:
         return None, None
 
-    if not ("iss" in claims and "sub" in claims):
+    if "iss" not in claims or "sub" not in claims:
         logger.warning("Token is missing 'iss' or 'sub' claims.")
         return None, None
 
     return claims["iss"], claims["sub"]
 
 
-def get_aws_region() -> str | None:
-    """Get the current AWS workload's region, if any."""
-    if "AWS_REGION" in os.environ:  # Lambda
-        return os.environ["AWS_REGION"]
-    else:  # EC2
-        return InstanceMetadataRegionFetcher().retrieve_region()
-
-
-def get_aws_arn() -> str | None:
-    """Get the current AWS workload's ARN, if any."""
-    caller_identity = boto3.client("sts").get_caller_identity()
-    if not caller_identity or "Arn" not in caller_identity:
+def _decode_jwt_without_validation(token: str) -> Any:
+    """Helper that decodes *token* with ``verify_signature=False``.:contentReference[oaicite:1]{index=1}"""
+    try:
+        return jwt.decode(token, options={"verify_signature": False})
+    except jwt.exceptions.InvalidTokenError:
+        logger.warning("Token is not a valid JWT.", exc_info=True)
         return None
-    return caller_identity["Arn"]
 
 
-def get_aws_partition(arn: str) -> str | None:
-    """Get the current AWS partition from ARN, if any.
+class AWSPartition(str, Enum):
+    BASE = "aws"
+    CHINA = "aws-cn"
+    GOV = "aws-us-gov"
 
-    Args:
-        arn (str): The Amazon Resource Name (ARN) string.
 
-    Returns:
-        str | None: The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov')
-                    if found, otherwise None.
+def _partition_from_region(region: str) -> AWSPartition:
+    if region.startswith("cn-"):
+        return AWSPartition.CHINA
+    if region.startswith("us-gov-"):
+        return AWSPartition.GOV
+    return AWSPartition.BASE
 
-    Reference: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html.
+
+def _sts_host_from_region(region: str) -> str | None:
     """
-    if not arn or not isinstance(arn, str):
-        return None
-    parts = arn.split(":")
-    if len(parts) > 1 and parts[0] == "arn" and parts[1]:
-        return parts[1]
-    logger.warning("Invalid AWS ARN: %s", arn)
-    return None
-
-
-def get_aws_sts_hostname(region: str, partition: str) -> str | None:
-    """Constructs the AWS STS hostname for a given region and partition.
-
-    Args:
-        region (str): The AWS region (e.g., 'us-east-1', 'cn-north-1').
-        partition (str): The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov').
-
-    Returns:
-        str | None: The AWS STS hostname (e.g., 'sts.us-east-1.amazonaws.com')
-                    if a valid hostname can be constructed, otherwise None.
+    Construct the STS endpoint hostname for region according to the
+    regionalised-STS rules published by AWS.:contentReference[oaicite:2]{index=2}
 
     References:
     - https://docs.aws.amazon.com/sdkref/latest/guide/feature-sts-regionalized-endpoints.html
     - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
     - https://docs.aws.amazon.com/general/latest/gr/sts.html
     """
-    if (
-        not region
-        or not partition
-        or not isinstance(region, str)
-        or not isinstance(partition, str)
-    ):
+    if not region or not isinstance(region, str):
         return None
 
-    if partition == "aws":
-        # For the 'aws' partition, STS endpoints are generally regional
-        # except for the global endpoint (sts.amazonaws.com) which is
-        # generally resolved to us-east-1 under the hood by the SDKs
-        # when a region is not explicitly specified.
-        # However, for explicit regional endpoints, the format is sts.<region>.amazonaws.com
-        return f"sts.{region}.amazonaws.com"
-    elif partition == "aws-cn":
-        # China regions have a different domain suffix
-        return f"sts.{region}.amazonaws.com.cn"
-    elif partition == "aws-us-gov":
-        return (
-            f"sts.{region}.amazonaws.com"  # GovCloud uses .com, but dedicated regions
-        )
-    else:
-        logger.warning("Invalid AWS partition: %s", partition)
-        return None
+    part = _partition_from_region(region)
+    suffix = ".amazonaws.com.cn" if part is AWSPartition.CHINA else ".amazonaws.com"
+    return f"sts.{region}{suffix}"
+
+
+def _try_get_arn_from_env_vars() -> str | None:
+    """Try to get ARN already exposed by the runtime (no extra network I/O).
+
+    •  `AWS_ROLE_ARN` – web-identity / many FaaS runtimes
+    •  `AWS_EC2_METADATA_ARN` – some IMDSv2 environments
+    •  `AWS_SESSION_ARN` – recent AWS SDKs export this when assuming a role
+    """
+    for possible_arn_env_var in (
+        "AWS_ROLE_ARN",
+        "AWS_EC2_METADATA_ARN",
+        "AWS_SESSION_ARN",
+    ):
+        value = os.getenv(possible_arn_env_var)
+        if value and value.startswith("arn:"):
+            return value
+    return None
+
+
+def try_compose_aws_user_identifier(region: str | None = None) -> dict[str, str]:
+    """Return an identifier for the running AWS workload.
+
+    Always includes the AWS region; adds an *arn* key only if one is already
+    discoverable via common environment variables.  Returns {} only if
+    the region cannot be determined."""
+    region = region or get_region()
+    if not region:
+        return {}
+
+    identifier: dict[str, str] = {"region": region}
+
+    if arn := _try_get_arn_from_env_vars():
+        identifier["arn"] = arn
+
+    return identifier
 
 
 def create_aws_attestation() -> WorkloadIdentityAttestation | None:
-    """Tries to create a workload identity attestation for AWS.
+    """Return AWS attestation or None if we're not on AWS / creds missing."""
 
-    If the application isn't running on AWS or no credentials were found, returns None.
-    """
-    aws_creds = boto3.session.Session().get_credentials()
-    if not aws_creds:
-        logger.debug("No AWS credentials were found.")
+    creds = load_default_credentials()
+    if not creds:
+        logger.debug("No AWS credentials available.")
         return None
-    region = get_aws_region()
+
+    region = get_region()
     if not region:
-        logger.debug("No AWS region was found.")
-        return None
-    arn = get_aws_arn()
-    if not arn:
-        logger.debug("No AWS caller identity was found.")
-        return None
-    partition = get_aws_partition(arn)
-    if not partition:
-        logger.debug("No AWS partition was found.")
+        logger.debug("AWS region could not be determined.")
         return None
 
-    sts_hostname = get_aws_sts_hostname(region, partition)
-    request = AWSRequest(
-        method="POST",
-        url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
-        headers={
-            "Host": sts_hostname,
-            "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
-        },
+    sts_url = (
+        f"https://{_sts_host_from_region(region)}"
+        "/?Action=GetCallerIdentity&Version=2011-06-15"
+    )
+    signed_headers = sign_get_caller_identity(
+        url=sts_url,
+        region=region,
+        access_key=creds.access_key,
+        secret_key=creds.secret_key,
+        session_token=creds.token,
     )
 
-    SigV4Auth(aws_creds, "sts", region).add_auth(request)
+    attestation = b64encode(
+        json.dumps(
+            {"url": sts_url, "method": "POST", "headers": signed_headers}
+        ).encode()
+    ).decode()
 
-    assertion_dict = {
-        "url": request.url,
-        "method": request.method,
-        "headers": dict(request.headers.items()),
-    }
-    credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
+    user_identifier = try_compose_aws_user_identifier(region)
     return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"arn": arn}
+        AttestationProvider.AWS, attestation, user_identifier
     )
 
 
