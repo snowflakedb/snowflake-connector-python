@@ -73,6 +73,7 @@ from .constants import (
     PARAMETER_QUERY_CONTEXT_CACHE_SIZE,
     PARAMETER_SERVICE_NAME,
     PARAMETER_TIMEZONE,
+    RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION,
     OCSPMode,
     QueryStatus,
 )
@@ -385,6 +386,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
         int,  # type
     ),  # snowflake internal
+    RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION: (
+        False,
+        bool,
+    ),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
