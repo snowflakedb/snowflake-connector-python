@@ -338,5 +338,6 @@ def _init_rest(
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
     connection._rest = rest
+    connection.rest = rest
     rest._post_request = post_request
     return rest

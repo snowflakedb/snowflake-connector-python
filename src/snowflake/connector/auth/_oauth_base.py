@@ -316,8 +316,8 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         if self._scope:
             fields["scope"] = self._scope
         try:
+            # TODO(SNOW-2229411) Session manager should be used here. It may require additional security validation (since we would transition from PoolManager to requests.Session) and some parameters would be passed implicitly. OAuth token exchange must NOT reuse pooled HTTP sessions. We should create a fresh SessionManager with use_pooling=False for each call.
             return urllib3.PoolManager().request_encode_body(
-                # TODO: use network pool to gain use of proxy settings and so on
                 "POST",
                 self._token_request_url,
                 encode_multipart=False,
@@ -356,8 +356,8 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         connection: SnowflakeConnection,
         fields: dict[str, str],
     ) -> (str | None, str | None):
+        # TODO(SNOW-2229411) Session manager should be used here. It may require additional security validation (since we would transition from PoolManager to requests.Session) and some parameters would be passed implicitly. Token request must bypass HTTP connection pools.
         resp = urllib3.PoolManager().request_encode_body(
-            # TODO: use network pool to gain use of proxy settings and so on
             "POST",
             self._token_request_url,
             headers=self._create_token_request_headers(),

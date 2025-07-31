@@ -60,7 +60,7 @@ def test_socks_5_proxy_missing_proxy_header_attribute(caplog):
 
     # bad path
     with unittest.mock.patch(
-        "snowflake.connector.network.ProxySupportAdapter.proxy_manager_for",
+        "snowflake.connector.session_manager.ProxySupportAdapter.proxy_manager_for",
         mock_proxy_manager_for_url_no_header,
     ):
         with pytest.raises(OperationalError):
@@ -77,7 +77,7 @@ def test_socks_5_proxy_missing_proxy_header_attribute(caplog):
 
     # happy path
     with unittest.mock.patch(
-        "snowflake.connector.network.ProxySupportAdapter.proxy_manager_for",
+        "snowflake.connector.session_manager.ProxySupportAdapter.proxy_manager_for",
         mock_proxy_manager_for_url_wiht_header,
     ):
         with pytest.raises(OperationalError):
