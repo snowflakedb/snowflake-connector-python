@@ -237,6 +237,7 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
         # Close all the HTTPConnections in the pool before the
         # HTTPConnectionPool object is garbage collected.
         weakref_finalize(self, _close_pool_connections, pool)
+        self._get_counter = 0
 
     def _new_conn(self):
         """
@@ -639,7 +640,13 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
             Additional parameters are passed to
             :meth:`urllib3.response.HTTPResponse.from_httplib`
         """
-
+        """
+        post queries are like the following:
+        '/queries/v1/query-request?requestId=xxx&request_guid=xxx'
+        """
+        if method == "GET" and url.startswith("/queries/"):
+            print('urlopen counter', self._get_counter)
+            self._get_counter += 1
         parsed_url = parse_url(url)
         destination_scheme = parsed_url.scheme
 
@@ -721,6 +728,9 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
                 headers=headers,
                 chunked=chunked,
             )
+            # attempt 1: mock SocketError, after calling GET query twice, raise the error
+            if self._get_counter == 2:
+                raise SocketError("Remote Disconnected")
 
             # If we're going to release the connection in ``finally:``, then
             # the response doesn't need to know about the connection. Otherwise
@@ -739,6 +749,10 @@ class HTTPConnectionPool(ConnectionPool, RequestMethods):
                 retries=retries,
                 **response_kw
             )
+
+            # attempt 2: mock raise 499 error
+            # if self._get_counter == 2:
+            #     response = HTTPResponse(status=499)
 
             # Everything went great!
             clean_exit = True
