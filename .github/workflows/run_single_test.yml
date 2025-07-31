@@ -52,4 +52,4 @@ jobs:
 
       - name: Run pytest
         run: |
-          pytest -vv test/ -k "externalbrowser"
+          pytest -vv test/integ/aio/sso
