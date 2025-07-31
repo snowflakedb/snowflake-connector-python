@@ -24,7 +24,6 @@ import sys
 import pytest
 
 import snowflake.connector.aio
-from snowflake.connector.auth._auth import delete_temporary_credential
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -77,11 +76,7 @@ ALTER SYSTEM SET
 
 
 @pytest.mark.skipif(
-    not (
-        CONNECTION_PARAMETERS_SSO
-        and CONNECTION_PARAMETERS_ADMIN
-        and delete_temporary_credential
-    ),
+    not (CONNECTION_PARAMETERS_SSO and CONNECTION_PARAMETERS_ADMIN),
     reason="SSO and ADMIN connection parameters must be provided.",
 )
 async def test_connect_externalbrowser(token_validity_test_values):
@@ -90,11 +85,16 @@ async def test_connect_externalbrowser(token_validity_test_values):
     In order to run this test, remove the above pytest.mark.skip annotation and run it. It will popup a windows once
     but the rest connections should not create popups.
     """
-    delete_temporary_credential(
-        host=CONNECTION_PARAMETERS_SSO["host"],
-        user=CONNECTION_PARAMETERS_SSO["user"],
-        cred_type=ID_TOKEN,
-    )  # delete existing temporary credential
+    from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
+
+    TokenCache.make().remove(
+        TokenKey(
+            CONNECTION_PARAMETERS_SSO["host"],
+            CONNECTION_PARAMETERS_SSO["user"],
+            TokenType.ID_TOKEN,
+        )
+    )
+    # delete existing temporary credential
     CONNECTION_PARAMETERS_SSO["client_store_temporary_credential"] = True
 
     # change database and schema to non-default one

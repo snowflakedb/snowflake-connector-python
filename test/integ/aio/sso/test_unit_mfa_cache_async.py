@@ -23,21 +23,9 @@ except ImportError:
     IS_LINUX = platform.system() == "Linux"
     IS_WINDOWS = platform.system() == "Windows"
 
-try:
-    import keyring  # noqa
-
-    from snowflake.connector.auth._auth import delete_temporary_credential
-except ImportError:
-    delete_temporary_credential = None
-
-MFA_TOKEN = "MFATOKEN"
-
 
 # Although this is an unit test, we put it under test/integ/sso, since it needs keyring package installed
-@pytest.mark.skipif(
-    delete_temporary_credential is None,
-    reason="delete_temporary_credential is not available.",
-)
+@pytest.mark.skipolddriver
 @patch("snowflake.connector.aio._network.SnowflakeRestful._post_request")
 async def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     """Connects with (username, pwd, mfa) mock."""
@@ -134,8 +122,10 @@ async def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     mockSnowflakeRestfulPostRequest.side_effect = mock_post_request
 
     async def test_body(conn_cfg):
-        delete_temporary_credential(
-            host=conn_cfg["host"], user=conn_cfg["user"], cred_type=MFA_TOKEN
+        from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
+
+        TokenCache.make().remove(
+            TokenKey(conn_cfg["host"], conn_cfg["user"], TokenType.MFA_TOKEN)
         )
 
         # first connection, no mfa token cache

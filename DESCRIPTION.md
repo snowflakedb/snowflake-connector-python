@@ -46,9 +46,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added a feature to verify if the connection is still good enough to send queries over.
   - Added support for base64-encoded DER private key strings in the `private_key` authentication type.
 
-- v3.12.5(TBD)
-  - Added a feature to limit the sizes of IO-bound ThreadPoolExecutors during PUT and GET commands.
-
 - v3.12.4(December 3,2024)
   - Fixed a bug where multipart uploads to Azure would be missing their MD5 hashes.
   - Fixed a bug where OpenTelemetry header injection would sometimes cause Exceptions to be thrown.
