@@ -13,6 +13,7 @@ import random
 import string
 import tempfile
 from collections.abc import Iterator
+from os import makedirs, path
 from threading import Lock
 from typing import Generic, NoReturn, TypeVar
 
@@ -415,6 +416,16 @@ class SFDictFileCache(SFDictCache):
         #  place is readable/writable by us
         random_string = "".join(random.choice(string.ascii_letters) for _ in range(5))
         cache_folder = os.path.dirname(self.file_path)
+        if not path.exists(cache_folder):
+            try:
+                makedirs(cache_folder, mode=0o700)
+            except Exception as ex:
+                logger.debug(
+                    "cannot create a cache directory: [%s], err=[%s]",
+                    cache_folder,
+                    ex,
+                )
+
         try:
             tmp_file, tmp_file_path = tempfile.mkstemp(
                 dir=cache_folder,

@@ -159,3 +159,11 @@ class ArrowConverterContext:
         digits = [int(digit) for digit in str(int128) if digit != "-"]
         sign = int128 < 0
         return decimal.Decimal((sign, digits, -scale))
+
+    def DECFLOAT_to_decimal(self, exponent: int, significand: bytes) -> decimal.Decimal:
+        # significand is two's complement big endian.
+        significand = int.from_bytes(significand, byteorder="big", signed=True)
+        return decimal.Decimal(significand).scaleb(exponent)
+
+    def DECFLOAT_to_numpy_float64(self, exponent: int, significand: bytes) -> float64:
+        return numpy.float64(self.DECFLOAT_to_decimal(exponent, significand))
