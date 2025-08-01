@@ -15,7 +15,7 @@ from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import suppress
 from difflib import get_close_matches
-from functools import partial
+from functools import cached_property, partial
 from io import StringIO
 from logging import getLogger
 from threading import Lock
@@ -895,6 +895,14 @@ class SnowflakeConnection:
     @property
     def check_arrow_conversion_error_on_every_column(self) -> bool:
         return self._check_arrow_conversion_error_on_every_column
+
+    @cached_property
+    def snowflake_version(self) -> str:
+        # The result from SELECT CURRENT_VERSION() is `<version> <internal hash>`,
+        # and we only need the first part
+        return str(
+            self.cursor().execute("SELECT CURRENT_VERSION()").fetchall()[0][0]
+        ).split(" ")[0]
 
     @check_arrow_conversion_error_on_every_column.setter
     def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
