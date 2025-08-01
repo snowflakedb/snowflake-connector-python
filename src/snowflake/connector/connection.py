@@ -197,6 +197,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # network timeout (infinite by default)
     "socket_timeout": (None, (type(None), int)),
     "external_browser_timeout": (120, int),
+    "platform_detection_timeout_seconds": (
+        None,
+        (type(None), float),
+    ),  # Platform detection timeout for CSP metadata endpoints
     "backoff_policy": (DEFAULT_BACKOFF_POLICY, Callable),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
@@ -703,6 +707,14 @@ class SnowflakeConnection:
     def client_session_keep_alive_heartbeat_frequency(self, value) -> None:
         self._client_session_keep_alive_heartbeat_frequency = value
         self._validate_client_session_keep_alive_heartbeat_frequency()
+
+    @property
+    def platform_detection_timeout_seconds(self) -> float | None:
+        return self._platform_detection_timeout_seconds
+
+    @platform_detection_timeout_seconds.setter
+    def platform_detection_timeout_seconds(self, value) -> None:
+        self._platform_detection_timeout_seconds = value
 
     @property
     def client_prefetch_threads(self) -> int:

@@ -283,6 +283,31 @@ def test_keep_alive_heartbeat_frequency_min(db_parameters):
         cnx.close()
 
 
+@pytest.mark.skipolddriver
+def test_platform_detection_timeout(db_parameters):
+    """Tests platform detection timeout.
+
+    Creates a connection with platform_detection_timeout parameter.
+    """
+    config = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "account": db_parameters["account"],
+        "schema": db_parameters["schema"],
+        "database": db_parameters["database"],
+        "protocol": db_parameters["protocol"],
+        "timezone": "UTC",
+        "platform_detection_timeout_seconds": 2.5,
+    }
+    cnx = snowflake.connector.connect(**config)
+    try:
+        assert cnx.platform_detection_timeout_seconds == 2.5
+    finally:
+        cnx.close()
+
+
 def test_bad_db(db_parameters):
     """Attempts to use a bad DB."""
     cnx = snowflake.connector.connect(
