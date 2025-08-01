@@ -148,9 +148,14 @@ class TestDetectPlatforms:
             }
             return mock_client
 
-        def slow_imds_get_request(*args, **kwargs):
+        def imds_fetcher(*args, **kwargs):
             time.sleep(sleep_time)
-            return build_response(content=b"content", status_code=200)
+            mock_imds_instance = Mock()
+            mock_imds_instance._get_request.return_value = build_response(
+                content=b"content", status_code=200
+            )
+            mock_imds_instance._fetch_metadata_token.return_value = "test-token"
+            return mock_imds_instance
 
         def slow_imds_fetch_token(*args, **kwargs):
             return "test-token"
@@ -163,11 +168,8 @@ class TestDetectPlatforms:
             "snowflake.connector.platform_detection.boto3.client",
             side_effect=slow_boto3_client,
         ), patch(
-            "snowflake.connector.platform_detection.IMDSFetcher._get_request",
-            side_effect=slow_imds_get_request,
-        ), patch(
-            "snowflake.connector.platform_detection.IMDSFetcher._fetch_metadata_token",
-            side_effect=slow_imds_fetch_token,
+            "snowflake.connector.platform_detection.IMDSFetcher",
+            side_effect=imds_fetcher,
         ):
             start_time = time.time()
             result = detect_platforms(platform_detection_timeout_seconds=10)
