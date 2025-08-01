@@ -396,7 +396,7 @@ def detect_platforms(platform_detection_timeout_seconds: float | None) -> list[s
                 "is_azure_vm": executor.submit(
                     is_azure_vm, platform_detection_timeout_seconds
                 ),
-                "azure_managed_identity": executor.submit(
+                "has_azure_managed_identity": executor.submit(
                     has_azure_managed_identity, platform_detection_timeout_seconds
                 ),
                 "is_gce_vm": executor.submit(
