@@ -13,11 +13,7 @@ import jwt
 from botocore.awsrequest import AWSRequest
 from botocore.credentials import Credentials
 
-from snowflake.connector.vendored.requests.exceptions import (
-    ConnectTimeout,
-    HTTPError,
-    RequestException,
-)
+from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
 from snowflake.connector.vendored.requests.models import Response
 
 logger = logging.getLogger(__name__)
@@ -57,6 +53,7 @@ class FakeMetadataService(ABC):
     """Base class for fake metadata service implementations."""
 
     def __init__(self):
+        self.unexpected_host_name_exception = ConnectTimeout()
         self.reset_defaults()
 
     @abstractmethod
@@ -79,9 +76,6 @@ class FakeMetadataService(ABC):
     def handle_request(self, method, parsed_url, headers, timeout):
         return ConnectTimeout()
 
-    def handle_unexpected_hostname(self):
-        raise ConnectTimeout()
-
     def get_environment_variables(self) -> dict[str, str]:
         """Returns a dictionary of environment variables to patch in to fake the metadata service."""
         return {}
@@ -101,7 +95,7 @@ class FakeMetadataService(ABC):
             logger.debug(
                 f"Received request to unexpected hostname {parsed_url.hostname}"
             )
-            self.handle_unexpected_hostname()
+            raise self.unexpected_host_name_exception
 
         return self.handle_request(method, parsed_url, headers, timeout)
 
@@ -154,24 +148,6 @@ class UnavailableMetadataService(FakeMetadataService):
 
     def handle_request(self, method, parsed_url, headers, timeout):
         # This should never be called because we always raise a ConnectTimeout.
-        pass
-
-
-class BrokenMetadataService(FakeMetadataService):
-    """Emulates an environment where all metadata services cannot be connected to."""
-
-    def reset_defaults(self):
-        pass
-
-    def handle_unexpected_hostname(self):
-        raise RequestException()
-
-    @property
-    def expected_hostnames(self):
-        return []  # Always raise a RequestException.
-
-    def handle_request(self, method, parsed_url, headers, timeout):
-        # This should never be called because we always raise a RequestException.
         pass
 
 

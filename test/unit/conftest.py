@@ -5,7 +5,6 @@ import pytest
 from snowflake.connector.telemetry_oob import TelemetryService
 
 from ..csp_helpers import (
-    BrokenMetadataService,
     FakeAwsEnvironment,
     FakeAzureFunctionMetadataService,
     FakeAzureVmMetadataService,
@@ -31,13 +30,6 @@ def disable_oob_telemetry():
 def unavailable_metadata_service():
     """Emulates an environment where all metadata services are unavailable."""
     with UnavailableMetadataService() as server:
-        yield server
-
-
-@pytest.fixture
-def broken_metadata_service():
-    """Emulates an environment without any metadata service."""
-    with BrokenMetadataService() as server:
         yield server
 
 

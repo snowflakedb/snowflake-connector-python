@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from snowflake.connector.platform_detection import detect_platforms
+from snowflake.connector.vendored.requests.exceptions import RequestException
 from src.snowflake.connector.vendored.requests import Response
 
 
@@ -14,6 +15,13 @@ def build_response(status_code=200, headers=None):
     response.status_code = status_code
     response.headers = headers
     return response
+
+
+@pytest.fixture
+def unavailable_metadata_service_with_request_exception(unavailable_metadata_service):
+    """Customize unavailable_metadata_service to use RequestException for detect_platforms tests."""
+    unavailable_metadata_service.unexpected_host_name_exception = RequestException()
+    return unavailable_metadata_service
 
 
 @pytest.mark.xdist_group(name="serial_tests")
@@ -25,17 +33,21 @@ class TestDetectPlatforms:
             yield
             detect_platforms.cache_clear()  # clear cache after each test
 
-    def test_no_platforms_detected(self, broken_metadata_service):
+    def test_no_platforms_detected(
+        self, unavailable_metadata_service_with_request_exception
+    ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert result == []
 
     def test_ec2_instance_detection(
-        self, broken_metadata_service, fake_aws_environment
+        self, unavailable_metadata_service_with_request_exception, fake_aws_environment
     ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_ec2_instance" in result
 
-    def test_aws_lambda_detection(self, broken_metadata_service, fake_aws_environment):
+    def test_aws_lambda_detection(
+        self, unavailable_metadata_service_with_request_exception, fake_aws_environment
+    ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_aws_lambda" in result
 
@@ -51,7 +63,10 @@ class TestDetectPlatforms:
         ],
     )
     def test_aws_identity_detection(
-        self, broken_metadata_service, fake_aws_environment, arn
+        self,
+        unavailable_metadata_service_with_request_exception,
+        fake_aws_environment,
+        arn,
     ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "has_aws_identity" in result
@@ -69,7 +84,7 @@ class TestDetectPlatforms:
     ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_azure_function" in result
-        assert "azure_managed_identity" in result
+        assert "has_azure_managed_identity" in result
 
     def test_gce_vm_detection(self, fake_gce_metadata_service):
         result = detect_platforms(platform_detection_timeout_seconds=None)
@@ -111,7 +126,7 @@ class TestDetectPlatforms:
         assert "is_azure_vm_timeout" in result
         assert "is_gce_vm_timeout" in result
         assert "has_gcp_identity_timeout" in result
-        assert "azure_managed_identity_timeout" in result
+        assert "has_azure_managed_identity_timeout" in result
 
     @pytest.mark.parametrize(
         "arn",
@@ -149,13 +164,18 @@ class TestDetectPlatforms:
         ],
     )
     def test_invalid_arn_handling(
-        self, broken_metadata_service, fake_aws_environment, arn
+        self,
+        unavailable_metadata_service_with_request_exception,
+        fake_aws_environment,
+        arn,
     ):
         fake_aws_environment.caller_identity = {"Arn": arn}
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "has_aws_identity" not in result
 
-    def test_missing_arn_handling(self, broken_metadata_service, fake_aws_environment):
+    def test_missing_arn_handling(
+        self, unavailable_metadata_service_with_request_exception, fake_aws_environment
+    ):
         fake_aws_environment.caller_identity = {"UserId": "test-user"}
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "has_aws_identity" not in result
@@ -165,29 +185,39 @@ class TestDetectPlatforms:
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "azure_managed_identity" not in result
 
-    def test_azure_function_missing_identity_endpoint(self, broken_metadata_service):
+    def test_azure_function_missing_identity_endpoint(
+        self, unavailable_metadata_service_with_request_exception
+    ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_azure_function" not in result
 
     def test_aws_ec2_empty_instance_document(
-        self, broken_metadata_service, fake_aws_environment
+        self, unavailable_metadata_service_with_request_exception, fake_aws_environment
     ):
         fake_aws_environment.instance_document = b""
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_ec2_instance" not in result
 
-    def test_aws_lambda_empty_task_root(self, broken_metadata_service):
+    def test_aws_lambda_empty_task_root(
+        self, unavailable_metadata_service_with_request_exception
+    ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_aws_lambda" not in result
 
-    def test_github_actions_missing_environment_variable(self, broken_metadata_service):
+    def test_github_actions_missing_environment_variable(
+        self, unavailable_metadata_service_with_request_exception
+    ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_github_action" not in result
 
-    def test_gce_cloud_run_service_missing_k_service(self, broken_metadata_service):
+    def test_gce_cloud_run_service_missing_k_service(
+        self, unavailable_metadata_service_with_request_exception
+    ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_gce_cloud_run_service" not in result
 
-    def test_gce_cloud_run_job_missing_cloud_run_job(self, broken_metadata_service):
+    def test_gce_cloud_run_job_missing_cloud_run_job(
+        self, unavailable_metadata_service_with_request_exception
+    ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_gce_cloud_run_job" not in result
