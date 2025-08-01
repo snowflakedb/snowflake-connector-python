@@ -80,7 +80,7 @@ class FakeMetadataService(ABC):
         return ConnectTimeout()
 
     def handle_unexpected_hostname(self):
-        return ConnectTimeout()
+        raise ConnectTimeout()
 
     def get_environment_variables(self) -> dict[str, str]:
         """Returns a dictionary of environment variables to patch in to fake the metadata service."""
@@ -101,7 +101,7 @@ class FakeMetadataService(ABC):
             logger.debug(
                 f"Received request to unexpected hostname {parsed_url.hostname}"
             )
-            raise self.handle_unexpected_hostname()
+            self.handle_unexpected_hostname()
 
         return self.handle_request(method, parsed_url, headers, timeout)
 
@@ -143,7 +143,7 @@ class FakeMetadataService(ABC):
 
 
 class UnavailableMetadataService(FakeMetadataService):
-    """Emulates an environment where all metadata services unavailable."""
+    """Emulates an environment where all metadata services are unavailable."""
 
     def reset_defaults(self):
         pass
@@ -164,7 +164,7 @@ class BrokenMetadataService(FakeMetadataService):
         pass
 
     def handle_unexpected_hostname(self):
-        return RequestException()
+        raise RequestException()
 
     @property
     def expected_hostnames(self):

@@ -102,7 +102,7 @@ class Auth:
         login_timeout: int | None = None,
         network_timeout: int | None = None,
         socket_timeout: int | None = None,
-        platform_detection_timeout: float | None = None,
+        platform_detection_timeout_seconds: float | None = None,
     ):
         return {
             "data": {
@@ -125,7 +125,7 @@ class Auth:
                     "NETWORK_TIMEOUT": network_timeout,
                     "SOCKET_TIMEOUT": socket_timeout,
                     "PLATFORM": detect_platforms(
-                        timeout_seconds=platform_detection_timeout
+                        platform_detection_timeout_seconds=platform_detection_timeout_seconds
                     ),
                 },
             },

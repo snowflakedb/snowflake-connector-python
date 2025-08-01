@@ -21,7 +21,7 @@ class _DetectionState(Enum):
     TIMEOUT = "timeout"
 
 
-def is_ec2_instance(timeout_seconds: float):
+def is_ec2_instance(platform_detection_timeout_seconds: float):
     """
     Check if the current environment is running on an AWS EC2 instance.
 
@@ -31,13 +31,15 @@ def is_ec2_instance(timeout_seconds: float):
     It will ignore the token if on IMDSv1 and use the token if on IMDSv2.
 
     Args:
-        timeout_seconds: Timeout value for the metadata service request.
+        platform_detection_timeout_seconds: Timeout value for the metadata service request.
 
     Returns:
         _DetectionState: DETECTED if running on EC2, NOT_DETECTED otherwise.
     """
     try:
-        fetcher = IMDSFetcher(timeout=timeout_seconds, num_attempts=1)
+        fetcher = IMDSFetcher(
+            timeout=platform_detection_timeout_seconds, num_attempts=1
+        )
         document = fetcher._get_request(
             "/latest/dynamic/instance-identity/document",
             None,
@@ -71,7 +73,7 @@ def is_aws_lambda():
 
 def is_valid_arn_for_wif(arn: str) -> bool:
     """
-    Validate if an AWS ARN is suitable for Web Identity Federation (WIF).
+    Validate if an AWS ARN is suitable for use with Snowflake's Workload Identity Federation (WIF).
 
     Args:
         arn: The AWS ARN string to validate.
@@ -86,7 +88,7 @@ def is_valid_arn_for_wif(arn: str) -> bool:
     return any(re.match(p, arn) for p in patterns)
 
 
-def has_aws_identity(timeout_seconds: float):
+def has_aws_identity(platform_detection_timeout_seconds: float):
     """
     Check if the current environment has a valid AWS identity for authentication.
 
@@ -94,31 +96,30 @@ def has_aws_identity(timeout_seconds: float):
     then we assume we have a valid AWS identity for authentication.
 
     Args:
-        timeout_seconds: Timeout value for AWS API calls.
+        platform_detection_timeout_seconds: Timeout value for AWS API calls.
 
     Returns:
         _DetectionState: DETECTED if valid AWS identity exists, NOT_DETECTED otherwise.
     """
     try:
         config = Config(
-            connect_timeout=timeout_seconds,
-            read_timeout=timeout_seconds,
+            connect_timeout=platform_detection_timeout_seconds,
+            read_timeout=platform_detection_timeout_seconds,
             retries={"total_max_attempts": 1},
         )
         caller_identity = boto3.client("sts", config=config).get_caller_identity()
         if not caller_identity or "Arn" not in caller_identity:
             return _DetectionState.NOT_DETECTED
-        else:
-            return (
-                _DetectionState.DETECTED
-                if is_valid_arn_for_wif(caller_identity["Arn"])
-                else _DetectionState.NOT_DETECTED
-            )
+        return (
+            _DetectionState.DETECTED
+            if is_valid_arn_for_wif(caller_identity["Arn"])
+            else _DetectionState.NOT_DETECTED
+        )
     except Exception:
         return _DetectionState.NOT_DETECTED
 
 
-def is_azure_vm(timeout_seconds: float):
+def is_azure_vm(platform_detection_timeout_seconds: float):
     """
     Check if the current environment is running on an Azure Virtual Machine.
 
@@ -126,7 +127,7 @@ def is_azure_vm(timeout_seconds: float):
     then we assume we are running on an Azure VM.
 
     Args:
-        timeout_seconds: Timeout value for the metadata service request.
+        platform_detection_timeout_seconds: Timeout value for the metadata service request.
 
     Returns:
         _DetectionState: DETECTED if on Azure VM, TIMEOUT if request times out,
@@ -136,7 +137,7 @@ def is_azure_vm(timeout_seconds: float):
         token_resp = requests.get(
             "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
             headers={"Metadata": "True"},
-            timeout=timeout_seconds,
+            timeout=platform_detection_timeout_seconds,
         )
         return (
             _DetectionState.DETECTED
@@ -174,7 +175,7 @@ def is_azure_function():
 
 
 def is_managed_identity_available_on_azure_vm(
-    timeout_seconds, resource="https://management.azure.com/"
+    platform_detection_timeout_seconds, resource="https://management.azure.com"
 ):
     """
     Check if Azure Managed Identity is available and accessible on an Azure VM.
@@ -184,7 +185,7 @@ def is_managed_identity_available_on_azure_vm(
     then we assume managed identity is available.
 
     Args:
-        timeout_seconds: Timeout value for the metadata service request.
+        platform_detection_timeout_seconds: Timeout value for the metadata service request.
         resource: The Azure resource URI to request a token for.
 
     Returns:
@@ -194,7 +195,9 @@ def is_managed_identity_available_on_azure_vm(
     endpoint = f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={resource}"
     headers = {"Metadata": "true"}
     try:
-        response = requests.get(endpoint, headers=headers, timeout=timeout_seconds)
+        response = requests.get(
+            endpoint, headers=headers, timeout=platform_detection_timeout_seconds
+        )
         return (
             _DetectionState.DETECTED
             if response.status_code == 200
@@ -206,7 +209,11 @@ def is_managed_identity_available_on_azure_vm(
         return _DetectionState.NOT_DETECTED
 
 
-def has_azure_managed_identity(timeout_seconds: float):
+def is_managed_identity_available_on_azure_function():
+    return bool(os.environ.get("IDENTITY_HEADER"))
+
+
+def has_azure_managed_identity(platform_detection_timeout_seconds: float):
     """
     Determine if Azure Managed Identity is available in the current environment.
 
@@ -214,38 +221,27 @@ def has_azure_managed_identity(timeout_seconds: float):
     then we assume managed identity is available.
     If we are on an Azure VM and can mint an access token from the managed identity endpoint,
     then we assume managed identity is available.
-    Assumes timeout state if either VM or Function detection timed out.
-    Otherwise, assumes it is not available
+    Handles Azure Functions first since the checks are faster
+    Handles Azure VM checks second since they involve network calls.
 
     Args:
-        timeout_seconds: Timeout value for managed identity checks.
+        platform_detection_timeout_seconds: Timeout value for managed identity checks.
 
     Returns:
         _DetectionState: DETECTED if managed identity is available, TIMEOUT if
                         detection timed out, NOT_DETECTED otherwise.
     """
-    has_azure_function_managed_identity = (
-        _DetectionState.DETECTED
-        if os.environ.get("IDENTITY_HEADER")
-        else _DetectionState.NOT_DETECTED
-    )
-    has_azure_vm_managed_identity = is_managed_identity_available_on_azure_vm(
-        timeout_seconds
-    )
-    if (
-        has_azure_vm_managed_identity == _DetectionState.DETECTED
-        or has_azure_function_managed_identity == _DetectionState.DETECTED
-    ):
-        return _DetectionState.DETECTED
-    if (
-        has_azure_vm_managed_identity == _DetectionState.TIMEOUT
-        or has_azure_function_managed_identity == _DetectionState.TIMEOUT
-    ):
-        return _DetectionState.TIMEOUT
-    return _DetectionState.NOT_DETECTED
+    # short circuit early to save on latency and avoid minting an unnecessary token
+    if is_azure_function() == _DetectionState.DETECTED:
+        return (
+            _DetectionState.DETECTED
+            if is_managed_identity_available_on_azure_function()
+            else _DetectionState.NOT_DETECTED
+        )
+    return is_managed_identity_available_on_azure_vm(platform_detection_timeout_seconds)
 
 
-def is_gce_vm(timeout_seconds: float):
+def is_gce_vm(platform_detection_timeout_seconds: float):
     """
     Check if the current environment is running on Google Compute Engine (GCE).
 
@@ -253,7 +249,7 @@ def is_gce_vm(timeout_seconds: float):
     "Metadata-Flavor: Google" header, then we assume we are running on GCE.
 
     Args:
-        timeout_seconds: Timeout value for the metadata service request.
+        platform_detection_timeout_seconds: Timeout value for the metadata service request.
 
     Returns:
         _DetectionState: DETECTED if on GCE, TIMEOUT if request times out,
@@ -261,7 +257,8 @@ def is_gce_vm(timeout_seconds: float):
     """
     try:
         response = requests.get(
-            "http://metadata.google.internal", timeout=timeout_seconds
+            "http://metadata.google.internal",
+            timeout=platform_detection_timeout_seconds,
         )
         return (
             _DetectionState.DETECTED
@@ -274,7 +271,7 @@ def is_gce_vm(timeout_seconds: float):
         return _DetectionState.NOT_DETECTED
 
 
-def is_gce_cloud_run_service():
+def is_gcp_cloud_run_service():
     """
     Check if the current environment is running in Google Cloud Run service.
 
@@ -293,7 +290,7 @@ def is_gce_cloud_run_service():
     )
 
 
-def is_gce_cloud_run_job():
+def is_gcp_cloud_run_job():
     """
     Check if the current environment is running in Google Cloud Run job.
 
@@ -312,7 +309,7 @@ def is_gce_cloud_run_job():
     )
 
 
-def has_gcp_identity(timeout_seconds: float):
+def has_gcp_identity(platform_detection_timeout_seconds: float):
     """
     Check if the current environment has a valid Google Cloud Platform identity.
 
@@ -320,7 +317,7 @@ def has_gcp_identity(timeout_seconds: float):
     and receive a non-empty response, then we assume we have a valid GCP identity.
 
     Args:
-        timeout_seconds: Timeout value for the metadata service request.
+        platform_detection_timeout_seconds: Timeout value for the metadata service request.
     Returns:
         _DetectionState: DETECTED if valid GCP identity exists, TIMEOUT if request
                         times out, NOT_DETECTED otherwise.
@@ -329,7 +326,7 @@ def has_gcp_identity(timeout_seconds: float):
         response = requests.get(
             "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email",
             headers={"Metadata-Flavor": "Google"},
-            timeout=timeout_seconds,
+            timeout=platform_detection_timeout_seconds,
         )
         return (
             _DetectionState.DETECTED
@@ -360,13 +357,13 @@ def is_github_action():
 
 
 @cache
-def detect_platforms(timeout_seconds: float | None) -> list[str]:
+def detect_platforms(platform_detection_timeout_seconds: float | None) -> list[str]:
     """
     Detect all potential platforms that the current environment may be running on.
     Swallows all exceptions and returns an empty list if any exception occurs to not affect main driver functionality.
 
     Args:
-        timeout_seconds: Timeout value for platform detection requests. Defaults to 0.2 seconds
+        platform_detection_timeout_seconds: Timeout value for platform detection requests. Defaults to 0.2 seconds
                 if None is provided.
 
     Returns:
@@ -375,27 +372,42 @@ def detect_platforms(timeout_seconds: float | None) -> list[str]:
                   exception occurs during detection.
     """
     try:
-        if timeout_seconds is None:
-            timeout_seconds = 0.2
+        if platform_detection_timeout_seconds is None:
+            platform_detection_timeout_seconds = 0.2
 
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        # Run environment-only checks synchronously (no network calls, no threading overhead)
+        platforms = {
+            "is_aws_lambda": is_aws_lambda(),
+            "is_azure_function": is_azure_function(),
+            "is_gce_cloud_run_service": is_gcp_cloud_run_service(),
+            "is_gce_cloud_run_job": is_gcp_cloud_run_job(),
+            "is_github_action": is_github_action(),
+        }
+
+        # Run network-calling functions in parallel
+        with ThreadPoolExecutor(max_workers=6) as executor:
             futures = {
-                "is_ec2_instance": executor.submit(is_ec2_instance, timeout_seconds),
-                "is_aws_lambda": executor.submit(is_aws_lambda),
-                "has_aws_identity": executor.submit(has_aws_identity, timeout_seconds),
-                "is_azure_vm": executor.submit(is_azure_vm, timeout_seconds),
-                "is_azure_function": executor.submit(is_azure_function),
-                "azure_managed_identity": executor.submit(
-                    has_azure_managed_identity, timeout_seconds
+                "is_ec2_instance": executor.submit(
+                    is_ec2_instance, platform_detection_timeout_seconds
                 ),
-                "is_gce_vm": executor.submit(is_gce_vm, timeout_seconds),
-                "is_gce_cloud_run_service": executor.submit(is_gce_cloud_run_service),
-                "is_gce_cloud_run_job": executor.submit(is_gce_cloud_run_job),
-                "has_gcp_identity": executor.submit(has_gcp_identity, timeout_seconds),
-                "is_github_action": executor.submit(is_github_action),
+                "has_aws_identity": executor.submit(
+                    has_aws_identity, platform_detection_timeout_seconds
+                ),
+                "is_azure_vm": executor.submit(
+                    is_azure_vm, platform_detection_timeout_seconds
+                ),
+                "azure_managed_identity": executor.submit(
+                    has_azure_managed_identity, platform_detection_timeout_seconds
+                ),
+                "is_gce_vm": executor.submit(
+                    is_gce_vm, platform_detection_timeout_seconds
+                ),
+                "has_gcp_identity": executor.submit(
+                    has_gcp_identity, platform_detection_timeout_seconds
+                ),
             }
 
-            platforms = {key: future.result() for key, future in futures.items()}
+            platforms.update({key: future.result() for key, future in futures.items()})
 
         detected_platforms = []
         for platform_name, detection_state in platforms.items():

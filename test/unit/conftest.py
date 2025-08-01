@@ -29,7 +29,7 @@ def disable_oob_telemetry():
 
 @pytest.fixture
 def unavailable_metadata_service():
-    """Emulates an environment where all metadata services unavailable."""
+    """Emulates an environment where all metadata services are unavailable."""
     with UnavailableMetadataService() as server:
         yield server
 
