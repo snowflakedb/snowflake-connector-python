@@ -262,7 +262,7 @@ def is_gce_vm(platform_detection_timeout_seconds: float):
         )
         return (
             _DetectionState.DETECTED
-            if response.headers.get("Metadata-Flavor") == "Google"
+            if response.headers and response.headers.get("Metadata-Flavor") == "Google"
             else _DetectionState.NOT_DETECTED
         )
     except requests.Timeout:

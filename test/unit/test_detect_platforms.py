@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import patch
+import time
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -10,8 +11,9 @@ from snowflake.connector.vendored.requests.exceptions import RequestException
 from src.snowflake.connector.vendored.requests import Response
 
 
-def build_response(status_code=200, headers=None):
+def build_response(content: bytes = b"", status_code: int = 200, headers=None):
     response = Response()
+    response._content = content
     response.status_code = status_code
     response.headers = headers
     return response
@@ -128,6 +130,66 @@ class TestDetectPlatforms:
         assert "is_gce_vm_timeout" in result
         assert "has_gcp_identity_timeout" in result
         assert "has_azure_managed_identity_timeout" in result
+
+    def test_detect_platforms_executes_in_parallel(self):
+        sleep_time = 2
+
+        def slow_requests_get(*args, **kwargs):
+            time.sleep(sleep_time)
+            return build_response(
+                status_code=200, headers={"Metadata-Flavor": "Google"}
+            )
+
+        def slow_boto3_client(*args, **kwargs):
+            time.sleep(sleep_time)
+            mock_client = Mock()
+            mock_client.get_caller_identity.return_value = {
+                "Arn": "arn:aws:iam::123456789012:user/TestUser"
+            }
+            return mock_client
+
+        def slow_imds_get_request(*args, **kwargs):
+            time.sleep(sleep_time)
+            return build_response(content=b"content", status_code=200)
+
+        def slow_imds_fetch_token(*args, **kwargs):
+            return "test-token"
+
+        # Mock all the network calls that run in parallel
+        with patch(
+            "snowflake.connector.platform_detection.requests.get",
+            side_effect=slow_requests_get,
+        ), patch(
+            "snowflake.connector.platform_detection.boto3.client",
+            side_effect=slow_boto3_client,
+        ), patch(
+            "snowflake.connector.platform_detection.IMDSFetcher._get_request",
+            side_effect=slow_imds_get_request,
+        ), patch(
+            "snowflake.connector.platform_detection.IMDSFetcher._fetch_metadata_token",
+            side_effect=slow_imds_fetch_token,
+        ):
+            start_time = time.time()
+            result = detect_platforms(platform_detection_timeout_seconds=10)
+            end_time = time.time()
+
+            execution_time = end_time - start_time
+
+            # Check that I/O calls are made in parallel. We shouldn't expect more than 2x the amount of time a single
+            # I/O operation takes. Which in this case is 2 seconds.
+            assert (
+                execution_time < 2 * sleep_time
+            ), f"Expected parallel execution to take <4s, but took {execution_time:.2f}s"
+            assert (
+                execution_time >= sleep_time
+            ), f"Expected at least 2s due to sleep, but took {execution_time:.2f}s"
+
+            assert "is_ec2_instance" in result
+            assert "has_aws_identity" in result
+            assert "is_azure_vm" in result
+            assert "has_azure_managed_identity" in result
+            assert "is_gce_vm" in result
+            assert "has_gcp_identity" in result
 
     @pytest.mark.parametrize(
         "arn",
