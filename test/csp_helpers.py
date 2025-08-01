@@ -444,4 +444,4 @@ class FakeAwsLambdaEnvironment(FakeAwsEnvironment):
 
     def __exit__(self, *args, **kwargs):
         self.os_environment_patch.__exit__(*args)
-        super().__exit__(args, **kwargs)
+        super().__exit__(*args, **kwargs)
