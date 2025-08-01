@@ -283,21 +283,14 @@ class FakeGceMetadataService(FakeMetadataService):
             raise HTTPError()
 
 
-class FakeGceCloudRunServiceService(FakeMetadataService):
+class FakeGceCloudRunServiceService(FakeGceMetadataService):
     """Emulates an environment with the GCE Cloud Run Service metadata service."""
-
-    @property
-    def expected_hostnames(self):
-        # Raise connection timeout since we don't have anything to mock currently
-        return []
-
-    def handle_request(self, method, parsed_url, headers, timeout):
-        pass
 
     def reset_defaults(self):
         self.k_service = "test-service"
         self.k_revision = "test-revision"
         self.k_configuration = "test-configuration"
+        super().reset_defaults()
 
     def get_environment_variables(self) -> dict[str, str]:
         return {
@@ -307,19 +300,13 @@ class FakeGceCloudRunServiceService(FakeMetadataService):
         }
 
 
-class FakeGceCloudRunJobService(FakeMetadataService):
+class FakeGceCloudRunJobService(FakeGceMetadataService):
     """Emulates an environment with the GCE Cloud Run Job metadata service."""
-
-    @property
-    def expected_hostnames(self):
-        return []
-
-    def handle_request(self, method, parsed_url, headers, timeout):
-        pass
 
     def reset_defaults(self):
         self.cloud_run_job = "test-job"
         self.cloud_run_execution = "test-execution"
+        super().reset_defaults()
 
     def get_environment_variables(self) -> dict[str, str]:
         return {
@@ -328,21 +315,22 @@ class FakeGceCloudRunJobService(FakeMetadataService):
         }
 
 
-class FakeGitHubActionsService(FakeMetadataService):
-    """Emulates an environment with the GitHub Actions metadata service."""
-
-    @property
-    def expected_hostnames(self):
-        return []
-
-    def handle_request(self, method, parsed_url, headers, timeout):
-        pass
-
-    def reset_defaults(self):
-        self.github_actions = "github-actions"
+class FakeGitHubActionsService:
+    """Emulates an environment running in GitHub Actions."""
 
     def get_environment_variables(self) -> dict[str, str]:
-        return {"GITHUB_ACTIONS": self.github_actions}
+        return {"GITHUB_ACTIONS": "github-actions"}
+
+    def __enter__(self):
+        # This doesn't clear, so it's additive to the existing environment.
+        self.os_environment_patch = patch.dict(
+            os.environ, self.get_environment_variables()
+        )
+        self.os_environment_patch.__enter__()
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        self.os_environment_patch.__exit__(*args, **kwargs)
 
 
 class FakeAwsEnvironment:
