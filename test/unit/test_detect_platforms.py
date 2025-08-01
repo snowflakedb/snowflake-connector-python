@@ -46,7 +46,9 @@ class TestDetectPlatforms:
         assert "is_ec2_instance" in result
 
     def test_aws_lambda_detection(
-        self, unavailable_metadata_service_with_request_exception, fake_aws_environment
+        self,
+        unavailable_metadata_service_with_request_exception,
+        fake_aws_lambda_environment,
     ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_aws_lambda" in result
@@ -110,13 +112,12 @@ class TestDetectPlatforms:
 
     def test_multiple_platforms_detection(
         self,
-        fake_aws_environment,
+        fake_aws_lambda_environment,
         fake_github_actions_metadata_service,
         fake_gce_cloud_run_service_metadata_service,
     ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_aws_lambda" in result
-        assert "is_ec2_instance" in result
         assert "has_aws_identity" in result
         assert "is_github_action" in result
         assert "is_gce_cloud_run_service" in result

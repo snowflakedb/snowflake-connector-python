@@ -318,19 +318,16 @@ class FakeGceCloudRunJobService(FakeGceMetadataService):
 class FakeGitHubActionsService:
     """Emulates an environment running in GitHub Actions."""
 
-    def get_environment_variables(self) -> dict[str, str]:
-        return {"GITHUB_ACTIONS": "github-actions"}
-
     def __enter__(self):
         # This doesn't clear, so it's additive to the existing environment.
         self.os_environment_patch = patch.dict(
-            os.environ, self.get_environment_variables()
+            os.environ, {"GITHUB_ACTIONS": "github-actions"}
         )
         self.os_environment_patch.__enter__()
         return self
 
     def __exit__(self, *args, **kwargs):
-        self.os_environment_patch.__exit__(*args, **kwargs)
+        self.os_environment_patch.__exit__(*args)
 
 
 class FakeAwsEnvironment:
@@ -351,7 +348,6 @@ class FakeAwsEnvironment:
             b'{"region": "us-east-1", "instanceId": "i-1234567890abcdef0"}'
         )
         self.metadata_token = "test-token"
-        self.lambda_task_root = "/var/task"
 
     def get_region(self):
         return self.region
@@ -382,8 +378,6 @@ class FakeAwsEnvironment:
         return mock_client
 
     def __enter__(self):
-        os.environ["LAMBDA_TASK_ROOT"] = self.lambda_task_root
-
         # Patch the relevant functions to do what we want.
         self.patchers = []
         self.patchers.append(
@@ -431,6 +425,21 @@ class FakeAwsEnvironment:
         return self
 
     def __exit__(self, *args, **kwargs):
-        os.environ.pop("LAMBDA_TASK_ROOT")
         for patcher in self.patchers:
             patcher.__exit__(*args, **kwargs)
+
+
+class FakeAwsLambdaEnvironment(FakeAwsEnvironment):
+    """Emulates an environment running in AWS Lambda."""
+
+    def __enter__(self):
+        # This doesn't clear, so it's additive to the existing environment.
+        self.os_environment_patch = patch.dict(
+            os.environ, {"LAMBDA_TASK_ROOT": "/var/task"}
+        )
+        self.os_environment_patch.__enter__()
+        return super().__enter__()
+
+    def __exit__(self, *args, **kwargs):
+        self.os_environment_patch.__exit__(*args)
+        super().__exit__(args, **kwargs)

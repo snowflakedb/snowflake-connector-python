@@ -6,6 +6,7 @@ from snowflake.connector.telemetry_oob import TelemetryService
 
 from ..csp_helpers import (
     FakeAwsEnvironment,
+    FakeAwsLambdaEnvironment,
     FakeAzureFunctionMetadataService,
     FakeAzureVmMetadataService,
     FakeGceCloudRunJobService,
@@ -37,6 +38,13 @@ def unavailable_metadata_service():
 def fake_aws_environment():
     """Emulates the AWS environment, returning dummy credentials."""
     with FakeAwsEnvironment() as env:
+        yield env
+
+
+@pytest.fixture
+def fake_aws_lambda_environment():
+    """Emulates the AWS Lambda environment, returning dummy credentials."""
+    with FakeAwsLambdaEnvironment() as env:
         yield env
 
 
