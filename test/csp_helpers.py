@@ -158,6 +158,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         # Defaults used for generating an Entra ID token. Can be overriden in individual tests.
         self.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
         self.iss = "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
+        self.has_token_endpoint = True
 
     @property
     def expected_hostnames(self):
@@ -179,6 +180,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
             and parsed_url.path == "/metadata/identity/oauth2/token"
             and headers.get("Metadata") == "True"
             and query_string["resource"]
+            and self.has_token_endpoint
         ):
             resource = query_string["resource"][0]
             self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource)

@@ -181,8 +181,10 @@ class TestDetectPlatforms:
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "has_aws_identity" not in result
 
-    def test_azure_managed_identity_wrong_issuer(self, fake_azure_vm_metadata_service):
-        fake_azure_vm_metadata_service.iss = "https://fake-issuer.com"
+    def test_azure_managed_identity_no_token_endpoint(
+        self, fake_azure_vm_metadata_service
+    ):
+        fake_azure_vm_metadata_service.has_token_endpoint = False
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "azure_managed_identity" not in result
 
