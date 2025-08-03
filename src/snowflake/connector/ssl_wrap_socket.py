@@ -48,16 +48,21 @@ _CURRENT_SESSION_MANAGER: ContextVar[weakref.ref[SessionManager] | None] = Conte
 
 
 def get_current_session_manager(
-    create_default_if_missing: bool = True,
+    create_default_if_missing: bool = True, **clone_kwargs
 ) -> SessionManager | None:
     """Return the SessionManager associated with the current handshake, if any.
 
     If the weak reference is dead or no manager was set, returns ``None``.
     """
-    ref = _CURRENT_SESSION_MANAGER.get()
-    if ref is None:
-        return SessionManager(use_pooling=False) if create_default_if_missing else None
-    return ref()
+    sm_weak_ref = _CURRENT_SESSION_MANAGER.get()
+    if sm_weak_ref is None:
+        return SessionManager() if create_default_if_missing else None
+    context_session_manager = sm_weak_ref()
+
+    if context_session_manager is None:
+        return SessionManager() if create_default_if_missing else None
+
+    return context_session_manager.shallow_clone(**clone_kwargs)
 
 
 def set_current_session_manager(sm: SessionManager | None) -> Any:

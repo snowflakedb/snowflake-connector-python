@@ -415,7 +415,9 @@ def create_attestation(
     """
     entra_resource = entra_resource or DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
     session_manager = (
-        session_manager.clone() if session_manager else SessionManager(use_pooling=True)
+        session_manager.shallow_clone()
+        if session_manager
+        else SessionManager(use_pooling=True)
     )
 
     attestation: WorkloadIdentityAttestation | None = None

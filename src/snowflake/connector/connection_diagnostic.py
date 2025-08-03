@@ -195,7 +195,7 @@ class ConnectionDiagnostic:
 
         # Use a non-pooled SessionManager—clone the given one or create a fresh instance if not supplied (should only happen in tests).
         self._session_manager = (
-            session_manager.clone(use_pooling=False)
+            session_manager.shallow_clone(use_pooling=False)
             if session_manager
             else SessionManager(use_pooling=False)
         )

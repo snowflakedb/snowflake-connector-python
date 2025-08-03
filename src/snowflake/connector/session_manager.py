@@ -236,17 +236,20 @@ class _RequestVerbsUsingSessionMixin:
 class SessionManager(_RequestVerbsUsingSessionMixin):
     def __init__(
         self,
-        config: HttpConfig | None,
+        config: HttpConfig | None = None,
+        *,
+        use_pooling: bool = True,
+        adapter_factory: Callable[..., HTTPAdapter] | None = None,
     ) -> None:
         """
         Create a new SessionManager.
         """
 
         if config is None:
-            logger.debug("Creating a SessionManager with default config values")
+            logger.debug("Creating a config for the SessionManager")
             config = HttpConfig(
-                adapter_factory=ProxySupportAdapterFactory(),
-                use_pooling=False,
+                adapter_factory=adapter_factory or ProxySupportAdapterFactory(),
+                use_pooling=use_pooling,
             )
         self._cfg: HttpConfig = config
 

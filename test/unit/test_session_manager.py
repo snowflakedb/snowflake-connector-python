@@ -143,7 +143,7 @@ def test_clone_independence():
         pass
     assert HOST_SFC_TEST_0 in manager.sessions_map
 
-    clone = manager.clone()
+    clone = manager.shallow_clone()
 
     assert clone is not manager
     assert clone.adapter_factory is manager.adapter_factory

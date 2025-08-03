@@ -548,7 +548,7 @@ class OCSPServer:
                     url = sf_cache_server_url
 
             # Obtain SessionManager from ssl_wrap_socket context var if available
-            session_manager = get_current_session_manager().clone(
+            session_manager = get_current_session_manager(
                 use_pooling=False
             ) or SessionManager(use_pooling=False)
             with session_manager.use_requests_session() as session:
@@ -1627,9 +1627,9 @@ class SnowflakeOCSP:
         # if none is set (e.g. standalone OCSP unit tests), fall back to a fresh
         # instance. Clone first to inherit adapter/proxy config without sharing
         # pools.
-        context_session_manager = get_current_session_manager()
+        context_session_manager = get_current_session_manager(use_pooling=False)
         session_manager: SessionManager = (
-            context_session_manager.clone(use_pooling=False)
+            context_session_manager
             if context_session_manager is not None
             else SessionManager(use_pooling=False)
         )
