@@ -215,7 +215,7 @@ def test_cursor_download_uses_original_http_config(
     with conn_cnx(disable_request_pooling=disable_request_pooling) as conn:
         cur = conn.cursor()
         cur.execute(query_sql)
-        original_cfg = conn.session_manager.config
+        original_cfg = conn.rest.session_manager.config
 
     # Connection is now closed; iterating cursor should download remaining chunks
     # It is important to make sure that all ResultBatch._download had access to either active connection's config or the one stored in self._session_manager

@@ -166,7 +166,7 @@ def create_batches_from_response(
                     column_converters,
                     cursor._use_dict_result,
                     json_result_force_utf8_decoding=cursor._connection._json_result_force_utf8_decoding,
-                    session_manager=cursor._connection.session_manager.shallow_clone(),
+                    session_manager=cursor._connection._session_manager.shallow_clone(),
                 )
                 for c in chunks
             ]
@@ -181,7 +181,7 @@ def create_batches_from_response(
                     cursor._connection._numpy,
                     schema,
                     cursor._connection._arrow_number_to_decimal,
-                    session_manager=cursor._connection.session_manager.shallow_clone(),
+                    session_manager=cursor._connection._session_manager.shallow_clone(),
                 )
                 for c in chunks
             ]
@@ -194,7 +194,7 @@ def create_batches_from_response(
             schema,
             column_converters,
             cursor._use_dict_result,
-            session_manager=cursor._connection.session_manager.shallow_clone(),
+            session_manager=cursor._connection._session_manager.shallow_clone(),
         )
     elif rowset_b64 is not None:
         first_chunk = ArrowResultBatch.from_data(
@@ -205,7 +205,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
-            session_manager=cursor._connection.session_manager.shallow_clone(),
+            session_manager=cursor._connection._session_manager.shallow_clone(),
         )
     else:
         logger.error(f"Don't know how to construct ResultBatches from response: {data}")
@@ -217,7 +217,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
-            session_manager=cursor._connection.session_manager.shallow_clone(),
+            session_manager=cursor._connection._session_manager.shallow_clone(),
         )
 
     return [first_chunk] + rest_of_chunks

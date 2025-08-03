@@ -893,14 +893,6 @@ class SnowflakeConnection:
     def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
         self._check_arrow_conversion_error_on_every_column = value
 
-    @property
-    def session_manager(self) -> SessionManager | None:
-        return self._session_manager
-
-    @property
-    def http_config(self) -> HttpConfig | None:
-        return self._http_config
-
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
@@ -928,7 +920,7 @@ class SnowflakeConnection:
                 proxy_port=self.proxy_port,
                 proxy_user=self.proxy_user,
                 proxy_password=self.proxy_password,
-                session_manager=self.session_manager.shallow_clone(use_pooling=False),
+                session_manager=self._session_manager.shallow_clone(use_pooling=False),
             )
             try:
                 connection_diag.run_test()
@@ -1121,7 +1113,7 @@ class SnowflakeConnection:
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
             connection=self,
-            session_manager=self.session_manager,  # connection shares the session pool used for making Backend related requests
+            session_manager=self._session_manager,  # connection shares the session pool used for making Backend related requests
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 

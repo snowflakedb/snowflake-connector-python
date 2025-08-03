@@ -289,7 +289,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
 
         Example::
 
-            no_pool_cfg = conn.http_config.copy_with(use_pooling=False)
+            no_pool_cfg = conn._http_config.copy_with(use_pooling=False)
             manager = SessionManager.from_config(no_pool_cfg)
         """
 
