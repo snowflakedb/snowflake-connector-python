@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import socket
 from unittest import mock
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
@@ -244,9 +245,11 @@ def test_auth_webbrowser_post(_, disable_console_login):
 )
 @patch("secrets.token_bytes", return_value=PROOF_KEY)
 def test_auth_webbrowser_fail_webbrowser(
-    _, capsys, input_text, expected_error, disable_console_login
+    _, caplog, input_text, expected_error, disable_console_login
 ):
     """Authentication by WebBrowser with failed to start web browser case."""
+
+    caplog.set_level(logging.INFO)
     rest = _init_rest(
         REF_SSO_URL, REF_PROOF_KEY, disable_console_login=disable_console_login
     )
@@ -275,15 +278,15 @@ def test_auth_webbrowser_fail_webbrowser(
             user=USER,
             password=PASSWORD,
         )
-    captured = capsys.readouterr()
-    assert captured.out == (
+    assert (
         "Initiating login request with your identity provider. A browser window "
         "should have opened for you to complete the login. If you can't see it, "
         "check existing browser windows, or your OS settings. Press CTRL+C to "
         f"abort and try again...\nGoing to open: {REF_SSO_URL if disable_console_login else REF_CONSOLE_LOGIN_SSO_URL} to authenticate...\nWe were unable to open a browser window for "
         "you, please open the url above manually then paste the URL you "
         "are redirected to into the terminal.\n"
-    )
+    ) in caplog.text
+
     if expected_error:
         assert rest._connection.errorhandler.called  # an error
         assert auth.assertion_content is None
@@ -299,8 +302,11 @@ def test_auth_webbrowser_fail_webbrowser(
 
 @pytest.mark.parametrize("disable_console_login", [True, False])
 @patch("secrets.token_bytes", return_value=PROOF_KEY)
-def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
+def test_auth_webbrowser_fail_webserver(_, caplog, disable_console_login):
     """Authentication by WebBrowser with failed to start web browser case."""
+
+    caplog.set_level(logging.INFO)
+
     rest = _init_rest(
         REF_SSO_URL, REF_PROOF_KEY, disable_console_login=disable_console_login
     )
@@ -334,13 +340,13 @@ def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
             user=USER,
             password=PASSWORD,
         )
-        captured = capsys.readouterr()
-        assert captured.out == (
+        assert (
             "Initiating login request with your identity provider. A browser window "
             "should have opened for you to complete the login. If you can't see it, "
             "check existing browser windows, or your OS settings. Press CTRL+C to "
             f"abort and try again...\nGoing to open: {REF_SSO_URL if disable_console_login else REF_CONSOLE_LOGIN_SSO_URL} to authenticate...\n"
-        )
+        ) in caplog.text
+
         assert rest._connection.errorhandler.called  # an error
         assert auth.assertion_content is None
 
