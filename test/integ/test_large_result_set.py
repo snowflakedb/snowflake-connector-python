@@ -189,7 +189,7 @@ def test_cursor_download_uses_original_http_config(
     monkeypatch, conn_cnx, ingest_data, db_parameters, disable_request_pooling
 ):
     """Cursor iterating after connection context ends must reuse original HTTP config."""
-    from src.snowflake.connector.result_batch import ResultBatch
+    from snowflake.connector.result_batch import ResultBatch
 
     download_cfgs = []
     original_download = ResultBatch._download

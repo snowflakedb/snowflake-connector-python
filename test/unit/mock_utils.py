@@ -43,7 +43,7 @@ def mock_connection(
         _backoff_policy=backoff_policy,
         backoff_policy=backoff_policy,
         _disable_saml_url_check=disable_saml_url_check,
-        session_manager=session_manager or get_mock_session_manager(),
+        _session_manager=session_manager or get_mock_session_manager(),
     )
 
 
