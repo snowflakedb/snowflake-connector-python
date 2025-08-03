@@ -5,7 +5,8 @@ import collections
 import contextlib
 import itertools
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Generator, Mapping, NamedTuple
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Any, Callable, Generator, Mapping
 
 from .compat import urlparse
 from .vendored import requests
@@ -23,17 +24,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 REQUESTS_RETRY = 1  # requests library builtin retry
-
-
-class HttpConfig(NamedTuple):
-    """Immutable HTTP configuration shared by SessionManager instances."""
-
-    adapter_factory: Callable[..., HTTPAdapter]
-    use_pooling: bool = True
-    max_retries: int | None = REQUESTS_RETRY
-
-    def copy_with(self, **overrides: Any) -> HttpConfig:
-        return self._replace(**overrides)
 
 
 class ProxySupportAdapter(HTTPAdapter):
@@ -81,6 +71,21 @@ class AdapterFactory(abc.ABC):
 class ProxySupportAdapterFactory(AdapterFactory):
     def __call__(self, *args, **kwargs) -> ProxySupportAdapter:
         return ProxySupportAdapter(*args, **kwargs)
+
+
+@dataclass(frozen=True, slots=True)
+class HttpConfig:
+    """Immutable HTTP configuration shared by SessionManager instances."""
+
+    adapter_factory: Callable[..., HTTPAdapter] = field(
+        default_factory=ProxySupportAdapterFactory
+    )
+    use_pooling: bool = True
+    max_retries: int | None = REQUESTS_RETRY
+
+    def copy_with(self, **overrides: Any) -> HttpConfig:
+        """Return a new HttpConfig with overrides applied."""
+        return replace(self, **overrides)
 
 
 class SessionPool:
@@ -234,23 +239,14 @@ class _RequestVerbsUsingSessionMixin:
 
 
 class SessionManager(_RequestVerbsUsingSessionMixin):
-    def __init__(
-        self,
-        config: HttpConfig | None = None,
-        *,
-        use_pooling: bool = True,
-        adapter_factory: Callable[..., HTTPAdapter] | None = None,
-    ) -> None:
+    def __init__(self, config: HttpConfig | None = None, **http_config_kwargs) -> None:
         """
         Create a new SessionManager.
         """
 
         if config is None:
             logger.debug("Creating a config for the SessionManager")
-            config = HttpConfig(
-                adapter_factory=adapter_factory or ProxySupportAdapterFactory(),
-                use_pooling=use_pooling,
-            )
+            config = HttpConfig(**http_config_kwargs)
         self._cfg: HttpConfig = config
 
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
@@ -268,7 +264,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
         """
 
         if overrides:
-            cfg = cfg._replace(**overrides)  # type: ignore[arg-type]
+            cfg = cfg.copy_with(**overrides)
         return cls(config=cfg)
 
     @property
@@ -281,7 +277,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
 
     @use_pooling.setter
     def use_pooling(self, value: bool) -> None:
-        self._cfg = self._cfg._replace(use_pooling=value)
+        self._cfg = self._cfg.copy_with(use_pooling=value)
 
     @property
     def adapter_factory(self) -> Callable[..., HTTPAdapter]:
@@ -289,7 +285,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
 
     @adapter_factory.setter
     def adapter_factory(self, value: Callable[..., HTTPAdapter]) -> None:
-        self._cfg = self._cfg._replace(adapter_factory=value)
+        self._cfg = self._cfg.copy_with(adapter_factory=value)
 
     @property
     def sessions_map(self) -> dict[str, SessionPool]:

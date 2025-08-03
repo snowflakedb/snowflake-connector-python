@@ -1192,6 +1192,30 @@ def test_client_failover_connection_url(conn_cnx):
             ]
 
 
+@pytest.mark.skipolddriver
+def test_ocsp_and_rest_pool_isolation(conn_cnx):
+    """Ensure REST shares its SessionManager with the connection and OCSP uses a separate one."""
+    from snowflake.connector.ssl_wrap_socket import get_current_session_manager
+
+    with conn_cnx() as conn:
+        # Run a simple query to ensure handshake, REST, and possible OCSP traffic
+        with conn.cursor() as cur:
+            cur.execute("select 1").fetchall()
+
+        rest_sm = conn.rest.session_manager
+        ocsp_sm = get_current_session_manager(create_default_if_missing=False)
+
+        # Connection and REST should share the same manager (and therefore pools)
+        assert rest_sm is conn.session_manager
+        # Ensure at least one host pool exists after query
+        assert rest_sm.sessions_map, "REST did not create any SessionPool"
+
+        # OCSP and REST must not share pools
+        shared_hosts = set(rest_sm.sessions_map) & set(ocsp_sm.sessions_map)
+        for host in shared_hosts:
+            assert rest_sm.sessions_map[host] is not ocsp_sm.sessions_map[host]
+
+
 def test_connection_gc(conn_cnx):
     """This test makes sure that a heartbeat thread doesn't prevent garbage collection of SnowflakeConnection."""
     conn = conn_cnx(client_session_keep_alive=True).__enter__()
