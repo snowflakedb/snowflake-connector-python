@@ -103,7 +103,7 @@ class ProxySupportAdapterFactory(AdapterFactory):
         return ProxySupportAdapter(*args, **kwargs)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class HttpConfig:
     """Immutable HTTP configuration shared by SessionManager instances."""
 

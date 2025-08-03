@@ -1205,7 +1205,7 @@ def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
         with conn1.cursor() as cur:
             cur.execute("select 1").fetchall()
 
-        rest_sm_1 = conn1.session_manager
+        rest_sm_1 = conn1.rest.session_manager
 
     assert rest_sm_1.sessions_map or disable_request_pooling
 
@@ -1223,7 +1223,7 @@ def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
         with conn2.cursor() as cur:
             cur.execute("select 1").fetchall()
 
-            rest_sm_2 = conn2.session_manager
+            rest_sm_2 = conn2.rest.session_manager
 
     assert rest_sm_2.sessions_map or disable_request_pooling
     assert rest_sm_2 is not rest_sm_1
