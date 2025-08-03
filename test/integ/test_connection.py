@@ -1193,17 +1193,21 @@ def test_client_failover_connection_url(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_and_rest_pool_isolation(conn_cnx):
+@pytest.mark.parametrize("disable_request_pooling", [True, False])
+def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
     """Each connection’s SessionManager is isolated; OCSP picks the right one."""
     from snowflake.connector.ssl_wrap_socket import get_current_session_manager
 
-    # ---- Connection #1 --------------------------------------------------
-    with conn_cnx() as conn1:
+    #
+    with conn_cnx(
+        disable_request_pooling=disable_request_pooling,
+    ) as conn1:
         with conn1.cursor() as cur:
             cur.execute("select 1").fetchall()
 
         rest_sm_1 = conn1.session_manager
-    assert rest_sm_1.sessions_map
+
+    assert rest_sm_1.sessions_map or disable_request_pooling
 
     with rest_sm_1.use_requests_session("https://example.com"):
         ocsp_sm_1 = get_current_session_manager(create_default_if_missing=False)
@@ -1213,13 +1217,15 @@ def test_ocsp_and_rest_pool_isolation(conn_cnx):
     assert get_current_session_manager(create_default_if_missing=False) is None
 
     # ---- Connection #2 --------------------------------------------------
-    with conn_cnx() as conn2:
+    with conn_cnx(
+        disable_request_pooling=disable_request_pooling,
+    ) as conn2:
         with conn2.cursor() as cur:
             cur.execute("select 1").fetchall()
 
             rest_sm_2 = conn2.session_manager
 
-    assert rest_sm_2.sessions_map
+    assert rest_sm_2.sessions_map or disable_request_pooling
     assert rest_sm_2 is not rest_sm_1
 
     with rest_sm_2.use_requests_session("https://example.com"):
