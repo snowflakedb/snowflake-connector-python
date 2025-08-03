@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 import collections
 import contextlib
+import functools
 import itertools
 import logging
 from dataclasses import dataclass, field, replace
@@ -24,6 +25,35 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 REQUESTS_RETRY = 1  # requests library builtin retry
+
+
+def _propagate_session_manager_to_ocsp(generator_func):
+    """Decorator: push self into ssl_wrap_socket ContextVar for OCSP duration.
+
+    Designed for methods that are implemented as generator functions.
+    It performs a push-pop (``set_current_session_manager`` / ``reset_current_session_manager``)
+    around the execution of the generator so that any TLS handshake & OCSP
+    validation triggered by the HTTP request can reuse the correct proxy /
+    retry configuration.
+
+    Can be removed, when OCSP is deprecated.
+    """
+
+    @functools.wraps(generator_func)
+    def wrapper(self, *args, **kwargs):
+        # Local import avoids a circular dependency at module load time.
+        from snowflake.connector.ssl_wrap_socket import (
+            reset_current_session_manager,
+            set_current_session_manager,
+        )
+
+        context_token = set_current_session_manager(self)
+        try:
+            yield from generator_func(self, *args, **kwargs)
+        finally:
+            reset_current_session_manager(context_token)
+
+    return wrapper
 
 
 class ProxySupportAdapter(HTTPAdapter):
@@ -331,6 +361,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
         return session
 
     @contextlib.contextmanager
+    @_propagate_session_manager_to_ocsp
     def use_requests_session(
         self, url: str | bytes | None = None, use_pooling: bool | None = None
     ) -> Generator[Session, Any, None]:
