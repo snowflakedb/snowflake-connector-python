@@ -1194,26 +1194,46 @@ def test_client_failover_connection_url(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_ocsp_and_rest_pool_isolation(conn_cnx):
-    """Ensure REST shares its SessionManager with the connection and OCSP uses a separate one."""
+    """Each connection’s SessionManager is isolated; OCSP picks the right one."""
     from snowflake.connector.ssl_wrap_socket import get_current_session_manager
 
-    with conn_cnx() as conn:
-        # Run a simple query to ensure handshake, REST, and possible OCSP traffic
-        with conn.cursor() as cur:
+    # ---- Connection #1 --------------------------------------------------
+    with conn_cnx() as conn1:
+        with conn1.cursor() as cur:
             cur.execute("select 1").fetchall()
 
-        rest_sm = conn.rest.session_manager
-        ocsp_sm = get_current_session_manager(create_default_if_missing=False)
+        rest_sm_1 = conn1.session_manager
+    assert rest_sm_1.sessions_map
 
-        # Connection and REST should share the same manager (and therefore pools)
-        assert rest_sm is conn.session_manager
-        # Ensure at least one host pool exists after query
-        assert rest_sm.sessions_map, "REST did not create any SessionPool"
+    with rest_sm_1.use_requests_session("https://example.com"):
+        ocsp_sm_1 = get_current_session_manager(create_default_if_missing=False)
+        assert ocsp_sm_1 is not rest_sm_1
+        assert ocsp_sm_1.config == rest_sm_1.config
 
-        # OCSP and REST must not share pools
-        shared_hosts = set(rest_sm.sessions_map) & set(ocsp_sm.sessions_map)
-        for host in shared_hosts:
-            assert rest_sm.sessions_map[host] is not ocsp_sm.sessions_map[host]
+    assert get_current_session_manager(create_default_if_missing=False) is None
+
+    # ---- Connection #2 --------------------------------------------------
+    with conn_cnx() as conn2:
+        with conn2.cursor() as cur:
+            cur.execute("select 1").fetchall()
+
+            rest_sm_2 = conn2.session_manager
+
+    assert rest_sm_2.sessions_map
+    assert rest_sm_2 is not rest_sm_1
+
+    with rest_sm_2.use_requests_session("https://example.com"):
+        ocsp_sm_2 = get_current_session_manager(create_default_if_missing=False)
+        assert ocsp_sm_2 is not rest_sm_2
+        assert ocsp_sm_2.config == rest_sm_2.config
+
+    # After second request the ContextVar should again be cleared
+    assert get_current_session_manager(create_default_if_missing=False) is None
+
+    # ---- Pools must not be shared across connections --------------------
+    shared_hosts = set(rest_sm_1.sessions_map) & set(rest_sm_2.sessions_map)
+    for host in shared_hosts:
+        assert rest_sm_1.sessions_map[host] is not rest_sm_2.sessions_map[host]
 
 
 def test_connection_gc(conn_cnx):
