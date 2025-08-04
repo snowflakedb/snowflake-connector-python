@@ -20,6 +20,7 @@ from pytz import UTC
 from .compat import IS_BINARY, IS_NUMERIC
 from .errorcode import ER_NOT_SUPPORT_DATA_TYPE
 from .errors import ProgrammingError
+from .interval_util import interval_year_month_to_string
 from .sfbinaryformat import binary_to_python, binary_to_snowflake
 from .sfdatetime import sfdatetime_total_seconds_from_timedelta
 
@@ -354,6 +355,28 @@ class SnowflakeConverter:
         self, ctx: dict[str, str | None] | dict[str, str]
     ) -> Callable:
         return lambda value: value in ("1", "TRUE")
+
+    def _INTERVAL_YEAR_MONTH_to_python(self, ctx: dict[str, Any]) -> Callable:
+        return lambda v: interval_year_month_to_string(int(v))
+
+    def _INTERVAL_YEAR_MONTH_numpy_to_python(self, ctx: dict[str, Any]) -> Callable:
+        return lambda v: numpy.timedelta64(int(v), "M")
+
+    def _INTERVAL_DAY_TIME_to_python(self, ctx: dict[str, Any]) -> Callable:
+        # Python timedelta only supports microsecond precision. We receive value in
+        # nanoseconds.
+        return lambda v: timedelta(microseconds=int(v) // 1000)
+
+    def _INTERVAL_DAY_TIME_numpy_to_python(self, ctx: dict[str, Any]) -> Callable:
+        # Last 4 bits of the precision are used to store the leading field precision of
+        # the interval.
+        lfp = ctx["precision"] & 0x0F
+        # Numpy timedelta only supports up to 64-bit integers. If the leading field
+        # precision is higher than 5 we receive 16 byte integer from server. So we need
+        # to change the unit to milliseconds to fit in 64-bit integer.
+        if lfp > 5:
+            return lambda v: numpy.timedelta64(int(v) // 1_000_000, "ms")
+        return lambda v: numpy.timedelta64(int(v), "ns")
 
     def snowflake_type(self, value: Any) -> str | None:
         """Returns Snowflake data type for the value. This is used for qmark parameter style."""
