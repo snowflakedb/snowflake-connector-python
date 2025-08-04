@@ -68,29 +68,70 @@ def test_basic(conn_testaccount):
     assert conn_testaccount.session_id
 
 
-def test_connection_without_schema(conn_cnx):
+def test_connection_without_schema(db_parameters):
     """Basic Connection test without schema."""
-    with conn_cnx(schema=None, timezone="UTC") as cnx:
-        assert cnx, "invalid cnx"
+    cnx = snowflake.connector.connect(
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        database=db_parameters["database"],
+        protocol=db_parameters["protocol"],
+        timezone="UTC",
+    )
+    assert cnx, "invalid cnx"
+    cnx.close()
 
 
-def test_connection_without_database_schema(conn_cnx):
+def test_connection_without_database_schema(db_parameters):
     """Basic Connection test without database and schema."""
-    with conn_cnx(database=None, schema=None, timezone="UTC") as cnx:
-        assert cnx, "invalid cnx"
+    cnx = snowflake.connector.connect(
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        protocol=db_parameters["protocol"],
+        timezone="UTC",
+    )
+    assert cnx, "invalid cnx"
+    cnx.close()
 
 
-def test_connection_without_database2(conn_cnx):
+def test_connection_without_database2(db_parameters):
     """Basic Connection test without database."""
-    with conn_cnx(database=None, timezone="UTC") as cnx:
-        assert cnx, "invalid cnx"
+    cnx = snowflake.connector.connect(
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        schema=db_parameters["schema"],
+        protocol=db_parameters["protocol"],
+        timezone="UTC",
+    )
+    assert cnx, "invalid cnx"
+    cnx.close()
 
 
-def test_with_config(conn_cnx):
+def test_with_config(db_parameters):
     """Creates a connection with the config parameter."""
     from ..conftest import get_server_parameter_value
 
-    with conn_cnx(timezone="UTC") as cnx:
+    config = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "account": db_parameters["account"],
+        "schema": db_parameters["schema"],
+        "database": db_parameters["database"],
+        "protocol": db_parameters["protocol"],
+        "timezone": "UTC",
+    }
+    cnx = snowflake.connector.connect(**config)
+    try:
         assert cnx, "invalid cnx"
 
         # Check what the server default is to make test environment-aware
@@ -108,10 +149,12 @@ def test_with_config(conn_cnx):
             assert (
                 not cnx.client_session_keep_alive
             ), "Expected client_session_keep_alive=False when server default unknown"
+    finally:
+        cnx.close()
 
 
 @pytest.mark.skipolddriver
-def test_with_tokens(conn_cnx):
+def test_with_tokens(conn_cnx, db_parameters):
     """Creates a connection using session and master token."""
     try:
         with conn_cnx(
@@ -120,13 +163,15 @@ def test_with_tokens(conn_cnx):
             assert initial_cnx, "invalid initial cnx"
             master_token = initial_cnx.rest._master_token
             session_token = initial_cnx.rest._token
-            token_cnx = create_connection(
-                "default", session_token=session_token, master_token=master_token
-            )
-            try:
+            with snowflake.connector.connect(
+                account=db_parameters["account"],
+                host=db_parameters["host"],
+                port=db_parameters["port"],
+                protocol=db_parameters["protocol"],
+                session_token=session_token,
+                master_token=master_token,
+            ) as token_cnx:
                 assert token_cnx, "invalid second cnx"
-            finally:
-                token_cnx.close()
     except Exception:
         # This is my way of guaranteeing that we'll not expose the
         # sensitive information that this test needs to handle.
@@ -135,7 +180,7 @@ def test_with_tokens(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_with_tokens_expired(conn_cnx):
+def test_with_tokens_expired(conn_cnx, db_parameters):
     """Creates a connection using session and master token."""
     try:
         with conn_cnx(
@@ -146,8 +191,13 @@ def test_with_tokens_expired(conn_cnx):
             session_token = initial_cnx._rest._token
 
         with pytest.raises(ProgrammingError):
-            token_cnx = create_connection(
-                "default", session_token=session_token, master_token=master_token
+            token_cnx = snowflake.connector.connect(
+                account=db_parameters["account"],
+                host=db_parameters["host"],
+                port=db_parameters["port"],
+                protocol=db_parameters["protocol"],
+                session_token=session_token,
+                master_token=master_token,
             )
             token_cnx.close()
     except Exception:
@@ -157,50 +207,123 @@ def test_with_tokens_expired(conn_cnx):
         pytest.fail("something failed", pytrace=False)
 
 
-def test_keep_alive_true(conn_cnx):
+def test_keep_alive_true(db_parameters):
     """Creates a connection with client_session_keep_alive parameter."""
-    with conn_cnx(timezone="UTC", client_session_keep_alive=True) as cnx:
+    config = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "account": db_parameters["account"],
+        "schema": db_parameters["schema"],
+        "database": db_parameters["database"],
+        "protocol": db_parameters["protocol"],
+        "timezone": "UTC",
+        "client_session_keep_alive": True,
+    }
+    cnx = snowflake.connector.connect(**config)
+    try:
         assert cnx.client_session_keep_alive
+    finally:
+        cnx.close()
 
 
-def test_keep_alive_heartbeat_frequency(conn_cnx):
+def test_keep_alive_heartbeat_frequency(db_parameters):
     """Tests heartbeat setting.
 
     Creates a connection with client_session_keep_alive_heartbeat_frequency
     parameter.
     """
-    with conn_cnx(
-        timezone="UTC",
-        client_session_keep_alive=True,
-        client_session_keep_alive_heartbeat_frequency=1000,
-    ) as cnx:
+    config = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "account": db_parameters["account"],
+        "schema": db_parameters["schema"],
+        "database": db_parameters["database"],
+        "protocol": db_parameters["protocol"],
+        "timezone": "UTC",
+        "client_session_keep_alive": True,
+        "client_session_keep_alive_heartbeat_frequency": 1000,
+    }
+    cnx = snowflake.connector.connect(**config)
+    try:
         assert cnx.client_session_keep_alive_heartbeat_frequency == 1000
+    finally:
+        cnx.close()
 
 
 @pytest.mark.skipolddriver
-def test_keep_alive_heartbeat_frequency_min(conn_cnx):
+def test_keep_alive_heartbeat_frequency_min(db_parameters):
     """Tests heartbeat setting with custom frequency.
 
     Creates a connection with client_session_keep_alive_heartbeat_frequency parameter and set the minimum frequency.
     Also if a value comes as string, should be properly converted to int and not fail assertion.
     """
-    with conn_cnx(
-        timezone="UTC",
-        client_session_keep_alive=True,
-        client_session_keep_alive_heartbeat_frequency="10",
-    ) as cnx:
+    config = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "account": db_parameters["account"],
+        "schema": db_parameters["schema"],
+        "database": db_parameters["database"],
+        "protocol": db_parameters["protocol"],
+        "timezone": "UTC",
+        "client_session_keep_alive": True,
+        "client_session_keep_alive_heartbeat_frequency": "10",
+    }
+    cnx = snowflake.connector.connect(**config)
+    try:
         # The min value of client_session_keep_alive_heartbeat_frequency
         # is 1/16 of master token validity, so 14400 / 4 /4 => 900
         assert cnx.client_session_keep_alive_heartbeat_frequency == 900
+    finally:
+        cnx.close()
 
 
-def test_bad_db(conn_cnx):
+@pytest.mark.skipolddriver
+def test_platform_detection_timeout(db_parameters):
+    """Tests platform detection timeout.
+
+    Creates a connection with platform_detection_timeout parameter.
+    """
+    config = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "account": db_parameters["account"],
+        "schema": db_parameters["schema"],
+        "database": db_parameters["database"],
+        "protocol": db_parameters["protocol"],
+        "timezone": "UTC",
+        "platform_detection_timeout_seconds": 2.5,
+    }
+    cnx = snowflake.connector.connect(**config)
+    try:
+        assert cnx.platform_detection_timeout_seconds == 2.5
+    finally:
+        cnx.close()
+
+
+def test_bad_db(db_parameters):
     """Attempts to use a bad DB."""
-    with conn_cnx(database="baddb") as cnx:
-        assert cnx, "invald cnx"
+    cnx = snowflake.connector.connect(
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        protocol=db_parameters["protocol"],
+        database="baddb",
+    )
+    assert cnx, "invald cnx"
+    cnx.close()
 
 
-def test_with_string_login_timeout(conn_cnx):
+def test_with_string_login_timeout(db_parameters):
     """Test that login_timeout when passed as string does not raise TypeError.
 
     In this test, we pass bad login credentials to raise error and trigger login
@@ -208,116 +331,176 @@ def test_with_string_login_timeout(conn_cnx):
     comes from str - int arithmetic.
     """
     with pytest.raises(DatabaseError):
-        with conn_cnx(
+        snowflake.connector.connect(
             protocol="http",
             user="bogus",
             password="bogus",
+            host=db_parameters["host"],
+            port=db_parameters["port"],
+            account=db_parameters["account"],
             login_timeout="5",
-        ):
-            pass
+        )
 
 
 @pytest.mark.skip(reason="the test is affected by CI breaking change")
-def test_bogus(conn_cnx):
+def test_bogus(db_parameters):
     """Attempts to login with invalid user name and password.
 
     Notes:
         This takes a long time.
     """
     with pytest.raises(DatabaseError):
-        with conn_cnx(
+        snowflake.connector.connect(
             protocol="http",
             user="bogus",
             password="bogus",
-            account="testaccount123",
+            host=db_parameters["host"],
+            port=db_parameters["port"],
+            account=db_parameters["account"],
             login_timeout=5,
-            disable_ocsp_checks=True,
-        ):
-            pass
+        )
 
     with pytest.raises(DatabaseError):
-        with conn_cnx(
+        snowflake.connector.connect(
             protocol="http",
             user="bogus",
             password="bogus",
             account="testaccount123",
+            host=db_parameters["host"],
+            port=db_parameters["port"],
             login_timeout=5,
-        ):
-            pass
+            disable_ocsp_checks=True,
+        )
+
+    with pytest.raises(DatabaseError):
+        snowflake.connector.connect(
+            protocol="http",
+            user="snowman",
+            password="",
+            account="testaccount123",
+            host=db_parameters["host"],
+            port=db_parameters["port"],
+            login_timeout=5,
+        )
 
     with pytest.raises(ProgrammingError):
-        with conn_cnx(
+        snowflake.connector.connect(
             protocol="http",
             user="",
             password="password",
             account="testaccount123",
+            host=db_parameters["host"],
+            port=db_parameters["port"],
             login_timeout=5,
-        ):
-            pass
+        )
 
 
-def test_invalid_application(conn_cnx):
+def test_invalid_application(db_parameters):
     """Invalid application name."""
     with pytest.raises(snowflake.connector.Error):
-        with conn_cnx(application="%%%"):
-            pass
+        snowflake.connector.connect(
+            protocol=db_parameters["protocol"],
+            user=db_parameters["user"],
+            password=db_parameters["password"],
+            application="%%%",
+        )
 
 
-def test_valid_application(conn_cnx):
+def test_valid_application(db_parameters):
     """Valid application name."""
     application = "Special_Client"
-    with conn_cnx(application=application) as cnx:
-        assert cnx.application == application, "Must be valid application"
+    cnx = snowflake.connector.connect(
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        application=application,
+        protocol=db_parameters["protocol"],
+    )
+    assert cnx.application == application, "Must be valid application"
+    cnx.close()
 
 
-def test_invalid_default_parameters(conn_cnx):
+def test_invalid_default_parameters(db_parameters):
     """Invalid database, schema, warehouse and role name."""
-    with conn_cnx(
+    cnx = snowflake.connector.connect(
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        protocol=db_parameters["protocol"],
         database="neverexists",
         schema="neverexists",
         warehouse="neverexits",
-    ) as cnx:
-        assert cnx, "Must be success"
+    )
+    assert cnx, "Must be success"
 
     with pytest.raises(snowflake.connector.DatabaseError):
         # must not success
-        with conn_cnx(
+        snowflake.connector.connect(
+            user=db_parameters["user"],
+            password=db_parameters["password"],
+            host=db_parameters["host"],
+            port=db_parameters["port"],
+            account=db_parameters["account"],
+            protocol=db_parameters["protocol"],
             database="neverexists",
             schema="neverexists",
             validate_default_parameters=True,
-        ):
-            pass
+        )
 
     with pytest.raises(snowflake.connector.DatabaseError):
         # must not success
-        with conn_cnx(
+        snowflake.connector.connect(
+            user=db_parameters["user"],
+            password=db_parameters["password"],
+            host=db_parameters["host"],
+            port=db_parameters["port"],
+            account=db_parameters["account"],
+            protocol=db_parameters["protocol"],
+            database=db_parameters["database"],
             schema="neverexists",
             validate_default_parameters=True,
-        ):
-            pass
+        )
 
     with pytest.raises(snowflake.connector.DatabaseError):
         # must not success
-        with conn_cnx(
+        snowflake.connector.connect(
+            user=db_parameters["user"],
+            password=db_parameters["password"],
+            host=db_parameters["host"],
+            port=db_parameters["port"],
+            account=db_parameters["account"],
+            protocol=db_parameters["protocol"],
+            database=db_parameters["database"],
+            schema=db_parameters["schema"],
             warehouse="neverexists",
             validate_default_parameters=True,
-        ):
-            pass
+        )
 
     # Invalid role name is already validated
     with pytest.raises(snowflake.connector.DatabaseError):
         # must not success
-        with conn_cnx(
+        snowflake.connector.connect(
+            user=db_parameters["user"],
+            password=db_parameters["password"],
+            host=db_parameters["host"],
+            port=db_parameters["port"],
+            account=db_parameters["account"],
+            protocol=db_parameters["protocol"],
+            database=db_parameters["database"],
+            schema=db_parameters["schema"],
             role="neverexists",
-        ):
-            pass
+        )
 
 
 @pytest.mark.skipif(
     not CONNECTION_PARAMETERS_ADMIN,
     reason="The user needs a privilege of create warehouse.",
 )
-def test_drop_create_user(conn_cnx):
+def test_drop_create_user(conn_cnx, db_parameters):
     """Drops and creates user."""
     with conn_cnx() as cnx:
 
@@ -327,25 +510,28 @@ def test_drop_create_user(conn_cnx):
         exe("use role accountadmin")
         exe("drop user if exists snowdog")
         exe("create user if not exists snowdog identified by 'testdoc'")
-
-        # Get database and schema from the connection
-        current_db = cnx.database
-        current_schema = cnx.schema
-
-        exe(f"use {current_db}")
+        exe("use {}".format(db_parameters["database"]))
         exe("create or replace role snowdog_role")
         exe("grant role snowdog_role to user snowdog")
         try:
             # This statement will be partially executed because REFERENCE_USAGE
             # will not be granted.
-            exe(f"grant all on database {current_db} to role snowdog_role")
+            exe(
+                "grant all on database {} to role snowdog_role".format(
+                    db_parameters["database"]
+                )
+            )
         except ProgrammingError as error:
             err_str = (
                 "Grant partially executed: privileges [REFERENCE_USAGE] not granted."
             )
             assert 3011 == error.errno
             assert error.msg.find(err_str) != -1
-        exe(f"grant all on schema {current_schema} to role snowdog_role")
+        exe(
+            "grant all on schema {} to role snowdog_role".format(
+                db_parameters["schema"]
+            )
+        )
 
     with conn_cnx(user="snowdog", password="testdoc") as cnx2:
 
@@ -353,8 +539,8 @@ def test_drop_create_user(conn_cnx):
             return cnx2.cursor().execute(sql)
 
         exe("use role snowdog_role")
-        exe(f"use {current_db}")
-        exe(f"use schema {current_schema}")
+        exe("use {}".format(db_parameters["database"]))
+        exe("use schema {}".format(db_parameters["schema"]))
         exe("create or replace table friends(name varchar(100))")
         exe("drop table friends")
     with conn_cnx() as cnx:
@@ -363,30 +549,38 @@ def test_drop_create_user(conn_cnx):
             return cnx.cursor().execute(sql)
 
         exe("use role accountadmin")
-        exe(f"revoke all on database {current_db} from role snowdog_role")
+        exe(
+            "revoke all on database {} from role snowdog_role".format(
+                db_parameters["database"]
+            )
+        )
         exe("drop role snowdog_role")
         exe("drop user if exists snowdog")
 
 
 @pytest.mark.timeout(15)
 @pytest.mark.skipolddriver
-def test_invalid_account_timeout(conn_cnx):
+def test_invalid_account_timeout():
     with pytest.raises(HttpError):
-        with conn_cnx(account="bogus", user="test", password="test", login_timeout=5):
-            pass
+        snowflake.connector.connect(
+            account="bogus", user="test", password="test", login_timeout=5
+        )
 
 
 @pytest.mark.timeout(15)
-def test_invalid_proxy(conn_cnx):
+def test_invalid_proxy(db_parameters):
     with pytest.raises(OperationalError):
-        with conn_cnx(
+        snowflake.connector.connect(
             protocol="http",
             account="testaccount",
+            user=db_parameters["user"],
+            password=db_parameters["password"],
+            host=db_parameters["host"],
+            port=db_parameters["port"],
             login_timeout=5,
             proxy_host="localhost",
             proxy_port="3333",
-        ):
-            pass
+        )
     # NOTE environment variable is set if the proxy parameter is specified.
     del os.environ["HTTP_PROXY"]
     del os.environ["HTTPS_PROXY"]
@@ -394,7 +588,7 @@ def test_invalid_proxy(conn_cnx):
 
 @pytest.mark.timeout(15)
 @pytest.mark.skipolddriver
-def test_eu_connection(tmpdir, conn_cnx):
+def test_eu_connection(tmpdir):
     """Tests setting custom region.
 
     If region is specified to eu-central-1, the URL should become
@@ -408,7 +602,7 @@ def test_eu_connection(tmpdir, conn_cnx):
     os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED"] = "true"
     with pytest.raises(HttpError):
         # must reach Snowflake
-        with conn_cnx(
+        snowflake.connector.connect(
             account="testaccount1234",
             user="testuser",
             password="testpassword",
@@ -417,12 +611,11 @@ def test_eu_connection(tmpdir, conn_cnx):
             ocsp_response_cache_filename=os.path.join(
                 str(tmpdir), "test_ocsp_cache.txt"
             ),
-        ):
-            pass
+        )
 
 
 @pytest.mark.skipolddriver
-def test_us_west_connection(tmpdir, conn_cnx):
+def test_us_west_connection(tmpdir):
     """Tests default region setting.
 
     Region='us-west-2' indicates no region is included in the hostname, i.e.,
@@ -433,18 +626,17 @@ def test_us_west_connection(tmpdir, conn_cnx):
     """
     with pytest.raises(HttpError):
         # must reach Snowflake
-        with conn_cnx(
+        snowflake.connector.connect(
             account="testaccount1234",
             user="testuser",
             password="testpassword",
             region="us-west-2",
             login_timeout=5,
-        ):
-            pass
+        )
 
 
 @pytest.mark.timeout(60)
-def test_privatelink(conn_cnx):
+def test_privatelink(db_parameters):
     """Ensure the OCSP cache server URL is overridden if privatelink connection is used."""
     try:
         os.environ["SF_OCSP_FAIL_OPEN"] = "false"
@@ -466,19 +658,43 @@ def test_privatelink(conn_cnx):
             "ocsp_response_cache.json"
         )
 
-    with conn_cnx(timezone="UTC") as cnx:
-        assert cnx, "invalid cnx"
+    cnx = snowflake.connector.connect(
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        database=db_parameters["database"],
+        protocol=db_parameters["protocol"],
+        timezone="UTC",
+    )
+    assert cnx, "invalid cnx"
 
-        ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
-        assert ocsp_url is None, f"OCSP URL should be None: {ocsp_url}"
+    ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
+    assert ocsp_url is None, f"OCSP URL should be None: {ocsp_url}"
     del os.environ["SF_OCSP_DO_RETRY"]
     del os.environ["SF_OCSP_FAIL_OPEN"]
 
 
-def test_disable_request_pooling(conn_cnx):
+def test_disable_request_pooling(db_parameters):
     """Creates a connection with client_session_keep_alive parameter."""
-    with conn_cnx(timezone="UTC", disable_request_pooling=True) as cnx:
+    config = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "account": db_parameters["account"],
+        "schema": db_parameters["schema"],
+        "database": db_parameters["database"],
+        "protocol": db_parameters["protocol"],
+        "timezone": "UTC",
+        "disable_request_pooling": True,
+    }
+    cnx = snowflake.connector.connect(**config)
+    try:
         assert cnx.disable_request_pooling
+    finally:
+        cnx.close()
 
 
 def test_privatelink_ocsp_url_creation():
@@ -604,7 +820,7 @@ def test_okta_url(conn_cnx):
         assert cnx
 
 
-def test_dashed_url():
+def test_dashed_url(db_parameters):
     """Test whether dashed URLs get created correctly."""
     with mock.patch(
         "snowflake.connector.network.SnowflakeRestful.fetch",
@@ -629,7 +845,7 @@ def test_dashed_url():
             )
 
 
-def test_dashed_url_account_name():
+def test_dashed_url_account_name(db_parameters):
     """Tests whether dashed URLs get created correctly when no hostname is provided."""
     with mock.patch(
         "snowflake.connector.network.SnowflakeRestful.fetch",
@@ -693,64 +909,89 @@ def test_dashed_url_account_name():
         ),
     ],
 )
-def test_invalid_connection_parameter(conn_cnx, name, value, exc_warn):
+def test_invalid_connection_parameter(db_parameters, name, value, exc_warn):
     with warnings.catch_warnings(record=True) as w:
-        with conn_cnx(validate_default_parameters=True, **{name: value}) as conn:
-            if name != "no_such_parameter":  # Skip check for fake parameters
-                param_exists = hasattr(conn, "_" + name)
-                assert param_exists, f"Real parameter {name} should exist on connection"
+        conn_params = {
+            "account": db_parameters["account"],
+            "user": db_parameters["user"],
+            "password": db_parameters["password"],
+            "schema": db_parameters["schema"],
+            "database": db_parameters["database"],
+            "protocol": db_parameters["protocol"],
+            "host": db_parameters["host"],
+            "port": db_parameters["port"],
+            "validate_default_parameters": True,
+            name: value,
+        }
+        try:
+            conn = snowflake.connector.connect(**conn_params)
+            assert getattr(conn, "_" + name) == value
+            # TODO: SNOW-2114216 remove filtering once the root cause for deprecation warning is fixed
+            # Filter out the deprecation warning
+            filtered_w = [
+                warning for warning in w if warning.category != DeprecationWarning
+            ]
+            assert len(filtered_w) == 1
+            assert str(filtered_w[0].message) == str(exc_warn)
+        finally:
+            conn.close()
 
-        filtered_w = [
-            warning for warning in w if warning.category != DeprecationWarning
-        ]
-        specific_warnings = [
-            warning for warning in filtered_w if str(exc_warn) in str(warning.message)
-        ]
-        assert len(specific_warnings) >= 1
-        assert str(specific_warnings[0].message) == str(exc_warn)
 
-
-def test_invalid_connection_parameters_turned_off(conn_cnx):
+def test_invalid_connection_parameters_turned_off(db_parameters):
     """Makes sure parameter checking can be turned off."""
     with warnings.catch_warnings(record=True) as w:
-        with conn_cnx(
-            validate_default_parameters=False,
-            autocommit="True",  # Wrong type
-            applucation="this is a typo or my own variable",  # Wrong name
-        ) as conn:
-            assert conn._autocommit == "True"
-            assert conn._applucation == "this is a typo or my own variable"
+        conn_params = {
+            "account": db_parameters["account"],
+            "user": db_parameters["user"],
+            "password": db_parameters["password"],
+            "schema": db_parameters["schema"],
+            "database": db_parameters["database"],
+            "protocol": db_parameters["protocol"],
+            "host": db_parameters["host"],
+            "port": db_parameters["port"],
+            "validate_default_parameters": False,
+            "autocommit": "True",  # Wrong type
+            "applucation": "this is a typo or my own variable",  # Wrong name
+        }
+        try:
+            conn = snowflake.connector.connect(**conn_params)
+            assert conn._autocommit == conn_params["autocommit"]
+            assert conn._applucation == conn_params["applucation"]
             # TODO: SNOW-2114216 remove filtering once the root cause for deprecation warning is fixed
             # Filter out the deprecation warning
             filtered_w = [
                 warning for warning in w if warning.category != DeprecationWarning
             ]
             assert len(filtered_w) == 0
+        finally:
+            conn.close()
 
 
-def test_invalid_connection_parameters_only_warns(conn_cnx):
+def test_invalid_connection_parameters_only_warns(db_parameters):
     """This test supresses warnings to only have warehouse, database and schema checking."""
     with warnings.catch_warnings(record=True) as w:
-        with conn_cnx(
-            validate_default_parameters=True,
-            autocommit="True",  # Wrong type
-            applucation="this is a typo or my own variable",  # Wrong name
-        ) as conn:
+        conn_params = {
+            "account": db_parameters["account"],
+            "user": db_parameters["user"],
+            "password": db_parameters["password"],
+            "schema": db_parameters["schema"],
+            "database": db_parameters["database"],
+            "protocol": db_parameters["protocol"],
+            "host": db_parameters["host"],
+            "port": db_parameters["port"],
+            "validate_default_parameters": True,
+            "autocommit": "True",  # Wrong type
+            "applucation": "this is a typo or my own variable",  # Wrong name
+        }
+        try:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-            assert conn._autocommit == "True"
-            assert conn._applucation == "this is a typo or my own variable"
-
-            # When using conn_cnx, we may get additional warnings from default parameters
-            # Filter out deprecation warnings and focus on parameter validation warnings
-            filtered_w = [
-                warning for warning in w if warning.category != DeprecationWarning
-            ]
-
-            # The main goal is that invalid parameters are accepted without errors
-            # We're more flexible about warning counts since conn_cnx may generate additional warnings
-            # The key test is that the connection succeeds and parameters are set
-            assert len(filtered_w) >= 0  # Accept any number of non-deprecation warnings
+                conn = snowflake.connector.connect(**conn_params)
+            assert conn._autocommit == conn_params["autocommit"]
+            assert conn._applucation == conn_params["applucation"]
+            assert len(w) == 0
+        finally:
+            conn.close()
 
 
 @pytest.mark.skipolddriver
@@ -934,25 +1175,16 @@ def test_process_param_error(conn_cnx):
 @pytest.mark.parametrize(
     "auto_commit", [pytest.param(True, marks=pytest.mark.skipolddriver), False]
 )
-def test_autocommit(conn_cnx, auto_commit):
-    with conn_cnx() as conn:
-        with mock.patch.object(conn, "commit") as mocked_commit:
-            # Execute operations inside the mock scope
+def test_autocommit(conn_cnx, db_parameters, auto_commit):
+    conn = snowflake.connector.connect(**db_parameters)
+    with mock.patch.object(conn, "commit") as mocked_commit:
+        with conn:
             with conn.cursor() as cur:
                 cur.execute(f"alter session set autocommit = {auto_commit}")
-
-            # For autocommit=False, the connection context manager should call commit on exit
-            # We need to trigger this by exiting the connection context
-            pass
-
-        # Check commit behavior after the mock patch (but connection is still active)
-        if auto_commit:
-            assert not mocked_commit.called
-        else:
-            # For non-autocommit mode, commit might be called by context manager
-            # If it's not called automatically, let's accept that behavior change
-            # and just verify autocommit functionality works
-            pass
+    if auto_commit:
+        assert not mocked_commit.called
+    else:
+        assert mocked_commit.called
 
 
 @pytest.mark.skipolddriver
@@ -974,6 +1206,15 @@ def test_client_fetch_threads_setting(conn_cnx):
         assert conn.client_fetch_threads is None
         conn.client_fetch_threads = 32
         assert conn.client_fetch_threads == 32
+
+
+@pytest.mark.external
+def test_client_failover_connection_url(conn_cnx):
+    with conn_cnx("client_failover") as conn:
+        with conn.cursor() as cur:
+            assert cur.execute("select 1;").fetchall() == [
+                (1,),
+            ]
 
 
 def test_connection_gc(conn_cnx):
@@ -1019,7 +1260,7 @@ def test_ocsp_cache_working(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry):
+def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry, db_parameters):
     # these imports are not used but for testing
     import html.parser  # noqa: F401
     import json  # noqa: F401
@@ -1060,9 +1301,20 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry):
 
     # test different application
     new_application_name = "PythonSnowpark"
-    with conn_cnx(
-        timezone="UTC",
-        application=new_application_name,
+    config = {
+        "user": db_parameters["user"],
+        "password": db_parameters["password"],
+        "host": db_parameters["host"],
+        "port": db_parameters["port"],
+        "account": db_parameters["account"],
+        "schema": db_parameters["schema"],
+        "database": db_parameters["database"],
+        "protocol": db_parameters["protocol"],
+        "timezone": "UTC",
+        "application": new_application_name,
+    }
+    with snowflake.connector.connect(
+        **config
     ) as conn, capture_sf_telemetry.patch_connection(conn, False) as telemetry_test:
         conn._log_telemetry_imported_packages()
         assert len(telemetry_test.records) > 0
@@ -1076,10 +1328,9 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry):
         )
 
     # test opt out
-    with conn_cnx(
-        timezone="UTC",
-        application=new_application_name,
-        log_imported_packages_in_telemetry=False,
+    config["log_imported_packages_in_telemetry"] = False
+    with snowflake.connector.connect(
+        **config
     ) as conn, capture_sf_telemetry.patch_connection(conn, False) as telemetry_test:
         conn._log_telemetry_imported_packages()
         assert len(telemetry_test.records) == 0
@@ -1291,19 +1542,16 @@ def test_connection_atexit_close(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-def test_token_file_path(tmp_path):
+def test_token_file_path(tmp_path, db_parameters):
     fake_token = "some token"
     token_file_path = tmp_path / "token"
     with open(token_file_path, "w") as f:
         f.write(fake_token)
 
-    conn = create_connection("default", token=fake_token)
+    conn = snowflake.connector.connect(**db_parameters, token=fake_token)
     assert conn._token == fake_token
-    conn.close()
-
-    conn = create_connection("default", token_file_path=token_file_path)
+    conn = snowflake.connector.connect(**db_parameters, token_file_path=token_file_path)
     assert conn._token == fake_token
-    conn.close()
 
 
 @pytest.mark.skipolddriver
