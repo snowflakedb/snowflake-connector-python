@@ -148,3 +148,18 @@ def pytest_runtest_setup(item) -> None:
     if "auth" in test_tags:
         if os.getenv("RUN_AUTH_TESTS") != "true":
             pytest.skip("Skipping auth test in current environment")
+
+    if "wif" in test_tags:
+        if os.getenv("RUN_WIF_TESTS") != "true":
+            pytest.skip("Skipping WIF test in current environment")
+
+
+def get_server_parameter_value(connection, parameter_name: str) -> str | None:
+    """Get server parameter value, returns None if parameter doesn't exist."""
+    try:
+        with connection.cursor() as cur:
+            cur.execute(f"show parameters like '{parameter_name}'")
+            ret = cur.fetchone()
+            return ret[1] if ret else None
+    except Exception:
+        return None
