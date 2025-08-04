@@ -9,6 +9,7 @@ from unittest.mock import Mock, PropertyMock
 import pytest
 
 import snowflake.connector.errors
+from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
@@ -139,6 +140,10 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
     return ret
 
 
+@pytest.mark.skipif(
+    IS_WINDOWS,
+    reason="There are consistent race condition issues with the global mock_cnt used for this test on windows",
+)
 @pytest.mark.parametrize(
     "next_action", ("EXT_AUTHN_DUO_ALL", "EXT_AUTHN_DUO_PUSH_N_PASSCODE")
 )
