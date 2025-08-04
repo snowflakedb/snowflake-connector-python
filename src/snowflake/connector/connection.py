@@ -27,7 +27,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
-from . import errors, proxy
+from . import errors
 from ._query_context_cache import QueryContextCache
 from ._utils import (
     _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
@@ -910,6 +910,10 @@ class SnowflakeConnection:
         self._http_config = HttpConfig(
             adapter_factory=ProxySupportAdapterFactory(),
             use_pooling=(not self.disable_request_pooling),
+            proxy_host=self.proxy_host,
+            proxy_port=self.proxy_port,
+            proxy_user=self.proxy_user,
+            proxy_password=self.proxy_password,
         )
         self._session_manager = SessionManager(self._http_config)
 
@@ -1109,10 +1113,6 @@ class SnowflakeConnection:
         """Opens a new network connection."""
         self.converter = self._converter_class(
             use_numpy=self._numpy, support_negative_year=self._support_negative_year
-        )
-
-        proxy.set_proxies(
-            self.proxy_host, self.proxy_port, self.proxy_user, self.proxy_password
         )
 
         self._rest = SnowflakeRestful(

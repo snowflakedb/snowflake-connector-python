@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Callable, Generator, Mapping
 
 from .compat import urlparse
+from .proxy import get_proxy_url
 from .vendored import requests
 from .vendored.requests import Response, Session
 from .vendored.requests.adapters import BaseAdapter, HTTPAdapter
@@ -112,6 +113,10 @@ class HttpConfig:
     )
     use_pooling: bool = True
     max_retries: int | None = REQUESTS_RETRY
+    proxy_host: str | None = None
+    proxy_port: str | None = None
+    proxy_user: str | None = None
+    proxy_password: str | None = None
 
     def copy_with(self, **overrides: Any) -> HttpConfig:
         """Return a new HttpConfig with overrides applied."""
@@ -278,6 +283,12 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
             logger.debug("Creating a config for the SessionManager")
             config = HttpConfig(**http_config_kwargs)
         self._cfg: HttpConfig = config
+        self._proxy = get_proxy_url(
+            self._cfg.proxy_host,
+            self._cfg.proxy_port,
+            self._cfg.proxy_user,
+            self._cfg.proxy_password,
+        )
 
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
@@ -358,6 +369,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
     def make_session(self) -> Session:
         session = requests.Session()
         self._mount_adapters(session)
+        session.proxies = {"http": self._proxy, "https": self._proxy}
         return session
 
     @contextlib.contextmanager
