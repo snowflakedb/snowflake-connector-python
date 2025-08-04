@@ -76,7 +76,7 @@ from .constants import (
     OCSPMode,
     QueryStatus,
 )
-from .converter import SnowflakeConverter
+from .converter import SnowflakeConverter, infer_snowflake_type
 from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor
 from .description import (
     CLIENT_NAME,
@@ -122,6 +122,7 @@ from .network import (
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
+from .type_wrappers import snowflake_type_wrapper
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
 from .wif_util import AttestationProvider
@@ -1791,7 +1792,7 @@ class SnowflakeConnection:
                 )
             snowflake_type, v = v
         else:
-            snowflake_type = self.converter.snowflake_type(v)
+            snowflake_type = infer_snowflake_type(v)
             if snowflake_type is None:
                 Error.errorhandler_wrapper(
                     self,
@@ -1810,6 +1811,9 @@ class SnowflakeConnection:
             self.converter.to_snowflake_bindings(snowflake_type, v),
         )
 
+    def _is_complex_type(self, snowflake_type: str):
+        return snowflake_type in ("VARIANT", "OBJECT", "ARRAY", "MAP")
+
     # TODO we could probably rework this to not make dicts like this: {'1': 'value', '2': '13'}
     def _process_params_qmarks(
         self,
@@ -1823,8 +1827,12 @@ class SnowflakeConnection:
         get_type_and_binding = partial(self._get_snowflake_type_and_binding, cursor)
 
         for idx, v in enumerate(params):
-            if isinstance(v, list):
-                snowflake_type = self.converter.snowflake_type(v)
+            if isinstance(v, snowflake_type_wrapper):
+                processed_params[str(idx + 1)] = (
+                    self.converter.to_snowflake_bindings_dict("", v)
+                )
+            elif isinstance(v, list):
+                snowflake_type = infer_snowflake_type(v)
                 all_param_data = list(map(get_type_and_binding, v))
                 first_type = all_param_data[0].type
                 # if all elements have the same snowflake type, update snowflake_type
