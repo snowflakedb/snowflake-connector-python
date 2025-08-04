@@ -180,3 +180,47 @@ def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, caplog):
         assert (
             aws_request_present
         ), "AWS URL was not found in logs, so it can't be assumed that no leaks happened in it"
+
+
+@pytest.mark.aws
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("disable_request_pooling", [True, False])
+def test_cursor_download_uses_original_http_config(
+    monkeypatch, conn_cnx, ingest_data, db_parameters, disable_request_pooling
+):
+    """Cursor iterating after connection context ends must reuse original HTTP config."""
+    from snowflake.connector.result_batch import ResultBatch
+
+    download_cfgs = []
+    original_download = ResultBatch._download
+
+    def spy_download(self, connection=None, **kwargs):  # type: ignore[no-self-use]
+        # Path A – batch carries its own cloned SessionManager
+        if getattr(self, "_session_manager", None) is not None:
+            download_cfgs.append(self._session_manager.config)
+        # Path B – connection still open, _download reuses connection.rest.session_manager
+        elif (
+            connection is not None
+            and getattr(connection, "rest", None) is not None
+            and connection.rest.session_manager is not None
+        ):
+            download_cfgs.append(connection.rest.session_manager.config)
+        return original_download(self, connection, **kwargs)
+
+    monkeypatch.setattr(ResultBatch, "_download", spy_download, raising=True)
+
+    table_name = db_parameters["name"]
+    query_sql = f"select * from {table_name} order by 1"
+
+    with conn_cnx(disable_request_pooling=disable_request_pooling) as conn:
+        cur = conn.cursor()
+        cur.execute(query_sql)
+        original_cfg = conn.rest.session_manager.config
+
+    # Connection is now closed; iterating cursor should download remaining chunks
+    # It is important to make sure that all ResultBatch._download had access to either active connection's config or the one stored in self._session_manager
+    list(cur)
+
+    # Every ResultBatch download reused the same HTTP configuration values
+    for cfg in download_cfgs:
+        assert cfg == original_cfg

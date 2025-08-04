@@ -143,7 +143,7 @@ def test_clone_independence():
         pass
     assert HOST_SFC_TEST_0 in manager.sessions_map
 
-    clone = manager.clone()
+    clone = manager.shallow_clone()
 
     assert clone is not manager
     assert clone.adapter_factory is manager.adapter_factory
@@ -166,3 +166,69 @@ def test_mount_adapters_and_pool_manager():
 
     pool_manager = manager.get_session_pool_manager(session, "https://example.com")
     assert pool_manager is not None
+
+
+def test_shallow_clone_independent_pools():
+    """A shallow_clone must *not* share its SessionPool objects with the original."""
+    from snowflake.connector.session_manager import (
+        HttpConfig,
+        ProxySupportAdapterFactory,
+        SessionManager,
+    )
+
+    base = SessionManager(
+        HttpConfig(adapter_factory=ProxySupportAdapterFactory(), use_pooling=True)
+    )
+
+    # Use the base manager – this should register a pool for the hostname
+    with base.use_requests_session("https://example.com"):
+        pass
+    assert "example.com" in base.sessions_map
+
+    clone = base.shallow_clone()
+    # No pools yet in the clone
+    assert clone.sessions_map == {}
+
+    # After use the clone should have its own pool, distinct from the base’s pool
+    with clone.use_requests_session("https://example.com"):
+        pass
+    assert "example.com" in clone.sessions_map
+    assert clone.sessions_map["example.com"] is not base.sessions_map["example.com"]
+
+
+def test_context_var_weakref_does_not_leak():
+    """Setting the current SessionManager should not create a strong ref that keeps it alive."""
+    import gc
+
+    from snowflake.connector.session_manager import (
+        HttpConfig,
+        ProxySupportAdapterFactory,
+        SessionManager,
+    )
+    from snowflake.connector.ssl_wrap_socket import (
+        get_current_session_manager,
+        reset_current_session_manager,
+        set_current_session_manager,
+    )
+
+    passed_max_retries = 12345
+    passed_config = HttpConfig(
+        adapter_factory=ProxySupportAdapterFactory(),
+        use_pooling=False,
+        max_retries=passed_max_retries,
+    )
+    sm = SessionManager(passed_config)
+    token = set_current_session_manager(sm)
+
+    # The context var should return the same object while it’s alive
+    assert (
+        get_current_session_manager(create_default_if_missing=False).config
+        == passed_config
+    )
+
+    # Delete all strong refs and force GC – the weakref in the ContextVar should be cleared
+    del sm
+    gc.collect()
+
+    reset_current_session_manager(token)
+    assert get_current_session_manager(create_default_if_missing=False) is None

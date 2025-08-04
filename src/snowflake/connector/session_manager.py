@@ -3,8 +3,10 @@ from __future__ import annotations
 import abc
 import collections
 import contextlib
+import functools
 import itertools
 import logging
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Callable, Generator, Mapping
 
 from .compat import urlparse
@@ -20,10 +22,38 @@ from .vendored.urllib3.util.url import parse_url
 if TYPE_CHECKING:
     from .vendored.urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
-logger = logging.getLogger(__name__)
 
-# requests parameters
+logger = logging.getLogger(__name__)
 REQUESTS_RETRY = 1  # requests library builtin retry
+
+
+def _propagate_session_manager_to_ocsp(generator_func):
+    """Decorator: push self into ssl_wrap_socket ContextVar for OCSP duration.
+
+    Designed for methods that are implemented as generator functions.
+    It performs a push-pop (``set_current_session_manager`` / ``reset_current_session_manager``)
+    around the execution of the generator so that any TLS handshake & OCSP
+    validation triggered by the HTTP request can reuse the correct proxy /
+    retry configuration.
+
+    Can be removed, when OCSP is deprecated.
+    """
+
+    @functools.wraps(generator_func)
+    def wrapper(self, *args, **kwargs):
+        # Local import avoids a circular dependency at module load time.
+        from snowflake.connector.ssl_wrap_socket import (
+            reset_current_session_manager,
+            set_current_session_manager,
+        )
+
+        context_token = set_current_session_manager(self)
+        try:
+            yield from generator_func(self, *args, **kwargs)
+        finally:
+            reset_current_session_manager(context_token)
+
+    return wrapper
 
 
 class ProxySupportAdapter(HTTPAdapter):
@@ -71,6 +101,21 @@ class AdapterFactory(abc.ABC):
 class ProxySupportAdapterFactory(AdapterFactory):
     def __call__(self, *args, **kwargs) -> ProxySupportAdapter:
         return ProxySupportAdapter(*args, **kwargs)
+
+
+@dataclass(frozen=True)
+class HttpConfig:
+    """Immutable HTTP configuration shared by SessionManager instances."""
+
+    adapter_factory: Callable[..., HTTPAdapter] = field(
+        default_factory=ProxySupportAdapterFactory
+    )
+    use_pooling: bool = True
+    max_retries: int | None = REQUESTS_RETRY
+
+    def copy_with(self, **overrides: Any) -> HttpConfig:
+        """Return a new HttpConfig with overrides applied."""
+        return replace(self, **overrides)
 
 
 class SessionPool:
@@ -224,32 +269,53 @@ class _RequestVerbsUsingSessionMixin:
 
 
 class SessionManager(_RequestVerbsUsingSessionMixin):
-    def __init__(
-        self,
-        use_pooling: bool = True,
-        adapter_factory: Callable[..., HTTPAdapter] | None = None,
-    ):
-        self._use_pooling = use_pooling
-        self._adapter_factory = adapter_factory or ProxySupportAdapterFactory()
+    def __init__(self, config: HttpConfig | None = None, **http_config_kwargs) -> None:
+        """
+        Create a new SessionManager.
+        """
+
+        if config is None:
+            logger.debug("Creating a config for the SessionManager")
+            config = HttpConfig(**http_config_kwargs)
+        self._cfg: HttpConfig = config
+
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
         )
 
+    @classmethod
+    def from_config(cls, cfg: HttpConfig, **overrides: Any) -> SessionManager:
+        """Build a new manager from *cfg*, optionally overriding fields.
+
+        Example::
+
+            no_pool_cfg = conn._http_config.copy_with(use_pooling=False)
+            manager = SessionManager.from_config(no_pool_cfg)
+        """
+
+        if overrides:
+            cfg = cfg.copy_with(**overrides)
+        return cls(config=cfg)
+
+    @property
+    def config(self) -> HttpConfig:
+        return self._cfg
+
     @property
     def use_pooling(self) -> bool:
-        return self._use_pooling
+        return self._cfg.use_pooling
 
     @use_pooling.setter
     def use_pooling(self, value: bool) -> None:
-        self._use_pooling = value
+        self._cfg = self._cfg.copy_with(use_pooling=value)
 
     @property
-    def adapter_factory(self) -> AdapterFactory:
-        return self._adapter_factory
+    def adapter_factory(self) -> Callable[..., HTTPAdapter]:
+        return self._cfg.adapter_factory
 
     @adapter_factory.setter
-    def adapter_factory(self, value: AdapterFactory) -> None:
-        self._adapter_factory = value
+    def adapter_factory(self, value: Callable[..., HTTPAdapter]) -> None:
+        self._cfg = self._cfg.copy_with(adapter_factory=value)
 
     @property
     def sessions_map(self) -> dict[str, SessionPool]:
@@ -276,7 +342,9 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
     def _mount_adapters(self, session: requests.Session) -> None:
         try:
             # Its important that each separate session manager creates its own adapters - because they are storing internally PoolManagers - which shouldn't be reused if not in scope of the same adapter.
-            adapter = self._adapter_factory(max_retries=REQUESTS_RETRY)
+            adapter = self._cfg.adapter_factory(
+                max_retries=self._cfg.max_retries or REQUESTS_RETRY
+            )
             if adapter is not None:
                 session.mount("http://", adapter)
                 session.mount("https://", adapter)
@@ -293,10 +361,11 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
         return session
 
     @contextlib.contextmanager
+    @_propagate_session_manager_to_ocsp
     def use_requests_session(
         self, url: str | bytes | None = None, use_pooling: bool | None = None
     ) -> Generator[Session, Any, None]:
-        use_pooling = use_pooling if use_pooling is not None else self._use_pooling
+        use_pooling = use_pooling if use_pooling is not None else self.use_pooling
         if not use_pooling:
             session = self.make_session()
             try:
@@ -340,22 +409,29 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
         for pool in self._sessions_map.values():
             pool.close()
 
-    def clone(
+    def shallow_clone(
         self,
         *,
         use_pooling: bool | None = None,
         adapter_factory: AdapterFactory | None = None,
     ) -> SessionManager:
-        """Return an independent manager that reuses the adapter_factory.
-        The 'clone' and the 'original' do not share the sessions map, but by default share the same settings and adapter_factory.
-        Those can be overridden using the method's arguments.
+        """Return a new *stateless* SessionManager sharing this instance’s config.
+
+        "Shallow" means the configuration object (HttpConfig) is reused as-is,
+        while *stateful* aspects such as the per-host SessionPool mapping are
+        reset, so the two managers do not share live `requests.Session`
+        objects.
+        Optional *use_pooling* / *adapter_factory* overrides create a modified
+        copy of the config before instantiation.
         """
-        return SessionManager(
-            use_pooling=self._use_pooling if use_pooling is None else use_pooling,
-            adapter_factory=(
-                self._adapter_factory if adapter_factory is None else adapter_factory
-            ),
-        )
+
+        overrides: dict[str, Any] = {}
+        if use_pooling is not None:
+            overrides["use_pooling"] = use_pooling
+        if adapter_factory is not None:
+            overrides["adapter_factory"] = adapter_factory
+
+        return SessionManager.from_config(self._cfg, **overrides)
 
     def __getstate__(self):
         state = self.__dict__.copy()

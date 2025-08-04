@@ -317,8 +317,8 @@ class SnowflakeRestful:
         self._connection = connection
         if session_manager is None:
             session_manager = (
-                connection.session_manager
-                if (connection and connection.session_manager)
+                connection._session_manager
+                if (connection and connection._session_manager)
                 else SessionManager(adapter_factory=ProxySupportAdapterFactory())
             )
         self._session_manager = session_manager

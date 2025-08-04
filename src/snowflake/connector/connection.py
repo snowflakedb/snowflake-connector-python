@@ -119,11 +119,8 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
-from .session_manager import SessionManager
+from .session_manager import HttpConfig, ProxySupportAdapterFactory, SessionManager
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
-from .ssl_wrap_socket import (
-    set_current_session_manager as set_current_session_manager_for_ssl,
-)
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
@@ -523,8 +520,11 @@ class SnowflakeConnection:
             PLATFORM,
         )
 
+        # Placeholder attributes; will be initialized in connect()
+        self._http_config: HttpConfig | None = None
         self._session_manager: SessionManager | None = None
         self._rest: SnowflakeRestful | None = None
+
         for name, (value, _) in DEFAULT_CONFIGURATION.items():
             setattr(self, f"_{name}", value)
 
@@ -893,28 +893,17 @@ class SnowflakeConnection:
     def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
         self._check_arrow_conversion_error_on_every_column = value
 
-    @property
-    def session_manager(self) -> SessionManager:
-        return self._session_manager
-
     def connect(self, **kwargs) -> None:
         """Establishes connection to Snowflake."""
         logger.debug("connect")
         if len(kwargs) > 0:
             self.__config(**kwargs)
 
-        self._session_manager = SessionManager(
+        self._http_config = HttpConfig(
+            adapter_factory=ProxySupportAdapterFactory(),
             use_pooling=(not self.disable_request_pooling),
         )
-        try:
-            # Set context var for OCSP downloads to use this manager. Can be removed once OCSP is deprecated.
-            self._ocsp_sm_context_var_old_token = set_current_session_manager_for_ssl(
-                self._session_manager
-            )
-        except Exception:
-            logger.debug(
-                "Could not set current SessionManager in ssl_wrap_socket", exc_info=True
-            )
+        self._session_manager = SessionManager(self._http_config)
 
         if self.enable_connection_diag:
             exceptions_dict = {}
@@ -931,6 +920,7 @@ class SnowflakeConnection:
                 proxy_port=self.proxy_port,
                 proxy_user=self.proxy_user,
                 proxy_password=self.proxy_password,
+                session_manager=self._session_manager.shallow_clone(use_pooling=False),
             )
             try:
                 connection_diag.run_test()
@@ -954,15 +944,6 @@ class SnowflakeConnection:
                     raise Exception(str(exceptions_dict))
         else:
             self.__open_connection()
-
-        try:
-            # Reset context var for OCSP downloads to use this manager. Can be removed once OCSP is deprecated.
-            from .ssl_wrap_socket import reset_current_session_manager as _reset_sm
-
-            if hasattr(self, "_ocsp_sm_context_var_old_token"):
-                _reset_sm(self._ocsp_sm_context_var_old_token)
-        except Exception:
-            logger.debug("Failed to reset OCSP SessionManager context", exc_info=True)
 
     def close(self, retry: bool = True) -> None:
         """Closes the connection."""
@@ -1132,7 +1113,7 @@ class SnowflakeConnection:
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
             connection=self,
-            session_manager=self.session_manager,
+            session_manager=self._session_manager,  # connection shares the session pool used for making Backend related requests
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 

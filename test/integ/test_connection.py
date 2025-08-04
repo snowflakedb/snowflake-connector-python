@@ -1192,6 +1192,56 @@ def test_client_failover_connection_url(conn_cnx):
             ]
 
 
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("disable_request_pooling", [True, False])
+def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
+    """Each connection’s SessionManager is isolated; OCSP picks the right one."""
+    from snowflake.connector.ssl_wrap_socket import get_current_session_manager
+
+    #
+    with conn_cnx(
+        disable_request_pooling=disable_request_pooling,
+    ) as conn1:
+        with conn1.cursor() as cur:
+            cur.execute("select 1").fetchall()
+
+        rest_sm_1 = conn1.rest.session_manager
+
+    assert rest_sm_1.sessions_map or disable_request_pooling
+
+    with rest_sm_1.use_requests_session("https://example.com"):
+        ocsp_sm_1 = get_current_session_manager(create_default_if_missing=False)
+        assert ocsp_sm_1 is not rest_sm_1
+        assert ocsp_sm_1.config == rest_sm_1.config
+
+    assert get_current_session_manager(create_default_if_missing=False) is None
+
+    # ---- Connection #2 --------------------------------------------------
+    with conn_cnx(
+        disable_request_pooling=disable_request_pooling,
+    ) as conn2:
+        with conn2.cursor() as cur:
+            cur.execute("select 1").fetchall()
+
+            rest_sm_2 = conn2.rest.session_manager
+
+    assert rest_sm_2.sessions_map or disable_request_pooling
+    assert rest_sm_2 is not rest_sm_1
+
+    with rest_sm_2.use_requests_session("https://example.com"):
+        ocsp_sm_2 = get_current_session_manager(create_default_if_missing=False)
+        assert ocsp_sm_2 is not rest_sm_2
+        assert ocsp_sm_2.config == rest_sm_2.config
+
+    # After second request the ContextVar should again be cleared
+    assert get_current_session_manager(create_default_if_missing=False) is None
+
+    # ---- Pools must not be shared across connections --------------------
+    shared_hosts = set(rest_sm_1.sessions_map) & set(rest_sm_2.sessions_map)
+    for host in shared_hosts:
+        assert rest_sm_1.sessions_map[host] is not rest_sm_2.sessions_map[host]
+
+
 def test_connection_gc(conn_cnx):
     """This test makes sure that a heartbeat thread doesn't prevent garbage collection of SnowflakeConnection."""
     conn = conn_cnx(client_session_keep_alive=True).__enter__()
