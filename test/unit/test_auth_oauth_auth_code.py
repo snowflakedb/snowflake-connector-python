@@ -39,7 +39,9 @@ def test_auth_oauth_auth_code_oauth_type(omit_oauth_urls_check):
     )
     body = {"data": {}}
     auth.update_body(body)
-    assert body["data"]["OAUTH_TYPE"] == "oauth_authorization_code"
+    assert (
+        body["data"]["CLIENT_ENVIRONMENT"]["OAUTH_TYPE"] == "oauth_authorization_code"
+    )
 
 
 @pytest.mark.parametrize("rtr_enabled", [True, False])
