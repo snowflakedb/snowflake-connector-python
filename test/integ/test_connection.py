@@ -200,7 +200,7 @@ def test_platform_detection_timeout(conn_cnx):
 
     Creates a connection with platform_detection_timeout parameter.
     """
-    
+
     with conn_cnx(platform_detection_timeout_seconds=2.5) as cnx:
         assert cnx.platform_detection_timeout_seconds == 2.5
 
@@ -343,20 +343,20 @@ def test_drop_create_user(conn_cnx, db):
         current_db = cnx.database
         current_schema = cnx.schema
 
-        exe("use {}".format(current_db))
+        exe(f"use {current_db}")
         exe("create or replace role snowdog_role")
         exe("grant role snowdog_role to user snowdog")
         try:
             # This statement will be partially executed because REFERENCE_USAGE
             # will not be granted.
-            exe("grant all on database {} to role snowdog_role".format(current_db))
+            exe(f"grant all on database {current_db} to role snowdog_role")
         except ProgrammingError as error:
             err_str = (
                 "Grant partially executed: privileges [REFERENCE_USAGE] not granted."
             )
             assert 3011 == error.errno
             assert error.msg.find(err_str) != -1
-        exe("grant all on schema {} to role snowdog_role".format(current_schema))
+        exe(f"grant all on schema {current_schema} to role snowdog_role")
 
     with conn_cnx(user="snowdog", password="testdoc") as cnx2:
 
@@ -364,8 +364,8 @@ def test_drop_create_user(conn_cnx, db):
             return cnx2.cursor().execute(sql)
 
         exe("use role snowdog_role")
-        exe("use {}".format(current_db))
-        exe("use schema {}".format(current_schema))
+        exe(f"use {current_db}")
+        exe(f"use schema {current_schema}")
         exe("create or replace table friends(name varchar(100))")
         exe("drop table friends")
     with conn_cnx() as cnx:
@@ -374,7 +374,7 @@ def test_drop_create_user(conn_cnx, db):
             return cnx.cursor().execute(sql)
 
         exe("use role accountadmin")
-        exe("revoke all on database {} from role snowdog_role".format(current_db))
+        exe(f"revoke all on database {current_db} from role snowdog_role")
         exe("drop role snowdog_role")
         exe("drop user if exists snowdog")
 
