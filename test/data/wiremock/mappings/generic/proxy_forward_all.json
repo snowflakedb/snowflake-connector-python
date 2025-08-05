@@ -1,0 +1,9 @@
+{
+  "request": {
+    "urlPattern": "/.*",
+    "method": "ANY"
+  },
+  "response": {
+    "proxyBaseUrl": "{{TARGET_HTTP_HOST_WITH_PORT}}"
+  }
+}

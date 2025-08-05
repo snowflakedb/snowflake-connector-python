@@ -77,8 +77,15 @@ class ProxySupportAdapter(HTTPAdapter):
             proxy_manager = self.proxy_manager_for(proxy)
 
             if isinstance(proxy_manager, ProxyManager):
-                # Add Host to proxy header SNOW-232777
-                proxy_manager.proxy_headers["Host"] = parsed_url.hostname
+                # Add Host to proxy header SNOW-232777 and SNOW-694457
+
+                # RFC 7230 / 5.4 – a proxy’s Host header must repeat the request authority
+                # verbatim: <hostname>[:<port>] with IPv6 still in [brackets].  We take that
+                # straight from urlparse(url).netloc, which preserves port and brackets (and case-sensitive hostname).
+                # Note: netloc also keeps user-info (user:pass@host) if present in URL. The driver never sends
+                # URLs with embedded credentials, so we leave them unhandled — for full support
+                # we’d need to manually concatenate hostname with optional port and IPv6 brackets.
+                proxy_manager.proxy_headers["Host"] = parsed_url.netloc
             else:
                 logger.debug(
                     f"Unable to set 'Host' to proxy manager of type {type(proxy_manager)} as"

@@ -20,9 +20,11 @@ from ..errorcode import (
 )
 from ..errors import Error, ProgrammingError
 from ..network import OAUTH_AUTHENTICATOR
+from ..proxy import get_proxy_url
 from ..secret_detector import SecretDetector
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..vendored import urllib3
+from ..vendored.urllib3.poolmanager import ProxyManager
 from .by_plugin import AuthByPlugin, AuthType
 
 if TYPE_CHECKING:
@@ -317,7 +319,18 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             fields["scope"] = self._scope
         try:
             # TODO(SNOW-2229411) Session manager should be used here. It may require additional security validation (since we would transition from PoolManager to requests.Session) and some parameters would be passed implicitly. OAuth token exchange must NOT reuse pooled HTTP sessions. We should create a fresh SessionManager with use_pooling=False for each call.
-            return urllib3.PoolManager().request_encode_body(
+            proxy_url = get_proxy_url(
+                conn.proxy_host,
+                conn.proxy_port,
+                conn.proxy_user,
+                conn.proxy_password,
+            )
+            http_client = (
+                ProxyManager(proxy_url=proxy_url)
+                if proxy_url
+                else urllib3.PoolManager()
+            )
+            return http_client.request_encode_body(
                 "POST",
                 self._token_request_url,
                 encode_multipart=False,
@@ -357,7 +370,16 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         fields: dict[str, str],
     ) -> (str | None, str | None):
         # TODO(SNOW-2229411) Session manager should be used here. It may require additional security validation (since we would transition from PoolManager to requests.Session) and some parameters would be passed implicitly. Token request must bypass HTTP connection pools.
-        resp = urllib3.PoolManager().request_encode_body(
+        proxy_url = get_proxy_url(
+            connection.proxy_host,
+            connection.proxy_port,
+            connection.proxy_user,
+            connection.proxy_password,
+        )
+        http_client = (
+            ProxyManager(proxy_url=proxy_url) if proxy_url else urllib3.PoolManager()
+        )
+        resp = http_client.request_encode_body(
             "POST",
             self._token_request_url,
             headers=self._create_token_request_headers(),
