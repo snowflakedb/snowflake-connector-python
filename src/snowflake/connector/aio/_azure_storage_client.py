@@ -49,7 +49,6 @@ class SnowflakeAzureRestClient(
         credentials: StorageCredential | None,
         chunk_size: int,
         stage_info: dict[str, Any],
-        use_s3_regional_url: bool = False,
         unsafe_file_write: bool = False,
     ) -> None:
         SnowflakeAzureRestClientSync.__init__(

@@ -663,6 +663,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
                     multipart_threshold=data.get("threshold"),
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
                     unsafe_file_write=self._connection.unsafe_file_write,
+                    gcs_use_virtual_endpoints=self._connection.gcs_use_virtual_endpoints,
                 )
                 await sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
