@@ -8,19 +8,6 @@ jobs:
   close-issue:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          repository: snowflakedb/gh-actions
-          ref: jira_v1
-          token: ${{ secrets.SNOWFLAKE_GITHUB_TOKEN }} # stored in GitHub secrets
-          path: .
-      - name: Jira login
-        uses: atlassian/gajira-login@master
-        env:
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
       - name: Extract issue from title
         id: extract
         env:
@@ -28,8 +15,29 @@ jobs:
         run: |
           jira=$(echo -n $TITLE | awk '{print $1}' | sed -e 's/://')
           echo ::set-output name=jira::$jira
-      - name: Close issue
-        uses: ./jira/gajira-close
+
+      - name: Close Jira Issue
         if: startsWith(steps.extract.outputs.jira, 'SNOW-')
-        with:
-          issue: "${{ steps.extract.outputs.jira }}"
+        run: |
+          ISSUE_KEY="${{ steps.extract.outputs.jira }}"
+          JIRA_API_URL="${{ secrets.JIRA_BASE_URL }}/rest/api/2/issue/${ISSUE_KEY}/transitions"
+
+          curl -X POST \
+            --url "$JIRA_API_URL" \
+            --user "${{ secrets.JIRA_USER_EMAIL }}:${{ secrets.JIRA_API_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --data "{
+              \"update\": {
+                \"comment\": [
+                  { \"add\": { \"body\": \"Closed on GitHub\" } }
+                ]
+              },
+              \"fields\": {
+                \"customfield_12860\": { \"id\": \"11506\" },
+                \"customfield_10800\": { \"id\": \"-1\" },
+                \"customfield_12500\": { \"id\": \"11302\" },
+                \"customfield_12400\": { \"id\": \"-1\" },
+                \"resolution\": { \"name\": \"Done\" }
+              },
+              \"transition\": { \"id\": \"71\" }
+            }"
