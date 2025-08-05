@@ -38,13 +38,23 @@ class WiremockClient:
         self.wiremock_https_port = None
         self.forbidden_ports = forbidden_ports if forbidden_ports is not None else []
 
-        self.wiremock_dir = pathlib.Path(__file__).parent.parent.parent / ".wiremock"
+        self.wiremock_dir = (
+            pathlib.Path(__file__).parent.parent.parent.parent / ".wiremock"
+        )
         assert self.wiremock_dir.exists(), f"{self.wiremock_dir} does not exist"
 
         self.wiremock_jar_path = self.wiremock_dir / self.wiremock_filename
         assert (
             self.wiremock_jar_path.exists()
         ), f"{self.wiremock_jar_path} does not exist"
+
+    @property
+    def http_host_with_port(self) -> str:
+        return f"http://{self.wiremock_host}:{self.wiremock_http_port}"
+
+    @property
+    def http_placeholders(self) -> dict[str, str]:
+        return {"{{WIREMOCK_HTTP_HOST_WITH_PORT}}": self.http_host_with_port}
 
     def _start_wiremock(self):
         self.wiremock_http_port = self._find_free_port(
@@ -76,14 +86,22 @@ class WiremockClient:
         self._wait_for_wiremock()
 
     def _stop_wiremock(self):
-        response = self._wiremock_post(
-            f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/shutdown"
-        )
-        if response.status_code != 200:
-            logger.info("Wiremock shutdown failed, the process will be killed")
+        if self.wiremock_process.poll() is not None:
+            logger.warning("Wiremock process already exited, skipping shutdown")
+            return
+
+        try:
+            response = self._wiremock_post(
+                f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/shutdown"
+            )
+            if response.status_code != 200:
+                logger.info("Wiremock shutdown failed, the process will be killed")
+                self.wiremock_process.kill()
+            else:
+                logger.debug("Wiremock shutdown gracefully")
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Shutdown request failed: {e}. Killing process directly.")
             self.wiremock_process.kill()
-        else:
-            logger.debug("Wiremock shutdown gracefully")
 
     def _wait_for_wiremock(self):
         retry_count = 0
@@ -139,19 +157,36 @@ class WiremockClient:
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
         return requests.post(endpoint, data=body, headers=headers)
 
-    def import_mapping(self, mapping: Union[str, dict, pathlib.Path]):
+    def _replace_placeholders_in_mapping(
+        self, mapping_str: str, placeholders: Optional[dict[str, object]]
+    ) -> str:
+        if not placeholders:
+            return mapping_str
+        for key, value in placeholders.items():
+            mapping_str = mapping_str.replace(str(key), str(value))
+        return mapping_str
+
+    def import_mapping(
+        self,
+        mapping: Union[str, dict, pathlib.Path],
+        placeholders: Optional[dict[str, object]] = None,
+    ):
         self._reset_wiremock()
-        import_mapping_endpoint = f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/mappings/import"
+        import_mapping_endpoint = f"{self.http_host_with_port}/__admin/mappings/import"
         mapping_str = _get_mapping_str(mapping)
+        mapping_str = self._replace_placeholders_in_mapping(mapping_str, placeholders)
         response = self._wiremock_post(import_mapping_endpoint, mapping_str)
         if response.status_code != requests.codes.ok:
             raise RuntimeError("Failed to import mapping")
 
-    def add_mapping(self, mapping: Union[str, dict, pathlib.Path]):
-        add_mapping_endpoint = (
-            f"http://{self.wiremock_host}:{self.wiremock_http_port}/__admin/mappings"
-        )
+    def add_mapping(
+        self,
+        mapping: Union[str, dict, pathlib.Path],
+        placeholders: Optional[dict[str, object]] = None,
+    ):
+        add_mapping_endpoint = f"{self.http_host_with_port}/__admin/mappings"
         mapping_str = _get_mapping_str(mapping)
+        mapping_str = self._replace_placeholders_in_mapping(mapping_str, placeholders)
         response = self._wiremock_post(add_mapping_endpoint, mapping_str)
         if response.status_code != requests.codes.created:
             raise RuntimeError("Failed to add mapping")

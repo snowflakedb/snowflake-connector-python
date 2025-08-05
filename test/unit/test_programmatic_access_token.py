@@ -1,5 +1,4 @@
 import pathlib
-from typing import Any, Generator, Union
 
 import pytest
 
@@ -9,13 +8,7 @@ try:
 except ImportError:
     pass
 
-from ..wiremock.wiremock_utils import WiremockClient
-
-
-@pytest.fixture(scope="session")
-def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
-    with WiremockClient() as client:
-        yield client
+from ..test_utils.wiremock.wiremock_utils import WiremockClient
 
 
 @pytest.mark.skipolddriver
