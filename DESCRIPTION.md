@@ -104,6 +104,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Improved implementation of the `snowflake.connector.util_text.random_string` to reduce the likelihood of collisions.
   - Updated the log level for OCSP fail-open warning messages from ERROR to WARNING.
 
+- v3.12.2(TBD)
+  - Fixed a bug where proxy settings were leaked through environmental variables
+
 - v3.12.1(August 20,2024)
   - Fixed a bug that logged the session token when renewing a session.
   - Fixed a bug where disabling client telemetry did not work.
