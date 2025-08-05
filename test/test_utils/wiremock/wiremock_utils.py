@@ -35,7 +35,7 @@ class WiremockClient:
     def __init__(
         self,
         forbidden_ports: Optional[List[int]] = None,
-        additional_wiremock_process_args: Iterable[str] | None = None,
+        additional_wiremock_process_args: Optional[Iterable[str]] = None,
     ) -> None:
         self.wiremock_filename = "wiremock-standalone.jar"
         self.wiremock_host = "localhost"
