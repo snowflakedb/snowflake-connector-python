@@ -8,7 +8,10 @@ import pytest
 
 import snowflake.connector
 
-from ..wiremock.wiremock_utils import WiremockClient
+from ..wiremock.wiremock_utils import (  # pylint: disable=import-outside-toplevel
+    WiremockClient,
+    get_clients_for_proxy_and_target,
+)
 
 
 @pytest.fixture(scope="session")
@@ -64,3 +67,15 @@ def conn_cnx_wiremock(
     return partial(
         db_wiremock, default_db_wiremock_parameters=default_db_wiremock_parameters
     )
+
+
+@pytest.fixture
+def wiremock_target_proxy_pair():
+    """Starts a *target* Wiremock and a *proxy* Wiremock pre-configured to forward to it.
+
+    The fixture yields a tuple ``(target_wm, proxy_wm)`` of  ``WiremockClient``
+    instances.  It is a thin wrapper around
+    ``test.test_utils.wiremock.wiremock_utils.proxy_target_pair``.
+    """
+    with get_clients_for_proxy_and_target() as pair:
+        yield pair

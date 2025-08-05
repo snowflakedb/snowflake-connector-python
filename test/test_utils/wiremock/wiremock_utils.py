@@ -3,8 +3,9 @@ import logging
 import pathlib
 import socket
 import subprocess
+from contextlib import contextmanager
 from time import sleep
-from typing import List, Optional, Union
+from typing import Iterable, List, Optional, Union
 
 try:
     from snowflake.connector.vendored import requests
@@ -31,7 +32,11 @@ def _get_mapping_str(mapping: Union[str, dict, pathlib.Path]) -> str:
 
 
 class WiremockClient:
-    def __init__(self, forbidden_ports: Optional[List[int]] = None) -> None:
+    def __init__(
+        self,
+        forbidden_ports: Optional[List[int]] = None,
+        additional_wiremock_process_args: Iterable[str] | None = None,
+    ) -> None:
         self.wiremock_filename = "wiremock-standalone.jar"
         self.wiremock_host = "localhost"
         self.wiremock_http_port = None
@@ -47,6 +52,9 @@ class WiremockClient:
         assert (
             self.wiremock_jar_path.exists()
         ), f"{self.wiremock_jar_path} does not exist"
+        self._additional_wiremock_process_args = (
+            additional_wiremock_process_args or list()
+        )
 
     @property
     def http_host_with_port(self) -> str:
@@ -82,6 +90,7 @@ class WiremockClient:
                 "--ca-keystore",
                 self.wiremock_dir / "ca-cert.jks",
             ]
+            + self._additional_wiremock_process_args
         )
         self._wait_for_wiremock()
 
@@ -219,3 +228,63 @@ class WiremockClient:
     def __exit__(self, exc_type, exc_val, exc_tb):
         logger.debug("Stopping wiremock process")
         self._stop_wiremock()
+
+
+@contextmanager
+def get_clients_for_proxy_and_target(
+    proxy_mapping_template: Union[str, dict, pathlib.Path, None] = None,
+    additional_proxy_placeholders: dict[str, object] | None = None,
+    additional_proxy_args: Iterable[str] | None = None,
+):
+    """Context manager that starts two Wiremock instances – *target* and *proxy* – and
+    configures the proxy to forward **all** traffic to the target.
+
+    It yields a tuple ``(target_wm, proxy_wm)`` where both items are fully initialised
+    ``WiremockClient`` objects ready for use in tests.  When the context exits both
+    Wiremock processes are shut down automatically.
+
+    Parameters
+    ----------
+    proxy_mapping_template
+        Mapping JSON (str / dict / pathlib.Path) to be used for configuring the proxy
+        Wiremock.  If *None*, the default template at
+        ``test/data/wiremock/mappings/proxy/forward_all.json`` is used.
+    additional_proxy_placeholders
+        Optional placeholders to be replaced in the proxy mapping *in addition* to the
+        automatically provided ``{{TARGET_HTTP_HOST_WITH_PORT}}``.
+    additional_proxy_args
+        Extra command-line arguments passed to the proxy Wiremock instance when it is
+        launched.  Useful for tweaking Wiremock behaviour in specific tests.
+    """
+
+    # Resolve default mapping template if none provided
+    if proxy_mapping_template is None:
+        proxy_mapping_template = (
+            pathlib.Path(__file__).parent.parent.parent.parent
+            / "test"
+            / "data"
+            / "wiremock"
+            / "mappings"
+            / "proxy"
+            / "forward_all.json"
+        )
+
+    # Start the *target* Wiremock first – this will emulate Snowflake / IdP backend
+    with WiremockClient() as target_wm:
+        # Then start the *proxy* Wiremock and ensure it doesn't try to bind the same port
+        with WiremockClient(
+            forbidden_ports=[target_wm.wiremock_http_port],
+            additional_wiremock_process_args=additional_proxy_args,
+        ) as proxy_wm:
+            # Prepare placeholders so that proxy forwards to the *target*
+            placeholders: dict[str, object] = {
+                "{{TARGET_HTTP_HOST_WITH_PORT}}": target_wm.http_host_with_port
+            }
+            if additional_proxy_placeholders:
+                placeholders.update(additional_proxy_placeholders)
+
+            # Configure proxy Wiremock to forward everything to target
+            proxy_wm.add_mapping(proxy_mapping_template, placeholders=placeholders)
+
+            # Yield control back to the caller with both Wiremocks ready
+            yield target_wm, proxy_wm
