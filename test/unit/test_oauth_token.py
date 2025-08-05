@@ -2,10 +2,10 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
+import json
 import logging
 import pathlib
 from threading import Thread
-from typing import Any, Generator, Union
 from unittest import mock
 from unittest.mock import Mock, patch
 
@@ -16,15 +16,9 @@ import snowflake.connector
 from snowflake.connector.auth import AuthByOauthCredentials
 from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
-from ..wiremock.wiremock_utils import WiremockClient
+from ..test_utils.wiremock.wiremock_utils import WiremockClient
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture(scope="session")
-def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
-    with WiremockClient() as client:
-        yield client
 
 
 @pytest.fixture(scope="session")
@@ -50,17 +44,6 @@ def wiremock_oauth_client_creds_dir() -> pathlib.Path:
         / "auth"
         / "oauth"
         / "client_credentials"
-    )
-
-
-@pytest.fixture(scope="session")
-def wiremock_generic_mappings_dir() -> pathlib.Path:
-    return (
-        pathlib.Path(__file__).parent.parent
-        / "data"
-        / "wiremock"
-        / "mappings"
-        / "generic"
     )
 
 
@@ -699,3 +682,303 @@ def test_client_creds_expired_refresh_token_flow(
     cached_refresh_token = temp_cache.retrieve(refresh_token_key)
     assert cached_access_token == "expired-access-token-123"
     assert cached_refresh_token == "expired-refresh-token-123"
+
+
+@pytest.mark.skipolddriver
+def test_client_credentials_flow_via_explicit_proxy(
+    wiremock_oauth_client_creds_dir,
+    wiremock_generic_mappings_dir,
+    temp_cache,
+):
+    """Spin up two Wiremock instances: one acts as a true proxy that forwards to the target service."""
+
+    # Start target Wiremock first (acts as Snowflake+IdP backend)
+    with WiremockClient() as target_wm:
+        target_wm.import_mapping(
+            wiremock_oauth_client_creds_dir / "successful_flow.json"
+        )
+        target_wm.add_mapping(
+            wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+        )
+        target_wm.add_mapping(
+            wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+        )
+
+        # Now start proxy Wiremock (will forward everything to target)
+        with WiremockClient(forbidden_ports=[target_wm.wiremock_http_port]) as proxy_wm:
+            # Configure proxy Wiremock using a json template on disk
+            proxy_mapping_path = (
+                wiremock_generic_mappings_dir / "proxy_forward_all.json"
+            )
+            # with open(proxy_mapping_path) as f:
+            #     proxy_mapping_json = json.load(f)
+            # proxy_mapping_json["mappings"][0]["response"]["proxyBaseUrl"] = (
+            #     f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}"
+            # )
+            # proxy_wm.import_mapping(proxy_mapping_json)
+            proxy_wm.add_mapping(
+                proxy_mapping_path,
+                placeholders={
+                    "{{TARGET_HTTP_HOST_WITH_PORT}}": target_wm.http_host_with_port
+                },
+            )
+
+            # Prepare OAuth token request URL pointing at *target* server
+            token_request_url = f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/token-request"
+
+            with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+                # Establish connection through explicit proxy
+                cnx = snowflake.connector.connect(
+                    user="testUser",
+                    authenticator="OAUTH_CLIENT_CREDENTIALS",
+                    oauth_client_id="cid",
+                    oauth_client_secret="secret",
+                    account="testAccount",
+                    protocol="http",
+                    role="ANALYST",
+                    oauth_token_request_url=token_request_url,
+                    host=target_wm.wiremock_host,
+                    port=target_wm.wiremock_http_port,
+                    proxy_host=proxy_wm.wiremock_host,
+                    proxy_port=str(proxy_wm.wiremock_http_port),
+                    proxy_user="proxyUser",
+                    proxy_password="proxyPass",
+                    oauth_enable_refresh_tokens=True,
+                    client_store_temporary_credential=True,
+                    token_cache=temp_cache,
+                )
+
+                assert cnx, "Connection object should be valid"
+                cnx.close()
+
+                # Verify: proxy Wiremock saw the token request
+                proxy_requests = requests.get(
+                    f"http://{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}/__admin/requests"
+                ).json()
+                assert any(
+                    req["request"]["url"].endswith("/oauth/token-request")
+                    for req in proxy_requests["requests"]
+                ), "Proxy did not record token-request"
+
+                # Verify: target Wiremock also saw it (because proxy forwarded)
+                target_requests = requests.get(
+                    f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/__admin/requests"
+                ).json()
+                assert any(
+                    req["request"]["url"].endswith("/oauth/token-request")
+                    for req in target_requests["requests"]
+                ), "Target did not receive token-request forwarded by proxy"
+
+
+#
+#
+# import json
+# import requests
+# from unittest import mock
+#
+# import pytest
+# import snowflake.connector
+# from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
+#
+# from ..test_utils.wiremock.wiremock_utils import WiremockClient
+#
+#
+# @pytest.fixture()
+# def temp_cache():
+#     """In-memory token cache to observe refresh-token behaviour (copied from existing tests)."""
+#
+#     class TemporaryCache(TokenCache):
+#         def __init__(self):
+#             self.cache = {}
+#
+#         def store(self, key: TokenKey, token: str) -> None:
+#             self.cache[key] = token
+#
+#         def retrieve(self, key: TokenKey) -> str | None:  # type: ignore[override]
+#             return self.cache.get(key)
+#
+#         def remove(self, key: TokenKey) -> None:
+#             if key in self.cache:
+#                 del self.cache[key]
+#
+#     return TemporaryCache()
+#
+#
+# @pytest.mark.skipolddriver
+# def test_client_credentials_flow_via_explicit_proxy(
+#     wiremock_oauth_client_creds_dir,
+#     wiremock_generic_mappings_dir,
+#     temp_cache,
+# ):
+#     """Spin up two Wiremock instances: one acts as a true proxy that forwards to the target service."""
+#
+#     # Start target Wiremock first (acts as Snowflake+IdP backend)
+#     with WiremockClient() as target_wm:
+#         target_wm.import_mapping(wiremock_oauth_client_creds_dir / "successful_flow.json")
+#         target_wm.add_mapping(wiremock_generic_mappings_dir / "snowflake_login_successful.json")
+#         target_wm.add_mapping(wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json")
+#
+#         # Now start proxy Wiremock (will forward everything to target)
+#         with WiremockClient(forbidden_ports=[target_wm.wiremock_http_port, target_wm.wiremock_https_port]) as proxy_wm:
+#             # Configure proxy Wiremock to forward every request to target Wiremock
+#             proxy_mapping = {
+#                 "request": {"urlPattern": ".*", "method": "ANY"},
+#                 "proxyBaseUrl": f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}"
+#             }
+#             proxy_wm.add_mapping(proxy_mapping)
+#
+#             # Prepare OAuth token request URL pointing at *target* server
+#             token_request_url = (
+#                 f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/token-request"
+#             )
+#
+#             # Establish connection through explicit proxy
+#             cnx = snowflake.connector.connect(
+#                 user="testUser",
+#                 authenticator="OAUTH_CLIENT_CREDENTIALS",
+#                 oauth_client_id="cid",
+#                 oauth_client_secret="secret",
+#                 account="testAccount",
+#                 protocol="http",
+#                 role="ANALYST",
+#                 oauth_token_request_url=token_request_url,
+#                 host=target_wm.wiremock_host,
+#                 port=target_wm.wiremock_http_port,
+#                 proxy_host=proxy_wm.wiremock_host,
+#                 proxy_port=str(proxy_wm.wiremock_http_port),
+#                 proxy_user="proxyUser",
+#                 proxy_password="proxyPass",
+#                 oauth_enable_refresh_tokens=True,
+#                 client_store_temporary_credential=True,
+#                 token_cache=temp_cache,
+#             )
+#
+#             assert cnx, "Connection object should be valid"
+#             cnx.close()
+#
+#             # Verify: proxy Wiremock saw the token request
+#             proxy_requests = requests.get(
+#                 f"http://{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}/__admin/requests"
+#             ).json()
+#             assert any(
+#                 req["request"]["url"].endswith("/oauth/token-request") for req in proxy_requests["requests"]
+#             ), "Proxy did not record token-request"
+#
+#             # Verify: target Wiremock also saw it (because proxy forwarded)
+#             target_requests = requests.get(
+#                 f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/__admin/requests"
+#             ).json()
+#             assert any(
+#                 req["request"]["url"].endswith("/oauth/token-request") for req in target_requests["requests"]
+#             ), "Target did not receive token-request forwarded by proxy"
+#
+#
+
+
+@pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
+def test_oauth_code_successful_flow_through_proxy(
+    wiremock_oauth_authorization_code_dir,
+    wiremock_generic_mappings_dir,
+    webbrowser_mock,
+    monkeypatch,
+    omit_oauth_urls_check,
+) -> None:
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
+
+    # Start target Wiremock first (acts as Snowflake+IdP backend)
+    with WiremockClient() as target_wm:
+        target_wm.import_mapping(
+            wiremock_oauth_authorization_code_dir / "successful_flow.json"
+        )
+        target_wm.add_mapping(
+            wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+        )
+        target_wm.add_mapping(
+            wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+        )
+
+        # Now start proxy Wiremock (will forward everything to target)
+        with WiremockClient(forbidden_ports=[target_wm.wiremock_http_port]) as proxy_wm:
+            # Configure proxy Wiremock using a json template on disk
+            proxy_mapping_path = (
+                wiremock_generic_mappings_dir / "proxy_forward_all.json"
+            )
+            with open(proxy_mapping_path) as f:
+                proxy_mapping_json = json.load(f)
+            proxy_mapping_json["mappings"][0]["response"][
+                "proxyBaseUrl"
+            ] = f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}"
+            proxy_wm.import_mapping(proxy_mapping_json)
+
+            # Prepare OAuth token request URL pointing at *target* server
+            # token_request_url = (
+            #     f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/token-request"
+            # )
+
+            with mock.patch("webbrowser.open", new=webbrowser_mock.open):
+                with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+                    cnx = snowflake.connector.connect(
+                        user="testUser",
+                        authenticator="OAUTH_AUTHORIZATION_CODE",
+                        oauth_client_id="123",
+                        account="testAccount",
+                        protocol="http",
+                        role="ANALYST",
+                        proxy_host=proxy_wm.wiremock_host,
+                        proxy_port=str(proxy_wm.wiremock_http_port),
+                        proxy_user="proxyUser",
+                        proxy_password="proxyPass",
+                        oauth_client_secret="testClientSecret",
+                        oauth_token_request_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/token-request",
+                        oauth_authorization_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/authorize",
+                        oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                        host=target_wm.wiremock_host,
+                        port=target_wm.wiremock_http_port,
+                    )
+
+                    assert cnx, "invalid cnx"
+                    cnx.close()
+
+                # with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+                #     # Establish connection through explicit proxy
+                #     cnx = snowflake.connector.connect(
+                #         user="testUser",
+                #         authenticator="OAUTH_CLIENT_CREDENTIALS",
+                #         oauth_client_id="cid",
+                #         oauth_client_secret="secret",
+                #         account="testAccount",
+                #         protocol="http",
+                #         role="ANALYST",
+                #         oauth_token_request_url=token_request_url,
+                #         host=target_wm.wiremock_host,
+                #         port=target_wm.wiremock_http_port,
+                #         # proxy_host=proxy_wm.wiremock_host,
+                #         # proxy_port=str(proxy_wm.wiremock_http_port),
+                #         # proxy_user="proxyUser",
+                #         # proxy_password="proxyPass",
+                #         oauth_enable_refresh_tokens=True,
+                #         client_store_temporary_credential=True,
+                #         token_cache=temp_cache,
+                #     )
+                #
+                #     assert cnx, "Connection object should be valid"
+                #     cnx.close()
+
+                # Verify: proxy Wiremock saw the token request
+                proxy_requests = requests.get(
+                    f"http://{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}/__admin/requests"
+                ).json()
+                assert any(
+                    req["request"]["url"].endswith("/oauth/token-request")
+                    for req in proxy_requests["requests"]
+                ), "Proxy did not record token-request"
+
+                # Verify: target Wiremock also saw it (because proxy forwarded)
+                target_requests = requests.get(
+                    f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/__admin/requests"
+                ).json()
+                assert any(
+                    req["request"]["url"].endswith("/oauth/token-request")
+                    for req in target_requests["requests"]
+                ), "Target did not receive token-request forwarded by proxy"
