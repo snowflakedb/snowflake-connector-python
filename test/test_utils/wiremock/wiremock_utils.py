@@ -265,8 +265,8 @@ def get_clients_for_proxy_and_target(
             / "data"
             / "wiremock"
             / "mappings"
-            / "proxy"
-            / "forward_all.json"
+            / "generic"
+            / "proxy_forward_all.json"
         )
 
     # Start the *target* Wiremock first – this will emulate Snowflake / IdP backend

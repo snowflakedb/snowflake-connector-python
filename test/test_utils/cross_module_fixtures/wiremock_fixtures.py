@@ -70,12 +70,17 @@ def conn_cnx_wiremock(
 
 
 @pytest.fixture
-def wiremock_target_proxy_pair():
+def wiremock_target_proxy_pair(wiremock_generic_mappings_dir):
     """Starts a *target* Wiremock and a *proxy* Wiremock pre-configured to forward to it.
 
     The fixture yields a tuple ``(target_wm, proxy_wm)`` of  ``WiremockClient``
     instances.  It is a thin wrapper around
     ``test.test_utils.wiremock.wiremock_utils.proxy_target_pair``.
     """
-    with get_clients_for_proxy_and_target() as pair:
+    wiremock_proxy_mapping_path = (
+        wiremock_generic_mappings_dir / "proxy_forward_all.json"
+    )
+    with get_clients_for_proxy_and_target(
+        proxy_mapping_template=wiremock_proxy_mapping_path
+    ) as pair:
         yield pair
