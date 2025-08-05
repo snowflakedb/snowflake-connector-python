@@ -42,6 +42,7 @@ except ImportError:
     AuthByDefault = AuthByOkta = AuthByOAuth = AuthByWebBrowser = MagicMock
 
 try:  # pragma: no cover
+    import snowflake.connector.vendored.requests as requests
     from snowflake.connector.auth import AuthByUsrPwdMfa
     from snowflake.connector.config_manager import CONFIG_MANAGER
     from snowflake.connector.constants import (
@@ -719,3 +720,66 @@ def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
             oauth_enable_single_use_refresh_tokens=rtr_enabled,
         )
         assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled
+
+
+@pytest.mark.skipolddriver
+def test_large_query_through_proxy(
+    wiremock_generic_mappings_dir, wiremock_target_proxy_pair, wiremock_mapping_dir
+):
+    target_wm, proxy_wm = wiremock_target_proxy_pair
+
+    password_mapping = wiremock_mapping_dir / "auth/password/successful_flow.json"
+    multi_chunk_request_mapping = (
+        wiremock_mapping_dir / "queries/select_large_request_successful.json"
+    )
+    disconnect_mapping = (
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+    telemetry_mapping = wiremock_generic_mappings_dir / "telemetry.json"
+    chunk_1_mapping = wiremock_mapping_dir / "queries/chunk_1.json"
+    chunk_2_mapping = wiremock_mapping_dir / "queries/chunk_2.json"
+
+    target_wm.import_mapping(password_mapping)
+    target_wm.add_mapping(
+        multi_chunk_request_mapping, placeholders=target_wm.http_placeholders
+    )
+    target_wm.add_mapping(disconnect_mapping)
+    target_wm.add_mapping(telemetry_mapping)
+    target_wm.add_mapping(chunk_1_mapping, placeholders=target_wm.http_placeholders)
+    target_wm.add_mapping(chunk_2_mapping, placeholders=target_wm.http_placeholders)
+
+    row_count = 50_000
+    with snowflake.connector.connect(
+        user="testUser",
+        password="testPassword",
+        account="testAccount",
+        host=target_wm.wiremock_host,
+        port=target_wm.wiremock_http_port,
+        protocol="http",
+        warehouse="TEST_WH",
+        proxy_host=proxy_wm.wiremock_host,
+        proxy_port=str(proxy_wm.wiremock_http_port),
+        proxy_user="proxyUser",
+        proxy_password="proxyPass",
+    ) as conn:
+        cursors = conn.execute_string(
+            f"select seq4() as n from table(generator(rowcount => {row_count}));"
+        )
+        assert len(cursors[0]._result_set.batches) > 1  # We need to have remote results
+    assert list(cursors[0])
+
+    # Ensure proxy saw query
+    proxy_reqs = requests.get(f"{proxy_wm.http_host_with_port}/__admin/requests").json()
+    assert any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in proxy_reqs["requests"]
+    )
+
+    # Ensure backend saw query
+    target_reqs = requests.get(
+        f"{target_wm.http_host_with_port}/__admin/requests"
+    ).json()
+    assert any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in target_reqs["requests"]
+    )

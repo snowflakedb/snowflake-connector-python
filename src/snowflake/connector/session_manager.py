@@ -290,13 +290,6 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
             logger.debug("Creating a config for the SessionManager")
             config = HttpConfig(**http_config_kwargs)
         self._cfg: HttpConfig = config
-        self._proxy = get_proxy_url(
-            self._cfg.proxy_host,
-            self._cfg.proxy_port,
-            self._cfg.proxy_user,
-            self._cfg.proxy_password,
-        )
-
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
         )
@@ -318,6 +311,19 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
     @property
     def config(self) -> HttpConfig:
         return self._cfg
+
+    @config.setter
+    def config(self, cfg: HttpConfig) -> None:
+        self._cfg = cfg
+
+    @property
+    def proxy_url(self) -> str:
+        return get_proxy_url(
+            self._cfg.proxy_host,
+            self._cfg.proxy_port,
+            self._cfg.proxy_user,
+            self._cfg.proxy_password,
+        )
 
     @property
     def use_pooling(self) -> bool:
@@ -376,7 +382,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
     def make_session(self) -> Session:
         session = requests.Session()
         self._mount_adapters(session)
-        session.proxies = {"http": self._proxy, "https": self._proxy}
+        session.proxies = {"http": self.proxy_url, "https": self.proxy_url}
         return session
 
     @contextlib.contextmanager
