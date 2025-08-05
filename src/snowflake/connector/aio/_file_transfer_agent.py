@@ -63,6 +63,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
         unsafe_file_write: bool = False,
+        gcs_use_virtual_endpoints: bool = False,
     ) -> None:
         super().__init__(
             cursor=cursor,
@@ -82,6 +83,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
             source_from_stream=source_from_stream,
             use_s3_regional_url=use_s3_regional_url,
             unsafe_file_write=unsafe_file_write,
+            gcs_use_virtual_endpoints=gcs_use_virtual_endpoints,
         )
 
     async def execute(self) -> None:
@@ -281,7 +283,6 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 self._credentials,
                 AZURE_CHUNK_SIZE,
                 self._stage_info,
-                use_s3_regional_url=self._use_s3_regional_url,
                 unsafe_file_write=self._unsafe_file_write,
             )
         elif self._stage_location_type == S3_FS:
@@ -303,7 +304,6 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 self._stage_info,
                 self._cursor._connection,
                 self._command,
-                use_s3_regional_url=self._use_s3_regional_url,
                 unsafe_file_write=self._unsafe_file_write,
             )
             if client.security_token:
