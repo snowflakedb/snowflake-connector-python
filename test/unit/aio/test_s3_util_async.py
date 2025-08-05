@@ -29,13 +29,10 @@ try:
         SnowflakeFileMeta,
         StorageCredential,
     )
-    from snowflake.connector.s3_storage_client import ERRORNO_WSAECONNABORTED
     from snowflake.connector.vendored.requests import HTTPError
 except ImportError:
     # Compatibility for olddriver tests
     from requests import HTTPError
-
-    from snowflake.connector.s3_util import ERRORNO_WSAECONNABORTED  # NOQA
 
     SnowflakeFileMeta = dict
     SnowflakeS3RestClient = None
@@ -500,3 +497,46 @@ async def test_accelerate_in_china_endpoint():
         8 * megabyte,
     )
     assert not await rest_client.transfer_accelerate_config()
+
+
+@pytest.mark.parametrize(
+    "use_s3_regional_url,stage_info_flags,expected",
+    [
+        (False, {}, False),
+        (True, {}, True),
+        (False, {"useS3RegionalUrl": True}, True),
+        (False, {"useRegionalUrl": True}, True),
+        (True, {"useS3RegionalUrl": False}, True),
+        (False, {"useS3RegionalUrl": True, "useRegionalUrl": False}, True),
+        (False, {"useS3RegionalUrl": False, "useRegionalUrl": True}, True),
+        (False, {"useS3RegionalUrl": False, "useRegionalUrl": False}, False),
+    ],
+)
+def test_s3_regional_url_logic_async(use_s3_regional_url, stage_info_flags, expected):
+    """Tests that the async S3 storage client correctly handles regional URL flags from stage_info."""
+    if SnowflakeS3RestClient is None:
+        pytest.skip("S3 storage client not available")
+
+    meta = SnowflakeFileMeta(
+        name="path/some_file",
+        src_file_name="path/some_file",
+        stage_location_type="S3",
+    )
+    storage_credentials = StorageCredential({}, mock.Mock(), "test")
+
+    stage_info = {
+        "region": "us-west-2",
+        "location": "test-bucket",
+        "endPoint": None,
+    }
+    stage_info.update(stage_info_flags)
+
+    client = SnowflakeS3RestClient(
+        meta=meta,
+        credentials=storage_credentials,
+        stage_info=stage_info,
+        chunk_size=1024,
+        use_s3_regional_url=use_s3_regional_url,
+    )
+
+    assert client.use_s3_regional_url == expected

@@ -27,6 +27,7 @@ from ..gcs_storage_client import (
     GCS_METADATA_ENCRYPTIONDATAPROP,
     GCS_METADATA_MATDESC_KEY,
     GCS_METADATA_SFC_DIGEST,
+    GCS_REGION_ME_CENTRAL_2,
 )
 
 
@@ -38,7 +39,6 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
         stage_info: dict[str, Any],
         cnx: SnowflakeConnection,
         command: str,
-        use_s3_regional_url: bool = False,
         unsafe_file_write: bool = False,
     ) -> None:
         """Creates a client object with given stage credentials.
@@ -65,6 +65,15 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
         # presigned_url in meta is for downloading
         self.presigned_url: str = meta.presigned_url or stage_info.get("presignedUrl")
         self.security_token = credentials.creds.get("GCS_ACCESS_TOKEN")
+        self.use_regional_url = (
+            "region" in stage_info
+            and stage_info["region"].lower() == GCS_REGION_ME_CENTRAL_2
+            or "useRegionalUrl" in stage_info
+            and stage_info["useRegionalUrl"]
+        )
+        self.endpoint: str | None = (
+            None if "endPoint" not in stage_info else stage_info["endPoint"]
+        )
 
     async def _has_expired_token(self, response: aiohttp.ClientResponse) -> bool:
         return self.security_token and response.status == 401
@@ -73,7 +82,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
         self, response: aiohttp.ClientResponse
     ) -> bool:
         # Presigned urls can be generated for any xml-api operation
-        # offered by GCS. Hence the error codes expected are similar
+        # offered by GCS. Hence, the error codes expected are similar
         # to xml api.
         # https://cloud.google.com/storage/docs/xml-api/reference-status
 
@@ -132,7 +141,14 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
         ):
             if not self.presigned_url:
                 upload_url = self.generate_file_url(
-                    self.stage_info["location"], meta.dst_file_name.lstrip("/")
+                    self.stage_info["location"],
+                    meta.dst_file_name.lstrip("/"),
+                    self.use_regional_url,
+                    (
+                        None
+                        if "region" not in self.stage_info
+                        else self.stage_info["region"]
+                    ),
                 )
                 access_token = self.security_token
             else:
@@ -162,7 +178,15 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
             gcs_headers = {}
             if not self.presigned_url:
                 download_url = self.generate_file_url(
-                    self.stage_info["location"], meta.src_file_name.lstrip("/")
+                    self.stage_info["location"],
+                    meta.src_file_name.lstrip("/"),
+                    self.use_regional_url,
+                    (
+                        None
+                        if "region" not in self.stage_info
+                        else self.stage_info["region"]
+                    ),
+                    self.endpoint,
                 )
                 access_token = self.security_token
                 gcs_headers["Authorization"] = f"Bearer {access_token}"
@@ -279,7 +303,14 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
 
             def generate_url_and_authenticated_headers():
                 url = self.generate_file_url(
-                    self.stage_info["location"], filename.lstrip("/")
+                    self.stage_info["location"],
+                    filename.lstrip("/"),
+                    self.use_regional_url,
+                    (
+                        None
+                        if "region" not in self.stage_info
+                        else self.stage_info["region"]
+                    ),
                 )
                 gcs_headers = {"Authorization": f"Bearer {self.security_token}"}
                 rest_args = {"headers": gcs_headers}
