@@ -169,7 +169,6 @@ CLIENT_VERSION = CLIENT_VERSION
 PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
 
 NO_TOKEN = "no-token"
-NO_EXTERNAL_SESSION_ID = "no-external-session-id"
 
 STATUS_TO_EXCEPTION: dict[int, type[Error]] = {
     INTERNAL_SERVER_ERROR: InternalServerError,
@@ -332,7 +331,7 @@ class PATWithExternalSessionAuth(AuthBase):
             del r.headers[HEADER_AUTHORIZATION_KEY]
         if self.token != NO_TOKEN:
             r.headers[HEADER_AUTHORIZATION_KEY] = "Bearer " + self.token
-        if self.external_session_id != NO_EXTERNAL_SESSION_ID:
+        if self.external_session_id:
             r.headers[HEADER_EXTERNAL_SESSION_KEY] = self.external_session_id
         return r
 
@@ -953,7 +952,7 @@ class SnowflakeRestful:
         retry_ctx,
         no_retry: bool = False,
         token=NO_TOKEN,
-        external_session_id=NO_EXTERNAL_SESSION_ID,
+        external_session_id=None,
         **kwargs,
     ):
         conn = self._connection
