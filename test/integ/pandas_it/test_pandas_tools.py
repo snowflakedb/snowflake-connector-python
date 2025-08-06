@@ -1214,29 +1214,41 @@ def test_write_pandas_with_use_vectorized_scanner(
         f"({col_name} STRING, {col_points} INT, {col_id} INT AUTOINCREMENT)"
     )
 
-    select_count_sql = f"SELECT count(*) FROM {table_name}"
     drop_sql = f"DROP TABLE IF EXISTS {table_name}"
     with conn_cnx() as cnx:  # type: SnowflakeConnection
+        original_cur = cnx.cursor().execute
+
+        def fake_execute(query, params=None, *args, **kwargs):
+            return original_cur(query, params, *args, **kwargs)
+
         cnx.execute_string(create_sql)
         try:
-            # Write dataframe with 1 row
-            success, nchunks, nrows, _ = write_pandas(
-                cnx,
-                df,
-                random_table_name,
-                quote_identifiers=False,
-                auto_create_table=False,
-                overwrite=True,
-                index=True,
-                use_vectorized_scanner=use_vectorized_scanner,
-            )
-            # Check write_pandas output
-            assert success
-            assert nchunks == 1
-            assert nrows == 1
-            result = cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
-            # Check number of rows
-            assert result["COUNT(*)"] == 1
+            with mock.patch(
+                "snowflake.connector.cursor.SnowflakeCursor.execute",
+                side_effect=fake_execute,
+            ) as execute:
+                # Write dataframe with 1 row
+                success, nchunks, nrows, _ = write_pandas(
+                    cnx,
+                    df,
+                    random_table_name,
+                    quote_identifiers=False,
+                    auto_create_table=False,
+                    overwrite=True,
+                    index=True,
+                    use_vectorized_scanner=use_vectorized_scanner,
+                )
+                # Check write_pandas output
+                assert success
+                assert nchunks == 1
+                assert nrows == 1
+
+                for call in execute.call_args_list:
+                    if call.args[0].startswith("COPY"):
+                        assert (
+                            f"USE_VECTORIZED_SCANNER={use_vectorized_scanner}"
+                            in call.args[0]
+                        )
 
         finally:
             cnx.execute_string(drop_sql)

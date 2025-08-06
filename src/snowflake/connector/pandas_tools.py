@@ -261,7 +261,7 @@ def write_pandas(
     use_logical_type: bool | None = None,
     iceberg_config: dict[str, str] | None = None,
     bulk_upload_chunks: bool = False,
-    use_vectorized_scanner: bool = True,
+    use_vectorized_scanner: bool = False,
     **kwargs: Any,
 ) -> tuple[
     bool,
