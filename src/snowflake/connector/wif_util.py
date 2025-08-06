@@ -22,19 +22,6 @@ logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
 DEFAULT_ENTRA_SNOWFLAKE_RESOURCE = "api://fd3f753b-eed3-462c-b6a7-a4b5bb650aad"
 
-"""
-References:
-- https://learn.microsoft.com/en-us/entra/identity-platform/authentication-national-cloud#microsoft-entra-authentication-endpoints
-- https://learn.microsoft.com/en-us/answers/questions/1190472/what-are-the-token-issuers-for-the-sovereign-cloud
-"""
-AZURE_ISSUER_PREFIXES = [
-    "https://sts.windows.net/",  # Public and USGov (v1 issuer)
-    "https://sts.chinacloudapi.cn/",  # Mooncake (v1 issuer)
-    "https://login.microsoftonline.com/",  # Public (v2 issuer)
-    "https://login.microsoftonline.us/",  # USGov (v2 issuer)
-    "https://login.partner.microsoftonline.cn/",  # Mooncake (v2 issuer)
-]
-
 
 @unique
 class AttestationProvider(Enum):
@@ -54,6 +41,11 @@ class AttestationProvider(Enum):
         """Converts a string to a strongly-typed enum value of AttestationProvider."""
         return AttestationProvider[provider.upper()]
 
+    @staticmethod
+    def all_string_values() -> list[str]:
+        """Returns a list of all string values of the AttestationProvider enum."""
+        return [provider.value for provider in AttestationProvider]
+
 
 @dataclass
 class WorkloadIdentityAttestation:
@@ -62,17 +54,13 @@ class WorkloadIdentityAttestation:
     user_identifier_components: dict
 
 
-def try_metadata_service_call(
-    method: str, url: str, headers: dict, timeout_sec: int = 3
-) -> Response | None:
-    """Tries to make a HTTP request to the metadata service with the given URL, method, headers and timeout.
+def try_metadata_service_call(method: str, url: str, headers: dict) -> Response | None:
+    """Tries to make a HTTP request to the metadata service with the given URL, method and headers.
 
     If we receive an error response or any exceptions are raised, returns None. Otherwise returns the response.
     """
     try:
-        res: Response = requests.request(
-            method=method, url=url, headers=headers, timeout=timeout_sec
-        )
+        res: Response = requests.request(method=method, url=url, headers=headers)
         if not res.ok:
             return None
     except requests.RequestException:
@@ -86,63 +74,75 @@ def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[st
     Note: the real token verification (including signature verification) happens on the Snowflake side. The driver doesn't have
     the keys to verify these JWTs, and in any case that's not where the security boundary is drawn.
 
-    We only decode the JWT here to get some basic claims, which will be used for a) a quick smoke test to ensure we got the right
-    issuer, and b) to find the unique user being asserted and populate assertion_content. The latter may be used for logging
+    We only decode the JWT here to get some basic claims, which will be used for a) a quick smoke test to ensure the token is well-formed,
+    and b) to find the unique user being asserted and populate assertion_content. The latter may be used for logging
     and possibly caching.
 
-    If there are any errors in parsing the token or extracting iss and sub, this will return (None, None).
+    Any errors during token parsing will be bubbled up. Missing 'iss' or 'sub' claims will also raise an error.
     """
-    try:
-        claims = jwt.decode(jwt_str, options={"verify_signature": False})
-    except jwt.exceptions.InvalidTokenError:
-        logger.warning("Token is not a valid JWT.", exc_info=True)
-        return None, None
+    claims = jwt.decode(jwt_str, options={"verify_signature": False})
 
     if not ("iss" in claims and "sub" in claims):
-        logger.warning("Token is missing 'iss' or 'sub' claims.")
-        return None, None
+        raise ProgrammingError(
+            msg="Token is missing 'iss' or 'sub' claims.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
 
     return claims["iss"], claims["sub"]
 
 
-def get_aws_region() -> str | None:
-    """Get the current AWS workload's region, if any."""
+def get_aws_region() -> str:
+    """Get the current AWS workload's region, or raises an error if it's missing."""
+    region = None
     if "AWS_REGION" in os.environ:  # Lambda
-        return os.environ["AWS_REGION"]
+        region = os.environ["AWS_REGION"]
     else:  # EC2
-        return InstanceMetadataRegionFetcher().retrieve_region()
+        region = InstanceMetadataRegionFetcher().retrieve_region()
+
+    if not region:
+        raise ProgrammingError(
+            msg="No AWS region was found. Ensure the application is running on AWS.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+    return region
 
 
-def get_aws_arn() -> str | None:
-    """Get the current AWS workload's ARN, if any."""
+def get_aws_arn() -> str:
+    """Get the current AWS workload's ARN."""
     caller_identity = boto3.client("sts").get_caller_identity()
     if not caller_identity or "Arn" not in caller_identity:
-        return None
+        raise ProgrammingError(
+            msg=f"No AWS identity was found. Ensure the application is running on AWS with an IAM role attached.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
     return caller_identity["Arn"]
 
 
-def get_aws_partition(arn: str) -> str | None:
+def get_aws_partition(arn: str) -> str:
     """Get the current AWS partition from ARN, if any.
 
     Args:
         arn (str): The Amazon Resource Name (ARN) string.
 
     Returns:
-        str | None: The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov')
-                    if found, otherwise None.
+        str: The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov').
+
+    Raises:
+        ProgrammingError: If the ARN is invalid or does not contain a valid partition.
 
     Reference: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html.
     """
-    if not arn or not isinstance(arn, str):
-        return None
     parts = arn.split(":")
     if len(parts) > 1 and parts[0] == "arn" and parts[1]:
         return parts[1]
-    logger.warning("Invalid AWS ARN: %s", arn)
-    return None
+
+    raise ProgrammingError(
+        msg=f"Invalid AWS ARN: '{arn}'.",
+        errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+    )
 
 
-def get_aws_sts_hostname(region: str, partition: str) -> str | None:
+def get_aws_sts_hostname(region: str, partition: str) -> str:
     """Constructs the AWS STS hostname for a given region and partition.
 
     Args:
@@ -150,22 +150,14 @@ def get_aws_sts_hostname(region: str, partition: str) -> str | None:
         partition (str): The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov').
 
     Returns:
-        str | None: The AWS STS hostname (e.g., 'sts.us-east-1.amazonaws.com')
-                    if a valid hostname can be constructed, otherwise None.
+        str: The AWS STS hostname (e.g., 'sts.us-east-1.amazonaws.com')
+             if a valid hostname can be constructed, otherwise raises a ProgrammingError.
 
     References:
     - https://docs.aws.amazon.com/sdkref/latest/guide/feature-sts-regionalized-endpoints.html
     - https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_region-endpoints.html
     - https://docs.aws.amazon.com/general/latest/gr/sts.html
     """
-    if (
-        not region
-        or not partition
-        or not isinstance(region, str)
-        or not isinstance(partition, str)
-    ):
-        return None
-
     if partition == "aws":
         # For the 'aws' partition, STS endpoints are generally regional
         # except for the global endpoint (sts.amazonaws.com) which is
@@ -181,32 +173,26 @@ def get_aws_sts_hostname(region: str, partition: str) -> str | None:
             f"sts.{region}.amazonaws.com"  # GovCloud uses .com, but dedicated regions
         )
     else:
-        logger.warning("Invalid AWS partition: %s", partition)
-        return None
+        raise ProgrammingError(
+            msg=f"Invalid AWS partition: '{partition}'.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
 
 
-def create_aws_attestation() -> WorkloadIdentityAttestation | None:
+def create_aws_attestation() -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for AWS.
 
-    If the application isn't running on AWS or no credentials were found, returns None.
+    If the application isn't running on AWS or no credentials were found, raises an error.
     """
     aws_creds = boto3.session.Session().get_credentials()
     if not aws_creds:
-        logger.debug("No AWS credentials were found.")
-        return None
+        raise ProgrammingError(
+            msg="No AWS credentials were found. Ensure the application is running on AWS with an IAM role attached.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
     region = get_aws_region()
-    if not region:
-        logger.debug("No AWS region was found.")
-        return None
     arn = get_aws_arn()
-    if not arn:
-        logger.debug("No AWS caller identity was found.")
-        return None
     partition = get_aws_partition(arn)
-    if not partition:
-        logger.debug("No AWS partition was found.")
-        return None
-
     sts_hostname = get_aws_sts_hostname(region, partition)
     request = AWSRequest(
         method="POST",
@@ -230,32 +216,22 @@ def create_aws_attestation() -> WorkloadIdentityAttestation | None:
     )
 
 
-def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
+def create_gcp_attestation() -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for GCP.
 
-    If the application isn't running on GCP or no credentials were found, returns None.
+    If the application isn't running on GCP or no credentials were found, raises an error.
     """
-    res = try_metadata_service_call(
+    res = requests.request(
         method="GET",
         url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
         headers={
             "Metadata-Flavor": "Google",
         },
     )
-    if res is None:
-        # Most likely we're just not running on GCP, which may be expected.
-        logger.debug("GCP metadata server request was not successful.")
-        return None
+    res.raise_for_status()
 
     jwt_str = res.content.decode("utf-8")
-    issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
-    if not issuer or not subject:
-        return None
-    if issuer != "https://accounts.google.com":
-        # This might happen if we're running on a different platform that responds to the same metadata request signature as GCP.
-        logger.debug("Unexpected GCP token issuer '%s'", issuer)
-        return None
-
+    _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     return WorkloadIdentityAttestation(
         AttestationProvider.GCP, jwt_str, {"sub": subject}
     )
@@ -263,10 +239,10 @@ def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
 
 def create_azure_attestation(
     snowflake_entra_resource: str,
-) -> WorkloadIdentityAttestation | None:
+) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for Azure.
 
-    If the application isn't running on Azure or no credentials were found, returns None.
+    If the application isn't running on Azure or no credentials were found, raises an error.
     """
     headers = {"Metadata": "True"}
     url_without_query_string = "http://169.254.169.254/metadata/identity/oauth2/token"
@@ -279,8 +255,10 @@ def create_azure_attestation(
 
     if is_azure_functions:
         if not identity_header:
-            logger.warning("Managed identity is not enabled on this Azure function.")
-            return None
+            raise ProgrammingError(
+                msg="Managed identity is not enabled on this Azure function.",
+                errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+            )
 
         # Azure Functions uses a different endpoint, headers and API version.
         url_without_query_string = identity_endpoint
@@ -292,116 +270,64 @@ def create_azure_attestation(
         if managed_identity_client_id:
             query_params += f"&client_id={managed_identity_client_id}"
 
-    res = try_metadata_service_call(
+    res = requests.request(
         method="GET",
         url=f"{url_without_query_string}?{query_params}",
         headers=headers,
     )
-    if res is None:
-        # Most likely we're just not running on Azure, which may be expected.
-        logger.debug("Azure metadata server request was not successful.")
-        return None
+    res.raise_for_status()
 
-    try:
-        jwt_str = res.json().get("access_token")
-        if not jwt_str:
-            # Could be that Managed Identity is disabled.
-            logger.debug("No access token found in Azure response.")
-            return None
-    except (ValueError, KeyError) as e:
-        logger.debug(f"Error parsing Azure response: {e}")
-        return None
+    jwt_str = res.json().get("access_token")
+    if not jwt_str:
+        raise ProgrammingError(
+            msg="No access token found in Azure metadata service response.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
 
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
-    if not issuer or not subject:
-        return None
-    if not any(
-        issuer.startswith(issuer_prefix) for issuer_prefix in AZURE_ISSUER_PREFIXES
-    ):
-        # This might happen if we're running on a different platform that responds to the same metadata request signature as Azure.
-        logger.debug("Unexpected Azure token issuer '%s'", issuer)
-        return None
-
     return WorkloadIdentityAttestation(
         AttestationProvider.AZURE, jwt_str, {"iss": issuer, "sub": subject}
     )
 
 
-def create_oidc_attestation(token: str | None) -> WorkloadIdentityAttestation | None:
+def create_oidc_attestation(token: str | None) -> WorkloadIdentityAttestation:
     """Tries to create an attestation using the given token.
 
     If this is not populated, returns None.
     """
     if not token:
-        logger.debug("No OIDC token was specified.")
-        return None
+        raise ProgrammingError(
+            msg=f"token must be provided if workload_identity_provider=OIDC",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
 
     issuer, subject = extract_iss_and_sub_without_signature_verification(token)
-    if not issuer or not subject:
-        return None
-
     return WorkloadIdentityAttestation(
         AttestationProvider.OIDC, token, {"iss": issuer, "sub": subject}
     )
 
 
-def create_autodetect_attestation(
-    entra_resource: str, token: str | None = None
-) -> WorkloadIdentityAttestation | None:
-    """Tries to create an attestation using the auto-detected runtime environment.
-
-    If no attestation can be found, returns None.
-    """
-    attestation = create_oidc_attestation(token)
-    if attestation:
-        return attestation
-
-    attestation = create_aws_attestation()
-    if attestation:
-        return attestation
-
-    attestation = create_azure_attestation(entra_resource)
-    if attestation:
-        return attestation
-
-    attestation = create_gcp_attestation()
-    if attestation:
-        return attestation
-
-    return None
-
-
 def create_attestation(
-    provider: AttestationProvider | None,
+    provider: AttestationProvider,
     entra_resource: str | None = None,
     token: str | None = None,
 ) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
 
-    If the provider is None, this will try to auto-detect a credential from the runtime environment. If the provider fails to detect a credential,
-    a ProgrammingError will be raised.
-
     If an explicit entra_resource was provided to the connector, this will be used. Otherwise, the default Snowflake Entra resource will be used.
     """
     entra_resource = entra_resource or DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
 
-    attestation: WorkloadIdentityAttestation = None
     if provider == AttestationProvider.AWS:
-        attestation = create_aws_attestation()
+        return create_aws_attestation()
     elif provider == AttestationProvider.AZURE:
-        attestation = create_azure_attestation(entra_resource)
+        return create_azure_attestation(entra_resource)
     elif provider == AttestationProvider.GCP:
-        attestation = create_gcp_attestation()
+        return create_gcp_attestation()
     elif provider == AttestationProvider.OIDC:
-        attestation = create_oidc_attestation(token)
-    elif provider is None:
-        attestation = create_autodetect_attestation(entra_resource, token)
-
-    if not attestation:
-        provider_str = "auto-detect" if provider is None else provider.value
+        return create_oidc_attestation(token)
+    else:
         raise ProgrammingError(
-            msg=f"No workload identity credential was found for '{provider_str}'.",
+            msg=f"Unknown workload_identity_provider: '{provider.value}'.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
-
-    return attestation

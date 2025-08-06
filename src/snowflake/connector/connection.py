@@ -1326,12 +1326,20 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
                 self._check_experimental_authentication_flag()
-                # Standardize the provider enum.
-                if self._workload_identity_provider and isinstance(
-                    self._workload_identity_provider, str
-                ):
+
+                if isinstance(self._workload_identity_provider, str):
                     self._workload_identity_provider = AttestationProvider.from_string(
                         self._workload_identity_provider
+                    )
+                if not self._workload_identity_provider:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"workload_identity_provider must be set to one of {','.join(AttestationProvider.all_string_values())} when authenticator is WORKLOAD_IDENTITY.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
                     )
                 self.auth_class = AuthByWorkloadIdentity(
                     provider=self._workload_identity_provider,

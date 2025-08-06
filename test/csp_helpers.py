@@ -86,7 +86,7 @@ class FakeMetadataService(ABC):
             headers = {}
         return self.__call__(method="GET", url=url, headers=headers, timeout=timeout)
 
-    def __call__(self, method, url, headers, timeout):
+    def __call__(self, method, url, headers, timeout=None):
         """Entry point for the requests mock."""
         logger.debug(f"Received request: {method} {url} {str(headers)}")
         parsed_url = urlparse(url)
