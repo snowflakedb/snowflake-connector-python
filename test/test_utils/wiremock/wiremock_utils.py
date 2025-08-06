@@ -31,22 +31,6 @@ def _get_mapping_str(mapping: Union[str, dict, pathlib.Path]) -> str:
     raise RuntimeError(f"Mapping {mapping} is of an invalid type")
 
 
-def _get_mapping_dict(mapping: Union[str, dict, pathlib.Path]) -> dict:
-    """Load mapping as a dictionary for programmatic modification."""
-    if isinstance(mapping, dict):
-        return mapping.copy()
-    if isinstance(mapping, str):
-        return json.loads(mapping)
-    if isinstance(mapping, pathlib.Path):
-        if mapping.is_file():
-            with open(mapping) as f:
-                return json.load(f)
-        else:
-            raise RuntimeError(f"File with mapping: {mapping} does not exist")
-
-    raise RuntimeError(f"Mapping {mapping} is of an invalid type")
-
-
 class WiremockClient:
     HTTP_HOST_PLACEHOLDER: str = "{{WIREMOCK_HTTP_HOST_WITH_PORT}}"
 
@@ -84,45 +68,26 @@ class WiremockClient:
 
     def add_expected_headers_to_mapping(
         self,
-        mapping: Union[str, dict, pathlib.Path],
-        expected_headers: Optional[dict] = None,
-    ) -> dict:
-        """Load mapping and add expected headers to all request matchers.
-
-        Parameters
-        ----------
-        mapping
-            The mapping to modify
-        expected_headers
-            Dictionary of headers to add to request matchers. If None, no headers are added.
-
-        Returns
-        -------
-        dict
-            The modified mapping as a dictionary
-        """
-        mapping_dict = _get_mapping_dict(mapping)
-
-        if expected_headers is None:
-            return mapping_dict
+        mapping_str: str,
+        expected_headers: dict,
+    ) -> str:
+        """Add expected headers to all request matchers in mapping string."""
+        mapping_dict = json.loads(mapping_str)
 
         def add_headers_to_request(request_dict: dict) -> None:
-            """Add expected headers to a single request dictionary."""
             if "headers" not in request_dict:
                 request_dict["headers"] = {}
             request_dict["headers"].update(expected_headers)
 
-        # Handle single mapping
         if "request" in mapping_dict:
             add_headers_to_request(mapping_dict["request"])
 
-        # Handle mappings array (multiple mappings in one file)
         if "mappings" in mapping_dict:
             for single_mapping in mapping_dict["mappings"]:
                 if "request" in single_mapping:
                     add_headers_to_request(single_mapping["request"])
 
-        return mapping_dict
+        return json.dumps(mapping_dict)
 
     def get_default_placeholders(self) -> dict[str, str]:
         return self.get_http_placeholders()
@@ -243,26 +208,15 @@ class WiremockClient:
         placeholders: Optional[dict[str, object]] = None,
         expected_headers: Optional[dict] = None,
     ):
-        """Import a mapping with optional placeholders and expected headers.
-
-        Parameters
-        ----------
-        mapping
-            The mapping to import
-        placeholders
-            String placeholders to replace in the mapping
-        expected_headers
-            Headers to add to all request matchers in the mapping
-        """
         self._reset_wiremock()
         import_mapping_endpoint = f"{self.http_host_with_port}/__admin/mappings/import"
 
-        # First apply expected headers if specified
-        if expected_headers is not None:
-            mapping = self.add_expected_headers_to_mapping(mapping, expected_headers)
-
-        # Then handle placeholders and import
         mapping_str = _get_mapping_str(mapping)
+        if expected_headers is not None:
+            mapping_str = self.add_expected_headers_to_mapping(
+                mapping_str, expected_headers
+            )
+
         mapping_str = self._replace_placeholders_in_mapping(mapping_str, placeholders)
         response = self._wiremock_post(import_mapping_endpoint, mapping_str)
         if response.status_code != requests.codes.ok:
@@ -290,25 +244,14 @@ class WiremockClient:
         placeholders: Optional[dict[str, object]] = None,
         expected_headers: Optional[dict] = None,
     ):
-        """Add a mapping with optional placeholders and expected headers.
-
-        Parameters
-        ----------
-        mapping
-            The mapping to add
-        placeholders
-            String placeholders to replace in the mapping
-        expected_headers
-            Headers to add to all request matchers in the mapping
-        """
         add_mapping_endpoint = f"{self.http_host_with_port}/__admin/mappings"
 
-        # First apply expected headers if specified
-        if expected_headers is not None:
-            mapping = self.add_expected_headers_to_mapping(mapping, expected_headers)
-
-        # Then handle placeholders and add
         mapping_str = _get_mapping_str(mapping)
+        if expected_headers is not None:
+            mapping_str = self.add_expected_headers_to_mapping(
+                mapping_str, expected_headers
+            )
+
         mapping_str = self._replace_placeholders_in_mapping(mapping_str, placeholders)
         response = self._wiremock_post(add_mapping_endpoint, mapping_str)
         if response.status_code != requests.codes.created:
