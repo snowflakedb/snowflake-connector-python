@@ -19,6 +19,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added basic json support for Interval types.
   - Moved `OAUTH_TYPE` to `CLIENT_ENVIROMENT`.
   - Fix bug where PAT with external session authenticator was used while `external_session_id` was not provided in `SnowflakeRestful.fetch`
+  - Added support for parameter `use_vectorized_scanner` in function `write_pandas`.
 
 - v3.16.0(July 04,2025)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4.
