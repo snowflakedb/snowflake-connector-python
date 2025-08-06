@@ -346,3 +346,13 @@ def _init_rest(
     connection._rest = rest
     rest._post_request = post_request
     return rest
+
+
+def test_mro():
+    """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
+    from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
+    from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
+
+    assert AuthByOkta.mro().index(AuthByPluginAsync) < AuthByOkta.mro().index(
+        AuthByPluginSync
+    )

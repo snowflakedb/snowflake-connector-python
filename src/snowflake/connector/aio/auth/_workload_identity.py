@@ -13,7 +13,7 @@ from .._wif_util import AttestationProvider, create_attestation
 from ._by_plugin import AuthByPlugin as AuthByPluginAsync
 
 
-class AuthByWorkloadIdentity(AuthByWorkloadIdentitySync, AuthByPluginAsync):
+class AuthByWorkloadIdentity(AuthByPluginAsync, AuthByWorkloadIdentitySync):
     """Plugin to authenticate via workload identity."""
 
     def __init__(

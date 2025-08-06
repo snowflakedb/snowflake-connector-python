@@ -871,3 +871,17 @@ async def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(
 
         assert not rest._connection.errorhandler.called  # no error
         assert auth.assertion_content == ref_token
+
+
+def test_mro():
+    """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
+    from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
+    from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
+
+    assert AuthByWebBrowser.mro().index(
+        AuthByPluginAsync
+    ) < AuthByWebBrowser.mro().index(AuthByPluginSync)
+
+    assert AuthByIdToken.mro().index(AuthByPluginAsync) < AuthByIdToken.mro().index(
+        AuthByPluginSync
+    )
