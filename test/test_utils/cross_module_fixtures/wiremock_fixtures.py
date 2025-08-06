@@ -8,10 +8,7 @@ import pytest
 
 import snowflake.connector
 
-from ..wiremock.wiremock_utils import (  # pylint: disable=import-outside-toplevel
-    WiremockClient,
-    get_clients_for_proxy_and_target,
-)
+from ..wiremock.wiremock_utils import WiremockClient, get_clients_for_proxy_and_target
 
 
 @pytest.fixture(scope="session")

@@ -84,8 +84,13 @@ def test_socks_5_proxy_missing_proxy_header_attribute(caplog):
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
 def test_basic_query_through_proxy(
-    wiremock_generic_mappings_dir, wiremock_target_proxy_pair, wiremock_mapping_dir
+    wiremock_generic_mappings_dir,
+    wiremock_target_proxy_pair,
+    wiremock_mapping_dir,
+    proxy_env_vars,
+    proxy_method,
 ):
     target_wm, proxy_wm = wiremock_target_proxy_pair
 
@@ -106,18 +111,32 @@ def test_basic_query_through_proxy(
     target_wm.add_mapping(disconnect_mapping)
     target_wm.add_mapping(telemetry_mapping)
 
+    # Configure proxy based on test parameter
+    set_proxy_env_vars, clear_proxy_env_vars = proxy_env_vars
+    connect_kwargs = {
+        "user": "testUser",
+        "password": "testPassword",
+        "account": "testAccount",
+        "host": target_wm.wiremock_host,
+        "port": target_wm.wiremock_http_port,
+        "protocol": "http",
+        "warehouse": "TEST_WH",
+    }
+
+    if proxy_method == "explicit_args":
+        connect_kwargs.update(
+            {
+                "proxy_host": proxy_wm.wiremock_host,
+                "proxy_port": str(proxy_wm.wiremock_http_port),
+            }
+        )
+        clear_proxy_env_vars()  # Ensure no env vars interfere
+    else:  # env_vars
+        proxy_url = f"http://{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}"
+        set_proxy_env_vars(proxy_url)
+
     # Make connection via proxy
-    cnx = snowflake.connector.connect(
-        user="testUser",
-        password="testPassword",
-        account="testAccount",
-        host=target_wm.wiremock_host,
-        port=target_wm.wiremock_http_port,
-        protocol="http",
-        warehouse="TEST_WH",
-        proxy_host=proxy_wm.wiremock_host,
-        proxy_port=str(proxy_wm.wiremock_http_port),
-    )
+    cnx = snowflake.connector.connect(**connect_kwargs)
     cur = cnx.cursor()
     cur.execute("SELECT 1")
     result = cur.fetchone()

@@ -723,8 +723,13 @@ def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
 def test_large_query_through_proxy(
-    wiremock_generic_mappings_dir, wiremock_target_proxy_pair, wiremock_mapping_dir
+    wiremock_generic_mappings_dir,
+    wiremock_target_proxy_pair,
+    wiremock_mapping_dir,
+    proxy_env_vars,
+    proxy_method,
 ):
     target_wm, proxy_wm = wiremock_target_proxy_pair
 
@@ -751,20 +756,34 @@ def test_large_query_through_proxy(
     target_wm.add_mapping_with_default_placeholders(chunk_1_mapping, expected_headers)
     target_wm.add_mapping_with_default_placeholders(chunk_2_mapping, expected_headers)
 
+    # Configure proxy based on test parameter
+    set_proxy_env_vars, clear_proxy_env_vars = proxy_env_vars
+    connect_kwargs = {
+        "user": "testUser",
+        "password": "testPassword",
+        "account": "testAccount",
+        "host": target_wm.wiremock_host,
+        "port": target_wm.wiremock_http_port,
+        "protocol": "http",
+        "warehouse": "TEST_WH",
+    }
+
+    if proxy_method == "explicit_args":
+        connect_kwargs.update(
+            {
+                "proxy_host": proxy_wm.wiremock_host,
+                "proxy_port": str(proxy_wm.wiremock_http_port),
+                "proxy_user": "proxyUser",
+                "proxy_password": "proxyPass",
+            }
+        )
+        clear_proxy_env_vars()  # Ensure no env vars interfere
+    else:  # env_vars
+        proxy_url = f"http://proxyUser:proxyPass@{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}"
+        set_proxy_env_vars(proxy_url)
+
     row_count = 50_000
-    with snowflake.connector.connect(
-        user="testUser",
-        password="testPassword",
-        account="testAccount",
-        host=target_wm.wiremock_host,
-        port=target_wm.wiremock_http_port,
-        protocol="http",
-        warehouse="TEST_WH",
-        proxy_host=proxy_wm.wiremock_host,
-        proxy_port=str(proxy_wm.wiremock_http_port),
-        proxy_user="proxyUser",
-        proxy_password="proxyPass",
-    ) as conn:
+    with snowflake.connector.connect(**connect_kwargs) as conn:
         cursors = conn.execute_string(
             f"select seq4() as n from table(generator(rowcount => {row_count}));"
         )
