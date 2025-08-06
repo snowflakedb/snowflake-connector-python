@@ -32,6 +32,9 @@ def _get_mapping_str(mapping: Union[str, dict, pathlib.Path]) -> str:
 
 
 class WiremockClient:
+    HTTP_HOST_PLACEHOLDER: str = "{{WIREMOCK_HTTP_HOST_WITH_PORT}}"
+    EXPECTED_HEADERS_PLACEHOLDER: str = "{{EXPECTED_HEADERS_MATCHER}}"
+
     def __init__(
         self,
         forbidden_ports: Optional[List[int]] = None,
@@ -60,9 +63,31 @@ class WiremockClient:
     def http_host_with_port(self) -> str:
         return f"http://{self.wiremock_host}:{self.wiremock_http_port}"
 
-    @property
-    def http_placeholders(self) -> dict[str, str]:
-        return {"{{WIREMOCK_HTTP_HOST_WITH_PORT}}": self.http_host_with_port}
+    def get_http_placeholders(self) -> dict[str, str]:
+        """Placeholder that substitutes the target Wiremock's host:port in JSON."""
+        return {self.HTTP_HOST_PLACEHOLDER: self.http_host_with_port}
+
+    def get_expected_headers_placeholders(
+        self, matcher: Optional[str] = None
+    ) -> dict[str, str]:
+        """Placeholder for header matchers.
+
+        Parameters
+        ----------
+        matcher
+            JSON fragment to inject into the mapping.  If *None* (default) an
+            **empty JSON object** is used so the mapping accepts any headers.
+        """
+        if matcher is None:
+            matcher = "{}"
+        return {self.EXPECTED_HEADERS_PLACEHOLDER: matcher}
+
+    def get_default_placeholders(self, matcher: Optional[str] = None) -> dict[str, str]:
+        """Return the union of host-placeholder and (optionally) header matcher."""
+        placeholders = {}
+        placeholders.update(self.get_http_placeholders())
+        placeholders.update(self.get_expected_headers_placeholders(matcher))
+        return placeholders
 
     def _start_wiremock(self):
         self.wiremock_http_port = self._find_free_port(
@@ -188,6 +213,20 @@ class WiremockClient:
         if response.status_code != requests.codes.ok:
             raise RuntimeError("Failed to import mapping")
 
+    def import_mapping_with_default_placeholders(
+        self,
+        mapping: Union[str, dict, pathlib.Path],
+    ):
+        placeholders = self.get_default_placeholders()
+        return self.import_mapping(mapping, placeholders)
+
+    def add_mapping_with_default_placeholders(
+        self,
+        mapping: Union[str, dict, pathlib.Path],
+    ):
+        placeholders = self.get_default_placeholders()
+        return self.add_mapping(mapping, placeholders)
+
     def add_mapping(
         self,
         mapping: Union[str, dict, pathlib.Path],
@@ -233,8 +272,8 @@ class WiremockClient:
 @contextmanager
 def get_clients_for_proxy_and_target(
     proxy_mapping_template: Union[str, dict, pathlib.Path, None] = None,
-    additional_proxy_placeholders: dict[str, object] | None = None,
-    additional_proxy_args: Iterable[str] | None = None,
+    additional_proxy_placeholders: Optional[dict[str, object]] = None,
+    additional_proxy_args: Optional[Iterable[str]] = None,
 ):
     """Context manager that starts two Wiremock instances – *target* and *proxy* – and
     configures the proxy to forward **all** traffic to the target.
