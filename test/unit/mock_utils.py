@@ -32,6 +32,7 @@ def mock_connection(
     backoff_policy=DEFAULT_BACKOFF_POLICY,
     disable_saml_url_check=False,
     session_manager: SessionManager = None,
+    platform_detection_timeout=None,
 ):
     return MagicMock(
         _login_timeout=login_timeout,
@@ -44,6 +45,8 @@ def mock_connection(
         backoff_policy=backoff_policy,
         _disable_saml_url_check=disable_saml_url_check,
         _session_manager=session_manager or get_mock_session_manager(),
+        _platform_detection_timeout=platform_detection_timeout,
+        platform_detection_timeout=platform_detection_timeout,
     )
 
 

@@ -270,7 +270,9 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         """
         body["data"]["AUTHENTICATOR"] = OAUTH_AUTHENTICATOR
         body["data"]["TOKEN"] = self._access_token
-        body["data"]["OAUTH_TYPE"] = self._get_oauth_type_id()
+        if "CLIENT_ENVIRONMENT" not in body["data"]:
+            body["data"]["CLIENT_ENVIRONMENT"] = {}
+        body["data"]["CLIENT_ENVIRONMENT"]["OAUTH_TYPE"] = self._get_oauth_type_id()
 
     def _do_refresh_token(self, conn: SnowflakeConnection) -> None:
         """If a refresh token is available exchanges it with a new access token.
