@@ -16,7 +16,6 @@ from botocore.utils import InstanceMetadataRegionFetcher
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
 from .vendored import requests
-from .vendored.requests import Response
 
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
@@ -98,7 +97,7 @@ def get_aws_arn() -> str:
     caller_identity = boto3.client("sts").get_caller_identity()
     if not caller_identity or "Arn" not in caller_identity:
         raise ProgrammingError(
-            msg=f"No AWS identity was found. Ensure the application is running on AWS with an IAM role attached.",
+            msg="No AWS identity was found. Ensure the application is running on AWS with an IAM role attached.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
     return caller_identity["Arn"]
@@ -283,7 +282,7 @@ def create_oidc_attestation(token: str | None) -> WorkloadIdentityAttestation:
     """
     if not token:
         raise ProgrammingError(
-            msg=f"token must be provided if workload_identity_provider=OIDC",
+            msg="token must be provided if workload_identity_provider=OIDC",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
 

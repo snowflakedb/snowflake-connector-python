@@ -91,7 +91,7 @@ def test_explicit_oidc_invalid_inline_token_raises_error():
     auth_class = AuthByWorkloadIdentity(
         provider=AttestationProvider.OIDC, token=invalid_token
     )
-    with pytest.raises(jwt.exceptions.DecodeError) as excinfo:
+    with pytest.raises(jwt.exceptions.DecodeError):
         auth_class.prepare()
 
 
