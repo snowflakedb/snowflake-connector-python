@@ -1185,3 +1185,58 @@ def test_write_pandas_bulk_chunks_upload(conn_cnx, bulk_upload_chunks):
             assert result["COUNT(*)"] == 4
         finally:
             cnx.execute_string(drop_sql)
+
+
+@pytest.mark.parametrize(
+    "use_vectorized_scanner",
+    [
+        True,
+        False,
+    ],
+)
+def test_write_pandas_with_use_vectorized_scanner(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
+    use_vectorized_scanner,
+    caplog,
+):
+    """Tests whether overwriting table using a Pandas DataFrame works as expected."""
+    random_table_name = random_string(5, "userspoints_")
+    df_data = [("Dash", 50)]
+    df = pandas.DataFrame(df_data, columns=["name", "points"])
+
+    table_name = random_table_name
+    col_id = "id"
+    col_name = "name"
+    col_points = "points"
+
+    create_sql = (
+        f"CREATE OR REPLACE TABLE {table_name}"
+        f"({col_name} STRING, {col_points} INT, {col_id} INT AUTOINCREMENT)"
+    )
+
+    select_count_sql = f"SELECT count(*) FROM {table_name}"
+    drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        cnx.execute_string(create_sql)
+        try:
+            # Write dataframe with 1 row
+            success, nchunks, nrows, _ = write_pandas(
+                cnx,
+                df,
+                random_table_name,
+                quote_identifiers=False,
+                auto_create_table=False,
+                overwrite=True,
+                index=True,
+                use_vectorized_scanner=use_vectorized_scanner,
+            )
+            # Check write_pandas output
+            assert success
+            assert nchunks == 1
+            assert nrows == 1
+            result = cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
+            # Check number of rows
+            assert result["COUNT(*)"] == 1
+
+        finally:
+            cnx.execute_string(drop_sql)
