@@ -2,7 +2,6 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-import json
 import logging
 import pathlib
 from threading import Thread
@@ -759,70 +758,56 @@ def test_oauth_code_successful_flow_through_proxy(
     omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
+    target_wm, proxy_wm = wiremock_target_proxy_pair
 
-    # Start target Wiremock first (acts as Snowflake+IdP backend)
-    with WiremockClient() as target_wm:
-        target_wm.import_mapping(
-            wiremock_oauth_authorization_code_dir / "successful_flow.json"
-        )
-        target_wm.add_mapping(
-            wiremock_generic_mappings_dir / "snowflake_login_successful.json"
-        )
-        target_wm.add_mapping(
-            wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
-        )
+    target_wm.import_mapping(
+        wiremock_oauth_authorization_code_dir / "successful_flow.json"
+    )
+    target_wm.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+    )
+    target_wm.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
 
-        # Now start proxy Wiremock (will forward everything to target)
-        with WiremockClient(forbidden_ports=[target_wm.wiremock_http_port]) as proxy_wm:
-            # Configure proxy Wiremock using a json template on disk
-            proxy_mapping_path = (
-                wiremock_generic_mappings_dir / "proxy_forward_all.json"
+    with mock.patch("webbrowser.open", new=webbrowser_mock.open):
+        with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+            cnx = snowflake.connector.connect(
+                user="testUser",
+                authenticator="OAUTH_AUTHORIZATION_CODE",
+                oauth_client_id="123",
+                account="testAccount",
+                protocol="http",
+                role="ANALYST",
+                proxy_host=proxy_wm.wiremock_host,
+                proxy_port=str(proxy_wm.wiremock_http_port),
+                proxy_user="proxyUser",
+                proxy_password="proxyPass",
+                oauth_client_secret="testClientSecret",
+                oauth_token_request_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/token-request",
+                oauth_authorization_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/authorize",
+                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                host=target_wm.wiremock_host,
+                port=target_wm.wiremock_http_port,
             )
-            with open(proxy_mapping_path) as f:
-                proxy_mapping_json = json.load(f)
-            proxy_mapping_json["mappings"][0]["response"][
-                "proxyBaseUrl"
-            ] = f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}"
-            proxy_wm.import_mapping(proxy_mapping_json)
 
-            with mock.patch("webbrowser.open", new=webbrowser_mock.open):
-                with mock.patch("secrets.token_urlsafe", return_value="abc123"):
-                    cnx = snowflake.connector.connect(
-                        user="testUser",
-                        authenticator="OAUTH_AUTHORIZATION_CODE",
-                        oauth_client_id="123",
-                        account="testAccount",
-                        protocol="http",
-                        role="ANALYST",
-                        proxy_host=proxy_wm.wiremock_host,
-                        proxy_port=str(proxy_wm.wiremock_http_port),
-                        proxy_user="proxyUser",
-                        proxy_password="proxyPass",
-                        oauth_client_secret="testClientSecret",
-                        oauth_token_request_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/token-request",
-                        oauth_authorization_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/authorize",
-                        oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
-                        host=target_wm.wiremock_host,
-                        port=target_wm.wiremock_http_port,
-                    )
+            assert cnx, "invalid cnx"
+            cnx.close()
 
-                    assert cnx, "invalid cnx"
-                    cnx.close()
+        # Verify: proxy Wiremock saw the token request
+        proxy_requests = requests.get(
+            f"http://{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}/__admin/requests"
+        ).json()
+        assert any(
+            req["request"]["url"].endswith("/oauth/token-request")
+            for req in proxy_requests["requests"]
+        ), "Proxy did not record token-request"
 
-                # Verify: proxy Wiremock saw the token request
-                proxy_requests = requests.get(
-                    f"http://{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}/__admin/requests"
-                ).json()
-                assert any(
-                    req["request"]["url"].endswith("/oauth/token-request")
-                    for req in proxy_requests["requests"]
-                ), "Proxy did not record token-request"
-
-                # Verify: target Wiremock also saw it (because proxy forwarded)
-                target_requests = requests.get(
-                    f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/__admin/requests"
-                ).json()
-                assert any(
-                    req["request"]["url"].endswith("/oauth/token-request")
-                    for req in target_requests["requests"]
-                ), "Target did not receive token-request forwarded by proxy"
+        # Verify: target Wiremock also saw it (because proxy forwarded)
+        target_requests = requests.get(
+            f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/__admin/requests"
+        ).json()
+        assert any(
+            req["request"]["url"].endswith("/oauth/token-request")
+            for req in target_requests["requests"]
+        ), "Target did not receive token-request forwarded by proxy"
