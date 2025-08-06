@@ -70,3 +70,13 @@ async def test_pat_authenticator_creates_auth_by_pat(monkeypatch):
     assert isinstance(conn.auth_class, AuthByPAT)
 
     await conn.close()
+
+
+def test_mro():
+    """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
+    from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
+    from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
+
+    assert AuthByPAT.mro().index(AuthByPluginAsync) < AuthByPAT.mro().index(
+        AuthByPluginSync
+    )

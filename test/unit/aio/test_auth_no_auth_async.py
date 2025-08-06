@@ -39,3 +39,14 @@ async def test_auth_no_auth():
     assert (
         reauth_response == expected_reauth_response
     ), f'reauthenticate(foo="bar") is expected to return {expected_reauth_response}, but returns {reauth_response}'
+
+
+def test_mro():
+    """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
+    from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
+    from snowflake.connector.aio.auth._no_auth import AuthNoAuth
+    from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
+
+    assert AuthNoAuth.mro().index(AuthByPluginAsync) < AuthNoAuth.mro().index(
+        AuthByPluginSync
+    )
