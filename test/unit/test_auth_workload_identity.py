@@ -406,7 +406,7 @@ def test_azure_issuer_prefixes(issuer):
 
 
 def test_autodetect_aws_present(
-    no_metadata_service, fake_aws_environment: FakeAwsEnvironment
+    unavailable_metadata_service, fake_aws_environment: FakeAwsEnvironment
 ):
     auth_class = AuthByWorkloadIdentity(provider=None)
     auth_class.prepare(conn=None)
@@ -439,7 +439,7 @@ def test_autodetect_azure_present(fake_azure_metadata_service):
     }
 
 
-def test_autodetect_oidc_present(no_metadata_service):
+def test_autodetect_oidc_present(unavailable_metadata_service):
     dummy_token = gen_dummy_id_token(sub="service-1", iss="issuer-1")
     auth_class = AuthByWorkloadIdentity(provider=None, token=dummy_token)
     auth_class.prepare(conn=None)
@@ -451,7 +451,7 @@ def test_autodetect_oidc_present(no_metadata_service):
     }
 
 
-def test_autodetect_no_provider_raises_error(no_metadata_service):
+def test_autodetect_no_provider_raises_error(unavailable_metadata_service):
     auth_class = AuthByWorkloadIdentity(provider=None, token=None)
     with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare(conn=None)

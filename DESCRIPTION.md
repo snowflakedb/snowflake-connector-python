@@ -16,6 +16,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fix OAuth authenticator values.
   - Add `unsafe_skip_file_permissions_check` flag to skip file permissions check on cache and config.
   - Introduce snowflake_version property to the connection
+  - Added basic json support for Interval types.
+  - Moved `OAUTH_TYPE` to `CLIENT_ENVIROMENT`.
+  - Fix bug where PAT with external session authenticator was used while `external_session_id` was not provided in `SnowflakeRestful.fetch`
 
 - v3.16.0(July 04,2025)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4.
