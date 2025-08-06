@@ -96,8 +96,13 @@ def test_basic_query_through_proxy(
     )
     telemetry_mapping = wiremock_generic_mappings_dir / "telemetry.json"
 
-    target_wm.import_mapping(password_mapping)
-    target_wm.add_mapping(select_mapping)
+    # Use expected headers to ensure requests go through proxy
+    expected_headers = {"Via": {"contains": "wiremock"}}
+
+    target_wm.import_mapping_with_default_placeholders(
+        password_mapping, expected_headers
+    )
+    target_wm.add_mapping_with_default_placeholders(select_mapping, expected_headers)
     target_wm.add_mapping(disconnect_mapping)
     target_wm.add_mapping(telemetry_mapping)
 
