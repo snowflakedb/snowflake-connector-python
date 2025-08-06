@@ -483,7 +483,7 @@ def test_privatelink(conn_cnx):
 
         ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
         assert ocsp_url is None, f"OCSP URL should be None: {ocsp_url}"
-    
+
     del os.environ["SF_OCSP_DO_RETRY"]
     del os.environ["SF_OCSP_FAIL_OPEN"]
 
