@@ -54,20 +54,6 @@ class WorkloadIdentityAttestation:
     user_identifier_components: dict
 
 
-def try_metadata_service_call(method: str, url: str, headers: dict) -> Response | None:
-    """Tries to make a HTTP request to the metadata service with the given URL, method and headers.
-
-    If we receive an error response or any exceptions are raised, returns None. Otherwise returns the response.
-    """
-    try:
-        res: Response = requests.request(method=method, url=url, headers=headers)
-        if not res.ok:
-            return None
-    except requests.RequestException:
-        return None
-    return res
-
-
 def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[str, str]:
     """Extracts the 'iss' and 'sub' claims from the given JWT, without verifying the signature.
 
@@ -119,7 +105,7 @@ def get_aws_arn() -> str:
 
 
 def get_aws_partition(arn: str) -> str:
-    """Get the current AWS partition from ARN, if any.
+    """Get the current AWS partition from ARN.
 
     Args:
         arn (str): The Amazon Resource Name (ARN) string.
@@ -293,7 +279,7 @@ def create_azure_attestation(
 def create_oidc_attestation(token: str | None) -> WorkloadIdentityAttestation:
     """Tries to create an attestation using the given token.
 
-    If this is not populated, returns None.
+    If this is not populated, raises an error.
     """
     if not token:
         raise ProgrammingError(

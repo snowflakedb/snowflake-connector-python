@@ -1495,7 +1495,7 @@ class SnowflakeConnection:
                     self,
                     None,
                     ProgrammingError,
-                    {"msg": "User is empty", "errno": ER_NO_USER},
+                    {"msg": f"User is empty, but it must be provided unless authenticator is one of {', '.join(empty_user_allowed_authenticators)}.", "errno": ER_NO_USER},
                 )
 
             if self._private_key or self._private_key_file:
