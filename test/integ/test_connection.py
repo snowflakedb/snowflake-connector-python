@@ -714,13 +714,17 @@ def test_invalid_connection_parameter(conn_cnx, name, value, exc_warn):
             conn = create_connection("default", **kwargs)
             if name != "no_such_parameter":  # Skip check for fake parameters
                 assert getattr(conn, "_" + name) == value
-            
+
             # Filter out deprecation warnings and focus on parameter validation warnings
             filtered_w = [
-                warning for warning in w 
-                if warning.category != DeprecationWarning and str(exc_warn) in str(warning.message)
+                warning
+                for warning in w
+                if warning.category != DeprecationWarning
+                and str(exc_warn) in str(warning.message)
             ]
-            assert len(filtered_w) >= 1, f"Expected warning '{exc_warn}' not found. Got warnings: {[str(warning.message) for warning in w]}"
+            assert (
+                len(filtered_w) >= 1
+            ), f"Expected warning '{exc_warn}' not found. Got warnings: {[str(warning.message) for warning in w]}"
             assert str(filtered_w[0].message) == str(exc_warn)
         finally:
             conn.close()
@@ -754,8 +758,8 @@ def test_invalid_connection_parameters_only_warns(conn_cnx):
         ) as conn:
             assert conn._autocommit == "True"
             assert conn._applucation == "this is a typo or my own variable"
-            
-            # With key-pair auth, we may get additional warnings. 
+
+            # With key-pair auth, we may get additional warnings.
             # The main goal is that invalid parameters are accepted without errors
             # We're more flexible about warning counts since conn_cnx may generate additional warnings
             # Filter out deprecation warnings and focus on parameter validation warnings
@@ -953,7 +957,7 @@ def test_autocommit(conn_cnx, auto_commit):
             with conn.cursor() as cur:
                 cur.execute(f"alter session set autocommit = {auto_commit}")
             # Execute operations inside the mock scope
-            
+
         # Check commit behavior after the mock patch
         if auto_commit:
             # For autocommit mode, manual commit should not be called
