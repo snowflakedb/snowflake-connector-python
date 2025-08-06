@@ -17,11 +17,7 @@ def test_abc(conn_cnx, tmpdir, db_parameters):
     fileURI = pathlib.Path(test_data).as_uri()
 
     subdir = db_parameters["name"]
-    with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as con:
+    with conn_cnx() as con:
         rec = con.cursor().execute(f"put {fileURI} @~/{subdir}0/").fetchall()
         assert rec[0][6] == "UPLOADED"
 

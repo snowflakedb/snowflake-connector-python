@@ -98,7 +98,6 @@ ratio number(6,2))
         with conn_cnx(
             user=db_parameters["user"],
             account=db_parameters["account"],
-            password=db_parameters["password"],
         ) as cnx:
             cnx.cursor().execute(
                 "drop table if exists {table}".format(table=db_parameters["name"])
