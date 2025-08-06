@@ -2,12 +2,7 @@ name: Build and Test
 
 on:
     push:
-        branches:
-            - master
-            - main
-            - dev/aio-connector
-        tags:
-            - v*
+
     pull_request:
         branches:
             - '**'
