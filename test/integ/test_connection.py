@@ -455,20 +455,20 @@ def test_us_west_connection(tmpdir, conn_cnx):
 
 
 @pytest.mark.timeout(60)
-def test_privatelink(conn_cnx):
+def test_privatelink(db_parameters):
     """Ensure the OCSP cache server URL is overridden if privatelink connection is used."""
     try:
         os.environ["SF_OCSP_FAIL_OPEN"] = "false"
         os.environ["SF_OCSP_DO_RETRY"] = "false"
-        with conn_cnx(
+        snowflake.connector.connect(
             account="testaccount",
             user="testuser",
             password="testpassword",
             region="eu-central-1.privatelink",
             login_timeout=5,
-        ):
-            pytest.fail("should not make connection")
-    except (OperationalError, HttpError):
+        )
+        pytest.fail("should not make connection")
+    except OperationalError:
         ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
         assert ocsp_url is not None, "OCSP URL should not be None"
         assert (
@@ -477,11 +477,20 @@ def test_privatelink(conn_cnx):
             "ocsp_response_cache.json"
         )
 
-    with conn_cnx(timezone="UTC") as cnx:
-        assert cnx, "invalid cnx"
+    cnx = snowflake.connector.connect(
+        user=db_parameters["user"],
+        password=db_parameters["password"],
+        host=db_parameters["host"],
+        port=db_parameters["port"],
+        account=db_parameters["account"],
+        database=db_parameters["database"],
+        protocol=db_parameters["protocol"],
+        timezone="UTC",
+    )
+    assert cnx, "invalid cnx"
 
-        ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
-        assert ocsp_url is None, f"OCSP URL should be None: {ocsp_url}"
+    ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
+    assert ocsp_url is None, f"OCSP URL should be None: {ocsp_url}"
     del os.environ["SF_OCSP_DO_RETRY"]
     del os.environ["SF_OCSP_FAIL_OPEN"]
 
