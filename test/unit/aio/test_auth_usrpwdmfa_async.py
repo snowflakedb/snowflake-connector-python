@@ -5,17 +5,7 @@
 
 from __future__ import annotations
 
-from snowflake.connector.aio.auth import AuthByOAuth
-
-
-async def test_auth_oauth():
-    """Simple OAuth test."""
-    token = "oAuthToken"
-    auth = AuthByOAuth(token)
-    body = {"data": {}}
-    await auth.update_body(body)
-    assert body["data"]["TOKEN"] == token, body
-    assert body["data"]["AUTHENTICATOR"] == "OAUTH", body
+from snowflake.connector.aio.auth._usrpwdmfa import AuthByUsrPwdMfa
 
 
 def test_mro():
@@ -23,6 +13,6 @@ def test_mro():
     from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
     from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
 
-    assert AuthByOAuth.mro().index(AuthByPluginAsync) < AuthByOAuth.mro().index(
+    assert AuthByUsrPwdMfa.mro().index(AuthByPluginAsync) < AuthByUsrPwdMfa.mro().index(
         AuthByPluginSync
     )

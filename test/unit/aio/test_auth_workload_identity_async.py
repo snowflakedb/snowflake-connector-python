@@ -380,3 +380,13 @@ async def test_autodetect_no_provider_raises_error(no_metadata_service):
     assert "No workload identity credential was found for 'auto-detect" in str(
         excinfo.value
     )
+
+
+def test_mro():
+    """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
+    from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
+    from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
+
+    assert AuthByWorkloadIdentity.mro().index(
+        AuthByPluginAsync
+    ) < AuthByWorkloadIdentity.mro().index(AuthByPluginSync)
