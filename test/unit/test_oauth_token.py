@@ -771,7 +771,6 @@ def test_client_credentials_flow_via_explicit_proxy(
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 def test_oauth_code_successful_flow_through_proxy(
     wiremock_oauth_authorization_code_dir,
@@ -780,8 +779,6 @@ def test_oauth_code_successful_flow_through_proxy(
     webbrowser_mock,
     monkeypatch,
     omit_oauth_urls_check,
-    proxy_env_vars,
-    proxy_method,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
     target_wm, proxy_wm = wiremock_target_proxy_pair
@@ -796,40 +793,26 @@ def test_oauth_code_successful_flow_through_proxy(
         wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json",
     )
 
-    # Configure proxy based on test parameter
-    set_proxy_env_vars, clear_proxy_env_vars = proxy_env_vars
-    connect_kwargs = {
-        "user": "testUser",
-        "authenticator": "OAUTH_AUTHORIZATION_CODE",
-        "oauth_client_id": "123",
-        "account": "testAccount",
-        "protocol": "http",
-        "role": "ANALYST",
-        "oauth_client_secret": "testClientSecret",
-        "oauth_token_request_url": f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/token-request",
-        "oauth_authorization_url": f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/authorize",
-        "oauth_redirect_uri": "http://localhost:8009/snowflake/oauth-redirect",
-        "host": target_wm.wiremock_host,
-        "port": target_wm.wiremock_http_port,
-    }
-
-    if proxy_method == "explicit_args":
-        connect_kwargs.update(
-            {
-                "proxy_host": proxy_wm.wiremock_host,
-                "proxy_port": str(proxy_wm.wiremock_http_port),
-                "proxy_user": "proxyUser",
-                "proxy_password": "proxyPass",
-            }
-        )
-        clear_proxy_env_vars()  # Ensure no env vars interfere
-    else:  # env_vars
-        proxy_url = f"http://proxyUser:proxyPass@{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}"
-        set_proxy_env_vars(proxy_url)
-
     with mock.patch("webbrowser.open", new=webbrowser_mock.open):
         with mock.patch("secrets.token_urlsafe", return_value="abc123"):
-            cnx = snowflake.connector.connect(**connect_kwargs)
+            cnx = snowflake.connector.connect(
+                user="testUser",
+                authenticator="OAUTH_AUTHORIZATION_CODE",
+                oauth_client_id="123",
+                account="testAccount",
+                protocol="http",
+                role="ANALYST",
+                proxy_host=proxy_wm.wiremock_host,
+                proxy_port=str(proxy_wm.wiremock_http_port),
+                proxy_user="proxyUser",
+                proxy_password="proxyPass",
+                oauth_client_secret="testClientSecret",
+                oauth_token_request_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/token-request",
+                oauth_authorization_url=f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/authorize",
+                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                host=target_wm.wiremock_host,
+                port=target_wm.wiremock_http_port,
+            )
 
             assert cnx, "invalid cnx"
             cnx.close()

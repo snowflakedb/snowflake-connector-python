@@ -24,6 +24,7 @@ from ..proxy import get_proxy_url
 from ..secret_detector import SecretDetector
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..vendored import urllib3
+from ..vendored.requests.utils import get_environ_proxies, select_proxy
 from ..vendored.urllib3.poolmanager import ProxyManager
 from .by_plugin import AuthByPlugin, AuthType
 
@@ -319,12 +320,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             fields["scope"] = self._scope
         try:
             # TODO(SNOW-2229411) Session manager should be used here. It may require additional security validation (since we would transition from PoolManager to requests.Session) and some parameters would be passed implicitly. OAuth token exchange must NOT reuse pooled HTTP sessions. We should create a fresh SessionManager with use_pooling=False for each call.
-            proxy_url = get_proxy_url(
-                conn.proxy_host,
-                conn.proxy_port,
-                conn.proxy_user,
-                conn.proxy_password,
-            )
+            proxy_url = self._resolve_proxy_url(conn, self._token_request_url)
             http_client = (
                 ProxyManager(proxy_url=proxy_url)
                 if proxy_url
@@ -370,12 +366,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         fields: dict[str, str],
     ) -> (str | None, str | None):
         # TODO(SNOW-2229411) Session manager should be used here. It may require additional security validation (since we would transition from PoolManager to requests.Session) and some parameters would be passed implicitly. Token request must bypass HTTP connection pools.
-        proxy_url = get_proxy_url(
-            connection.proxy_host,
-            connection.proxy_port,
-            connection.proxy_user,
-            connection.proxy_password,
-        )
+        proxy_url = self._resolve_proxy_url(connection, self._token_request_url)
         http_client = (
             ProxyManager(proxy_url=proxy_url) if proxy_url else urllib3.PoolManager()
         )
@@ -420,3 +411,25 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         }
+
+    @staticmethod
+    def _resolve_proxy_url(
+        connection: SnowflakeConnection, request_url: str
+    ) -> str | None:
+        # TODO(SNOW-2229411) Session manager should be used instead. It may require additional security validation.
+        """Resolve proxy URL from explicit config first, then environment variables."""
+        # First try explicit proxy configuration from connection parameters
+        proxy_url = get_proxy_url(
+            connection.proxy_host,
+            connection.proxy_port,
+            connection.proxy_user,
+            connection.proxy_password,
+        )
+
+        if proxy_url:
+            return proxy_url
+
+        # Fall back to environment variables (HTTP_PROXY, HTTPS_PROXY)
+        # Use proper proxy selection that considers the URL scheme
+        proxies = get_environ_proxies(request_url)
+        return select_proxy(request_url, proxies)
