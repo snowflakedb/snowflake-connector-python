@@ -739,12 +739,17 @@ def test_large_query_through_proxy(
     chunk_1_mapping = wiremock_mapping_dir / "queries/chunk_1.json"
     chunk_2_mapping = wiremock_mapping_dir / "queries/chunk_2.json"
 
-    target_wm.import_mapping(password_mapping)
-    target_wm.add_mapping_with_default_placeholders(multi_chunk_request_mapping)
-    target_wm.add_mapping(disconnect_mapping)
-    target_wm.add_mapping(telemetry_mapping)
-    target_wm.add_mapping_with_default_placeholders(chunk_1_mapping)
-    target_wm.add_mapping_with_default_placeholders(chunk_2_mapping)
+    # Configure mappings with proxy header verification
+    expected_headers = {"Via": {"contains": "wiremock"}}
+
+    target_wm.import_mapping(password_mapping, expected_headers=expected_headers)
+    target_wm.add_mapping_with_default_placeholders(
+        multi_chunk_request_mapping, expected_headers
+    )
+    target_wm.add_mapping(disconnect_mapping, expected_headers=expected_headers)
+    target_wm.add_mapping(telemetry_mapping, expected_headers=expected_headers)
+    target_wm.add_mapping_with_default_placeholders(chunk_1_mapping, expected_headers)
+    target_wm.add_mapping_with_default_placeholders(chunk_2_mapping, expected_headers)
 
     row_count = 50_000
     with snowflake.connector.connect(

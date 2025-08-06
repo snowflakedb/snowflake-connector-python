@@ -695,13 +695,19 @@ def test_client_credentials_flow_via_explicit_proxy(
 
     target_wm, proxy_wm = wiremock_target_proxy_pair
 
-    # Configure backend (Snowflake + IdP) responses
-    target_wm.import_mapping(wiremock_oauth_client_creds_dir / "successful_flow.json")
-    target_wm.add_mapping(
-        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+    # Configure backend (Snowflake + IdP) responses with proxy header verification
+    expected_headers = {"Via": {"contains": "wiremock"}}
+
+    target_wm.import_mapping_with_default_placeholders(
+        wiremock_oauth_client_creds_dir / "successful_flow.json", expected_headers
+    )
+    target_wm.add_mapping_with_default_placeholders(
+        wiremock_generic_mappings_dir / "snowflake_login_successful.json",
+        expected_headers,
     )
     target_wm.add_mapping(
-        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json",
+        expected_headers=expected_headers,
     )
 
     token_request_url = f"http://{target_wm.wiremock_host}:{target_wm.wiremock_http_port}/oauth/token-request"
@@ -760,14 +766,14 @@ def test_oauth_code_successful_flow_through_proxy(
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
     target_wm, proxy_wm = wiremock_target_proxy_pair
 
-    target_wm.import_mapping(
-        wiremock_oauth_authorization_code_dir / "successful_flow.json"
+    target_wm.import_mapping_with_default_placeholders(
+        wiremock_oauth_authorization_code_dir / "successful_flow.json",
+    )
+    target_wm.add_mapping_with_default_placeholders(
+        wiremock_generic_mappings_dir / "snowflake_login_successful.json",
     )
     target_wm.add_mapping(
-        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
-    )
-    target_wm.add_mapping(
-        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json",
     )
 
     with mock.patch("webbrowser.open", new=webbrowser_mock.open):
