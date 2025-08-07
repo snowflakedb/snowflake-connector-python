@@ -250,10 +250,11 @@ def create_azure_attestation(
         headers = {"X-IDENTITY-HEADER": identity_header}
         query_params = f"api-version=2019-08-01&resource={snowflake_entra_resource}"
 
-        # Some Azure Functions environments may require client_id in the URL
-        managed_identity_client_id = os.environ.get("MANAGED_IDENTITY_CLIENT_ID")
-        if managed_identity_client_id:
-            query_params += f"&client_id={managed_identity_client_id}"
+    # Allow configuring an explicit client ID, which may be used in Azure Functions,
+    # if there are user-assigned identities, or multiple managed identities available.
+    managed_identity_client_id = os.environ.get("MANAGED_IDENTITY_CLIENT_ID")
+    if managed_identity_client_id:
+        query_params += f"&client_id={managed_identity_client_id}"
 
     res = requests.request(
         method="GET",

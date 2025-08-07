@@ -159,6 +159,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         self.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
         self.iss = "https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd"
         self.has_token_endpoint = True
+        self.requested_client_id = None
 
     @property
     def expected_hostnames(self):
@@ -183,6 +184,7 @@ class FakeAzureVmMetadataService(FakeMetadataService):
             and self.has_token_endpoint
         ):
             resource = query_string["resource"][0]
+            self.requested_client_id = query_string.get("client_id", [None])[0]
             self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource)
             return build_response(
                 json.dumps({"access_token": self.token}).encode("utf-8")
@@ -206,6 +208,7 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
         self.functions_extension_version = "~4"
         self.azure_web_jobs_storage = "DefaultEndpointsProtocol=https;AccountName=test"
         self.parsed_identity_endpoint = urlparse(self.identity_endpoint)
+        self.requested_client_id = None
 
     @property
     def expected_hostnames(self):
@@ -229,6 +232,7 @@ class FakeAzureFunctionMetadataService(FakeMetadataService):
         logger.debug("Received request for Azure Functions metadata service")
 
         resource = query_string["resource"][0]
+        self.requested_client_id = query_string.get("client_id", [None])[0]
         self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=resource)
         return build_response(json.dumps({"access_token": self.token}).encode("utf-8"))
 

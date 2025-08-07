@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from base64 import b64decode
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
@@ -363,3 +364,19 @@ def test_explicit_azure_uses_explicit_entra_resource(fake_azure_metadata_service
     token = fake_azure_metadata_service.token
     parsed = jwt.decode(token, options={"verify_signature": False})
     assert parsed["aud"] == "api://non-standard"
+
+
+def test_explicit_azure_omits_client_id_if_not_set(fake_azure_metadata_service):
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+    auth_class.prepare()
+    assert fake_azure_metadata_service.requested_client_id is None
+
+
+def test_explicit_azure_uses_explicit_client_id_if_set(fake_azure_metadata_service):
+    with mock.patch.dict(
+        os.environ, {"MANAGED_IDENTITY_CLIENT_ID": "custom-client-id"}
+    ):
+        auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+        auth_class.prepare()
+
+    assert fake_azure_metadata_service.requested_client_id == "custom-client-id"
