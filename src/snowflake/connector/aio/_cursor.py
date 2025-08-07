@@ -1276,7 +1276,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             data = ret.get("data")
             await self._init_result_and_meta(data)
         else:
-            logger.info("failed")
+            logger.debug("failed")
             logger.debug(ret)
             err = ret["message"]
             code = ret.get("code", -1)
