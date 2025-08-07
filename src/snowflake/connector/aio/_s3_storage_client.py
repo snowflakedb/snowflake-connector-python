@@ -127,6 +127,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
             amzdate = t.strftime("%Y%m%dT%H%M%SZ")
             short_amzdate = amzdate[:8]
             x_amz_headers["x-amz-date"] = amzdate
+            x_amz_headers["x-amz-security-token"] = self.credentials.creds.get(
+                "AWS_TOKEN", ""
+            )
 
             (
                 canonical_request,
