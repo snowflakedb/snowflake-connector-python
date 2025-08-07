@@ -663,6 +663,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
                     multipart_threshold=data.get("threshold"),
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
                     unsafe_file_write=self._connection.unsafe_file_write,
+                    gcs_use_virtual_endpoints=self._connection.gcs_use_virtual_endpoints,
                 )
                 await sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
@@ -685,7 +686,15 @@ class SnowflakeCursor(SnowflakeCursorSync):
             logger.debug(ret)
             err = ret["message"]
             code = ret.get("code", -1)
-            if self._timebomb and self._timebomb.result():
+            if (
+                self._timebomb
+                and self._timebomb.result()
+                and "SQL execution canceled" in err
+            ):
+                # Modify the error message only if the server error response indicates the query was canceled.
+                # If the error occurs before the cancellation request reaches the backend
+                # (e.g., due to a very short timeout), we retain the original error message
+                # as the query might have encountered an issue prior to cancellation.
                 err = (
                     f"SQL execution was cancelled by the client due to a timeout. "
                     f"Error message received from the server: {err}"

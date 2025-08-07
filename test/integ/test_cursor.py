@@ -14,6 +14,7 @@ import time
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
+from unittest.mock import MagicMock
 
 import pytest
 import pytz
@@ -826,6 +827,7 @@ def test_invalid_bind_data_type(conn_cnx):
             cnx.cursor().execute("select 1 from dual where 1=%s", ([1, 2, 3],))
 
 
+@pytest.mark.skipolddriver
 def test_timeout_query(conn_cnx):
     with conn_cnx() as cnx:
         with cnx.cursor() as c:
@@ -836,8 +838,28 @@ def test_timeout_query(conn_cnx):
                 )
             assert err.value.errno == 604, (
                 "Invalid error code"
-                and "SQL execution was cancelled by the client due to a timeout"
+                and "SQL execution was cancelled by the client due to a timeout. Error message received from the server: SQL execution canceled"
                 in err.value.msg
+            )
+
+            with pytest.raises(errors.ProgrammingError) as err:
+                # we can not precisely control the timing to send cancel query request right after server
+                # executes the query but before returning the results back to client
+                # it depends on python scheduling and server processing speed, so we mock here
+                with mock.patch.object(
+                    c, "_timebomb", new_callable=MagicMock
+                ) as mock_timerbomb:
+                    mock_timerbomb.executed = True
+                    c.execute(
+                        "select 123'",
+                        timeout=0.1,
+                    )
+            assert c._timebomb.executed is True and err.value.errno == 1003, (
+                "Invalid error code"
+                and "SQL compilation error:\nsyntax error line 1 at position 10 unexpected '''."
+                in err.value.msg
+                and "SQL execution was cancelled by the client due to a timeout"
+                not in err.value.msg
             )
 
 
