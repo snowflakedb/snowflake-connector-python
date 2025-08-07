@@ -71,7 +71,12 @@ from ..network import (
 )
 from ..network import SessionPool as SessionPoolSync
 from ..network import SnowflakeRestful as SnowflakeRestfulSync
-from ..network import get_http_retryable_error, is_login_request, is_retryable_http_code
+from ..network import (
+    SnowflakeRestfulJsonEncoder,
+    get_http_retryable_error,
+    is_login_request,
+    is_retryable_http_code,
+)
 from ..secret_detector import SecretDetector
 from ..sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
@@ -236,7 +241,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             return await self._post_request(
                 url,
                 headers,
-                json.dumps(body),
+                json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
                 token=self.token,
                 _no_results=_no_results,
                 timeout=timeout,
@@ -298,7 +303,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         ret = await self._post_request(
             url,
             headers,
-            json.dumps(body),
+            json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
             token=header_token,
         )
         if ret.get("success") and ret.get("data", {}).get("sessionToken"):
@@ -396,7 +401,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 ret = await self._post_request(
                     url,
                     headers,
-                    json.dumps(body),
+                    json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
                     token=self.token,
                     timeout=5,
                     no_retry=True,
