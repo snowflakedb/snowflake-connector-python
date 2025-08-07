@@ -6,7 +6,6 @@ import os
 from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum, unique
-from hashlib import sha256
 
 import boto3
 import jwt
@@ -93,23 +92,6 @@ def get_aws_region() -> str:
     return region
 
 
-def get_aws_partition(region: str) -> str:
-    """Get the current AWS partition from region.
-
-    Args:
-        region (str): The AWS region (e.g., 'us-east-1', 'cn-north-1').
-
-    Returns:
-        str: The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov').
-    """
-    if region.startswith("cn-"):
-        return "aws-cn"
-    elif region.startswith("us-gov-"):
-        return "aws-us-gov"
-    else:
-        return "aws"
-
-
 def get_aws_sts_hostname(region: str, partition: str) -> str:
     """Constructs the AWS STS hostname for a given region and partition.
 
@@ -152,14 +134,15 @@ def create_aws_attestation() -> WorkloadIdentityAttestation:
 
     If the application isn't running on AWS or no credentials were found, raises an error.
     """
-    aws_creds = boto3.session.Session().get_credentials()
+    session = boto3.session.Session()
+    aws_creds = session.get_credentials()
     if not aws_creds:
         raise ProgrammingError(
             msg="No AWS credentials were found. Ensure the application is running on AWS with an IAM role attached.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
     region = get_aws_region()
-    partition = get_aws_partition(region)
+    partition = session.get_partition_for_region(region)
     sts_hostname = get_aws_sts_hostname(region, partition)
     request = AWSRequest(
         method="POST",
@@ -178,8 +161,10 @@ def create_aws_attestation() -> WorkloadIdentityAttestation:
         "headers": dict(request.headers.items()),
     }
     credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
+    # Unlike other providers, for AWS, we only include general identifiers (region and partition)
+    # rather than specific user identifiers, since we don't actually execute a GetCallerIdentity call.
     return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"hashed_attestation": sha256(credential.encode("utf-8")).hexdigest()}
+        AttestationProvider.AWS, credential, {"region": region, "partition": partition}
     )
 
 
