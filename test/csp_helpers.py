@@ -92,51 +92,6 @@ class FakeMetadataService(ABC):
 
         return self.handle_request(method, parsed_url, headers, timeout)
 
-    def _async_request(self, method, url, headers=None, timeout=None):
-        """Entry point for the aiohttp mock."""
-        logger.debug(f"Received async request: {method} {url} {str(headers)}")
-        parsed_url = urlparse(url)
-
-        # Create async context manager for aiohttp response
-        class AsyncResponseContextManager:
-            def __init__(self, response):
-                self.response = response
-
-            async def __aenter__(self):
-                return self.response
-
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                pass
-
-        # Create aiohttp-compatible response mock
-        class AsyncResponse:
-            def __init__(self, requests_response):
-                self.ok = requests_response.ok
-                self.status = requests_response.status_code
-                self._content = requests_response.content
-
-            async def read(self):
-                return self._content
-
-        if not parsed_url.hostname == self.expected_hostname:
-            logger.debug(
-                f"Received async request to unexpected hostname {parsed_url.hostname}"
-            )
-            import aiohttp
-
-            raise aiohttp.ClientError()
-
-        # Get the response from the subclass handler, catch exceptions and convert them
-        try:
-            sync_response = self.handle_request(method, parsed_url, headers, timeout)
-            async_response = AsyncResponse(sync_response)
-            return AsyncResponseContextManager(async_response)
-        except (HTTPError, ConnectTimeout) as e:
-            import aiohttp
-
-            # Convert requests exceptions to aiohttp exceptions so they get caught properly
-            raise aiohttp.ClientError() from e
-
     def __enter__(self):
         """Patches the relevant HTTP calls when entering as a context manager."""
         self.reset_defaults()
@@ -148,10 +103,7 @@ class FakeMetadataService(ABC):
                 "snowflake.connector.vendored.requests.request", side_effect=self
             )
         )
-        # Mock aiohttp for async requests
-        self.patchers.append(
-            mock.patch("aiohttp.ClientSession.request", side_effect=self._async_request)
-        )
+
         # HTTPConnection.request is used by the AWS boto libraries. We're not mocking those calls here, so we
         # simply raise a ConnectTimeout to avoid making real network calls.
         self.patchers.append(
@@ -357,64 +309,6 @@ class FakeAwsEnvironment:
             )
         )
 
-        # Patch async aioboto3 calls (for when aioboto3 is used directly)
-        async def async_get_credentials():
-            return self.credentials
-
-        async def async_get_caller_identity():
-            return {"Arn": self.arn}
-
-        async def async_get_region():
-            return self.get_region()
-
-        # Mock aioboto3.Session.get_credentials (IS async)
-        self.patchers.append(
-            mock.patch(
-                "snowflake.connector.aio._wif_util.aioboto3.Session.get_credentials",
-                side_effect=async_get_credentials,
-            )
-        )
-
-        # Mock the async AWS region and ARN functions
-        self.patchers.append(
-            mock.patch(
-                "snowflake.connector.aio._wif_util.get_aws_region",
-                side_effect=async_get_region,
-            )
-        )
-
-        async def async_get_arn():
-            return self.get_arn()
-
-        self.patchers.append(
-            mock.patch(
-                "snowflake.connector.aio._wif_util.get_aws_arn",
-                side_effect=async_get_arn,
-            )
-        )
-
-        # Mock the async STS client for direct aioboto3 usage
-        class MockStsClient:
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                pass
-
-            async def get_caller_identity(self):
-                return await async_get_caller_identity()
-
-        def mock_session_client(service_name):
-            if service_name == "sts":
-                return MockStsClient()
-            return None
-
-        self.patchers.append(
-            mock.patch(
-                "snowflake.connector.aio._wif_util.aioboto3.Session.client",
-                side_effect=mock_session_client,
-            )
-        )
         for patcher in self.patchers:
             patcher.__enter__()
         return self
