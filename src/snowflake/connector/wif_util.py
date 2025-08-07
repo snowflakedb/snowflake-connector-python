@@ -15,6 +15,7 @@ from botocore.utils import InstanceMetadataRegionFetcher
 
 from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
+from .session_manager import SessionManager
 from .vendored import requests
 from .vendored.requests import Response
 
@@ -63,15 +64,23 @@ class WorkloadIdentityAttestation:
 
 
 def try_metadata_service_call(
-    method: str, url: str, headers: dict, timeout_sec: int = 3
+    method: str,
+    url: str,
+    headers: dict,
+    timeout: int = 3,
+    session_manager: SessionManager | None = None,
 ) -> Response | None:
     """Tries to make a HTTP request to the metadata service with the given URL, method, headers and timeout.
 
     If we receive an error response or any exceptions are raised, returns None. Otherwise returns the response.
     """
     try:
-        res: Response = requests.request(
-            method=method, url=url, headers=headers, timeout=timeout_sec
+        res: Response = session_manager.request(
+            method=method,
+            url=url,
+            headers=headers,
+            timeout=timeout,
+            use_pooling=False,
         )
         if not res.ok:
             return None
@@ -80,7 +89,9 @@ def try_metadata_service_call(
     return res
 
 
-def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[str, str]:
+def extract_iss_and_sub_without_signature_verification(
+    jwt_str: str,
+) -> tuple[str | None, str | None]:
     """Extracts the 'iss' and 'sub' claims from the given JWT, without verifying the signature.
 
     Note: the real token verification (including signature verification) happens on the Snowflake side. The driver doesn't have
@@ -110,11 +121,13 @@ def get_aws_region() -> str | None:
     if "AWS_REGION" in os.environ:  # Lambda
         return os.environ["AWS_REGION"]
     else:  # EC2
+        # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
         return InstanceMetadataRegionFetcher().retrieve_region()
 
 
 def get_aws_arn() -> str | None:
     """Get the current AWS workload's ARN, if any."""
+    # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
     caller_identity = boto3.client("sts").get_caller_identity()
     if not caller_identity or "Arn" not in caller_identity:
         return None
@@ -185,11 +198,14 @@ def get_aws_sts_hostname(region: str, partition: str) -> str | None:
         return None
 
 
-def create_aws_attestation() -> WorkloadIdentityAttestation | None:
+def create_aws_attestation(
+    session_manager: SessionManager | None = None,
+) -> WorkloadIdentityAttestation | None:
     """Tries to create a workload identity attestation for AWS.
 
     If the application isn't running on AWS or no credentials were found, returns None.
     """
+    # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
     aws_creds = boto3.session.Session().get_credentials()
     if not aws_creds:
         logger.debug("No AWS credentials were found.")
@@ -230,7 +246,9 @@ def create_aws_attestation() -> WorkloadIdentityAttestation | None:
     )
 
 
-def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
+def create_gcp_attestation(
+    session_manager: SessionManager | None = None,
+) -> WorkloadIdentityAttestation | None:
     """Tries to create a workload identity attestation for GCP.
 
     If the application isn't running on GCP or no credentials were found, returns None.
@@ -241,13 +259,20 @@ def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
         headers={
             "Metadata-Flavor": "Google",
         },
+        session_manager=session_manager,
     )
     if res is None:
         # Most likely we're just not running on GCP, which may be expected.
         logger.debug("GCP metadata server request was not successful.")
         return None
 
-    jwt_str = res.content.decode("utf-8")
+    # Ensure content is bytes and decode it
+    content = res.content
+    if isinstance(content, bytes):
+        jwt_str = content.decode("utf-8")
+    else:
+        jwt_str = str(content)
+
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     if not issuer or not subject:
         return None
@@ -263,6 +288,7 @@ def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
 
 def create_azure_attestation(
     snowflake_entra_resource: str,
+    session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation | None:
     """Tries to create a workload identity attestation for Azure.
 
@@ -296,6 +322,7 @@ def create_azure_attestation(
         method="GET",
         url=f"{url_without_query_string}?{query_params}",
         headers=headers,
+        session_manager=session_manager,
     )
     if res is None:
         # Most likely we're just not running on Azure, which may be expected.
@@ -346,7 +373,9 @@ def create_oidc_attestation(token: str | None) -> WorkloadIdentityAttestation | 
 
 
 def create_autodetect_attestation(
-    entra_resource: str, token: str | None = None
+    entra_resource: str,
+    token: str | None = None,
+    session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation | None:
     """Tries to create an attestation using the auto-detected runtime environment.
 
@@ -356,15 +385,15 @@ def create_autodetect_attestation(
     if attestation:
         return attestation
 
-    attestation = create_aws_attestation()
+    attestation = create_aws_attestation(session_manager)
     if attestation:
         return attestation
 
-    attestation = create_azure_attestation(entra_resource)
+    attestation = create_azure_attestation(entra_resource, session_manager)
     if attestation:
         return attestation
 
-    attestation = create_gcp_attestation()
+    attestation = create_gcp_attestation(session_manager)
     if attestation:
         return attestation
 
@@ -375,6 +404,7 @@ def create_attestation(
     provider: AttestationProvider | None,
     entra_resource: str | None = None,
     token: str | None = None,
+    session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
 
@@ -384,18 +414,25 @@ def create_attestation(
     If an explicit entra_resource was provided to the connector, this will be used. Otherwise, the default Snowflake Entra resource will be used.
     """
     entra_resource = entra_resource or DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
+    session_manager = (
+        session_manager.shallow_clone()
+        if session_manager
+        else SessionManager(use_pooling=True)
+    )
 
-    attestation: WorkloadIdentityAttestation = None
+    attestation: WorkloadIdentityAttestation | None = None
     if provider == AttestationProvider.AWS:
-        attestation = create_aws_attestation()
+        attestation = create_aws_attestation(session_manager)
     elif provider == AttestationProvider.AZURE:
-        attestation = create_azure_attestation(entra_resource)
+        attestation = create_azure_attestation(entra_resource, session_manager)
     elif provider == AttestationProvider.GCP:
-        attestation = create_gcp_attestation()
+        attestation = create_gcp_attestation(session_manager)
     elif provider == AttestationProvider.OIDC:
         attestation = create_oidc_attestation(token)
     elif provider is None:
-        attestation = create_autodetect_attestation(entra_resource, token)
+        attestation = create_autodetect_attestation(
+            entra_resource, token, session_manager
+        )
 
     if not attestation:
         provider_str = "auto-detect" if provider is None else provider.value

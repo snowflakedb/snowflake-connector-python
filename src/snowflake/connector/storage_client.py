@@ -25,6 +25,7 @@ from .constants import (
 from .encryption_util import EncryptionMetadata, SnowflakeEncryptionUtil
 from .errors import RequestExceedMaxRetryError
 from .file_util import SnowflakeFileUtil
+from .session_manager import SessionManager
 from .vendored import requests
 from .vendored.requests import ConnectionError, Timeout
 from .vendored.urllib3 import HTTPResponse
@@ -42,11 +43,11 @@ class SnowflakeFileEncryptionMaterial(NamedTuple):
 
 
 METHODS = {
-    "GET": requests.get,
-    "PUT": requests.put,
-    "POST": requests.post,
-    "HEAD": requests.head,
-    "DELETE": requests.delete,
+    "GET": SessionManager.get,
+    "PUT": SessionManager.put,
+    "POST": SessionManager.post,
+    "HEAD": SessionManager.head,
+    "DELETE": SessionManager.delete,
 }
 
 
@@ -288,12 +289,17 @@ class SnowflakeStorageClient(ABC):
             rest_kwargs["timeout"] = (REQUEST_CONNECTION_TIMEOUT, REQUEST_READ_TIMEOUT)
             try:
                 if conn:
-                    with conn._rest._use_requests_session(url) as session:
+                    with conn.rest.use_requests_session(url=url) as session:
                         logger.debug(f"storage client request with session {session}")
                         response = session.request(verb, url, **rest_kwargs)
                 else:
+                    # This path should be entered only in unusual scenarios - when entrypoint to transfer wasn't through
+                    # connection -> cursor. It is rather unit-tests-specific use case. Due to this fact we can create
+                    # SessionManager on the flight, if code ends up here, since we probably do not care about loosing
+                    # proxy or HTTP setup.
                     logger.debug("storage client request with new session")
-                    response = rest_call(url, **rest_kwargs)
+                    session_manager = SessionManager(use_pooling=False)
+                    response = rest_call(session_manager, url, **rest_kwargs)
 
                 if self._has_expired_presigned_url(response):
                     logger.debug(

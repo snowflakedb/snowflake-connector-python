@@ -119,6 +119,7 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
+from .session_manager import HttpConfig, ProxySupportAdapterFactory, SessionManager
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
@@ -523,7 +524,11 @@ class SnowflakeConnection:
             PLATFORM,
         )
 
-        self._rest = None
+        # Placeholder attributes; will be initialized in connect()
+        self._http_config: HttpConfig | None = None
+        self._session_manager: SessionManager | None = None
+        self._rest: SnowflakeRestful | None = None
+
         for name, (value, _) in DEFAULT_CONFIGURATION.items():
             setattr(self, f"_{name}", value)
 
@@ -914,6 +919,12 @@ class SnowflakeConnection:
         if len(kwargs) > 0:
             self.__config(**kwargs)
 
+        self._http_config = HttpConfig(
+            adapter_factory=ProxySupportAdapterFactory(),
+            use_pooling=(not self.disable_request_pooling),
+        )
+        self._session_manager = SessionManager(self._http_config)
+
         if self.enable_connection_diag:
             exceptions_dict = {}
             connection_diag = ConnectionDiagnostic(
@@ -929,6 +940,7 @@ class SnowflakeConnection:
                 proxy_port=self.proxy_port,
                 proxy_user=self.proxy_user,
                 proxy_password=self.proxy_password,
+                session_manager=self._session_manager.shallow_clone(use_pooling=False),
             )
             try:
                 connection_diag.run_test()
@@ -1121,6 +1133,7 @@ class SnowflakeConnection:
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
             connection=self,
+            session_manager=self._session_manager,  # connection shares the session pool used for making Backend related requests
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 
