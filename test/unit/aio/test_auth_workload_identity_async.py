@@ -337,9 +337,17 @@ async def test_autodetect_aws_present(
     verify_aws_token(data["TOKEN"], fake_aws_environment.region)
 
 
+@mock.patch("snowflake.connector.aio._wif_util.AioInstanceMetadataRegionFetcher")
 async def test_autodetect_gcp_present(
+    mock_fetcher,
     fake_gce_metadata_service: FakeGceMetadataService,
 ):
+    # Mock AioInstanceMetadataRegionFetcher to return None properly as an async function
+    async def mock_retrieve_region():
+        return None
+
+    mock_fetcher.return_value.retrieve_region.side_effect = mock_retrieve_region
+
     auth_class = AuthByWorkloadIdentity(provider=None)
     await auth_class.prepare()
 
@@ -350,7 +358,14 @@ async def test_autodetect_gcp_present(
     }
 
 
-async def test_autodetect_azure_present(fake_azure_metadata_service):
+@mock.patch("snowflake.connector.aio._wif_util.AioInstanceMetadataRegionFetcher")
+async def test_autodetect_azure_present(mock_fetcher, fake_azure_metadata_service):
+    # Mock AioInstanceMetadataRegionFetcher to return None properly as an async function
+    async def mock_retrieve_region():
+        return None
+
+    mock_fetcher.return_value.retrieve_region.side_effect = mock_retrieve_region
+
     auth_class = AuthByWorkloadIdentity(provider=None)
     await auth_class.prepare()
 
@@ -373,7 +388,14 @@ async def test_autodetect_oidc_present(no_metadata_service):
     }
 
 
-async def test_autodetect_no_provider_raises_error(no_metadata_service):
+@mock.patch("snowflake.connector.aio._wif_util.AioInstanceMetadataRegionFetcher")
+async def test_autodetect_no_provider_raises_error(mock_fetcher, no_metadata_service):
+    # Mock AioInstanceMetadataRegionFetcher to return None properly as an async function
+    async def mock_retrieve_region():
+        return None
+
+    mock_fetcher.return_value.retrieve_region.side_effect = mock_retrieve_region
+
     auth_class = AuthByWorkloadIdentity(provider=None, token=None)
     with pytest.raises(ProgrammingError) as excinfo:
         await auth_class.prepare()
