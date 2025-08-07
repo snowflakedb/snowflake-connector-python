@@ -17,11 +17,8 @@ from snowflake.connector.aio._wif_util import AttestationProvider
 from snowflake.connector.aio.auth import AuthByWorkloadIdentity
 from snowflake.connector.errors import ProgrammingError
 
-from ...csp_helpers import (
-    FakeAwsEnvironment,
-    FakeGceMetadataService,
-    gen_dummy_id_token,
-)
+from ...csp_helpers import gen_dummy_id_token
+from .csp_helpers_async import FakeAwsEnvironmentAsync, FakeGceMetadataServiceAsync
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +105,7 @@ async def test_explicit_oidc_no_token_raises_error():
 
 
 async def test_explicit_aws_no_auth_raises_error(
-    fake_aws_environment: FakeAwsEnvironment,
+    fake_aws_environment: FakeAwsEnvironmentAsync,
 ):
     fake_aws_environment.credentials = None
 
@@ -119,7 +116,7 @@ async def test_explicit_aws_no_auth_raises_error(
 
 
 async def test_explicit_aws_encodes_audience_host_signature_to_api(
-    fake_aws_environment: FakeAwsEnvironment,
+    fake_aws_environment: FakeAwsEnvironmentAsync,
 ):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     await auth_class.prepare()
@@ -131,7 +128,7 @@ async def test_explicit_aws_encodes_audience_host_signature_to_api(
 
 
 async def test_explicit_aws_uses_regional_hostname(
-    fake_aws_environment: FakeAwsEnvironment,
+    fake_aws_environment: FakeAwsEnvironmentAsync,
 ):
     fake_aws_environment.region = "antarctica-northeast-3"
 
@@ -149,7 +146,7 @@ async def test_explicit_aws_uses_regional_hostname(
 
 
 async def test_explicit_aws_generates_unique_assertion_content(
-    fake_aws_environment: FakeAwsEnvironment,
+    fake_aws_environment: FakeAwsEnvironmentAsync,
 ):
     fake_aws_environment.arn = (
         "arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"
@@ -205,7 +202,7 @@ async def test_explicit_gcp_metadata_server_error_raises_auth_error(exception):
 
 
 async def test_explicit_gcp_wrong_issuer_raises_error(
-    fake_gce_metadata_service: FakeGceMetadataService,
+    fake_gce_metadata_service: FakeGceMetadataServiceAsync,
 ):
     fake_gce_metadata_service.iss = "not-google"
 
@@ -216,7 +213,7 @@ async def test_explicit_gcp_wrong_issuer_raises_error(
 
 
 async def test_explicit_gcp_plumbs_token_to_api(
-    fake_gce_metadata_service: FakeGceMetadataService,
+    fake_gce_metadata_service: FakeGceMetadataServiceAsync,
 ):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.GCP)
     await auth_class.prepare()
@@ -229,7 +226,7 @@ async def test_explicit_gcp_plumbs_token_to_api(
 
 
 async def test_explicit_gcp_generates_unique_assertion_content(
-    fake_gce_metadata_service: FakeGceMetadataService,
+    fake_gce_metadata_service: FakeGceMetadataServiceAsync,
 ):
     fake_gce_metadata_service.sub = "123456"
 
@@ -328,7 +325,7 @@ async def test_explicit_azure_uses_explicit_entra_resource(fake_azure_metadata_s
 
 
 async def test_autodetect_aws_present(
-    no_metadata_service, fake_aws_environment: FakeAwsEnvironment
+    no_metadata_service, fake_aws_environment: FakeAwsEnvironmentAsync
 ):
     auth_class = AuthByWorkloadIdentity(provider=None)
     await auth_class.prepare()
@@ -342,7 +339,7 @@ async def test_autodetect_aws_present(
 @mock.patch("snowflake.connector.aio._wif_util.AioInstanceMetadataRegionFetcher")
 async def test_autodetect_gcp_present(
     mock_fetcher,
-    fake_gce_metadata_service: FakeGceMetadataService,
+    fake_gce_metadata_service: FakeGceMetadataServiceAsync,
 ):
     # Mock AioInstanceMetadataRegionFetcher to return None properly as an async function
     async def mock_retrieve_region():
