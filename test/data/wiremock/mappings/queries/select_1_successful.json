@@ -1,0 +1,199 @@
+{
+  "scenarioName": "Successful SELECT 1 flow",
+  "request": {
+    "urlPathPattern": "/queries/v1/query-request.*",
+    "method": "POST",
+    "headers": {
+      "Authorization": {
+        "equalTo": "Snowflake Token=\"session token\""
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": {
+      "data": {
+        "parameters": [
+          {
+            "name": "TIMESTAMP_OUTPUT_FORMAT",
+            "value": "YYYY-MM-DD HH24:MI:SS.FF3 TZHTZM"
+          },
+          {
+            "name": "CLIENT_PREFETCH_THREADS",
+            "value": 4
+          },
+          {
+            "name": "TIME_OUTPUT_FORMAT",
+            "value": "HH24:MI:SS"
+          },
+          {
+            "name": "CLIENT_RESULT_CHUNK_SIZE",
+            "value": 16
+          },
+          {
+            "name": "TIMESTAMP_TZ_OUTPUT_FORMAT",
+            "value": ""
+          },
+          {
+            "name": "CLIENT_SESSION_KEEP_ALIVE",
+            "value": false
+          },
+          {
+            "name": "QUERY_CONTEXT_CACHE_SIZE",
+            "value": 5
+          },
+          {
+            "name": "CLIENT_METADATA_USE_SESSION_DATABASE",
+            "value": false
+          },
+          {
+            "name": "CLIENT_OUT_OF_BAND_TELEMETRY_ENABLED",
+            "value": false
+          },
+          {
+            "name": "ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1",
+            "value": true
+          },
+          {
+            "name": "TIMESTAMP_NTZ_OUTPUT_FORMAT",
+            "value": "YYYY-MM-DD HH24:MI:SS.FF3"
+          },
+          {
+            "name": "CLIENT_RESULT_PREFETCH_THREADS",
+            "value": 1
+          },
+          {
+            "name": "CLIENT_METADATA_REQUEST_USE_CONNECTION_CTX",
+            "value": false
+          },
+          {
+            "name": "CLIENT_HONOR_CLIENT_TZ_FOR_TIMESTAMP_NTZ",
+            "value": true
+          },
+          {
+            "name": "CLIENT_MEMORY_LIMIT",
+            "value": 1536
+          },
+          {
+            "name": "CLIENT_TIMESTAMP_TYPE_MAPPING",
+            "value": "TIMESTAMP_LTZ"
+          },
+          {
+            "name": "TIMEZONE",
+            "value": "America/Los_Angeles"
+          },
+          {
+            "name": "SERVICE_NAME",
+            "value": ""
+          },
+          {
+            "name": "CLIENT_RESULT_PREFETCH_SLOTS",
+            "value": 2
+          },
+          {
+            "name": "CLIENT_TELEMETRY_ENABLED",
+            "value": true
+          },
+          {
+            "name": "CLIENT_DISABLE_INCIDENTS",
+            "value": true
+          },
+          {
+            "name": "CLIENT_USE_V1_QUERY_API",
+            "value": true
+          },
+          {
+            "name": "CLIENT_RESULT_COLUMN_CASE_INSENSITIVE",
+            "value": false
+          },
+          {
+            "name": "CSV_TIMESTAMP_FORMAT",
+            "value": ""
+          },
+          {
+            "name": "BINARY_OUTPUT_FORMAT",
+            "value": "HEX"
+          },
+          {
+            "name": "CLIENT_ENABLE_LOG_INFO_STATEMENT_PARAMETERS",
+            "value": false
+          },
+          {
+            "name": "CLIENT_TELEMETRY_SESSIONLESS_ENABLED",
+            "value": true
+          },
+          {
+            "name": "DATE_OUTPUT_FORMAT",
+            "value": "YYYY-MM-DD"
+          },
+          {
+            "name": "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD",
+            "value": 65280
+          },
+          {
+            "name": "CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY",
+            "value": 3600
+          },
+          {
+            "name": "CLIENT_SESSION_CLONE",
+            "value": false
+          },
+          {
+            "name": "AUTOCOMMIT",
+            "value": true
+          },
+          {
+            "name": "TIMESTAMP_LTZ_OUTPUT_FORMAT",
+            "value": ""
+          }
+        ],
+        "rowtype": [
+          {
+            "name": "1",
+            "database": "",
+            "schema": "",
+            "table": "",
+            "nullable": false,
+            "length": null,
+            "type": "fixed",
+            "scale": 0,
+            "precision": 1,
+            "byteLength": null,
+            "collation": null
+          }
+        ],
+        "rowset": [
+          [
+            "1"
+          ]
+        ],
+        "total": 1,
+        "returned": 1,
+        "queryId": "01ba13b4-0104-e9fd-0000-0111029ca00e",
+        "databaseProvider": null,
+        "finalDatabaseName": null,
+        "finalSchemaName": null,
+        "finalWarehouseName": "TEST_XSMALL",
+        "numberOfBinds": 0,
+        "arrayBindSupported": false,
+        "statementTypeId": 4096,
+        "version": 1,
+        "sendResultTime": 1738317395581,
+        "queryResultFormat": "json",
+        "queryContext": {
+          "entries": [
+            {
+              "id": 0,
+              "timestamp": 1738317395574564,
+              "priority": 0,
+              "context": "CPbPTg=="
+            }
+          ]
+        }
+      },
+      "code": null,
+      "message": null,
+      "success": true
+    }
+  }
+}

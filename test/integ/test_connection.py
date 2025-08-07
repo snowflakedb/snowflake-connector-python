@@ -389,6 +389,8 @@ def test_invalid_account_timeout(conn_cnx):
 
 @pytest.mark.timeout(15)
 def test_invalid_proxy(conn_cnx):
+    http_proxy = os.environ.get("HTTP_PROXY")
+    https_proxy = os.environ.get("HTTPS_PROXY")
     with pytest.raises(OperationalError):
         with conn_cnx(
             protocol="http",
@@ -398,9 +400,9 @@ def test_invalid_proxy(conn_cnx):
             proxy_port="3333",
         ):
             pass
-    # NOTE environment variable is set if the proxy parameter is specified.
-    del os.environ["HTTP_PROXY"]
-    del os.environ["HTTPS_PROXY"]
+    # Proxy environment variables should not change
+    assert os.environ.get("HTTP_PROXY") == http_proxy
+    assert os.environ.get("HTTPS_PROXY") == https_proxy
 
 
 @pytest.mark.timeout(15)

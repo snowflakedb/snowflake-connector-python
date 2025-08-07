@@ -269,6 +269,7 @@ You can close this window now and go back where you started from.
             "login. If you can't see it, check existing browser windows, "
             "or your OS settings. Press CTRL+C to abort and try again..."
         )
+        # TODO(SNOW-2229411) Investigate if Session manager / Http Config should be used here.
         code, state = (
             self._receive_authorization_callback(callback_server, connection)
             if webbrowser.open(authorization_request)
