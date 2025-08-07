@@ -76,6 +76,7 @@ from ..util_text import split_statements
 from ..wif_util import AttestationProvider
 from ._cursor import SnowflakeCursor
 from ._description import CLIENT_NAME
+from ._direct_file_operation_utils import FileOperationParser, StreamDownloader
 from ._network import SnowflakeRestful
 from ._telemetry import TelemetryClient
 from ._time_util import HeartBeatTimer
@@ -120,6 +121,10 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         self.expired = False
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
+
+        # Set up the file operation parser and stream downloader.
+        self._file_operation_parser = FileOperationParser(self)
+        self._stream_downloader = StreamDownloader(self)
 
     def __enter__(self):
         # async connection does not support sync context manager
