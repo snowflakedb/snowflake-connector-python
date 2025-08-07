@@ -301,6 +301,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 self._cursor._connection,
                 self._command,
                 unsafe_file_write=self._unsafe_file_write,
+                use_virtual_endpoints=self._gcs_use_virtual_endpoints,
             )
             if client.security_token:
                 logger.debug(f"len(GCS_ACCESS_TOKEN): {len(client.security_token)}")
