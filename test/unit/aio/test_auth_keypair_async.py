@@ -130,6 +130,16 @@ async def test_renew_token(mockPrepare):
     assert mockPrepare.called
 
 
+def test_mro():
+    """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
+    from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
+    from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
+
+    assert AuthByKeyPair.mro().index(AuthByPluginAsync) < AuthByKeyPair.mro().index(
+        AuthByPluginSync
+    )
+
+
 def _init_rest(application, post_requset):
     connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)

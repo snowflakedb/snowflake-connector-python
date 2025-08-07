@@ -330,3 +330,13 @@ async def test_authbyplugin_abc_api():
 'password': <Parameter "password: 'str'">, \
 'kwargs': <Parameter "**kwargs: 'Any'">})"""
         )
+
+
+def test_mro():
+    """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
+    from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
+    from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
+
+    assert AuthByDefault.mro().index(AuthByPluginAsync) < AuthByDefault.mro().index(
+        AuthByPluginSync
+    )
