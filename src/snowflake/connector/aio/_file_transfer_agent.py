@@ -195,7 +195,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
         ) -> None:
             # Note: chunk_id is 0 based while num_of_chunks is count
             logger.debug(
-                f"Chunk {chunk_id}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
+                f"Chunk(id: {chunk_id}) {chunk_id+1}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
             )
             if task.exception():
                 done_client.failed_transfers += 1
