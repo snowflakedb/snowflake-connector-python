@@ -356,19 +356,14 @@ def _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, reraise_param_
     Returns:
         tuple: (agent, test_exception, mock_client, mock_create_client)
     """
-    from snowflake.connector.constants import (
-        RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION,
-    )
 
     file1 = tmp_path / "file1"
     file1.write_text("test content")
 
     # Mock cursor with connection attribute
     mock_cursor = mock.MagicMock(autospec=SnowflakeCursor)
-    setattr(
-        mock_cursor.connection,
-        f"_{RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION}",
-        reraise_param_value,
+    mock_cursor.connection._reraise_error_in_file_transfer_work_function = (
+        reraise_param_value
     )
 
     # Create file transfer agent
@@ -395,7 +390,13 @@ def _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, reraise_param_
             },
             "success": True,
         },
+        reraise_error_in_file_transfer_work_function=reraise_param_value,
     )
+
+    # Quick check to make sure the field _reraise_error_in_file_transfer_work_function is correctly populated
+    assert (
+        agent._reraise_error_in_file_transfer_work_function == reraise_param_value
+    ), f"expected {reraise_param_value}, got {agent._reraise_error_in_file_transfer_work_function}"
 
     # Parse command and initialize file metadata
     agent._parse_command()

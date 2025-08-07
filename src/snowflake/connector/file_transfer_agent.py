@@ -25,7 +25,6 @@ from .constants import (
     CMD_TYPE_UPLOAD,
     GCS_FS,
     LOCAL_FS,
-    RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION,
     S3_DEFAULT_CHUNK_SIZE,
     S3_FS,
     S3_MAX_OBJECT_SIZE,
@@ -358,6 +357,7 @@ class SnowflakeFileTransferAgent:
         iobound_tpe_limit: int | None = None,
         unsafe_file_write: bool = False,
         snowflake_server_dop_cap_for_file_transfer=_DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+        reraise_error_in_file_transfer_work_function: bool = False,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -392,6 +392,9 @@ class SnowflakeFileTransferAgent:
         self._unsafe_file_write = unsafe_file_write
         self._snowflake_server_dop_cap_for_file_transfer = (
             snowflake_server_dop_cap_for_file_transfer
+        )
+        self._reraise_error_in_file_transfer_work_function = (
+            reraise_error_in_file_transfer_work_function
         )
 
     def execute(self) -> None:
@@ -633,11 +636,7 @@ class SnowflakeFileTransferAgent:
                 # exception_caught_in_work, such that towards the end of
                 # the transfer call, we reraise the error as is immediately
                 # instead of continuing the execution after transfer.
-                if getattr(
-                    self._cursor.connection,
-                    f"_{RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION}",
-                    False,
-                ):
+                if self._reraise_error_in_file_transfer_work_function:
                     with cv_main_thread:
                         nonlocal exception_caught_in_work
                         exception_caught_in_work = e

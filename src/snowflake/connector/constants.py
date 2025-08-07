@@ -39,10 +39,6 @@ _SNOWFLAKE_HOST_SUFFIX_REGEX = r"snowflakecomputing(\.[a-zA-Z]{1,63}){1,2}$"
 
 _PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS = "ENABLE_FIX_1375538"
 
-RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION = (
-    "reraise_error_in_file_transfer_work_function"
-)
-
 
 class FieldType(NamedTuple):
     name: str

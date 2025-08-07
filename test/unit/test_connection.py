@@ -730,9 +730,6 @@ def test_reraise_error_in_file_transfer_work_function_config(
 ):
     """Test that reraise_error_in_file_transfer_work_function config is
     properly set on connection."""
-    from snowflake.connector.constants import (
-        RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION,
-    )
 
     with mock.patch(
         "snowflake.connector.network.SnowflakeRestful._post_request",
@@ -748,7 +745,7 @@ def test_reraise_error_in_file_transfer_work_function_config(
         if reraise_enabled is not None:
             # Create a connection with the config set to the value of reraise_enabled.
             conn = fake_connector(
-                **{RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION: reraise_enabled}
+                **{"reraise_error_in_file_transfer_work_function": reraise_enabled}
             )
         else:
             # Special test setup: when reraise_enabled is None, create a
@@ -758,5 +755,5 @@ def test_reraise_error_in_file_transfer_work_function_config(
         # When reraise_enabled is None, we expect a default value of False,
         # so taking bool() on it also makes sense.
         expected_value = bool(reraise_enabled)
-        actual_value = getattr(conn, f"_{RERAISE_ERROR_IN_FILE_TRANSFER_WORK_FUNCTION}")
+        actual_value = conn._reraise_error_in_file_transfer_work_function
         assert actual_value == expected_value
