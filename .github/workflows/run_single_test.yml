@@ -53,4 +53,4 @@ jobs:
 
       - name: Run pytest
         run: |
-          pytest -vv test/unit/test_programmatic_access_token.py
+          pytest -vv test/unit/test_auth_workload_identity.py
