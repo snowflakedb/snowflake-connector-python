@@ -187,6 +187,7 @@ def _mock_aiohttp_exception(exception):
     "exception",
     [
         aiohttp.ClientError(),
+        aiohttp.ConnectionTimeoutError(),
         asyncio.TimeoutError(),
     ],
 )
@@ -246,6 +247,7 @@ async def test_explicit_gcp_generates_unique_assertion_content(
     [
         aiohttp.ClientError(),
         asyncio.TimeoutError(),
+        aiohttp.ConnectionTimeoutError(),
     ],
 )
 async def test_explicit_azure_metadata_server_error_raises_auth_error(exception):
