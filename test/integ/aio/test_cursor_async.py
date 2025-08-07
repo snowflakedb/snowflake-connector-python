@@ -1696,6 +1696,23 @@ async def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_met
                 await fetch_next_fn()
 
 
+@pytest.mark.parametrize("result_format", ("json", "arrow"))
+async def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
+    """Tests whether the year 10000 is out of range exception is raised as expected."""
+    async with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: result_format
+        }
+    ) as con:
+        async with con.cursor() as cur:
+            await cur.execute("select TO_DATE('10000-01-01'), TO_DATE('9999-01-01')")
+            with pytest.raises(
+                InterfaceError,
+                match="out of range",
+            ):
+                await cur.fetchall()
+
+
 async def test_describe(conn_cnx):
     async with conn_cnx() as con:
         async with con.cursor() as cur:
