@@ -12,7 +12,7 @@ from base64 import b64encode
 
 import aioboto3
 import aiohttp
-from aiobotocore.utils import InstanceMetadataRegionFetcher
+from aiobotocore.utils import AioInstanceMetadataRegionFetcher
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 
@@ -58,27 +58,17 @@ async def get_aws_region() -> str | None:
     if "AWS_REGION" in os.environ:  # Lambda
         return os.environ["AWS_REGION"]
     else:  # EC2
-        return await InstanceMetadataRegionFetcher().retrieve_region()
+        return await AioInstanceMetadataRegionFetcher().retrieve_region()
 
 
 async def get_aws_arn() -> str | None:
     """Get the current AWS workload's ARN, if any."""
-    if aioboto3 is None:
-        logger.debug("aioboto3 not available, falling back to sync implementation")
-        from ..wif_util import get_aws_arn as sync_get_aws_arn
-
-        return sync_get_aws_arn()
-
-    try:
-        session = aioboto3.Session()
-        async with session.client("sts") as client:
-            caller_identity = await client.get_caller_identity()
-            if not caller_identity or "Arn" not in caller_identity:
-                return None
-            return caller_identity["Arn"]
-    except Exception:
-        logger.debug("Failed to get AWS ARN", exc_info=True)
-        return None
+    session = aioboto3.Session()
+    async with session.client("sts") as client:
+        caller_identity = await client.get_caller_identity()
+        if not caller_identity or "Arn" not in caller_identity:
+            return None
+        return caller_identity["Arn"]
 
 
 async def create_aws_attestation() -> WorkloadIdentityAttestation | None:
@@ -86,56 +76,43 @@ async def create_aws_attestation() -> WorkloadIdentityAttestation | None:
 
     If the application isn't running on AWS or no credentials were found, returns None.
     """
-    if aioboto3 is None:
-        logger.debug("aioboto3 not available, falling back to sync implementation")
-        from ..wif_util import create_aws_attestation as sync_create_aws_attestation
-
-        return sync_create_aws_attestation()
-
-    try:
-        # Get credentials using aioboto3
-        session = aioboto3.Session()
-        aws_creds = await session.get_credentials()  # This IS async in aioboto3
-        if not aws_creds:
-            logger.debug("No AWS credentials were found.")
-            return None
-
-        region = await get_aws_region()
-        if not region:
-            logger.debug("No AWS region was found.")
-            return None
-
-        arn = await get_aws_arn()
-        if not arn:
-            logger.debug("No AWS caller identity was found.")
-            return None
-
-        sts_hostname = f"sts.{region}.amazonaws.com"
-        request = AWSRequest(
-            method="POST",
-            url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
-            headers={
-                "Host": sts_hostname,
-                "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
-            },
-        )
-
-        SigV4Auth(aws_creds, "sts", region).add_auth(request)
-
-        assertion_dict = {
-            "url": request.url,
-            "method": request.method,
-            "headers": dict(request.headers.items()),
-        }
-        credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode(
-            "utf-8"
-        )
-        return WorkloadIdentityAttestation(
-            AttestationProvider.AWS, credential, {"arn": arn}
-        )
-    except Exception:
-        logger.debug("Failed to create AWS attestation", exc_info=True)
+    session = aioboto3.Session()
+    aws_creds = await session.get_credentials()
+    if not aws_creds:
+        logger.debug("No AWS credentials were found.")
         return None
+
+    region = await get_aws_region()
+    if not region:
+        logger.debug("No AWS region was found.")
+        return None
+
+    arn = await get_aws_arn()
+    if not arn:
+        logger.debug("No AWS caller identity was found.")
+        return None
+
+    sts_hostname = f"sts.{region}.amazonaws.com"
+    request = AWSRequest(
+        method="POST",
+        url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
+        headers={
+            "Host": sts_hostname,
+            "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
+        },
+    )
+
+    SigV4Auth(aws_creds, "sts", region).add_auth(request)
+
+    assertion_dict = {
+        "url": request.url,
+        "method": request.method,
+        "headers": dict(request.headers.items()),
+    }
+    credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
+    return WorkloadIdentityAttestation(
+        AttestationProvider.AWS, credential, {"arn": arn}
+    )
 
 
 async def create_gcp_attestation() -> WorkloadIdentityAttestation | None:
