@@ -364,11 +364,32 @@ class FakeAwsEnvironment:
         async def async_get_caller_identity():
             return {"Arn": self.arn}
 
+        async def async_get_region():
+            return self.get_region()
+
         # Mock aioboto3.Session.get_credentials (IS async)
         self.patchers.append(
             mock.patch(
                 "snowflake.connector.aio._wif_util.aioboto3.Session.get_credentials",
                 side_effect=async_get_credentials,
+            )
+        )
+
+        # Mock the async AWS region and ARN functions
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.aio._wif_util.get_aws_region",
+                side_effect=async_get_region,
+            )
+        )
+
+        async def async_get_arn():
+            return self.get_arn()
+
+        self.patchers.append(
+            mock.patch(
+                "snowflake.connector.aio._wif_util.get_aws_arn",
+                side_effect=async_get_arn,
             )
         )
 
