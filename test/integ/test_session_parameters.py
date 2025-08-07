@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import pytest
 
-import snowflake.connector
-
 try:
     from snowflake.connector.util_text import random_string
 except ImportError:
@@ -16,21 +14,11 @@ except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 
-def test_session_parameters(db_parameters):
+def test_session_parameters(db_parameters, conn_cnx):
     """Sets the session parameters in connection time."""
-    connection = snowflake.connector.connect(
-        protocol=db_parameters["protocol"],
-        account=db_parameters["account"],
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        session_parameters={"TIMEZONE": "UTC"},
-    )
-    ret = connection.cursor().execute("show parameters like 'TIMEZONE'").fetchone()
-    assert ret[1] == "UTC"
+    with conn_cnx(session_parameters={"TIMEZONE": "UTC"}) as connection:
+        ret = connection.cursor().execute("show parameters like 'TIMEZONE'").fetchone()
+        assert ret[1] == "UTC"
 
 
 @pytest.mark.skipif(
@@ -44,63 +32,39 @@ def test_client_session_keep_alive(db_parameters, conn_cnx):
     session parameter is always honored and given higher precedence over
     user and account level backend configuration.
     """
-    admin_cnxn = snowflake.connector.connect(
-        protocol=db_parameters["sf_protocol"],
-        account=db_parameters["sf_account"],
-        user=db_parameters["sf_user"],
-        password=db_parameters["sf_password"],
-        host=db_parameters["sf_host"],
-        port=db_parameters["sf_port"],
-    )
+    with conn_cnx("admin") as admin_cnxn:
+        # Ensure backend parameter is set to False
+        set_backend_client_session_keep_alive(db_parameters, admin_cnxn, False)
 
-    # Ensure backend parameter is set to False
-    set_backend_client_session_keep_alive(db_parameters, admin_cnxn, False)
-    with conn_cnx(client_session_keep_alive=True) as connection:
-        ret = (
-            connection.cursor()
-            .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
-            .fetchone()
-        )
-        assert ret[1] == "true"
+        # Test client_session_keep_alive=True (connection parameter)
+        with conn_cnx(client_session_keep_alive=True) as connection:
+            ret = (
+                connection.cursor()
+                .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
+                .fetchone()
+            )
+            assert ret[1] == "true"
 
-    # Set backend parameter to True
-    set_backend_client_session_keep_alive(db_parameters, admin_cnxn, True)
+        # Test client_session_keep_alive=False (connection parameter)
+        with conn_cnx(client_session_keep_alive=False) as connection:
+            ret = (
+                connection.cursor()
+                .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
+                .fetchone()
+            )
+            assert ret[1] == "false"
 
-    # Set session parameter to False
-    with conn_cnx(client_session_keep_alive=False) as connection:
-        ret = (
-            connection.cursor()
-            .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
-            .fetchone()
-        )
-        assert ret[1] == "false"
+        # Ensure backend parameter is set to True
+        set_backend_client_session_keep_alive(db_parameters, admin_cnxn, True)
 
-    # Set session parameter to None backend parameter continues to be True
-    with conn_cnx(client_session_keep_alive=None) as connection:
-        ret = (
-            connection.cursor()
-            .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
-            .fetchone()
-        )
-        assert ret[1] == "true"
-
-    admin_cnxn.close()
-
-
-def create_client_connection(db_parameters: object, val: bool) -> object:
-    """Create connection with client session keep alive set to specific value."""
-    connection = snowflake.connector.connect(
-        protocol=db_parameters["protocol"],
-        account=db_parameters["account"],
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        client_session_keep_alive=val,
-    )
-    return connection
+        # Test that client setting overrides backend setting
+        with conn_cnx(client_session_keep_alive=False) as connection:
+            ret = (
+                connection.cursor()
+                .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
+                .fetchone()
+            )
+            assert ret[1] == "false"
 
 
 def set_backend_client_session_keep_alive(

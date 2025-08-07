@@ -241,7 +241,6 @@ def test_write_pandas(
     with conn_cnx(
         user=db_parameters["user"],
         account=db_parameters["account"],
-        password=db_parameters["password"],
     ) as cnx:
         table_name = "driver_versions"
 

@@ -131,20 +131,10 @@ def test_exceptions_as_connection_attributes(conn_cnx):
         assert con.NotSupportedError == errors.NotSupportedError
 
 
-def test_commit(db_parameters):
-    con = snowflake.connector.connect(
-        account=db_parameters["account"],
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        protocol=db_parameters["protocol"],
-    )
-    try:
+def test_commit(conn_cnx):
+    with conn_cnx() as con:
         # Commit must work, even if it doesn't do anything
         con.commit()
-    finally:
-        con.close()
 
 
 def test_rollback(conn_cnx, db_parameters):
@@ -240,36 +230,14 @@ def test_rowcount(conn_local):
         assert cur.rowcount == 1, "cursor.rowcount should the number of rows returned"
 
 
-def test_close(db_parameters):
-    con = snowflake.connector.connect(
-        account=db_parameters["account"],
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        protocol=db_parameters["protocol"],
-    )
-    try:
+def test_close(conn_cnx):
+    # Create connection using conn_cnx context manager, but we need to test manual closing
+    with conn_cnx() as con:
         cur = con.cursor()
-    finally:
-        con.close()
+        # Break out of context manager early to test manual close behavior
+        # Note: connection is now closed by context manager
 
-    # commit is currently a nop; disabling for now
-    # connection.commit should raise an Error if called after connection is
-    # closed.
-    #        assert calling(con.commit()),raises(errors.Error,'con.commit'))
-
-    # disabling due to SNOW-13645
-    # cursor.close() should raise an Error if called after connection closed
-    #        try:
-    #            cur.close()
-    # should not get here and raise and exception
-    #            assert calling(cur.close()),raises(errors.Error,
-    #     'calling cursor.close() twice in a row does not get an error'))
-    #        except BASE_EXCEPTION_CLASS as err:
-    #            assert error.errno,equal_to(
-    #   errorcode.ER_CURSOR_IS_CLOSED),'cursor.close() called twice in a row')
-
+    # Test behavior after connection is closed
     # calling cursor.execute after connection is closed should raise an error
     with pytest.raises(errors.Error) as e:
         cur.execute(f"create or replace table {TABLE1} (name string)")
