@@ -9,14 +9,14 @@
         "method": "POST",
         "bodyPatterns": [
           {
-            "equalToJson" : {
+            "equalToJson": {
               "data": {
                 "LOGIN_NAME": "testUser",
                 "AUTHENTICATOR": "PROGRAMMATIC_ACCESS_TOKEN",
                 "TOKEN": "some PAT"
               }
             },
-            "ignoreExtraElements" : true
+            "ignoreExtraElements": true
           },
           {
             "matchesJsonPath": {
@@ -28,6 +28,9 @@
       },
       "response": {
         "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "jsonBody": {
           "data": {
             "masterToken": "master token",

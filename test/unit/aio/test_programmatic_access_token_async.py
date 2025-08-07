@@ -46,7 +46,7 @@ async def test_valid_pat_async(wiremock_client: WiremockClient) -> None:
         / "generic"
     )
 
-    wiremock_client.import_mapping(wiremock_data_dir / "successful_flow_async.json")
+    wiremock_client.import_mapping(wiremock_data_dir / "successful_flow.json")
     wiremock_client.add_mapping(
         wiremock_generic_data_dir / "snowflake_disconnect_successful.json"
     )
@@ -75,7 +75,7 @@ async def test_invalid_pat_async(wiremock_client: WiremockClient) -> None:
         / "auth"
         / "pat"
     )
-    wiremock_client.import_mapping(wiremock_data_dir / "invalid_token_async.json")
+    wiremock_client.import_mapping(wiremock_data_dir / "invalid_token.json")
 
     with pytest.raises(snowflake.connector.errors.DatabaseError) as execinfo:
         connection = SnowflakeConnection(
@@ -112,9 +112,7 @@ async def test_pat_as_password_async(wiremock_client: WiremockClient) -> None:
         / "generic"
     )
 
-    wiremock_client.import_mapping(
-        wiremock_data_dir / "successful_flow_password_async.json"
-    )
+    wiremock_client.import_mapping(wiremock_data_dir / "successful_flow.json")
     wiremock_client.add_mapping(
         wiremock_generic_data_dir / "snowflake_disconnect_successful.json"
     )

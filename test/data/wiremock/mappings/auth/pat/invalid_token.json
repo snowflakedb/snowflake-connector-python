@@ -22,6 +22,9 @@
       },
       "response": {
         "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "jsonBody": {
           "data": {
             "nextAction": "RETRY_LOGIN",
