@@ -6,6 +6,7 @@ import os
 from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum, unique
+from hashlib import sha256
 
 import boto3
 import jwt
@@ -92,39 +93,21 @@ def get_aws_region() -> str:
     return region
 
 
-def get_aws_arn() -> str:
-    """Get the current AWS workload's ARN."""
-    caller_identity = boto3.client("sts").get_caller_identity()
-    if not caller_identity or "Arn" not in caller_identity:
-        raise ProgrammingError(
-            msg="No AWS identity was found. Ensure the application is running on AWS with an IAM role attached.",
-            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-        )
-    return caller_identity["Arn"]
-
-
-def get_aws_partition(arn: str) -> str:
-    """Get the current AWS partition from ARN.
+def get_aws_partition(region: str) -> str:
+    """Get the current AWS partition from region.
 
     Args:
-        arn (str): The Amazon Resource Name (ARN) string.
+        region (str): The AWS region (e.g., 'us-east-1', 'cn-north-1').
 
     Returns:
         str: The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov').
-
-    Raises:
-        ProgrammingError: If the ARN is invalid or does not contain a valid partition.
-
-    Reference: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html.
     """
-    parts = arn.split(":")
-    if len(parts) > 1 and parts[0] == "arn" and parts[1]:
-        return parts[1]
-
-    raise ProgrammingError(
-        msg=f"Invalid AWS ARN: '{arn}'.",
-        errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-    )
+    if region.startswith("cn-"):
+        return "aws-cn"
+    elif region.startswith("us-gov-"):
+        return "aws-us-gov"
+    else:
+        return "aws"
 
 
 def get_aws_sts_hostname(region: str, partition: str) -> str:
@@ -176,8 +159,7 @@ def create_aws_attestation() -> WorkloadIdentityAttestation:
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
     region = get_aws_region()
-    arn = get_aws_arn()
-    partition = get_aws_partition(arn)
+    partition = get_aws_partition(region)
     sts_hostname = get_aws_sts_hostname(region, partition)
     request = AWSRequest(
         method="POST",
@@ -197,7 +179,7 @@ def create_aws_attestation() -> WorkloadIdentityAttestation:
     }
     credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
     return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"arn": arn}
+        AttestationProvider.AWS, credential, {"hashed_attestation": sha256(credential.encode("utf-8")).hexdigest()}
     )
 
 
