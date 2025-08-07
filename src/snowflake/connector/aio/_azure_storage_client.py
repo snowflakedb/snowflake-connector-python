@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
-from ..azure_storage_client import AzureCredentialFilter
 from ..azure_storage_client import (
     SnowflakeAzureRestClient as SnowflakeAzureRestClientSync,
 )
@@ -36,8 +35,6 @@ from ..azure_storage_client import (
 )
 
 logger = getLogger(__name__)
-
-getLogger("aiohttp").addFilter(AzureCredentialFilter())
 
 
 class SnowflakeAzureRestClient(
