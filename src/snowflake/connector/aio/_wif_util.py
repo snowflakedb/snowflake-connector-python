@@ -10,18 +10,11 @@ import logging
 import os
 from base64 import b64encode
 
+import aioboto3
 import aiohttp
-
-try:
-    import aioboto3
-    from botocore.auth import SigV4Auth
-    from botocore.awsrequest import AWSRequest
-    from botocore.utils import InstanceMetadataRegionFetcher
-except ImportError:
-    aioboto3 = None
-    SigV4Auth = None
-    AWSRequest = None
-    InstanceMetadataRegionFetcher = None
+from aiobotocore.utils import InstanceMetadataRegionFetcher
+from botocore.auth import SigV4Auth
+from botocore.awsrequest import AWSRequest
 
 from ..errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from ..errors import ProgrammingError
@@ -62,10 +55,10 @@ async def try_metadata_service_call(
 
 async def get_aws_region() -> str | None:
     """Get the current AWS workload's region, if any."""
-    # Use sync implementation which has proper mocking support
-    from ..wif_util import get_aws_region as sync_get_aws_region
-
-    return sync_get_aws_region()
+    if "AWS_REGION" in os.environ:  # Lambda
+        return os.environ["AWS_REGION"]
+    else:  # EC2
+        return await InstanceMetadataRegionFetcher().retrieve_region()
 
 
 async def get_aws_arn() -> str | None:
