@@ -743,12 +743,16 @@ class ArrowResultBatch(ResultBatch):
         return self._create_empty_table()
 
     def to_pandas(
-        self, connection: SnowflakeConnection | None = None, **kwargs
+        self, connection: SnowflakeConnection | None = None,
+        lowercase_columns: bool = False, **kwargs
     ) -> DataFrame:
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
         table = self.to_arrow(connection=connection)
-        return table.to_pandas(**kwargs)
+        dataFrame = table.to_pandas(**kwargs)
+        if lowercase_columns:
+            dataFrame.columns = [col.lower() for col in dataFrame.columns]
+        return dataFrame
 
     def _get_pandas_iter(
         self, connection: SnowflakeConnection | None = None, **kwargs
