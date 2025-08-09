@@ -1101,6 +1101,71 @@ select '2019-08-10'::date, '2019-01-02 12:34:56.1234'::timestamp_ntz(4),
         assert val[3] == numpy.datetime64("2019-01-02 12:34:56.12345678")
 
 
+@pytest.mark.parametrize("use_numpy", [True, False])
+async def test_select_year_month_interval_arrow(conn_cnx, use_numpy):
+    cases = ["0-0", "1-2", "-1-3", "999999999-11", "-999999999-11"]
+    expected = [0, 14, -15, 11_999_999_999, -11_999_999_999]
+    if use_numpy:
+        expected = [numpy.timedelta64(e, "M") for e in expected]
+
+    table = "test_arrow_day_time_interval"
+    values = "(" + "),(".join([f"'{c}'" for c in cases]) + ")"
+    async with conn_cnx(numpy=use_numpy) as conn:
+        cursor = conn.cursor()
+        await cursor.execute(
+            "alter session set python_connector_query_result_format='arrow'"
+        )
+
+        await cursor.execute("alter session set feature_interval_types=enabled")
+        await cursor.execute(
+            f"create or replace table {table} (c1 interval year to month)"
+        )
+        await cursor.execute(f"insert into {table} values {values}")
+        result = await conn.cursor().execute(f"select * from {table}").fetchall()
+        result = [r[0] for r in result]
+        assert result == expected
+
+
+@pytest.mark.skip(
+    reason="SNOW-1878635: Add support for day-time interval in ArrowStreamWriter"
+)
+@pytest.mark.parametrize("use_numpy", [True, False])
+async def test_select_day_time_interval_arrow(conn_cnx, use_numpy):
+    cases = [
+        "0 0:0:0.0",
+        "12 3:4:5.678",
+        "-1 2:3:4.567",
+        "99999 23:59:59.999999",
+        "-99999 23:59:59.999999",
+    ]
+    expected = [
+        timedelta(days=0),
+        timedelta(days=12, hours=3, minutes=4, seconds=5.678),
+        -timedelta(days=1, hours=2, minutes=3, seconds=4.567),
+        timedelta(days=99999, hours=23, minutes=59, seconds=59.999999),
+        -timedelta(days=99999, hours=23, minutes=59, seconds=59.999999),
+    ]
+    if use_numpy:
+        expected = [numpy.timedelta64(e) for e in expected]
+
+    table = "test_arrow_day_time_interval"
+    values = "(" + "),(".join([f"'{c}'" for c in cases]) + ")"
+    async with conn_cnx(numpy=use_numpy) as conn:
+        cursor = conn.cursor()
+        await cursor.execute(
+            "alter session set python_connector_query_result_format='arrow'"
+        )
+
+        await cursor.execute("alter session set feature_interval_types=enabled")
+        await cursor.execute(
+            f"create or replace table {table} (c1 interval day(5) to second)"
+        )
+        await cursor.execute(f"insert into {table} values {values}")
+        result = await conn.cursor().execute(f"select * from {table}").fetchall()
+        result = [r[0] for r in result]
+        assert result == expected
+
+
 async def iterate_over_test_chunk(
     test_name, conn_cnx, sql_text, row_count, col_count, eps=None, expected=None
 ):
