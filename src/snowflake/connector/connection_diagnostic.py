@@ -579,7 +579,7 @@ class ConnectionDiagnostic:
                     cert_reqs=cert_reqs,
                 )
             resp = http.request(
-                "GET", "https://nonexistentdomain.invalidtld", timeout=10.0
+                "GET", "https://nonexistentdomain.invalid", timeout=10.0
             )
 
             # squid does not throw exception.  Check HTML
