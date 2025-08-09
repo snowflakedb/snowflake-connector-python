@@ -196,13 +196,25 @@ async def test_partner_env_var(mock_post_requests):
     )
 
 
-async def test_imported_module(mock_post_requests):
-    with patch.dict(sys.modules, {"streamlit": "foo"}):
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "sys_modules,application",
+    [
+        ({"streamlit": None}, "streamlit"),
+        (
+            {"ipykernel": None, "jupyter_core": None, "jupyter_client": None},
+            "jupyter_notebook",
+        ),
+        ({"snowbooks": None}, "snowflake_notebook"),
+    ],
+)
+async def test_imported_module(mock_post_requests, sys_modules, application):
+    with patch.dict(sys.modules, sys_modules):
         async with fake_db_conn() as conn:
-            assert conn.application == "streamlit"
+            assert conn.application == application
 
     assert (
-        mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == "streamlit"
+        mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == application
     )
 
 
