@@ -1871,6 +1871,7 @@ async def test_fetch_download_timeout_setting(conn_cnx):
             assert len(await (await cur.execute(sql)).fetchall()) == 100000
 
 
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize(
     "request_id",
     [
@@ -1892,6 +1893,7 @@ async def test_custom_request_id_negative(request_id, conn_cnx):
                 )
 
 
+@pytest.mark.skipolddriver
 async def test_custom_request_id(conn_cnx):
     request_id = uuid.uuid4()
 
