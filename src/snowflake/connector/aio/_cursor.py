@@ -56,6 +56,8 @@ from snowflake.connector.file_transfer_agent import SnowflakeProgressPercentage
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
 from snowflake.connector.time_util import get_time_millis
 
+from .._utils import REQUEST_ID_STATEMENT_PARAM_NAME, is_uuid4
+
 if TYPE_CHECKING:
     from pandas import DataFrame
     from pyarrow import Table
@@ -202,7 +204,27 @@ class SnowflakeCursor(SnowflakeCursorSync):
                     )
 
         self._sequence_counter = await self._connection._next_sequence_counter()
-        self._request_id = uuid.uuid4()
+
+        # If requestId is contained in statement parameters, use it to set request id. Verify here it is a valid uuid4
+        # identifier.
+        if (
+            statement_params is not None
+            and REQUEST_ID_STATEMENT_PARAM_NAME in statement_params
+        ):
+            request_id = statement_params[REQUEST_ID_STATEMENT_PARAM_NAME]
+
+            if not is_uuid4(request_id):
+                # uuid.UUID will throw an error if invalid, but we explicitly check and throw here.
+                raise ValueError(f"requestId {request_id} is not a valid UUID4.")
+            self._request_id = uuid.UUID(str(request_id), version=4)
+
+            # Create a (deep copy) and remove the statement param, there is no need to encode it as extra parameter
+            # one more time.
+            statement_params = statement_params.copy()
+            statement_params.pop(REQUEST_ID_STATEMENT_PARAM_NAME)
+        else:
+            # Generate UUID for query.
+            self._request_id = uuid.uuid4()
 
         logger.debug(f"Request id: {self._request_id}")
 
