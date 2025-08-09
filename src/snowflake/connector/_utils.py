@@ -1,13 +1,10 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import string
 from enum import Enum
 from random import choice
 from threading import Timer
+from uuid import UUID
 
 
 class TempObjectType(Enum):
@@ -33,6 +30,8 @@ _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING = (
     "PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS"
 )
 
+REQUEST_ID_STATEMENT_PARAM_NAME = "requestId"
+
 
 def generate_random_alphanumeric(length: int = 10) -> str:
     return "".join(choice(ALPHANUMERIC) for _ in range(length))
@@ -44,6 +43,21 @@ def random_name_for_temp_object(object_type: TempObjectType) -> str:
 
 def get_temp_type_for_object(use_scoped_temp_objects: bool) -> str:
     return SCOPED_TEMPORARY_STRING if use_scoped_temp_objects else TEMPORARY_STRING
+
+
+def is_uuid4(str_or_uuid: str | UUID) -> bool:
+    """Check whether provided string str is a valid UUID version4."""
+    if isinstance(str_or_uuid, UUID):
+        return str_or_uuid.version == 4
+
+    if not isinstance(str_or_uuid, str):
+        return False
+
+    try:
+        uuid_str = str(UUID(str_or_uuid, version=4))
+    except ValueError:
+        return False
+    return uuid_str == str_or_uuid
 
 
 class _TrackedQueryCancellationTimer(Timer):
