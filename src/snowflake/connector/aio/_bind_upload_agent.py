@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from io import BytesIO
 from logging import getLogger
 from typing import TYPE_CHECKING, cast
@@ -56,8 +57,11 @@ class BindUploadAgent(BindUploadAgentSync):
                 if row_idx >= len(self.rows) or size >= self._stream_buffer_size:
                     break
             try:
-                await self.cursor.execute(
-                    f"PUT file://{row_idx}.csv {self.stage_path}", file_stream=f
+                f.seek(0)
+                await self.cursor._upload_stream(
+                    input_stream=f,
+                    stage_location=os.path.join(self.stage_path, f"{row_idx}.csv"),
+                    options={"source_compression": "auto_detect"},
                 )
             except Error as err:
                 logger.debug("Failed to upload the bindings file to stage.")
