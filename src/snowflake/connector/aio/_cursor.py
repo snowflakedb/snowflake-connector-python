@@ -23,7 +23,7 @@ from snowflake.connector import (
     ProgrammingError,
 )
 from snowflake.connector._sql_util import get_file_transfer_type
-from snowflake.connector.aio._build_upload_agent import BindUploadAgent
+from snowflake.connector.aio._bind_upload_agent import BindUploadAgent
 from snowflake.connector.aio._result_batch import (
     ResultBatch,
     create_batches_from_response,
@@ -803,7 +803,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 bind_stage = None
                 if (
                     bind_size
-                    > self.connection._session_parameters[
+                    >= self.connection._session_parameters[
                         "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
                     ]
                     > 0
