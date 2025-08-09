@@ -406,10 +406,16 @@ def _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, reraise_param_
     # Create a custom exception to be raised by the work function
     test_exception = Exception("Test work function failure")
 
+    def mock_upload_chunk_with_delay(*args, **kwargs):
+        import time
+
+        time.sleep(0.2)
+        raise test_exception
+
     # Set up mock client patch, which we will activate in each unit test case.
     mock_create_client = mock.patch.object(agent, "_create_file_transfer_client")
     mock_client = mock.MagicMock()
-    mock_client.prepare_upload.side_effect = test_exception
+    mock_client.upload_chunk.side_effect = mock_upload_chunk_with_delay
 
     # Set up mock client attributes needed for the transfer flow
     mock_client.meta = agent._file_metadata[0]
