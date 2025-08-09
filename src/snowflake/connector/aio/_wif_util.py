@@ -15,12 +15,15 @@ from botocore.awsrequest import AWSRequest
 from ..errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from ..errors import ProgrammingError
 from ..wif_util import (
+    AZURE_ISSUER_PREFIXES,
     DEFAULT_ENTRA_SNOWFLAKE_RESOURCE,
     SNOWFLAKE_AUDIENCE,
     AttestationProvider,
     WorkloadIdentityAttestation,
     create_oidc_attestation,
     extract_iss_and_sub_without_signature_verification,
+    get_aws_partition,
+    get_aws_sts_hostname,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,7 +91,12 @@ async def create_aws_attestation() -> WorkloadIdentityAttestation | None:
         logger.debug("No AWS caller identity was found.")
         return None
 
-    sts_hostname = f"sts.{region}.amazonaws.com"
+    partition = get_aws_partition(arn)
+    if not partition:
+        logger.debug("No AWS partition was found.")
+        return None
+
+    sts_hostname = get_aws_sts_hostname(region, partition)
     request = AWSRequest(
         method="POST",
         url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
@@ -198,9 +206,8 @@ async def create_azure_attestation(
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     if not issuer or not subject:
         return None
-    if not (
-        issuer.startswith("https://sts.windows.net/")
-        or issuer.startswith("https://login.microsoftonline.com/")
+    if not any(
+        issuer.startswith(issuer_prefix) for issuer_prefix in AZURE_ISSUER_PREFIXES
     ):
         # This might happen if we're running on a different platform that responds to the same metadata request signature as Azure.
         logger.debug("Unexpected Azure token issuer '%s'", issuer)
