@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 from os import chmod, path
 from unittest import mock
+from unittest.mock import patch
 
 import pytest
 
@@ -149,3 +150,43 @@ async def test_upload_file_with_azure_upload_failed_error(tmp_path):
             await rest_client.execute()
             assert mock_update.called
             assert rest_client._results[0].error_details is exc
+
+
+def test_strip_stage_prefix_from_dst_file_name_for_download():
+    """Verifies that _strip_stage_prefix_from_dst_file_name_for_download is called when initializing file meta.
+
+    Workloads like sproc will need to monkeypatch _strip_stage_prefix_from_dst_file_name_for_download on the server side
+    to maintain its behavior. So we add this unit test to make sure that we do not accidentally refactor this method and
+    break sproc workloads.
+    """
+    file = "test.txt"
+    agent = SnowflakeFileTransferAgent(
+        mock.MagicMock(autospec=SnowflakeCursor),
+        "GET @stage_foo/test.txt file:///tmp",
+        {
+            "data": {
+                "localLocation": "/tmp",
+                "command": "DOWNLOAD",
+                "autoCompress": False,
+                "src_locations": [file],
+                "sourceCompression": "none",
+                "stageInfo": {
+                    "creds": {},
+                    "location": "",
+                    "locationType": "S3",
+                    "path": "remote_loc",
+                },
+            },
+            "success": True,
+        },
+    )
+    agent._parse_command()
+    with patch.object(
+        agent,
+        "_strip_stage_prefix_from_dst_file_name_for_download",
+        return_value="mock value",
+    ):
+        agent._init_file_metadata()
+        agent._strip_stage_prefix_from_dst_file_name_for_download.assert_called_with(
+            file
+        )
