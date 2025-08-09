@@ -129,6 +129,7 @@ async def structured_type_wrapped_conn(conn_cnx, structured_type_support):
             "ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT": True,
             "FORCE_ENABLE_STRUCTURED_TYPES_NATIVE_ARROW_FORMAT": True,
             "IGNORE_CLIENT_VESRION_IN_STRUCTURED_TYPES_RESPONSE": True,
+            "ENABLE_STRUCTURED_TYPES_IN_FDN_TABLES": True,
         }
 
     async with conn_cnx(session_parameters=parameters) as conn:
