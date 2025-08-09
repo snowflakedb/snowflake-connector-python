@@ -12,6 +12,7 @@ import logging
 import os
 import pickle
 import time
+import uuid
 from datetime import date, datetime, timezone
 from typing import NamedTuple
 from unittest import mock
@@ -1868,3 +1869,37 @@ async def test_fetch_download_timeout_setting(conn_cnx):
         sql = "SELECT seq4(), uniform(1, 10, RANDOM(12)) FROM TABLE(GENERATOR(ROWCOUNT => 100000)) v"
         async with conn_cnx() as con, con.cursor() as cur:
             assert len(await (await cur.execute(sql)).fetchall()) == 100000
+
+
+@pytest.mark.parametrize(
+    "request_id",
+    [
+        "THIS IS NOT VALID",
+        uuid.uuid1(),
+        uuid.uuid3(uuid.NAMESPACE_URL, "www.snowflake.com"),
+        uuid.uuid5(uuid.NAMESPACE_URL, "www.snowflake.com"),
+    ],
+)
+async def test_custom_request_id_negative(request_id, conn_cnx):
+
+    # Ensure that invalid request_ids (non uuid4) do not compromise interface.
+    with pytest.raises(ValueError, match="requestId"):
+        async with conn_cnx() as con:
+            async with con.cursor() as cur:
+                await cur.execute(
+                    "select seq4() as foo from table(generator(rowcount=>5))",
+                    _statement_params={"requestId": request_id},
+                )
+
+
+async def test_custom_request_id(conn_cnx):
+    request_id = uuid.uuid4()
+
+    async with conn_cnx() as con:
+        async with con.cursor() as cur:
+            await cur.execute(
+                "select seq4() as foo from table(generator(rowcount=>5))",
+                _statement_params={"requestId": request_id},
+            )
+
+            assert cur._sfqid is not None, "Query must execute successfully."
