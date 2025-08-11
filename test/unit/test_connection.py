@@ -773,3 +773,41 @@ def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
             oauth_enable_single_use_refresh_tokens=rtr_enabled,
         )
         assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled
+
+
+# Skip for old drivers because the connection config of
+# reraise_error_in_file_transfer_work_function is newly introduced.
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("reraise_enabled", [True, False, None])
+def test_reraise_error_in_file_transfer_work_function_config(
+    reraise_enabled: bool | None,
+):
+    """Test that reraise_error_in_file_transfer_work_function config is
+    properly set on connection."""
+
+    with mock.patch(
+        "snowflake.connector.network.SnowflakeRestful._post_request",
+        return_value={
+            "data": {
+                "serverVersion": "a.b.c",
+            },
+            "code": None,
+            "message": None,
+            "success": True,
+        },
+    ):
+        if reraise_enabled is not None:
+            # Create a connection with the config set to the value of reraise_enabled.
+            conn = fake_connector(
+                **{"reraise_error_in_file_transfer_work_function": reraise_enabled}
+            )
+        else:
+            # Special test setup: when reraise_enabled is None, create a
+            # connection without setting the config.
+            conn = fake_connector()
+
+        # When reraise_enabled is None, we expect a default value of False,
+        # so taking bool() on it also makes sense.
+        expected_value = bool(reraise_enabled)
+        actual_value = conn._reraise_error_in_file_transfer_work_function
+        assert actual_value == expected_value

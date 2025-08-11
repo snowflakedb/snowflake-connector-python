@@ -357,6 +357,7 @@ class SnowflakeFileTransferAgent:
         iobound_tpe_limit: int | None = None,
         unsafe_file_write: bool = False,
         snowflake_server_dop_cap_for_file_transfer=_DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+        reraise_error_in_file_transfer_work_function: bool = False,
     ) -> None:
         self._cursor = cursor
         self._command = command
@@ -391,6 +392,9 @@ class SnowflakeFileTransferAgent:
         self._unsafe_file_write = unsafe_file_write
         self._snowflake_server_dop_cap_for_file_transfer = (
             snowflake_server_dop_cap_for_file_transfer
+        )
+        self._reraise_error_in_file_transfer_work_function = (
+            reraise_error_in_file_transfer_work_function
         )
 
     def execute(self) -> None:
@@ -471,6 +475,7 @@ class SnowflakeFileTransferAgent:
         transfer_metadata = TransferMetadata()  # this is protected by cv_chunk_process
         is_upload = self._command_type == CMD_TYPE_UPLOAD
         exception_caught_in_callback: Exception | None = None
+        exception_caught_in_work: Exception | None = None
         logger.debug(
             "Going to %sload %d files", "up" if is_upload else "down", len(metas)
         )
@@ -626,6 +631,17 @@ class SnowflakeFileTransferAgent:
                 logger.error(f"An exception was raised in {repr(work)}", exc_info=True)
                 file_meta.error_details = e
                 result = (False, e)
+                # If the reraise is enabled, notify the main thread of work
+                # function error, with the concrete exception stored aside in
+                # exception_caught_in_work, such that towards the end of
+                # the transfer call, we reraise the error as is immediately
+                # instead of continuing the execution after transfer.
+                if self._reraise_error_in_file_transfer_work_function:
+                    with cv_main_thread:
+                        nonlocal exception_caught_in_work
+                        exception_caught_in_work = e
+                        cv_main_thread.notify()
+
             try:
                 _callback(*result, file_meta)
             except Exception as e:
@@ -670,6 +686,10 @@ class SnowflakeFileTransferAgent:
         with cv_main_thread:
             while transfer_metadata.num_files_completed < num_total_files:
                 cv_main_thread.wait()
+                # If both exception_caught_in_work and exception_caught_in_callback
+                # are present, the former will take precedence.
+                if exception_caught_in_work is not None:
+                    raise exception_caught_in_work
                 if exception_caught_in_callback is not None:
                     raise exception_caught_in_callback
 
