@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive tests for the native HTTP checker.
-
-This test suite documents exactly what patterns the checker is designed to detect
-and serves as both validation and specification documentation.
+Tests for the native HTTP checker run in pre-commit to enforce using SessionManager.
 """
 import ast
 import os
@@ -634,6 +631,606 @@ response = requests.get("http://example.com")
                 assert (
                     violations[0].violation_type == ViolationType.REQUESTS_HTTP_METHOD
                 )
+            finally:
+                os.unlink(f.name)
+
+
+class TestEndToEndScenarios:
+    """End-to-end tests using temporary files with complete code examples."""
+
+    def test_real_world_migration_file(self):
+        """Test a realistic file that needs migration to SessionManager."""
+        code = '''
+"""Module that demonstrates various HTTP patterns needing migration."""
+import requests
+import urllib3
+from requests import Session, get as requests_get
+from urllib3 import PoolManager
+import json
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class HTTPClient:
+    def __init__(self):
+        # These should be flagged
+        self.session = requests.Session()
+        self.pool = urllib3.PoolManager()
+
+    def fetch_data(self, url: str):
+        """Fetch data using various HTTP methods."""
+        # Direct requests calls - should be flagged
+        response1 = requests.get(url)
+        response2 = requests.post(url, json={"test": "data"})
+
+        # Session calls - should be flagged
+        response3 = self.session.get(url)
+
+        # urllib3 calls - should be flagged
+        response4 = self.pool.request("GET", url)
+
+        # Imported function calls - should be flagged
+        response5 = requests_get(url)
+
+        return [response1, response2, response3, response4, response5]
+
+    def complex_patterns(self):
+        """More complex patterns."""
+        # Chained calls - should be flagged
+        data1 = requests.Session().get("http://api.example.com").json()
+        data2 = urllib3.PoolManager().request("POST", "http://api.example.com")
+
+        # Variable aliasing - should be flagged
+        req_lib = requests
+        response = req_lib.get("http://example.com")
+
+        return data1, data2, response
+
+
+def standalone_function():
+    """Standalone function with HTTP calls."""
+    # These should all be flagged
+    http = urllib3.PoolManager()
+    session = Session()
+
+    response1 = http.urlopen("GET", "http://example.com")
+    response2 = session.post("http://example.com", data={})
+
+    return response1, response2
+        '''
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(code)
+            f.flush()
+
+            try:
+                checker = FileChecker(f.name)
+                violations, messages = checker.check_file()
+
+                # Should find many violations in this realistic code
+                assert (
+                    len(violations) >= 12
+                ), f"Expected many violations, got {len(violations)}"
+                assert len(messages) == 0, "Should not have any error messages"
+
+                # Check that different violation types are detected
+                violation_types = {v.violation_type for v in violations}
+                expected_types = {
+                    ViolationType.REQUESTS_SESSION,
+                    ViolationType.URLLIB3_POOLMANAGER,
+                    ViolationType.REQUESTS_HTTP_METHOD,
+                    ViolationType.DIRECT_HTTP_IMPORT,
+                    ViolationType.DIRECT_SESSION_IMPORT,
+                    ViolationType.DIRECT_POOL_IMPORT,
+                }
+
+                # Should detect multiple types of violations
+                assert len(violation_types & expected_types) >= 4
+
+            finally:
+                os.unlink(f.name)
+
+    def test_legitimate_production_code(self):
+        """Test code that should NOT be flagged."""
+        code = '''
+"""Legitimate production code using SessionManager and type hints."""
+from __future__ import annotations
+from typing import Optional, List, Union
+from requests import Session  # Used only for type hints
+from urllib3 import PoolManager  # Used only for type hints
+import json
+
+from snowflake.connector.session_manager import SessionManager
+
+
+class HTTPService:
+    """Service using SessionManager correctly."""
+
+    def __init__(self):
+        self.session_manager = SessionManager()
+
+    def get_data(self, url: str) -> Optional[dict]:
+        """Fetch data using SessionManager."""
+        # This should NOT be flagged - using SessionManager
+        response = self.session_manager.request("GET", url)
+        return response.json() if response.status_code == 200 else None
+
+    def post_data(self, url: str, data: dict) -> bool:
+        """Post data using SessionManager."""
+        # This should NOT be flagged - using SessionManager
+        session = self.session_manager.use_requests_session()
+        response = session.post(url, json=data)
+        return response.status_code == 201
+
+
+def process_responses(responses: List[Session]) -> None:
+    """Process responses - Session used only in type hint."""
+    for response in responses:
+        print(f"Processing response: {response}")
+
+
+def create_pool_manager() -> PoolManager:
+    """Return a pool manager - PoolManager used only in type hint."""
+    # This should NOT be flagged - returning from SessionManager
+    return SessionManager().get_pool_manager()
+
+
+class APIClient:
+    """API client with proper type annotations."""
+
+    def __init__(self, session: Session | None = None):
+        """Initialize with optional session parameter."""
+        self.session_manager = SessionManager()
+        self._session = session
+
+    def configure(self, pool: Optional[PoolManager] = None) -> None:
+        """Configure with optional pool parameter."""
+        if pool:
+            self.session_manager.configure_pool(pool)
+
+
+# String annotations (PEP 563) - should NOT be flagged
+def handle_session(s: "Session") -> "Optional[Session]":
+    return s if s else None
+
+def handle_pool(p: "PoolManager") -> "Union[PoolManager, None]":
+    return p
+        '''
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(code)
+            f.flush()
+
+            try:
+                checker = FileChecker(f.name)
+                violations, messages = checker.check_file()
+
+                # Should find NO violations in legitimate code
+                assert (
+                    len(violations) == 0
+                ), f"Expected no violations, got {[str(v) for v in violations]}"
+                assert len(messages) == 0, "Should not have any error messages"
+
+            finally:
+                os.unlink(f.name)
+
+    def test_complex_aliasing_chains(self):
+        """Test complex aliasing patterns that should be detected."""
+        code = '''
+"""Complex aliasing patterns."""
+import requests
+import urllib3
+import snowflake.connector.vendored.requests as vendored_req
+
+# Multi-level aliasing
+level1 = requests
+level2 = level1
+level3 = level2
+final = level3
+
+# Attribute aliasing
+vendor_req = snowflake.connector.vendored.requests
+vendor_urllib = snowflake.connector.vendored.urllib3
+
+# Mixed patterns
+def test_all_aliases():
+    # Transitive aliases - should be flagged
+    result1 = final.get("http://example.com")
+    result2 = level2.Session()
+    result3 = level1.request("POST", "http://example.com")
+
+    # Attribute aliases - should be flagged
+    result4 = vendor_req.get("http://example.com")
+    result5 = vendor_urllib.PoolManager()
+
+    # Import aliases - should be flagged
+    result6 = vendored_req.Session()
+
+    # Chained with aliases - should be flagged
+    result7 = final.Session().post("http://example.com")
+    result8 = vendor_urllib.PoolManager().request("GET", "http://example.com")
+
+    return [result1, result2, result3, result4, result5, result6, result7, result8]
+        '''
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(code)
+            f.flush()
+
+            try:
+                checker = FileChecker(f.name)
+                violations, messages = checker.check_file()
+
+                # Should detect all aliased calls
+                assert (
+                    len(violations) >= 8
+                ), f"Expected at least 8 violations, got {len(violations)}"
+                assert len(messages) == 0, "Should not have any error messages"
+
+                # Check that transitive and attribute aliasing are both detected
+                violation_messages = [v.message for v in violations]
+                assert any("requests.get" in msg for msg in violation_messages)
+                assert any("requests.Session" in msg for msg in violation_messages)
+                assert any("urllib3.PoolManager" in msg for msg in violation_messages)
+
+            finally:
+                os.unlink(f.name)
+
+    def test_mixed_legitimate_and_violations(self):
+        """Test file with both legitimate and violating patterns."""
+        code = '''
+"""Mixed legitimate and violating code."""
+from __future__ import annotations
+from typing import TYPE_CHECKING
+from requests import Session, get
+from urllib3 import PoolManager
+import requests
+import urllib3
+
+if TYPE_CHECKING:
+    from requests import RequestException
+    from urllib3 import Retry
+
+from snowflake.connector.session_manager import SessionManager
+
+
+class MixedService:
+    def __init__(self):
+        self.session_manager = SessionManager()
+
+        # VIOLATION: Direct session creation
+        self.bad_session = requests.Session()
+
+        # VIOLATION: Direct pool creation
+        self.bad_pool = urllib3.PoolManager()
+
+    def legitimate_method(self, session: Session) -> Session:
+        """Type hints only - should NOT be flagged."""
+        # LEGITIMATE: Using SessionManager
+        response = self.session_manager.request("GET", "http://example.com")
+        return session
+
+    def violating_method(self):
+        """Various violations."""
+        # VIOLATION: Direct requests call
+        response1 = requests.get("http://example.com")
+
+        # VIOLATION: Imported function call
+        response2 = get("http://example.com")
+
+        # VIOLATION: Direct pool usage
+        pool = PoolManager()
+        response3 = pool.request("GET", "http://example.com")
+
+        return response1, response2, response3
+
+    def type_hint_method(self) -> Optional[Session]:
+        """More type hints - should NOT be flagged."""
+        return None
+
+    def configure_pool(self, pool: PoolManager | None = None) -> None:
+        """PEP 604 union in type hint - should NOT be flagged."""
+        if pool:
+            self.session_manager.configure(pool)
+
+
+# String annotations - should NOT be flagged
+def handle_request(req: "Session") -> "List[PoolManager]":
+    return []
+
+# TYPE_CHECKING imports - should NOT be flagged for runtime
+def handle_exception(exc: RequestException) -> None:
+    pass
+
+def create_retry_policy() -> Retry:
+    return None
+        '''
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(code)
+            f.flush()
+
+            try:
+                checker = FileChecker(f.name)
+                violations, messages = checker.check_file()
+
+                # Should find violations but not flag legitimate patterns
+                assert (
+                    len(violations) >= 5
+                ), f"Expected violations, got {len(violations)}"
+                assert len(messages) == 0, "Should not have any error messages"
+
+                # Check violation types
+                violation_types = [v.violation_type for v in violations]
+                assert ViolationType.REQUESTS_SESSION in violation_types
+                assert ViolationType.URLLIB3_POOLMANAGER in violation_types
+                assert ViolationType.REQUESTS_HTTP_METHOD in violation_types
+                assert ViolationType.DIRECT_HTTP_IMPORT in violation_types
+                assert ViolationType.DIRECT_POOL_IMPORT in violation_types
+
+            finally:
+                os.unlink(f.name)
+
+    def test_file_with_syntax_errors(self):
+        """Test that files with syntax errors are handled gracefully."""
+        code = '''
+"""File with deliberate syntax errors."""
+import requests
+import urllib3
+
+def broken_function(
+    # Missing closing parenthesis and colon
+
+# This should cause a syntax error
+response = requests.get("http://example.com"
+        '''
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(code)
+            f.flush()
+
+            try:
+                checker = FileChecker(f.name)
+                violations, messages = checker.check_file()
+
+                # Should handle syntax errors gracefully
+                assert (
+                    len(violations) == 0
+                ), "Should not find violations in syntactically invalid file"
+                assert len(messages) == 1, "Should have exactly one error message"
+                assert "syntax error" in messages[0].lower()
+
+            finally:
+                os.unlink(f.name)
+
+    def test_large_realistic_file(self):
+        """Test performance and correctness on a larger, realistic file."""
+        code = '''
+"""Large realistic file with many patterns."""
+import asyncio
+import json
+import logging
+import os
+import sys
+from typing import Dict, List, Optional, Union, Any
+from concurrent.futures import ThreadPoolExecutor
+import requests
+import urllib3
+from requests import Session, RequestException
+from urllib3 import PoolManager, ProxyManager
+from urllib3.exceptions import HTTPError
+
+# This should NOT be flagged - legitimate import for type hints
+from requests.models import Response
+
+logger = logging.getLogger(__name__)
+
+
+class HTTPService:
+    """HTTP service with various patterns."""
+
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+        self.logger = logger
+
+        # VIOLATIONS: Direct instantiation
+        self.session = requests.Session()
+        self.pool = urllib3.PoolManager()
+        self.proxy_pool = urllib3.ProxyManager("http://proxy:8080")
+
+        # Aliasing that should be detected
+        self.req_lib = requests
+        self.urllib_lib = urllib3
+
+    def fetch_data_sync(self, urls: List[str]) -> List[Optional[dict]]:
+        """Synchronous data fetching with violations."""
+        results = []
+
+        for url in urls:
+            try:
+                # VIOLATIONS: Various HTTP calls
+                response1 = requests.get(url, timeout=30)
+                response2 = self.session.post(url, json={"test": True})
+                response3 = self.pool.request("GET", url, retries=3)
+                response4 = self.req_lib.get(url)  # Aliased call
+
+                results.append(response1.json())
+                results.append(response2.json())
+
+            except (RequestException, HTTPError) as e:
+                self.logger.error(f"HTTP error: {e}")
+                results.append(None)
+
+        return results
+
+    async def fetch_data_async(self, urls: List[str]) -> List[dict]:
+        """Async data fetching."""
+        loop = asyncio.get_event_loop()
+
+        async def fetch_one(url: str) -> Optional[dict]:
+            # VIOLATION: requests in async context
+            response = await loop.run_in_executor(
+                None,
+                lambda: requests.get(url)  # Should be flagged
+            )
+            return response.json() if response.status_code == 200 else None
+
+        # VIOLATIONS: More async HTTP calls
+        tasks = []
+        for url in urls:
+            # Chained calls in async context
+            task = loop.run_in_executor(
+                None,
+                lambda u=url: urllib3.PoolManager().request("GET", u)
+            )
+            tasks.append(task)
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return [r.json() if hasattr(r, 'json') else {} for r in results]
+
+    def process_with_threading(self, urls: List[str]) -> Dict[str, Any]:
+        """Process URLs using threading."""
+        def worker(url: str) -> dict:
+            # VIOLATIONS: HTTP calls in threads
+            session = Session()  # Direct import usage
+            pool = PoolManager()  # Direct import usage
+
+            response1 = session.get(url)
+            response2 = pool.request("POST", url, body=b'{"data": "test"}')
+
+            return {
+                "url": url,
+                "session_response": response1.json(),
+                "pool_response": response2.data.decode()
+            }
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(worker, url) for url in urls]
+            results = [future.result() for future in futures]
+
+        return {"results": results, "count": len(results)}
+
+    def complex_chaining_patterns(self):
+        """Complex chaining and aliasing patterns."""
+        # VIOLATIONS: Various complex patterns
+
+        # Multiple chained calls
+        data1 = requests.Session().get("http://api.example.com").json()
+        data2 = urllib3.PoolManager().urlopen("GET", "http://api.example.com").data
+        data3 = urllib3.ProxyManager("http://proxy:8080").request_encode_body(
+            "POST", "http://api.example.com", fields={"test": "data"}
+        ).data
+
+        # Transitive aliasing
+        level1 = self.req_lib
+        level2 = level1
+        level3 = level2
+        response = level3.get("http://example.com")  # Should trace back to requests
+
+        # Attribute aliasing with complex paths
+        vendor_requests = getattr(sys.modules.get('snowflake.connector.vendored'), 'requests', None)
+        if vendor_requests:
+            # This would be flagged if the getattr resolved to the vendored module
+            response2 = vendor_requests.get("http://example.com")
+
+        return data1, data2, data3, response, response2
+
+
+def utility_functions():
+    """Utility functions with various patterns."""
+
+    def make_request(method: str, url: str, **kwargs) -> Response:
+        """Make HTTP request - Response used in type hint only."""
+        # VIOLATION: Direct requests usage
+        return requests.request(method, url, **kwargs)
+
+    def create_session_pool() -> tuple[Session, PoolManager]:
+        """Create session and pool - types used in hint only."""
+        # VIOLATIONS: Direct instantiation
+        session = requests.Session()
+        pool = urllib3.PoolManager()
+        return session, pool
+
+    def process_responses(responses: List[Response]) -> List[dict]:
+        """Process responses - Response used in type hint only."""
+        return [r.json() for r in responses if r.status_code == 200]
+
+
+# VIOLATIONS: Module-level HTTP calls
+CONFIG = {"base_url": "http://api.example.com"}
+GLOBAL_SESSION = requests.Session()
+GLOBAL_POOL = urllib3.PoolManager()
+
+# Function with various violation patterns
+def main():
+    """Main function with violations."""
+    service = HTTPService(CONFIG)
+
+    urls = [
+        "http://api.example.com/users",
+        "http://api.example.com/posts",
+        "http://api.example.com/comments"
+    ]
+
+    # VIOLATIONS: Direct calls
+    health_check = requests.get(f"{CONFIG['base_url']}/health")
+    if health_check.status_code != 200:
+        # VIOLATION: Another direct call
+        fallback = urllib3.PoolManager().request("GET", "http://fallback.example.com/health")
+
+    # Various service methods that contain violations
+    sync_results = service.fetch_data_sync(urls)
+    async_results = asyncio.run(service.fetch_data_async(urls))
+    threaded_results = service.process_with_threading(urls)
+
+    return {
+        "sync": sync_results,
+        "async": async_results,
+        "threaded": threaded_results,
+        "health": health_check.json()
+    }
+
+
+if __name__ == "__main__":
+    main()
+        '''
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
+            f.write(code)
+            f.flush()
+
+            try:
+                checker = FileChecker(f.name)
+                violations, messages = checker.check_file()
+
+                # Should find exactly 20 violations in this large realistic file
+                assert (
+                    len(violations) == 20
+                ), f"Expected exactly 20 violations in large file, got {len(violations)}"
+                assert len(messages) == 0, "Should not have any error messages"
+
+                # Should detect many different types of violations
+                violation_types = {v.violation_type for v in violations}
+                expected_types = {
+                    ViolationType.REQUESTS_SESSION,
+                    ViolationType.URLLIB3_POOLMANAGER,
+                    ViolationType.REQUESTS_HTTP_METHOD,
+                    ViolationType.REQUESTS_REQUEST,
+                    ViolationType.DIRECT_HTTP_IMPORT,
+                    ViolationType.DIRECT_SESSION_IMPORT,
+                    ViolationType.DIRECT_POOL_IMPORT,
+                }
+
+                # Should detect most violation types in this comprehensive example
+                assert len(violation_types & expected_types) >= 6
+
+                # Should detect violations across different patterns
+                violation_messages = [v.message for v in violations]
+                assert any("Chained call" in msg for msg in violation_messages)
+                assert any("Direct use" in msg for msg in violation_messages)
+                assert any("aliased" in msg for msg in violation_messages)
+
             finally:
                 os.unlink(f.name)
 

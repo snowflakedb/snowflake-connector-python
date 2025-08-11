@@ -19,11 +19,9 @@ class ViolationType(Enum):
     REQUESTS_SESSION = "SNOW002"
     URLLIB3_POOLMANAGER = "SNOW003"
     REQUESTS_HTTP_METHOD = "SNOW004"
-    POOLMANAGER_REQUEST = "SNOW005"
     DIRECT_HTTP_IMPORT = "SNOW006"
     DIRECT_POOL_IMPORT = "SNOW007"
     DIRECT_SESSION_IMPORT = "SNOW008"
-    ALIASED_CALL = "SNOW009"
     STAR_IMPORT = "SNOW010"
     URLLIB3_DIRECT_API = "SNOW011"
 
@@ -352,24 +350,54 @@ class ContextBuilder(ast.NodeVisitor):
 
     def visit_Assign(self, node: ast.Assign):
         """Handle variable assignments for basic aliasing and attribute aliasing."""
-        if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-            var_name = node.targets[0].id
+        if len(node.targets) == 1:
+            target = node.targets[0]
 
-            # Handle Name = Name aliasing (e.g., r = requests)
-            if isinstance(node.value, ast.Name):
-                original_name = node.value.id
-                self.context.add_variable_alias(var_name, original_name)
+            # Handle simple variable assignments: var = value
+            if isinstance(target, ast.Name):
+                var_name = target.id
 
-            # Handle Name = Attribute aliasing (e.g., v = snowflake.connector.vendored.requests)
-            elif isinstance(node.value, ast.Attribute):
-                dotted_chain = ASTHelper.get_attribute_chain(node.value)
-                if dotted_chain:
-                    full_path = ".".join(dotted_chain)
-                    # Check if this points to a requests or urllib3 module
-                    if ModulePattern.is_requests_module(
-                        full_path
-                    ) or ModulePattern.is_urllib3_module(full_path):
-                        self.context.add_variable_alias(var_name, full_path)
+                # Handle Name = Name aliasing (e.g., r = requests)
+                if isinstance(node.value, ast.Name):
+                    original_name = node.value.id
+                    self.context.add_variable_alias(var_name, original_name)
+
+                # Handle Name = Attribute aliasing (e.g., v = snowflake.connector.vendored.requests)
+                elif isinstance(node.value, ast.Attribute):
+                    dotted_chain = ASTHelper.get_attribute_chain(node.value)
+                    if dotted_chain:
+                        # Handle level1 = self.req_lib (where req_lib is already an alias)
+                        if (
+                            len(dotted_chain) == 2
+                            and dotted_chain[0] == "self"
+                            and dotted_chain[1] in self.context.variable_aliases
+                        ):
+                            # level1 gets the same alias as req_lib
+                            aliased_module = self.context.variable_aliases[
+                                dotted_chain[1]
+                            ]
+                            self.context.add_variable_alias(var_name, aliased_module)
+                        else:
+                            # Handle v = snowflake.connector.vendored.requests
+                            full_path = ".".join(dotted_chain)
+                            # Check if this points to a requests or urllib3 module
+                            if ModulePattern.is_requests_module(
+                                full_path
+                            ) or ModulePattern.is_urllib3_module(full_path):
+                                self.context.add_variable_alias(var_name, full_path)
+
+            # Handle attribute assignments: self.attr = value
+            elif isinstance(target, ast.Attribute):
+                # For self.req_lib = requests, track req_lib as an alias
+                if (
+                    isinstance(target.value, ast.Name)
+                    and target.value.id == "self"
+                    and isinstance(node.value, ast.Name)
+                ):
+
+                    attr_name = target.attr  # req_lib
+                    original_name = node.value.id  # requests
+                    self.context.add_variable_alias(attr_name, original_name)
 
         self.generic_visit(node)
 
@@ -766,7 +794,7 @@ class CallAnalyzer(ast.NodeVisitor):
     def _check_multi_part_call(
         self, node: ast.Call, chain: List[str]
     ) -> Optional[HTTPViolation]:
-        """Check multi-part calls like requests.sessions.Session."""
+        """Check multi-part calls like requests.sessions.Session or self.req_lib.get."""
         if len(chain) >= 3:
             module_name = chain[0]
 
@@ -791,6 +819,35 @@ class CallAnalyzer(ast.NodeVisitor):
                         ViolationType.REQUESTS_HTTP_METHOD,
                         f"Direct use of {'.'.join(chain)}() is forbidden, use SessionManager instead",
                     )
+
+            # Check for aliased calls like self.req_lib.get() where req_lib is an alias
+            elif len(chain) >= 3:
+                # For patterns like self.req_lib.get(), check if req_lib is an alias
+                potential_alias = chain[1]  # req_lib in self.req_lib.get
+                func_name = chain[-1]  # get in self.req_lib.get
+
+                if potential_alias in self.context.variable_aliases:
+                    aliased_module = self.context.variable_aliases[potential_alias]
+                    if ModulePattern.is_requests_module(
+                        aliased_module
+                    ) and ModulePattern.is_http_method(func_name):
+                        return HTTPViolation(
+                            self.filename,
+                            node.lineno,
+                            node.col_offset,
+                            ViolationType.REQUESTS_HTTP_METHOD,
+                            f"Direct use of aliased {chain[0]}.{potential_alias}.{func_name}() is forbidden, use SessionManager instead",
+                        )
+                    elif ModulePattern.is_urllib3_module(
+                        aliased_module
+                    ) and ModulePattern.is_pool_manager(func_name):
+                        return HTTPViolation(
+                            self.filename,
+                            node.lineno,
+                            node.col_offset,
+                            ViolationType.URLLIB3_POOLMANAGER,
+                            f"Direct use of aliased {chain[0]}.{potential_alias}.{func_name}() is forbidden, use SessionManager instead",
+                        )
 
         return None
 
@@ -852,7 +909,7 @@ class FileChecker:
 
     EXEMPT_PATTERNS = [
         "**/session_manager.py",
-        "**/vendored/**",
+        "**/vendored/**/*",
     ]
 
     TEST_PATTERNS = [
@@ -860,7 +917,9 @@ class FileChecker:
         "**/*_test.py",
         "**/test_*.py",
         "**/conftest.py",
+        "conftest.py",
         "**/mock_utils.py",
+        "mock_utils.py",
     ]
 
     TEMPORARY_EXEMPT_PATTERNS = [
@@ -872,44 +931,14 @@ class FileChecker:
         self.filename = filename
         self.path = PurePath(filename)
 
-    @staticmethod
-    def _any_match(path: PurePath, patterns: List[str]) -> bool:
-        """Check if path matches any of the glob patterns."""
-        for pattern in patterns:
-            # Try direct match first
-            if path.match(pattern):
-                return True
-
-            # For ** patterns, check if any parent path matches
-            if "**" in pattern:
-                # Convert pattern like "**/vendored/**" to check if "vendored" is in path parts
-                if pattern.startswith("**/") and pattern.endswith("/**"):
-                    middle = pattern[3:-3]  # Extract "vendored" from "**/vendored/**"
-                    if middle in path.parts:
-                        return True
-
-                # Handle patterns like "**/conftest.py"
-                elif pattern.startswith("**/"):
-                    filename = pattern[
-                        3:
-                    ]  # Extract "conftest.py" from "**/conftest.py"
-                    if path.name == filename:
-                        return True
-                # Handle patterns like "**/*.py"
-                elif pattern.startswith("**/"):
-                    if path.match(pattern[3:]):  # Try matching without the **/
-                        return True
-
-        return False
-
     def is_exempt(self) -> bool:
         """Check if file is exempt from all checks."""
         # Check exempt patterns first
-        if self._any_match(self.path, self.EXEMPT_PATTERNS):
+        if any(self.path.match(pattern) for pattern in self.EXEMPT_PATTERNS):
             return True
 
         # Check test patterns (exempt test files)
-        if self._any_match(self.path, self.TEST_PATTERNS):
+        if any(self.path.match(pattern) for pattern in self.TEST_PATTERNS):
             return True
 
         return False
@@ -975,11 +1004,7 @@ def main():
 
         checker = FileChecker(filename)
 
-        # Check if file is fully exempt first
-        if checker.is_exempt():
-            continue
-
-        # Then check for temporary exemption
+        # Check for temporary exemption first
         temp_ticket = checker.get_temporary_exemption()
         if temp_ticket:
             temp_exempt_files.append((filename, temp_ticket))
