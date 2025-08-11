@@ -199,6 +199,62 @@ urllib3.PoolManager().request_encode_body("POST", "http://x", fields={})
     assert_types(v, expected)
 
 
+from textwrap import dedent
+
+
+def test_attribute_aliasing_on_self_filechecker(tmp_path):
+    """
+    File-level: self.req_lib = requests; self.req_lib.get(...) should be flagged.
+    """
+    code = dedent(
+        """
+    import requests
+
+    class Foo:
+        def __init__(self):
+            self.req_lib = requests
+
+        def do(self):
+            return self.req_lib.get("http://x")
+    """
+    )
+    p = tmp_path / "attr_alias_self.py"
+    p.write_text(code, encoding="utf-8")
+
+    checker = FileChecker(str(p))
+    violations, messages = checker.check_file()
+
+    assert messages == []
+    types = [v.violation_type for v in violations]
+    assert types == [ViolationType.REQUESTS_HTTP_METHOD]
+
+
+def test_chained_proxymanager_variants_filechecker(tmp_path):
+    """
+    File-level: ProxyManager chained calls (request, urlopen, request_encode_body).
+    Note: instance calls (pm.request(...)) are not inferred by the checker.
+    """
+    code = (
+        "import urllib3\n"
+        "a = urllib3.ProxyManager('http://p:8080').request('GET', 'http://x')\n"
+        "b = urllib3.ProxyManager('http://p:8080').urlopen('GET', 'http://x')\n"
+        "c = urllib3.ProxyManager('http://p:8080').request_encode_body('POST', 'http://x')\n"
+    )
+    p = tmp_path / "proxy_variants.py"
+    p.write_text(code, encoding="utf-8")
+
+    checker = FileChecker(str(p))
+    violations, messages = checker.check_file()
+
+    assert messages == []
+    types = [v.violation_type for v in violations]
+    assert types == [
+        ViolationType.URLLIB3_POOLMANAGER,
+        ViolationType.URLLIB3_POOLMANAGER,
+        ViolationType.URLLIB3_POOLMANAGER,
+    ]
+
+
 # ---------- Type-hints and TYPE_CHECKING handling ----------
 
 
@@ -379,5 +435,51 @@ def provide() -> PoolManager:
     assert analyze(code) == []
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+def test_e2e_mixed_small_filechecker(tmp_path):
+    """
+    End-to-end small realistic file:
+      - legit type-hint-only imports
+      - violations: requests.get, requests.Session, ProxyManager.request
+      - attribute aliasing: self.req_lib.get
+    """
+    code = """
+from typing import TYPE_CHECKING, Optional
+from requests import Session  # type-hint only
+from urllib3 import PoolManager  # type-hint only
+import requests, urllib3
+
+if TYPE_CHECKING:
+    from requests import Response
+
+class Svc:
+    def __init__(self):
+        self.req_lib = requests  # attribute alias
+
+    def ok(self, s: Session, p: PoolManager) -> Optional[Session]:
+        return None
+
+    def bad(self, url: str):
+        x = requests.get(url)                        # REQUESTS_HTTP_METHOD
+        s = requests.Session()                       # REQUESTS_SESSION
+        pm = urllib3.ProxyManager("http://p:8080")
+        y = pm.request("GET", url)                   # URLLIB3_POOLMANAGER
+        z = self.req_lib.get(url)                    # REQUESTS_HTTP_METHOD (alias)
+        return x, s, y, z
+"""
+    p = tmp_path / "e2e_mixed_small.py"
+    p.write_text(code, encoding="utf-8")
+
+    checker = FileChecker(str(p))
+    violations, messages = checker.check_file()
+
+    assert messages == []
+    types = [v.violation_type for v in violations]
+
+    # Expect exactly four violations, one of each kind listed below
+    expected = [
+        ViolationType.REQUESTS_HTTP_METHOD,  # requests.get
+        ViolationType.REQUESTS_SESSION,  # requests.Session
+        ViolationType.URLLIB3_POOLMANAGER,  # ProxyManager.request
+        ViolationType.REQUESTS_HTTP_METHOD,  # self.req_lib.get (alias)
+    ]
+    assert types == expected

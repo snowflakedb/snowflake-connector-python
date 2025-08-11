@@ -1042,7 +1042,9 @@ def main():
             print(
                 "  - Replace requests.Session() with SessionManager.use_requests_session()"
             )
-            print("  - Replace urllib3.PoolManager/ProxyManager() with SessionManager")
+            print(
+                "  - Replace urllib3.PoolManager/ProxyManager() with session from session_manager.use_requests_session()"
+            )
             print("  - Replace direct HTTP method imports with SessionManager usage")
             print("  - Use SessionManager for all HTTP operations")
 
