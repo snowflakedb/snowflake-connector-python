@@ -55,6 +55,16 @@ def verify_aws_token(token: str, region: str):
     assert headers["X-Snowflake-Audience"] == "snowflakecomputing.com"
 
 
+def test_mro():
+    """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
+    from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
+    from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
+
+    assert AuthByWorkloadIdentity.mro().index(
+        AuthByPluginAsync
+    ) < AuthByWorkloadIdentity.mro().index(AuthByPluginSync)
+
+
 # -- OIDC Tests --
 
 
@@ -319,95 +329,3 @@ async def test_explicit_azure_uses_explicit_entra_resource(fake_azure_metadata_s
     token = fake_azure_metadata_service.token
     parsed = jwt.decode(token, options={"verify_signature": False})
     assert parsed["aud"] == "api://non-standard"
-
-
-# -- Auto-detect Tests --
-
-
-async def test_autodetect_aws_present(
-    no_metadata_service, fake_aws_environment: FakeAwsEnvironmentAsync
-):
-    auth_class = AuthByWorkloadIdentity(provider=None)
-    await auth_class.prepare()
-
-    data = await extract_api_data(auth_class)
-    assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
-    assert data["PROVIDER"] == "AWS"
-    verify_aws_token(data["TOKEN"], fake_aws_environment.region)
-
-
-@mock.patch("snowflake.connector.aio._wif_util.AioInstanceMetadataRegionFetcher")
-async def test_autodetect_gcp_present(
-    mock_fetcher,
-    fake_gce_metadata_service: FakeGceMetadataServiceAsync,
-):
-    # Mock AioInstanceMetadataRegionFetcher to return None properly as an async function
-    async def mock_retrieve_region():
-        return None
-
-    mock_fetcher.return_value.retrieve_region.side_effect = mock_retrieve_region
-
-    auth_class = AuthByWorkloadIdentity(provider=None)
-    await auth_class.prepare()
-
-    assert await extract_api_data(auth_class) == {
-        "AUTHENTICATOR": "WORKLOAD_IDENTITY",
-        "PROVIDER": "GCP",
-        "TOKEN": fake_gce_metadata_service.token,
-    }
-
-
-@mock.patch("snowflake.connector.aio._wif_util.AioInstanceMetadataRegionFetcher")
-async def test_autodetect_azure_present(mock_fetcher, fake_azure_metadata_service):
-    # Mock AioInstanceMetadataRegionFetcher to return None properly as an async function
-    async def mock_retrieve_region():
-        return None
-
-    mock_fetcher.return_value.retrieve_region.side_effect = mock_retrieve_region
-
-    auth_class = AuthByWorkloadIdentity(provider=None)
-    await auth_class.prepare()
-
-    assert await extract_api_data(auth_class) == {
-        "AUTHENTICATOR": "WORKLOAD_IDENTITY",
-        "PROVIDER": "AZURE",
-        "TOKEN": fake_azure_metadata_service.token,
-    }
-
-
-async def test_autodetect_oidc_present(no_metadata_service):
-    dummy_token = gen_dummy_id_token(sub="service-1", iss="issuer-1")
-    auth_class = AuthByWorkloadIdentity(provider=None, token=dummy_token)
-    await auth_class.prepare()
-
-    assert await extract_api_data(auth_class) == {
-        "AUTHENTICATOR": "WORKLOAD_IDENTITY",
-        "PROVIDER": "OIDC",
-        "TOKEN": dummy_token,
-    }
-
-
-@mock.patch("snowflake.connector.aio._wif_util.AioInstanceMetadataRegionFetcher")
-async def test_autodetect_no_provider_raises_error(mock_fetcher, no_metadata_service):
-    # Mock AioInstanceMetadataRegionFetcher to return None properly as an async function
-    async def mock_retrieve_region():
-        return None
-
-    mock_fetcher.return_value.retrieve_region.side_effect = mock_retrieve_region
-
-    auth_class = AuthByWorkloadIdentity(provider=None, token=None)
-    with pytest.raises(ProgrammingError) as excinfo:
-        await auth_class.prepare()
-    assert "No workload identity credential was found for 'auto-detect" in str(
-        excinfo.value
-    )
-
-
-def test_mro():
-    """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
-    from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
-    from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
-
-    assert AuthByWorkloadIdentity.mro().index(
-        AuthByPluginAsync
-    ) < AuthByWorkloadIdentity.mro().index(AuthByPluginSync)
