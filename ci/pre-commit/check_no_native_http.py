@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Enhanced pre-commit hook to prevent direct usage of requests and urllib3 calls.
+Pre-commit hook to prevent direct usage of requests and urllib3 calls.
 Ensures all HTTP requests go through SessionManager.
-This version tracks imports and catches alias patterns in a single AST pass.
+Tracks imports, catches alias patterns, and handles type hints correctly.
 """
 import argparse
 import ast
@@ -10,7 +10,9 @@ import sys
 from typing import Dict, List, Optional, Set, Tuple
 
 
-class HTTPCallViolation:
+class HTTPViolation:
+    """Represents a violation of HTTP call restrictions (calls or imports)."""
+
     def __init__(self, filename: str, line: int, col: int, code: str, message: str):
         self.filename = filename
         self.line = line
@@ -22,17 +24,21 @@ class HTTPCallViolation:
         return f"{self.filename}:{self.line}:{self.col}: {self.code} {self.message}"
 
 
-class SinglePassChecker(ast.NodeVisitor):
-    """Single-pass AST visitor that tracks imports and finds violations simultaneously."""
+class HTTPAnalyzer(ast.NodeVisitor):
+    """Single-pass AST visitor that tracks imports and finds HTTP violations."""
 
     def __init__(self, filename: str):
         self.filename = filename
-        self.violations: List[HTTPCallViolation] = []
+        self.violations: List[HTTPViolation] = []
 
         # Import tracking
         self.aliases: Dict[str, Tuple[str, Optional[str]]] = {}
         self.direct_imports: Set[str] = set()
         self.direct_import_sources: Dict[str, str] = {}
+
+        # Track usage context
+        self.type_hint_only_imports: Set[str] = set()
+        self.actual_usage_imports: Set[str] = set()
 
         # Violation definitions
         self.VIOLATIONS = {
@@ -43,7 +49,7 @@ class SinglePassChecker(ast.NodeVisitor):
             "SNOW005": "Direct use of PoolManager.request() is forbidden, use SessionManager instead",
             "SNOW006": "Direct import of HTTP methods from requests is forbidden, use SessionManager instead",
             "SNOW007": "Direct import of PoolManager from urllib3 is forbidden, use SessionManager instead",
-            "SNOW008": "Direct import of Session from requests is forbidden, use SessionManager instead",
+            "SNOW008": "Direct import of Session from requests for runtime use is forbidden, use SessionManager instead",
             "SNOW009": "Use of aliased requests/urllib3 calls is forbidden, use SessionManager instead",
         }
 
@@ -70,72 +76,63 @@ class SinglePassChecker(ast.NodeVisitor):
                 self.direct_imports.add(alias_name)
                 self.direct_import_sources[alias_name] = node.module
 
-            # Check for violations in import statement itself
-            violation = self._check_import_from_violation(node)
-            if violation:
-                self.violations.append(violation)
-
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call):
         """Handle function calls."""
+        # Track actual usage (not type hints)
+        if isinstance(node.func, ast.Name):
+            self.actual_usage_imports.add(node.func.id)
+        elif isinstance(node.func, ast.Attribute) and isinstance(
+            node.func.value, ast.Name
+        ):
+            self.actual_usage_imports.add(node.func.value.id)
+
         violation = self._check_call_violation(node)
         if violation:
             self.violations.append(violation)
         self.generic_visit(node)
 
-    def _check_import_from_violation(
-        self, node: ast.ImportFrom
-    ) -> Optional[HTTPCallViolation]:
-        """Check ImportFrom nodes for forbidden imports."""
-        for alias in node.names:
-            if alias.name == "*":
-                continue
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        """Handle function definitions and their type annotations."""
+        self._track_type_annotations(node)
+        self.generic_visit(node)
 
-            import_name = alias.name
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        """Handle async function definitions and their type annotations."""
+        self._track_type_annotations(node)
+        self.generic_visit(node)
 
-            # Check for HTTP method imports from requests
-            if self._is_requests_module(node.module) and import_name in {
-                "get",
-                "post",
-                "put",
-                "patch",
-                "delete",
-                "head",
-                "options",
-                "request",
-            }:
-                return HTTPCallViolation(
-                    self.filename,
-                    node.lineno,
-                    node.col_offset,
-                    "SNOW006",
-                    self.VIOLATIONS["SNOW006"],
-                )
+    def _track_type_annotations(self, node):
+        """Track type annotations to identify type-hint-only imports."""
+        # Check return type annotation
+        if node.returns:
+            self._extract_type_names(node.returns)
 
-            # Check for PoolManager import from urllib3
-            if self._is_urllib3_module(node.module) and import_name == "PoolManager":
-                return HTTPCallViolation(
-                    self.filename,
-                    node.lineno,
-                    node.col_offset,
-                    "SNOW007",
-                    self.VIOLATIONS["SNOW007"],
-                )
+        # Check parameter type annotations
+        for arg in node.args.args:
+            if arg.annotation:
+                self._extract_type_names(arg.annotation)
 
-            # Check for Session import from requests
-            if self._is_requests_module(node.module) and import_name == "Session":
-                return HTTPCallViolation(
-                    self.filename,
-                    node.lineno,
-                    node.col_offset,
-                    "SNOW008",
-                    self.VIOLATIONS["SNOW008"],
-                )
+    def _extract_type_names(self, annotation_node):
+        """Extract type names from annotation nodes."""
+        if isinstance(annotation_node, ast.Name):
+            self.type_hint_only_imports.add(annotation_node.id)
+        elif isinstance(annotation_node, ast.Attribute):
+            if isinstance(annotation_node.value, ast.Name):
+                self.type_hint_only_imports.add(annotation_node.value.id)
+        elif isinstance(annotation_node, ast.Subscript):
+            # Handle Generic[T], List[T], etc.
+            if isinstance(annotation_node.value, ast.Name):
+                self.type_hint_only_imports.add(annotation_node.value.id)
+            if isinstance(annotation_node.slice, ast.Name):
+                self.type_hint_only_imports.add(annotation_node.slice.id)
+            elif hasattr(annotation_node.slice, "elts"):  # Tuple of types
+                for elt in annotation_node.slice.elts:
+                    if isinstance(elt, ast.Name):
+                        self.type_hint_only_imports.add(elt.id)
 
-        return None
-
-    def _check_call_violation(self, node: ast.Call) -> Optional[HTTPCallViolation]:
+    def _check_call_violation(self, node: ast.Call) -> Optional[HTTPViolation]:
         """Check Call nodes for violations."""
 
         # Direct function calls (e.g., get(), post() from direct imports)
@@ -144,7 +141,7 @@ class SinglePassChecker(ast.NodeVisitor):
 
             # Check if it's a directly imported HTTP method
             if self._is_direct_http_method(func_name):
-                return HTTPCallViolation(
+                return HTTPViolation(
                     self.filename,
                     node.lineno,
                     node.col_offset,
@@ -154,7 +151,7 @@ class SinglePassChecker(ast.NodeVisitor):
 
             # Check if it's a directly imported PoolManager
             if self._is_direct_poolmanager(func_name):
-                return HTTPCallViolation(
+                return HTTPViolation(
                     self.filename,
                     node.lineno,
                     node.col_offset,
@@ -164,7 +161,7 @@ class SinglePassChecker(ast.NodeVisitor):
 
             # Check if it's a directly imported Session
             if self._is_direct_session(func_name):
-                return HTTPCallViolation(
+                return HTTPViolation(
                     self.filename,
                     node.lineno,
                     node.col_offset,
@@ -180,7 +177,7 @@ class SinglePassChecker(ast.NodeVisitor):
 
     def _check_attribute_call_violation(
         self, node: ast.Call
-    ) -> Optional[HTTPCallViolation]:
+    ) -> Optional[HTTPViolation]:
         """Check attribute calls for violations."""
         if not isinstance(node.func, ast.Attribute):
             return None
@@ -194,7 +191,7 @@ class SinglePassChecker(ast.NodeVisitor):
             # Check for aliased requests calls
             if self._is_requests_related(obj_name):
                 if attr_name == "request":
-                    return HTTPCallViolation(
+                    return HTTPViolation(
                         self.filename,
                         node.lineno,
                         node.col_offset,
@@ -202,7 +199,7 @@ class SinglePassChecker(ast.NodeVisitor):
                         f"Aliased requests.request() call ('{obj_name}.{attr_name}') is forbidden, use SessionManager instead",
                     )
                 elif attr_name == "Session":
-                    return HTTPCallViolation(
+                    return HTTPViolation(
                         self.filename,
                         node.lineno,
                         node.col_offset,
@@ -218,7 +215,7 @@ class SinglePassChecker(ast.NodeVisitor):
                     "head",
                     "options",
                 }:
-                    return HTTPCallViolation(
+                    return HTTPViolation(
                         self.filename,
                         node.lineno,
                         node.col_offset,
@@ -228,8 +225,8 @@ class SinglePassChecker(ast.NodeVisitor):
 
             # Check for aliased urllib3 calls
             elif self._is_urllib3_related(obj_name):
-                if attr_name == "PoolManager":
-                    return HTTPCallViolation(
+                if attr_name in {"PoolManager", "ProxyManager"}:
+                    return HTTPViolation(
                         self.filename,
                         node.lineno,
                         node.col_offset,
@@ -240,11 +237,11 @@ class SinglePassChecker(ast.NodeVisitor):
         # Original checks for direct module usage (fallback)
         return self._check_original_patterns(node)
 
-    def _check_original_patterns(self, node: ast.Call) -> Optional[HTTPCallViolation]:
+    def _check_original_patterns(self, node: ast.Call) -> Optional[HTTPViolation]:
         """Check original patterns for backward compatibility."""
         # requests.request() calls
         if self._is_requests_request_call(node):
-            return HTTPCallViolation(
+            return HTTPViolation(
                 self.filename,
                 node.lineno,
                 node.col_offset,
@@ -254,7 +251,7 @@ class SinglePassChecker(ast.NodeVisitor):
 
         # requests.Session() instantiation
         if self._is_requests_session_instantiation(node):
-            return HTTPCallViolation(
+            return HTTPViolation(
                 self.filename,
                 node.lineno,
                 node.col_offset,
@@ -264,7 +261,7 @@ class SinglePassChecker(ast.NodeVisitor):
 
         # urllib3.PoolManager() instantiation
         if self._is_urllib3_poolmanager_instantiation(node):
-            return HTTPCallViolation(
+            return HTTPViolation(
                 self.filename,
                 node.lineno,
                 node.col_offset,
@@ -274,7 +271,7 @@ class SinglePassChecker(ast.NodeVisitor):
 
         # Direct HTTP method calls (requests.get, etc.)
         if self._is_requests_http_method_call(node):
-            return HTTPCallViolation(
+            return HTTPViolation(
                 self.filename,
                 node.lineno,
                 node.col_offset,
@@ -284,7 +281,7 @@ class SinglePassChecker(ast.NodeVisitor):
 
         # PoolManager().request() calls
         if self._is_poolmanager_request_call(node):
-            return HTTPCallViolation(
+            return HTTPViolation(
                 self.filename,
                 node.lineno,
                 node.col_offset,
@@ -293,6 +290,64 @@ class SinglePassChecker(ast.NodeVisitor):
             )
 
         return None
+
+    def get_import_violations(self) -> List[HTTPViolation]:
+        """Check imports after full AST traversal to determine actual usage vs type hints."""
+        violations = []
+
+        for import_name in self.direct_imports:
+            if import_name in self.direct_import_sources:
+                source_module = self.direct_import_sources[import_name]
+
+                # Skip if only used in type hints
+                if (
+                    import_name in self.type_hint_only_imports
+                    and import_name not in self.actual_usage_imports
+                ):
+                    continue
+
+                # Check for HTTP method imports from requests
+                if self._is_requests_module(source_module) and import_name in {
+                    "get",
+                    "post",
+                    "put",
+                    "patch",
+                    "delete",
+                    "head",
+                    "options",
+                    "request",
+                }:
+                    # Find the import line (we don't have it here, so use line 1 as placeholder)
+                    violations.append(
+                        HTTPViolation(
+                            self.filename, 1, 0, "SNOW006", self.VIOLATIONS["SNOW006"]
+                        )
+                    )
+
+                # Check for PoolManager import from urllib3
+                elif self._is_urllib3_module(source_module) and import_name in {
+                    "PoolManager",
+                    "ProxyManager",
+                }:
+                    violations.append(
+                        HTTPViolation(
+                            self.filename, 1, 0, "SNOW007", self.VIOLATIONS["SNOW007"]
+                        )
+                    )
+
+                # Check for Session import from requests (only if actually used, not just type hints)
+                elif (
+                    self._is_requests_module(source_module)
+                    and import_name == "Session"
+                    and import_name in self.actual_usage_imports
+                ):
+                    violations.append(
+                        HTTPViolation(
+                            self.filename, 1, 0, "SNOW008", self.VIOLATIONS["SNOW008"]
+                        )
+                    )
+
+        return violations
 
     # Helper methods for checking patterns
     def _is_requests_related(self, name: str) -> bool:
@@ -329,7 +384,10 @@ class SinglePassChecker(ast.NodeVisitor):
         """Check if name is a directly imported PoolManager."""
         if name in self.direct_import_sources:
             source_module = self.direct_import_sources[name]
-            return self._is_urllib3_module(source_module) and name == "PoolManager"
+            return self._is_urllib3_module(source_module) and name in {
+                "PoolManager",
+                "ProxyManager",
+            }
         return False
 
     def _is_direct_session(self, name: str) -> bool:
@@ -374,7 +432,7 @@ class SinglePassChecker(ast.NodeVisitor):
         return (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "PoolManager"
+            and node.func.attr in {"PoolManager", "ProxyManager"}
             and isinstance(node.func.value, ast.Name)
             and node.func.value.id == "urllib3"
         )
@@ -404,8 +462,8 @@ class SinglePassChecker(ast.NodeVisitor):
         )
 
 
-class OptimizedNoNativeHTTPChecker:
-    """Optimized checker using single-pass AST traversal."""
+class NoNativeHTTPChecker:
+    """Checker to prevent direct usage of requests/urllib3 calls."""
 
     # Files that are allowed to use native HTTP calls
     EXEMPT_PATTERNS = [
@@ -434,11 +492,13 @@ class OptimizedNoNativeHTTPChecker:
     def is_exempt(self) -> bool:
         """Check if the file is exempt from HTTP call restrictions."""
         # Check general exemptions
-        if any(
-            pattern in self.filename
-            for pattern in self.EXEMPT_PATTERNS + self.TEST_PATTERNS
-        ):
+        if any(pattern in self.filename for pattern in self.EXEMPT_PATTERNS):
             return True
+
+        # Check test file patterns
+        for pattern in self.TEST_PATTERNS:
+            if pattern in self.filename:
+                return True
 
         return False
 
@@ -449,7 +509,7 @@ class OptimizedNoNativeHTTPChecker:
                 return ticket
         return None
 
-    def check_file(self) -> List[HTTPCallViolation]:
+    def check_file(self) -> List[HTTPViolation]:
         """Check a file for HTTP call violations using single-pass AST traversal."""
         if self.is_exempt():
             return []
@@ -471,10 +531,13 @@ class OptimizedNoNativeHTTPChecker:
             return []
 
         # Single pass: collect imports and check violations simultaneously
-        visitor = SinglePassChecker(self.filename)
-        visitor.visit(tree)
+        analyzer = HTTPAnalyzer(self.filename)
+        analyzer.visit(tree)
 
-        return visitor.violations
+        # Add import-specific violations after full analysis
+        import_violations = analyzer.get_import_violations()
+
+        return analyzer.violations + import_violations
 
 
 def main():
@@ -493,7 +556,7 @@ def main():
         if not filename.endswith(".py"):
             continue
 
-        checker = OptimizedNoNativeHTTPChecker(filename)
+        checker = NoNativeHTTPChecker(filename)
 
         # Check for temporary exemptions
         temp_ticket = checker.is_temporarily_exempt()
@@ -520,12 +583,14 @@ def main():
 
         print()
         if args.show_fixes:
-            print("💡 How to fix:")
+            print("How to fix:")
             print("  - Replace requests.request() with session_manager.request()")
             print(
                 "  - Replace requests.Session() with session_manager.use_requests_session()"
             )
-            print("  - Replace urllib3.PoolManager() with SessionManager")
+            print(
+                "  - Replace urllib3.PoolManager/ProxyManager() with session from session_manager.use_requests_session()"
+            )
             print("  - Replace direct HTTP method imports with SessionManager usage")
             print("  - Use connection.rest.use_requests_session() when available")
             print()
