@@ -168,7 +168,7 @@ class AuthByOkta(AuthByPlugin):
             conn._ocsp_mode(),
             conn.login_timeout,
             conn._network_timeout,
-            conn._session_manager.shallow_clone(use_pooling=False),
+            session_manager=conn._session_manager.shallow_clone(use_pooling=False),
         )
 
         body["data"]["AUTHENTICATOR"] = authenticator
