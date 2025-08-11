@@ -32,7 +32,7 @@ from ..connection import SnowflakeConnection as SnowflakeConnectionSync
 from ..connection import _get_private_bytes_from_file
 from ..constants import (
     _CONNECTIVITY_ERR_MSG,
-    ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
+    _OAUTH_DEFAULT_SCOPE,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -52,13 +52,14 @@ from ..errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_VALUE,
-    ER_INVALID_WIF_SETTINGS,
 )
 from ..network import (
     DEFAULT_AUTHENTICATOR,
     EXTERNAL_BROWSER_AUTHENTICATOR,
     KEY_PAIR_AUTHENTICATOR,
     OAUTH_AUTHENTICATOR,
+    OAUTH_AUTHORIZATION_CODE,
+    OAUTH_CLIENT_CREDENTIALS,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
@@ -83,6 +84,8 @@ from .auth import (
     AuthByIdToken,
     AuthByKeyPair,
     AuthByOAuth,
+    AuthByOauthCode,
+    AuthByOauthCredentials,
     AuthByOkta,
     AuthByPAT,
     AuthByPlugin,
@@ -305,6 +308,56 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     oauth_token=self._token,
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
+                )
+            elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
+                self._check_experimental_authentication_flag()
+                self._check_oauth_required_parameters()
+                features = self.oauth_security_features
+                if self._role and (self._oauth_scope == ""):
+                    # if role is known then let's inject it into scope
+                    self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
+                self.auth_class = AuthByOauthCode(
+                    application=self.application,
+                    client_id=self._oauth_client_id,
+                    client_secret=self._oauth_client_secret,
+                    authentication_url=self._oauth_authorization_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    token_request_url=self._oauth_token_request_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    redirect_uri=self._oauth_redirect_uri,
+                    scope=self._oauth_scope,
+                    pkce_enabled=features.pkce_enabled,
+                    token_cache=(
+                        auth.get_token_cache()
+                        if self._client_store_temporary_credential
+                        else None
+                    ),
+                    refresh_token_enabled=features.refresh_token_enabled,
+                    external_browser_timeout=self._external_browser_timeout,
+                )
+            elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
+                self._check_experimental_authentication_flag()
+                self._check_oauth_required_parameters()
+                features = self.oauth_security_features
+                if self._role and (self._oauth_scope == ""):
+                    # if role is known then let's inject it into scope
+                    self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
+                self.auth_class = AuthByOauthCredentials(
+                    application=self.application,
+                    client_id=self._oauth_client_id,
+                    client_secret=self._oauth_client_secret,
+                    token_request_url=self._oauth_token_request_url.format(
+                        host=self.host, port=self.port
+                    ),
+                    scope=self._oauth_scope,
+                    token_cache=(
+                        auth.get_token_cache()
+                        if self._client_store_temporary_credential
+                        else None
+                    ),
+                    refresh_token_enabled=features.refresh_token_enabled,
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
                 self.auth_class = AuthByPAT(self._token)
