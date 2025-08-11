@@ -134,8 +134,8 @@ class ImportTracker:
         """Get the source module for a directly imported name."""
         return self.direct_import_sources.get(name)
 
-    def is_runtime_only(self, name: str) -> bool:
-        """Check if name is used only at runtime (not just type hints)."""
+    def is_runtime(self, name: str) -> bool:
+        """Check if name is used at runtime (not just type hints)."""
         return name in self.runtime_usage or name not in self.type_hint_only
 
 
@@ -178,22 +178,8 @@ class ViolationDetector:
                 "Direct import of HTTP methods from requests is forbidden, use SessionManager instead",
             )
 
-        # Pool manager imports from urllib3
-        if ModulePattern.is_urllib3_module(
-            node.module
-        ) and ModulePattern.is_pool_manager(import_name):
-            return HTTPViolation(
-                self.filename,
-                node.lineno,
-                node.col_offset,
-                ViolationType.DIRECT_POOL_IMPORT,
-                "Direct import of PoolManager/ProxyManager from urllib3 is forbidden, use SessionManager instead",
-            )
-
-        # Session import from requests (only if used at runtime)
-        if ModulePattern.is_requests_module(node.module) and import_name == "Session":
-            # This will be checked later in get_runtime_import_violations
-            pass
+        # Pool manager and Session imports are checked later in get_runtime_import_violations
+        # to allow type hints usage
 
         return None
 
@@ -373,7 +359,7 @@ class ViolationDetector:
         return None
 
     def get_runtime_import_violations(self) -> List[HTTPViolation]:
-        """Check for Session imports that are used at runtime."""
+        """Check for Session and PoolManager imports that are used at runtime."""
         violations = []
 
         for import_name in self.import_tracker.direct_imports:
@@ -385,7 +371,7 @@ class ViolationDetector:
             if (
                 ModulePattern.is_requests_module(source_module)
                 and import_name == "Session"
-                and self.import_tracker.is_runtime_only(import_name)
+                and self.import_tracker.is_runtime(import_name)
             ):
                 violations.append(
                     HTTPViolation(
@@ -394,6 +380,22 @@ class ViolationDetector:
                         0,  # Line number not available for import analysis
                         ViolationType.DIRECT_SESSION_IMPORT,
                         "Direct import of Session from requests for runtime use is forbidden, use SessionManager instead",
+                    )
+                )
+
+            # Only flag PoolManager/ProxyManager imports that are used at runtime
+            if (
+                ModulePattern.is_urllib3_module(source_module)
+                and ModulePattern.is_pool_manager(import_name)
+                and self.import_tracker.is_runtime(import_name)
+            ):
+                violations.append(
+                    HTTPViolation(
+                        self.filename,
+                        1,
+                        0,  # Line number not available for import analysis
+                        ViolationType.DIRECT_POOL_IMPORT,
+                        "Direct import of PoolManager/ProxyManager from urllib3 for runtime use is forbidden, use SessionManager instead",
                     )
                 )
 
