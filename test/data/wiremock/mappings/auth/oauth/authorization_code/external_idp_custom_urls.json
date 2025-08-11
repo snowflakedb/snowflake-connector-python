@@ -61,6 +61,9 @@
       },
       "response": {
         "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "jsonBody": {
           "access_token": "access-token-123",
           "refresh_token": "123",
