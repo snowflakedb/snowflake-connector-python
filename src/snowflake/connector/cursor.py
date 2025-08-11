@@ -1090,6 +1090,7 @@ class SnowflakeCursor:
                     snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
                         self._connection
                     ),
+                    reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
                 )
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
@@ -1807,6 +1808,7 @@ class SnowflakeCursor:
             snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
                 self._connection
             ),
+            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
@@ -1850,6 +1852,7 @@ class SnowflakeCursor:
             snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
                 self._connection
             ),
+            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
@@ -1921,6 +1924,7 @@ class SnowflakeCursor:
             snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
                 self._connection
             ),
+            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
