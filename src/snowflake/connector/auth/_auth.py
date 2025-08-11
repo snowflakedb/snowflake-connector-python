@@ -53,6 +53,7 @@ from ..network import (
     ReauthenticationRequest,
 )
 from ..platform_detection import detect_platforms
+from ..session_manager import SessionManager
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..version import VERSION
@@ -103,6 +104,7 @@ class Auth:
         network_timeout: int | None = None,
         socket_timeout: int | None = None,
         platform_detection_timeout_seconds: float | None = None,
+        session_manager: SessionManager | None = None,
     ):
         return {
             "data": {
@@ -125,7 +127,8 @@ class Auth:
                     "NETWORK_TIMEOUT": network_timeout,
                     "SOCKET_TIMEOUT": socket_timeout,
                     "PLATFORM": detect_platforms(
-                        platform_detection_timeout_seconds=platform_detection_timeout_seconds
+                        platform_detection_timeout_seconds=platform_detection_timeout_seconds,
+                        session_manager=session_manager,
                     ),
                 },
             },
@@ -183,6 +186,7 @@ class Auth:
             self._rest._connection._network_timeout,
             self._rest._connection._socket_timeout,
             self._rest._connection._platform_detection_timeout_seconds,
+            self._rest.session_manager.shallow_clone(use_pooling=False),
         )
 
         body = copy.deepcopy(body_template)
