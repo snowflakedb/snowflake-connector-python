@@ -2,114 +2,427 @@
 """
 Pre-commit hook to prevent direct usage of requests and urllib3 calls.
 Ensures all HTTP requests go through SessionManager.
-Tracks imports, catches alias patterns, and handles type hints correctly.
 """
 import argparse
 import ast
 import sys
+from dataclasses import dataclass
+from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple
 
 
-class HTTPViolation:
-    """Represents a violation of HTTP call restrictions (calls or imports)."""
+class ViolationType(Enum):
+    """Types of HTTP violations."""
 
-    def __init__(self, filename: str, line: int, col: int, code: str, message: str):
-        self.filename = filename
-        self.line = line
-        self.col = col
-        self.code = code
-        self.message = message
+    REQUESTS_REQUEST = "SNOW001"
+    REQUESTS_SESSION = "SNOW002"
+    URLLIB3_POOLMANAGER = "SNOW003"
+    REQUESTS_HTTP_METHOD = "SNOW004"
+    POOLMANAGER_REQUEST = "SNOW005"
+    DIRECT_HTTP_IMPORT = "SNOW006"
+    DIRECT_POOL_IMPORT = "SNOW007"
+    DIRECT_SESSION_IMPORT = "SNOW008"
+    ALIASED_CALL = "SNOW009"
+
+
+@dataclass(frozen=True)
+class HTTPViolation:
+    """Represents a violation of HTTP call restrictions."""
+
+    filename: str
+    line: int
+    col: int
+    violation_type: ViolationType
+    message: str
 
     def __str__(self):
-        return f"{self.filename}:{self.line}:{self.col}: {self.code} {self.message}"
+        return f"{self.filename}:{self.line}:{self.col}: {self.violation_type.value} {self.message}"
 
 
-class HTTPAnalyzer(ast.NodeVisitor):
-    """Single-pass AST visitor that tracks imports and finds HTTP violations."""
+class ModulePattern:
+    """Utility class for module pattern matching."""
 
-    def __init__(self, filename: str):
-        self.filename = filename
-        self.violations: List[HTTPViolation] = []
+    REQUESTS_MODULES = {"requests"}
+    URLLIB3_MODULES = {"urllib3"}
+    HTTP_METHODS = {
+        "get",
+        "post",
+        "put",
+        "patch",
+        "delete",
+        "head",
+        "options",
+        "request",
+    }
+    POOL_MANAGERS = {"PoolManager", "ProxyManager"}
 
-        # Import tracking
+    @classmethod
+    def is_requests_module(cls, module: str) -> bool:
+        """Check if module is requests-related (including vendored)."""
+        return (
+            module in cls.REQUESTS_MODULES
+            or "requests" in module
+            or module.endswith(".requests")
+        )
+
+    @classmethod
+    def is_urllib3_module(cls, module: str) -> bool:
+        """Check if module is urllib3-related (including vendored)."""
+        return (
+            module in cls.URLLIB3_MODULES
+            or "urllib3" in module
+            or module.endswith(".urllib3")
+        )
+
+    @classmethod
+    def is_http_method(cls, name: str) -> bool:
+        """Check if name is an HTTP method."""
+        return name in cls.HTTP_METHODS
+
+    @classmethod
+    def is_pool_manager(cls, name: str) -> bool:
+        """Check if name is a pool manager class."""
+        return name in cls.POOL_MANAGERS
+
+
+class ImportTracker:
+    """Tracks imports and their usage context."""
+
+    def __init__(self):
         self.aliases: Dict[str, Tuple[str, Optional[str]]] = {}
         self.direct_imports: Set[str] = set()
         self.direct_import_sources: Dict[str, str] = {}
+        self.type_hint_only: Set[str] = set()
+        self.runtime_usage: Set[str] = set()
 
-        # Track usage context
-        self.type_hint_only_imports: Set[str] = set()
-        self.actual_usage_imports: Set[str] = set()
+    def add_import(
+        self, alias_name: str, module: str, import_name: Optional[str] = None
+    ):
+        """Add an import mapping."""
+        self.aliases[alias_name] = (module, import_name)
+        if import_name:  # from module import name
+            self.direct_imports.add(alias_name)
+            self.direct_import_sources[alias_name] = module
 
-        # Violation definitions
-        self.VIOLATIONS = {
-            "SNOW001": "Direct use of requests.request() is forbidden, use SessionManager.request() instead",
-            "SNOW002": "Direct use of requests.Session() is forbidden, use SessionManager.use_requests_session() instead",
-            "SNOW003": "Direct use of urllib3.PoolManager() is forbidden, use SessionManager instead",
-            "SNOW004": "Direct HTTP method calls (requests.get, etc.) are forbidden, use SessionManager instead",
-            "SNOW005": "Direct use of PoolManager.request() is forbidden, use SessionManager instead",
-            "SNOW006": "Direct import of HTTP methods from requests is forbidden, use SessionManager instead",
-            "SNOW007": "Direct import of PoolManager from urllib3 is forbidden, use SessionManager instead",
-            "SNOW008": "Direct import of Session from requests for runtime use is forbidden, use SessionManager instead",
-            "SNOW009": "Use of aliased requests/urllib3 calls is forbidden, use SessionManager instead",
-        }
+    def add_type_hint_usage(self, name: str):
+        """Mark a name as used in type hints."""
+        self.type_hint_only.add(name)
 
-    def visit_Import(self, node: ast.Import):
-        """Handle 'import module as alias' statements."""
+    def add_runtime_usage(self, name: str):
+        """Mark a name as used at runtime."""
+        self.runtime_usage.add(name)
+
+    def is_requests_related(self, name: str) -> bool:
+        """Check if name refers to requests module or its components."""
+        if name == "requests":
+            return True
+        if name in self.aliases:
+            module, _ = self.aliases[name]
+            return ModulePattern.is_requests_module(module)
+        return False
+
+    def is_urllib3_related(self, name: str) -> bool:
+        """Check if name refers to urllib3 module or its components."""
+        if name == "urllib3":
+            return True
+        if name in self.aliases:
+            module, _ = self.aliases[name]
+            return ModulePattern.is_urllib3_module(module)
+        return False
+
+    def get_import_source(self, name: str) -> Optional[str]:
+        """Get the source module for a directly imported name."""
+        return self.direct_import_sources.get(name)
+
+    def is_runtime_only(self, name: str) -> bool:
+        """Check if name is used only at runtime (not just type hints)."""
+        return name in self.runtime_usage or name not in self.type_hint_only
+
+
+class ViolationDetector:
+    """Detects different types of HTTP violations."""
+
+    def __init__(self, filename: str, import_tracker: ImportTracker):
+        self.filename = filename
+        self.import_tracker = import_tracker
+
+    def check_import_from(self, node: ast.ImportFrom) -> List[HTTPViolation]:
+        """Check ImportFrom nodes for forbidden imports."""
+        if not node.module:
+            return []
+
+        violations = []
         for alias in node.names:
-            module_name = alias.name
-            alias_name = alias.asname if alias.asname else alias.name
-            self.aliases[alias_name] = (module_name, None)
-        self.generic_visit(node)
+            if alias.name == "*":
+                continue
 
-    def visit_ImportFrom(self, node: ast.ImportFrom):
-        """Handle 'from module import name as alias' statements."""
-        if node.module:
-            # Track imports
-            for alias in node.names:
-                if alias.name == "*":
-                    continue
+            violation = self._check_single_import(node, alias.name)
+            if violation:
+                violations.append(violation)
 
-                import_name = alias.name
-                alias_name = alias.asname if alias.asname else alias.name
+        return violations
 
-                self.aliases[alias_name] = (node.module, import_name)
-                self.direct_imports.add(alias_name)
-                self.direct_import_sources[alias_name] = node.module
+    def _check_single_import(
+        self, node: ast.ImportFrom, import_name: str
+    ) -> Optional[HTTPViolation]:
+        """Check a single import for violations."""
+        # HTTP method imports from requests
+        if ModulePattern.is_requests_module(
+            node.module
+        ) and ModulePattern.is_http_method(import_name):
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.DIRECT_HTTP_IMPORT,
+                "Direct import of HTTP methods from requests is forbidden, use SessionManager instead",
+            )
 
-        self.generic_visit(node)
+        # Pool manager imports from urllib3
+        if ModulePattern.is_urllib3_module(
+            node.module
+        ) and ModulePattern.is_pool_manager(import_name):
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.DIRECT_POOL_IMPORT,
+                "Direct import of PoolManager/ProxyManager from urllib3 is forbidden, use SessionManager instead",
+            )
 
-    def visit_Call(self, node: ast.Call):
-        """Handle function calls."""
-        # Track actual usage (not type hints)
+        # Session import from requests (only if used at runtime)
+        if ModulePattern.is_requests_module(node.module) and import_name == "Session":
+            # This will be checked later in get_runtime_import_violations
+            pass
+
+        return None
+
+    def check_call(self, node: ast.Call) -> Optional[HTTPViolation]:
+        """Check function calls for violations."""
         if isinstance(node.func, ast.Name):
-            self.actual_usage_imports.add(node.func.id)
-        elif isinstance(node.func, ast.Attribute) and isinstance(
-            node.func.value, ast.Name
-        ):
-            self.actual_usage_imports.add(node.func.value.id)
+            return self._check_direct_call(node)
+        elif isinstance(node.func, ast.Attribute):
+            return self._check_attribute_call(node)
+        return None
 
-        violation = self._check_call_violation(node)
-        if violation:
-            self.violations.append(violation)
-        self.generic_visit(node)
+    def _check_direct_call(self, node: ast.Call) -> Optional[HTTPViolation]:
+        """Check direct function calls (from imports)."""
+        func_name = node.func.id
+        source_module = self.import_tracker.get_import_source(func_name)
+
+        if not source_module:
+            return None
+
+        # HTTP method calls
+        if ModulePattern.is_requests_module(
+            source_module
+        ) and ModulePattern.is_http_method(func_name):
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.DIRECT_HTTP_IMPORT,
+                f"Direct use of imported '{func_name}()' is forbidden, use SessionManager instead",
+            )
+
+        # Pool manager instantiation
+        if ModulePattern.is_urllib3_module(
+            source_module
+        ) and ModulePattern.is_pool_manager(func_name):
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.DIRECT_POOL_IMPORT,
+                f"Direct use of imported '{func_name}()' is forbidden, use SessionManager instead",
+            )
+
+        # Session instantiation
+        if ModulePattern.is_requests_module(source_module) and func_name == "Session":
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.DIRECT_SESSION_IMPORT,
+                f"Direct use of imported '{func_name}()' is forbidden, use SessionManager instead",
+            )
+
+        return None
+
+    def _check_attribute_call(self, node: ast.Call) -> Optional[HTTPViolation]:
+        """Check attribute calls (module.function or alias.function)."""
+        if not isinstance(node.func.value, ast.Name):
+            return self._check_chained_call(node)
+
+        obj_name = node.func.value.id
+        attr_name = node.func.attr
+
+        # Direct module calls (requests.get, urllib3.PoolManager)
+        if obj_name == "requests":
+            return self._check_requests_module_call(node, attr_name)
+        elif obj_name == "urllib3":
+            return self._check_urllib3_module_call(node, attr_name)
+
+        # Aliased calls
+        if self.import_tracker.is_requests_related(obj_name):
+            return self._check_aliased_requests_call(node, obj_name, attr_name)
+        elif self.import_tracker.is_urllib3_related(obj_name):
+            return self._check_aliased_urllib3_call(node, obj_name, attr_name)
+
+        return None
+
+    def _check_requests_module_call(
+        self, node: ast.Call, attr_name: str
+    ) -> Optional[HTTPViolation]:
+        """Check direct requests module calls."""
+        if attr_name == "request":
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.REQUESTS_REQUEST,
+                "Direct use of requests.request() is forbidden, use SessionManager.request() instead",
+            )
+        elif attr_name == "Session":
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.REQUESTS_SESSION,
+                "Direct use of requests.Session() is forbidden, use SessionManager.use_requests_session() instead",
+            )
+        elif ModulePattern.is_http_method(attr_name):
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.REQUESTS_HTTP_METHOD,
+                "Direct HTTP method calls (requests.get, etc.) are forbidden, use SessionManager instead",
+            )
+        return None
+
+    def _check_urllib3_module_call(
+        self, node: ast.Call, attr_name: str
+    ) -> Optional[HTTPViolation]:
+        """Check direct urllib3 module calls."""
+        if ModulePattern.is_pool_manager(attr_name):
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.URLLIB3_POOLMANAGER,
+                "Direct use of urllib3.PoolManager/ProxyManager() is forbidden, use SessionManager instead",
+            )
+        return None
+
+    def _check_aliased_requests_call(
+        self, node: ast.Call, obj_name: str, attr_name: str
+    ) -> Optional[HTTPViolation]:
+        """Check aliased requests calls."""
+        if attr_name in {"request", "Session"} or ModulePattern.is_http_method(
+            attr_name
+        ):
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.ALIASED_CALL,
+                f"Aliased requests.{attr_name}() call ('{obj_name}.{attr_name}') is forbidden, use SessionManager instead",
+            )
+        return None
+
+    def _check_aliased_urllib3_call(
+        self, node: ast.Call, obj_name: str, attr_name: str
+    ) -> Optional[HTTPViolation]:
+        """Check aliased urllib3 calls."""
+        if ModulePattern.is_pool_manager(attr_name):
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.ALIASED_CALL,
+                f"Aliased urllib3.{attr_name}() call ('{obj_name}.{attr_name}') is forbidden, use SessionManager instead",
+            )
+        return None
+
+    def _check_chained_call(self, node: ast.Call) -> Optional[HTTPViolation]:
+        """Check chained calls like PoolManager().request()."""
+        if (
+            isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Call)
+            and isinstance(node.func.value.func, ast.Attribute)
+            and isinstance(node.func.value.func.value, ast.Name)
+        ):
+
+            obj_name = node.func.value.func.value.id
+            class_name = node.func.value.func.attr
+            method_name = node.func.attr
+
+            if (
+                obj_name == "urllib3"
+                and ModulePattern.is_pool_manager(class_name)
+                and method_name in {"request", "request_encode_body"}
+            ):
+                return HTTPViolation(
+                    self.filename,
+                    node.lineno,
+                    node.col_offset,
+                    ViolationType.POOLMANAGER_REQUEST,
+                    "Direct use of PoolManager.request() is forbidden, use SessionManager instead",
+                )
+        return None
+
+    def get_runtime_import_violations(self) -> List[HTTPViolation]:
+        """Check for Session imports that are used at runtime."""
+        violations = []
+
+        for import_name in self.import_tracker.direct_imports:
+            source_module = self.import_tracker.get_import_source(import_name)
+            if not source_module:
+                continue
+
+            # Only flag Session imports that are used at runtime
+            if (
+                ModulePattern.is_requests_module(source_module)
+                and import_name == "Session"
+                and self.import_tracker.is_runtime_only(import_name)
+            ):
+                violations.append(
+                    HTTPViolation(
+                        self.filename,
+                        1,
+                        0,  # Line number not available for import analysis
+                        ViolationType.DIRECT_SESSION_IMPORT,
+                        "Direct import of Session from requests for runtime use is forbidden, use SessionManager instead",
+                    )
+                )
+
+        return violations
+
+
+class TypeHintExtractor(ast.NodeVisitor):
+    """Extracts type hint information from AST nodes."""
+
+    def __init__(self, import_tracker: ImportTracker):
+        self.import_tracker = import_tracker
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        """Handle function definitions and their type annotations."""
-        self._track_type_annotations(node)
+        """Extract type hints from function definitions."""
+        self._extract_from_function(node)
         self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
-        """Handle async function definitions and their type annotations."""
-        self._track_type_annotations(node)
+        """Extract type hints from async function definitions."""
+        self._extract_from_function(node)
         self.generic_visit(node)
 
-    def _track_type_annotations(self, node):
-        """Track type annotations to identify type-hint-only imports."""
-        # Check return type annotation
+    def _extract_from_function(self, node):
+        """Extract type hints from function signature."""
+        # Return type annotation
         if node.returns:
             self._extract_type_names(node.returns)
 
-        # Check parameter type annotations
+        # Parameter type annotations
         for arg in node.args.args:
             if arg.annotation:
                 self._extract_type_names(arg.annotation)
@@ -117,361 +430,107 @@ class HTTPAnalyzer(ast.NodeVisitor):
     def _extract_type_names(self, annotation_node):
         """Extract type names from annotation nodes."""
         if isinstance(annotation_node, ast.Name):
-            self.type_hint_only_imports.add(annotation_node.id)
+            self.import_tracker.add_type_hint_usage(annotation_node.id)
         elif isinstance(annotation_node, ast.Attribute):
             if isinstance(annotation_node.value, ast.Name):
-                self.type_hint_only_imports.add(annotation_node.value.id)
+                self.import_tracker.add_type_hint_usage(annotation_node.value.id)
         elif isinstance(annotation_node, ast.Subscript):
-            # Handle Generic[T], List[T], etc.
-            if isinstance(annotation_node.value, ast.Name):
-                self.type_hint_only_imports.add(annotation_node.value.id)
-            if isinstance(annotation_node.slice, ast.Name):
-                self.type_hint_only_imports.add(annotation_node.slice.id)
-            elif hasattr(annotation_node.slice, "elts"):  # Tuple of types
-                for elt in annotation_node.slice.elts:
-                    if isinstance(elt, ast.Name):
-                        self.type_hint_only_imports.add(elt.id)
+            self._extract_from_subscript(annotation_node)
 
-    def _check_call_violation(self, node: ast.Call) -> Optional[HTTPViolation]:
-        """Check Call nodes for violations."""
+    def _extract_from_subscript(self, node: ast.Subscript):
+        """Extract type names from generic types like List[T], Generator[T, None, None]."""
+        if isinstance(node.value, ast.Name):
+            self.import_tracker.add_type_hint_usage(node.value.id)
 
-        # Direct function calls (e.g., get(), post() from direct imports)
-        if isinstance(node.func, ast.Name):
-            func_name = node.func.id
+        # Handle the subscript part
+        if isinstance(node.slice, ast.Name):
+            self.import_tracker.add_type_hint_usage(node.slice.id)
+        elif hasattr(node.slice, "elts"):  # Tuple of types
+            for elt in node.slice.elts:
+                if isinstance(elt, ast.Name):
+                    self.import_tracker.add_type_hint_usage(elt.id)
 
-            # Check if it's a directly imported HTTP method
-            if self._is_direct_http_method(func_name):
-                return HTTPViolation(
-                    self.filename,
-                    node.lineno,
-                    node.col_offset,
-                    "SNOW006",
-                    f"Direct use of imported '{func_name}()' is forbidden, use SessionManager instead",
-                )
 
-            # Check if it's a directly imported PoolManager
-            if self._is_direct_poolmanager(func_name):
-                return HTTPViolation(
-                    self.filename,
-                    node.lineno,
-                    node.col_offset,
-                    "SNOW007",
-                    f"Direct use of imported '{func_name}()' is forbidden, use SessionManager instead",
-                )
+class HTTPAnalyzer(ast.NodeVisitor):
+    """Main analyzer that orchestrates the detection process."""
 
-            # Check if it's a directly imported Session
-            if self._is_direct_session(func_name):
-                return HTTPViolation(
-                    self.filename,
-                    node.lineno,
-                    node.col_offset,
-                    "SNOW008",
-                    f"Direct use of imported '{func_name}()' is forbidden, use SessionManager instead",
-                )
+    def __init__(self, filename: str):
+        self.filename = filename
+        self.import_tracker = ImportTracker()
+        self.detector = ViolationDetector(filename, self.import_tracker)
+        self.type_hint_extractor = TypeHintExtractor(self.import_tracker)
+        self.violations: List[HTTPViolation] = []
 
-        # Attribute calls (e.g., req.get(), alias.PoolManager())
-        elif isinstance(node.func, ast.Attribute):
-            return self._check_attribute_call_violation(node)
+    def visit_Import(self, node: ast.Import):
+        """Handle import statements."""
+        for alias in node.names:
+            module_name = alias.name
+            alias_name = alias.asname if alias.asname else alias.name
+            self.import_tracker.add_import(alias_name, module_name)
+        self.generic_visit(node)
 
-        return None
-
-    def _check_attribute_call_violation(
-        self, node: ast.Call
-    ) -> Optional[HTTPViolation]:
-        """Check attribute calls for violations."""
-        if not isinstance(node.func, ast.Attribute):
-            return None
-
-        attr_name = node.func.attr
-
-        # Get the object being called
-        if isinstance(node.func.value, ast.Name):
-            obj_name = node.func.value.id
-
-            # Check for aliased requests calls
-            if self._is_requests_related(obj_name):
-                if attr_name == "request":
-                    return HTTPViolation(
-                        self.filename,
-                        node.lineno,
-                        node.col_offset,
-                        "SNOW009",
-                        f"Aliased requests.request() call ('{obj_name}.{attr_name}') is forbidden, use SessionManager instead",
-                    )
-                elif attr_name == "Session":
-                    return HTTPViolation(
-                        self.filename,
-                        node.lineno,
-                        node.col_offset,
-                        "SNOW009",
-                        f"Aliased requests.Session() call ('{obj_name}.{attr_name}') is forbidden, use SessionManager instead",
-                    )
-                elif attr_name in {
-                    "get",
-                    "post",
-                    "put",
-                    "patch",
-                    "delete",
-                    "head",
-                    "options",
-                }:
-                    return HTTPViolation(
-                        self.filename,
-                        node.lineno,
-                        node.col_offset,
-                        "SNOW009",
-                        f"Aliased requests.{attr_name}() call ('{obj_name}.{attr_name}') is forbidden, use SessionManager instead",
-                    )
-
-            # Check for aliased urllib3 calls
-            elif self._is_urllib3_related(obj_name):
-                if attr_name in {"PoolManager", "ProxyManager"}:
-                    return HTTPViolation(
-                        self.filename,
-                        node.lineno,
-                        node.col_offset,
-                        "SNOW009",
-                        f"Aliased urllib3.PoolManager() call ('{obj_name}.{attr_name}') is forbidden, use SessionManager instead",
-                    )
-
-        # Original checks for direct module usage (fallback)
-        return self._check_original_patterns(node)
-
-    def _check_original_patterns(self, node: ast.Call) -> Optional[HTTPViolation]:
-        """Check original patterns for backward compatibility."""
-        # requests.request() calls
-        if self._is_requests_request_call(node):
-            return HTTPViolation(
-                self.filename,
-                node.lineno,
-                node.col_offset,
-                "SNOW001",
-                self.VIOLATIONS["SNOW001"],
-            )
-
-        # requests.Session() instantiation
-        if self._is_requests_session_instantiation(node):
-            return HTTPViolation(
-                self.filename,
-                node.lineno,
-                node.col_offset,
-                "SNOW002",
-                self.VIOLATIONS["SNOW002"],
-            )
-
-        # urllib3.PoolManager() instantiation
-        if self._is_urllib3_poolmanager_instantiation(node):
-            return HTTPViolation(
-                self.filename,
-                node.lineno,
-                node.col_offset,
-                "SNOW003",
-                self.VIOLATIONS["SNOW003"],
-            )
-
-        # Direct HTTP method calls (requests.get, etc.)
-        if self._is_requests_http_method_call(node):
-            return HTTPViolation(
-                self.filename,
-                node.lineno,
-                node.col_offset,
-                "SNOW004",
-                self.VIOLATIONS["SNOW004"],
-            )
-
-        # PoolManager().request() calls
-        if self._is_poolmanager_request_call(node):
-            return HTTPViolation(
-                self.filename,
-                node.lineno,
-                node.col_offset,
-                "SNOW005",
-                self.VIOLATIONS["SNOW005"],
-            )
-
-        return None
-
-    def get_import_violations(self) -> List[HTTPViolation]:
-        """Check imports after full AST traversal to determine actual usage vs type hints."""
-        violations = []
-
-        for import_name in self.direct_imports:
-            if import_name in self.direct_import_sources:
-                source_module = self.direct_import_sources[import_name]
-
-                # Skip if only used in type hints
-                if (
-                    import_name in self.type_hint_only_imports
-                    and import_name not in self.actual_usage_imports
-                ):
+    def visit_ImportFrom(self, node: ast.ImportFrom):
+        """Handle from...import statements."""
+        if node.module:
+            for alias in node.names:
+                if alias.name == "*":
                     continue
 
-                # Check for HTTP method imports from requests
-                if self._is_requests_module(source_module) and import_name in {
-                    "get",
-                    "post",
-                    "put",
-                    "patch",
-                    "delete",
-                    "head",
-                    "options",
-                    "request",
-                }:
-                    # Find the import line (we don't have it here, so use line 1 as placeholder)
-                    violations.append(
-                        HTTPViolation(
-                            self.filename, 1, 0, "SNOW006", self.VIOLATIONS["SNOW006"]
-                        )
-                    )
+                import_name = alias.name
+                alias_name = alias.asname if alias.asname else alias.name
+                self.import_tracker.add_import(alias_name, node.module, import_name)
 
-                # Check for PoolManager import from urllib3
-                elif self._is_urllib3_module(source_module) and import_name in {
-                    "PoolManager",
-                    "ProxyManager",
-                }:
-                    violations.append(
-                        HTTPViolation(
-                            self.filename, 1, 0, "SNOW007", self.VIOLATIONS["SNOW007"]
-                        )
-                    )
+            # Check for import violations
+            violations = self.detector.check_import_from(node)
+            self.violations.extend(violations)
 
-                # Check for Session import from requests (only if actually used, not just type hints)
-                elif (
-                    self._is_requests_module(source_module)
-                    and import_name == "Session"
-                    and import_name in self.actual_usage_imports
-                ):
-                    violations.append(
-                        HTTPViolation(
-                            self.filename, 1, 0, "SNOW008", self.VIOLATIONS["SNOW008"]
-                        )
-                    )
+        self.generic_visit(node)
 
-        return violations
+    def visit_Call(self, node: ast.Call):
+        """Handle function calls."""
+        # Track runtime usage
+        self._track_runtime_usage(node)
 
-    # Helper methods for checking patterns
-    def _is_requests_related(self, name: str) -> bool:
-        """Check if a name refers to requests module or its components."""
-        if name in self.aliases:
-            module, _ = self.aliases[name]
-            return self._is_requests_module(module)
-        return name == "requests"
+        # Check for violations
+        violation = self.detector.check_call(node)
+        if violation:
+            self.violations.append(violation)
 
-    def _is_urllib3_related(self, name: str) -> bool:
-        """Check if a name refers to urllib3 module or its components."""
-        if name in self.aliases:
-            module, _ = self.aliases[name]
-            return self._is_urllib3_module(module)
-        return name == "urllib3"
+        self.generic_visit(node)
 
-    def _is_direct_http_method(self, name: str) -> bool:
-        """Check if name is a directly imported HTTP method."""
-        if name in self.direct_import_sources:
-            source_module = self.direct_import_sources[name]
-            return self._is_requests_module(source_module) and name in {
-                "get",
-                "post",
-                "put",
-                "patch",
-                "delete",
-                "head",
-                "options",
-                "request",
-            }
-        return False
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        """Handle function definitions for type hint extraction."""
+        self.type_hint_extractor.visit_FunctionDef(node)
+        self.generic_visit(node)
 
-    def _is_direct_poolmanager(self, name: str) -> bool:
-        """Check if name is a directly imported PoolManager."""
-        if name in self.direct_import_sources:
-            source_module = self.direct_import_sources[name]
-            return self._is_urllib3_module(source_module) and name in {
-                "PoolManager",
-                "ProxyManager",
-            }
-        return False
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        """Handle async function definitions for type hint extraction."""
+        self.type_hint_extractor.visit_AsyncFunctionDef(node)
+        self.generic_visit(node)
 
-    def _is_direct_session(self, name: str) -> bool:
-        """Check if name is a directly imported Session."""
-        if name in self.direct_import_sources:
-            source_module = self.direct_import_sources[name]
-            return self._is_requests_module(source_module) and name == "Session"
-        return False
+    def _track_runtime_usage(self, node: ast.Call):
+        """Track which imports are used at runtime."""
+        if isinstance(node.func, ast.Name):
+            self.import_tracker.add_runtime_usage(node.func.id)
+        elif isinstance(node.func, ast.Attribute) and isinstance(
+            node.func.value, ast.Name
+        ):
+            self.import_tracker.add_runtime_usage(node.func.value.id)
 
-    def _is_requests_module(self, module: str) -> bool:
-        """Check if module is requests-related (including vendored)."""
-        return (
-            module == "requests" or "requests" in module or module.endswith(".requests")
-        )
-
-    def _is_urllib3_module(self, module: str) -> bool:
-        """Check if module is urllib3-related (including vendored)."""
-        return module == "urllib3" or "urllib3" in module or module.endswith(".urllib3")
-
-    def _is_requests_request_call(self, node: ast.AST) -> bool:
-        """Check if node is a requests.request() call."""
-        return (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "request"
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "requests"
-        )
-
-    def _is_requests_session_instantiation(self, node: ast.AST) -> bool:
-        """Check if node is a requests.Session() instantiation."""
-        return (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "Session"
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "requests"
-        )
-
-    def _is_urllib3_poolmanager_instantiation(self, node: ast.AST) -> bool:
-        """Check if node is a urllib3.PoolManager() instantiation."""
-        return (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr in {"PoolManager", "ProxyManager"}
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "urllib3"
-        )
-
-    def _is_requests_http_method_call(self, node: ast.AST) -> bool:
-        """Check if node is a direct HTTP method call on requests module."""
-        http_methods = {"get", "post", "put", "patch", "delete", "head", "options"}
-        return (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr in http_methods
-            and isinstance(node.func.value, ast.Name)
-            and node.func.value.id == "requests"
-        )
-
-    def _is_poolmanager_request_call(self, node: ast.AST) -> bool:
-        """Check if node is a PoolManager().request() or .request_encode_body() call."""
-        return (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr in ("request", "request_encode_body")
-            and isinstance(node.func.value, ast.Call)
-            and isinstance(node.func.value.func, ast.Attribute)
-            and node.func.value.func.attr == "PoolManager"
-            and isinstance(node.func.value.func.value, ast.Name)
-            and node.func.value.func.value.id == "urllib3"
-        )
+    def get_all_violations(self) -> List[HTTPViolation]:
+        """Get all violations including runtime import violations."""
+        runtime_violations = self.detector.get_runtime_import_violations()
+        return self.violations + runtime_violations
 
 
-class NoNativeHTTPChecker:
-    """Checker to prevent direct usage of requests/urllib3 calls."""
+class FileChecker:
+    """Handles file-level checking logic."""
 
-    # Files that are allowed to use native HTTP calls
     EXEMPT_PATTERNS = [
         "session_manager.py",
         "vendored/",
     ]
 
-    # Test file patterns (more specific)
     TEST_PATTERNS = [
         "/test/",
         "test/",
@@ -480,7 +539,6 @@ class NoNativeHTTPChecker:
         "mock_utils.py",
     ]
 
-    # Files that are temporarily allowed with warnings
     TEMPORARY_EXEMPT_PATTERNS = [
         ("auth/_oauth_base.py", "SNOW-2229411"),
         ("telemetry_oob.py", "SNOW-2259522"),
@@ -490,34 +548,25 @@ class NoNativeHTTPChecker:
         self.filename = filename
 
     def is_exempt(self) -> bool:
-        """Check if the file is exempt from HTTP call restrictions."""
-        # Check general exemptions
-        if any(pattern in self.filename for pattern in self.EXEMPT_PATTERNS):
-            return True
+        """Check if file is exempt from all checks."""
+        return any(pattern in self.filename for pattern in self.EXEMPT_PATTERNS) or any(
+            pattern in self.filename for pattern in self.TEST_PATTERNS
+        )
 
-        # Check test file patterns
-        for pattern in self.TEST_PATTERNS:
-            if pattern in self.filename:
-                return True
-
-        return False
-
-    def is_temporarily_exempt(self) -> Optional[str]:
-        """Check if the file is temporarily exempt and return the JIRA ticket."""
+    def get_temporary_exemption(self) -> Optional[str]:
+        """Get JIRA ticket for temporary exemption, if any."""
         for pattern, ticket in self.TEMPORARY_EXEMPT_PATTERNS:
             if pattern in self.filename:
                 return ticket
         return None
 
     def check_file(self) -> List[HTTPViolation]:
-        """Check a file for HTTP call violations using single-pass AST traversal."""
+        """Check a file for HTTP violations."""
         if self.is_exempt():
             return []
 
-        # Check for temporary exemptions
-        temp_ticket = self.is_temporarily_exempt()
-        if temp_ticket:
-            return []  # Skip checking but will show warning in main()
+        if self.get_temporary_exemption():
+            return []  # Handled by caller
 
         try:
             with open(self.filename, encoding="utf-8") as f:
@@ -530,14 +579,9 @@ class NoNativeHTTPChecker:
         except SyntaxError:
             return []
 
-        # Single pass: collect imports and check violations simultaneously
         analyzer = HTTPAnalyzer(self.filename)
         analyzer.visit(tree)
-
-        # Add import-specific violations after full analysis
-        import_violations = analyzer.get_import_violations()
-
-        return analyzer.violations + import_violations
+        return analyzer.get_all_violations()
 
 
 def main():
@@ -556,24 +600,23 @@ def main():
         if not filename.endswith(".py"):
             continue
 
-        checker = NoNativeHTTPChecker(filename)
+        checker = FileChecker(filename)
+        temp_ticket = checker.get_temporary_exemption()
 
-        # Check for temporary exemptions
-        temp_ticket = checker.is_temporarily_exempt()
         if temp_ticket:
             temp_exempt_files.append((filename, temp_ticket))
-            continue
+        else:
+            violations = checker.check_file()
+            all_violations.extend(violations)
 
-        violations = checker.check_file()
-        all_violations.extend(violations)
-
-    # Show warnings for temporarily exempt files
+    # Show temporary exemptions
     if temp_exempt_files:
         print("Files temporarily exempt from HTTP call checks:")
         for filename, ticket in temp_exempt_files:
             print(f"  {filename} (tracked in {ticket})")
         print()
 
+    # Show violations
     if all_violations:
         print("Native HTTP call violations found:")
         print()
@@ -581,20 +624,18 @@ def main():
         for violation in all_violations:
             print(f"  {violation}")
 
-        print()
         if args.show_fixes:
+            print()
             print("How to fix:")
             print("  - Replace requests.request() with session_manager.request()")
             print(
                 "  - Replace requests.Session() with session_manager.use_requests_session()"
             )
-            print(
-                "  - Replace urllib3.PoolManager/ProxyManager() with session from session_manager.use_requests_session()"
-            )
+            print("  - Replace urllib3.PoolManager/ProxyManager() with SessionManager")
             print("  - Replace direct HTTP method imports with SessionManager usage")
             print("  - Use connection.rest.use_requests_session() when available")
-            print()
 
+        print()
         print(f"Found {len(all_violations)} violation(s)")
         return 1
 
