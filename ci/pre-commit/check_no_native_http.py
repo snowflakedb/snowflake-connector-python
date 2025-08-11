@@ -50,7 +50,7 @@ class NoNativeHTTPChecker:
     # Files that are temporarily allowed with warnings
     TEMPORARY_EXEMPT_PATTERNS = [
         ("auth/_oauth_base.py", "SNOW-2229411"),
-        ("telemetry_oob.py", "SNOW-694457"),
+        ("telemetry_oob.py", "SNOW-2259522"),
     ]
 
     def __init__(self, filename: str):
@@ -243,13 +243,13 @@ def main():
 
     # Show warnings for temporarily exempt files
     if temp_exempt_files:
-        print("⚠️  Files temporarily exempt from HTTP call checks:")
+        print("Files temporarily exempt from HTTP call checks:")
         for filename, ticket in temp_exempt_files:
             print(f"  {filename} (tracked in {ticket})")
         print()
 
     if all_violations:
-        print("❌ Native HTTP call violations found:")
+        print("Native HTTP call violations found:")
         print()
 
         for violation in all_violations:
