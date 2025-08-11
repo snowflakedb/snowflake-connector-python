@@ -411,15 +411,15 @@ class OptimizedNoNativeHTTPChecker:
     EXEMPT_PATTERNS = [
         "session_manager.py",
         "vendored/",
-        "conftest.py",
-        "mock_utils.py",
     ]
 
     # Test file patterns (more specific)
     TEST_PATTERNS = [
         "/test/",
         "test/",
+        "conftest.py",
         "_test.py",
+        "mock_utils.py",
     ]
 
     # Files that are temporarily allowed with warnings
@@ -434,13 +434,11 @@ class OptimizedNoNativeHTTPChecker:
     def is_exempt(self) -> bool:
         """Check if the file is exempt from HTTP call restrictions."""
         # Check general exemptions
-        if any(pattern in self.filename for pattern in self.EXEMPT_PATTERNS):
+        if any(
+            pattern in self.filename
+            for pattern in self.EXEMPT_PATTERNS + self.TEST_PATTERNS
+        ):
             return True
-
-        # Check test file patterns (only if in test directory or ends with _test.py)
-        for pattern in self.TEST_PATTERNS:
-            if pattern in self.filename:
-                return True
 
         return False
 
@@ -508,13 +506,13 @@ def main():
 
     # Show warnings for temporarily exempt files
     if temp_exempt_files:
-        print("⚠️  Files temporarily exempt from HTTP call checks:")
+        print("Files temporarily exempt from HTTP call checks:")
         for filename, ticket in temp_exempt_files:
             print(f"  {filename} (tracked in {ticket})")
         print()
 
     if all_violations:
-        print("❌ Native HTTP call violations found:")
+        print("Native HTTP call violations found:")
         print()
 
         for violation in all_violations:
