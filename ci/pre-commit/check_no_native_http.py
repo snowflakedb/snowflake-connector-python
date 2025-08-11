@@ -72,7 +72,7 @@ class ModulePattern:
         "request",
     }
     POOL_MANAGERS = {"PoolManager", "ProxyManager"}
-    URLLIB3_APIS = {"request", "HTTPConnectionPool", "HTTPSConnectionPool"}
+    URLLIB3_APIS = {"request", "urlopen", "HTTPConnectionPool", "HTTPSConnectionPool"}
 
     @classmethod
     def is_requests_module(cls, module_or_symbol: str) -> bool:
@@ -176,8 +176,19 @@ class ImportContext:
         self.variable_aliases[var_name] = original_name
 
     def resolve_name(self, name: str) -> str:
-        """Resolve a name through variable aliases."""
-        return self.variable_aliases.get(name, name)
+        """Resolve a name through variable aliases transitively (A→B→C)."""
+        seen = set()
+        current = name
+        max_depth = 10  # Prevent infinite loops
+
+        while (
+            current in self.variable_aliases and current not in seen and max_depth > 0
+        ):
+            seen.add(current)
+            current = self.variable_aliases[current]
+            max_depth -= 1
+
+        return current
 
     def is_requests_related(self, name: str) -> bool:
         """Check if name refers to requests module or its components."""
@@ -225,13 +236,12 @@ class ImportContext:
 
         return False
 
-    def is_runtime_only(self, name: str) -> bool:
-        """Check if name is used only at runtime (not type hints)."""
-        # Must have actual runtime usage AND not be type-checking-only
+    def is_runtime(self, name: str) -> bool:
+        """Check if name is used at runtime (has actual runtime usage)."""
         return (
             name in self.runtime_usage
             and name not in self.type_checking_imports
-            and (name not in self.type_hint_usage or name in self.runtime_usage)
+            and name not in self.type_hint_usage
         )
 
     def get_import_location(self, name: str) -> Tuple[int, int]:
@@ -277,7 +287,6 @@ class ContextBuilder(ast.NodeVisitor):
 
     def __init__(self):
         self.context = ImportContext()
-        self._if_test_stack: List[bool] = []  # Track TYPE_CHECKING blocks
 
     def visit_Import(self, node: ast.Import):
         """Handle import statements."""
@@ -342,16 +351,25 @@ class ContextBuilder(ast.NodeVisitor):
             self.generic_visit(node)
 
     def visit_Assign(self, node: ast.Assign):
-        """Handle variable assignments for basic aliasing."""
-        if (
-            len(node.targets) == 1
-            and isinstance(node.targets[0], ast.Name)
-            and isinstance(node.value, ast.Name)
-        ):
-
+        """Handle variable assignments for basic aliasing and attribute aliasing."""
+        if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             var_name = node.targets[0].id
-            original_name = node.value.id
-            self.context.add_variable_alias(var_name, original_name)
+
+            # Handle Name = Name aliasing (e.g., r = requests)
+            if isinstance(node.value, ast.Name):
+                original_name = node.value.id
+                self.context.add_variable_alias(var_name, original_name)
+
+            # Handle Name = Attribute aliasing (e.g., v = snowflake.connector.vendored.requests)
+            elif isinstance(node.value, ast.Attribute):
+                dotted_chain = ASTHelper.get_attribute_chain(node.value)
+                if dotted_chain:
+                    full_path = ".".join(dotted_chain)
+                    # Check if this points to a requests or urllib3 module
+                    if ModulePattern.is_requests_module(
+                        full_path
+                    ) or ModulePattern.is_urllib3_module(full_path):
+                        self.context.add_variable_alias(var_name, full_path)
 
         self.generic_visit(node)
 
@@ -399,7 +417,7 @@ class ContextBuilder(ast.NodeVisitor):
                 self._extract_type_names(arg.annotation)
 
     def _extract_type_names(self, annotation_node):
-        """Extract names from type annotations."""
+        """Extract names from type annotations, including string annotations (PEP 563)."""
         if isinstance(annotation_node, ast.Name):
             self.context.add_type_hint_usage(annotation_node.id)
         elif isinstance(annotation_node, ast.Attribute):
@@ -417,6 +435,29 @@ class ContextBuilder(ast.NodeVisitor):
             # Tuple types
             for elt in annotation_node.elts:
                 self._extract_type_names(elt)
+        elif isinstance(annotation_node, ast.Constant) and isinstance(
+            annotation_node.value, str
+        ):
+            # String annotations (PEP 563): "Session", "List[Session]", etc.
+            self._extract_from_string_annotation(annotation_node.value)
+
+    def _extract_from_string_annotation(self, annotation_str: str):
+        """Parse string annotation and extract type names."""
+        try:
+            # Parse the string as a Python expression
+            parsed = ast.parse(annotation_str, mode="eval")
+            # Extract type names from the parsed expression
+            self._extract_type_names(parsed.body)
+        except SyntaxError:
+            # If parsing fails, try simple name extraction
+            # Handle basic cases like "Session", "Session | None"
+            import re
+
+            # Match Python identifiers that could be type names
+            names = re.findall(r"\b([A-Z][a-zA-Z0-9_]*)\b", annotation_str)
+            for name in names:
+                if name in ["Session", "PoolManager", "ProxyManager"]:
+                    self.context.add_type_hint_usage(name)
 
     def _extract_from_subscript(self, node: ast.Subscript):
         """Extract type names from generic types."""
@@ -500,7 +541,7 @@ class ViolationAnalyzer:
             )
 
         # Flag Session/PoolManager imports only if used at runtime
-        if import_info.imported_name and self.context.is_runtime_only(
+        if import_info.imported_name and self.context.is_runtime(
             import_info.alias_name
         ):
 
@@ -550,10 +591,19 @@ class CallAnalyzer(ast.NodeVisitor):
         if violation:
             self.violations.append(violation)
 
+            # If this is a chained call, don't visit the inner call to avoid duplicates
+            if self._is_chained_call(node):
+                return
+
         self.generic_visit(node)
 
     def _check_call_violation(self, node: ast.Call) -> Optional[HTTPViolation]:
         """Check a single call for violations."""
+        # First check for chained calls like Session().get() or PoolManager().request()
+        chained_violation = self._check_chained_calls(node)
+        if chained_violation:
+            return chained_violation
+
         # Get attribute chain
         chain = ASTHelper.get_attribute_chain(node.func)
         if not chain:
@@ -634,10 +684,62 @@ class CallAnalyzer(ast.NodeVisitor):
 
         return None
 
+    def _is_chained_call(self, node: ast.Call) -> bool:
+        """Check if this is a chained call that we detected."""
+        return isinstance(node.func, ast.Attribute) and isinstance(
+            node.func.value, ast.Call
+        )
+
+    def _check_chained_calls(self, node: ast.Call) -> Optional[HTTPViolation]:
+        """Check for chained calls like requests.Session().get() or urllib3.PoolManager().request()."""
+        if isinstance(node.func, ast.Attribute) and isinstance(
+            node.func.value, ast.Call
+        ):
+            inner_chain = ASTHelper.get_attribute_chain(node.func.value.func)
+            if inner_chain and len(inner_chain) >= 2:
+                inner_module, inner_func = inner_chain[0], inner_chain[-1]
+                outer_method = node.func.attr
+
+                # Check for requests.Session().method()
+                if (
+                    (
+                        inner_module == "requests"
+                        or self.context.is_requests_related(inner_module)
+                    )
+                    and inner_func == "Session"
+                    and ModulePattern.is_http_method(outer_method)
+                ):
+                    return HTTPViolation(
+                        self.filename,
+                        node.lineno,
+                        node.col_offset,
+                        ViolationType.REQUESTS_SESSION,
+                        f"Chained call requests.Session().{outer_method}() is forbidden, use SessionManager instead",
+                    )
+
+                # Check for urllib3.PoolManager().method()
+                if (
+                    (
+                        inner_module == "urllib3"
+                        or self.context.is_urllib3_related(inner_module)
+                    )
+                    and ModulePattern.is_pool_manager(inner_func)
+                    and outer_method in {"request", "urlopen", "request_encode_body"}
+                ):
+                    return HTTPViolation(
+                        self.filename,
+                        node.lineno,
+                        node.col_offset,
+                        ViolationType.URLLIB3_POOLMANAGER,
+                        f"Chained call urllib3.{inner_func}().{outer_method}() is forbidden, use SessionManager instead",
+                    )
+
+        return None
+
     def _check_two_part_call(
         self, node: ast.Call, chain: List[str]
     ) -> Optional[HTTPViolation]:
-        """Check two-part calls like module.function."""
+        """Check two-part calls like module.function or instance.method."""
         module_name, func_name = chain
         resolved_module = self.context.resolve_name(module_name)
 
@@ -650,6 +752,14 @@ class CallAnalyzer(ast.NodeVisitor):
             resolved_module
         ):
             return self._check_urllib3_call(node, func_name)
+
+        # Check for aliased module calls (e.g., v = vendored.requests; v.get())
+        if module_name in self.context.variable_aliases:
+            aliased_module = self.context.variable_aliases[module_name]
+            if ModulePattern.is_requests_module(aliased_module):
+                return self._check_requests_call(node, func_name)
+            elif ModulePattern.is_urllib3_module(aliased_module):
+                return self._check_urllib3_call(node, func_name)
 
         return None
 
@@ -680,34 +790,6 @@ class CallAnalyzer(ast.NodeVisitor):
                         node.col_offset,
                         ViolationType.REQUESTS_HTTP_METHOD,
                         f"Direct use of {'.'.join(chain)}() is forbidden, use SessionManager instead",
-                    )
-
-        # Check for chained calls like requests.Session().get()
-        if (
-            len(chain) >= 2
-            and isinstance(node.func, ast.Attribute)
-            and isinstance(node.func.value, ast.Call)
-        ):
-
-            inner_chain = ASTHelper.get_attribute_chain(node.func.value.func)
-            if inner_chain and len(inner_chain) >= 2:
-                inner_module, inner_func = inner_chain[0], inner_chain[-1]
-                outer_method = node.func.attr
-
-                if (
-                    (
-                        inner_module == "requests"
-                        or self.context.is_requests_related(inner_module)
-                    )
-                    and inner_func == "Session"
-                    and ModulePattern.is_http_method(outer_method)
-                ):
-                    return HTTPViolation(
-                        self.filename,
-                        node.lineno,
-                        node.col_offset,
-                        ViolationType.REQUESTS_SESSION,
-                        f"Chained call requests.Session().{outer_method}() is forbidden, use SessionManager instead",
                     )
 
         return None
@@ -766,22 +848,19 @@ class CallAnalyzer(ast.NodeVisitor):
 
 
 class FileChecker:
-    """Handles file-level checking logic with improved path handling."""
+    """Handles file-level checking logic with proper glob path matching."""
 
     EXEMPT_PATTERNS = [
-        "session_manager.py",
+        "**/session_manager.py",
         "**/vendored/**",
     ]
 
     TEST_PATTERNS = [
         "**/test/**",
         "**/*_test.py",
+        "**/test_*.py",
         "**/conftest.py",
         "**/mock_utils.py",
-    ]
-
-    TEST_DATA_PATTERNS = [
-        "**/test/data/**",
     ]
 
     TEMPORARY_EXEMPT_PATTERNS = [
@@ -793,39 +872,54 @@ class FileChecker:
         self.filename = filename
         self.path = PurePath(filename)
 
+    @staticmethod
+    def _any_match(path: PurePath, patterns: List[str]) -> bool:
+        """Check if path matches any of the glob patterns."""
+        for pattern in patterns:
+            # Try direct match first
+            if path.match(pattern):
+                return True
+
+            # For ** patterns, check if any parent path matches
+            if "**" in pattern:
+                # Convert pattern like "**/vendored/**" to check if "vendored" is in path parts
+                if pattern.startswith("**/") and pattern.endswith("/**"):
+                    middle = pattern[3:-3]  # Extract "vendored" from "**/vendored/**"
+                    if middle in path.parts:
+                        return True
+
+                # Handle patterns like "**/conftest.py"
+                elif pattern.startswith("**/"):
+                    filename = pattern[
+                        3:
+                    ]  # Extract "conftest.py" from "**/conftest.py"
+                    if path.name == filename:
+                        return True
+                # Handle patterns like "**/*.py"
+                elif pattern.startswith("**/"):
+                    if path.match(pattern[3:]):  # Try matching without the **/
+                        return True
+
+        return False
+
     def is_exempt(self) -> bool:
         """Check if file is exempt from all checks."""
-        # Check exempt patterns
-        for pattern in self.EXEMPT_PATTERNS:
-            if pattern.replace("**/", "").replace("/**", "") in self.path.parts:
-                return True
-            if pattern in str(self.path):
-                return True
+        # Check exempt patterns first
+        if self._any_match(self.path, self.EXEMPT_PATTERNS):
+            return True
 
-        # Check if it's test data (should be scanned)
-        for pattern in self.TEST_DATA_PATTERNS:
-            clean_pattern = pattern.replace("**/", "").replace("/**", "")
-            if clean_pattern in str(self.path):
-                return False  # Don't exempt test data
-
-        # Check test patterns (exempt all other test files)
-        for pattern in self.TEST_PATTERNS:
-            clean_pattern = (
-                pattern.replace("**/", "").replace("/**", "").replace("*", "")
-            )
-            if clean_pattern in self.path.parts:
-                return True
-            if clean_pattern in str(self.path):
-                return True
+        # Check test patterns (exempt test files)
+        if self._any_match(self.path, self.TEST_PATTERNS):
+            return True
 
         return False
 
     def get_temporary_exemption(self) -> Optional[str]:
         """Get JIRA ticket for temporary exemption, if any."""
-        for pattern, ticket in self.TEMPORARY_EXEMPT_PATTERNS:
-            clean_pattern = pattern.replace("**/", "").replace("/**", "")
-            if clean_pattern in str(self.path):
-                return ticket
+        temp_patterns = [pattern for pattern, _ in self.TEMPORARY_EXEMPT_PATTERNS]
+        for i, pattern in enumerate(temp_patterns):
+            if self.path.match(pattern):
+                return self.TEMPORARY_EXEMPT_PATTERNS[i][1]
         return None
 
     def check_file(self) -> Tuple[List[HTTPViolation], List[str]]:
@@ -880,8 +974,13 @@ def main():
             continue
 
         checker = FileChecker(filename)
-        temp_ticket = checker.get_temporary_exemption()
 
+        # Check if file is fully exempt first
+        if checker.is_exempt():
+            continue
+
+        # Then check for temporary exemption
+        temp_ticket = checker.get_temporary_exemption()
         if temp_ticket:
             temp_exempt_files.append((filename, temp_ticket))
         else:

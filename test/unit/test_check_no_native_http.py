@@ -638,6 +638,143 @@ response = requests.get("http://example.com")
                 os.unlink(f.name)
 
 
+class TestAdvancedFeatures:
+    """Test advanced features like string annotations and transitive aliases."""
+
+    def test_string_annotations_pep563(self):
+        """String annotations (PEP 563) should be handled correctly."""
+        code = """
+from __future__ import annotations
+from requests import Session
+from urllib3 import PoolManager
+
+# String annotations - should NOT be flagged
+def func1(session: "Session") -> "Session":
+    pass
+
+def func2(pool: "PoolManager") -> None:
+    pass
+
+def func3(data: "List[Session]") -> "Optional[Session]":
+    pass
+
+# Runtime usage should still be flagged
+def func4():
+    s = Session()
+    return s
+        """
+
+        tree = ast.parse(code)
+        builder = ContextBuilder()
+        builder.visit(tree)
+        analyzer = ViolationAnalyzer("test.py", builder.context)
+        analyzer.analyze_imports()
+        analyzer.analyze_calls(tree)
+
+        # Should only flag the runtime Session() call, not the string annotations
+        violations = analyzer.violations
+        assert len(violations) == 1
+        assert violations[0].violation_type == ViolationType.DIRECT_SESSION_IMPORT
+
+    def test_transitive_alias_resolution(self):
+        """Transitive alias resolution should work (A→B→C)."""
+        code = """
+import requests
+
+# Chain of aliases
+a = requests
+b = a
+c = b
+d = c
+
+# Should all be detected as requests calls
+result1 = a.get("http://example.com")
+result2 = b.post("http://example.com")
+result3 = c.Session()
+result4 = d.request("GET", "http://example.com")
+        """
+
+        tree = ast.parse(code)
+        builder = ContextBuilder()
+        builder.visit(tree)
+        analyzer = ViolationAnalyzer("test.py", builder.context)
+        analyzer.analyze_imports()
+        analyzer.analyze_calls(tree)
+
+        violations = analyzer.violations
+        assert len(violations) == 4
+
+        # All should be detected as requests violations
+        violation_types = [v.violation_type for v in violations]
+        expected_types = [
+            ViolationType.REQUESTS_HTTP_METHOD,  # a.get
+            ViolationType.REQUESTS_HTTP_METHOD,  # b.post
+            ViolationType.REQUESTS_SESSION,  # c.Session
+            ViolationType.REQUESTS_REQUEST,  # d.request
+        ]
+        assert all(vtype in expected_types for vtype in violation_types)
+
+    def test_chained_poolmanager_calls(self):
+        """Enhanced chained PoolManager calls should be detected."""
+        code = """
+import urllib3
+
+# Various chained calls
+result1 = urllib3.PoolManager().request("GET", "http://example.com")
+result2 = urllib3.PoolManager().urlopen("GET", "http://example.com")
+result3 = urllib3.PoolManager().request_encode_body("POST", "http://example.com", fields={})
+        """
+
+        tree = ast.parse(code)
+        builder = ContextBuilder()
+        builder.visit(tree)
+        analyzer = ViolationAnalyzer("test.py", builder.context)
+        analyzer.analyze_imports()
+        analyzer.analyze_calls(tree)
+
+        violations = analyzer.violations
+        assert len(violations) == 3
+
+        # All should be chained urllib3 PoolManager violations
+        for violation in violations:
+            assert violation.violation_type == ViolationType.URLLIB3_POOLMANAGER
+            assert "Chained call" in violation.message
+
+    def test_attribute_aliasing(self):
+        """Attribute aliasing should be detected."""
+        code = """
+import snowflake.connector.vendored.requests as vendored_requests
+import snowflake.connector.vendored.urllib3 as vendored_urllib3
+
+# Attribute aliasing
+v_req = snowflake.connector.vendored.requests
+v_urllib = snowflake.connector.vendored.urllib3
+
+# Should be detected
+result1 = v_req.get("http://example.com")
+result2 = v_urllib.PoolManager()
+result3 = vendored_requests.Session()
+result4 = vendored_urllib3.request("GET", "http://example.com")
+        """
+
+        tree = ast.parse(code)
+        builder = ContextBuilder()
+        builder.visit(tree)
+        analyzer = ViolationAnalyzer("test.py", builder.context)
+        analyzer.analyze_imports()
+        analyzer.analyze_calls(tree)
+
+        violations = analyzer.violations
+        assert len(violations) == 4
+
+        # Check that all aliased calls are detected
+        messages = [v.message for v in violations]
+        assert any("requests.get" in msg for msg in messages)
+        assert any("urllib3.PoolManager" in msg for msg in messages)
+        assert any("requests.Session" in msg for msg in messages)
+        assert any("urllib3.request" in msg for msg in messages)
+
+
 if __name__ == "__main__":
     # Run tests when script is executed directly
     pytest.main([__file__, "-v"])
