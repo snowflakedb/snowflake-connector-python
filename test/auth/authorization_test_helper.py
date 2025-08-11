@@ -154,6 +154,25 @@ class AuthorizationTestHelper:
             self.error_msg = e
             raise RuntimeError(e)
 
+    def get_totp(self, seed: str = "") -> []:
+        if self.auth_test_env == "docker":
+            try:
+                provide_totp_generator_path = "/externalbrowser/totpGenerator.js"
+                process = subprocess.run(
+                    ["node", provide_totp_generator_path, seed],
+                    timeout=40,
+                    capture_output=True,
+                    text=True,
+                )
+                logger.debug(f"OUTPUT:  {process.stdout}, ERRORS: {process.stderr}")
+                return process.stdout.strip().split()
+            except Exception as e:
+                self.error_msg = e
+                raise RuntimeError(e)
+        else:
+            logger.info("TOTP generation is not supported in this environment")
+            return ""
+
     def connect_using_okta_connection_and_execute_custom_command(
         self, command: str, return_token: bool = False
     ) -> Union[bool, str]:
