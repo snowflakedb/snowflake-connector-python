@@ -6,6 +6,8 @@ from datetime import timedelta
 import numpy
 import pytest
 
+from snowflake.connector import constants
+
 pytestmark = pytest.mark.skipolddriver  # old test driver tests won't run this module
 
 
@@ -30,14 +32,17 @@ def test_select_year_month_interval(conn_cnx, use_numpy, result_format):
         cursor.execute("alter session set feature_interval_types=enabled")
         cursor.execute(f"create or replace table {table} (c1 interval year to month)")
         cursor.execute(f"insert into {table} values {values}")
-        result = conn.cursor().execute(f"select * from {table}").fetchall()
+        result = cursor.execute(f"select * from {table}").fetchall()
+        # Validate column metadata.
+        type_code = cursor._description[0].type_code
+        assert (
+            constants.FIELD_ID_TO_NAME[type_code] == "INTERVAL_YEAR_MONTH"
+        ), f"invalid column type: {type_code}"
+        # Validate column values.
         result = [r[0] for r in result]
         assert result == expected
 
 
-@pytest.mark.skip(
-    reason="SNOW-1878635: Add support for day-time interval in ArrowStreamWriter"
-)
 @pytest.mark.parametrize("use_numpy", [True, False])
 @pytest.mark.parametrize("result_format", ["json", "arrow"])
 def test_select_day_time_interval(conn_cnx, use_numpy, result_format):
@@ -71,6 +76,12 @@ def test_select_day_time_interval(conn_cnx, use_numpy, result_format):
             f"create or replace table {table} (c1 interval day(5) to second)"
         )
         cursor.execute(f"insert into {table} values {values}")
-        result = conn.cursor().execute(f"select * from {table}").fetchall()
+        result = cursor.execute(f"select * from {table}").fetchall()
+        # Validate column metadata.
+        type_code = cursor._description[0].type_code
+        assert (
+            constants.FIELD_ID_TO_NAME[type_code] == "INTERVAL_DAY_TIME"
+        ), f"invalid column type: {type_code}"
+        # Validate column values.
         result = [r[0] for r in result]
         assert result == expected
