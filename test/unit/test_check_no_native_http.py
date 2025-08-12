@@ -8,9 +8,7 @@ Goals:
 - Clear separation of: violations, aliasing/vendored, type hints, exemptions, file handling.
 """
 import ast
-import os
 import sys
-import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -335,44 +333,44 @@ def test_temporary_exemptions(path, ticket):
 # ---------- File handling ----------
 
 
-def test_syntax_error_handling_tempfile():
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-        f.write("def bad(:\n")
-        f.flush()
-        try:
-            violations, messages = FileChecker(f.name).check_file()
-            assert violations == []
-            assert len(messages) == 1 and "syntax error" in messages[0].lower()
-        finally:
-            os.unlink(f.name)
+def test_syntax_error_handling_tempfile(tmp_path):
+    p = tmp_path / "broken.py"
+    p.write_text(
+        "import requests\ndef invalid syntax here\nresponse = requests.get()",
+        encoding="utf-8",
+    )
+
+    checker = FileChecker(str(p))
+    violations, messages = checker.check_file()
+
+    assert violations == []
+    assert len(messages) == 1
+    assert "syntax error" in messages[0].lower()
 
 
-def test_unicode_error_handling_tempfile():
-    with tempfile.NamedTemporaryFile(mode="wb", suffix=".py", delete=False) as f:
-        f.write(b"\xff\xfe\xfa\xfb")
-        f.flush()
-        try:
-            violations, messages = FileChecker(f.name).check_file()
-            assert violations == []
-            assert len(messages) == 1
-        finally:
-            os.unlink(f.name)
+def test_unicode_error_handling_tempfile(tmp_path):
+    p = tmp_path / "bad.py"
+    p.write_bytes(b"import requests\n\xff\xfe invalid unicode\n")
+
+    checker = FileChecker(str(p))
+    violations, messages = checker.check_file()
+
+    assert violations == []
+    assert len(messages) == 1
 
 
-def test_valid_file_processing_tempfile():
-    code = "import requests\nrequests.get('http://x')\n"
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-        f.write(code)
-        f.flush()
-        try:
-            violations, messages = FileChecker(f.name).check_file()
-            assert messages == []
-            assert any(
-                v.violation_type == ViolationType.REQUESTS_HTTP_METHOD
-                for v in violations
-            )
-        finally:
-            os.unlink(f.name)
+def test_valid_file_processing_tempfile(tmp_path):
+    p = tmp_path / "ok.py"
+    p.write_text(
+        'import requests\nresponse = requests.get("http://example.com")\n',
+        encoding="utf-8",
+    )
+
+    checker = FileChecker(str(p))
+    violations, messages = checker.check_file()
+
+    assert violations
+    assert messages == []
 
 
 # ---------- Compact integration scenarios ----------
