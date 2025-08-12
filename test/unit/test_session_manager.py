@@ -143,7 +143,7 @@ def test_clone_independence():
         pass
     assert HOST_SFC_TEST_0 in manager.sessions_map
 
-    clone = manager.shallow_clone()
+    clone = manager.clone()
 
     assert clone is not manager
     assert clone.adapter_factory is manager.adapter_factory
@@ -168,8 +168,8 @@ def test_mount_adapters_and_pool_manager():
     assert pool_manager is not None
 
 
-def test_shallow_clone_independent_pools():
-    """A shallow_clone must *not* share its SessionPool objects with the original."""
+def test_clone_independent_pools():
+    """A clone must *not* share its SessionPool objects with the original."""
     from snowflake.connector.session_manager import (
         HttpConfig,
         ProxySupportAdapterFactory,
@@ -185,7 +185,7 @@ def test_shallow_clone_independent_pools():
         pass
     assert "example.com" in base.sessions_map
 
-    clone = base.shallow_clone()
+    clone = base.clone()
     # No pools yet in the clone
     assert clone.sessions_map == {}
 
