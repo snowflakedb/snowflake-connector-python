@@ -370,7 +370,7 @@ def test_explicit_azure_uses_explicit_entra_resource(fake_azure_metadata_service
 
 def test_explicit_azure_omits_client_id_if_not_set(fake_azure_metadata_service):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    auth_class.prepare()
+    auth_class.prepare(conn=None)
     assert fake_azure_metadata_service.requested_client_id is None
 
 
