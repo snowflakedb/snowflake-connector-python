@@ -19,7 +19,6 @@ def ingest_data(request, conn_cnx, db_parameters):
     with conn_cnx(
         user=db_parameters["user"],
         account=db_parameters["account"],
-        password=db_parameters["password"],
     ) as cnx:
         cnx.cursor().execute(
             """
@@ -79,7 +78,6 @@ def ingest_data(request, conn_cnx, db_parameters):
         with conn_cnx(
             user=db_parameters["user"],
             account=db_parameters["account"],
-            password=db_parameters["password"],
         ) as cnx:
             cnx.cursor().execute(
                 "drop table if exists {name}".format(name=db_parameters["name"])
@@ -98,7 +96,6 @@ def test_query_large_result_set_n_threads(
     with conn_cnx(
         user=db_parameters["user"],
         account=db_parameters["account"],
-        password=db_parameters["password"],
         client_prefetch_threads=num_threads,
     ) as cnx:
         assert cnx.client_prefetch_threads == num_threads
