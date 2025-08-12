@@ -51,7 +51,6 @@ async def test_valid_pat_async(wiremock_client: WiremockClient) -> None:
     )
 
     connection = SnowflakeConnection(
-        user="testUser",
         authenticator=PROGRAMMATIC_ACCESS_TOKEN,
         token="some PAT",
         account="testAccount",
@@ -77,7 +76,6 @@ async def test_invalid_pat_async(wiremock_client: WiremockClient) -> None:
 
     with pytest.raises(snowflake.connector.errors.DatabaseError) as execinfo:
         connection = SnowflakeConnection(
-            user="testUser",
             authenticator=PROGRAMMATIC_ACCESS_TOKEN,
             token="some PAT",
             account="testAccount",

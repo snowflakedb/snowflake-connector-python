@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
-from unittest.mock import Mock
+import logging
 
 import pytest
 
+from snowflake.connector.secret_detector import SecretDetector
 from snowflake.connector.telemetry import TelemetryField
 
 NUMBER_OF_ROWS = 50000
@@ -18,7 +19,9 @@ PREFETCH_THREADS = [8, 3, 1]
 
 @pytest.fixture()
 async def ingest_data(request, conn_cnx, db_parameters):
-    async with conn_cnx() as cnx:
+    async with conn_cnx(
+        session_parameters={"python_connector_query_result_format": "json"},
+    ) as cnx:
         await cnx.cursor().execute(
             """
     create or replace table {name} (
@@ -89,7 +92,12 @@ async def test_query_large_result_set_n_threads(
     conn_cnx, db_parameters, ingest_data, num_threads
 ):
     sql = "select * from {name} order by 1".format(name=db_parameters["name"])
-    async with conn_cnx(client_prefetch_threads=num_threads) as cnx:
+    async with conn_cnx(
+        client_prefetch_threads=num_threads,
+        session_parameters={
+            "python_connector_query_result_format": "json",
+        },
+    ) as cnx:
         assert cnx.client_prefetch_threads == num_threads
         results = []
         async for rec in await cnx.cursor().execute(sql):
@@ -102,13 +110,26 @@ async def test_query_large_result_set_n_threads(
 
 @pytest.mark.aws
 @pytest.mark.skipolddriver
-async def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
+async def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, caplog):
     """[s3] Gets Large Result set."""
+    caplog.set_level(logging.DEBUG)
+    caplog.set_level(logging.DEBUG, logger="snowflake.connector.vendored.urllib3")
+    caplog.set_level(
+        logging.DEBUG, logger="snowflake.connector.vendored.urllib3.connectionpool"
+    )
+    caplog.set_level(logging.DEBUG, logger="aiohttp")
+    caplog.set_level(logging.DEBUG, logger="aiohttp.client")
     sql = "select * from {name} order by 1".format(name=db_parameters["name"])
-    async with conn_cnx() as cnx:
+    async with conn_cnx(
+        session_parameters={
+            "python_connector_query_result_format": "json",
+        }
+    ) as cnx:
         telemetry_data = []
-        add_log_mock = Mock()
-        add_log_mock.side_effect = lambda datum: telemetry_data.append(datum)
+
+        async def add_log_mock(datum):
+            telemetry_data.append(datum)
+
         cnx._telemetry.add_log_to_batch = add_log_mock
 
         result2 = []
@@ -152,3 +173,20 @@ async def test_query_large_result_set(conn_cnx, db_parameters, ingest_data):
                 "Expected three telemetry logs (one per query) "
                 "for log type {}".format(field.value)
             )
+
+        aws_request_present = False
+        expected_token_prefix = "X-Amz-Signature="
+        for line in caplog.text.splitlines():
+            if expected_token_prefix in line:
+                aws_request_present = True
+                # getattr is used to stay compatible with old driver - before SECRET_STARRED_MASK_STR was added
+                assert (
+                    expected_token_prefix
+                    + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
+                    in line
+                ), "connectionpool logger is leaking sensitive information"
+
+        # If no AWS request appeared in logs, we cannot assert masking here.
+        assert (
+            aws_request_present
+        ), "AWS URL was not found in logs, so it can't be assumed that no leaks happened in it"
