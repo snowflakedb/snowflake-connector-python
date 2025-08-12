@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import glob
 import gzip
+import logging
 import os
 
 import pytest
 from aiohttp import ClientResponseError
 
 from snowflake.connector.constants import UTF8
+from snowflake.connector.file_transfer_agent import SnowflakeS3ProgressPercentage
+from snowflake.connector.secret_detector import SecretDetector
 
 try:  # pragma: no cover
     from snowflake.connector.aio._file_transfer_agent import SnowflakeFileMeta
@@ -38,9 +41,10 @@ pytestmark = [pytest.mark.asyncio, pytest.mark.aws]
 @pytest.mark.parametrize(
     "from_path", [True, pytest.param(False, marks=pytest.mark.skipolddriver)]
 )
-async def test_put_get_with_aws(tmpdir, aio_connection, from_path):
+async def test_put_get_with_aws(tmpdir, aio_connection, from_path, caplog):
     """[s3] Puts and Gets a small text using AWS S3."""
     # create a data file
+    caplog.set_level(logging.DEBUG)
     fname = str(tmpdir.join("test_put_get_with_aws_token.txt.gz"))
     original_contents = "123,test1\n456,test2\n"
     with gzip.open(fname, "wb") as f:
@@ -60,6 +64,8 @@ async def test_put_get_with_aws(tmpdir, aio_connection, from_path):
             f"%{table_name}",
             from_path,
             sql_options=" auto_compress=true parallel=30",
+            _put_callback=SnowflakeS3ProgressPercentage,
+            _get_callback=SnowflakeS3ProgressPercentage,
             file_stream=file_stream,
         )
         rec = await csr.fetchone()
@@ -71,21 +77,43 @@ async def test_put_get_with_aws(tmpdir, aio_connection, from_path):
             f"copy into @%{table_name} from {table_name} "
             "file_format=(type=csv compression='gzip')"
         )
-        await csr.execute(f"get @%{table_name} file://{tmp_dir}")
+        await csr.execute(
+            f"get @%{table_name} file://{tmp_dir}",
+            _put_callback=SnowflakeS3ProgressPercentage,
+            _get_callback=SnowflakeS3ProgressPercentage,
+        )
         rec = await csr.fetchone()
         assert rec[0].startswith("data_"), "A file downloaded by GET"
         assert rec[1] == 36, "Return right file size"
         assert rec[2] == "DOWNLOADED", "Return DOWNLOADED status"
         assert rec[3] == "", "Return no error message"
     finally:
-        await csr.execute(f"drop table {table_name}")
+        await csr.execute(f"drop table if exists {table_name}")
         if file_stream:
             file_stream.close()
+        await aio_connection.close()
 
     files = glob.glob(os.path.join(tmp_dir, "data_*"))
     with gzip.open(files[0], "rb") as fd:
         contents = fd.read().decode(UTF8)
     assert original_contents == contents, "Output is different from the original file"
+
+    aws_request_present = False
+    expected_token_prefix = "X-Amz-Signature="
+    for line in caplog.text.splitlines():
+        if ".amazonaws." in line:
+            aws_request_present = True
+            # getattr is used to stay compatible with old driver - before SECRET_STARRED_MASK_STR was added
+            assert (
+                expected_token_prefix
+                + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
+                in line
+                or expected_token_prefix not in line
+            ), "connectionpool logger is leaking sensitive information"
+
+    assert (
+        aws_request_present
+    ), "AWS URL was not found in logs, so it can't be assumed that no leaks happened in it"
 
 
 @pytest.mark.skipolddriver
@@ -141,3 +169,4 @@ async def test_put_with_invalid_token(tmpdir, aio_connection):
             await client.upload_chunk(0)
     finally:
         await csr.execute(f"drop table if exists {table_name}")
+        await aio_connection.close()
