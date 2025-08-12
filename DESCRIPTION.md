@@ -7,7 +7,7 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.16.1(TBD)
+- v3.17 (TBD)
   - Added new authentication methods support for Workload Identity Federation (WIF).
     - Added the `WORKLOAD_IDENTITY` value for authenticator type.
     - Added the `workload_identity_provider` and `workload_identity_entra_resource` parameters.
@@ -23,6 +23,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Moved `OAUTH_TYPE` to `CLIENT_ENVIROMENT`.
   - Fix bug where PAT with external session authenticator was used while `external_session_id` was not provided in `SnowflakeRestful.fetch`
   - Added support for parameter `use_vectorized_scanner` in function `write_pandas`.
+  - Relaxed `pyarrow` version constraint, versions >= 19 can be used.
 
 - v3.16.0(July 04,2025)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4.
