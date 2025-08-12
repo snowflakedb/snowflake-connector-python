@@ -640,17 +640,6 @@ def test_cannot_set_dependent_params_without_wlid_authenticator(
     )
 
 
-def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
-    with pytest.raises(ProgrammingError) as excinfo:
-        snowflake.connector.connect(
-            account="account", authenticator="WORKLOAD_IDENTITY"
-        )
-    assert (
-        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable true to use the 'WORKLOAD_IDENTITY' authenticator"
-        in str(excinfo.value)
-    )
-
-
 @pytest.mark.parametrize(
     "provider_param",
     [
@@ -666,7 +655,6 @@ def test_workload_identity_provider_is_required_for_wif_authenticator(
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         with pytest.raises(ProgrammingError) as excinfo:
             snowflake.connector.connect(
@@ -702,7 +690,6 @@ def test_connection_params_are_plumbed_into_authbyworkloadidentity(
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = snowflake.connector.connect(
             account="my_account_1",
@@ -744,7 +731,6 @@ def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = snowflake.connector.connect(connections_file_path=connections_file)
         assert conn.auth_class.provider == AttestationProvider.OIDC
@@ -763,7 +749,6 @@ def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = snowflake.connector.connect(
             account="my_account_1",
