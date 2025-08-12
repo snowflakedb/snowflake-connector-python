@@ -119,6 +119,18 @@ class HttpConfig:
 
 
 class SessionPool:
+    """
+    Component responsible for storing and reusing established instances of requests.Session class.
+
+    This approach is especially useful in scenarios where multiple requests would have to be sent
+    to the same host in short period of time. Instead of repeatedly establishing a new TCP connection
+    for each request, one can get a new Session instance only when there was no connection to the
+    current host yet, or the workload is so high that all established sessions are already occupied.
+
+    Sessions are created using the factory method make_session of a passed instance of the
+    SessionManager class.
+    """
+
     def __init__(self, manager: SessionManager) -> None:
         # A stack of the idle sessions
         self._idle_sessions = []
@@ -272,6 +284,28 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
 
 
 class SessionManager(_RequestVerbsUsingSessionMixin):
+    """
+    Central HTTP session manager that handles all external requests from the Snowflake driver.
+
+    **Purpose**: Replaces scattered HTTP methods (requests.request/post/get, PoolManager().request_encode,
+    urllib3.HttpConnection().urlopen) with centralized configuration and optional connection pooling.
+
+    **Two Operating Modes**:
+    - use_pooling=False: One-shot sessions (create, use, close) - suitable for infrequent requests
+    - use_pooling=True: Per-hostname session pools - reuses TCP connections, avoiding handshake
+      and SSL/TLS negotiation overhead for repeated requests to the same host
+
+    **Key Benefits**:
+    - Centralized HTTP configuration management and easy propagation across the codebase
+    - Consistent proxy setup (SNOW-694457) and headers customization (SNOW-2043816)
+    - HTTPAdapter customization for connection-level request manipulation
+    - Performance optimization through connection reuse for high-traffic scenarios
+
+    **Usage**: Create the base session manager, then use clone() for derived managers to ensure
+    proper config propagation. Pre-commit checks enforce usage to prevent code drift back to
+    direct HTTP library calls.
+    """
+
     def __init__(self, config: HttpConfig | None = None, **http_config_kwargs) -> None:
         """
         Create a new SessionManager.
