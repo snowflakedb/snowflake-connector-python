@@ -793,7 +793,11 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         except ReauthenticationRequest as ex:
             # cached id_token expiration error, we have cleaned id_token and try to authenticate again
             logger.debug("ID token expired. Reauthenticating...: %s", ex)
-            if isinstance(auth_instance, AuthByIdToken):
+            if type(auth_instance) in (
+                AuthByIdToken,
+                AuthByOauthCode,
+                AuthByOauthCredentials,
+            ):
                 # Note: SNOW-733835 IDToken auth needs to authenticate through
                 #  SSO if it has expired
                 await self._reauthenticate()

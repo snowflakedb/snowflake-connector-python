@@ -30,6 +30,7 @@ from ...network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
+    OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
@@ -272,7 +273,7 @@ class Auth(AuthSync):
                 # clear stored id_token if failed to connect because of id_token
                 # raise an exception for reauth without id_token
                 self._rest.id_token = None
-                self.delete_temporary_credential(
+                self._delete_temporary_credential(
                     self._rest._host, user, TokenType.ID_TOKEN
                 )
                 raise ReauthenticationRequest(
@@ -282,6 +283,15 @@ class Auth(AuthSync):
                         sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     )
                 )
+            elif errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE:
+                raise ReauthenticationRequest(
+                    ProgrammingError(
+                        msg=ret["message"],
+                        errno=int(errno),
+                        sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                    )
+                )
+
             from . import AuthByKeyPair
 
             if isinstance(auth_instance, AuthByKeyPair):
@@ -295,7 +305,7 @@ class Auth(AuthSync):
             from . import AuthByUsrPwdMfa
 
             if isinstance(auth_instance, AuthByUsrPwdMfa):
-                self.delete_temporary_credential(
+                self._delete_temporary_credential(
                     self._rest._host, user, TokenType.MFA_TOKEN
                 )
             Error.errorhandler_wrapper(
