@@ -389,6 +389,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
         int,  # type
     ),  # snowflake internal
+    "reraise_error_in_file_transfer_work_function": (
+        False,
+        bool,
+    ),
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")

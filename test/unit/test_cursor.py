@@ -24,6 +24,7 @@ class FakeConnection(SnowflakeConnection):
     def __init__(self):
         self._log_max_query_length = 0
         self._reuse_results = None
+        self._reraise_error_in_file_transfer_work_function = False
 
 
 @pytest.mark.parametrize(
