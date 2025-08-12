@@ -8,6 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v3.16.1(TBD)
+  - Added new authentication methods support for Workload Identity Federation (WIF).
+    - Added the `WORKLOAD_IDENTITY` value for authenticator type.
+    - Added the `workload_identity_provider` and `workload_identity_entra_resource` parameters.
   - Added in-band OCSP exception telemetry.
   - Added `APPLICATION_PATH` within `CLIENT_ENVIRONMENT` to distinguish between multiple scripts using the PythonConnector in the same environment.
   - Disabled token caching for OAuth Client Credentials authentication
