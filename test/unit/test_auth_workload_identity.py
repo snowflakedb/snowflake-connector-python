@@ -285,8 +285,11 @@ def test_explicit_gcp_metadata_server_error_bubbles_up(exception):
     with mock.patch(
         "snowflake.connector.vendored.requests.request", side_effect=exception
     ):
-        with pytest.raises(type(exception)):
+        with pytest.raises(ProgrammingError) as excinfo:
             auth_class.prepare()
+
+    assert "Error fetching GCP metadata:" in str(excinfo.value)
+    assert "Ensure the application is running on GCP." in str(excinfo.value)
 
 
 def test_explicit_gcp_plumbs_token_to_api(
@@ -329,8 +332,10 @@ def test_explicit_azure_metadata_server_error_bubbles_up(exception):
     with mock.patch(
         "snowflake.connector.vendored.requests.request", side_effect=exception
     ):
-        with pytest.raises(type(exception)):
+        with pytest.raises(ProgrammingError) as excinfo:
             auth_class.prepare()
+    assert "Error fetching Azure metadata:" in str(excinfo.value)
+    assert "Ensure the application is running on Azure." in str(excinfo.value)
 
 
 @pytest.mark.parametrize(

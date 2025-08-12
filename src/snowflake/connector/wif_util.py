@@ -185,14 +185,20 @@ def create_gcp_attestation() -> WorkloadIdentityAttestation:
 
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
-    res = requests.request(
-        method="GET",
-        url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
-        headers={
-            "Metadata-Flavor": "Google",
-        },
-    )
-    res.raise_for_status()
+    try:
+        res = requests.request(
+            method="GET",
+            url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
+            headers={
+                "Metadata-Flavor": "Google",
+            },
+        )
+        res.raise_for_status()
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
 
     jwt_str = res.content.decode("utf-8")
     _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
@@ -235,12 +241,18 @@ def create_azure_attestation(
     if managed_identity_client_id:
         query_params += f"&client_id={managed_identity_client_id}"
 
-    res = requests.request(
-        method="GET",
-        url=f"{url_without_query_string}?{query_params}",
-        headers=headers,
-    )
-    res.raise_for_status()
+    try:
+        res = requests.request(
+            method="GET",
+            url=f"{url_without_query_string}?{query_params}",
+            headers=headers,
+        )
+        res.raise_for_status()
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Error fetching Azure metadata: {e}. Ensure the application is running on Azure.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
 
     jwt_str = res.json().get("access_token")
     if not jwt_str:
