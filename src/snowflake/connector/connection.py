@@ -942,7 +942,7 @@ class SnowflakeConnection:
                 proxy_port=self.proxy_port,
                 proxy_user=self.proxy_user,
                 proxy_password=self.proxy_password,
-                session_manager=self._session_manager.shallow_clone(use_pooling=False),
+                session_manager=self._session_manager.clone(use_pooling=False),
             )
             try:
                 connection_diag.run_test()

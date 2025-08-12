@@ -412,7 +412,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
         for pool in self._sessions_map.values():
             pool.close()
 
-    def shallow_clone(
+    def clone(
         self,
         *,
         use_pooling: bool | None = None,

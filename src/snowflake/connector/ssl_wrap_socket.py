@@ -62,7 +62,7 @@ def get_current_session_manager(
     if context_session_manager is None:
         return SessionManager() if create_default_if_missing else None
 
-    return context_session_manager.shallow_clone(**clone_kwargs)
+    return context_session_manager.clone(**clone_kwargs)
 
 
 def set_current_session_manager(sm: SessionManager | None) -> Any:
