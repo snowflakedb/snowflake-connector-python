@@ -1456,8 +1456,7 @@ class SnowflakeConnection:
         # type to be the same as the custom auth class
         if self._auth_class:
             self._authenticator = self._auth_class.type_.value
-
-        if self._authenticator:
+        elif self._authenticator:
             # Validate authenticator and convert it to uppercase if it is a non-okta link
             auth_tmp = self._authenticator.upper()
             if auth_tmp in [
