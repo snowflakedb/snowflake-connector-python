@@ -802,7 +802,11 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 #  SSO if it has expired
                 await self._reauthenticate()
             else:
-                await self._authenticate(auth_instance)
+                # TODO pczajka: check if this is correct
+                # For OAuth and other auth types, call their reauthenticate method
+                await auth_instance.reauthenticate(conn=self)
+                # The reauthenticate method will call authenticate_with_retry internally,
+                # so we don't need to call _authenticate again here
 
     async def autocommit(self, mode) -> None:
         """Sets autocommit mode to True, or False. Defaults to True."""

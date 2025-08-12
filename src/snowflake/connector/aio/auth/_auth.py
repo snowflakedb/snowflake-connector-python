@@ -30,6 +30,7 @@ from ...network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
     CONTENT_TYPE_APPLICATION_JSON,
     ID_TOKEN_INVALID_LOGIN_REQUEST_GS_CODE,
+    OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
@@ -282,6 +283,15 @@ class Auth(AuthSync):
                         sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     )
                 )
+            elif errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE:
+                raise ReauthenticationRequest(
+                    ProgrammingError(
+                        msg=ret["message"],
+                        errno=int(errno),
+                        sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
+                    )
+                )
+
             from . import AuthByKeyPair
 
             if isinstance(auth_instance, AuthByKeyPair):
