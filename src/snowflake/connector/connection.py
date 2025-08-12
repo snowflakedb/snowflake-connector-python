@@ -1201,6 +1201,7 @@ class SnowflakeConnection:
                     raise TypeError("auth_class must be a child class of AuthByKeyPair")
                     # TODO: add telemetry for custom auth
                 self.auth_class = self.auth_class
+            # match authentivator - validation happens in __config
             elif self._authenticator == DEFAULT_AUTHENTICATOR:
                 self.auth_class = AuthByDefault(
                     password=self._password,
@@ -1457,18 +1458,29 @@ class SnowflakeConnection:
             self._authenticator = self._auth_class.type_.value
 
         if self._authenticator:
-            # Only upper self._authenticator if it is a non-okta link
+            # Validate authenticator and convert it to uppercase if it is a non-okta link
             auth_tmp = self._authenticator.upper()
-            if auth_tmp in [  # Non-okta authenticators
+            if auth_tmp in [
                 DEFAULT_AUTHENTICATOR,
                 EXTERNAL_BROWSER_AUTHENTICATOR,
                 KEY_PAIR_AUTHENTICATOR,
                 OAUTH_AUTHENTICATOR,
+                OAUTH_AUTHORIZATION_CODE,
+                OAUTH_CLIENT_CREDENTIALS,
                 USR_PWD_MFA_AUTHENTICATOR,
                 WORKLOAD_IDENTITY_AUTHENTICATOR,
+                PROGRAMMATIC_ACCESS_TOKEN,
                 PAT_WITH_EXTERNAL_SESSION,
             ]:
                 self._authenticator = auth_tmp
+            elif auth_tmp.startswith("HTTPS://"):
+                # okta authenticator link
+                pass
+            else:
+                raise ProgrammingError(
+                    msg=f"Unknown authenticator: {self._authenticator}",
+                    errno=ER_INVALID_VALUE,
+                )
 
         # read OAuth token from
         token_file_path = kwargs.get("token_file_path")

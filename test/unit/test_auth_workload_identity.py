@@ -54,6 +54,69 @@ def verify_aws_token(token: str, region: str):
     assert headers["X-Snowflake-Audience"] == "snowflakecomputing.com"
 
 
+@mock.patch("snowflake.connector.network.SnowflakeRestful._post_request")
+def test_wif_authenticator_with_no_provider_raises_error(mock_post_request):
+    from snowflake.connector import connect
+
+    with pytest.raises(ProgrammingError) as excinfo:
+        connect(
+            account="account",
+            authenticator="WORKLOAD_IDENTITY",
+        )
+    assert (
+        "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY."
+        in str(excinfo.value)
+    )
+    # Ensure no network requests were made
+    mock_post_request.assert_not_called()
+
+
+@mock.patch("snowflake.connector.network.SnowflakeRestful._post_request")
+def test_wif_authenticator_with_invalid_provider_raises_error(mock_post_request):
+    from snowflake.connector import connect
+
+    with pytest.raises(ProgrammingError) as excinfo:
+        connect(
+            account="account",
+            authenticator="WORKLOAD_IDENTITY",
+            workload_identity_provider="INVALID",
+        )
+    assert (
+        "Unknown workload_identity_provider: 'INVALID'. Expected one of: AWS, AZURE, GCP, OIDC"
+        in str(excinfo.value)
+    )
+    # Ensure no network requests were made
+    mock_post_request.assert_not_called()
+
+
+@mock.patch("snowflake.connector.network.SnowflakeRestful._post_request")
+@pytest.mark.parametrize("authenticator", ["WORKLOAD_IDENTITY", "workload_identity"])
+def test_wif_authenticator_is_case_insensitive(
+    mock_post_request, fake_aws_environment, authenticator
+):
+    """Test that connect() with workload_identity authenticator creates AuthByWorkloadIdentity instance."""
+    from snowflake.connector import connect
+
+    # Mock the post request to prevent actual authentication attempt
+    mock_post_request.return_value = {
+        "success": True,
+        "data": {
+            "token": "fake-token",
+            "masterToken": "fake-master-token",
+            "sessionId": "fake-session-id",
+        },
+    }
+
+    connection = connect(
+        account="testaccount",
+        authenticator=authenticator,
+        workload_identity_provider="AWS",
+    )
+
+    # Verify that the auth instance is of the correct type
+    assert isinstance(connection.auth_class, AuthByWorkloadIdentity)
+
+
 # -- OIDC Tests --
 
 
@@ -88,8 +151,9 @@ def test_explicit_oidc_invalid_inline_token_raises_error():
     auth_class = AuthByWorkloadIdentity(
         provider=AttestationProvider.OIDC, token=invalid_token
     )
-    with pytest.raises(jwt.exceptions.DecodeError):
+    with pytest.raises(ProgrammingError) as excinfo:
         auth_class.prepare()
+    assert "Invalid JWT token: " in str(excinfo.value)
 
 
 def test_explicit_oidc_no_token_raises_error():
