@@ -188,3 +188,27 @@ class AuthorizationTestHelper:
         if return_token:
             return token
         return False
+
+    def connect_and_execute_simple_query_with_mfa_token(self, totp_codes):
+        # Try each TOTP code until one works
+        for i, totp_code in enumerate(totp_codes):
+            logging.info(f"Trying TOTP code {i + 1}/{len(totp_codes)}")
+
+            self.configuration["passcode"] = totp_code
+            self.error_msg = ""
+
+            connection_success = self.connect_and_execute_simple_query()
+
+            if connection_success:
+                logging.info(f"Successfully connected with TOTP code {i + 1}")
+                return True
+            else:
+                last_error = str(self.error_msg)
+                logging.warning(f"TOTP code {i + 1} failed: {last_error}")
+                if "TOTP Invalid" in last_error:
+                    logging.info("TOTP/MFA error detected.")
+                    continue
+                else:
+                    logging.error(f"Non-TOTP error detected: {last_error}")
+                    break
+        return False
