@@ -15,11 +15,7 @@ from snowflake.connector.vendored.requests.exceptions import (
     HTTPError,
     Timeout,
 )
-from snowflake.connector.wif_util import (
-    AttestationProvider,
-    get_aws_partition,
-    get_aws_sts_hostname,
-)
+from snowflake.connector.wif_util import AttestationProvider, get_aws_sts_hostname
 
 from ..csp_helpers import FakeAwsEnvironment, FakeGceMetadataService, gen_dummy_id_token
 
@@ -129,8 +125,19 @@ def test_explicit_aws_encodes_audience_host_signature_to_api(
     verify_aws_token(data["TOKEN"], fake_aws_environment.region)
 
 
-def test_explicit_aws_uses_regional_hostname(fake_aws_environment: FakeAwsEnvironment):
-    fake_aws_environment.region = "antarctica-northeast-3"
+@pytest.mark.parametrize(
+    "region,expected_hostname",
+    [
+        ("us-east-1", "sts.us-east-1.amazonaws.com"),
+        ("af-south-1", "sts.af-south-1.amazonaws.com"),
+        ("us-gov-west-1", "sts.us-gov-west-1.amazonaws.com"),
+        ("cn-north-1", "sts.cn-north-1.amazonaws.com.cn"),
+    ],
+)
+def test_explicit_aws_uses_regional_hostnames(
+    fake_aws_environment: FakeAwsEnvironment, region: str, expected_hostname: str
+):
+    fake_aws_environment.region = region
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     auth_class.prepare(conn=None)
@@ -140,7 +147,6 @@ def test_explicit_aws_uses_regional_hostname(fake_aws_environment: FakeAwsEnviro
     hostname_from_url = urlparse(decoded_token["url"]).hostname
     hostname_from_header = decoded_token["headers"]["Host"]
 
-    expected_hostname = "sts.antarctica-northeast-3.amazonaws.com"
     assert expected_hostname == hostname_from_url
     assert expected_hostname == hostname_from_header
 
@@ -148,49 +154,14 @@ def test_explicit_aws_uses_regional_hostname(fake_aws_environment: FakeAwsEnviro
 def test_explicit_aws_generates_unique_assertion_content(
     fake_aws_environment: FakeAwsEnvironment,
 ):
-    fake_aws_environment.arn = (
-        "arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"
-    )
+    fake_aws_environment.region = "us-east-1"
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     auth_class.prepare(conn=None)
 
     assert (
-        '{"_provider":"AWS","arn":"arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"}'
+        '{"_provider":"AWS","partition":"aws","region":"us-east-1"}'
         == auth_class.assertion_content
     )
-
-
-@pytest.mark.parametrize(
-    "arn, expected_partition",
-    [
-        ("arn:aws:iam::123456789012:role/MyTestRole", "aws"),
-        (
-            "arn:aws-cn:ec2:cn-north-1:987654321098:instance/i-1234567890abcdef0",
-            "aws-cn",
-        ),
-        ("arn:aws-us-gov:s3:::my-gov-bucket", "aws-us-gov"),
-        ("arn:aws:s3:::my-bucket/my/key", "aws"),
-        ("arn:aws:lambda:us-east-1:123456789012:function:my-function", "aws"),
-        ("arn:aws:sns:eu-west-1:111122223333:my-topic", "aws"),
-        ("arn:aws:iam:", "aws"),  # Incomplete ARN, but partition is present
-    ],
-)
-def test_get_aws_partition_valid_arns(arn, expected_partition):
-    assert get_aws_partition(arn) == expected_partition
-
-
-@pytest.mark.parametrize(
-    "arn",
-    [
-        "invalid-arn",
-        "arn::service:region:account:resource",  # Missing partition
-        "",  # Empty string
-    ],
-)
-def test_get_aws_partition_invalid_arns(arn):
-    with pytest.raises(ProgrammingError) as excinfo:
-        get_aws_partition(arn)
-    assert "Invalid AWS ARN" in str(excinfo.value)
 
 
 @pytest.mark.parametrize(

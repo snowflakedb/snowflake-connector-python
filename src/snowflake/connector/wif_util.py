@@ -93,42 +93,6 @@ def get_aws_region() -> str:
     return region
 
 
-def get_aws_arn() -> str:
-    """Get the current AWS workload's ARN."""
-    # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
-    caller_identity = boto3.client("sts").get_caller_identity()
-    if not caller_identity or "Arn" not in caller_identity:
-        raise ProgrammingError(
-            msg="No AWS identity was found. Ensure the application is running on AWS with an IAM role attached.",
-            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-        )
-    return caller_identity["Arn"]
-
-
-def get_aws_partition(arn: str) -> str:
-    """Get the current AWS partition from ARN.
-
-    Args:
-        arn (str): The Amazon Resource Name (ARN) string.
-
-    Returns:
-        str: The AWS partition (e.g., 'aws', 'aws-cn', 'aws-us-gov').
-
-    Raises:
-        ProgrammingError: If the ARN is invalid or does not contain a valid partition.
-
-    Reference: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html.
-    """
-    parts = arn.split(":")
-    if len(parts) > 1 and parts[0] == "arn" and parts[1]:
-        return parts[1]
-
-    raise ProgrammingError(
-        msg=f"Invalid AWS ARN: '{arn}'.",
-        errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-    )
-
-
 def get_aws_sts_hostname(region: str, partition: str) -> str:
     """Constructs the AWS STS hostname for a given region and partition.
 
@@ -174,15 +138,15 @@ def create_aws_attestation(
     If the application isn't running on AWS or no credentials were found, raises an error.
     """
     # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
-    aws_creds = boto3.session.Session().get_credentials()
+    session = boto3.session.Session()
+    aws_creds = session.get_credentials()
     if not aws_creds:
         raise ProgrammingError(
             msg="No AWS credentials were found. Ensure the application is running on AWS with an IAM role attached.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
     region = get_aws_region()
-    arn = get_aws_arn()
-    partition = get_aws_partition(arn)
+    partition = session.get_partition_for_region(region)
     sts_hostname = get_aws_sts_hostname(region, partition)
     request = AWSRequest(
         method="POST",
@@ -201,8 +165,10 @@ def create_aws_attestation(
         "headers": dict(request.headers.items()),
     }
     credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
+    # Unlike other providers, for AWS, we only include general identifiers (region and partition)
+    # rather than specific user identifiers, since we don't actually execute a GetCallerIdentity call.
     return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"arn": arn}
+        AttestationProvider.AWS, credential, {"region": region, "partition": partition}
     )
 
 
