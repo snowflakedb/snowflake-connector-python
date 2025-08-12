@@ -173,12 +173,15 @@ class SessionPool:
         self._idle_sessions.clear()
 
 
-class _RequestVerbsUsingSessionMixin:
+class _RequestVerbsUsingSessionMixin(abc.ABC):
     """
     Mixin that provides HTTP methods (get, post, put, etc.) mirroring requests.Session, maintaining their default argument behavior (e.g., HEAD uses allow_redirects=False).
     These wrappers manage the SessionManager's use of pooled/non-pooled sessions and delegate the actual request to the corresponding session.<verb>() method.
     The subclass must implement use_requests_session to yield a *requests.Session* instance.
     """
+
+    @abc.abstractmethod
+    def use_requests_session(self, url: str, use_pooling: bool) -> Session: ...
 
     def get(
         self,

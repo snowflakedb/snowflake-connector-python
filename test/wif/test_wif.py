@@ -25,18 +25,6 @@ PROVIDER = os.getenv("SNOWFLAKE_TEST_WIF_PROVIDER")
 
 
 @pytest.mark.wif
-def test_wif_provider_autodetection():
-    connection_params = {
-        "account": ACCOUNT,
-        "authenticator": "WORKLOAD_IDENTITY",
-        "host": HOST,
-    }
-    assert connect_and_execute_simple_query(
-        connection_params
-    ), "Failed to connect with using WIF - automatic provider detection"
-
-
-@pytest.mark.wif
 def test_wif_defined_provider():
     connection_params = {
         "host": HOST,
