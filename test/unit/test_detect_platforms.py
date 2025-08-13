@@ -162,7 +162,7 @@ class TestDetectPlatforms:
 
         # Mock all the network calls that run in parallel
         with patch(
-            "snowflake.connector.platform_detection.requests.get",
+            "snowflake.connector.platform_detection.SessionManager.get",
             side_effect=slow_requests_get,
         ), patch(
             "snowflake.connector.platform_detection.boto3.client",
