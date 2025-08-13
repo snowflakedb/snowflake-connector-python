@@ -232,15 +232,30 @@ async def test_get_multiple_files_with_same_name(tmp_path, aio_connection, caplo
         f"PUT 'file://{filename_in_put}' @{stage_name}/data/2/",
     )
 
+    # Verify files are uploaded before attempting GET
+    import asyncio
+
+    for _ in range(10):  # Wait up to 10 seconds for files to be available
+        file_list = await (await cur.execute(f"LS @{stage_name}")).fetchall()
+        if len(file_list) >= 2:  # Both files should be available
+            break
+        await asyncio.sleep(1)
+    else:
+        pytest.fail(f"Files not available in stage after 10 seconds: {file_list}")
+
     with caplog.at_level(logging.WARNING):
         try:
             await cur.execute(
                 f"GET @{stage_name} file://{tmp_path} PATTERN='.*data.csv.gz'"
             )
         except OperationalError:
-            # This is expected flakiness
+            # This can happen due to cloud storage timing issues
             pass
-    assert "Downloading multiple files with the same name" in caplog.text
+
+    # Check for the expected warning message
+    assert (
+        "Downloading multiple files with the same name" in caplog.text
+    ), f"Expected warning not found in logs: {caplog.text}"
 
 
 async def test_transfer_error_message(tmp_path, aio_connection):
@@ -267,17 +282,18 @@ async def test_transfer_error_message(tmp_path, aio_connection):
 @pytest.mark.skipolddriver
 async def test_put_md5(tmp_path, aio_connection):
     """This test uploads a single and a multi part file and makes sure that md5 is populated."""
-    # Generate random files and folders
-    small_folder = tmp_path / "small"
-    big_folder = tmp_path / "big"
-    small_folder.mkdir()
-    big_folder.mkdir()
-    generate_k_lines_of_n_files(3, 1, tmp_dir=str(small_folder))
-    # This generates a ~342 MB file to trigger a multipart upload
-    generate_k_lines_of_n_files(3_000_000, 1, tmp_dir=str(big_folder))
+    # Create files directly without subfolders for efficiency
+    # Small file for single-part upload test
+    small_test_file = tmp_path / "small_file.txt"
+    small_test_file.write_text("test content\n")  # Minimal content
 
-    small_test_file = small_folder / "file0"
-    big_test_file = big_folder / "file0"
+    # Big file for multi-part upload test - 200MB (well over 64MB threshold)
+    big_test_file = tmp_path / "big_file.txt"
+    chunk_size = 1024 * 1024  # 1MB chunks
+    chunk_data = "A" * chunk_size  # 1MB of 'A' characters
+    with open(big_test_file, "w") as f:
+        for _ in range(200):  # Write 200MB total
+            f.write(chunk_data)
 
     stage_name = random_string(5, "test_put_md5_")
     # Use the async connection for PUT/LS operations
@@ -285,6 +301,7 @@ async def test_put_md5(tmp_path, aio_connection):
     async with aio_connection.cursor() as cur:
         await cur.execute(f"create temporary stage {stage_name}")
 
+        # Upload both files in sequence
         small_filename_in_put = str(small_test_file).replace("\\", "/")
         big_filename_in_put = str(big_test_file).replace("\\", "/")
 
@@ -295,6 +312,8 @@ async def test_put_md5(tmp_path, aio_connection):
             f"PUT 'file://{big_filename_in_put}' @{stage_name}/big AUTO_COMPRESS = FALSE"
         )
 
-        res = await cur.execute(f"LS @{stage_name}")
-
-    assert all(map(lambda e: e[2] is not None, await res.fetchall()))
+        # Verify MD5 is populated for both files
+        file_list = await (await cur.execute(f"LS @{stage_name}")).fetchall()
+        assert all(
+            file_info[2] is not None for file_info in file_list
+        ), "MD5 should be populated for all uploaded files"

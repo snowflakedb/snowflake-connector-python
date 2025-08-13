@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import snowflake.connector.aio
-
 
 async def exe0(cnx, sql):
     return await cnx.cursor().execute(sql)
@@ -164,7 +162,7 @@ DROP TABLE IF EXISTS {name}
             )
 
 
-async def test_autocommit_parameters(db_parameters):
+async def test_autocommit_parameters(db_parameters, conn_cnx):
     """Tests autocommit parameter.
 
     Args:
@@ -174,17 +172,7 @@ async def test_autocommit_parameters(db_parameters):
     async def exe(cnx, sql):
         return await cnx.cursor().execute(sql.format(name=db_parameters["name"]))
 
-    async with snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        schema=db_parameters["schema"],
-        database=db_parameters["database"],
-        autocommit=False,
-    ) as cnx:
+    async with conn_cnx(autocommit=False) as cnx:
         await exe(
             cnx,
             """
@@ -193,17 +181,7 @@ CREATE TABLE {name} (c1 boolean)
         )
         await _run_autocommit_off(cnx, db_parameters)
 
-    async with snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        schema=db_parameters["schema"],
-        database=db_parameters["database"],
-        autocommit=True,
-    ) as cnx:
+    async with conn_cnx(autocommit=True) as cnx:
         await _run_autocommit_on(cnx, db_parameters)
         await exe(
             cnx,

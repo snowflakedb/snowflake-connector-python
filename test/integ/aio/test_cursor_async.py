@@ -188,7 +188,9 @@ async def test_insert_select(conn, db_parameters, caplog):
             assert "Number of results in first chunk: 3" in caplog.text
 
 
-async def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
+async def test_insert_and_select_by_separate_connection(
+    conn, conn_cnx, db_parameters, caplog
+):
     """Inserts a record and select it by a separate connection."""
     caplog.set_level(logging.DEBUG)
     async with conn() as cnx:
@@ -202,20 +204,7 @@ async def test_insert_and_select_by_separate_connection(conn, db_parameters, cap
             cnt += int(rec[0])
         assert cnt == 1, "wrong number of records were inserted"
         assert result.rowcount == 1, "wrong number of records were inserted"
-
-    cnx2 = snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-        timezone="UTC",
-    )
-    await cnx2.connect()
-    try:
+    async with conn_cnx(timezone="UTC") as cnx2:
         c = cnx2.cursor()
         await c.execute("select aa from {name}".format(name=db_parameters["name"]))
         results = []
@@ -225,8 +214,6 @@ async def test_insert_and_select_by_separate_connection(conn, db_parameters, cap
         assert results[0] == 1234, "the first result was wrong"
         assert result.rowcount == 1, "wrong number of records were selected"
         assert "Number of results in first chunk: 1" in caplog.text
-    finally:
-        await cnx2.close()
 
 
 def _total_milliseconds_from_timedelta(td):
@@ -239,7 +226,7 @@ def _total_seconds_from_timedelta(td):
     return _total_milliseconds_from_timedelta(td) // 10**3
 
 
-async def test_insert_timestamp_select(conn, db_parameters):
+async def test_insert_timestamp_select(conn, conn_cnx, db_parameters):
     """Inserts and gets timestamp, timestamp with tz, date, and time.
 
     Notes:
@@ -282,19 +269,7 @@ async def test_insert_timestamp_select(conn, db_parameters):
         finally:
             await c.close()
 
-    cnx2 = snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-        timezone="UTC",
-    )
-    await cnx2.connect()
-    try:
+    async with conn_cnx(timezone="UTC") as cnx2:
         c = cnx2.cursor()
         await c.execute(
             "select aa, tsltz, tstz, tsntz, dt, tm from {name}".format(
@@ -374,8 +349,6 @@ async def test_insert_timestamp_select(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[5])] == "TIME"
             ), "invalid column name"
-    finally:
-        await cnx2.close()
 
 
 async def test_insert_timestamp_ltz(conn, db_parameters):
@@ -475,7 +448,7 @@ async def test_struct_time(conn, db_parameters):
                 time.tzset()
 
 
-async def test_insert_binary_select(conn, db_parameters):
+async def test_insert_binary_select(conn, conn_cnx, db_parameters):
     """Inserts and get a binary value."""
     value = b"\x00\xFF\xA1\xB2\xC3"
 
@@ -490,18 +463,7 @@ async def test_insert_binary_select(conn, db_parameters):
         finally:
             await c.close()
 
-    cnx2 = snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-    )
-    await cnx2.connect()
-    try:
+    async with conn_cnx() as cnx2:
         c = cnx2.cursor()
         await c.execute("select b from {name}".format(name=db_parameters["name"]))
 
@@ -524,11 +486,9 @@ async def test_insert_binary_select(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
             ), "invalid column name"
-    finally:
-        await cnx2.close()
 
 
-async def test_insert_binary_select_with_bytearray(conn, db_parameters):
+async def test_insert_binary_select_with_bytearray(conn, conn_cnx, db_parameters):
     """Inserts and get a binary value using the bytearray type."""
     value = bytearray(b"\x00\xFF\xA1\xB2\xC3")
 
@@ -543,18 +503,7 @@ async def test_insert_binary_select_with_bytearray(conn, db_parameters):
         finally:
             await c.close()
 
-    cnx2 = snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-    )
-    await cnx2.connect()
-    try:
+    async with conn_cnx() as cnx2:
         c = cnx2.cursor()
         await c.execute("select b from {name}".format(name=db_parameters["name"]))
 
@@ -577,8 +526,6 @@ async def test_insert_binary_select_with_bytearray(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
             ), "invalid column name"
-    finally:
-        await cnx2.close()
 
 
 async def test_variant(conn, db_parameters):

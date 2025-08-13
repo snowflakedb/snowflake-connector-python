@@ -291,7 +291,7 @@ async def test_fetch():
     async def fake_request_exec(**kwargs):
         headers = kwargs.get("headers")
         cnt = headers["cnt"]
-        await asyncio.sleep(3)
+        await asyncio.sleep(0.1)
         if cnt.c <= 1:
             # the first two raises failure
             cnt.c += 1
