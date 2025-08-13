@@ -8,25 +8,16 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from test.integ.test_converter_null import NUMERIC_VALUES
 
-import snowflake.connector.aio
 from snowflake.connector.converter import ZERO_EPOCH
 from snowflake.connector.converter_null import SnowflakeNoConverterToPython
 
 
-async def test_converter_no_converter_to_python(db_parameters):
+async def test_converter_no_converter_to_python(conn_cnx):
     """Tests no converter.
 
     This should not translate the Snowflake internal data representation to the Python native types.
     """
-    async with snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
+    async with conn_cnx(
         timezone="UTC",
         converter_class=SnowflakeNoConverterToPython,
     ) as con:

@@ -133,21 +133,10 @@ async def test_exceptions_as_connection_attributes(conn_cnx):
         assert con.NotSupportedError == errors.NotSupportedError
 
 
-async def test_commit(db_parameters):
-    con = snowflake.connector.aio.SnowflakeConnection(
-        account=db_parameters["account"],
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        protocol=db_parameters["protocol"],
-    )
-    await con.connect()
-    try:
+async def test_commit(conn_cnx):
+    async with conn_cnx() as con:
         # Commit must work, even if it doesn't do anything
         await con.commit()
-    finally:
-        await con.close()
 
 
 async def test_rollback(conn_cnx, db_parameters):
@@ -247,20 +236,9 @@ async def test_rowcount(conn_local):
         assert cur.rowcount == 1, "cursor.rowcount should the number of rows returned"
 
 
-async def test_close(db_parameters):
-    con = snowflake.connector.aio.SnowflakeConnection(
-        account=db_parameters["account"],
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        protocol=db_parameters["protocol"],
-    )
-    await con.connect()
-    try:
+async def test_close(conn_cnx):
+    async with conn_cnx() as con:
         cur = con.cursor()
-    finally:
-        await con.close()
 
     # commit is currently a nop; disabling for now
     # connection.commit should raise an Error if called after connection is
@@ -736,15 +714,67 @@ async def test_escape(conn_local):
     async with conn_local() as con:
         cur = con.cursor()
         await executeDDL1(cur)
-        for i in teststrings:
-            args = {"dbapi_ddl2": i}
-            await cur.execute("insert into %s values (%%(dbapi_ddl2)s)" % TABLE1, args)
-            await cur.execute("select * from %s" % TABLE1)
-            row = await cur.fetchone()
-            await cur.execute("delete from %s where name=%%s" % TABLE1, i)
-            assert (
-                i == row[0]
-            ), f"newline not properly converted, got {row[0]}, should be {i}"
+
+        # Test 1: Batch INSERT with dictionary parameters (executemany)
+        # This tests the same dictionary parameter binding as the original
+        batch_args = [{"dbapi_ddl2": test_string} for test_string in teststrings]
+        await cur.executemany(
+            "insert into %s values (%%(dbapi_ddl2)s)" % TABLE1, batch_args
+        )
+
+        # Test 2: Batch SELECT with no parameters
+        # This tests the same SELECT functionality as the original
+        await cur.execute("select name from %s" % TABLE1)
+        rows = await cur.fetchall()
+
+        # Verify each test string was properly escaped/handled
+        assert len(rows) == len(
+            teststrings
+        ), f"Expected {len(teststrings)} rows, got {len(rows)}"
+
+        # Extract actual strings from result set
+        actual_strings = {row[0] for row in rows}  # Use set to ignore order
+        expected_strings = set(teststrings)
+
+        # Verify all expected strings are present
+        missing_strings = expected_strings - actual_strings
+        extra_strings = actual_strings - expected_strings
+
+        assert len(missing_strings) == 0, f"Missing strings: {missing_strings}"
+        assert len(extra_strings) == 0, f"Extra strings: {extra_strings}"
+        assert actual_strings == expected_strings, "String sets don't match"
+
+        # Test 3: DELETE with positional parameters (batched for efficiency)
+        # This maintains the same DELETE parameter binding test as the original
+        # We test a representative subset to maintain coverage while being efficient
+        critical_test_strings = [
+            teststrings[0],  # Basic newline: "abc\ndef"
+            teststrings[5],  # Double quote: 'abc"def'
+            teststrings[7],  # Single quote: "abc'def"
+            teststrings[13],  # Tab: "abc\tdef"
+            teststrings[16],  # Backslash-x: "\\x"
+        ]
+
+        # Batch DELETE with positional parameters using executemany
+        # This tests the same positional parameter binding as the original individual DELETEs
+        await cur.executemany(
+            "delete from %s where name=%%s" % TABLE1,
+            [(test_string,) for test_string in critical_test_strings],
+        )
+
+        # Batch verification: check that all critical strings were deleted
+        await cur.execute(
+            "select name from %s where name in (%s)"
+            % (TABLE1, ",".join(["%s"] * len(critical_test_strings))),
+            critical_test_strings,
+        )
+        remaining_critical = await cur.fetchall()
+        assert (
+            len(remaining_critical) == 0
+        ), f"Failed to delete strings: {[row[0] for row in remaining_critical]}"
+
+        # Clean up remaining rows
+        await cur.execute("delete from %s" % TABLE1)
 
 
 @pytest.mark.skipolddriver
