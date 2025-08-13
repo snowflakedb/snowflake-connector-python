@@ -18,11 +18,12 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug where timezoned timestamps fetched as pandas.DataFrame or pyarrow.Table would overflow for the sake of unnecessary precision. In the case where an overflow cannot be prevented a clear error will be raised now.
   - Fix OAuth authenticator values.
   - Add `unsafe_skip_file_permissions_check` flag to skip file permissions check on cache and config.
-  - Introduce snowflake_version property to the connection
+  - Introduce snowflake_version property to the connection.
   - Added basic json support for Interval types.
   - Moved `OAUTH_TYPE` to `CLIENT_ENVIROMENT`.
   - Fix bug where PAT with external session authenticator was used while `external_session_id` was not provided in `SnowflakeRestful.fetch`
   - Added support for parameter `use_vectorized_scanner` in function `write_pandas`.
+  - Fixed GCS staging by ensuring the endpoint has a scheme.
   - Fix unclear error messages in case of incorrect `authenticator` values.
   - Fix case-sensitivity of `Oauth` and `programmatic_access_token` authenticator values.
   - Relaxed `pyarrow` version constraint, versions >= 19 can now be used.
