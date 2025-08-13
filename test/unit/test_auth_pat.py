@@ -2,10 +2,11 @@
 #
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
-
 from __future__ import annotations
 
-from snowflake.connector.auth import AuthByPAT
+import pytest
+
+from snowflake.connector.auth import AuthByPAT, AuthNoAuth
 from snowflake.connector.auth.by_plugin import AuthType
 from snowflake.connector.network import PROGRAMMATIC_ACCESS_TOKEN
 
@@ -33,8 +34,21 @@ def test_auth_pat_reauthenticate():
     assert result == {"success": False}
 
 
-def test_pat_authenticator_creates_auth_by_pat(monkeypatch):
-    """Test that using PROGRAMMATIC_ACCESS_TOKEN authenticator creates AuthByPAT instance."""
+@pytest.mark.parametrize(
+    "authenticator, expected_auth_class",
+    [
+        ("PROGRAMMATIC_ACCESS_TOKEN", AuthByPAT),
+        ("programmatic_access_token", AuthByPAT),
+        ("PAT_WITH_EXTERNAL_SESSION", AuthNoAuth),
+        ("pat_with_external_session", AuthNoAuth),
+    ],
+)
+def test_pat_authenticator_creates_auth_by_pat(
+    monkeypatch, authenticator, expected_auth_class
+):
+    """Test that using PROGRAMMATIC_ACCESS_TOKEN authenticator creates AuthByPAT instance.
+    PAT_WITH_EXTERNAL_SESSION authenticator creates AuthNoAuth instance.
+    """
     import snowflake.connector
 
     def mock_post_request(request, url, headers, json_body, **kwargs):
@@ -59,11 +73,11 @@ def test_pat_authenticator_creates_auth_by_pat(monkeypatch):
         account="account",
         database="TESTDB",
         warehouse="TESTWH",
-        authenticator=PROGRAMMATIC_ACCESS_TOKEN,
+        authenticator=authenticator,
         token="test_pat_token",
     )
 
     # Verify that the auth_class is an instance of AuthByPAT
-    assert isinstance(conn.auth_class, AuthByPAT)
+    assert isinstance(conn.auth_class, expected_auth_class)
 
     conn.close()

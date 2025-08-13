@@ -23,6 +23,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Moved `OAUTH_TYPE` to `CLIENT_ENVIROMENT`.
   - Fix bug where PAT with external session authenticator was used while `external_session_id` was not provided in `SnowflakeRestful.fetch`
   - Added support for parameter `use_vectorized_scanner` in function `write_pandas`.
+  - Fix unclear error messages in case of incorrect `authenticator` values.
+  - Fix case-sensitivity of `Oauth` and `programmatic_access_token` authenticator values.
   - Relaxed `pyarrow` version constraint, versions >= 19 can now be used.
   - Populate type_code in ResultMetadata for interval types.
 
