@@ -28,6 +28,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fix case-sensitivity of `Oauth` and `programmatic_access_token` authenticator values.
   - Relaxed `pyarrow` version constraint, versions >= 19 can now be used.
   - Populate type_code in ResultMetadata for interval types.
+  - Proxy setup with connection parameters added.
 
 - v3.16.0(July 04,2025)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4.
