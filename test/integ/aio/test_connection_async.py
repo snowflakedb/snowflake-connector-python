@@ -43,8 +43,9 @@ try:  # pragma: no cover
     from ..parameters import CONNECTION_PARAMETERS_ADMIN
 except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
-
 from snowflake.connector.aio.auth import AuthByOkta, AuthByPlugin
+
+from .conftest import create_connection
 
 try:
     from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
@@ -59,80 +60,43 @@ async def test_basic(conn_testaccount):
     assert conn_testaccount.session_id
 
 
-async def test_connection_without_schema(db_parameters):
+async def test_connection_without_schema(conn_cnx):
     """Basic Connection test without schema."""
-    cnx = snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        protocol=db_parameters["protocol"],
-        timezone="UTC",
-    )
-    await cnx.connect()
-    assert cnx, "invalid cnx"
-    await cnx.close()
+    async with conn_cnx(schema=None, timezone="UTC") as cnx:
+        assert cnx
 
 
-async def test_connection_without_database_schema(db_parameters):
+async def test_connection_without_database_schema(conn_cnx):
     """Basic Connection test without database and schema."""
-    cnx = snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        timezone="UTC",
-    )
-    await cnx.connect()
-    assert cnx, "invalid cnx"
-    await cnx.close()
+    async with conn_cnx(database=None, schema=None, timezone="UTC") as cnx:
+        assert cnx
 
 
-async def test_connection_without_database2(db_parameters):
+async def test_connection_without_database2(conn_cnx):
     """Basic Connection test without database."""
-    cnx = snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-        timezone="UTC",
-    )
-    await cnx.connect()
-    assert cnx, "invalid cnx"
-    await cnx.close()
+    async with conn_cnx(database=None, timezone="UTC") as cnx:
+        assert cnx
 
 
-async def test_with_config(db_parameters):
+async def test_with_config(conn_cnx):
     """Creates a connection with the config parameter."""
-    config = {
-        "user": db_parameters["user"],
-        "password": db_parameters["password"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "account": db_parameters["account"],
-        "schema": db_parameters["schema"],
-        "database": db_parameters["database"],
-        "protocol": db_parameters["protocol"],
-        "timezone": "UTC",
-    }
-    cnx = snowflake.connector.aio.SnowflakeConnection(**config)
-    try:
-        await cnx.connect()
+    async with conn_cnx(timezone="UTC") as cnx:
         assert cnx, "invalid cnx"
-        assert not cnx.client_session_keep_alive  # default is False
-    finally:
-        await cnx.close()
+        # Default depends on server; if unreachable, fall back to False
+        from ..conftest import get_server_parameter_value
+
+        server_default_str = get_server_parameter_value(
+            cnx, "CLIENT_SESSION_KEEP_ALIVE"
+        )
+        if server_default_str:
+            server_default = server_default_str.lower() == "true"
+            assert cnx.client_session_keep_alive == server_default
+        else:
+            assert not cnx.client_session_keep_alive
 
 
 @pytest.mark.skipolddriver
-async def test_with_tokens(conn_cnx, db_parameters):
+async def test_with_tokens(conn_cnx):
     """Creates a connection using session and master token."""
     try:
         async with conn_cnx(
@@ -141,16 +105,13 @@ async def test_with_tokens(conn_cnx, db_parameters):
             assert initial_cnx, "invalid initial cnx"
             master_token = initial_cnx.rest._master_token
             session_token = initial_cnx.rest._token
-            async with snowflake.connector.aio.SnowflakeConnection(
-                account=db_parameters["account"],
-                host=db_parameters["host"],
-                port=db_parameters["port"],
-                protocol=db_parameters["protocol"],
-                session_token=session_token,
-                master_token=master_token,
-            ) as token_cnx:
-                await token_cnx.connect()
+            token_cnx = await create_connection(
+                "default", session_token=session_token, master_token=master_token
+            )
+            try:
                 assert token_cnx, "invalid second cnx"
+            finally:
+                await token_cnx.close()
     except Exception:
         # This is my way of guaranteeing that we'll not expose the
         # sensitive information that this test needs to handle.
@@ -159,7 +120,7 @@ async def test_with_tokens(conn_cnx, db_parameters):
 
 
 @pytest.mark.skipolddriver
-async def test_with_tokens_expired(conn_cnx, db_parameters):
+async def test_with_tokens_expired(conn_cnx):
     """Creates a connection using session and master token."""
     try:
         async with conn_cnx(
@@ -170,16 +131,11 @@ async def test_with_tokens_expired(conn_cnx, db_parameters):
             session_token = initial_cnx._rest._token
 
         with pytest.raises(ProgrammingError):
-            token_cnx = snowflake.connector.aio.SnowflakeConnection(
-                account=db_parameters["account"],
-                host=db_parameters["host"],
-                port=db_parameters["port"],
-                protocol=db_parameters["protocol"],
+            async with conn_cnx(
                 session_token=session_token,
                 master_token=master_token,
-            )
-            await token_cnx.connect()
-            await token_cnx.close()
+            ) as token_cnx:
+                assert token_cnx
     except Exception:
         # This is my way of guaranteeing that we'll not expose the
         # sensitive information that this test needs to handle.
@@ -187,99 +143,48 @@ async def test_with_tokens_expired(conn_cnx, db_parameters):
         pytest.fail("something failed", pytrace=False)
 
 
-async def test_keep_alive_true(db_parameters):
+async def test_keep_alive_true(conn_cnx):
     """Creates a connection with client_session_keep_alive parameter."""
-    config = {
-        "user": db_parameters["user"],
-        "password": db_parameters["password"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "account": db_parameters["account"],
-        "schema": db_parameters["schema"],
-        "database": db_parameters["database"],
-        "protocol": db_parameters["protocol"],
-        "timezone": "UTC",
-        "client_session_keep_alive": True,
-    }
-    cnx = snowflake.connector.aio.SnowflakeConnection(**config)
-    try:
-        await cnx.connect()
+    async with conn_cnx(client_session_keep_alive=True) as cnx:
         assert cnx.client_session_keep_alive
-    finally:
-        await cnx.close()
 
 
-async def test_keep_alive_heartbeat_frequency(db_parameters):
+async def test_keep_alive_heartbeat_frequency(conn_cnx):
     """Tests heartbeat setting.
 
     Creates a connection with client_session_keep_alive_heartbeat_frequency
     parameter.
     """
-    config = {
-        "user": db_parameters["user"],
-        "password": db_parameters["password"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "account": db_parameters["account"],
-        "schema": db_parameters["schema"],
-        "database": db_parameters["database"],
-        "protocol": db_parameters["protocol"],
-        "timezone": "UTC",
-        "client_session_keep_alive": True,
-        "client_session_keep_alive_heartbeat_frequency": 1000,
-    }
-    cnx = snowflake.connector.aio.SnowflakeConnection(**config)
-    try:
-        await cnx.connect()
+    async with conn_cnx(
+        client_session_keep_alive=True,
+        client_session_keep_alive_heartbeat_frequency=1000,
+    ) as cnx:
         assert cnx.client_session_keep_alive_heartbeat_frequency == 1000
-    finally:
-        await cnx.close()
 
 
 @pytest.mark.skipolddriver
-async def test_keep_alive_heartbeat_frequency_min(db_parameters):
+async def test_keep_alive_heartbeat_frequency_min(conn_cnx):
     """Tests heartbeat setting with custom frequency.
 
     Creates a connection with client_session_keep_alive_heartbeat_frequency parameter and set the minimum frequency.
     Also if a value comes as string, should be properly converted to int and not fail assertion.
     """
-    config = {
-        "user": db_parameters["user"],
-        "password": db_parameters["password"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "account": db_parameters["account"],
-        "schema": db_parameters["schema"],
-        "database": db_parameters["database"],
-        "protocol": db_parameters["protocol"],
-        "timezone": "UTC",
-        "client_session_keep_alive": True,
-        "client_session_keep_alive_heartbeat_frequency": "10",
-    }
-    cnx = snowflake.connector.aio.SnowflakeConnection(**config)
-    try:
-        # The min value of client_session_keep_alive_heartbeat_frequency
-        # is 1/16 of master token validity, so 14400 / 4 /4 => 900
-        await cnx.connect()
+    async with conn_cnx(
+        client_session_keep_alive=True,
+        client_session_keep_alive_heartbeat_frequency="10",
+    ) as cnx:
         assert cnx.client_session_keep_alive_heartbeat_frequency == 900
-    finally:
-        await cnx.close()
 
 
-async def test_keep_alive_heartbeat_send(db_parameters):
-    config = {
-        "user": db_parameters["user"],
-        "password": db_parameters["password"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "account": db_parameters["account"],
-        "schema": db_parameters["schema"],
-        "database": db_parameters["database"],
-        "protocol": db_parameters["protocol"],
-        "timezone": "UTC",
-        "client_session_keep_alive": True,
-        "client_session_keep_alive_heartbeat_frequency": "1",
-    }
+async def test_keep_alive_heartbeat_send(conn_cnx, db_parameters):
+    config = db_parameters.copy()
+    config.update(
+        {
+            "timezone": "UTC",
+            "client_session_keep_alive": True,
+            "client_session_keep_alive_heartbeat_frequency": "1",
+        }
+    )
     with mock.patch(
         "snowflake.connector.aio._connection.SnowflakeConnection._validate_client_session_keep_alive_heartbeat_frequency",
         return_value=900,
@@ -306,23 +211,13 @@ async def test_keep_alive_heartbeat_send(db_parameters):
         assert mocked_heartbeat.call_count >= 2
 
 
-async def test_bad_db(db_parameters):
+async def test_bad_db(conn_cnx):
     """Attempts to use a bad DB."""
-    cnx = snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        database="baddb",
-    )
-    await cnx.connect()
-    assert cnx, "invald cnx"
-    await cnx.close()
+    async with conn_cnx(database="baddb") as cnx:
+        assert cnx, "invald cnx"
 
 
-async def test_with_string_login_timeout(db_parameters):
+async def test_with_string_login_timeout(conn_cnx):
     """Test that login_timeout when passed as string does not raise TypeError.
 
     In this test, we pass bad login credentials to raise error and trigger login
@@ -330,13 +225,10 @@ async def test_with_string_login_timeout(db_parameters):
     comes from str - int arithmetic.
     """
     with pytest.raises(DatabaseError):
-        async with snowflake.connector.aio.SnowflakeConnection(
+        async with conn_cnx(
             protocol="http",
             user="bogus",
             password="bogus",
-            host=db_parameters["host"],
-            port=db_parameters["port"],
-            account=db_parameters["account"],
             login_timeout="5",
         ):
             pass
@@ -386,60 +278,29 @@ async def test_bogus(db_parameters):
             pass
 
 
-async def test_invalid_application(db_parameters):
+async def test_invalid_application(conn_cnx):
     """Invalid application name."""
     with pytest.raises(snowflake.connector.Error):
-        async with snowflake.connector.aio.SnowflakeConnection(
-            protocol=db_parameters["protocol"],
-            user=db_parameters["user"],
-            password=db_parameters["password"],
-            application="%%%",
-        ):
+        async with conn_cnx(application="%%%"):
             pass
 
 
-async def test_valid_application(db_parameters):
+async def test_valid_application(conn_cnx):
     """Valid application name."""
     application = "Special_Client"
-    cnx = snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        application=application,
-        protocol=db_parameters["protocol"],
-    )
-    await cnx.connect()
-    assert cnx.application == application, "Must be valid application"
-    await cnx.close()
+    async with conn_cnx(application=application) as cnx:
+        assert cnx.application == application, "Must be valid application"
 
 
-async def test_invalid_default_parameters(db_parameters):
+async def test_invalid_default_parameters(conn_cnx):
     """Invalid database, schema, warehouse and role name."""
-    cnx = snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        protocol=db_parameters["protocol"],
-        database="neverexists",
-        schema="neverexists",
-        warehouse="neverexits",
-    )
-    await cnx.connect()
-    assert cnx, "Must be success"
+    async with conn_cnx(
+        database="neverexists", schema="neverexists", warehouse="neverexits"
+    ) as cnx:
+        assert cnx, "Must be success"
 
     with pytest.raises(snowflake.connector.DatabaseError):
-        # must not success
-        async with snowflake.connector.aio.SnowflakeConnection(
-            user=db_parameters["user"],
-            password=db_parameters["password"],
-            host=db_parameters["host"],
-            port=db_parameters["port"],
-            account=db_parameters["account"],
-            protocol=db_parameters["protocol"],
+        async with conn_cnx(
             database="neverexists",
             schema="neverexists",
             validate_default_parameters=True,
@@ -447,31 +308,14 @@ async def test_invalid_default_parameters(db_parameters):
             pass
 
     with pytest.raises(snowflake.connector.DatabaseError):
-        # must not success
-        async with snowflake.connector.aio.SnowflakeConnection(
-            user=db_parameters["user"],
-            password=db_parameters["password"],
-            host=db_parameters["host"],
-            port=db_parameters["port"],
-            account=db_parameters["account"],
-            protocol=db_parameters["protocol"],
-            database=db_parameters["database"],
+        async with conn_cnx(
             schema="neverexists",
             validate_default_parameters=True,
         ):
             pass
 
     with pytest.raises(snowflake.connector.DatabaseError):
-        # must not success
-        async with snowflake.connector.aio.SnowflakeConnection(
-            user=db_parameters["user"],
-            password=db_parameters["password"],
-            host=db_parameters["host"],
-            port=db_parameters["port"],
-            account=db_parameters["account"],
-            protocol=db_parameters["protocol"],
-            database=db_parameters["database"],
-            schema=db_parameters["schema"],
+        async with conn_cnx(
             warehouse="neverexists",
             validate_default_parameters=True,
         ):
@@ -479,18 +323,7 @@ async def test_invalid_default_parameters(db_parameters):
 
     # Invalid role name is already validated
     with pytest.raises(snowflake.connector.DatabaseError):
-        # must not success
-        async with snowflake.connector.aio.SnowflakeConnection(
-            user=db_parameters["user"],
-            password=db_parameters["password"],
-            host=db_parameters["host"],
-            port=db_parameters["port"],
-            account=db_parameters["account"],
-            protocol=db_parameters["protocol"],
-            database=db_parameters["database"],
-            schema=db_parameters["schema"],
-            role="neverexists",
-        ):
+        async with conn_cnx(role="neverexists"):
             pass
 
 
@@ -567,15 +400,11 @@ async def test_invalid_account_timeout():
 
 
 @pytest.mark.timeout(15)
-async def test_invalid_proxy(db_parameters):
+async def test_invalid_proxy(conn_cnx):
     with pytest.raises(OperationalError):
-        async with snowflake.connector.aio.SnowflakeConnection(
+        async with conn_cnx(
             protocol="http",
             account="testaccount",
-            user=db_parameters["user"],
-            password=db_parameters["password"],
-            host=db_parameters["host"],
-            port=db_parameters["port"],
             login_timeout=5,
             proxy_host="localhost",
             proxy_port="3333",
@@ -638,7 +467,7 @@ async def test_us_west_connection(tmpdir):
 
 
 @pytest.mark.timeout(60)
-async def test_privatelink(db_parameters):
+async def test_privatelink(conn_cnx):
     """Ensure the OCSP cache server URL is overridden if privatelink connection is used."""
     try:
         os.environ["SF_OCSP_FAIL_OPEN"] = "false"
@@ -661,18 +490,8 @@ async def test_privatelink(db_parameters):
             "ocsp_response_cache.json"
         )
 
-    cnx = snowflake.connector.aio.SnowflakeConnection(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        protocol=db_parameters["protocol"],
-        timezone="UTC",
-    )
-    await cnx.connect()
-    assert cnx, "invalid cnx"
+    async with conn_cnx(timezone="UTC") as cnx:
+        assert cnx, "invalid cnx"
 
     ocsp_url = os.getenv("SF_OCSP_RESPONSE_CACHE_SERVER_URL")
     assert ocsp_url is None, f"OCSP URL should be None: {ocsp_url}"
@@ -680,26 +499,10 @@ async def test_privatelink(db_parameters):
     del os.environ["SF_OCSP_FAIL_OPEN"]
 
 
-async def test_disable_request_pooling(db_parameters):
+async def test_disable_request_pooling(conn_cnx):
     """Creates a connection with client_session_keep_alive parameter."""
-    config = {
-        "user": db_parameters["user"],
-        "password": db_parameters["password"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "account": db_parameters["account"],
-        "schema": db_parameters["schema"],
-        "database": db_parameters["database"],
-        "protocol": db_parameters["protocol"],
-        "timezone": "UTC",
-        "disable_request_pooling": True,
-    }
-    cnx = snowflake.connector.aio.SnowflakeConnection(**config)
-    try:
-        await cnx.connect()
+    async with conn_cnx(timezone="UTC", disable_request_pooling=True) as cnx:
         assert cnx.disable_request_pooling
-    finally:
-        await cnx.close()
 
 
 async def test_privatelink_ocsp_url_creation():
