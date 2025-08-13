@@ -89,6 +89,12 @@ async def create_connection(connection_name: str, **kwargs) -> SnowflakeConnecti
             ret["private_key"] = private_key_bytes
             ret.pop("private_key_file", None)
 
+    # If authenticator is explicitly provided and it's not key-pair based, drop key-pair fields
+    authenticator_value = ret.get("authenticator")
+    if authenticator_value.lower() not in {"key_pair_authenticator", "snowflake_jwt"}:
+        ret.pop("private_key", None)
+        ret.pop("private_key_file", None)
+
     connection = SnowflakeConnection(**ret)
     await connection.connect()
     return connection

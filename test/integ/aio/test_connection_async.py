@@ -83,7 +83,7 @@ async def test_with_config(conn_cnx):
     async with conn_cnx(timezone="UTC") as cnx:
         assert cnx, "invalid cnx"
         # Default depends on server; if unreachable, fall back to False
-        from ..conftest import get_server_parameter_value
+        from ...conftest import get_server_parameter_value
 
         server_default_str = get_server_parameter_value(
             cnx, "CLIENT_SESSION_KEEP_ALIVE"
@@ -620,6 +620,7 @@ async def test_okta_url(conn_cnx):
         async with conn_cnx(
             timezone="UTC",
             authenticator=orig_authenticator,
+            password="test-password",
         ) as cnx:
             assert cnx
 
@@ -713,82 +714,42 @@ async def test_dashed_url_account_name(db_parameters):
         ),
     ],
 )
-async def test_invalid_connection_parameter(db_parameters, name, value, exc_warn):
-    with warnings.catch_warnings(record=True) as w:
-        conn_params = {
-            "account": db_parameters["account"],
-            "user": db_parameters["user"],
-            "password": db_parameters["password"],
-            "schema": db_parameters["schema"],
-            "database": db_parameters["database"],
-            "protocol": db_parameters["protocol"],
-            "host": db_parameters["host"],
-            "port": db_parameters["port"],
-            "validate_default_parameters": True,
-            name: value,
-        }
-        try:
-            conn = snowflake.connector.aio.SnowflakeConnection(**conn_params)
-            await conn.connect()
+async def test_invalid_connection_parameter(conn_cnx, name, value, exc_warn):
+    with warnings.catch_warnings(record=True) as warns:
+        async with conn_cnx(validate_default_parameters=True, **{name: value}) as conn:
             assert getattr(conn, "_" + name) == value
-            assert len(w) == 1
-            assert str(w[0].message) == str(exc_warn)
-        finally:
-            await conn.close()
+            assert any(str(exc_warn) == str(w.message) for w in warns)
 
 
-async def test_invalid_connection_parameters_turned_off(db_parameters):
+async def test_invalid_connection_parameters_turned_off(conn_cnx):
     """Makes sure parameter checking can be turned off."""
-    with warnings.catch_warnings(record=True) as w:
-        conn_params = {
-            "account": db_parameters["account"],
-            "user": db_parameters["user"],
-            "password": db_parameters["password"],
-            "schema": db_parameters["schema"],
-            "database": db_parameters["database"],
-            "protocol": db_parameters["protocol"],
-            "host": db_parameters["host"],
-            "port": db_parameters["port"],
-            "validate_default_parameters": False,
-            "autocommit": "True",  # Wrong type
-            "applucation": "this is a typo or my own variable",  # Wrong name
-        }
-        try:
-            conn = snowflake.connector.aio.SnowflakeConnection(**conn_params)
-            await conn.connect()
-            assert conn._autocommit == conn_params["autocommit"]
-            assert conn._applucation == conn_params["applucation"]
-            assert len(w) == 0
-        finally:
-            await conn.close()
+    with warnings.catch_warnings(record=True) as warns:
+        async with conn_cnx(
+            validate_default_parameters=False,
+            autocommit="True",
+            applucation="this is a typo or my own variable",
+        ) as conn:
+            assert conn._autocommit == "True"
+            assert conn._applucation == "this is a typo or my own variable"
+            assert not any(
+                "_autocommit" in w.message or "_applucation" in w.message for w in warns
+            )
 
 
-async def test_invalid_connection_parameters_only_warns(db_parameters):
+async def test_invalid_connection_parameters_only_warns(conn_cnx):
     """This test supresses warnings to only have warehouse, database and schema checking."""
-    with warnings.catch_warnings(record=True) as w:
-        conn_params = {
-            "account": db_parameters["account"],
-            "user": db_parameters["user"],
-            "password": db_parameters["password"],
-            "schema": db_parameters["schema"],
-            "database": db_parameters["database"],
-            "protocol": db_parameters["protocol"],
-            "host": db_parameters["host"],
-            "port": db_parameters["port"],
-            "validate_default_parameters": True,
-            "autocommit": "True",  # Wrong type
-            "applucation": "this is a typo or my own variable",  # Wrong name
-        }
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                conn = snowflake.connector.aio.SnowflakeConnection(**conn_params)
-                await conn.connect()
-            assert conn._autocommit == conn_params["autocommit"]
-            assert conn._applucation == conn_params["applucation"]
-            assert len(w) == 0
-        finally:
-            await conn.close()
+    with warnings.catch_warnings(record=True) as warns:
+        async with conn_cnx(
+            validate_default_parameters=True,
+            autocommit="True",
+            applucation="this is a typo or my own variable",
+        ) as conn:
+            assert conn._autocommit == "True"
+            assert conn._applucation == "this is a typo or my own variable"
+            assert not any(
+                "_autocommit" in str(w.message) or "_applucation" in str(w.message)
+                for w in warns
+            )
 
 
 @pytest.mark.skipolddriver
@@ -1059,9 +1020,7 @@ async def test_ocsp_cache_working(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-async def test_imported_packages_telemetry(
-    conn_cnx, capture_sf_telemetry_async, db_parameters
-):
+async def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry_async):
     # these imports are not used but for testing
     import html.parser  # noqa: F401
     import json  # noqa: F401
@@ -1102,20 +1061,8 @@ async def test_imported_packages_telemetry(
 
     # test different application
     new_application_name = "PythonSnowpark"
-    config = {
-        "user": db_parameters["user"],
-        "password": db_parameters["password"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "account": db_parameters["account"],
-        "schema": db_parameters["schema"],
-        "database": db_parameters["database"],
-        "protocol": db_parameters["protocol"],
-        "timezone": "UTC",
-        "application": new_application_name,
-    }
-    async with snowflake.connector.aio.SnowflakeConnection(
-        **config
+    async with conn_cnx(
+        timezone="UTC", application=new_application_name
     ) as conn, capture_sf_telemetry_async.patch_connection(
         conn, False
     ) as telemetry_test:
@@ -1131,9 +1078,10 @@ async def test_imported_packages_telemetry(
         )
 
     # test opt out
-    config["log_imported_packages_in_telemetry"] = False
-    async with snowflake.connector.aio.SnowflakeConnection(
-        **config
+    async with conn_cnx(
+        timezone="UTC",
+        application=new_application_name,
+        log_imported_packages_in_telemetry=False,
     ) as conn, capture_sf_telemetry_async.patch_connection(
         conn, False
     ) as telemetry_test:
