@@ -7,7 +7,53 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.14.1(TBD)
+- v3.17.0(August 16,2025)
+  - Added in-band HTTP exception telemetry.
+  - Added an `unsafe_skip_file_permissions_check` flag to skip file permission checks on the cache and configuration.
+  - Added `APPLICATION_PATH` within `CLIENT_ENVIRONMENT` to distinguish between multiple scripts using the Python Connector in the same environment.
+  - Added basic JSON support for Interval types.
+  - Added in-band OCSP exception telemetry.
+  - Added support for new authentication methods with Workload Identity Federation (WIF).
+    - Added the `WORKLOAD_IDENTITY` value for the authenticator type.
+    - Added the `workload_identity_provider` and `workload_identity_entra_resource` parameters.
+  - Added support for the `use_vectorized_scanner` parameter in the write_pandas function.
+  - Added support of proxy setup using connection parameters without emitting environment variables.
+  - Added populating of `type_code` in `ResultMetadata` for interval types.
+  - Introduced the `snowflake_version` property to the connection.
+  - Moved `OAUTH_TYPE` to `CLIENT_ENVIROMENT`.
+  - Relaxed the `pyarrow` version constrain; versions >= 19 can now be used.
+  - Disabled token caching for OAuth Client Credentials authentication.
+  - Fixed OAuth authenticator values.
+  - Fixed a bug where a PAT with an external session authenticator was used while `external_session_id` was not provided in `SnowflakeRestful.fetch`.
+  - Fixed the case-sensitivity of `Oauth` and `programmatic_access_token` authenticator values.
+  - Fixed unclear error messages for incorrect `authenticator` values.
+  - Fixed GCS staging by ensuring the endpoint has a scheme.
+  - Fixed a bug where time-zoned timestamps fetched as a `pandas.DataFrame` or `pyarrow.Table` would overflow due to unnecessary precision. A clear error will now be raised if an overflow cannot be prevented.
+
+- v3.16.0(July 04,2025)
+  - Bumped numpy dependency from <2.1.0 to <=2.2.4.
+  - Added Windows support for Python 3.13.
+  - Added `bulk_upload_chunks` parameter to `write_pandas` function. Setting this parameter to True changes the behaviour of write_pandas function to first write all the data chunks to the local disk and then perform the wildcard upload of the chunks folder to the stage. In default behaviour the chunks are being saved, uploaded and deleted one by one.
+  - Added support for new authentication mechanism PAT with external session ID.
+  - Added `client_fetch_use_mp` parameter that enables multiprocessed fetching of result batches.
+  - Added basic arrow support for Interval types.
+  - Fixed `write_pandas` special characters usage in the location name.
+  - Fixed usage of `use_virtual_url` when building the location for gcs storage client.
+  - Added support for Snowflake OAuth for local applications.
+
+- v3.15.0(Apr 29,2025)
+  - Bumped up min boto and botocore version to 1.24.
+  - OCSP: terminate certificates chain traversal if a trusted certificate already reached.
+  - Added new authentication methods support for programmatic access tokens (PATs), OAuth 2.0 Authorization Code Flow, OAuth 2.0 Client Credentials Flow, and OAuth Token caching.
+    - For OAuth 2.0 Authorization Code Flow:
+      - Added the `oauth_client_id`, `oauth_client_secret`, `oauth_authorization_url`, `oauth_token_request_url`, `oauth_redirect_uri`, `oauth_scope`, `oauth_disable_pkce`, `oauth_enable_refresh_tokens` and `oauth_enable_single_use_refresh_tokens` parameters.
+      - Added the `OAUTH_AUTHORIZATION_CODE` value for the parameter authenticator.
+    - For OAuth 2.0 Client Credentials Flow:
+      - Added the `oauth_client_id`, `oauth_client_secret`, `oauth_token_request_url`, and `oauth_scope` parameters.
+      - Added the `OAUTH_CLIENT_CREDENTIALS` value for the parameter authenticator.
+    - For OAuth Token caching: Passing a username to driver configuration is required, and the `client_store_temporary_credential property` is to be set to `true`.
+
+- v3.14.1(April 21, 2025)
   - Added support for Python 3.13.
     - NOTE: Windows 64 support is still experimental and should not yet be used for production environments.
   - Dropped support for Python 3.8.
