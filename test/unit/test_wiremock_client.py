@@ -1,22 +1,8 @@
-from typing import Any, Generator
-
-import pytest
-
 # old driver support
 try:
     from snowflake.connector.vendored import requests
 except ImportError:
     import requests
-
-
-from ..wiremock.wiremock_utils import WiremockClient
-
-
-@pytest.mark.skipolddriver
-@pytest.fixture(scope="session")
-def wiremock_client() -> Generator[WiremockClient, Any, None]:
-    with WiremockClient() as client:
-        yield client
 
 
 def test_wiremock(wiremock_client):
