@@ -389,6 +389,8 @@ def test_invalid_account_timeout(conn_cnx):
 
 @pytest.mark.timeout(15)
 def test_invalid_proxy(conn_cnx):
+    http_proxy = os.environ.get("HTTP_PROXY")
+    https_proxy = os.environ.get("HTTPS_PROXY")
     with pytest.raises(OperationalError):
         with conn_cnx(
             protocol="http",
@@ -398,9 +400,41 @@ def test_invalid_proxy(conn_cnx):
             proxy_port="3333",
         ):
             pass
-    # NOTE environment variable is set if the proxy parameter is specified.
-    del os.environ["HTTP_PROXY"]
-    del os.environ["HTTPS_PROXY"]
+    # NOTE environment variable is set ONLY FOR THE OLD DRIVER if the proxy parameter is specified.
+    # So this deletion is needed for old driver tests only.
+    if http_proxy is not None:
+        os.environ["HTTP_PROXY"] = http_proxy
+    else:
+        try:
+            del os.environ["HTTP_PROXY"]
+        except KeyError:
+            pass
+    if https_proxy is not None:
+        os.environ["HTTPS_PROXY"] = https_proxy
+    else:
+        try:
+            del os.environ["HTTPS_PROXY"]
+        except KeyError:
+            pass
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.timeout(15)
+def test_invalid_proxy_not_impacting_env_vars(conn_cnx):
+    http_proxy = os.environ.get("HTTP_PROXY")
+    https_proxy = os.environ.get("HTTPS_PROXY")
+    with pytest.raises(OperationalError):
+        with conn_cnx(
+            protocol="http",
+            account="testaccount",
+            login_timeout=5,
+            proxy_host="localhost",
+            proxy_port="3333",
+        ):
+            pass
+    # Proxy environment variables should not change
+    assert os.environ.get("HTTP_PROXY") == http_proxy
+    assert os.environ.get("HTTPS_PROXY") == https_proxy
 
 
 @pytest.mark.timeout(15)

@@ -26,7 +26,7 @@ from .network import (
 from .options import installed_pandas
 from .options import pyarrow as pa
 from .secret_detector import SecretDetector
-from .session_manager import SessionManager
+from .session_manager import HttpConfig, SessionManager
 from .time_util import TimerContextManager
 
 logger = getLogger(__name__)
@@ -261,6 +261,8 @@ class ResultBatch(abc.ABC):
             [s._to_result_metadata_v1() for s in schema] if schema is not None else None
         )
         self._use_dict_result = use_dict_result
+        # Passed to contain the configured Http behavior in case the connectio is no longer active for the download
+        # Can be overridden with setters if needed.
         self._session_manager = session_manager
         self._metrics: dict[str, int] = {}
         self._data: str | list[tuple[Any, ...]] | None = None
@@ -299,6 +301,25 @@ class ResultBatch(abc.ABC):
     @property
     def column_names(self) -> list[str]:
         return [col.name for col in self._schema]
+
+    @property
+    def session_manager(self) -> SessionManager | None:
+        return self._session_manager
+
+    @session_manager.setter
+    def session_manager(self, session_manager: SessionManager | None) -> None:
+        self._session_manager = session_manager
+
+    @property
+    def http_config(self):
+        return self._session_manager.config
+
+    @http_config.setter
+    def http_config(self, config: HttpConfig) -> None:
+        if self._session_manager:
+            self._session_manager.config = config
+        else:
+            self._session_manager = SessionManager(config=config)
 
     def __iter__(
         self,

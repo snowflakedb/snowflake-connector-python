@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Callable, Generator, Mapping
 
 from .compat import urlparse
+from .proxy import get_proxy_url
 from .vendored import requests
 from .vendored.requests import Response, Session
 from .vendored.requests.adapters import BaseAdapter, HTTPAdapter
@@ -76,8 +77,15 @@ class ProxySupportAdapter(HTTPAdapter):
             proxy_manager = self.proxy_manager_for(proxy)
 
             if isinstance(proxy_manager, ProxyManager):
-                # Add Host to proxy header SNOW-232777
-                proxy_manager.proxy_headers["Host"] = parsed_url.hostname
+                # Add Host to proxy header SNOW-232777 and SNOW-694457
+
+                # RFC 7230 / 5.4 – a proxy’s Host header must repeat the request authority
+                # verbatim: <hostname>[:<port>] with IPv6 still in [brackets].  We take that
+                # straight from urlparse(url).netloc, which preserves port and brackets (and case-sensitive hostname).
+                # Note: netloc also keeps user-info (user:pass@host) if present in URL. The driver never sends
+                # URLs with embedded credentials, so we leave them unhandled — for full support
+                # we’d need to manually concatenate hostname with optional port and IPv6 brackets.
+                proxy_manager.proxy_headers["Host"] = parsed_url.netloc
             else:
                 logger.debug(
                     f"Unable to set 'Host' to proxy manager of type {type(proxy_manager)} as"
@@ -112,6 +120,10 @@ class HttpConfig:
     )
     use_pooling: bool = True
     max_retries: int | None = REQUESTS_RETRY
+    proxy_host: str | None = None
+    proxy_port: str | None = None
+    proxy_user: str | None = None
+    proxy_password: str | None = None
 
     def copy_with(self, **overrides: Any) -> HttpConfig:
         """Return a new HttpConfig with overrides applied."""
@@ -293,13 +305,13 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
     **Two Operating Modes**:
     - use_pooling=False: One-shot sessions (create, use, close) - suitable for infrequent requests
     - use_pooling=True: Per-hostname session pools - reuses TCP connections, avoiding handshake
-      and SSL/TLS negotiation overhead for repeated requests to the same host
+      and SSL/TLS negotiation overhead for repeated requests to the same host.
 
     **Key Benefits**:
     - Centralized HTTP configuration management and easy propagation across the codebase
     - Consistent proxy setup (SNOW-694457) and headers customization (SNOW-2043816)
     - HTTPAdapter customization for connection-level request manipulation
-    - Performance optimization through connection reuse for high-traffic scenarios
+    - Performance optimization through connection reuse for high-traffic scenarios.
 
     **Usage**: Create the base session manager, then use clone() for derived managers to ensure
     proper config propagation. Pre-commit checks enforce usage to prevent code drift back to
@@ -315,7 +327,6 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
             logger.debug("Creating a config for the SessionManager")
             config = HttpConfig(**http_config_kwargs)
         self._cfg: HttpConfig = config
-
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
         )
@@ -337,6 +348,19 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
     @property
     def config(self) -> HttpConfig:
         return self._cfg
+
+    @config.setter
+    def config(self, cfg: HttpConfig) -> None:
+        self._cfg = cfg
+
+    @property
+    def proxy_url(self) -> str:
+        return get_proxy_url(
+            self._cfg.proxy_host,
+            self._cfg.proxy_port,
+            self._cfg.proxy_user,
+            self._cfg.proxy_password,
+        )
 
     @property
     def use_pooling(self) -> bool:
@@ -395,6 +419,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
     def make_session(self) -> Session:
         session = requests.Session()
         self._mount_adapters(session)
+        session.proxies = {"http": self.proxy_url, "https": self.proxy_url}
         return session
 
     @contextlib.contextmanager
