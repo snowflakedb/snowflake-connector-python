@@ -54,7 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        # python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.13"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -117,7 +118,10 @@ jobs:
       - name: Building wheel
         uses: pypa/cibuildwheel@v2.21.3
         env:
+          # Explicitly specify the Python implementation to use
           CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os.id }}
+          # Enable experimental feature for Windows ARM64
+          CIBW_ARCHS_WINDOWS: ARM64
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
         with:
           output-dir: dist
