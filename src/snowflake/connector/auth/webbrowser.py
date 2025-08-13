@@ -462,6 +462,7 @@ You can close this window now and go back where you started from.
             conn._rest._connection._ocsp_mode(),
             conn._rest._connection.login_timeout,
             conn._rest._connection._network_timeout,
+            session_manager=conn.rest.session_manager.clone(use_pooling=False),
         )
 
         body["data"]["AUTHENTICATOR"] = authenticator

@@ -1,6 +1,8 @@
 import time
 from unittest.mock import MagicMock
 
+from snowflake.connector.session_manager import SessionManager
+
 try:
     from snowflake.connector.vendored.requests.exceptions import ConnectionError
 except ImportError:
@@ -29,6 +31,7 @@ def mock_connection(
     socket_timeout=None,
     backoff_policy=DEFAULT_BACKOFF_POLICY,
     disable_saml_url_check=False,
+    session_manager: SessionManager = None,
     platform_detection_timeout=None,
 ):
     return MagicMock(
@@ -41,6 +44,7 @@ def mock_connection(
         _backoff_policy=backoff_policy,
         backoff_policy=backoff_policy,
         _disable_saml_url_check=disable_saml_url_check,
+        _session_manager=session_manager or get_mock_session_manager(),
         _platform_detection_timeout=platform_detection_timeout,
         platform_detection_timeout=platform_detection_timeout,
     )
@@ -59,3 +63,17 @@ def mock_request_with_action(next_action, sleep=None):
             raise ConnectionError()
 
     return mock_request
+
+
+def get_mock_session_manager(allow_send: bool = False):
+    def forbidden_send(*args, **kwargs):
+        raise NotImplementedError("Unit test tried to send data using Session.send")
+
+    class MockSessionManager(SessionManager):
+        def make_session(self):
+            session = super().make_session()
+            if not allow_send:
+                session.send = forbidden_send
+            return session
+
+    return MockSessionManager()

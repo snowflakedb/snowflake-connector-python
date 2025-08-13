@@ -40,7 +40,12 @@ from snowflake.connector.network import (
     SnowflakeRestful,
 )
 
-from .mock_utils import mock_connection, mock_request_with_action, zero_backoff
+from .mock_utils import (
+    get_mock_session_manager,
+    mock_connection,
+    mock_request_with_action,
+    zero_backoff,
+)
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
@@ -382,7 +387,9 @@ def test_secret_masking(caplog):
 
 
 def test_retry_connection_reset_error(caplog):
-    connection = mock_connection()
+    connection = mock_connection(
+        session_manager=get_mock_session_manager(allow_send=True)
+    )
     connection.errorhandler = Mock(return_value=None)
 
     rest = SnowflakeRestful(

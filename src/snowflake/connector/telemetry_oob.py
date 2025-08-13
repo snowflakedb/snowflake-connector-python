@@ -482,6 +482,7 @@ class TelemetryService:
                 # This logger guarantees the payload won't be masked. Testing purpose.
                 rt_plain_logger.debug(f"OOB telemetry data being sent is {payload}")
 
+            # TODO(SNOW-2259522): Telemetry OOB is currently disabled. If Telemetry OOB is to be re-enabled, this HTTP call must be routed through the connection_argument.session_manager.use_requests_session(use_pooling) (so the SessionManager instance attached to the connection which initialization's fail most likely triggered this telemetry log). It would allow to pick up proxy configuration & custom headers (see tickets SNOW-694457 and SNOW-2203079).
             with requests.Session() as session:
                 headers = {
                     "Content-type": "application/json",
