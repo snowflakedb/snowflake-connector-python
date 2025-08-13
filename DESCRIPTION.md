@@ -24,7 +24,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Relaxed the `pyarrow` version constrain; versions >= 19 can now be used.
   - Disabled token caching for OAuth Client Credentials authentication.
   - Fixed OAuth authenticator values.
-  - Fixed a bug where a PAT with an external session authenticator was used while external_session_id was not provided in SnowflakeRestful.fetch.
+  - Fixed a bug where a PAT with an external session authenticator was used while `external_session_id` was not provided in `SnowflakeRestful.fetch`.
   - Fixed the case-sensitivity of `Oauth` and `programmatic_access_token` authenticator values.
   - Fixed unclear error messages for incorrect `authenticator` values.
   - Fixed GCS staging by ensuring the endpoint has a scheme.
