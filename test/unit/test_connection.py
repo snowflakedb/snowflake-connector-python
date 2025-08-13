@@ -165,6 +165,16 @@ def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
 
 
 @pytest.mark.skipolddriver
+def test_invalid_authenticator():
+    with pytest.raises(ProgrammingError) as excinfo:
+        snowflake.connector.connect(
+            account="account",
+            authenticator="INVALID",
+        )
+    assert "Unknown authenticator: INVALID" in str(excinfo.value)
+
+
+@pytest.mark.skipolddriver
 def test_is_still_running():
     """Checks that is_still_running returns expected results."""
     statuses = [

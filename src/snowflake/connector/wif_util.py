@@ -13,7 +13,7 @@ from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from botocore.utils import InstanceMetadataRegionFetcher
 
-from .errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
+from .errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
 from .session_manager import SessionManager
 
@@ -38,7 +38,13 @@ class AttestationProvider(Enum):
     @staticmethod
     def from_string(provider: str) -> AttestationProvider:
         """Converts a string to a strongly-typed enum value of AttestationProvider."""
-        return AttestationProvider[provider.upper()]
+        try:
+            return AttestationProvider[provider.upper()]
+        except KeyError:
+            raise ProgrammingError(
+                msg=f"Unknown workload_identity_provider: '{provider}'. Expected one of: {', '.join(AttestationProvider.all_string_values())}",
+                errno=ER_INVALID_WIF_SETTINGS,
+            )
 
     @staticmethod
     def all_string_values() -> list[str]:
@@ -65,7 +71,13 @@ def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[st
 
     Any errors during token parsing will be bubbled up. Missing 'iss' or 'sub' claims will also raise an error.
     """
-    claims = jwt.decode(jwt_str, options={"verify_signature": False})
+    try:
+        claims = jwt.decode(jwt_str, options={"verify_signature": False})
+    except jwt.InvalidTokenError as e:
+        raise ProgrammingError(
+            msg=f"Invalid JWT token: {e}",
+            errno=ER_INVALID_WIF_SETTINGS,
+        )
 
     if not ("iss" in claims and "sub" in claims):
         raise ProgrammingError(
@@ -179,14 +191,20 @@ def create_gcp_attestation(
 
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
-    res = session_manager.request(
-        method="GET",
-        url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
-        headers={
-            "Metadata-Flavor": "Google",
-        },
-    )
-    res.raise_for_status()
+    try:
+        res = session_manager.request(
+            method="GET",
+            url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
+            headers={
+                "Metadata-Flavor": "Google",
+            },
+        )
+        res.raise_for_status()
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
 
     jwt_str = res.content.decode("utf-8")
     _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
@@ -230,12 +248,18 @@ def create_azure_attestation(
     if managed_identity_client_id:
         query_params += f"&client_id={managed_identity_client_id}"
 
-    res = session_manager.request(
-        method="GET",
-        url=f"{url_without_query_string}?{query_params}",
-        headers=headers,
-    )
-    res.raise_for_status()
+    try:
+        res = session_manager.request(
+            method="GET",
+            url=f"{url_without_query_string}?{query_params}",
+            headers=headers,
+        )
+        res.raise_for_status()
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Error fetching Azure metadata: {e}. Ensure the application is running on Azure.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
 
     jwt_str = res.json().get("access_token")
     if not jwt_str:
