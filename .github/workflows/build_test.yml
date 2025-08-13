@@ -85,7 +85,6 @@ jobs:
             id: macosx_x86_64
           - image: macos-latest
             id: macosx_arm64
-
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         exclude:
           - os:
@@ -116,10 +115,8 @@ jobs:
       - name: Building wheel
         uses: pypa/cibuildwheel@v2.21.3
         env:
-          # Explicitly specify the Python implementation to use
           CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os.id }}
-          # Enable experimental feature for Windows ARM64
-          CIBW_ARCHS_WINDOWS: ARM64
+          CIBW_ARCHS_WINDOWS: ${{ matrix.os.id == 'win_arm64' && 'ARM64' || 'auto' }}
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
         with:
           output-dir: dist
@@ -150,6 +147,15 @@ jobs:
            download_name: win_arm64
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         cloud-provider: [aws, azure, gcp]
+        exclude:
+          - os:
+              image_name: windows-11-arm
+              download_name: win_arm64
+            python-version: "3.9"
+          - os:
+              image_name: windows-11-arm
+              download_name: win_arm64
+            python-version: "3.10"
 
     steps:
       - uses: actions/checkout@v4
@@ -159,18 +165,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
-      - name: Set up Java for non-ARM environments
-        if: matrix.os.download_name != 'win_arm64'
+      - name: Set up Java
         uses: actions/setup-java@v4 # for wiremock
         with:
-          java-version: 11
-          distribution: 'temurin'
-          java-package: 'jre'
-      - name: Set up Java for ARM64 Windows
-        if: matrix.os.download_name == 'win_arm64'
-        uses: actions/setup-java@v4 # for wiremock
-        with:
-          java-version: '21.0.5+11.0.LTS'
+          java-version: ${{ matrix.os.download_name == 'win_arm64' && '21.0.5+11.0.LTS' || '11' }}
           distribution: 'temurin'
           java-package: 'jre'
       - name: Fetch Wiremock
