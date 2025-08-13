@@ -749,3 +749,46 @@ def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(monkeypatc
 
         assert not rest._connection.errorhandler.called  # no error
         assert auth.assertion_content == ref_token
+
+
+@pytest.mark.parametrize("authenticator", ["EXTERNALBROWSER", "externalbrowser"])
+def test_externalbrowser_authenticator_is_case_insensitive(monkeypatch, authenticator):
+    """Test that external browser authenticator is case insensitive."""
+    import snowflake.connector
+
+    def mock_post_request(self, url, headers, json_body, **kwargs):
+        return {
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+                "idToken": None,
+                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
+            },
+        }
+
+    monkeypatch.setattr(
+        snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
+    )
+
+    # Mock the webbrowser authentication to avoid opening actual browser
+    def mock_webbrowser_auth_prepare(
+        self, conn, authenticator, service_name, account, user, password
+    ):
+        # Just set the token directly to simulate successful browser auth
+        self._token = "MOCK_TOKEN"
+
+    monkeypatch.setattr(AuthByWebBrowser, "prepare", mock_webbrowser_auth_prepare)
+
+    # Create connection with external browser authenticator
+    conn = snowflake.connector.connect(
+        user="testuser",
+        account="testaccount",
+        authenticator=authenticator,
+    )
+
+    # Verify that the auth_class is an instance of AuthByWebBrowser
+    assert isinstance(conn.auth_class, AuthByWebBrowser)
+
+    conn.close()

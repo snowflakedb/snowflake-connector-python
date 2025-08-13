@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import Mock, PropertyMock, patch
 
+import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -36,7 +37,8 @@ def _create_mock_auth_keypair_rest_response():
     return _mock_auth_key_pair_rest_response
 
 
-def test_auth_keypair():
+@pytest.mark.parametrize("authenticator", ["SNOWFLAKE_JWT", "snowflake_jwt"])
+def test_auth_keypair(authenticator):
     """Simple Key Pair test."""
     private_key_der, public_key_der_encoded = generate_key_pair(2048)
     application = "testapplication"
@@ -45,7 +47,7 @@ def test_auth_keypair():
     auth_instance = AuthByKeyPair(private_key=private_key_der)
     auth_instance._retry_ctx.set_start_time()
     auth_instance.handle_timeout(
-        authenticator="SNOWFLAKE_JWT",
+        authenticator=authenticator,
         service_name=None,
         account=account,
         user=user,
