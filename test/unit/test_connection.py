@@ -42,6 +42,7 @@ except ImportError:
     AuthByDefault = AuthByOkta = AuthByOAuth = AuthByWebBrowser = MagicMock
 
 try:  # pragma: no cover
+    import snowflake.connector.vendored.requests as requests
     from snowflake.connector.auth import AuthByUsrPwdMfa
     from snowflake.connector.config_manager import CONFIG_MANAGER
     from snowflake.connector.constants import (
@@ -808,3 +809,88 @@ def test_reraise_error_in_file_transfer_work_function_config(
         expected_value = bool(reraise_enabled)
         actual_value = conn._reraise_error_in_file_transfer_work_function
         assert actual_value == expected_value
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
+def test_large_query_through_proxy(
+    wiremock_generic_mappings_dir,
+    wiremock_target_proxy_pair,
+    wiremock_mapping_dir,
+    proxy_env_vars,
+    proxy_method,
+):
+    target_wm, proxy_wm = wiremock_target_proxy_pair
+
+    password_mapping = wiremock_mapping_dir / "auth/password/successful_flow.json"
+    multi_chunk_request_mapping = (
+        wiremock_mapping_dir / "queries/select_large_request_successful.json"
+    )
+    disconnect_mapping = (
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+    telemetry_mapping = wiremock_generic_mappings_dir / "telemetry.json"
+    chunk_1_mapping = wiremock_mapping_dir / "queries/chunk_1.json"
+    chunk_2_mapping = wiremock_mapping_dir / "queries/chunk_2.json"
+
+    # Configure mappings with proxy header verification
+    expected_headers = {"Via": {"contains": "wiremock"}}
+
+    target_wm.import_mapping(password_mapping, expected_headers=expected_headers)
+    target_wm.add_mapping_with_default_placeholders(
+        multi_chunk_request_mapping, expected_headers
+    )
+    target_wm.add_mapping(disconnect_mapping, expected_headers=expected_headers)
+    target_wm.add_mapping(telemetry_mapping, expected_headers=expected_headers)
+    target_wm.add_mapping_with_default_placeholders(chunk_1_mapping, expected_headers)
+    target_wm.add_mapping_with_default_placeholders(chunk_2_mapping, expected_headers)
+
+    # Configure proxy based on test parameter
+    set_proxy_env_vars, clear_proxy_env_vars = proxy_env_vars
+    connect_kwargs = {
+        "user": "testUser",
+        "password": "testPassword",
+        "account": "testAccount",
+        "host": target_wm.wiremock_host,
+        "port": target_wm.wiremock_http_port,
+        "protocol": "http",
+        "warehouse": "TEST_WH",
+    }
+
+    if proxy_method == "explicit_args":
+        connect_kwargs.update(
+            {
+                "proxy_host": proxy_wm.wiremock_host,
+                "proxy_port": str(proxy_wm.wiremock_http_port),
+                "proxy_user": "proxyUser",
+                "proxy_password": "proxyPass",
+            }
+        )
+        clear_proxy_env_vars()  # Ensure no env vars interfere
+    else:  # env_vars
+        proxy_url = f"http://proxyUser:proxyPass@{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}"
+        set_proxy_env_vars(proxy_url)
+
+    row_count = 50_000
+    with snowflake.connector.connect(**connect_kwargs) as conn:
+        cursors = conn.execute_string(
+            f"select seq4() as n from table(generator(rowcount => {row_count}));"
+        )
+        assert len(cursors[0]._result_set.batches) > 1  # We need to have remote results
+    assert list(cursors[0])
+
+    # Ensure proxy saw query
+    proxy_reqs = requests.get(f"{proxy_wm.http_host_with_port}/__admin/requests").json()
+    assert any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in proxy_reqs["requests"]
+    )
+
+    # Ensure backend saw query
+    target_reqs = requests.get(
+        f"{target_wm.http_host_with_port}/__admin/requests"
+    ).json()
+    assert any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in target_reqs["requests"]
+    )
