@@ -211,3 +211,50 @@ def test_eligible_for_default_client_credentials_via_constructor(
             assert_initialized_correctly()
     else:
         assert_initialized_correctly()
+
+
+@pytest.mark.parametrize(
+    "authenticator", ["OAUTH_AUTHORIZATION_CODE", "oauth_authorization_code"]
+)
+def test_oauth_authorization_code_authenticator_is_case_insensitive(
+    monkeypatch, authenticator
+):
+    """Test that OAuth authorization code authenticator is case insensitive."""
+    import snowflake.connector
+
+    def mock_post_request(self, url, headers, json_body, **kwargs):
+        return {
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+                "idToken": None,
+                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
+            },
+        }
+
+    monkeypatch.setattr(
+        snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
+    )
+
+    # Mock the OAuth authorization flow to avoid opening browser and starting HTTP server
+    def mock_request_tokens(self, **kwargs):
+        # Simulate successful token retrieval
+        return ("mock_access_token", "mock_refresh_token")
+
+    monkeypatch.setattr(AuthByOauthCode, "_request_tokens", mock_request_tokens)
+
+    # Create connection with OAuth authorization code authenticator
+    conn = snowflake.connector.connect(
+        user="testuser",
+        account="testaccount",
+        authenticator=authenticator,
+        oauth_client_id="test_client_id",
+        oauth_client_secret="test_client_secret",
+    )
+
+    # Verify that the auth_class is an instance of AuthByOauthCode
+    assert isinstance(conn.auth_class, AuthByOauthCode)
+
+    conn.close()
