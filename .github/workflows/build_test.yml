@@ -1,15 +1,15 @@
 name: Build and Test
 
 on:
-    # push:
-    #     branches:
-    #         - master
-    #         - main
-    #     tags:
-    #         - v*
-    # pull_request:
-    #     branches:
-    #         - '**'
+    push:
+        branches:
+            - master
+            - main
+        tags:
+            - v*
+    pull_request:
+        branches:
+            - '**'
     workflow_dispatch:
         inputs:
           logLevel:
@@ -54,8 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        python-version: ["3.13"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -74,30 +73,29 @@ jobs:
     strategy:
       matrix:
         os:
-          # - image: ubuntu-latest
-          #   id: manylinux_x86_64
-          # - image: ubuntu-latest
-          #   id: manylinux_aarch64
-          # - image: windows-latest
-          #   id: win_amd64
+          - image: ubuntu-latest
+            id: manylinux_x86_64
+          - image: ubuntu-latest
+            id: manylinux_aarch64
+          - image: windows-latest
+            id: win_amd64
           - image: windows-11-arm
             id: win_arm64
-          # - image: macos-latest
-          #   id: macosx_x86_64
-          # - image: macos-latest
-          #   id: macosx_arm64
+          - image: macos-latest
+            id: macosx_x86_64
+          - image: macos-latest
+            id: macosx_arm64
 
-        # python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        python-version: ["3.13"]
-        # exclude:
-        #   - os:
-        #       image: windows-11-arm
-        #       id: win_arm64
-        #     python-version: "3.9"
-        #   - os:
-        #       image: windows-11-arm
-        #       id: win_arm64
-        #     python-version: "3.10"
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        exclude:
+          - os:
+              image: windows-11-arm
+              id: win_arm64
+            python-version: "3.9"
+          - os:
+              image: windows-11-arm
+              id: win_arm64
+            python-version: "3.10"
     name: Build ${{ matrix.os.id }}-py${{ matrix.python-version }}
     runs-on: ${{ matrix.os.image }}
     steps:
@@ -142,16 +140,15 @@ jobs:
       fail-fast: false
       matrix:
         os:
-        #  - image_name: ubuntu-latest
-        #    download_name: manylinux_x86_64
-        #  - image_name: macos-latest
-        #    download_name: macosx_x86_64
-        #  - image_name: windows-latest
-        #    download_name: win_amd64
+         - image_name: ubuntu-latest
+           download_name: manylinux_x86_64
+         - image_name: macos-latest
+           download_name: macosx_x86_64
+         - image_name: windows-latest
+           download_name: win_amd64
          - image_name: windows-11-arm
            download_name: win_arm64
-        # python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        python-version: ["3.13"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         cloud-provider: [aws, azure, gcp]
 
     steps:
