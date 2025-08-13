@@ -389,6 +389,8 @@ def test_invalid_account_timeout(conn_cnx):
 
 @pytest.mark.timeout(15)
 def test_invalid_proxy(conn_cnx):
+    http_proxy = os.environ.get("HTTP_PROXY")
+    https_proxy = os.environ.get("HTTPS_PROXY")
     with pytest.raises(OperationalError):
         with conn_cnx(
             protocol="http",
@@ -400,8 +402,20 @@ def test_invalid_proxy(conn_cnx):
             pass
     # NOTE environment variable is set ONLY FOR THE OLD DRIVER if the proxy parameter is specified.
     # So this deletion is needed for old driver tests only.
-    del os.environ["HTTP_PROXY"]
-    del os.environ["HTTPS_PROXY"]
+    if http_proxy is not None:
+        os.environ["HTTP_PROXY"] = http_proxy
+    else:
+        try:
+            del os.environ["HTTP_PROXY"]
+        except KeyError:
+            pass
+    if https_proxy is not None:
+        os.environ["HTTPS_PROXY"] = https_proxy
+    else:
+        try:
+            del os.environ["HTTPS_PROXY"]
+        except KeyError:
+            pass
 
 
 @pytest.mark.skipolddriver
