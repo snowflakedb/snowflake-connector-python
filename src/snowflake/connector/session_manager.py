@@ -395,6 +395,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
     def make_session(self) -> Session:
         session = requests.Session()
         self._mount_adapters(session)
+        print(session.proxies)
         return session
 
     @contextlib.contextmanager
