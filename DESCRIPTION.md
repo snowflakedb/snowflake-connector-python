@@ -9,6 +9,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v3.17 (TBD)
   - Added in-band HTTP exception telemetry.
+
+- v3.17.0(August 16,2025)
+
+   -N/A
+
   - Added an `unsafe_skip_file_permissions_check` flag to skip file permission checks on the cache and configuration.
   - Added `APPLICATION_PATH` within `CLIENT_ENVIRONMENT` to distinguish between multiple scripts using the Python Connector in the same environment.
   - Added basic JSON support for Interval types.
