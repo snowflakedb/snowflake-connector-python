@@ -7,7 +7,7 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.17 (TBD)
+- v3.17.0(August 16,2025)
   - Added in-band HTTP exception telemetry.
   - Added an `unsafe_skip_file_permissions_check` flag to skip file permission checks on the cache and configuration.
   - Added `APPLICATION_PATH` within `CLIENT_ENVIRONMENT` to distinguish between multiple scripts using the Python Connector in the same environment.
