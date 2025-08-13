@@ -12,6 +12,7 @@ import snowflake.connector.vendored.requests as requests
 from snowflake.connector.errors import OperationalError
 
 
+@pytest.mark.skipolddriver
 def test_get_proxy_url():
     from snowflake.connector.proxy import get_proxy_url
 
