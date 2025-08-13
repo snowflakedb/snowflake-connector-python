@@ -36,11 +36,17 @@ EXIT /B %ERRORLEVEL%
 set pv=%~1
 
 echo Going to compile wheel for Python %pv%
-py -%pv% -m pip install --upgrade pip setuptools wheel build
+py -%pv% -m pip install --upgrade pip setuptools wheel build delvewheel
 if %errorlevel% neq 0 goto :error
 
-py -%pv% -m build --wheel .
+py -%pv% -m build --outdir dist\rawwheel --wheel .
 if %errorlevel% neq 0 goto :error
+
+:: patch the wheel by including its dependencies
+py -%pv% -m delvewheel repair -vv -w dist dist\rawwheel\*
+if %errorlevel% neq 0 goto :error
+
+rd /s /q dist\rawwheel
 
 EXIT /B 0
 
