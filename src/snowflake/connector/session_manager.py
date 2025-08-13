@@ -305,13 +305,13 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
     **Two Operating Modes**:
     - use_pooling=False: One-shot sessions (create, use, close) - suitable for infrequent requests
     - use_pooling=True: Per-hostname session pools - reuses TCP connections, avoiding handshake
-      and SSL/TLS negotiation overhead for repeated requests to the same host
+      and SSL/TLS negotiation overhead for repeated requests to the same host.
 
     **Key Benefits**:
     - Centralized HTTP configuration management and easy propagation across the codebase
     - Consistent proxy setup (SNOW-694457) and headers customization (SNOW-2043816)
     - HTTPAdapter customization for connection-level request manipulation
-    - Performance optimization through connection reuse for high-traffic scenarios
+    - Performance optimization through connection reuse for high-traffic scenarios.
 
     **Usage**: Create the base session manager, then use clone() for derived managers to ensure
     proper config propagation. Pre-commit checks enforce usage to prevent code drift back to
