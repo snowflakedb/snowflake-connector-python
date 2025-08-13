@@ -17,7 +17,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
     - Added the `WORKLOAD_IDENTITY` value for the authenticator type.
     - Added the `workload_identity_provider` and `workload_identity_entra_resource` parameters.
   - Added support for the `use_vectorized_scanner` parameter in the write_pandas function.
-  - Added the support of proxy setup using connection parameters without emitting environment variables.
+  - Added support of proxy setup using connection parameters without emitting environment variables.
   - Added populating of `type_code` in `ResultMetadata` for interval types.
   - Introduced the `snowflake_version` property to the connection.
   - Moved `OAUTH_TYPE` to `CLIENT_ENVIROMENT`.
