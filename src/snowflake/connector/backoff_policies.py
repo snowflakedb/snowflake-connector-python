@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from typing import Callable, Iterator
+from typing import Callable, Generator
 
 """This module provides common implementations of backoff policies
 
@@ -38,7 +38,7 @@ def mixed_backoff(
     base: int = DEFAULT_BACKOFF_BASE,
     cap: int = DEFAULT_BACKOFF_CAP,
     enable_jitter: bool = DEFAULT_ENABLE_JITTER,
-) -> Callable[..., Iterator[int]]:
+) -> Callable[[], Generator[int]]:
     """Randomly chooses between exponential and constant backoff. Uses equal jitter.
 
     Args:
@@ -52,7 +52,7 @@ def mixed_backoff(
         Callable: generator function implementing the mixed backoff policy
     """
 
-    def generator():
+    def generator() -> Generator[int]:
         cnt = 0
         sleep = base
 
@@ -80,7 +80,7 @@ def linear_backoff(
     base: int = DEFAULT_BACKOFF_BASE,
     cap: int = DEFAULT_BACKOFF_CAP,
     enable_jitter: bool = DEFAULT_ENABLE_JITTER,
-) -> Callable[..., Iterator[int]]:
+) -> Callable[[], Generator[int]]:
     """Standard linear backoff. Uses full jitter.
 
     Args:
@@ -94,7 +94,7 @@ def linear_backoff(
         Callable: generator function implementing the linear backoff policy
     """
 
-    def generator():
+    def generator() -> Generator[int]:
         sleep = base
 
         yield sleep
@@ -113,7 +113,7 @@ def exponential_backoff(
     base: int = DEFAULT_BACKOFF_BASE,
     cap: int = DEFAULT_BACKOFF_CAP,
     enable_jitter: bool = DEFAULT_ENABLE_JITTER,
-) -> Callable[..., Iterator[int]]:
+) -> Callable[[], Generator[int]]:
     """Standard exponential backoff. Uses full jitter.
 
     Args:
@@ -127,7 +127,7 @@ def exponential_backoff(
         Callable: generator function implementing the exponential backoff policy
     """
 
-    def generator():
+    def generator() -> Generator[int]:
         sleep = base
 
         yield sleep
