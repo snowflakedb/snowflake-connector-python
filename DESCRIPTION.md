@@ -25,6 +25,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added support for parameter `use_vectorized_scanner` in function `write_pandas`.
   - Fix unclear error messages in case of incorrect `authenticator` values.
   - Fix case-sensitivity of `Oauth` and `programmatic_access_token` authenticator values.
+  - Populate type_code in ResultMetadata for interval types.
 
 - v3.16.0(July 04,2025)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4.

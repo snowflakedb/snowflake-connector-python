@@ -15,7 +15,7 @@ from botocore.utils import InstanceMetadataRegionFetcher
 
 from .errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
-from .vendored import requests
+from .session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
@@ -94,6 +94,7 @@ def get_aws_region() -> str:
     if "AWS_REGION" in os.environ:  # Lambda
         region = os.environ["AWS_REGION"]
     else:  # EC2
+        # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
         region = InstanceMetadataRegionFetcher().retrieve_region()
 
     if not region:
@@ -141,11 +142,14 @@ def get_aws_sts_hostname(region: str, partition: str) -> str:
         )
 
 
-def create_aws_attestation() -> WorkloadIdentityAttestation:
+def create_aws_attestation(
+    session_manager: SessionManager | None = None,
+) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for AWS.
 
     If the application isn't running on AWS or no credentials were found, raises an error.
     """
+    # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
     session = boto3.session.Session()
     aws_creds = session.get_credentials()
     if not aws_creds:
@@ -180,13 +184,15 @@ def create_aws_attestation() -> WorkloadIdentityAttestation:
     )
 
 
-def create_gcp_attestation() -> WorkloadIdentityAttestation:
+def create_gcp_attestation(
+    session_manager: SessionManager | None = None,
+) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for GCP.
 
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
     try:
-        res = requests.request(
+        res = session_manager.request(
             method="GET",
             url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
             headers={
@@ -209,6 +215,7 @@ def create_gcp_attestation() -> WorkloadIdentityAttestation:
 
 def create_azure_attestation(
     snowflake_entra_resource: str,
+    session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for Azure.
 
@@ -242,7 +249,7 @@ def create_azure_attestation(
         query_params += f"&client_id={managed_identity_client_id}"
 
     try:
-        res = requests.request(
+        res = session_manager.request(
             method="GET",
             url=f"{url_without_query_string}?{query_params}",
             headers=headers,
@@ -288,19 +295,23 @@ def create_attestation(
     provider: AttestationProvider,
     entra_resource: str | None = None,
     token: str | None = None,
+    session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
 
     If an explicit entra_resource was provided to the connector, this will be used. Otherwise, the default Snowflake Entra resource will be used.
     """
     entra_resource = entra_resource or DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
+    session_manager = (
+        session_manager.clone() if session_manager else SessionManager(use_pooling=True)
+    )
 
     if provider == AttestationProvider.AWS:
-        return create_aws_attestation()
+        return create_aws_attestation(session_manager)
     elif provider == AttestationProvider.AZURE:
-        return create_azure_attestation(entra_resource)
+        return create_azure_attestation(entra_resource, session_manager)
     elif provider == AttestationProvider.GCP:
-        return create_gcp_attestation()
+        return create_gcp_attestation(session_manager)
     elif provider == AttestationProvider.OIDC:
         return create_oidc_attestation(token)
     else:
