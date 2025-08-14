@@ -8,6 +8,8 @@ from enum import Enum, unique
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Callable, Iterator, NamedTuple, Sequence
 
+from typing_extensions import Self
+
 from .arrow_context import ArrowConverterContext
 from .backoff_policies import exponential_backoff
 from .compat import OK, UNAUTHORIZED, urlparse
@@ -24,8 +26,8 @@ from .network import (
 from .options import installed_pandas
 from .options import pyarrow as pa
 from .secret_detector import SecretDetector
+from .session_manager import HttpConfig, SessionManager
 from .time_util import TimerContextManager
-from .vendored import requests
 
 logger = getLogger(__name__)
 
@@ -164,6 +166,7 @@ def create_batches_from_response(
                     column_converters,
                     cursor._use_dict_result,
                     json_result_force_utf8_decoding=cursor._connection._json_result_force_utf8_decoding,
+                    session_manager=cursor._connection._session_manager.clone(),
                 )
                 for c in chunks
             ]
@@ -178,6 +181,7 @@ def create_batches_from_response(
                     cursor._connection._numpy,
                     schema,
                     cursor._connection._arrow_number_to_decimal,
+                    session_manager=cursor._connection._session_manager.clone(),
                 )
                 for c in chunks
             ]
@@ -190,6 +194,7 @@ def create_batches_from_response(
             schema,
             column_converters,
             cursor._use_dict_result,
+            session_manager=cursor._connection._session_manager.clone(),
         )
     elif rowset_b64 is not None:
         first_chunk = ArrowResultBatch.from_data(
@@ -200,6 +205,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
+            session_manager=cursor._connection._session_manager.clone(),
         )
     else:
         logger.error(f"Don't know how to construct ResultBatches from response: {data}")
@@ -211,6 +217,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
+            session_manager=cursor._connection._session_manager.clone(),
         )
 
     return [first_chunk] + rest_of_chunks
@@ -244,6 +251,7 @@ class ResultBatch(abc.ABC):
         remote_chunk_info: RemoteChunkInfo | None,
         schema: Sequence[ResultMetadataV2],
         use_dict_result: bool,
+        session_manager: SessionManager | None = None,
     ) -> None:
         self.rowcount = rowcount
         self._chunk_headers = chunk_headers
@@ -253,6 +261,9 @@ class ResultBatch(abc.ABC):
             [s._to_result_metadata_v1() for s in schema] if schema is not None else None
         )
         self._use_dict_result = use_dict_result
+        # Passed to contain the configured Http behavior in case the connectio is no longer active for the download
+        # Can be overridden with setters if needed.
+        self._session_manager = session_manager
         self._metrics: dict[str, int] = {}
         self._data: str | list[tuple[Any, ...]] | None = None
         if self._remote_chunk_info:
@@ -291,6 +302,25 @@ class ResultBatch(abc.ABC):
     def column_names(self) -> list[str]:
         return [col.name for col in self._schema]
 
+    @property
+    def session_manager(self) -> SessionManager | None:
+        return self._session_manager
+
+    @session_manager.setter
+    def session_manager(self, session_manager: SessionManager | None) -> None:
+        self._session_manager = session_manager
+
+    @property
+    def http_config(self):
+        return self._session_manager.config
+
+    @http_config.setter
+    def http_config(self, config: HttpConfig) -> None:
+        if self._session_manager:
+            self._session_manager.config = config
+        else:
+            self._session_manager = SessionManager(config=config)
+
     def __iter__(
         self,
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
@@ -323,17 +353,29 @@ class ResultBatch(abc.ABC):
                         "timeout": DOWNLOAD_TIMEOUT,
                     }
                     # Try to reuse a connection if possible
-                    if connection and connection._rest is not None:
-                        with connection._rest._use_requests_session() as session:
+
+                    if (
+                        connection
+                        and connection.rest
+                        and connection.rest.session_manager is not None
+                    ):
+                        # If connection was explicitly passed and not closed yet - we can reuse SessionManager with session pooling
+                        with connection.rest.use_requests_session() as session:
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
                             response = session.request("get", **request_data)
+                    elif self._session_manager is not None:
+                        # If connection is not accessible or was already closed, but cursors are now used to fetch the data - we will only reuse the http setup (through cloned SessionManager without session pooling)
+                        with self._session_manager.use_requests_session() as session:
+                            response = session.request("get", **request_data)
                     else:
+                        # If there was no session manager cloned, then we are using a default Session Manager setup, since it is very unlikely to enter this part outside of testing
                         logger.debug(
-                            f"downloading result batch id: {self.id} with new session"
+                            f"downloading result batch id: {self.id} with new session through local session manager"
                         )
-                        response = requests.get(**request_data)
+                        local_session_manager = SessionManager(use_pooling=False)
+                        response = local_session_manager.get(**request_data)
 
                     if response.status_code == OK:
                         logger.debug(
@@ -413,6 +455,14 @@ class ResultBatch(abc.ABC):
     def to_arrow(self) -> Table:
         raise NotImplementedError()
 
+    @abc.abstractmethod
+    def populate_data(
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> Self:
+        """Downloads the data that the ``ResultBatch`` is pointing at and populates it into self._data.
+        Returns the instance itself."""
+        raise NotImplementedError()
+
 
 class JSONResultBatch(ResultBatch):
     def __init__(
@@ -425,6 +475,7 @@ class JSONResultBatch(ResultBatch):
         use_dict_result: bool,
         *,
         json_result_force_utf8_decoding: bool = False,
+        session_manager: SessionManager | None = None,
     ) -> None:
         super().__init__(
             rowcount,
@@ -432,6 +483,7 @@ class JSONResultBatch(ResultBatch):
             remote_chunk_info,
             schema,
             use_dict_result,
+            session_manager,
         )
         self._json_result_force_utf8_decoding = json_result_force_utf8_decoding
         self.column_converters = column_converters
@@ -444,6 +496,7 @@ class JSONResultBatch(ResultBatch):
         schema: Sequence[ResultMetadataV2],
         column_converters: Sequence[tuple[str, SnowflakeConverterType]],
         use_dict_result: bool,
+        session_manager: SessionManager | None = None,
     ):
         """Initializes a ``JSONResultBatch`` from static, local data."""
         new_chunk = cls(
@@ -453,6 +506,7 @@ class JSONResultBatch(ResultBatch):
             schema,
             column_converters,
             use_dict_result,
+            session_manager=session_manager,
         )
         new_chunk._data = new_chunk._parse(data)
         return new_chunk
@@ -538,11 +592,9 @@ class JSONResultBatch(ResultBatch):
     def __repr__(self) -> str:
         return f"JSONResultChunk({self.id})"
 
-    def create_iter(
+    def _fetch_data(
         self, connection: SnowflakeConnection | None = None, **kwargs
-    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
-        if self._local:
-            return iter(self._data)
+    ) -> list[dict | Exception] | list[tuple | Exception]:
         response = self._download(connection=connection)
         # Load data to a intermediate form
         logger.debug(f"started loading result batch id: {self.id}")
@@ -554,7 +606,20 @@ class JSONResultBatch(ResultBatch):
         with TimerContextManager() as parse_metric:
             parsed_data = self._parse(downloaded_data)
         self._metrics[DownloadMetrics.parse.value] = parse_metric.get_timing_millis()
-        return iter(parsed_data)
+        return parsed_data
+
+    def populate_data(
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> Self:
+        self._data = self._fetch_data(connection=connection, **kwargs)
+        return self
+
+    def create_iter(
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
+        if self._local:
+            return iter(self._data)
+        return iter(self._fetch_data(connection=connection, **kwargs))
 
     def _arrow_fetching_error(self):
         return NotSupportedError(
@@ -580,6 +645,7 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadataV2],
         number_to_decimal: bool,
+        session_manager: SessionManager | None = None,
     ) -> None:
         super().__init__(
             rowcount,
@@ -587,6 +653,7 @@ class ArrowResultBatch(ResultBatch):
             remote_chunk_info,
             schema,
             use_dict_result,
+            session_manager,
         )
         self._context = context
         self._numpy = numpy
@@ -613,7 +680,10 @@ class ArrowResultBatch(ResultBatch):
         )
 
     def _from_data(
-        self, data: str, iter_unit: IterUnit, check_error_on_every_column: bool = True
+        self,
+        data: str | bytes,
+        iter_unit: IterUnit,
+        check_error_on_every_column: bool = True,
     ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` files from a str.
 
@@ -623,8 +693,11 @@ class ArrowResultBatch(ResultBatch):
         if len(data) == 0:
             return iter([])
 
+        if isinstance(data, str):
+            data = b64decode(data)
+
         return _create_nanoarrow_iterator(
-            b64decode(data),
+            data,
             self._context,
             self._use_dict_result,
             self._numpy,
@@ -643,6 +716,7 @@ class ArrowResultBatch(ResultBatch):
         numpy: bool,
         schema: Sequence[ResultMetadataV2],
         number_to_decimal: bool,
+        session_manager: SessionManager | None = None,
     ):
         """Initializes an ``ArrowResultBatch`` from static, local data."""
         new_chunk = cls(
@@ -654,6 +728,7 @@ class ArrowResultBatch(ResultBatch):
             numpy,
             schema,
             number_to_decimal,
+            session_manager=session_manager,
         )
         new_chunk._data = data
 
@@ -751,3 +826,9 @@ class ArrowResultBatch(ResultBatch):
                 return self._get_arrow_iter(connection=connection)
         else:
             return self._create_iter(iter_unit=iter_unit, connection=connection)
+
+    def populate_data(
+        self, connection: SnowflakeConnection | None = None, **kwargs
+    ) -> Self:
+        self._data = self._download(connection=connection).content
+        return self

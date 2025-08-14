@@ -1,27 +1,19 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import collections
-import contextlib
 import gzip
-import itertools
 import json
 import logging
 import re
 import time
 import uuid
-from collections import OrderedDict
 from threading import Lock
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generator
 
 import OpenSSL.SSL
 
 from snowflake.connector.secret_detector import SecretDetector
 from snowflake.connector.vendored.requests.models import PreparedRequest
-from snowflake.connector.vendored.urllib3.connectionpool import (
-    HTTPConnectionPool,
-    HTTPSConnectionPool,
-)
 
 from . import ssl_wrap_socket
 from .compat import (
@@ -40,6 +32,7 @@ from .compat import (
     IncompleteRead,
     urlencode,
     urlparse,
+    urlsplit,
 )
 from .constants import (
     _CONNECTIVITY_ERR_MSG,
@@ -65,6 +58,7 @@ from .errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_FAILED_TO_RENEW_SESSION,
     ER_FAILED_TO_REQUEST,
+    ER_HTTP_GENERAL_ERROR,
     ER_RETRYABLE_CODE,
 )
 from .errors import (
@@ -74,16 +68,18 @@ from .errors import (
     Error,
     ForbiddenError,
     GatewayTimeoutError,
-    InterfaceError,
+    HttpError,
     InternalServerError,
     MethodNotAllowed,
     OperationalError,
     OtherHTTPRetryableError,
     ProgrammingError,
     RefreshTokenError,
+    RevocationCheckError,
     ServiceUnavailableError,
     TooManyRequests,
 )
+from .session_manager import ProxySupportAdapterFactory, SessionManager, SessionPool
 from .sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
     SQLSTATE_CONNECTION_REJECTED,
@@ -97,18 +93,14 @@ from .time_util import (
 from .tool.probe_connection import probe_connection
 from .vendored import requests
 from .vendored.requests import Response, Session
-from .vendored.requests.adapters import HTTPAdapter
 from .vendored.requests.auth import AuthBase
 from .vendored.requests.exceptions import (
     ConnectionError,
     ConnectTimeout,
-    InvalidProxyURL,
     ReadTimeout,
     SSLError,
 )
-from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
 from .vendored.urllib3.exceptions import ProtocolError
-from .vendored.urllib3.poolmanager import ProxyManager
 from .vendored.urllib3.util.url import parse_url
 
 if TYPE_CHECKING:
@@ -124,7 +116,6 @@ ssl_wrap_socket.inject_into_urllib3()
 APPLICATION_SNOWSQL = "SnowSQL"
 
 # requests parameters
-REQUESTS_RETRY = 1  # requests library builtin retry
 DEFAULT_SOCKET_CONNECT_TIMEOUT = 1 * 60  # don't reduce less than 45 seconds
 
 # return codes
@@ -148,11 +139,11 @@ REQUEST_TYPE_RENEW = "RENEW"
 
 HEADER_AUTHORIZATION_KEY = "Authorization"
 HEADER_SNOWFLAKE_TOKEN = 'Snowflake Token="{token}"'
+HEADER_EXTERNAL_SESSION_KEY = "X-Snowflake-External-Session-ID"
 
 REQUEST_ID = "requestId"
 REQUEST_GUID = "request_guid"
 SNOWFLAKE_HOST_SUFFIX = ".snowflakecomputing.com"
-
 
 SNOWFLAKE_CONNECTOR_VERSION = SNOWFLAKE_CONNECTOR_VERSION
 PYTHON_VERSION = PYTHON_VERSION
@@ -189,6 +180,7 @@ USR_PWD_MFA_AUTHENTICATOR = "USERNAME_PASSWORD_MFA"
 PROGRAMMATIC_ACCESS_TOKEN = "PROGRAMMATIC_ACCESS_TOKEN"
 NO_AUTH_AUTHENTICATOR = "NO_AUTH"
 WORKLOAD_IDENTITY_AUTHENTICATOR = "WORKLOAD_IDENTITY"
+PAT_WITH_EXTERNAL_SESSION = "PAT_WITH_EXTERNAL_SESSION"
 
 
 def is_retryable_http_code(code: int) -> bool:
@@ -233,10 +225,10 @@ def raise_failed_request_error(
     Error.errorhandler_wrapper(
         connection,
         None,
-        InterfaceError,
+        HttpError,
         {
-            "msg": f"{response.status_code} {response.reason}: {method} {url}",
-            "errno": ER_FAILED_TO_REQUEST,
+            "msg": f"{response.status_code} {response.reason}: {method} {urlsplit(url).netloc}{urlsplit(url).path}",
+            "errno": ER_HTTP_GENERAL_ERROR + response.status_code,
             "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
         },
     )
@@ -244,42 +236,6 @@ def raise_failed_request_error(
 
 def is_login_request(url: str) -> bool:
     return "login-request" in parse_url(url).path
-
-
-class ProxySupportAdapter(HTTPAdapter):
-    """This Adapter creates proper headers for Proxy CONNECT messages."""
-
-    def get_connection(
-        self, url: str, proxies: OrderedDict | None = None
-    ) -> HTTPConnectionPool | HTTPSConnectionPool:
-        proxy = select_proxy(url, proxies)
-        parsed_url = urlparse(url)
-
-        if proxy:
-            proxy = prepend_scheme_if_needed(proxy, "http")
-            proxy_url = parse_url(proxy)
-            if not proxy_url.host:
-                raise InvalidProxyURL(
-                    "Please check proxy URL. It is malformed"
-                    " and could be missing the host."
-                )
-            proxy_manager = self.proxy_manager_for(proxy)
-
-            if isinstance(proxy_manager, ProxyManager):
-                # Add Host to proxy header SNOW-232777
-                proxy_manager.proxy_headers["Host"] = parsed_url.hostname
-            else:
-                logger.debug(
-                    f"Unable to set 'Host' to proxy manager of type {type(proxy_manager)} as"
-                    f" it does not have attribute 'proxy_headers'."
-                )
-            conn = proxy_manager.connection_from_url(url)
-        else:
-            # Only scheme should be lower case
-            url = parsed_url.geturl()
-            conn = self.poolmanager.connection_from_url(url)
-
-        return conn
 
 
 class RetryRequest(Exception):
@@ -313,47 +269,23 @@ class SnowflakeAuth(AuthBase):
         return r
 
 
-class SessionPool:
-    def __init__(self, rest: SnowflakeRestful) -> None:
-        # A stack of the idle sessions
-        self._idle_sessions: list[Session] = []
-        self._active_sessions: set[Session] = set()
-        self._rest: SnowflakeRestful = rest
+class PATWithExternalSessionAuth(AuthBase):
+    """Attaches HTTP Authorization headers for PAT with External Session."""
 
-    def get_session(self) -> Session:
-        """Returns a session from the session pool or creates a new one."""
-        try:
-            session = self._idle_sessions.pop()
-        except IndexError:
-            session = self._rest.make_requests_session()
-        self._active_sessions.add(session)
-        return session
+    def __init__(self, token, external_session_id) -> None:
+        # setup any auth-related data here
+        self.token = token
+        self.external_session_id = external_session_id
 
-    def return_session(self, session: Session) -> None:
-        """Places an active session back into the idle session stack."""
-        try:
-            self._active_sessions.remove(session)
-        except KeyError:
-            logger.debug("session doesn't exist in the active session pool. Ignored...")
-        self._idle_sessions.append(session)
-
-    def __str__(self) -> str:
-        total_sessions = len(self._active_sessions) + len(self._idle_sessions)
-        return (
-            f"SessionPool {len(self._active_sessions)}/{total_sessions} active sessions"
-        )
-
-    def close(self) -> None:
-        """Closes all active and idle sessions in this session pool."""
-        if self._active_sessions:
-            logger.debug(f"Closing {len(self._active_sessions)} active sessions")
-        for s in itertools.chain(self._active_sessions, self._idle_sessions):
-            try:
-                s.close()
-            except Exception as e:
-                logger.info(f"Session cleanup failed: {e}")
-        self._active_sessions.clear()
-        self._idle_sessions.clear()
+    def __call__(self, r: PreparedRequest) -> PreparedRequest:
+        """Modifies and returns the request."""
+        if HEADER_AUTHORIZATION_KEY in r.headers:
+            del r.headers[HEADER_AUTHORIZATION_KEY]
+        if self.token != NO_TOKEN:
+            r.headers[HEADER_AUTHORIZATION_KEY] = "Bearer " + self.token
+        if self.external_session_id:
+            r.headers[HEADER_EXTERNAL_SESSION_KEY] = self.external_session_id
+        return r
 
 
 # Customizable JSONEncoder to support additional types.
@@ -375,16 +307,21 @@ class SnowflakeRestful:
         protocol: str = "http",
         inject_client_pause: int = 0,
         connection: SnowflakeConnection | None = None,
+        session_manager: SessionManager | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._protocol = protocol
         self._inject_client_pause = inject_client_pause
         self._connection = connection
+        if session_manager is None:
+            session_manager = (
+                connection._session_manager
+                if (connection and connection._session_manager)
+                else SessionManager(adapter_factory=ProxySupportAdapterFactory())
+            )
+        self._session_manager = session_manager
         self._lock_token = Lock()
-        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
-            lambda: SessionPool(self)
-        )
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
         ssl_wrap_socket.FEATURE_OCSP_MODE = (
@@ -403,6 +340,12 @@ class SnowflakeRestful:
     @property
     def token(self) -> str | None:
         return self._token if hasattr(self, "_token") else None
+
+    @property
+    def external_session_id(self) -> str | None:
+        return (
+            self._external_session_id if hasattr(self, "_external_session_id") else None
+        )
 
     @property
     def master_token(self) -> str | None:
@@ -443,6 +386,14 @@ class SnowflakeRestful:
     def server_url(self) -> str:
         return f"{self._protocol}://{self._host}:{self._port}"
 
+    @property
+    def session_manager(self) -> SessionManager:
+        return self._session_manager
+
+    @property
+    def sessions_map(self) -> dict[str, SessionPool]:
+        return self.session_manager.sessions_map
+
     def close(self) -> None:
         if hasattr(self, "_token"):
             del self._token
@@ -453,8 +404,7 @@ class SnowflakeRestful:
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
 
-        for session_pool in self._sessions_map.values():
-            session_pool.close()
+        self.session_manager.close()
 
     def request(
         self,
@@ -513,6 +463,7 @@ class SnowflakeRestful:
                 headers,
                 json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
                 token=self.token,
+                external_session_id=self.external_session_id,
                 _no_results=_no_results,
                 timeout=timeout,
                 _include_retry_params=_include_retry_params,
@@ -523,6 +474,7 @@ class SnowflakeRestful:
                 url,
                 headers,
                 token=self.token,
+                external_session_id=self.external_session_id,
                 timeout=timeout,
             )
 
@@ -541,6 +493,17 @@ class SnowflakeRestful:
             self._id_token = id_token
             self._mfa_token = mfa_token
             self._master_validity_in_seconds = master_validity_in_seconds
+
+    def set_pat_and_external_session(
+        self,
+        personal_access_token,
+        external_session_id,
+    ) -> None:
+        """Updates session and master tokens and optionally temporary credential."""
+        with self._lock_token:
+            self._personal_access_token = personal_access_token
+            self._token = personal_access_token
+            self._external_session_id = external_session_id
 
     def _renew_session(self):
         """Renew a session and master token."""
@@ -698,6 +661,7 @@ class SnowflakeRestful:
         url: str,
         headers: dict[str, str],
         token: str = None,
+        external_session_id: str = None,
         timeout: int | None = None,
         is_fetch_query_status: bool = False,
     ) -> dict[str, Any]:
@@ -713,9 +677,13 @@ class SnowflakeRestful:
             headers,
             timeout=timeout,
             token=token,
+            external_session_id=external_session_id,
             is_fetch_query_status=is_fetch_query_status,
         )
-        if ret.get("code") == SESSION_EXPIRED_GS_CODE:
+        if (
+            ret.get("code") == SESSION_EXPIRED_GS_CODE
+            and self._connection._authenticator != PAT_WITH_EXTERNAL_SESSION
+        ):
             try:
                 ret = self._renew_session()
             except ReauthenticationRequest as ex:
@@ -743,6 +711,7 @@ class SnowflakeRestful:
         headers,
         body,
         token=None,
+        external_session_id: str | None = None,
         timeout: int | None = None,
         socket_timeout: int | None = None,
         _no_results: bool = False,
@@ -763,6 +732,7 @@ class SnowflakeRestful:
             data=body,
             timeout=timeout,
             token=token,
+            external_session_id=external_session_id,
             no_retry=no_retry,
             _include_retry_params=_include_retry_params,
             socket_timeout=socket_timeout,
@@ -775,7 +745,10 @@ class SnowflakeRestful:
 
         if ret.get("code") == MASTER_TOKEN_EXPIRED_GS_CODE:
             self._connection.expired = True
-        elif ret.get("code") == SESSION_EXPIRED_GS_CODE:
+        elif (
+            ret.get("code") == SESSION_EXPIRED_GS_CODE
+            and self._connection._authenticator != PAT_WITH_EXTERNAL_SESSION
+        ):
             try:
                 ret = self._renew_session()
             except ReauthenticationRequest as ex:
@@ -859,7 +832,7 @@ class SnowflakeRestful:
         include_retry_reason = self._connection._enable_retry_reason_in_query_response
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
-        with self._use_requests_session(full_url) as session:
+        with self.use_requests_session(full_url) as session:
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,
                 _include_retry_reason=include_retry_reason,
@@ -900,6 +873,7 @@ class SnowflakeRestful:
         retry_ctx,
         no_retry: bool = False,
         token=NO_TOKEN,
+        external_session_id=None,
         **kwargs,
     ):
         conn = self._connection
@@ -928,6 +902,7 @@ class SnowflakeRestful:
                 headers=headers,
                 data=data,
                 token=token,
+                external_session_id=external_session_id,
                 raise_raw_http_failure=raise_raw_http_failure,
                 **kwargs,
             )
@@ -939,6 +914,9 @@ class SnowflakeRestful:
                 raise RetryRequest(err_msg)
             self._handle_unknown_error(method, full_url, headers, data, conn)
             return {}
+        except RevocationCheckError as rce:
+            rce.exception_telemetry(rce.msg, None, self._connection)
+            raise rce
         except RetryRequest as e:
             cause = e.args[0]
             if no_retry:
@@ -977,6 +955,14 @@ class SnowflakeRestful:
             retry_ctx.increment()
 
             reason = getattr(cause, "errno", 0)
+            if reason is None:
+                reason = 0
+            else:
+                reason = (
+                    reason - ER_HTTP_GENERAL_ERROR
+                    if reason >= ER_HTTP_GENERAL_ERROR
+                    else reason
+                )
             retry_ctx.retry_reason = reason
 
             if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
@@ -1061,6 +1047,7 @@ class SnowflakeRestful:
         headers,
         data,
         token,
+        external_session_id=None,
         catch_okta_unauthorized_error: bool = False,
         is_raw_text: bool = False,
         is_raw_binary: bool = False,
@@ -1088,6 +1075,11 @@ class SnowflakeRestful:
             # socket timeout is constant. You should be able to receive
             # the response within the time. If not, ConnectReadTimeout or
             # ReadTimeout is raised.
+            auth = (
+                PATWithExternalSessionAuth(token, external_session_id)
+                if (external_session_id is not None and token is not None)
+                else SnowflakeAuth(token)
+            )
             raw_ret = session.request(
                 method=method,
                 url=full_url,
@@ -1096,7 +1088,7 @@ class SnowflakeRestful:
                 timeout=socket_timeout,
                 verify=True,
                 stream=is_raw_binary,
-                auth=SnowflakeAuth(token),
+                auth=auth,
             )
             download_end_time = get_time_millis()
 
@@ -1200,40 +1192,5 @@ class SnowflakeRestful:
         except Exception as err:
             raise err
 
-    def make_requests_session(self) -> Session:
-        s = requests.Session()
-        s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        s._reuse_count = itertools.count()
-        return s
-
-    @contextlib.contextmanager
-    def _use_requests_session(self, url: str | None = None):
-        """Session caching context manager.
-
-        Notes:
-            The session is not closed until close() is called so each session may be used multiple times.
-        """
-        # short-lived session, not added to the _sessions_map
-        if self._connection.disable_request_pooling:
-            session = self.make_requests_session()
-            try:
-                yield session
-            finally:
-                session.close()
-        else:
-            try:
-                hostname = urlparse(url).hostname
-            except Exception:
-                hostname = None
-
-            session_pool: SessionPool = self._sessions_map[hostname]
-            session = session_pool.get_session()
-            logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
-            try:
-                yield session
-            finally:
-                session_pool.return_session(session)
-                logger.debug(
-                    f"Session status for SessionPool '{hostname}', {session_pool}"
-                )
+    def use_requests_session(self, url=None) -> Generator[Session, Any, None]:
+        return self.session_manager.use_requests_session(url)

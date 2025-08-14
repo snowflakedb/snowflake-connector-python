@@ -37,6 +37,7 @@ from . import compat
 from ._sql_util import get_file_transfer_type
 from ._utils import (
     REQUEST_ID_STATEMENT_PARAM_NAME,
+    _snowflake_max_parallelism_for_file_transfer,
     _TrackedQueryCancellationTimer,
     is_uuid4,
 )
@@ -1086,6 +1087,10 @@ class SnowflakeCursor:
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
                     iobound_tpe_limit=self._connection.iobound_tpe_limit,
                     unsafe_file_write=self._connection.unsafe_file_write,
+                    snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
+                        self._connection
+                    ),
+                    reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
                 )
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
@@ -1212,6 +1217,7 @@ class SnowflakeCursor:
             result_chunks,
             self._connection.client_fetch_threads
             or self._connection.client_prefetch_threads,
+            self._connection.client_fetch_use_mp,
         )
         self._rownumber = -1
         self._result_state = ResultState.VALID
@@ -1462,7 +1468,7 @@ class SnowflakeCursor:
                 bind_stage = None
                 if (
                     bind_size
-                    > self.connection._session_parameters[
+                    >= self.connection._session_parameters[
                         "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
                     ]
                     > 0
@@ -1799,6 +1805,10 @@ class SnowflakeCursor:
             self,
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
+            snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
+                self._connection
+            ),
+            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
@@ -1839,6 +1849,10 @@ class SnowflakeCursor:
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
             force_put_overwrite=False,  # _upload should respect user decision on overwriting
+            snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
+                self._connection
+            ),
+            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
@@ -1907,6 +1921,10 @@ class SnowflakeCursor:
             ret,
             source_from_stream=input_stream,
             force_put_overwrite=False,  # _upload_stream should respect user decision on overwriting
+            snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
+                self._connection
+            ),
+            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())

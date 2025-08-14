@@ -7,11 +7,16 @@ from test.unit.mock_utils import mock_connection
 
 import pytest
 
+from snowflake.connector.errors import HttpError
 from src.snowflake.connector.network import SnowflakeRestfulJsonEncoder
 
 try:
-    from snowflake.connector import Error, InterfaceError
-    from snowflake.connector.network import SnowflakeRestful
+    from snowflake.connector import Error
+    from snowflake.connector.network import (
+        PATWithExternalSessionAuth,
+        SnowflakeAuth,
+        SnowflakeRestful,
+    )
     from snowflake.connector.vendored.requests import HTTPError, Response
 except ImportError:
     # skipping old driver test
@@ -64,9 +69,9 @@ def test_fetch():
             == {}
         )
         assert rest.fetch(**default_parameters, no_retry=True) == {}
-        # if no retry is set to False, the function raises an InterfaceError
-        with pytest.raises(InterfaceError) as exc:
-            assert rest.fetch(**default_parameters, no_retry=False)
+        # if no retry is set to False, the function raises an HttpError
+        with pytest.raises(HttpError):
+            rest.fetch(**default_parameters, no_retry=False)
 
 
 @pytest.mark.parametrize(
@@ -84,3 +89,57 @@ def test_json_serialize_uuid(u):
     assert (json.dumps(u, cls=SnowflakeRestfulJsonEncoder)) == f'"{u}"'
 
     assert json.dumps({"u": u, "a": 42}, cls=SnowflakeRestfulJsonEncoder) == expected
+
+
+def test_fetch_auth():
+    """Test checks that PATWithExternalSessionAuth is used instead of SnowflakeAuth when external_session_id is provided."""
+    connection = mock_connection()
+    rest = SnowflakeRestful(
+        host="test.snowflakecomputing.com", port=443, connection=connection
+    )
+    rest._token = "test-token"
+    rest._master_token = "test-master-token"
+
+    captured_auth = None
+
+    def mock_request(**kwargs):
+        nonlocal captured_auth
+        captured_auth = kwargs.get("auth")
+        mock_response = unittest.mock.MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"success": True}
+        return mock_response
+
+    with unittest.mock.patch(
+        "snowflake.connector.network.requests.Session"
+    ) as mock_session_class:
+        mock_session = unittest.mock.MagicMock()
+        mock_session_class.return_value = mock_session
+        mock_session.request = mock_request
+
+        # Call fetch without providing external_session_id - should use SnowflakeAuth
+        rest.fetch(
+            method="POST",
+            full_url="https://test.snowflakecomputing.com/test",
+            headers={},
+            data={},
+        )
+    assert isinstance(captured_auth, SnowflakeAuth)
+
+    with unittest.mock.patch(
+        "snowflake.connector.network.requests.Session"
+    ) as mock_session_class:
+        mock_session = unittest.mock.MagicMock()
+        mock_session_class.return_value = mock_session
+        mock_session.request = mock_request
+
+        # Call fetch with providing external_session_id - should use PATWithExternalSessionAuth
+        rest.fetch(
+            method="POST",
+            full_url="https://test.snowflakecomputing.com/test",
+            headers={},
+            data={},
+            external_session_id="dummy-external-session-id",
+        )
+    assert isinstance(captured_auth, PATWithExternalSessionAuth)
+    assert captured_auth.external_session_id == "dummy-external-session-id"

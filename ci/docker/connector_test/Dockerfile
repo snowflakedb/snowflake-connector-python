@@ -3,8 +3,7 @@ FROM $BASE_IMAGE
 
 RUN yum install -y java-11-openjdk
 
-# TODO: When there are prebuilt wheels accessible for our dependencies (i.e. numpy)
-# for Python 3.13 this rust cargo install command can be removed.
+# Our dependencies rely on the Rust toolchain being available in the build-time environment (https://github.com/pyca/cryptography/issues/5771)
 RUN yum -y install rust cargo
 
 # This is to solve permission issue, read https://denibertovic.com/posts/handling-permissions-with-docker-volumes/

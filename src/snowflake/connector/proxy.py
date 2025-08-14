@@ -1,43 +1,28 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import os
 
-
-def set_proxies(
+def get_proxy_url(
     proxy_host: str | None,
     proxy_port: str | None,
     proxy_user: str | None = None,
     proxy_password: str | None = None,
-) -> dict[str, str] | None:
-    """Sets proxy dict for requests."""
-    PREFIX_HTTP = "http://"
-    PREFIX_HTTPS = "https://"
-    proxies = None
+) -> str | None:
+    http_prefix = "http://"
+    https_prefix = "https://"
+
     if proxy_host and proxy_port:
-        if proxy_host.startswith(PREFIX_HTTP):
-            proxy_host = proxy_host[len(PREFIX_HTTP) :]
-        elif proxy_host.startswith(PREFIX_HTTPS):
-            proxy_host = proxy_host[len(PREFIX_HTTPS) :]
-        if proxy_user or proxy_password:
-            proxy_auth = "{proxy_user}:{proxy_password}@".format(
-                proxy_user=proxy_user if proxy_user is not None else "",
-                proxy_password=proxy_password if proxy_password is not None else "",
-            )
+        if proxy_host.startswith(http_prefix):
+            host = proxy_host[len(http_prefix) :]
+        elif proxy_host.startswith(https_prefix):
+            host = proxy_host[len(https_prefix) :]
         else:
-            proxy_auth = ""
-        proxies = {
-            "http": "http://{proxy_auth}{proxy_host}:{proxy_port}".format(
-                proxy_host=proxy_host,
-                proxy_port=str(proxy_port),
-                proxy_auth=proxy_auth,
-            ),
-            "https": "http://{proxy_auth}{proxy_host}:{proxy_port}".format(
-                proxy_host=proxy_host,
-                proxy_port=str(proxy_port),
-                proxy_auth=proxy_auth,
-            ),
-        }
-        os.environ["HTTP_PROXY"] = proxies["http"]
-        os.environ["HTTPS_PROXY"] = proxies["https"]
-    return proxies
+            host = proxy_host
+        auth = (
+            f"{proxy_user or ''}:{proxy_password or ''}@"
+            if proxy_user or proxy_password
+            else ""
+        )
+        return f"{http_prefix}{auth}{host}:{proxy_port}"
+
+    return None

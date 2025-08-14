@@ -124,18 +124,19 @@ class AuthByWebBrowser(AuthByPlugin):
                 socket_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
         try:
+            hostname = os.getenv("SF_AUTH_SOCKET_ADDR", "localhost")
             try:
                 socket_connection.bind(
                     (
-                        os.getenv("SF_AUTH_SOCKET_ADDR", "localhost"),
+                        hostname,
                         int(os.getenv("SF_AUTH_SOCKET_PORT", 0)),
                     )
                 )
             except socket.gaierror as ex:
                 if ex.args[0] == socket.EAI_NONAME:
                     raise OperationalError(
-                        msg="localhost is not found. Ensure /etc/hosts has "
-                        "localhost entry.",
+                        msg=f"{hostname} is not found. Ensure /etc/hosts has "
+                        f"{hostname} entry.",
                         errno=ER_NO_HOSTNAME_FOUND,
                     )
                 else:
@@ -461,6 +462,7 @@ You can close this window now and go back where you started from.
             conn._rest._connection._ocsp_mode(),
             conn._rest._connection.login_timeout,
             conn._rest._connection._network_timeout,
+            session_manager=conn.rest.session_manager.clone(use_pooling=False),
         )
 
         body["data"]["AUTHENTICATOR"] = authenticator

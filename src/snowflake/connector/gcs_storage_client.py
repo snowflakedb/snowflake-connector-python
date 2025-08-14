@@ -438,6 +438,8 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         if endpoint:
             if endpoint.endswith("/"):
                 endpoint = endpoint[:-1]
+            if not endpoint.startswith("https://"):
+                endpoint = "https://" + endpoint
             return GcsLocation(bucket_name=container_name, path=path, endpoint=endpoint)
         elif use_virtual_url:
             return GcsLocation(
@@ -464,7 +466,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClient):
         use_virtual_url: bool = False,
     ) -> str:
         gcs_location = SnowflakeGCSRestClient.get_location(
-            stage_location, use_regional_url, region, endpoint
+            stage_location, use_regional_url, region, endpoint, use_virtual_url
         )
         full_file_path = f"{gcs_location.path}{filename}"
 

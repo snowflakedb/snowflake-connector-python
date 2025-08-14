@@ -8,7 +8,6 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from ..constants import OAUTH_TYPE_CLIENT_CREDENTIALS
-from ..token_cache import TokenCache
 from ._oauth_base import AuthByOAuthBase
 
 if TYPE_CHECKING:
@@ -27,17 +26,17 @@ class AuthByOauthCredentials(AuthByOAuthBase):
         client_secret: str,
         token_request_url: str,
         scope: str,
-        token_cache: TokenCache | None = None,
-        refresh_token_enabled: bool = False,
+        connection: SnowflakeConnection | None = None,
         **kwargs,
     ) -> None:
+        self._validate_client_credentials_present(client_id, client_secret, connection)
         super().__init__(
             client_id=client_id,
             client_secret=client_secret,
             token_request_url=token_request_url,
             scope=scope,
-            token_cache=token_cache,
-            refresh_token_enabled=refresh_token_enabled,
+            token_cache=None,
+            refresh_token_enabled=False,
             **kwargs,
         )
         self._application = application
