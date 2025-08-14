@@ -16,19 +16,9 @@ except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 
 
-async def test_session_parameters(db_parameters):
+async def test_session_parameters(conn_cnx):
     """Sets the session parameters in connection time."""
-    async with snowflake.connector.aio.SnowflakeConnection(
-        protocol=db_parameters["protocol"],
-        account=db_parameters["account"],
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        session_parameters={"TIMEZONE": "UTC"},
-    ) as connection:
+    async with conn_cnx(session_parameters={"TIMEZONE": "UTC"}) as connection:
         ret = await (
             await connection.cursor().execute("show parameters like 'TIMEZONE'")
         ).fetchone()

@@ -21,7 +21,7 @@ on:
             description: "Test scenario tags"
 
 concurrency:
-  # older builds for the same pull request numer or branch should be cancelled
+  # older builds for the same pull request number or branch should be cancelled
   cancel-in-progress: true
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 
@@ -159,6 +159,13 @@ jobs:
         run: |
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Setup private key file
+        shell: bash
+        env:
+          PYTHON_PRIVATE_KEY_SECRET: ${{ secrets.PYTHON_PRIVATE_KEY_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PYTHON_PRIVATE_KEY_SECRET" \
+          .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
         with:
@@ -173,8 +180,8 @@ jobs:
         run: python -m pip install tox>=4
       - name: Run tests
        # To run a single test on GHA use the below command:
-       # run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
-        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit,integ,pandas,sso}-ci | sed 's/ /,/g'`
+#        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
 
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
@@ -224,6 +231,13 @@ jobs:
         run: |
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Setup private key file
+        shell: bash
+        env:
+          PYTHON_PRIVATE_KEY_SECRET: ${{ secrets.PYTHON_PRIVATE_KEY_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PYTHON_PRIVATE_KEY_SECRET" \
+          .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Upgrade setuptools, pip and wheel
         run: python -m pip install -U setuptools pip wheel
       - name: Install tox
@@ -285,6 +299,13 @@ jobs:
         run: |
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Setup private key file
+        shell: bash
+        env:
+          PYTHON_PRIVATE_KEY_SECRET: ${{ secrets.PYTHON_PRIVATE_KEY_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PYTHON_PRIVATE_KEY_SECRET" \
+          .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
         with:
@@ -332,6 +353,13 @@ jobs:
         run: |
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Setup private key file
+        shell: bash
+        env:
+          PYTHON_PRIVATE_KEY_SECRET: ${{ secrets.PYTHON_PRIVATE_KEY_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PYTHON_PRIVATE_KEY_SECRET" \
+          .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
         with:
@@ -396,6 +424,13 @@ jobs:
         run: |
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Setup private key file
+        shell: bash
+        env:
+          PYTHON_PRIVATE_KEY_SECRET: ${{ secrets.PYTHON_PRIVATE_KEY_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PYTHON_PRIVATE_KEY_SECRET" \
+          .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
         with:

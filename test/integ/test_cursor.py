@@ -14,7 +14,6 @@ import time
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING, NamedTuple
 from unittest import mock
-from unittest.mock import MagicMock
 
 import pytest
 import pytz
@@ -239,18 +238,7 @@ def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
         assert cnt == 1, "wrong number of records were inserted"
         assert result.rowcount == 1, "wrong number of records were inserted"
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-        timezone="UTC",
-    )
-    try:
+    with conn(timezone="UTC") as cnx2:
         c = cnx2.cursor()
         c.execute("select aa from {name}".format(name=db_parameters["name"]))
         results = []
@@ -260,8 +248,6 @@ def test_insert_and_select_by_separate_connection(conn, db_parameters, caplog):
         assert results[0] == 1234, "the first result was wrong"
         assert result.rowcount == 1, "wrong number of records were selected"
         assert "Number of results in first chunk: 1" in caplog.text
-    finally:
-        cnx2.close()
 
 
 def _total_milliseconds_from_timedelta(td):
@@ -317,18 +303,7 @@ def test_insert_timestamp_select(conn, db_parameters):
         finally:
             c.close()
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-        timezone="UTC",
-    )
-    try:
+    with conn(timezone="UTC") as cnx2:
         c = cnx2.cursor()
         c.execute(
             "select aa, tsltz, tstz, tsntz, dt, tm from {name}".format(
@@ -408,8 +383,6 @@ def test_insert_timestamp_select(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[5])] == "TIME"
             ), "invalid column name"
-    finally:
-        cnx2.close()
 
 
 def test_insert_timestamp_ltz(conn, db_parameters):
@@ -522,17 +495,7 @@ def test_insert_binary_select(conn, db_parameters):
         finally:
             c.close()
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-    )
-    try:
+    with conn() as cnx2:
         c = cnx2.cursor()
         c.execute("select b from {name}".format(name=db_parameters["name"]))
 
@@ -555,8 +518,6 @@ def test_insert_binary_select(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
             ), "invalid column name"
-    finally:
-        cnx2.close()
 
 
 def test_insert_binary_select_with_bytearray(conn, db_parameters):
@@ -574,17 +535,7 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
         finally:
             c.close()
 
-    cnx2 = snowflake.connector.connect(
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        account=db_parameters["account"],
-        database=db_parameters["database"],
-        schema=db_parameters["schema"],
-        protocol=db_parameters["protocol"],
-    )
-    try:
+    with conn() as cnx2:
         c = cnx2.cursor()
         c.execute("select b from {name}".format(name=db_parameters["name"]))
 
@@ -607,8 +558,6 @@ def test_insert_binary_select_with_bytearray(conn, db_parameters):
             assert (
                 constants.FIELD_ID_TO_NAME[type_code(desc[0])] == "BINARY"
             ), "invalid column name"
-    finally:
-        cnx2.close()
 
 
 def test_variant(conn, db_parameters):
@@ -846,10 +795,11 @@ def test_timeout_query(conn_cnx):
                 # we can not precisely control the timing to send cancel query request right after server
                 # executes the query but before returning the results back to client
                 # it depends on python scheduling and server processing speed, so we mock here
-                with mock.patch.object(
-                    c, "_timebomb", new_callable=MagicMock
-                ) as mock_timerbomb:
-                    mock_timerbomb.executed = True
+                with mock.patch(
+                    "snowflake.connector.cursor._TrackedQueryCancellationTimer",
+                    autospec=True,
+                ) as mock_timebomb:
+                    mock_timebomb.return_value.executed = True
                     c.execute(
                         "select 123'",
                         timeout=0.1,
