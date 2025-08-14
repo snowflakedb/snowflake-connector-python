@@ -43,7 +43,7 @@ py -%pv% -m build --outdir dist\rawwheel --wheel .
 if %errorlevel% neq 0 goto :error
 
 :: patch the wheel by including its dependencies
-py -%pv% -m delvewheel repair -vv -w dist --namespace-pkg snowflake.connector dist\rawwheel\*
+py -%pv% -m delvewheel repair -vv -w dist --namespace-pkg snowflake dist\rawwheel\*
 if %errorlevel% neq 0 goto :error
 
 rd /s /q dist\rawwheel
