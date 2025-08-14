@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v3.17.1(TBD)
   - Added `infer_schema` parameter to `write_pandas` to perform schema inference on the passed data.
+  - Namespace `snowlake` reverted back to non-module.
 
 - v3.17.0(August 16,2025)
   - Added in-band HTTP exception telemetry.
