@@ -961,6 +961,7 @@ async def test_client_prefetch_threads_setting(conn_cnx):
         assert conn.client_prefetch_threads == new_thread_count
 
 
+@pytest.mark.skip(reason="Test stopped working after account setup change")
 @pytest.mark.external
 async def test_client_failover_connection_url(conn_cnx):
     async with conn_cnx("client_failover") as conn:
