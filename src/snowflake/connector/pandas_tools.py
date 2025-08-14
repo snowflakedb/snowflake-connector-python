@@ -254,6 +254,7 @@ def write_pandas(
     on_error: str = "abort_statement",
     parallel: int = 4,
     quote_identifiers: bool = True,
+    infer_schema: bool = False,
     auto_create_table: bool = False,
     create_temp_table: bool = False,
     overwrite: bool = False,
@@ -316,6 +317,8 @@ def write_pandas(
         quote_identifiers: By default, identifiers, specifically database, schema, table and column names
             (from df.columns) will be quoted. If set to False, identifiers are passed on to Snowflake without quoting.
             I.e. identifiers will be coerced to uppercase by Snowflake.  (Default value = True)
+        infer_schema: Perform explicit schema inference on the data in the DataFrame and use the inferred data types
+            when selecting columns from the DataFrame. (Default value = False)
         auto_create_table: When true, will automatically create a table with corresponding columns for each column in
             the passed in DataFrame. The table will not be created if it already exists
         create_temp_table: (Deprecated) Will make the auto-created table as a temporary table
@@ -482,7 +485,7 @@ def write_pandas(
             num_statements=1,
         )
 
-    if auto_create_table or overwrite:
+    if auto_create_table or overwrite or infer_schema:
         file_format_location = _create_temp_file_format(
             cursor,
             database,
@@ -525,27 +528,29 @@ def write_pandas(
             quote_identifiers,
         )
 
-        iceberg = "ICEBERG " if iceberg_config else ""
-        iceberg_config_statement = _iceberg_config_statement_helper(
-            iceberg_config or {}
-        )
+        if auto_create_table or overwrite:
+            iceberg = "ICEBERG " if iceberg_config else ""
+            iceberg_config_statement = _iceberg_config_statement_helper(
+                iceberg_config or {}
+            )
 
-        create_table_sql = (
-            f"CREATE {table_type.upper()} {iceberg}TABLE IF NOT EXISTS identifier(?) "
-            f"({create_table_columns}) {iceberg_config_statement}"
-            f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
-        )
-        params = (target_table_location,)
-        logger.debug(
-            f"auto creating table with '{create_table_sql}'. params: %s", params
-        )
-        cursor.execute(
-            create_table_sql,
-            _is_internal=True,
-            _force_qmark_paramstyle=True,
-            params=params,
-            num_statements=1,
-        )
+            create_table_sql = (
+                f"CREATE {table_type.upper()} {iceberg}TABLE IF NOT EXISTS identifier(?) "
+                f"({create_table_columns}) {iceberg_config_statement}"
+                f" /* Python:snowflake.connector.pandas_tools.write_pandas() */ "
+            )
+            params = (target_table_location,)
+            logger.debug(
+                f"auto creating table with '{create_table_sql}'. params: %s", params
+            )
+            cursor.execute(
+                create_table_sql,
+                _is_internal=True,
+                _force_qmark_paramstyle=True,
+                params=params,
+                num_statements=1,
+            )
+
         # need explicit casting when the underlying table schema is inferred
         parquet_columns = "$1:" + ",$1:".join(
             f"{quote}{snowflake_col}{quote}::{column_type_mapping[col]}"
@@ -584,7 +589,7 @@ def write_pandas(
             f"TYPE=PARQUET "
             f"USE_VECTORIZED_SCANNER={use_vectorized_scanner} "
             f"COMPRESSION={compression_map[compression]}"
-            f"{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite else ''}"
+            f"{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite or infer_schema else ''}"
             f"{sql_use_logical_type}"
             f") "
             f"PURGE=TRUE ON_ERROR=?"

@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.17.1(TBD)
+  - Added `infer_schema` parameter to `write_pandas` to perform schema inference on the passed data.
+
 - v3.17.0(August 16,2025)
   - Added in-band HTTP exception telemetry.
   - Added an `unsafe_skip_file_permissions_check` flag to skip file permission checks on the cache and configuration.
