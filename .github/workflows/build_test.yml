@@ -439,7 +439,7 @@ jobs:
       - name: Install tox
         run: python -m pip install tox>=4
       - name: Run tests
-        run: python -m tox run -e aio-parallel-integ,aio-parallel-unit
+        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{aio-parallel-unit,aio-parallel-integ}-ci | sed 's/ /,/g'`
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
