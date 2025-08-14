@@ -444,7 +444,7 @@ jobs:
       - name: Install tox
         run: python -m pip install tox>=4
       - name: Run tests
-        run: python -m tox run -e aio-parallel
+        run: python -m tox run -e aio-parallel-integ,aio-parallel-unit
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
