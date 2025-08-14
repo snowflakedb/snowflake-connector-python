@@ -133,21 +133,10 @@ async def test_exceptions_as_connection_attributes(conn_cnx):
         assert con.NotSupportedError == errors.NotSupportedError
 
 
-async def test_commit(db_parameters):
-    con = snowflake.connector.aio.SnowflakeConnection(
-        account=db_parameters["account"],
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        protocol=db_parameters["protocol"],
-    )
-    await con.connect()
-    try:
+async def test_commit(conn_cnx):
+    async with conn_cnx() as con:
         # Commit must work, even if it doesn't do anything
         await con.commit()
-    finally:
-        await con.close()
 
 
 async def test_rollback(conn_cnx, db_parameters):
@@ -247,20 +236,9 @@ async def test_rowcount(conn_local):
         assert cur.rowcount == 1, "cursor.rowcount should the number of rows returned"
 
 
-async def test_close(db_parameters):
-    con = snowflake.connector.aio.SnowflakeConnection(
-        account=db_parameters["account"],
-        user=db_parameters["user"],
-        password=db_parameters["password"],
-        host=db_parameters["host"],
-        port=db_parameters["port"],
-        protocol=db_parameters["protocol"],
-    )
-    await con.connect()
-    try:
+async def test_close(conn_cnx):
+    async with conn_cnx() as con:
         cur = con.cursor()
-    finally:
-        await con.close()
 
     # commit is currently a nop; disabling for now
     # connection.commit should raise an Error if called after connection is
