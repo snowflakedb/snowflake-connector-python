@@ -28,6 +28,9 @@ from snowflake.connector.aio._ocsp_snowflake import OCSPCache, SnowflakeOCSP
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.util_text import random_string
 
+# Enforce worker_specific_cache_dir fixture
+from ..test_ocsp import worker_specific_cache_dir  # noqa: F401
+
 pytestmark = pytest.mark.asyncio
 
 try:

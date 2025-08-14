@@ -136,7 +136,7 @@ async def structured_type_wrapped_conn(conn_cnx, structured_type_support):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("datatype", ICEBERG_UNSUPPORTED_TYPES)
+@pytest.mark.parametrize("datatype", sorted(ICEBERG_UNSUPPORTED_TYPES))
 async def test_iceberg_negative(
     datatype, conn_cnx, iceberg_support, structured_type_support
 ):
