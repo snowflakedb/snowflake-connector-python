@@ -639,6 +639,55 @@ def test_log_debug_config_file_parent_dir_permissions(tmp_path, caplog):
     shutil.rmtree(tmp_dir)
 
 
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
+def test_error_config_file_writable_by_others(tmp_path):
+    c_file = tmp_path / "config.toml"
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    # Make file writable by others
+    c_file.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IWOTH)
+    file_permissions = oct(c_file.stat().st_mode)[-3:]
+
+    with pytest.raises(
+        ConfigSourceError,
+        match=re.escape(
+            f"file '{str(c_file)}' is writable by group or others — this poses a security risk because it allows unauthorized users to modify sensitive settings. Your Permission: {file_permissions}"
+        ),
+    ):
+        c1["b"]
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
+def test_skip_warning_config_file_permissions(tmp_path, monkeypatch):
+    c_file = tmp_path / "config.toml"
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    # Make file readable by others (would normally trigger warning)
+    c_file.chmod(stat.S_IMODE(c_file.stat().st_mode) | stat.S_IROTH)
+
+    with monkeypatch.context() as m:
+        # Set environment variable to skip warning
+        m.setenv("SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE", "true")
+        with warnings.catch_warnings(record=True) as c:
+            assert c1["b"] is True
+        # Should have no warnings when skip is enabled
+        assert len(c) == 0
+
+
 def test_configoption_missing_root_manager():
     with pytest.raises(
         TypeError,
