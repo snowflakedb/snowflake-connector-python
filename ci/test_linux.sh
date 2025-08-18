@@ -6,6 +6,9 @@
 #   - This script assumes that ../dist/repaired_wheels has the wheel(s) built for all versions to be tested
 #   - This is the script that test_docker.sh runs inside of the docker container
 
+# Tests USE_PASSWORD as it runs agains the mocked Snowflake instance
+export USE_PASSWORD=true
+
 PYTHON_VERSIONS="${1:-3.9 3.10 3.11 3.12 3.13}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
