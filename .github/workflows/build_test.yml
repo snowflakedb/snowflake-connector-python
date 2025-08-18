@@ -79,11 +79,22 @@ jobs:
             id: manylinux_aarch64
           - image: windows-latest
             id: win_amd64
+          - image: windows-11-arm
+            id: win_arm64
           - image: macos-latest
             id: macosx_x86_64
           - image: macos-latest
             id: macosx_arm64
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        exclude:
+          - os:
+              image: windows-11-arm
+              id: win_arm64
+            python-version: "3.9"
+          - os:
+              image: windows-11-arm
+              id: win_arm64
+            python-version: "3.10"
     name: Build ${{ matrix.os.id }}-py${{ matrix.python-version }}
     runs-on: ${{ matrix.os.image }}
     steps:
@@ -105,6 +116,7 @@ jobs:
         uses: pypa/cibuildwheel@v2.21.3
         env:
           CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os.id }}
+          CIBW_ARCHS_WINDOWS: ${{ matrix.os.id == 'win_arm64' && 'ARM64' || 'auto' }}
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
         with:
           output-dir: dist
@@ -131,8 +143,19 @@ jobs:
            download_name: macosx_x86_64
          - image_name: windows-latest
            download_name: win_amd64
+         - image_name: windows-11-arm
+           download_name: win_arm64
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         cloud-provider: [aws, azure, gcp]
+        exclude:
+          - os:
+              image_name: windows-11-arm
+              download_name: win_arm64
+            python-version: "3.9"
+          - os:
+              image_name: windows-11-arm
+              download_name: win_arm64
+            python-version: "3.10"
 
     steps:
       - uses: actions/checkout@v4
@@ -145,7 +168,7 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v4 # for wiremock
         with:
-          java-version: 11
+          java-version: ${{ matrix.os.download_name == 'win_arm64' && '21.0.5+11.0.LTS' || '11' }}
           distribution: 'temurin'
           java-package: 'jre'
       - name: Fetch Wiremock

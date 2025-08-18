@@ -10,7 +10,8 @@ import boto3
 from botocore.config import Config
 from botocore.utils import IMDSFetcher
 
-from .vendored import requests
+from .session_manager import SessionManager
+from .vendored.requests import RequestException, Timeout
 
 
 class _DetectionState(Enum):
@@ -119,7 +120,9 @@ def has_aws_identity(platform_detection_timeout_seconds: float):
         return _DetectionState.NOT_DETECTED
 
 
-def is_azure_vm(platform_detection_timeout_seconds: float):
+def is_azure_vm(
+    platform_detection_timeout_seconds: float, session_manager: SessionManager
+):
     """
     Check if the current environment is running on an Azure Virtual Machine.
 
@@ -128,13 +131,14 @@ def is_azure_vm(platform_detection_timeout_seconds: float):
 
     Args:
         platform_detection_timeout_seconds: Timeout value for the metadata service request.
+        session_manager: SessionManager instance for making HTTP requests.
 
     Returns:
         _DetectionState: DETECTED if on Azure VM, TIMEOUT if request times out,
                         NOT_DETECTED otherwise.
     """
     try:
-        token_resp = requests.get(
+        token_resp = session_manager.get(
             "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
             headers={"Metadata": "True"},
             timeout=platform_detection_timeout_seconds,
@@ -144,9 +148,9 @@ def is_azure_vm(platform_detection_timeout_seconds: float):
             if token_resp.status_code == 200
             else _DetectionState.NOT_DETECTED
         )
-    except requests.Timeout:
+    except Timeout:
         return _DetectionState.TIMEOUT
-    except requests.RequestException:
+    except RequestException:
         return _DetectionState.NOT_DETECTED
 
 
@@ -175,7 +179,9 @@ def is_azure_function():
 
 
 def is_managed_identity_available_on_azure_vm(
-    platform_detection_timeout_seconds, resource="https://management.azure.com"
+    platform_detection_timeout_seconds,
+    session_manager: SessionManager,
+    resource="https://management.azure.com",
 ):
     """
     Check if Azure Managed Identity is available and accessible on an Azure VM.
@@ -186,6 +192,7 @@ def is_managed_identity_available_on_azure_vm(
 
     Args:
         platform_detection_timeout_seconds: Timeout value for the metadata service request.
+        session_manager: SessionManager instance for making HTTP requests.
         resource: The Azure resource URI to request a token for.
 
     Returns:
@@ -195,7 +202,7 @@ def is_managed_identity_available_on_azure_vm(
     endpoint = f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={resource}"
     headers = {"Metadata": "true"}
     try:
-        response = requests.get(
+        response = session_manager.get(
             endpoint, headers=headers, timeout=platform_detection_timeout_seconds
         )
         return (
@@ -203,9 +210,9 @@ def is_managed_identity_available_on_azure_vm(
             if response.status_code == 200
             else _DetectionState.NOT_DETECTED
         )
-    except requests.Timeout:
+    except Timeout:
         return _DetectionState.TIMEOUT
-    except requests.RequestException:
+    except RequestException:
         return _DetectionState.NOT_DETECTED
 
 
@@ -213,7 +220,9 @@ def is_managed_identity_available_on_azure_function():
     return bool(os.environ.get("IDENTITY_HEADER"))
 
 
-def has_azure_managed_identity(platform_detection_timeout_seconds: float):
+def has_azure_managed_identity(
+    platform_detection_timeout_seconds: float, session_manager: SessionManager
+):
     """
     Determine if Azure Managed Identity is available in the current environment.
 
@@ -226,6 +235,7 @@ def has_azure_managed_identity(platform_detection_timeout_seconds: float):
 
     Args:
         platform_detection_timeout_seconds: Timeout value for managed identity checks.
+        session_manager: SessionManager instance for making HTTP requests.
 
     Returns:
         _DetectionState: DETECTED if managed identity is available, TIMEOUT if
@@ -238,10 +248,14 @@ def has_azure_managed_identity(platform_detection_timeout_seconds: float):
             if is_managed_identity_available_on_azure_function()
             else _DetectionState.NOT_DETECTED
         )
-    return is_managed_identity_available_on_azure_vm(platform_detection_timeout_seconds)
+    return is_managed_identity_available_on_azure_vm(
+        platform_detection_timeout_seconds, session_manager
+    )
 
 
-def is_gce_vm(platform_detection_timeout_seconds: float):
+def is_gce_vm(
+    platform_detection_timeout_seconds: float, session_manager: SessionManager
+):
     """
     Check if the current environment is running on Google Compute Engine (GCE).
 
@@ -250,13 +264,14 @@ def is_gce_vm(platform_detection_timeout_seconds: float):
 
     Args:
         platform_detection_timeout_seconds: Timeout value for the metadata service request.
+        session_manager: SessionManager instance for making HTTP requests.
 
     Returns:
         _DetectionState: DETECTED if on GCE, TIMEOUT if request times out,
                         NOT_DETECTED otherwise.
     """
     try:
-        response = requests.get(
+        response = session_manager.get(
             "http://metadata.google.internal",
             timeout=platform_detection_timeout_seconds,
         )
@@ -265,9 +280,9 @@ def is_gce_vm(platform_detection_timeout_seconds: float):
             if response.headers and response.headers.get("Metadata-Flavor") == "Google"
             else _DetectionState.NOT_DETECTED
         )
-    except requests.Timeout:
+    except Timeout:
         return _DetectionState.TIMEOUT
-    except requests.RequestException:
+    except RequestException:
         return _DetectionState.NOT_DETECTED
 
 
@@ -309,7 +324,9 @@ def is_gcp_cloud_run_job():
     )
 
 
-def has_gcp_identity(platform_detection_timeout_seconds: float):
+def has_gcp_identity(
+    platform_detection_timeout_seconds: float, session_manager: SessionManager
+):
     """
     Check if the current environment has a valid Google Cloud Platform identity.
 
@@ -318,12 +335,13 @@ def has_gcp_identity(platform_detection_timeout_seconds: float):
 
     Args:
         platform_detection_timeout_seconds: Timeout value for the metadata service request.
+        session_manager: SessionManager instance for making HTTP requests.
     Returns:
         _DetectionState: DETECTED if valid GCP identity exists, TIMEOUT if request
                         times out, NOT_DETECTED otherwise.
     """
     try:
-        response = requests.get(
+        response = session_manager.get(
             "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email",
             headers={"Metadata-Flavor": "Google"},
             timeout=platform_detection_timeout_seconds,
@@ -333,9 +351,9 @@ def has_gcp_identity(platform_detection_timeout_seconds: float):
             if response.status_code == 200
             else _DetectionState.NOT_DETECTED
         )
-    except requests.Timeout:
+    except Timeout:
         return _DetectionState.TIMEOUT
-    except requests.RequestException:
+    except RequestException:
         return _DetectionState.NOT_DETECTED
 
 
@@ -357,7 +375,10 @@ def is_github_action():
 
 
 @cache
-def detect_platforms(platform_detection_timeout_seconds: float | None) -> list[str]:
+def detect_platforms(
+    platform_detection_timeout_seconds: float | None,
+    session_manager: SessionManager | None = None,
+) -> list[str]:
     """
     Detect all potential platforms that the current environment may be running on.
     Swallows all exceptions and returns an empty list if any exception occurs to not affect main driver functionality.
@@ -365,6 +386,7 @@ def detect_platforms(platform_detection_timeout_seconds: float | None) -> list[s
     Args:
         platform_detection_timeout_seconds: Timeout value for platform detection requests. Defaults to 0.2 seconds
                 if None is provided.
+        session_manager: SessionManager instance for making HTTP requests. If None, a new instance will be created.
 
     Returns:
         list[str]: List of detected platform names. Platforms that timed out will have
@@ -374,6 +396,10 @@ def detect_platforms(platform_detection_timeout_seconds: float | None) -> list[s
     try:
         if platform_detection_timeout_seconds is None:
             platform_detection_timeout_seconds = 0.2
+
+        if session_manager is None:
+            # This should never happen - we expect session manager to be passed from the outer scope
+            session_manager = SessionManager(use_pooling=False)
 
         # Run environment-only checks synchronously (no network calls, no threading overhead)
         platforms = {
@@ -394,16 +420,20 @@ def detect_platforms(platform_detection_timeout_seconds: float | None) -> list[s
                     has_aws_identity, platform_detection_timeout_seconds
                 ),
                 "is_azure_vm": executor.submit(
-                    is_azure_vm, platform_detection_timeout_seconds
+                    is_azure_vm, platform_detection_timeout_seconds, session_manager
                 ),
                 "has_azure_managed_identity": executor.submit(
-                    has_azure_managed_identity, platform_detection_timeout_seconds
+                    has_azure_managed_identity,
+                    platform_detection_timeout_seconds,
+                    session_manager,
                 ),
                 "is_gce_vm": executor.submit(
-                    is_gce_vm, platform_detection_timeout_seconds
+                    is_gce_vm, platform_detection_timeout_seconds, session_manager
                 ),
                 "has_gcp_identity": executor.submit(
-                    has_gcp_identity, platform_detection_timeout_seconds
+                    has_gcp_identity,
+                    platform_detection_timeout_seconds,
+                    session_manager,
                 ),
             }
 
