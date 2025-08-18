@@ -567,7 +567,7 @@ def test_warn_config_file_owner(tmp_path, monkeypatch):
         assert (
             str(c[0].message)
             == f"Bad owner or permissions on {str(c_file)}"
-            + f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n'
+            + f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n * To skip this warning, set environment variable SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE=true.\n'
         )
 
 
@@ -587,7 +587,7 @@ def test_warn_config_file_permissions(tmp_path):
     with warnings.catch_warnings(record=True) as c:
         assert c1["b"] is True
     assert len(c) == 1
-    chmod_message = f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n'
+    chmod_message = f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n * To skip this warning, set environment variable SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE=true.\n'
     assert (
         str(c[0].message)
         == f"Bad owner or permissions on {str(c_file)}" + chmod_message

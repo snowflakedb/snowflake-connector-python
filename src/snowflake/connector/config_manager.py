@@ -30,9 +30,11 @@ READABLE_BY_OTHERS = stat.S_IRGRP | stat.S_IROTH
 WRITABLE_BY_OTHERS = stat.S_IWGRP | stat.S_IWOTH
 
 SKIP_WARNING_ENV_VAR = "SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE"
-SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE = (
-    os.getenv(SKIP_WARNING_ENV_VAR, "false").lower() == "true"
-)
+
+
+def _should_skip_warning_for_read_permissions_on_config_file() -> bool:
+    """Check if the warning should be skipped based on environment variable."""
+    return os.getenv(SKIP_WARNING_ENV_VAR, "false").lower() == "true"
 
 
 class ConfigSliceOptions(NamedTuple):
@@ -363,7 +365,7 @@ class ConfigManager:
             ):
                 chmod_message = f'.\n * To change owner, run `chown $USER "{str(filep)}"`.\n * To restrict permissions, run `chmod 0600 "{str(filep)}"`.\n * To skip this warning, set environment variable {SKIP_WARNING_ENV_VAR}=true.\n'
 
-                if not SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE:
+                if not _should_skip_warning_for_read_permissions_on_config_file():
                     warn(f"Bad owner or permissions on {str(filep)}{chmod_message}")
             LOGGER.debug(f"reading configuration file from {str(filep)}")
             try:
