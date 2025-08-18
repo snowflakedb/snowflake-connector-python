@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from concurrent.futures.thread import ThreadPoolExecutor
 from enum import Enum
 from functools import cache
@@ -10,8 +12,19 @@ import boto3
 from botocore.config import Config
 from botocore.utils import IMDSFetcher
 
-from .session_manager import SessionManager
+from .session_manager import HttpConfig, SessionManager
 from .vendored.requests import RequestException, Timeout
+
+# ================================================
+# WARNING: THIS FILE HAS TESTING MODIFICATIONS!
+# ================================================
+# The detect_platforms() function has been modified to force
+# retries for testing purposes. Search for "TESTING" comments
+# and remove all testing configuration before committing!
+# ================================================
+
+
+logger = logging.getLogger(__name__)  # For debugging platform detection
 
 
 class _DetectionState(Enum):
@@ -280,9 +293,13 @@ def is_gce_vm(
             if response.headers and response.headers.get("Metadata-Flavor") == "Google"
             else _DetectionState.NOT_DETECTED
         )
-    except Timeout:
+    except Timeout as e1:
+        # TODO: remove this e1 stuff and print
+        print(e1)
         return _DetectionState.TIMEOUT
-    except RequestException:
+    except RequestException as e2:
+        # TODO: remove this e2 stuff and print
+        print(e2)
         return _DetectionState.NOT_DETECTED
 
 
@@ -374,6 +391,26 @@ def is_github_action():
     )
 
 
+def _get_future_result_with_timeout(future, timeout_seconds: float) -> _DetectionState:
+    """
+    Get result from a future with timeout handling and proper exception management.
+
+    Args:
+        future: The future object to get result from
+        timeout_seconds: Timeout in seconds
+
+    Returns:
+        _DetectionState: The detection result, TIMEOUT if timed out, NOT_DETECTED if other error
+    """
+    try:
+        result = future.result(timeout=timeout_seconds)
+        return result
+    except FutureTimeoutError:
+        return _DetectionState.TIMEOUT
+    except Exception:
+        return _DetectionState.NOT_DETECTED
+
+
 @cache
 def detect_platforms(
     platform_detection_timeout_seconds: float | None,
@@ -397,9 +434,37 @@ def detect_platforms(
         if platform_detection_timeout_seconds is None:
             platform_detection_timeout_seconds = 0.2
 
+        # ================================================
+        # TESTING CONFIGURATION - REMOVE BEFORE COMMIT
+        # ================================================
+        # FORCING HIGH RETRY COUNT FOR TESTING PURPOSES
+        # This configuration forces all session_manager.get() calls to retry
+        # multiple times regardless of the original configuration.
+        #
+        # TODO: REMOVE THIS TESTING CODE BEFORE PRODUCTION!
+        # Normal production value should be max_retries=0 or 1
+        # ================================================
+        no_retry_config = HttpConfig(
+            use_pooling=False,
+            max_retries=0,  # TESTING: Force 10 retries instead of default 0-1
+        )
+
         if session_manager is None:
             # This should never happen - we expect session manager to be passed from the outer scope
-            session_manager = SessionManager(use_pooling=False)
+            # TESTING: Using forced retry config instead of default
+            session_manager = SessionManager(no_retry_config)
+            logger.warning(
+                "DEBUGGING: Created new SessionManager with %d retries",
+                no_retry_config.max_retries,
+            )
+        else:
+            # TESTING: Override any existing session manager config with forced retries
+            session_manager = session_manager.clone()
+            session_manager.config = no_retry_config
+            logger.warning(
+                "DEBUGGING: Overrode existing SessionManager config with %d retries",
+                no_retry_config.max_retries,
+            )
 
         # Run environment-only checks synchronously (no network calls, no threading overhead)
         platforms = {
@@ -413,31 +478,38 @@ def detect_platforms(
         # Run network-calling functions in parallel
         with ThreadPoolExecutor(max_workers=6) as executor:
             futures = {
-                "is_ec2_instance": executor.submit(
-                    is_ec2_instance, platform_detection_timeout_seconds
-                ),
-                "has_aws_identity": executor.submit(
-                    has_aws_identity, platform_detection_timeout_seconds
-                ),
-                "is_azure_vm": executor.submit(
-                    is_azure_vm, platform_detection_timeout_seconds, session_manager
-                ),
-                "has_azure_managed_identity": executor.submit(
-                    has_azure_managed_identity,
-                    platform_detection_timeout_seconds,
-                    session_manager,
-                ),
+                # "is_ec2_instance": executor.submit(
+                #     is_ec2_instance, platform_detection_timeout_seconds
+                # ),
+                # "has_aws_identity": executor.submit(
+                #     has_aws_identity, platform_detection_timeout_seconds
+                # ),
+                # "is_azure_vm": executor.submit(
+                #     is_azure_vm, platform_detection_timeout_seconds, session_manager
+                # ),
+                # "has_azure_managed_identity": executor.submit(
+                #     has_azure_managed_identity,
+                #     platform_detection_timeout_seconds,
+                #     session_manager,
+                # ),
                 "is_gce_vm": executor.submit(
                     is_gce_vm, platform_detection_timeout_seconds, session_manager
                 ),
-                "has_gcp_identity": executor.submit(
-                    has_gcp_identity,
-                    platform_detection_timeout_seconds,
-                    session_manager,
-                ),
+                # "has_gcp_identity": executor.submit(
+                #     has_gcp_identity,
+                #     platform_detection_timeout_seconds,
+                #     session_manager,
+                # ),
             }
 
-            platforms.update({key: future.result() for key, future in futures.items()})
+            platforms.update(
+                {
+                    key: _get_future_result_with_timeout(
+                        future, platform_detection_timeout_seconds
+                    )
+                    for key, future in futures.items()
+                }
+            )
 
         detected_platforms = []
         for platform_name, detection_state in platforms.items():
@@ -447,5 +519,7 @@ def detect_platforms(
                 detected_platforms.append(f"{platform_name}_timeout")
 
         return detected_platforms
-    except Exception:
+    except Exception as e1:
+        # TODO: remove this
+        print(e1)
         return []
