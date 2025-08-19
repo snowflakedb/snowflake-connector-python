@@ -399,7 +399,7 @@ def detect_platforms(
 
         if session_manager is None:
             # This should never happen - we expect session manager to be passed from the outer scope
-            session_manager = SessionManager(use_pooling=False)
+            session_manager = SessionManager(use_pooling=False, max_retries=0)
 
         # Run environment-only checks synchronously (no network calls, no threading overhead)
         platforms = {
