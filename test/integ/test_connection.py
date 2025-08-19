@@ -1370,7 +1370,7 @@ def test_logs_size_during_basic_query_stays_unchanged(conn_cnx, caplog):
                 logging.getLogger(__name__).warning(
                     f"There was a change in a size of the logs produced by the basic Snowflake query. "
                     f"Expected: {EXACT_EXPECTED_LOGS_BYTES}, got: {total_log_bytes}. "
-                    f"We may need to update the test_logs_size_during_basic_query_stays_unchanged"
+                    f"We may need to update the test_logs_size_during_basic_query_stays_unchanged - i.e. EXACT_EXPECTED_LOGS_BYTES constant."
                 )
 
             # Assert the log size is approximately equal to expected value within delta
