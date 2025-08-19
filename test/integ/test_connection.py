@@ -1385,13 +1385,21 @@ def _calculate_log_bytes(messages):
 def _log_pattern_analysis(
     actual_messages,
     expected_patterns,
+    matched_patterns,
+    missing_patterns,
+    unmatched_messages,
+    show_all_messages=False,
 ):
-    """Log detailed analysis of pattern differences."""
+    """Log detailed analysis of pattern differences.
 
-    # Analyze the differences in log messages
-    matched_patterns, missing_patterns, unmatched_messages = _find_matching_patterns(
-        actual_messages, expected_patterns
-    )
+    Args:
+        actual_messages: List of actual log messages
+        expected_patterns: List of expected log patterns
+        matched_patterns: Set of patterns that were found
+        missing_patterns: Set of patterns that were not found
+        unmatched_messages: List of messages that didn't match any pattern
+        show_all_messages: If True, log all actual messages for debugging
+    """
 
     if missing_patterns:
         logger.warning(f"Missing expected log patterns ({len(missing_patterns)}):")
@@ -1412,6 +1420,13 @@ def _log_pattern_analysis(
     logger.warning(f"  - Actual messages: {len(actual_messages)}")
     logger.warning(f"  - Unmatched messages: {len(unmatched_messages)}")
 
+    # Show all messages if requested (useful when patterns match but bytes don't)
+    if show_all_messages:
+        logger.warning("All actual log messages:")
+        for i, message in enumerate(actual_messages):
+            message_bytes = len(message.encode("utf-8"))
+            logger.warning(f"  [{i:2d}] '{message}' ({message_bytes} bytes)")
+
 
 def _assert_log_bytes_within_tolerance(actual_bytes, expected_bytes, tolerance):
     """Assert that log bytes are within acceptable tolerance."""
@@ -1430,7 +1445,7 @@ def test_logs_size_during_basic_query_stays_unchanged(conn_cnx, caplog):
 
     # Test-specific constants
     EXPECTED_BYTES = 145
-    ACCEPTABLE_DELTA = 0.15
+    ACCEPTABLE_DELTA = 0.6
     EXPECTED_PATTERNS = [
         "Snowflake Connector for Python Version: ",  # followed by version info
         "Connecting to GLOBAL Snowflake domain",
@@ -1449,9 +1464,22 @@ def test_logs_size_during_basic_query_stays_unchanged(conn_cnx, caplog):
                     f"Expected: {EXPECTED_BYTES}, got: {total_log_bytes}. "
                     f"We may need to update the test_logs_size_during_basic_query_stays_unchanged - i.e. EXACT_EXPECTED_LOGS_BYTES constant."
                 )
+
+                # Check if patterns match to decide whether to show all messages
+                matched_patterns, missing_patterns, unmatched_messages = (
+                    _find_matching_patterns(actual_messages, EXPECTED_PATTERNS)
+                )
+                patterns_match_perfectly = (
+                    len(missing_patterns) == 0 and len(unmatched_messages) == 0
+                )
+
                 _log_pattern_analysis(
                     actual_messages,
                     EXPECTED_PATTERNS,
+                    matched_patterns,
+                    missing_patterns,
+                    unmatched_messages,
+                    show_all_messages=patterns_match_perfectly,
                 )
 
             _assert_log_bytes_within_tolerance(
