@@ -405,7 +405,7 @@ def detect_platforms(
             logger.debug(
                 "No session manager provided. HTTP settings may not be preserved. Using default."
             )
-            session_manager = SessionManager(use_pooling=False)
+            session_manager = SessionManager(use_pooling=False, max_retries=0)
 
         # Run environment-only checks synchronously (no network calls, no threading overhead)
         platforms = {
