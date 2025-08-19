@@ -129,11 +129,21 @@ class HttpConfig:
         """Return a new HttpConfig with overrides applied."""
         return replace(self, **overrides)
 
-    def get_adapter(self, **adapter_factory_kwargs) -> HTTPAdapter:
+    def get_adapter(self, **override_adapter_factory_kwargs) -> HTTPAdapter:
         # We pass here only chosen attributes as kwargs to make the arguments received by the factory as compliant with the HttpAdapter constructor interface as possible.
         # We could consider passing the whole HttpConfig as kwarg to the factory if necessary in the future.
-        adapter_factory_kwargs.update(max_retries=self.max_retries)
-        return self.adapter_factory(**adapter_factory_kwargs)
+        attributes_for_adapter_factory = frozenset(
+            {
+                "max_retries",
+            }
+        )
+
+        self_kwargs_for_adapter_factory = {
+            attr_name: getattr(self, attr_name)
+            for attr_name in attributes_for_adapter_factory
+        }
+        self_kwargs_for_adapter_factory.update(override_adapter_factory_kwargs)
+        return self.adapter_factory(**self_kwargs_for_adapter_factory)
 
 
 class SessionPool:
