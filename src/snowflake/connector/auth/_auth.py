@@ -128,7 +128,7 @@ class Auth:
                     "SOCKET_TIMEOUT": socket_timeout,
                     "PLATFORM": detect_platforms(
                         platform_detection_timeout_seconds=platform_detection_timeout_seconds,
-                        session_manager=session_manager,
+                        session_manager=session_manager.clone(),
                     ),
                 },
             },

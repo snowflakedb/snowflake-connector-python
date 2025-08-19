@@ -16,7 +16,7 @@ from .vendored.requests import Response, Session
 from .vendored.requests.adapters import BaseAdapter, HTTPAdapter
 from .vendored.requests.exceptions import InvalidProxyURL
 from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
-from .vendored.urllib3 import PoolManager
+from .vendored.urllib3 import PoolManager, Retry
 from .vendored.urllib3.poolmanager import ProxyManager
 from .vendored.urllib3.util.url import parse_url
 
@@ -119,7 +119,7 @@ class HttpConfig:
         default_factory=ProxySupportAdapterFactory
     )
     use_pooling: bool = True
-    max_retries: int | None = REQUESTS_RETRY
+    max_retries: int | Retry | None = REQUESTS_RETRY
     proxy_host: str | None = None
     proxy_port: str | None = None
     proxy_user: str | None = None
@@ -128,6 +128,12 @@ class HttpConfig:
     def copy_with(self, **overrides: Any) -> HttpConfig:
         """Return a new HttpConfig with overrides applied."""
         return replace(self, **overrides)
+
+    def get_adapter(self, **adapter_factory_kwargs) -> HTTPAdapter:
+        # We pass here only chosen attributes as kwargs to make the arguments received by the factory as compliant with the HttpAdapter constructor interface as possible.
+        # We could consider passing the whole HttpConfig as kwarg to the factory if necessary in the future.
+        adapter_factory_kwargs.update(max_retries=self.max_retries)
+        return self.adapter_factory(**adapter_factory_kwargs)
 
 
 class SessionPool:
@@ -183,6 +189,40 @@ class SessionPool:
                 logger.info(f"Session cleanup failed - failed to close session: {e}")
         self._active_sessions.clear()
         self._idle_sessions.clear()
+
+
+class _ConfigDirectAccessMixin(abc.ABC):
+    @property
+    @abc.abstractmethod
+    def config(self) -> HttpConfig: ...
+
+    @config.setter
+    @abc.abstractmethod
+    def config(self, value) -> HttpConfig: ...
+
+    @property
+    def use_pooling(self) -> bool:
+        return self.config.use_pooling
+
+    @use_pooling.setter
+    def use_pooling(self, value: bool) -> None:
+        self.config = self.config.copy_with(use_pooling=value)
+
+    @property
+    def adapter_factory(self) -> Callable[..., HTTPAdapter]:
+        return self.config.adapter_factory
+
+    @adapter_factory.setter
+    def adapter_factory(self, value: Callable[..., HTTPAdapter]) -> None:
+        self.config = self.config.copy_with(adapter_factory=value)
+
+    @property
+    def max_retries(self) -> Retry | int:
+        return self.config.max_retries
+
+    @max_retries.setter
+    def max_retries(self, value: Retry | int) -> None:
+        self.config = self.config.copy_with(max_retries=value)
 
 
 class _RequestVerbsUsingSessionMixin(abc.ABC):
@@ -295,7 +335,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
             return session.delete(url, headers=headers, timeout=timeout, **kwargs)
 
 
-class SessionManager(_RequestVerbsUsingSessionMixin):
+class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
     """
     Central HTTP session manager that handles all external requests from the Snowflake driver.
 
@@ -363,22 +403,6 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
         )
 
     @property
-    def use_pooling(self) -> bool:
-        return self._cfg.use_pooling
-
-    @use_pooling.setter
-    def use_pooling(self, value: bool) -> None:
-        self._cfg = self._cfg.copy_with(use_pooling=value)
-
-    @property
-    def adapter_factory(self) -> Callable[..., HTTPAdapter]:
-        return self._cfg.adapter_factory
-
-    @adapter_factory.setter
-    def adapter_factory(self, value: Callable[..., HTTPAdapter]) -> None:
-        self._cfg = self._cfg.copy_with(adapter_factory=value)
-
-    @property
     def sessions_map(self) -> dict[str, SessionPool]:
         return self._sessions_map
 
@@ -403,8 +427,12 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
     def _mount_adapters(self, session: requests.Session) -> None:
         try:
             # Its important that each separate session manager creates its own adapters - because they are storing internally PoolManagers - which shouldn't be reused if not in scope of the same adapter.
-            adapter = self._cfg.adapter_factory(
-                max_retries=self._cfg.max_retries or REQUESTS_RETRY
+            adapter = self._cfg.get_adapter(
+                max_retries=(
+                    self._cfg.max_retries
+                    if self._cfg.max_retries is not None
+                    else REQUESTS_RETRY
+                )
             )
             if adapter is not None:
                 session.mount("http://", adapter)
