@@ -288,3 +288,50 @@ class TestDetectPlatforms:
     ):
         result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_gce_cloud_run_job" not in result
+
+    def test_zero_platform_detection_timeout_disables_endpoints_detection_on_cloud(
+        self,
+        fake_aws_lambda_environment,
+        fake_aws_environment,
+        fake_azure_vm_metadata_service,
+        fake_azure_function_metadata_service,
+        fake_gce_metadata_service,
+        fake_gce_cloud_run_service_metadata_service,
+        fake_gce_cloud_run_job_metadata_service,
+        fake_github_actions_metadata_service,
+    ):
+        result = detect_platforms(platform_detection_timeout_seconds=0)
+        assert not {
+            "is_ec2_instance",
+            "is_ec2_instance_timeout",
+            "has_aws_identity",
+            "has_aws_identity_timeout",
+            "is_azure_vm",
+            "is_azure_vm_timeout",
+            "has_azure_managed_identity",
+            "has_azure_managed_identity_timeout",
+            "is_gce_vm",
+            "is_gce_vm_timeout",
+            "has_gcp_identity",
+            "has_gcp_identity_timeout",
+        }.intersection(result)
+
+    def test_zero_platform_detection_timeout_disables_endpoints_detection_out_of_cloud(
+        self,
+        unavailable_metadata_service_with_request_exception,
+    ):
+        result = detect_platforms(platform_detection_timeout_seconds=0)
+        assert not {
+            "is_ec2_instance",
+            "is_ec2_instance_timeout",
+            "has_aws_identity",
+            "has_aws_identity_timeout",
+            "is_azure_vm",
+            "is_azure_vm_timeout",
+            "has_azure_managed_identity",
+            "has_azure_managed_identity_timeout",
+            "is_gce_vm",
+            "is_gce_vm_timeout",
+            "has_gcp_identity",
+            "has_gcp_identity_timeout",
+        }.intersection(result)

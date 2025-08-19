@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.17.2(TBD)
+  - Added disabling endpoint-based platform detection by setting `platform_detection_timeout_seconds` to zero
+
 - v3.17.1(August 17,2025)
   - Added `infer_schema` parameter to `write_pandas` to perform schema inference on the passed data.
   - Namespace `snowlake` reverted back to non-module.
