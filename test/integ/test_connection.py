@@ -60,6 +60,8 @@ try:
 except ImportError:
     pass
 
+logger = logging.getLogger(__name__)
+
 
 def test_basic(conn_testaccount):
     """Basic Connection test."""
@@ -1345,6 +1347,72 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_disabled(
                 "Using the value of 'disable_ocsp_checks."
             ) in caplog.text
             assert "This connection does not perform OCSP checks." in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_logs_size_during_basic_query_stays_unchanged(conn_cnx, caplog):
+    """Test that the amount of bytes logged during normal select 1 flow is within acceptable range. Related to: SNOW-2268606"""
+    caplog.set_level(logging.DEBUG, "snowflake.connector")
+    EXACT_EXPECTED_LOGS_BYTES = 1631
+    ACCEPTABLE_DELTA = 0.05
+
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            caplog.clear()
+            cur.execute("select 1").fetchall()
+
+            # Calculate total log bytes for this run
+            total_log_bytes = sum(
+                len(record.getMessage().encode("utf-8")) for record in caplog.records
+            )
+
+            if total_log_bytes != EXACT_EXPECTED_LOGS_BYTES:
+                logging.getLogger(__name__).warning(
+                    f"There was a change in a size of the logs produced by the basic Snowflake query. "
+                    f"Expected: {EXACT_EXPECTED_LOGS_BYTES}, got: {total_log_bytes}. "
+                    f"We may need to update the test_logs_size_during_basic_query_stays_unchanged"
+                )
+
+            # Assert the log size is approximately equal to expected value within delta
+            assert total_log_bytes == pytest.approx(
+                EXACT_EXPECTED_LOGS_BYTES, rel=ACCEPTABLE_DELTA
+            ), (
+                f"Log bytes {total_log_bytes} is not approximately equal to expected {EXACT_EXPECTED_LOGS_BYTES} "
+                f"within {ACCEPTABLE_DELTA*100}% tolerance. "
+                f"This may indicate unwanted logs being produced or changes in logging behavior."
+            )
+
+
+@pytest.mark.skipolddriver
+def test_no_new_warnings_or_errors_on_successful_basic_select(conn_cnx, caplog):
+    """Test that the number of warning/error log entries stays the same during successful basic select operations. Related to: SNOW-2268606"""
+    caplog.set_level(logging.WARNING, "snowflake.connector")
+    baseline_warning_count = 0
+    baseline_error_count = 0
+
+    # Execute basic select operations and check counts remain the same
+    caplog.clear()
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Execute basic select operations
+            result1 = cur.execute("select 1").fetchall()
+            assert result1 == [(1,)]
+
+    # Count warning/error log entries after operations
+    test_warning_count = len(
+        [r for r in caplog.records if r.levelno >= logging.WARNING]
+    )
+    test_error_count = len([r for r in caplog.records if r.levelno >= logging.ERROR])
+
+    # Assert counts stay the same (no new warnings or errors)
+    assert test_warning_count == baseline_warning_count, (
+        f"Warning count increased from {baseline_warning_count} to {test_warning_count}. "
+        f"New warnings: {[r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]}"
+    )
+    assert test_error_count == baseline_error_count, (
+        f"Error count increased from {baseline_error_count} to {test_error_count}. "
+        f"New errors: {[r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]}"
+    )
 
 
 @pytest.mark.skipolddriver
