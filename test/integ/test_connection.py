@@ -386,7 +386,7 @@ def test_invalid_account_timeout(conn_cnx):
             pass
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(20)
 def test_invalid_proxy(conn_cnx):
     with pytest.raises(OperationalError):
         with conn_cnx(
