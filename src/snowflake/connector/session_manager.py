@@ -427,13 +427,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
     def _mount_adapters(self, session: requests.Session) -> None:
         try:
             # Its important that each separate session manager creates its own adapters - because they are storing internally PoolManagers - which shouldn't be reused if not in scope of the same adapter.
-            adapter = self._cfg.get_adapter(
-                max_retries=(
-                    self._cfg.max_retries
-                    if self._cfg.max_retries is not None
-                    else REQUESTS_RETRY
-                )
-            )
+            adapter = self._cfg.get_adapter()
             if adapter is not None:
                 session.mount("http://", adapter)
                 session.mount("https://", adapter)
