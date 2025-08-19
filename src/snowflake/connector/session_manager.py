@@ -501,27 +501,18 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
 
     def clone(
         self,
-        *,
-        use_pooling: bool | None = None,
-        adapter_factory: AdapterFactory | None = None,
+        **http_config_overrides,
     ) -> SessionManager:
         """Return a new *stateless* SessionManager sharing this instance’s config.
 
-        "Shallow" means the configuration object (HttpConfig) is reused as-is,
+        "Shallow clone" - the configuration object (HttpConfig) is reused as-is,
         while *stateful* aspects such as the per-host SessionPool mapping are
         reset, so the two managers do not share live `requests.Session`
         objects.
-        Optional *use_pooling* / *adapter_factory* overrides create a modified
-        copy of the config before instantiation.
+        Optional kwargs (e.g. *use_pooling* / *adapter_factory* / max_retries etc.) - overrides to create a modified
+        copy of the HttpConfig before instantiation.
         """
-
-        overrides: dict[str, Any] = {}
-        if use_pooling is not None:
-            overrides["use_pooling"] = use_pooling
-        if adapter_factory is not None:
-            overrides["adapter_factory"] = adapter_factory
-
-        return SessionManager.from_config(self._cfg, **overrides)
+        return SessionManager.from_config(self._cfg, **http_config_overrides)
 
     def __getstate__(self):
         state = self.__dict__.copy()
