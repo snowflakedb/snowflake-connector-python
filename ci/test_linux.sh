@@ -6,8 +6,6 @@
 #   - This script assumes that ../dist/repaired_wheels has the wheel(s) built for all versions to be tested
 #   - This is the script that test_docker.sh runs inside of the docker container
 
-# Tests USE_PASSWORD as it runs agains the mocked Snowflake instance
-export USE_PASSWORD=true
 
 PYTHON_VERSIONS="${1:-3.9 3.10 3.11 3.12 3.13}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -41,7 +39,6 @@ if [[ "$is_old_driver" == "true" ]]; then
 else
     for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
         echo "[Info] Testing with ${PYTHON_VERSION}"
-        echp "Running with ${USE_PASSWORD}"
         SHORT_VERSION=$(python3.10 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
         CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/snowflake_connector_python*cp${SHORT_VERSION}*manylinux2014*.whl | sort -r | head -n 1)
         TEST_LIST=`echo py${PYTHON_VERSION/\./}-{unit-parallel,integ,pandas-parallel,sso}-ci | sed 's/ /,/g'`
