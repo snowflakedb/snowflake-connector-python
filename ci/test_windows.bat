@@ -20,13 +20,15 @@ if "%connector_whl%"=="" (
 )
 echo %connector_whl%
 
-:: Decrypt parameters file
+:: Decrypt parameters file and private key file
 :: Default to aws as cloud provider
+if "%cloud_provider%"=="" set cloud_provider=aws
 set PARAMETERS_DIR=%CONNECTOR_DIR%\.github\workflows\parameters\public
-set PARAMS_FILE=%PARAMETERS_DIR%\jenkins_test_parameters.py.gpg
+set PARAMS_FILE=%PARAMETERS_DIR%\parameters_aws.py.gpg
 if "%cloud_provider%"=="azure" set PARAMS_FILE=%PARAMETERS_DIR%\parameters_azure.py.gpg
 if "%cloud_provider%"=="gcp" set PARAMS_FILE=%PARAMETERS_DIR%\parameters_gcp.py.gpg
 gpg --quiet --batch --yes --decrypt --passphrase="%PARAMETERS_SECRET%" %PARAMS_FILE% > test\parameters.py
+gpg --quiet --batch --yes --decrypt --passphrase="%PARAMETERS_SECRET%" %CONNECTOR_DIR%\.github\workflows\parameters\public\rsa_keys\rsa_key_python_%cloud_provider%.p8.gpg > test\rsa_key_python_%cloud_provider%.p8
 
 :: create tox execution virtual env
 set venv_dir=%WORKSPACE%\tox_venv
