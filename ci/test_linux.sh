@@ -41,6 +41,7 @@ if [[ "$is_old_driver" == "true" ]]; then
 else
     for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
         echo "[Info] Testing with ${PYTHON_VERSION}"
+        echp "Running with ${USE_PASSWORD}"
         SHORT_VERSION=$(python3.10 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
         CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/snowflake_connector_python*cp${SHORT_VERSION}*manylinux2014*.whl | sort -r | head -n 1)
         TEST_LIST=`echo py${PYTHON_VERSION/\./}-{unit-parallel,integ,pandas-parallel,sso}-ci | sed 's/ /,/g'`

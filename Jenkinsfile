@@ -34,6 +34,7 @@ timestamps {
         string(name: 'client_git_branch', value: scmInfo.GIT_BRANCH),
         string(name: 'parent_job', value: env.JOB_NAME),
         string(name: 'parent_build_number', value: env.BUILD_NUMBER)
+        string(name: 'USE_PASSWORD', value: 'true')
       ]
       parallel(
       'Test': {
