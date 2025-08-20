@@ -85,7 +85,9 @@ class AuthByWorkloadIdentity(AuthByPlugin):
             self.provider,
             self.entra_resource,
             self.token,
-            session_manager=conn._session_manager.clone() if conn else None,
+            session_manager=(
+                conn._session_manager.clone(max_retries=0) if conn else None
+            ),
         )
 
     def reauthenticate(self, **kwargs: typing.Any) -> dict[str, bool]:
