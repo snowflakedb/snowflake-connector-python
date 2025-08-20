@@ -417,33 +417,36 @@ def detect_platforms(
         }
 
         # Run network-calling functions in parallel
-        with ThreadPoolExecutor(max_workers=6) as executor:
-            futures = {
-                "is_ec2_instance": executor.submit(
-                    is_ec2_instance, platform_detection_timeout_seconds
-                ),
-                "has_aws_identity": executor.submit(
-                    has_aws_identity, platform_detection_timeout_seconds
-                ),
-                "is_azure_vm": executor.submit(
-                    is_azure_vm, platform_detection_timeout_seconds, session_manager
-                ),
-                "has_azure_managed_identity": executor.submit(
-                    has_azure_managed_identity,
-                    platform_detection_timeout_seconds,
-                    session_manager,
-                ),
-                "is_gce_vm": executor.submit(
-                    is_gce_vm, platform_detection_timeout_seconds, session_manager
-                ),
-                "has_gcp_identity": executor.submit(
-                    has_gcp_identity,
-                    platform_detection_timeout_seconds,
-                    session_manager,
-                ),
-            }
+        if platform_detection_timeout_seconds != 0.0:
+            with ThreadPoolExecutor(max_workers=6) as executor:
+                futures = {
+                    "is_ec2_instance": executor.submit(
+                        is_ec2_instance, platform_detection_timeout_seconds
+                    ),
+                    "has_aws_identity": executor.submit(
+                        has_aws_identity, platform_detection_timeout_seconds
+                    ),
+                    "is_azure_vm": executor.submit(
+                        is_azure_vm, platform_detection_timeout_seconds, session_manager
+                    ),
+                    "has_azure_managed_identity": executor.submit(
+                        has_azure_managed_identity,
+                        platform_detection_timeout_seconds,
+                        session_manager,
+                    ),
+                    "is_gce_vm": executor.submit(
+                        is_gce_vm, platform_detection_timeout_seconds, session_manager
+                    ),
+                    "has_gcp_identity": executor.submit(
+                        has_gcp_identity,
+                        platform_detection_timeout_seconds,
+                        session_manager,
+                    ),
+                }
 
-            platforms.update({key: future.result() for key, future in futures.items()})
+                platforms.update(
+                    {key: future.result() for key, future in futures.items()}
+                )
 
         detected_platforms = []
         for platform_name, detection_state in platforms.items():
