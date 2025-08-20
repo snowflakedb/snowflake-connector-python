@@ -312,7 +312,9 @@ def create_attestation(
     """
     entra_resource = entra_resource or DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
     session_manager = (
-        session_manager.clone() if session_manager else SessionManager(use_pooling=True)
+        session_manager.clone()
+        if session_manager
+        else SessionManager(use_pooling=True, max_retries=0)
     )
 
     if provider == AttestationProvider.AWS:
