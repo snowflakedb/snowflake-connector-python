@@ -7,13 +7,8 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.17.2(TBD)
-  - Fixed a bug where platform_detection was retrying failed requests with warnings to non-existent endpoints.
-
 - v3.17.2(August 23,2025)
-
-   -N/A
-
+  - Fixed a bug where platform_detection was retrying failed requests with warnings to non-existent endpoints.
   - Added disabling endpoint-based platform detection by setting `platform_detection_timeout_seconds` to zero.
 
 - v3.17.1(August 17,2025)
