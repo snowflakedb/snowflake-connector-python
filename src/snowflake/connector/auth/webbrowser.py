@@ -456,14 +456,14 @@ You can close this window now and go back where you started from.
         body = Auth.base_auth_data(
             user,
             account,
-            conn._rest._connection.application,
-            conn._rest._connection._internal_application_name,
-            conn._rest._connection._internal_application_version,
-            conn._rest._connection._ocsp_mode(),
-            conn._rest._connection.login_timeout,
-            conn._rest._connection.network_timeout,
-            conn._rest._connection.socket_timeout,
-            conn._rest._connection.platform_detection_timeout_seconds,
+            conn.application,
+            conn._internal_application_name,
+            conn._internal_application_version,
+            conn._ocsp_mode(),
+            conn.login_timeout,
+            conn.network_timeout,
+            conn.socket_timeout,
+            conn.platform_detection_timeout_seconds,
             session_manager=conn.rest.session_manager.clone(use_pooling=False),
         )
 
