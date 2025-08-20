@@ -3,7 +3,15 @@ from __future__ import annotations
 
 from unittest import mock
 
-from snowflake.connector.session_manager import ProxySupportAdapter, SessionManager
+import pytest
+
+from snowflake.connector.session_manager import (
+    HttpConfig,
+    ProxySupportAdapter,
+    ProxySupportAdapterFactory,
+    SessionManager,
+)
+from snowflake.connector.vendored.urllib3 import Retry
 
 HOST_SFC_TEST_0 = "sfctest0.snowflakecomputing.com"
 URL_SFC_TEST_0 = f"https://{HOST_SFC_TEST_0}:443/session/v1/login-request"
@@ -232,3 +240,86 @@ def test_context_var_weakref_does_not_leak():
 
     reset_current_session_manager(token)
     assert get_current_session_manager(create_default_if_missing=False) is None
+
+
+@pytest.fixture
+def mock_adapter_with_factory():
+    """Fixture providing a mock adapter factory and adapter."""
+    mock_adapter_factory = mock.MagicMock()
+    mock_adapter = mock.MagicMock()
+    mock_adapter_factory.return_value = mock_adapter
+    return mock_adapter, mock_adapter_factory
+
+
+@pytest.mark.parametrize(
+    "max_retries,extra_kwargs,expected_kwargs",
+    [
+        # Test with integer max_retries
+        (
+            5,
+            {"timeout": 30, "pool_connections": 10},
+            {"timeout": 30, "pool_connections": 10, "max_retries": 5},
+        ),
+        # Test with None max_retries
+        (None, {}, {"max_retries": None}),
+        # Test with no extra kwargs
+        (7, {}, {"max_retries": 7}),
+        # Test override by extra kwargs
+        (0.2, {"max_retries": 0.7}, {"max_retries": 0.7}),
+    ],
+)
+def test_http_config_get_adapter_parametrized(
+    mock_adapter_with_factory, max_retries, extra_kwargs, expected_kwargs
+):
+    """Test that HttpConfig.get_adapter properly passes kwargs and max_retries to adapter factory."""
+    mock_adapter, mock_adapter_factory = mock_adapter_with_factory
+
+    config = HttpConfig(adapter_factory=mock_adapter_factory, max_retries=max_retries)
+    result = config.get_adapter(**extra_kwargs)
+
+    # Verify the adapter factory was called with correct arguments
+    mock_adapter_factory.assert_called_once_with(**expected_kwargs)
+    assert result is mock_adapter
+
+
+def test_http_config_get_adapter_with_retry_object(mock_adapter_with_factory):
+    """Test get_adapter with Retry object as max_retries."""
+    mock_adapter, mock_adapter_factory = mock_adapter_with_factory
+
+    retry_config = Retry(total=3, backoff_factor=0.3)
+    config = HttpConfig(adapter_factory=mock_adapter_factory, max_retries=retry_config)
+
+    result = config.get_adapter(pool_maxsize=20)
+
+    # Verify the call was made with the Retry object
+    mock_adapter_factory.assert_called_once()
+    call_args = mock_adapter_factory.call_args
+    assert call_args.kwargs["pool_maxsize"] == 20
+    assert call_args.kwargs["max_retries"] is retry_config  # Same object reference
+    assert result is mock_adapter
+
+
+def test_http_config_get_adapter_kwargs_override(mock_adapter_with_factory):
+    """Test that get_adapter config's max_retries takes precedence over kwargs max_retries."""
+    mock_adapter, mock_adapter_factory = mock_adapter_with_factory
+
+    config = HttpConfig(adapter_factory=mock_adapter_factory, max_retries=5)
+
+    # The config's max_retries should override any passed in kwargs
+    result = config.get_adapter(max_retries=10, timeout=30)
+
+    # Verify that config's max_retries (5) takes precedence over kwargs max_retries (10)
+    mock_adapter_factory.assert_called_once_with(max_retries=10, timeout=30)
+    assert result is mock_adapter
+
+
+def test_http_config_get_adapter_with_real_factory():
+    """Test get_adapter with the actual ProxySupportAdapterFactory."""
+    config = HttpConfig(adapter_factory=ProxySupportAdapterFactory(), max_retries=3)
+
+    adapter = config.get_adapter()
+
+    # Verify we get a real ProxySupportAdapter instance
+    assert isinstance(adapter, ProxySupportAdapter)
+    # Verify max_retries was set correctly
+    assert adapter.max_retries.total == 3
