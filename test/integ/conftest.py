@@ -38,6 +38,7 @@ if MYPY:  # from typing import TYPE_CHECKING once 3.5 is deprecated
 
 RUNNING_ON_GH = os.getenv("GITHUB_ACTIONS") == "true"
 RUNNING_ON_JENKINS = os.getenv("JENKINS_HOME") not in (None, "false")
+USE_PASSWORD_AUTH = os.getenv("USE_PASSWORD") == "true"
 RUNNING_OLD_DRIVER = os.getenv("TOX_ENV_NAME") == "olddriver"
 TEST_USING_VENDORED_ARROW = os.getenv("TEST_USING_VENDORED_ARROW") == "true"
 
@@ -120,7 +121,7 @@ if TEST_USING_VENDORED_ARROW:
     )
 
 
-if RUNNING_ON_JENKINS:
+if USE_PASSWORD_AUTH:
     DEFAULT_PARAMETERS: dict[str, Any] = {
         "account": "<account_name>",
         "user": "<user_name>",
@@ -271,7 +272,7 @@ def init_test_schema(db_parameters) -> Generator[None]:
 
     This is automatically called per test session.
     """
-    if RUNNING_ON_JENKINS:
+    if USE_PASSWORD_AUTH:
         connection_params = {
             "user": db_parameters["user"],
             "password": db_parameters["password"],
@@ -335,8 +336,8 @@ def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
     ret = get_db_parameters(connection_name)
     ret.update(kwargs)
 
-    # Handle private key authentication differently for old vs new driver (only if not on Jenkins)
-    if not RUNNING_ON_JENKINS and "private_key_file" in ret:
+    # Handle private key authentication differently for old vs new driver (only if not using password auth)
+    if not USE_PASSWORD_AUTH and "private_key_file" in ret:
         if RUNNING_OLD_DRIVER:
             # Old driver (3.1.0) expects private_key as bytes and SNOWFLAKE_JWT authenticator
             private_key_file = ret.get("private_key_file")
