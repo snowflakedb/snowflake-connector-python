@@ -29,6 +29,14 @@ LOGGER = logging.getLogger(__name__)
 READABLE_BY_OTHERS = stat.S_IRGRP | stat.S_IROTH
 
 
+SKIP_WARNING_ENV_VAR = "SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE"
+
+
+def _should_skip_warning_for_read_permissions_on_config_file() -> bool:
+    """Check if the warning should be skipped based on environment variable."""
+    return os.getenv(SKIP_WARNING_ENV_VAR, "false").lower() == "true"
+
+
 class ConfigSliceOptions(NamedTuple):
     """Class that defines settings individual configuration files."""
 
@@ -329,6 +337,7 @@ class ConfigManager:
                 )
                 continue
 
+            # Check for readable by others or wrong ownership - this should warn
             if (
                 not IS_WINDOWS  # Skip checking on Windows
                 and sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
@@ -342,9 +351,10 @@ class ConfigManager:
                     and filep.stat().st_uid != os.getuid()
                 )
             ):
-                chmod_message = f'.\n * To change owner, run `chown $USER "{str(filep)}"`.\n * To restrict permissions, run `chmod 0600 "{str(filep)}"`.\n'
+                chmod_message = f'.\n * To change owner, run `chown $USER "{str(filep)}"`.\n * To restrict permissions, run `chmod 0600 "{str(filep)}"`.\n * To skip this warning, set environment variable {SKIP_WARNING_ENV_VAR}=true.\n'
 
-                warn(f"Bad owner or permissions on {str(filep)}{chmod_message}")
+                if not _should_skip_warning_for_read_permissions_on_config_file():
+                    warn(f"Bad owner or permissions on {str(filep)}{chmod_message}")
             LOGGER.debug(f"reading configuration file from {str(filep)}")
             try:
                 read_config_piece = tomlkit.parse(filep.read_text())
