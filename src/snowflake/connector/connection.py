@@ -214,6 +214,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "workload_identity_provider": (None, (type(None), AttestationProvider)),
     "workload_identity_entra_resource": (None, (type(None), str)),
+    "workload_identity_impersonations": (None, (type(None), list)),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -1359,6 +1360,7 @@ class SnowflakeConnection:
                     provider=self._workload_identity_provider,
                     token=self._token,
                     entra_resource=self._workload_identity_entra_resource,
+                    impersonations=self._workload_identity_impersonations,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
@@ -1531,6 +1533,7 @@ class SnowflakeConnection:
             workload_identity_dependent_options = [
                 "workload_identity_provider",
                 "workload_identity_entra_resource",
+                "workload_identity_impersonations",
             ]
             for dependent_option in workload_identity_dependent_options:
                 if (
