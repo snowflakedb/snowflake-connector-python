@@ -20,6 +20,9 @@ docker build --build-arg ARCH=$(uname -m) -t snowflake_connector_python_image -f
 # Go back to the original directory
 cd $WORKSPACE
 
+mkdir -p $WORKSPACE/conda-bld
+chmod -R o+w,g+w $WORKSPACE/conda-bld
+
 
 # Check to make sure repos exist to build conda packages
 if [[ -d $WORKSPACE/snowflake-connector-python ]]; then
