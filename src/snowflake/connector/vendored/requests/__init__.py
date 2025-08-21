@@ -40,7 +40,7 @@ is at <https://requests.readthedocs.io>.
 
 import warnings
 
-import urllib3
+from .. import urllib3
 
 from .exceptions import RequestsDependencyWarning
 
@@ -140,7 +140,7 @@ except ImportError:
     pass
 
 # urllib3's DependencyWarnings should be silenced.
-from urllib3.exceptions import DependencyWarning
+from ..urllib3.exceptions import DependencyWarning
 
 warnings.simplefilter("ignore", DependencyWarning)
 
