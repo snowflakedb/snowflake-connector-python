@@ -1,7 +1,7 @@
 
 # Before running, do something similar to the following in command line.
 # export WORKSPACE=/home/zyao/my_workspace;
-# export build_number=321;
+# export package_build_number=321;
 
 # Here miniconda-install.sh is just a installer that I downloaded from Anaconda official site,
 # https://repo.anaconda.com/miniconda/
@@ -12,18 +12,13 @@ if [[ -z $WORKSPACE ]]; then
   WORKSPACE=$HOME
 fi
 
-DIRECTORY=`dirname $0`
-
 # ===== Build docker image =====
-cd $DIRECTORY
+cd $WORKSPACE
 
-cp ~/miniconda-install/miniconda-install.sh ./
+docker build --build-arg ARCH=$(uname -m) -t snowflake_connector_python_image -f snowflake-connector-python/ci/anaconda/Dockerfile .
 
-docker build --build-arg ARCH=$(uname -m) -t snowflake_connector_python_image -f Dockerfile .
-
-rm miniconda-install.sh || true
 # Go back to the original directory
-cd $DIRECTORY
+cd $WORKSPACE
 
 
 # Check to make sure repos exist to build conda packages
@@ -37,7 +32,7 @@ fi
 docker run \
   -v $WORKSPACE/snowflake-connector-python/:/repo/snowflake-connector-python \
   -v $WORKSPACE/conda-bld:/repo/conda-bld \
-  -e SNOWFLAKE_CONNECTOR_PYTHON_BUILD_NUMBER=${build_number} \
+  -e SNOWFLAKE_CONNECTOR_PYTHON_BUILD_NUMBER=${package_build_number} \
   snowflake_connector_python_image \
   /repo/snowflake-connector-python/ci/anaconda/package_builder.sh
 
