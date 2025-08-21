@@ -12,6 +12,8 @@ import jwt
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from botocore.utils import InstanceMetadataRegionFetcher
+from google.auth import impersonated_credentials
+from google.auth.transport.requests import Request
 
 from .errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
@@ -185,6 +187,7 @@ def create_aws_attestation(
 
 
 def create_gcp_attestation(
+    impersonations: list[str] | None = None,
     session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for GCP.
@@ -207,6 +210,24 @@ def create_gcp_attestation(
         )
 
     jwt_str = res.content.decode("utf-8")
+    if impersonations:
+        try:
+            for impersonation in impersonations:
+                jwt_str = impersonated_credentials.Credentials(
+                    source_credentials=jwt_str,
+                    target_principal=impersonation,
+                    target_audience=SNOWFLAKE_AUDIENCE,
+                )
+
+            # Refresh the last impersonated credential to get the final token
+            jwt_str.refresh(Request())
+            jwt_str = jwt_str.token
+        except Exception as e:
+            raise ProgrammingError(
+                msg=f"Error impersonating GCP service account: {e}. Ensure the service account has the 'Service Account Token Creator' role.",
+                errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+            )
+
     _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     return WorkloadIdentityAttestation(
         AttestationProvider.GCP, jwt_str, {"sub": subject}
@@ -295,6 +316,7 @@ def create_attestation(
     provider: AttestationProvider,
     entra_resource: str | None = None,
     token: str | None = None,
+    impersonations: list[str] | None = None,
     session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
@@ -313,7 +335,7 @@ def create_attestation(
     elif provider == AttestationProvider.AZURE:
         return create_azure_attestation(entra_resource, session_manager)
     elif provider == AttestationProvider.GCP:
-        return create_gcp_attestation(session_manager)
+        return create_gcp_attestation(impersonations, session_manager)
     elif provider == AttestationProvider.OIDC:
         return create_oidc_attestation(token)
     else:
