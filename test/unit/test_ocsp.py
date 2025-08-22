@@ -10,7 +10,7 @@ import os
 import platform
 import time
 from concurrent.futures.thread import ThreadPoolExecutor
-from os import environ, path
+from os import path
 from unittest import mock
 
 import asn1crypto.x509
@@ -78,7 +78,7 @@ THIS_DIR = path.dirname(path.realpath(__file__))
 
 
 @pytest.fixture(autouse=True)
-def worker_specific_cache_dir(tmpdir, request):
+def worker_specific_cache_dir(tmpdir, request, monkeypatch):
     """Create worker-specific cache directory to avoid file lock conflicts in parallel execution.
 
     Note: Tests that explicitly manage their own cache directories (like test_ocsp_cache_when_server_is_down)
@@ -88,13 +88,12 @@ def worker_specific_cache_dir(tmpdir, request):
     # Get worker ID for parallel execution (pytest-xdist)
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "master")
 
-    # Store original cache dir environment variable
-    original_cache_dir = os.environ.get("SF_OCSP_RESPONSE_CACHE_DIR")
+    # monkeypatch will automatically handle restoration
 
     # Set worker-specific cache directory to prevent main cache file conflicts
     worker_cache_dir = tmpdir.join(f"ocsp_cache_{worker_id}")
     worker_cache_dir.ensure(dir=True)
-    os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = str(worker_cache_dir)
+    monkeypatch.setenv("SF_OCSP_RESPONSE_CACHE_DIR", str(worker_cache_dir))
 
     # Only handle the OCSP_RESPONSE_VALIDATION_CACHE to prevent conflicts
     # Let tests manage SF_OCSP_RESPONSE_CACHE_DIR themselves if they need to
@@ -131,11 +130,7 @@ def worker_specific_cache_dir(tmpdir, request):
         # If modules not available, just yield the directory
         yield str(tmpdir)
     finally:
-        # Restore original cache directory environment variable
-        if original_cache_dir is not None:
-            os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = original_cache_dir
-        else:
-            os.environ.pop("SF_OCSP_RESPONSE_CACHE_DIR", None)
+        # monkeypatch will automatically restore the original environment variable
 
         # Reset cache dir back to original state
         try:
@@ -235,7 +230,7 @@ def test_ocsp_wo_cache_server():
         assert ocsp.validate(url, connection), f"Failed to validate: {url}"
 
 
-def test_ocsp_wo_cache_file():
+def test_ocsp_wo_cache_file(monkeypatch):
     """OCSP tests without File cache.
 
     Notes:
@@ -248,7 +243,7 @@ def test_ocsp_wo_cache_file():
     except FileNotFoundError:
         # File doesn't exist, which is fine for this test
         pass
-    environ["SF_OCSP_RESPONSE_CACHE_DIR"] = "/etc"
+    monkeypatch.setenv("SF_OCSP_RESPONSE_CACHE_DIR", "/etc")
     OCSPCache.reset_cache_dir()
 
     try:
@@ -257,11 +252,10 @@ def test_ocsp_wo_cache_file():
             connection = _openssl_connect(url)
             assert ocsp.validate(url, connection), f"Failed to validate: {url}"
     finally:
-        del environ["SF_OCSP_RESPONSE_CACHE_DIR"]
         OCSPCache.reset_cache_dir()
 
 
-def test_ocsp_fail_open_w_single_endpoint():
+def test_ocsp_fail_open_w_single_endpoint(monkeypatch):
     SnowflakeOCSP.clear_cache()
 
     try:
@@ -270,33 +264,28 @@ def test_ocsp_fail_open_w_single_endpoint():
         # File doesn't exist, which is fine for this test
         pass
 
-    environ["SF_OCSP_TEST_MODE"] = "true"
-    environ["SF_TEST_OCSP_URL"] = "http://httpbin.org/delay/10"
-    environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"] = "5"
+    monkeypatch.setenv("SF_OCSP_TEST_MODE", "true")
+    monkeypatch.setenv("SF_TEST_OCSP_URL", "http://httpbin.org/delay/10")
+    monkeypatch.setenv("SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT", "5")
 
     ocsp = SFOCSP(use_ocsp_cache_server=False)
     connection = _openssl_connect("snowflake.okta.com")
 
-    try:
-        assert ocsp.validate(
-            "snowflake.okta.com", connection
-        ), "Failed to validate: {}".format("snowflake.okta.com")
-    finally:
-        del environ["SF_OCSP_TEST_MODE"]
-        del environ["SF_TEST_OCSP_URL"]
-        del environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"]
+    assert ocsp.validate(
+        "snowflake.okta.com", connection
+    ), "Failed to validate: {}".format("snowflake.okta.com")
 
 
 @pytest.mark.skipif(
     ER_OCSP_RESPONSE_CERT_STATUS_REVOKED is None,
     reason="No ER_OCSP_RESPONSE_CERT_STATUS_REVOKED is available.",
 )
-def test_ocsp_fail_close_w_single_endpoint():
+def test_ocsp_fail_close_w_single_endpoint(monkeypatch):
     SnowflakeOCSP.clear_cache()
 
-    environ["SF_OCSP_TEST_MODE"] = "true"
-    environ["SF_TEST_OCSP_URL"] = "http://httpbin.org/delay/10"
-    environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"] = "5"
+    monkeypatch.setenv("SF_OCSP_TEST_MODE", "true")
+    monkeypatch.setenv("SF_TEST_OCSP_URL", "http://httpbin.org/delay/10")
+    monkeypatch.setenv("SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT", "5")
 
     OCSPCache.del_cache_file()
 
@@ -306,21 +295,16 @@ def test_ocsp_fail_close_w_single_endpoint():
     with pytest.raises(RevocationCheckError) as ex:
         ocsp.validate("snowflake.okta.com", connection)
 
-    try:
-        assert (
-            ex.value.errno == ER_OCSP_RESPONSE_FETCH_FAILURE
-        ), "Connection should have failed"
-    finally:
-        del environ["SF_OCSP_TEST_MODE"]
-        del environ["SF_TEST_OCSP_URL"]
-        del environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"]
+    assert (
+        ex.value.errno == ER_OCSP_RESPONSE_FETCH_FAILURE
+    ), "Connection should have failed"
 
 
-def test_ocsp_bad_validity():
+def test_ocsp_bad_validity(monkeypatch):
     SnowflakeOCSP.clear_cache()
 
-    environ["SF_OCSP_TEST_MODE"] = "true"
-    environ["SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY"] = "true"
+    monkeypatch.setenv("SF_OCSP_TEST_MODE", "true")
+    monkeypatch.setenv("SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY", "true")
 
     try:
         OCSPCache.del_cache_file()
@@ -334,12 +318,10 @@ def test_ocsp_bad_validity():
     assert ocsp.validate(
         "snowflake.okta.com", connection
     ), "Connection should have passed with fail open"
-    del environ["SF_OCSP_TEST_MODE"]
-    del environ["SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY"]
 
 
-def test_ocsp_single_endpoint():
-    environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"] = "True"
+def test_ocsp_single_endpoint(monkeypatch):
+    monkeypatch.setenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", "True")
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
     ocsp.OCSP_CACHE_SERVER.NEW_DEFAULT_CACHE_SERVER_BASE_URL = "https://snowflake.preprod3.us-west-2-dev.external-zone.snowflakecomputing.com:8085/ocsp/"
@@ -347,8 +329,6 @@ def test_ocsp_single_endpoint():
     assert ocsp.validate(
         "snowflake.okta.com", connection
     ), "Failed to validate: {}".format("snowflake.okta.com")
-
-    del environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"]
 
 
 def test_ocsp_by_post_method():
@@ -375,7 +355,9 @@ def test_ocsp_with_file_cache(tmpdir):
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_with_bogus_cache_files(tmpdir, random_ocsp_response_validation_cache):
+def test_ocsp_with_bogus_cache_files(
+    tmpdir, random_ocsp_response_validation_cache, monkeypatch
+):
     with mock.patch(
         "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
         random_ocsp_response_validation_cache,
@@ -383,7 +365,9 @@ def test_ocsp_with_bogus_cache_files(tmpdir, random_ocsp_response_validation_cac
         from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
 
         """Attempts to use bogus OCSP response data."""
-        cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
+        cache_file_name, target_hosts = _store_cache_in_file(
+            tmpdir, monkeypatch=monkeypatch
+        )
 
         ocsp = SFOCSP()
         OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
@@ -414,7 +398,9 @@ def test_ocsp_with_bogus_cache_files(tmpdir, random_ocsp_response_validation_cac
 
 
 @pytest.mark.skipolddriver
-def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_cache):
+def test_ocsp_with_outdated_cache(
+    tmpdir, random_ocsp_response_validation_cache, monkeypatch
+):
     with mock.patch(
         "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
         random_ocsp_response_validation_cache,
@@ -422,7 +408,9 @@ def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_cache)
         from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
 
         """Attempts to use outdated OCSP response cache file."""
-        cache_file_name, target_hosts = _store_cache_in_file(tmpdir)
+        cache_file_name, target_hosts = _store_cache_in_file(
+            tmpdir, monkeypatch=monkeypatch
+        )
 
         ocsp = SFOCSP()
 
@@ -452,10 +440,14 @@ def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_cache)
         ), "must be empty. outdated cache should not be loaded"
 
 
-def _store_cache_in_file(tmpdir, target_hosts=None):
+def _store_cache_in_file(tmpdir, target_hosts=None, monkeypatch=None):
     if target_hosts is None:
         target_hosts = TARGET_HOSTS
-    os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = str(tmpdir)
+    if monkeypatch:
+        monkeypatch.setenv("SF_OCSP_RESPONSE_CACHE_DIR", str(tmpdir))
+    else:
+        # Fallback for tests that don't pass monkeypatch (this should be rare)
+        os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = str(tmpdir)
     OCSPCache.reset_cache_dir()
     filename = path.join(str(tmpdir), "ocsp_response_cache.json")
 
@@ -658,11 +650,11 @@ def test_building_retry_url():
     assert OCSP_SERVER.OCSP_RETRY_URL is None
 
 
-def test_building_new_retry():
+def test_building_new_retry(monkeypatch):
     OCSP_SERVER = OCSPServer()
     OCSP_SERVER.OCSP_RETRY_URL = None
     hname = "a1.us-east-1.snowflakecomputing.com"
-    os.environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"] = "true"
+    monkeypatch.setenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", "true")
     OCSP_SERVER.reset_ocsp_endpoint(hname)
     assert (
         OCSP_SERVER.CACHE_SERVER_URL
@@ -697,8 +689,6 @@ def test_building_new_retry():
         OCSP_SERVER.OCSP_RETRY_URL
         == "https://ocspssd.snowflakecomputing.com/ocsp/retry"
     )
-
-    del os.environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"]
 
 
 @pytest.mark.parametrize(
