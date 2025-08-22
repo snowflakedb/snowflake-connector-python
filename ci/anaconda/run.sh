@@ -21,7 +21,6 @@ docker build --build-arg ARCH=$(uname -m) -t snowflake_connector_python_image -f
 cd $WORKSPACE
 
 mkdir -p $WORKSPACE/conda-bld
-chmod -R o+w,g+w $WORKSPACE/conda-bld
 
 
 # Check to make sure repos exist to build conda packages
@@ -38,6 +37,9 @@ docker run \
   -e SNOWFLAKE_CONNECTOR_PYTHON_BUILD_NUMBER=${package_build_number} \
   snowflake_connector_python_image \
   /repo/snowflake-connector-python/ci/anaconda/package_builder.sh
+
+# Add permission
+chmod -R o+w,g+w $WORKSPACE/conda-bld
 
 # Cleanup image for disk space
 docker container prune -f
