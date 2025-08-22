@@ -187,7 +187,7 @@ def create_aws_attestation(
 
 
 def create_gcp_attestation(
-    impersonations: list[str] | None = None,
+    impersonation_path: list[str] | None = None,
     session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for GCP.
@@ -210,9 +210,9 @@ def create_gcp_attestation(
         )
 
     jwt_str = res.content.decode("utf-8")
-    if impersonations:
+    if impersonation_path:
         try:
-            for impersonation in impersonations:
+            for impersonation in impersonation_path:
                 jwt_str = impersonated_credentials.Credentials(
                     source_credentials=jwt_str,
                     target_principal=impersonation,
@@ -316,7 +316,7 @@ def create_attestation(
     provider: AttestationProvider,
     entra_resource: str | None = None,
     token: str | None = None,
-    impersonations: list[str] | None = None,
+    impersonation_path: list[str] | None = None,
     session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
@@ -335,7 +335,7 @@ def create_attestation(
     elif provider == AttestationProvider.AZURE:
         return create_azure_attestation(entra_resource, session_manager)
     elif provider == AttestationProvider.GCP:
-        return create_gcp_attestation(impersonations, session_manager)
+        return create_gcp_attestation(impersonation_path, session_manager)
     elif provider == AttestationProvider.OIDC:
         return create_oidc_attestation(token)
     else:
