@@ -12,8 +12,6 @@ import jwt
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
 from botocore.utils import InstanceMetadataRegionFetcher
-from google.auth import impersonated_credentials
-from google.auth.transport.requests import Request
 
 from .errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import ProgrammingError
@@ -195,43 +193,65 @@ def create_gcp_attestation(
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
     try:
-        res = session_manager.request(
-            method="GET",
-            url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
-            headers={
-                "Metadata-Flavor": "Google",
-            },
-        )
-        res.raise_for_status()
+        if not impersonation_path:
+            res = session_manager.request(
+                method="GET",
+                url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
+                headers={
+                    "Metadata-Flavor": "Google",
+                },
+            )
+            res.raise_for_status()
+
+            jwt_str = res.content.decode("utf-8")
+            _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
+            return WorkloadIdentityAttestation(
+                AttestationProvider.GCP, jwt_str, {"sub": subject}
+            )
+        else:
+            # Get access token for the current service account
+            res = session_manager.request(
+                method="GET",
+                url="http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token",
+                headers={
+                    "Metadata-Flavor": "Google",
+                },
+            )
+            res.raise_for_status()
+            current_sa_token = res.json()["access_token"]
+
+            # Impersonate service accounts to get an access token for the target service account
+            impersonation_path = [
+                f"projects/-/serviceAccounts/{client_id}"
+                for client_id in impersonation_path
+            ]
+            headers = {
+                "Authorization": f"Bearer {current_sa_token}",
+                "Content-Type": "application/json",
+            }
+            body = {
+                "delegates": impersonation_path[:-1],
+                "audience": SNOWFLAKE_AUDIENCE,
+            }
+
+            res = session_manager.request(
+                method="POST",
+                url=f"https://iamcredentials.googleapis.com/v1/{impersonation_path[-1]}:generateIdToken",
+                headers=headers,
+                json=body,
+            )
+            res.raise_for_status()
+
+            token = res.json()["token"]
+            return WorkloadIdentityAttestation(
+                AttestationProvider.GCP, token, {"sub": impersonation_path[-1]}
+            )
+
     except Exception as e:
         raise ProgrammingError(
             msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
-
-    jwt_str = res.content.decode("utf-8")
-    if impersonation_path:
-        try:
-            for impersonation in impersonation_path:
-                jwt_str = impersonated_credentials.Credentials(
-                    source_credentials=jwt_str,
-                    target_principal=impersonation,
-                    target_audience=SNOWFLAKE_AUDIENCE,
-                )
-
-            # Refresh the last impersonated credential to get the final token
-            jwt_str.refresh(Request())
-            jwt_str = jwt_str.token
-        except Exception as e:
-            raise ProgrammingError(
-                msg=f"Error impersonating GCP service account: {e}. Ensure the service account has the 'Service Account Token Creator' role.",
-                errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-            )
-
-    _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
-    return WorkloadIdentityAttestation(
-        AttestationProvider.GCP, jwt_str, {"sub": subject}
-    )
 
 
 def create_azure_attestation(
