@@ -30,7 +30,6 @@ fi
 
 # Run packager in docker image
 docker run \
-  -u $(id -u):$(id -g) \
   -v $WORKSPACE/snowflake-connector-python/:/repo/snowflake-connector-python \
   -v $WORKSPACE/conda-bld:/repo/conda-bld \
   -e SNOWFLAKE_CONNECTOR_PYTHON_BUILD_NUMBER=${package_build_number} \

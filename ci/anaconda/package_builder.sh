@@ -16,3 +16,4 @@ conda config --remove-key conda_build.pkg_format
 conda build purge
 cd $CONDA_BLD_PATH
 conda index .
+chmod -R o+w,g+w $CONDA_BLD_PATH
