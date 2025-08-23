@@ -8,7 +8,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v3.18(TBD)
-  - Enhanced configuration file permission warning messages.
+  - Enhanced configuration file security checks with stricter permission validation.
+    - Configuration files writable by group or others now raise a `ConfigSourceError` with detailed permission information, preventing potential credential tampering.
     - Improved warning messages for readable permission issues to include clear instructions on how to skip warnings using the `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` environment variable.
 
 - v3.17.2(August 23,2025)
