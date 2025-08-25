@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import unittest.mock
 
 import pytest
@@ -28,10 +27,10 @@ def test_get_proxy_url():
 
 
 @pytest.mark.skipolddriver
-def test_socks_5_proxy_missing_proxy_header_attribute(caplog):
+def test_socks_5_proxy_missing_proxy_header_attribute(caplog, monkeypatch):
     from snowflake.connector.vendored.urllib3.poolmanager import ProxyManager
 
-    os.environ["HTTPS_PROXY"] = "socks5://localhost:8080"
+    monkeypatch.setenv("HTTPS_PROXY", "socks5://localhost:8080")
 
     class MockSOCKSProxyManager:
         def __init__(self):
@@ -80,8 +79,6 @@ def test_socks_5_proxy_missing_proxy_header_attribute(caplog):
                 warehouse="TESTWH",
             )
     assert "Unable to set 'Host' to proxy manager of type" not in caplog.text
-
-    del os.environ["HTTPS_PROXY"]
 
 
 @pytest.mark.skipolddriver
