@@ -185,6 +185,7 @@ def create_aws_attestation(
 
 
 def create_gcp_attestation(
+    impersonation_path: list[str] | None = None,
     session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for GCP.
@@ -192,25 +193,65 @@ def create_gcp_attestation(
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
     try:
-        res = session_manager.request(
-            method="GET",
-            url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
-            headers={
-                "Metadata-Flavor": "Google",
-            },
-        )
-        res.raise_for_status()
+        if not impersonation_path:
+            res = session_manager.request(
+                method="GET",
+                url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
+                headers={
+                    "Metadata-Flavor": "Google",
+                },
+            )
+            res.raise_for_status()
+
+            jwt_str = res.content.decode("utf-8")
+            _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
+            return WorkloadIdentityAttestation(
+                AttestationProvider.GCP, jwt_str, {"sub": subject}
+            )
+        else:
+            # Get access token for the current service account
+            res = session_manager.request(
+                method="GET",
+                url="http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token",
+                headers={
+                    "Metadata-Flavor": "Google",
+                },
+            )
+            res.raise_for_status()
+            current_sa_token = res.json()["access_token"]
+
+            # Impersonate service accounts to get an access token for the target service account
+            impersonation_path = [
+                f"projects/-/serviceAccounts/{client_id}"
+                for client_id in impersonation_path
+            ]
+            headers = {
+                "Authorization": f"Bearer {current_sa_token}",
+                "Content-Type": "application/json",
+            }
+            body = {
+                "delegates": impersonation_path[:-1],
+                "audience": SNOWFLAKE_AUDIENCE,
+            }
+
+            res = session_manager.request(
+                method="POST",
+                url=f"https://iamcredentials.googleapis.com/v1/{impersonation_path[-1]}:generateIdToken",
+                headers=headers,
+                json=body,
+            )
+            res.raise_for_status()
+
+            token = res.json()["token"]
+            return WorkloadIdentityAttestation(
+                AttestationProvider.GCP, token, {"sub": impersonation_path[-1]}
+            )
+
     except Exception as e:
         raise ProgrammingError(
             msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
-
-    jwt_str = res.content.decode("utf-8")
-    _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
-    return WorkloadIdentityAttestation(
-        AttestationProvider.GCP, jwt_str, {"sub": subject}
-    )
 
 
 def create_azure_attestation(
@@ -295,6 +336,7 @@ def create_attestation(
     provider: AttestationProvider,
     entra_resource: str | None = None,
     token: str | None = None,
+    impersonation_path: list[str] | None = None,
     session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
@@ -313,7 +355,7 @@ def create_attestation(
     elif provider == AttestationProvider.AZURE:
         return create_azure_attestation(entra_resource, session_manager)
     elif provider == AttestationProvider.GCP:
-        return create_gcp_attestation(session_manager)
+        return create_gcp_attestation(impersonation_path, session_manager)
     elif provider == AttestationProvider.OIDC:
         return create_oidc_attestation(token)
     else:

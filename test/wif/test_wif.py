@@ -55,6 +55,28 @@ def test_should_authenticate_using_oidc():
     ), "Failed to connect using WIF with OIDC provider"
 
 
+@pytest.mark.wif
+def test_should_authenticate_using_impersonation():
+    if not is_provider_gcp():
+        pytest.skip("Skipping test - not running on GCP")
+
+    connection_params = {
+        "host": HOST,
+        "account": ACCOUNT,
+        "authenticator": "WORKLOAD_IDENTITY",
+        "workload_identity_impersonation_path": [
+            108843329463860185322,
+            118284568890535033134,
+        ],
+        "workload_identity_provider": PROVIDER,
+        "token": get_gcp_access_token(),
+    }
+
+    assert connect_and_execute_simple_query(
+        connection_params
+    ), "Failed to connect using WIF using impersonation"
+
+
 def is_provider_gcp() -> bool:
     return PROVIDER == "GCP"
 
