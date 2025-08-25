@@ -40,6 +40,9 @@ def test_socks_5_proxy_missing_proxy_header_attribute(caplog):
         def connection_from_url(self, url):
             pass
 
+        def connection_from_host(self, host, *args, **kwargs):
+            pass
+
     def mock_proxy_manager_for_url_no_header(*args, **kwargs):
         return MockSOCKSProxyManager()
 

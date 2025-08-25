@@ -40,7 +40,7 @@ is at <https://requests.readthedocs.io>.
 
 import warnings
 
-import urllib3
+from .. import urllib3
 
 from .exceptions import RequestsDependencyWarning
 
@@ -122,25 +122,17 @@ except (AssertionError, ValueError):
 # if the standard library doesn't support SNI or the
 # 'ssl' library isn't available.
 try:
-    try:
-        import ssl
-    except ImportError:
-        ssl = None
+    from ..urllib3.contrib import pyopenssl
+    pyopenssl.inject_into_urllib3()
 
-    if not getattr(ssl, "HAS_SNI", False):
-        from urllib3.contrib import pyopenssl
-
-        pyopenssl.inject_into_urllib3()
-
-        # Check cryptography version
-        from cryptography import __version__ as cryptography_version
-
-        _check_cryptography(cryptography_version)
+    # Check cryptography version
+    from cryptography import __version__ as cryptography_version
+    _check_cryptography(cryptography_version)
 except ImportError:
     pass
 
 # urllib3's DependencyWarnings should be silenced.
-from urllib3.exceptions import DependencyWarning
+from ..urllib3.exceptions import DependencyWarning
 
 warnings.simplefilter("ignore", DependencyWarning)
 
