@@ -365,9 +365,7 @@ def test_ocsp_with_bogus_cache_files(
         from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
 
         """Attempts to use bogus OCSP response data."""
-        cache_file_name, target_hosts = _store_cache_in_file(
-            tmpdir, monkeypatch=monkeypatch
-        )
+        cache_file_name, target_hosts = _store_cache_in_file(monkeypatch, tmpdir)
 
         ocsp = SFOCSP()
         OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
@@ -408,9 +406,7 @@ def test_ocsp_with_outdated_cache(
         from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
 
         """Attempts to use outdated OCSP response cache file."""
-        cache_file_name, target_hosts = _store_cache_in_file(
-            tmpdir, monkeypatch=monkeypatch
-        )
+        cache_file_name, target_hosts = _store_cache_in_file(monkeypatch, tmpdir)
 
         ocsp = SFOCSP()
 
@@ -440,14 +436,8 @@ def test_ocsp_with_outdated_cache(
         ), "must be empty. outdated cache should not be loaded"
 
 
-def _store_cache_in_file(tmpdir, target_hosts=None, monkeypatch=None):
-    if target_hosts is None:
-        target_hosts = TARGET_HOSTS
-    if monkeypatch:
-        monkeypatch.setenv("SF_OCSP_RESPONSE_CACHE_DIR", str(tmpdir))
-    else:
-        # Fallback for tests that don't pass monkeypatch (this should be rare)
-        os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = str(tmpdir)
+def _store_cache_in_file(monkeypatch, tmpdir):
+    monkeypatch.setenv("SF_OCSP_RESPONSE_CACHE_DIR", str(tmpdir))
     OCSPCache.reset_cache_dir()
     filename = path.join(str(tmpdir), "ocsp_response_cache.json")
 
@@ -456,13 +446,13 @@ def _store_cache_in_file(tmpdir, target_hosts=None, monkeypatch=None):
     ocsp = SFOCSP(
         ocsp_response_cache_uri="file://" + filename, use_ocsp_cache_server=False
     )
-    for hostname in target_hosts:
+    for hostname in TARGET_HOSTS:
         connection = _openssl_connect(hostname)
         assert ocsp.validate(hostname, connection), "Failed to validate: {}".format(
             hostname
         )
     assert path.exists(filename), "OCSP response cache file"
-    return filename, target_hosts
+    return filename, TARGET_HOSTS
 
 
 def test_ocsp_with_invalid_cache_file():
