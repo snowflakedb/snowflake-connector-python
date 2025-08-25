@@ -48,7 +48,6 @@ requirements:
     {% else %}
     - python
     {% endif %}
-    - setuptools >=40.6.0
     - asn1crypto >0.24.0,<2.0.0
     - boto3 >=1.24
     - botocore >=1.24
