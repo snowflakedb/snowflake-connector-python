@@ -265,11 +265,7 @@ def create_gcp_attestation(
             )
             res.raise_for_status()
 
-            token = res.json()["token"]
-            _, subject = extract_iss_and_sub_without_signature_verification(token)
-            return WorkloadIdentityAttestation(
-                AttestationProvider.GCP, token, {"sub": subject}
-            )
+            jwt_str = res.json()["token"]
         except Exception as e:
             raise ProgrammingError(
                 msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
