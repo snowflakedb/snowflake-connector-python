@@ -59,7 +59,7 @@ def test_should_authenticate_using_oidc():
 
 
 @pytest.mark.wif
-@pytest.skip("Impersonation is still being developed")
+@pytest.mark.skip("Impersonation is still being developed")
 def test_should_authenticate_with_impersonation():
     if not isinstance(IMPERSONATION_PATH, str) or not IMPERSONATION_PATH:
         pytest.skip("Skipping test - IMPERSONATION_PATH is not set")
