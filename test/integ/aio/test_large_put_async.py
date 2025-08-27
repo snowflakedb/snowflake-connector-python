@@ -98,11 +98,7 @@ ratio number(6,2))
             finally:
                 await c.close()
     finally:
-        async with conn_cnx(
-            user=db_parameters["user"],
-            account=db_parameters["account"],
-            password=db_parameters["password"],
-        ) as cnx:
+        async with conn_cnx() as cnx:
             await cnx.cursor().execute(
                 "drop table if exists {table}".format(table=db_parameters["name"])
             )

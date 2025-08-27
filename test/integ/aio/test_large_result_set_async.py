@@ -18,11 +18,7 @@ PREFETCH_THREADS = [8, 3, 1]
 
 @pytest.fixture()
 async def ingest_data(request, conn_cnx, db_parameters):
-    async with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-    ) as cnx:
+    async with conn_cnx() as cnx:
         await cnx.cursor().execute(
             """
     create or replace table {name} (
@@ -78,11 +74,7 @@ async def ingest_data(request, conn_cnx, db_parameters):
         )[0]
 
     async def fin():
-        async with conn_cnx(
-            user=db_parameters["user"],
-            account=db_parameters["account"],
-            password=db_parameters["password"],
-        ) as cnx:
+        async with conn_cnx() as cnx:
             await cnx.cursor().execute(
                 "drop table if exists {name}".format(name=db_parameters["name"])
             )
@@ -97,12 +89,7 @@ async def test_query_large_result_set_n_threads(
     conn_cnx, db_parameters, ingest_data, num_threads
 ):
     sql = "select * from {name} order by 1".format(name=db_parameters["name"])
-    async with conn_cnx(
-        user=db_parameters["user"],
-        account=db_parameters["account"],
-        password=db_parameters["password"],
-        client_prefetch_threads=num_threads,
-    ) as cnx:
+    async with conn_cnx(client_prefetch_threads=num_threads) as cnx:
         assert cnx.client_prefetch_threads == num_threads
         results = []
         async for rec in await cnx.cursor().execute(sql):
