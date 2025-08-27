@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import pytest
 
-import snowflake.connector.aio
 from snowflake.connector.util_text import random_string
 
 try:  # pragma: no cover
@@ -36,48 +35,39 @@ async def test_client_session_keep_alive(db_parameters, conn_cnx):
     session parameter is always honored and given higher precedence over
     user and account level backend configuration.
     """
-    admin_cnxn = snowflake.connector.aio.SnowflakeConnection(
-        protocol=db_parameters["sf_protocol"],
-        account=db_parameters["sf_account"],
-        user=db_parameters["sf_user"],
-        password=db_parameters["sf_password"],
-        host=db_parameters["sf_host"],
-        port=db_parameters["sf_port"],
-    )
-    await admin_cnxn.connect()
+    async with conn_cnx("admin") as admin_cnxn:
 
-    # Ensure backend parameter is set to False
-    await set_backend_client_session_keep_alive(db_parameters, admin_cnxn, False)
-    async with conn_cnx(client_session_keep_alive=True) as connection:
-        ret = await (
-            await connection.cursor()
-            .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
-            .fetchone()
-        )
-        assert ret[1] == "true"
+        # Ensure backend parameter is set to False
+        await set_backend_client_session_keep_alive(db_parameters, admin_cnxn, False)
 
-    # Set backend parameter to True
-    await set_backend_client_session_keep_alive(db_parameters, admin_cnxn, True)
+        async with conn_cnx(client_session_keep_alive=True) as connection:
+            ret = await (
+                await connection.cursor()
+                .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
+                .fetchone()
+            )
+            assert ret[1] == "true"
 
-    # Set session parameter to False
-    async with conn_cnx(client_session_keep_alive=False) as connection:
-        ret = await (
-            await connection.cursor()
-            .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
-            .fetchone()
-        )
-        assert ret[1] == "false"
+        # Set session parameter to False
+        async with conn_cnx(client_session_keep_alive=False) as connection:
+            ret = await (
+                await connection.cursor()
+                .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
+                .fetchone()
+            )
+            assert ret[1] == "false"
 
-    # Set session parameter to None backend parameter continues to be True
-    async with conn_cnx(client_session_keep_alive=None) as connection:
-        ret = await (
-            await connection.cursor()
-            .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
-            .fetchone()
-        )
-        assert ret[1] == "true"
+        # Set backend parameter to True
+        await set_backend_client_session_keep_alive(db_parameters, admin_cnxn, True)
 
-    await admin_cnxn.close()
+        # Set session parameter to None backend parameter continues to be True
+        async with conn_cnx(client_session_keep_alive=False) as connection:
+            ret = await (
+                await connection.cursor()
+                .execute("show parameters like 'CLIENT_SESSION_KEEP_ALIVE'")
+                .fetchone()
+            )
+            assert ret[1] == "false"
 
 
 async def set_backend_client_session_keep_alive(

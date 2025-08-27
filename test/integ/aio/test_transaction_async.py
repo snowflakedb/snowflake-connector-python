@@ -69,21 +69,9 @@ async def test_transaction(conn_cnx, db_parameters):
         assert total == 13824, "total integer"
 
 
-async def test_connection_context_manager(request, db_parameters):
-    db_config = {
-        "protocol": db_parameters["protocol"],
-        "account": db_parameters["account"],
-        "user": db_parameters["user"],
-        "password": db_parameters["password"],
-        "host": db_parameters["host"],
-        "port": db_parameters["port"],
-        "database": db_parameters["database"],
-        "schema": db_parameters["schema"],
-        "timezone": "UTC",
-    }
-
+async def test_connection_context_manager(db_parameters, conn_cnx):
     async def fin():
-        async with snowflake.connector.aio.SnowflakeConnection(**db_config) as cnx:
+        async with conn_cnx(timezone="UTC") as cnx:
             await cnx.cursor().execute(
                 """
 DROP TABLE IF EXISTS {name}
@@ -93,7 +81,7 @@ DROP TABLE IF EXISTS {name}
             )
 
     try:
-        async with snowflake.connector.aio.SnowflakeConnection(**db_config) as cnx:
+        async with conn_cnx(timezone="UTC") as cnx:
             await cnx.autocommit(False)
             await cnx.cursor().execute(
                 """
@@ -146,7 +134,7 @@ SELECT WRONG SYNTAX QUERY
     except snowflake.connector.Error:
         # syntax error should be caught here
         # and the last change must have been rollbacked
-        async with snowflake.connector.aio.SnowflakeConnection(**db_config) as cnx:
+        async with conn_cnx(timezone="UTC") as cnx:
             ret = await (
                 await cnx.cursor().execute(
                     """
@@ -157,5 +145,5 @@ SELECT SUM(cc1) FROM {name}
                 )
             ).fetchone()
             assert ret[0] == 6
-    yield
+
     await fin()
