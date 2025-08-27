@@ -980,6 +980,7 @@ def test_client_fetch_threads_setting(conn_cnx):
         assert conn.client_fetch_threads == 32
 
 
+@pytest.mark.xfail(reason="Test stopped working after account setup change")
 @pytest.mark.external
 def test_client_failover_connection_url(conn_cnx):
     with conn_cnx("client_failover") as conn:
