@@ -84,9 +84,7 @@ def is_provider_gcp() -> bool:
     return PROVIDER == "GCP"
 
 
-def connect_and_execute_simple_query(
-    connection_params, expected_user: str | None = None
-) -> bool:
+def connect_and_execute_simple_query(connection_params, expected_user=None) -> bool:
     try:
         logger.info("Trying to connect to Snowflake")
         with snowflake.connector.connect(**connection_params) as con:
