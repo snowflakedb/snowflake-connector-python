@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import collections
@@ -39,9 +35,15 @@ from snowflake.connector.result_set import ResultSet
 
 from . import compat
 from ._sql_util import get_file_transfer_type
-from ._utils import _TrackedQueryCancellationTimer
+from ._utils import (
+    REQUEST_ID_STATEMENT_PARAM_NAME,
+    _TrackedQueryCancellationTimer,
+    is_uuid4,
+)
 from .bind_upload_agent import BindUploadAgent, BindUploadError
 from .constants import (
+    CMD_TYPE_DOWNLOAD,
+    CMD_TYPE_UPLOAD,
     FIELD_NAME_TO_ID,
     PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT,
     FileTransferType,
@@ -639,7 +641,27 @@ class SnowflakeCursor:
                     )
 
         self._sequence_counter = self._connection._next_sequence_counter()
-        self._request_id = uuid.uuid4()
+
+        # If requestId is contained in statement parameters, use it to set request id. Verify here it is a valid uuid4
+        # identifier.
+        if (
+            statement_params is not None
+            and REQUEST_ID_STATEMENT_PARAM_NAME in statement_params
+        ):
+            request_id = statement_params[REQUEST_ID_STATEMENT_PARAM_NAME]
+
+            if not is_uuid4(request_id):
+                # uuid.UUID will throw an error if invalid, but we explicitly check and throw here.
+                raise ValueError(f"requestId {request_id} is not a valid UUID4.")
+            self._request_id = uuid.UUID(str(request_id), version=4)
+
+            # Create a (deep copy) and remove the statement param, there is no need to encode it as extra parameter
+            # one more time.
+            statement_params = statement_params.copy()
+            statement_params.pop(REQUEST_ID_STATEMENT_PARAM_NAME)
+        else:
+            # Generate UUID for query.
+            self._request_id = uuid.uuid4()
 
         logger.debug(f"Request id: {self._request_id}")
 
@@ -1284,7 +1306,7 @@ class SnowflakeCursor:
             data = ret.get("data")
             self._init_result_and_meta(data)
         else:
-            logger.info("failed")
+            logger.debug("failed")
             logger.debug(ret)
             err = ret["message"]
             code = ret.get("code", -1)
@@ -1739,6 +1761,153 @@ class SnowflakeCursor:
             TelemetryField.GET_PARTITIONS_USED, TelemetryData.TRUE
         )
         return self._result_set.batches
+
+    def _download(
+        self,
+        stage_location: str,
+        target_directory: str,
+        options: dict[str, Any],
+        _do_reset: bool = True,
+    ) -> None:
+        """Downloads from the stage location to the target directory.
+
+        Args:
+            stage_location (str): The location of the stage to download from.
+            target_directory (str): The destination directory to download into.
+            options (dict[str, Any]): The download options.
+            _do_reset (bool, optional): Whether to reset the cursor before
+                downloading, by default we will reset the cursor.
+        """
+        from .file_transfer_agent import SnowflakeFileTransferAgent
+
+        if _do_reset:
+            self.reset()
+
+        # Interpret the file operation.
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name=None,
+            target_directory=target_directory,
+            command_type=CMD_TYPE_DOWNLOAD,
+            options=options,
+        )
+
+        # Execute the file operation based on the interpretation above.
+        file_transfer_agent = SnowflakeFileTransferAgent(
+            self,
+            "",  # empty command because it is triggered by directly calling this util not by a SQL query
+            ret,
+        )
+        file_transfer_agent.execute()
+        self._init_result_and_meta(file_transfer_agent.result())
+
+    def _upload(
+        self,
+        local_file_name: str,
+        stage_location: str,
+        options: dict[str, Any],
+        _do_reset: bool = True,
+    ) -> None:
+        """Uploads the local file to the stage location.
+
+        Args:
+            local_file_name (str): The local file to be uploaded.
+            stage_location (str): The stage location to upload the local file to.
+            options (dict[str, Any]): The upload options.
+            _do_reset (bool, optional): Whether to reset the cursor before
+                uploading, by default we will reset the cursor.
+        """
+        from .file_transfer_agent import SnowflakeFileTransferAgent
+
+        if _do_reset:
+            self.reset()
+
+        # Interpret the file operation.
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name=local_file_name,
+            target_directory=None,
+            command_type=CMD_TYPE_UPLOAD,
+            options=options,
+        )
+
+        # Execute the file operation based on the interpretation above.
+        file_transfer_agent = SnowflakeFileTransferAgent(
+            self,
+            "",  # empty command because it is triggered by directly calling this util not by a SQL query
+            ret,
+            force_put_overwrite=False,  # _upload should respect user decision on overwriting
+        )
+        file_transfer_agent.execute()
+        self._init_result_and_meta(file_transfer_agent.result())
+
+    def _download_stream(
+        self, stage_location: str, decompress: bool = False
+    ) -> IO[bytes]:
+        """Downloads from the stage location as a stream.
+
+        Args:
+            stage_location (str): The location of the stage to download from.
+            decompress (bool, optional): Whether to decompress the file, by
+                default we do not decompress.
+
+        Returns:
+            IO[bytes]: A stream to read from.
+        """
+        # Interpret the file operation.
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name=None,
+            target_directory=None,
+            command_type=CMD_TYPE_DOWNLOAD,
+            options=None,
+            has_source_from_stream=True,
+        )
+
+        # Set up stream downloading based on the interpretation and return the stream for reading.
+        return self.connection._stream_downloader.download_as_stream(ret, decompress)
+
+    def _upload_stream(
+        self,
+        input_stream: IO[bytes],
+        stage_location: str,
+        options: dict[str, Any],
+        _do_reset: bool = True,
+    ) -> None:
+        """Uploads content in the input stream to the stage location.
+
+        Args:
+            input_stream (IO[bytes]): A stream to read from.
+            stage_location (str): The location of the stage to upload to.
+            options (dict[str, Any]): The upload options.
+            _do_reset (bool, optional): Whether to reset the cursor before
+                uploading, by default we will reset the cursor.
+        """
+        from .file_transfer_agent import SnowflakeFileTransferAgent
+
+        if _do_reset:
+            self.reset()
+
+        # Interpret the file operation.
+        ret = self.connection._file_operation_parser.parse_file_operation(
+            stage_location=stage_location,
+            local_file_name=None,
+            target_directory=None,
+            command_type=CMD_TYPE_UPLOAD,
+            options=options,
+            has_source_from_stream=input_stream,
+        )
+
+        # Execute the file operation based on the interpretation above.
+        file_transfer_agent = SnowflakeFileTransferAgent(
+            self,
+            "",  # empty command because it is triggered by directly calling this util not by a SQL query
+            ret,
+            source_from_stream=input_stream,
+            force_put_overwrite=False,  # _upload_stream should respect user decision on overwriting
+        )
+        file_transfer_agent.execute()
+        self._init_result_and_meta(file_transfer_agent.result())
 
 
 class DictCursor(SnowflakeCursor):

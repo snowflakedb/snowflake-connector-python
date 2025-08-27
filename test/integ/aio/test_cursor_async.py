@@ -12,6 +12,7 @@ import logging
 import os
 import pickle
 import time
+import uuid
 from datetime import date, datetime, timezone
 from typing import NamedTuple
 from unittest import mock
@@ -1696,6 +1697,24 @@ async def test_out_of_range_year(conn_cnx, result_format, cursor_type, fetch_met
                 await fetch_next_fn()
 
 
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("result_format", ("json", "arrow"))
+async def test_out_of_range_year_followed_by_correct_year(conn_cnx, result_format):
+    """Tests whether the year 10000 is out of range exception is raised as expected."""
+    async with conn_cnx(
+        session_parameters={
+            PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT: result_format
+        }
+    ) as con:
+        async with con.cursor() as cur:
+            await cur.execute("select TO_DATE('10000-01-01'), TO_DATE('9999-01-01')")
+            with pytest.raises(
+                InterfaceError,
+                match="out of range",
+            ):
+                await cur.fetchall()
+
+
 async def test_describe(conn_cnx):
     async with conn_cnx() as con:
         async with con.cursor() as cur:
@@ -1850,3 +1869,39 @@ async def test_fetch_download_timeout_setting(conn_cnx):
         sql = "SELECT seq4(), uniform(1, 10, RANDOM(12)) FROM TABLE(GENERATOR(ROWCOUNT => 100000)) v"
         async with conn_cnx() as con, con.cursor() as cur:
             assert len(await (await cur.execute(sql)).fetchall()) == 100000
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "request_id",
+    [
+        "THIS IS NOT VALID",
+        uuid.uuid1(),
+        uuid.uuid3(uuid.NAMESPACE_URL, "www.snowflake.com"),
+        uuid.uuid5(uuid.NAMESPACE_URL, "www.snowflake.com"),
+    ],
+)
+async def test_custom_request_id_negative(request_id, conn_cnx):
+
+    # Ensure that invalid request_ids (non uuid4) do not compromise interface.
+    with pytest.raises(ValueError, match="requestId"):
+        async with conn_cnx() as con:
+            async with con.cursor() as cur:
+                await cur.execute(
+                    "select seq4() as foo from table(generator(rowcount=>5))",
+                    _statement_params={"requestId": request_id},
+                )
+
+
+@pytest.mark.skipolddriver
+async def test_custom_request_id(conn_cnx):
+    request_id = uuid.uuid4()
+
+    async with conn_cnx() as con:
+        async with con.cursor() as cur:
+            await cur.execute(
+                "select seq4() as foo from table(generator(rowcount=>5))",
+                _statement_params={"requestId": request_id},
+            )
+
+            assert cur._sfqid is not None, "Query must execute successfully."

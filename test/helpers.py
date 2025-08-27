@@ -1,8 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from __future__ import annotations
 
 import asyncio
@@ -175,6 +171,7 @@ def create_nanoarrow_pyarrow_iterator(input_data, use_table_iterator):
             False,
             False,
             False,
+            True,
         )
         if not use_table_iterator
         else NanoarrowPyArrowTableIterator(
@@ -183,6 +180,7 @@ def create_nanoarrow_pyarrow_iterator(input_data, use_table_iterator):
             ArrowConverterContext(
                 session_parameters={"TIMEZONE": "America/Los_Angeles"}
             ),
+            False,
             False,
             False,
             False,

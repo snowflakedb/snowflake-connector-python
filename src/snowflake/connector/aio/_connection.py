@@ -1,6 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
 from __future__ import annotations
 
 import asyncio
@@ -76,6 +73,7 @@ from ..util_text import split_statements
 from ..wif_util import AttestationProvider
 from ._cursor import SnowflakeCursor
 from ._description import CLIENT_NAME
+from ._direct_file_operation_utils import FileOperationParser, StreamDownloader
 from ._network import SnowflakeRestful
 from ._telemetry import TelemetryClient
 from ._time_util import HeartBeatTimer
@@ -120,6 +118,10 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         self.expired = False
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
+
+        # Set up the file operation parser and stream downloader.
+        self._file_operation_parser = FileOperationParser(self)
+        self._stream_downloader = StreamDownloader(self)
 
     def __enter__(self):
         # async connection does not support sync context manager
@@ -793,7 +795,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             await self._cancel_heartbeat()
 
             # close telemetry first, since it needs rest to send remaining data
-            logger.info("closed")
+            logger.debug("closed")
 
             await self._telemetry.close(
                 send_on_close=bool(retry and self.telemetry_enabled)
@@ -802,7 +804,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 await self._all_async_queries_finished()
                 and not self._server_session_keep_alive
             ):
-                logger.info("No async queries seem to be running, deleting session")
+                logger.debug("No async queries seem to be running, deleting session")
                 try:
                     await self.rest.delete_session(retry=retry)
                 except Exception as e:
@@ -810,7 +812,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                         "Exception encountered in deleting session. ignoring...: %s", e
                     )
             else:
-                logger.info(
+                logger.debug(
                     "There are {} async queries still running, not deleting session".format(
                         len(self._async_sfqids)
                     )
