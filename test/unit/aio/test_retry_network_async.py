@@ -314,14 +314,14 @@ async def test_fetch():
 
     # first attempt to reach timeout even if the exception is retryable
     cnt.reset()
-    ret = await rest.fetch(timeout=1, **default_parameters)
+    ret = await rest.fetch(timeout=0.001, **default_parameters)
     assert ret == {}
     assert rest._connection.errorhandler.called  # error
 
     # not retryable excpetion
     cnt.set(NOT_RETRYABLE)
     with pytest.raises(NotRetryableException):
-        await rest.fetch(timeout=7, **default_parameters)
+        await rest.fetch(timeout=5, **default_parameters)
 
     # first attempt fails and will not retry
     cnt.reset()
