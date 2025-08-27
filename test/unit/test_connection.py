@@ -24,7 +24,7 @@ from snowflake.connector.errors import (
     OperationalError,
     ProgrammingError,
 )
-from snowflake.connector.network import SnowflakeRestful
+from snowflake.connector.network import PROGRAMMATIC_ACCESS_TOKEN, SnowflakeRestful
 from snowflake.connector.wif_util import AttestationProvider
 
 from ..randomize import random_string
@@ -675,6 +675,100 @@ def test_workload_identity_provider_is_required_for_wif_authenticator(
             "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY"
             in str(excinfo.value)
         )
+
+
+@pytest.mark.parametrize(
+    "authenticator_param",
+    [
+        None,
+        PROGRAMMATIC_ACCESS_TOKEN,
+    ],
+)
+def test_wif_authenticator_required_for_workload_identity_impersonation_path(
+    monkeypatch, authenticator_param
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        with pytest.raises(ProgrammingError) as excinfo:
+            snowflake.connector.connect(
+                account="account",
+                authenticator=authenticator_param,
+                workload_identity_provider="GCP",
+                workload_identity_impersonation_path=[
+                    "sa2@project.iam.gserviceaccount.com"
+                ],
+            )
+        assert (
+            "workload_identity_impersonation_path is only supported for Workload Identity Federation."
+            in str(excinfo.value)
+        )
+
+
+@pytest.mark.parametrize(
+    "provider_param",
+    [
+        # Strongly-typed values.
+        AttestationProvider.AWS,
+        AttestationProvider.AZURE,
+        AttestationProvider.OIDC,
+        # String values.
+        "AWS",
+        "AZURE",
+        "OIDC",
+    ],
+)
+def test_workload_identity_impersonation_path_unsupported_for_non_gcp_providers(
+    monkeypatch, provider_param
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        with pytest.raises(ProgrammingError) as excinfo:
+            snowflake.connector.connect(
+                account="account",
+                authenticator="WORKLOAD_IDENTITY",
+                workload_identity_provider=provider_param,
+                workload_identity_impersonation_path=[
+                    "sa2@project.iam.gserviceaccount.com"
+                ],
+            )
+        assert "workload_identity_impersonation_path is only supported for GCP." in str(
+            excinfo.value
+        )
+
+
+@pytest.mark.parametrize(
+    "provider_param",
+    [
+        AttestationProvider.GCP,
+        "GCP",
+    ],
+)
+def test_workload_identity_impersonation_path_supported_for_gcp_provider(
+    monkeypatch, provider_param
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        conn = snowflake.connector.connect(
+            account="account",
+            authenticator="WORKLOAD_IDENTITY",
+            workload_identity_provider=provider_param,
+            workload_identity_impersonation_path=[
+                "sa2@project.iam.gserviceaccount.com"
+            ],
+        )
+        assert conn.auth_class.provider == AttestationProvider.GCP
+        assert conn.auth_class.impersonation_path == [
+            "sa2@project.iam.gserviceaccount.com"
+        ]
 
 
 @pytest.mark.parametrize(
