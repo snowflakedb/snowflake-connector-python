@@ -72,7 +72,7 @@ def test_should_authenticate_with_impersonation():
         "account": ACCOUNT,
         "authenticator": "WORKLOAD_IDENTITY",
         "workload_identity_provider": PROVIDER,
-        "impersonation_path": impersonation_path_list,
+        "workload_identity_impersonation_path": impersonation_path_list,
     }
 
     assert connect_and_execute_simple_query(
