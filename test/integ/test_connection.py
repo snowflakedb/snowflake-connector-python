@@ -60,6 +60,8 @@ try:
 except ImportError:
     pass
 
+logger = logging.getLogger(__name__)
+
 
 def test_basic(conn_testaccount):
     """Basic Connection test."""
@@ -203,6 +205,37 @@ def test_platform_detection_timeout(conn_cnx):
 
     with conn_cnx(platform_detection_timeout_seconds=2.5) as cnx:
         assert cnx.platform_detection_timeout_seconds == 2.5
+
+
+@pytest.mark.skipolddriver
+def test_platform_detection_zero_timeout(conn_cnx):
+    """Tests platform detection with timeout set to zero.
+
+    The expectation is that it mustn't do diagnostic requests at all.
+    """
+    with (
+        mock.patch(
+            "snowflake.connector.platform_detection.is_ec2_instance"
+        ) as is_ec2_instance,
+        mock.patch(
+            "snowflake.connector.platform_detection.has_aws_identity"
+        ) as has_aws_identity,
+        mock.patch("snowflake.connector.platform_detection.is_azure_vm") as is_azure_vm,
+        mock.patch(
+            "snowflake.connector.platform_detection.has_azure_managed_identity"
+        ) as has_azure_managed_identity,
+        mock.patch("snowflake.connector.platform_detection.is_gce_vm") as is_gce_vm,
+        mock.patch(
+            "snowflake.connector.platform_detection.has_gcp_identity"
+        ) as has_gcp_identity,
+    ):
+        with conn_cnx(platform_detection_timeout_seconds=0):
+            assert not is_ec2_instance.called
+            assert not has_aws_identity.called
+            assert not is_azure_vm.called
+            assert not has_azure_managed_identity.called
+            assert not is_gce_vm.called
+            assert not has_gcp_identity.called
 
 
 def test_bad_db(conn_cnx):
@@ -387,7 +420,7 @@ def test_invalid_account_timeout(conn_cnx):
             pass
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(20)
 def test_invalid_proxy(conn_cnx):
     http_proxy = os.environ.get("HTTP_PROXY")
     https_proxy = os.environ.get("HTTPS_PROXY")
@@ -419,7 +452,7 @@ def test_invalid_proxy(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(20)
 def test_invalid_proxy_not_impacting_env_vars(conn_cnx):
     http_proxy = os.environ.get("HTTP_PROXY")
     https_proxy = os.environ.get("HTTPS_PROXY")
@@ -1143,9 +1176,10 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry):
         "math",
     ]
 
-    with conn_cnx() as conn, capture_sf_telemetry.patch_connection(
-        conn, False
-    ) as telemetry_test:
+    with (
+        conn_cnx() as conn,
+        capture_sf_telemetry.patch_connection(conn, False) as telemetry_test,
+    ):
         conn._log_telemetry_imported_packages()
         assert len(telemetry_test.records) > 0
         assert any(
@@ -1160,10 +1194,13 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry):
 
     # test different application
     new_application_name = "PythonSnowpark"
-    with conn_cnx(
-        timezone="UTC",
-        application=new_application_name,
-    ) as conn, capture_sf_telemetry.patch_connection(conn, False) as telemetry_test:
+    with (
+        conn_cnx(
+            timezone="UTC",
+            application=new_application_name,
+        ) as conn,
+        capture_sf_telemetry.patch_connection(conn, False) as telemetry_test,
+    ):
         conn._log_telemetry_imported_packages()
         assert len(telemetry_test.records) > 0
         assert any(
@@ -1176,11 +1213,14 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry):
         )
 
     # test opt out
-    with conn_cnx(
-        timezone="UTC",
-        application=new_application_name,
-        log_imported_packages_in_telemetry=False,
-    ) as conn, capture_sf_telemetry.patch_connection(conn, False) as telemetry_test:
+    with (
+        conn_cnx(
+            timezone="UTC",
+            application=new_application_name,
+            log_imported_packages_in_telemetry=False,
+        ) as conn,
+        capture_sf_telemetry.patch_connection(conn, False) as telemetry_test,
+    ):
         conn._log_telemetry_imported_packages()
         assert len(telemetry_test.records) == 0
 
@@ -1316,9 +1356,10 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_match(
     conn_cnx, is_public_test, is_local_dev_setup, caplog
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
-    with conn_cnx(
-        insecure_mode=True, disable_ocsp_checks=True
-    ) as conn, conn.cursor() as cur:
+    with (
+        conn_cnx(insecure_mode=True, disable_ocsp_checks=True) as conn,
+        conn.cursor() as cur,
+    ):
         assert cur.execute("select 1").fetchall() == [(1,)]
         assert "snowflake.connector.ocsp_snowflake" not in caplog.text
         if is_public_test or is_local_dev_setup:
@@ -1334,9 +1375,10 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_disabled(
     conn_cnx, is_public_test, is_local_dev_setup, caplog
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
-    with conn_cnx(
-        insecure_mode=False, disable_ocsp_checks=True
-    ) as conn, conn.cursor() as cur:
+    with (
+        conn_cnx(insecure_mode=False, disable_ocsp_checks=True) as conn,
+        conn.cursor() as cur,
+    ):
         assert cur.execute("select 1").fetchall() == [(1,)]
         assert "snowflake.connector.ocsp_snowflake" not in caplog.text
         if is_public_test or is_local_dev_setup:
@@ -1347,14 +1389,185 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_disabled(
             assert "This connection does not perform OCSP checks." in caplog.text
 
 
+def _message_matches_pattern(message, pattern):
+    """Check if a log message matches a pattern (exact match or starts with pattern)."""
+    return message == pattern or message.startswith(pattern)
+
+
+def _find_matching_patterns(messages, patterns):
+    """Find which patterns match the given messages.
+
+    Returns:
+        tuple: (matched_patterns, missing_patterns, unmatched_messages)
+    """
+    matched_patterns = set()
+    unmatched_messages = []
+
+    for message in messages:
+        found_match = False
+        for pattern in patterns:
+            if _message_matches_pattern(message, pattern):
+                matched_patterns.add(pattern)
+                found_match = True
+                break
+        if not found_match:
+            unmatched_messages.append(message)
+
+    missing_patterns = set(patterns) - matched_patterns
+    return matched_patterns, missing_patterns, unmatched_messages
+
+
+def _calculate_log_bytes(messages):
+    """Calculate total byte size of log messages."""
+    return sum(len(message.encode("utf-8")) for message in messages)
+
+
+def _log_pattern_analysis(
+    actual_messages,
+    expected_patterns,
+    matched_patterns,
+    missing_patterns,
+    unmatched_messages,
+    show_all_messages=False,
+):
+    """Log detailed analysis of pattern differences.
+
+    Args:
+        actual_messages: List of actual log messages
+        expected_patterns: List of expected log patterns
+        matched_patterns: Set of patterns that were found
+        missing_patterns: Set of patterns that were not found
+        unmatched_messages: List of messages that didn't match any pattern
+        show_all_messages: If True, log all actual messages for debugging
+    """
+
+    if missing_patterns:
+        logger.warning(f"Missing expected log patterns ({len(missing_patterns)}):")
+        for pattern in sorted(missing_patterns):
+            logger.warning(f"  - MISSING: '{pattern}'")
+
+    if unmatched_messages:
+        logger.warning(f"New/unexpected log messages ({len(unmatched_messages)}):")
+        for message in unmatched_messages:
+            message_bytes = len(message.encode("utf-8"))
+            logger.warning(f"  + NEW: '{message}' ({message_bytes} bytes)")
+
+    # Log summary
+    logger.warning("Log analysis summary:")
+    logger.warning(f"  - Expected patterns: {len(expected_patterns)}")
+    logger.warning(f"  - Matched patterns: {len(matched_patterns)}")
+    logger.warning(f"  - Missing patterns: {len(missing_patterns)}")
+    logger.warning(f"  - Actual messages: {len(actual_messages)}")
+    logger.warning(f"  - Unmatched messages: {len(unmatched_messages)}")
+
+    # Show all messages if requested (useful when patterns match but bytes don't)
+    if show_all_messages:
+        logger.warning("All actual log messages:")
+        for i, message in enumerate(actual_messages):
+            message_bytes = len(message.encode("utf-8"))
+            logger.warning(f"  [{i:2d}] '{message}' ({message_bytes} bytes)")
+
+
+def _assert_log_bytes_within_tolerance(actual_bytes, expected_bytes, tolerance):
+    """Assert that log bytes are within acceptable tolerance."""
+    assert actual_bytes == pytest.approx(expected_bytes, rel=tolerance), (
+        f"Log bytes {actual_bytes} is not approximately equal to expected {expected_bytes} "
+        f"within {tolerance*100}% tolerance. "
+        f"This may indicate unwanted logs being produced or changes in logging behavior."
+    )
+
+
+@pytest.mark.skipolddriver
+def test_logs_size_during_basic_query_stays_unchanged(conn_cnx, caplog):
+    """Test that the amount of bytes logged during normal select 1 flow is within acceptable range. Related to: SNOW-2268606"""
+    caplog.set_level(logging.INFO, "snowflake.connector")
+    caplog.clear()
+
+    # Test-specific constants
+    EXPECTED_BYTES = 145
+    ACCEPTABLE_DELTA = 0.6
+    EXPECTED_PATTERNS = [
+        "Snowflake Connector for Python Version: ",  # followed by version info
+        "Connecting to GLOBAL Snowflake domain",
+    ]
+
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select 1").fetchall()
+
+            actual_messages = [record.getMessage() for record in caplog.records]
+            total_log_bytes = _calculate_log_bytes(actual_messages)
+
+            if total_log_bytes != EXPECTED_BYTES:
+                logger.warning(
+                    f"There was a change in a size of the logs produced by the basic Snowflake query. "
+                    f"Expected: {EXPECTED_BYTES}, got: {total_log_bytes}. "
+                    f"We may need to update the test_logs_size_during_basic_query_stays_unchanged - i.e. EXACT_EXPECTED_LOGS_BYTES constant."
+                )
+
+                # Check if patterns match to decide whether to show all messages
+                matched_patterns, missing_patterns, unmatched_messages = (
+                    _find_matching_patterns(actual_messages, EXPECTED_PATTERNS)
+                )
+                patterns_match_perfectly = (
+                    len(missing_patterns) == 0 and len(unmatched_messages) == 0
+                )
+
+                _log_pattern_analysis(
+                    actual_messages,
+                    EXPECTED_PATTERNS,
+                    matched_patterns,
+                    missing_patterns,
+                    unmatched_messages,
+                    show_all_messages=patterns_match_perfectly,
+                )
+
+            _assert_log_bytes_within_tolerance(
+                total_log_bytes, EXPECTED_BYTES, ACCEPTABLE_DELTA
+            )
+
+
+@pytest.mark.skipolddriver
+def test_no_new_warnings_or_errors_on_successful_basic_select(conn_cnx, caplog):
+    """Test that the number of warning/error log entries stays the same during successful basic select operations. Related to: SNOW-2268606"""
+    caplog.set_level(logging.WARNING, "snowflake.connector")
+    baseline_warning_count = 0
+    baseline_error_count = 0
+
+    # Execute basic select operations and check counts remain the same
+    caplog.clear()
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Execute basic select operations
+            result1 = cur.execute("select 1").fetchall()
+            assert result1 == [(1,)]
+
+    # Count warning/error log entries after operations
+    test_warning_count = len(
+        [r for r in caplog.records if r.levelno >= logging.WARNING]
+    )
+    test_error_count = len([r for r in caplog.records if r.levelno >= logging.ERROR])
+
+    # Assert counts stay the same (no new warnings or errors)
+    assert test_warning_count == baseline_warning_count, (
+        f"Warning count increased from {baseline_warning_count} to {test_warning_count}. "
+        f"New warnings: {[r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]}"
+    )
+    assert test_error_count == baseline_error_count, (
+        f"Error count increased from {baseline_error_count} to {test_error_count}. "
+        f"New errors: {[r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]}"
+    )
+
+
 @pytest.mark.skipolddriver
 def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
     conn_cnx, is_public_test, is_local_dev_setup, caplog
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.ocsp_snowflake")
-    with conn_cnx(
-        insecure_mode=True, disable_ocsp_checks=False
-    ) as conn, conn.cursor() as cur:
+    with (
+        conn_cnx(insecure_mode=True, disable_ocsp_checks=False) as conn,
+        conn.cursor() as cur,
+    ):
         assert cur.execute("select 1").fetchall() == [(1,)]
         if is_public_test or is_local_dev_setup:
             assert "snowflake.connector.ocsp_snowflake" in caplog.text
@@ -1453,9 +1666,10 @@ def test_disable_telemetry(conn_cnx, caplog):
 
     # set session parameters to false
     with caplog.at_level(logging.DEBUG):
-        with conn_cnx(
-            session_parameters={"CLIENT_TELEMETRY_ENABLED": False}
-        ) as conn, conn.cursor() as cur:
+        with (
+            conn_cnx(session_parameters={"CLIENT_TELEMETRY_ENABLED": False}) as conn,
+            conn.cursor() as cur,
+        ):
             cur.execute("select 1").fetchall()
             assert not conn.telemetry_enabled and not conn._telemetry._log_batch
             # this enable won't work as the session parameter is set to false

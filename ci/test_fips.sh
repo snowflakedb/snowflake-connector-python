@@ -1,8 +1,19 @@
 #!/bin/bash -e
 #
-# Test Snowflake Connector
-# Note this is the script that test_docker.sh runs inside of the docker container
+# Test Snowflake Connector (FIPS)
+# Note this is the script that test_fips_docker.sh runs inside of the docker container
 #
+
+# Export USE_PASSWORD only on Jenkins (not on GitHub Actions)
+# Jenkins FIPS tests run against mocked Snowflake with password auth
+# GitHub Actions FIPS tests run against real Snowflake with key-pair auth
+if [[ "${JENKINS_HOME}" != "false" && -n "${JENKINS_HOME}" ]]; then
+    export USE_PASSWORD=true
+    echo "[Info] Jenkins detected: Using password authentication for FIPS tests"
+else
+    echo "[Info] GitHub Actions detected: Using key-pair authentication for FIPS tests"
+fi
+
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck disable=SC1090
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"

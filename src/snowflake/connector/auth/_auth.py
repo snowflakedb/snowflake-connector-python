@@ -128,7 +128,7 @@ class Auth:
                     "SOCKET_TIMEOUT": socket_timeout,
                     "PLATFORM": detect_platforms(
                         platform_detection_timeout_seconds=platform_detection_timeout_seconds,
-                        session_manager=session_manager,
+                        session_manager=session_manager.clone(max_retries=0),
                     ),
                 },
             },
@@ -185,7 +185,7 @@ class Auth:
             self._rest._connection.login_timeout,
             self._rest._connection._network_timeout,
             self._rest._connection._socket_timeout,
-            self._rest._connection._platform_detection_timeout_seconds,
+            self._rest._connection.platform_detection_timeout_seconds,
             session_manager=self._rest.session_manager.clone(use_pooling=False),
         )
 
