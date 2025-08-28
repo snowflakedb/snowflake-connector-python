@@ -1365,7 +1365,7 @@ class SnowflakeConnection:
                         None,
                         ProgrammingError,
                         {
-                            "msg": "workload_identity_impersonation_path is only supported for GCP.",
+                            "msg": "workload_identity_impersonation_path is currently only supported for GCP.",
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
@@ -1508,16 +1508,6 @@ class SnowflakeConnection:
                     msg=f"Unknown authenticator: {self._authenticator}",
                     errno=ER_INVALID_VALUE,
                 )
-
-        # Check that workload_identity_impersonation_path is only set for WORKLOAD_IDENTITY_AUTHENTICATOR
-        if (
-            self._workload_identity_impersonation_path
-            and self._authenticator != WORKLOAD_IDENTITY_AUTHENTICATOR
-        ):
-            raise ProgrammingError(
-                msg="workload_identity_impersonation_path is only supported for Workload Identity Federation.",
-                errno=ER_INVALID_WIF_SETTINGS,
-            )
 
         # read OAuth token from
         token_file_path = kwargs.get("token_file_path")
