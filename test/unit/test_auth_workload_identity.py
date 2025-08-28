@@ -316,6 +316,17 @@ def test_explicit_gcp_generates_unique_assertion_content(
     assert auth_class.assertion_content == '{"_provider":"GCP","sub":"123456"}'
 
 
+def test_gcp_does_impersonation(fake_gce_metadata_service: FakeGceMetadataService):
+    fake_gce_metadata_service.sub = "123456"
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.GCP, impersonation_path=["123456"]
+    )
+    auth_class.prepare(conn=None)
+
+    assert auth_class is None
+
+
 # -- Azure Tests --
 
 

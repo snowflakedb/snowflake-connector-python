@@ -197,7 +197,7 @@ def get_gcp_workload_token(
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
     if gcp_token_type == GCPTokenType.IDENTITY_TOKEN:
-        metadata_url = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}"
+        metadata_url = f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}"
     elif gcp_token_type == GCPTokenType.ACCESS_TOKEN:
         metadata_url = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
     else:
@@ -219,6 +219,7 @@ def get_gcp_workload_token(
             return res.content.decode("utf-8")
         elif gcp_token_type == GCPTokenType.ACCESS_TOKEN:
             return res.json()["access_token"]
+            # return json.loads(res.content.decode("utf-8"))["access_token"]
 
     except Exception as e:
         raise ProgrammingError(
