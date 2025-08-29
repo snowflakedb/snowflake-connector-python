@@ -79,7 +79,10 @@ if TYPE_CHECKING:  # pragma: no cover
     from pyarrow import Table
 
     from .connection import SnowflakeConnection
-    from .file_transfer_agent import SnowflakeProgressPercentage
+    from .file_transfer_agent import (
+        SnowflakeFileTransferAgent,
+        SnowflakeProgressPercentage,
+    )
     from .result_batch import ResultBatch
 
 T = TypeVar("T", bound=collections.abc.Sequence)
@@ -1064,11 +1067,7 @@ class SnowflakeCursor:
             )
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
-                from .file_transfer_agent import SnowflakeFileTransferAgent
-
-                # Decide whether to use the old, or new code path
-                sf_file_transfer_agent = SnowflakeFileTransferAgent(
-                    self,
+                sf_file_transfer_agent = self._create_file_transfer_agent(
                     query,
                     ret,
                     put_callback=_put_callback,
@@ -1084,13 +1083,6 @@ class SnowflakeCursor:
                     skip_upload_on_content_match=_skip_upload_on_content_match,
                     source_from_stream=file_stream,
                     multipart_threshold=data.get("threshold"),
-                    use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
-                    iobound_tpe_limit=self._connection.iobound_tpe_limit,
-                    unsafe_file_write=self._connection.unsafe_file_write,
-                    snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
-                        self._connection
-                    ),
-                    reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
                 )
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
@@ -1786,8 +1778,6 @@ class SnowflakeCursor:
             _do_reset (bool, optional): Whether to reset the cursor before
                 downloading, by default we will reset the cursor.
         """
-        from .file_transfer_agent import SnowflakeFileTransferAgent
-
         if _do_reset:
             self.reset()
 
@@ -1801,14 +1791,9 @@ class SnowflakeCursor:
         )
 
         # Execute the file operation based on the interpretation above.
-        file_transfer_agent = SnowflakeFileTransferAgent(
-            self,
+        file_transfer_agent = self._create_file_transfer_agent(
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
-            snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
-                self._connection
-            ),
-            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
@@ -1829,7 +1814,6 @@ class SnowflakeCursor:
             _do_reset (bool, optional): Whether to reset the cursor before
                 uploading, by default we will reset the cursor.
         """
-        from .file_transfer_agent import SnowflakeFileTransferAgent
 
         if _do_reset:
             self.reset()
@@ -1844,15 +1828,10 @@ class SnowflakeCursor:
         )
 
         # Execute the file operation based on the interpretation above.
-        file_transfer_agent = SnowflakeFileTransferAgent(
-            self,
+        file_transfer_agent = self._create_file_transfer_agent(
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
             force_put_overwrite=False,  # _upload should respect user decision on overwriting
-            snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
-                self._connection
-            ),
-            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
@@ -1899,7 +1878,6 @@ class SnowflakeCursor:
             _do_reset (bool, optional): Whether to reset the cursor before
                 uploading, by default we will reset the cursor.
         """
-        from .file_transfer_agent import SnowflakeFileTransferAgent
 
         if _do_reset:
             self.reset()
@@ -1915,19 +1893,37 @@ class SnowflakeCursor:
         )
 
         # Execute the file operation based on the interpretation above.
-        file_transfer_agent = SnowflakeFileTransferAgent(
-            self,
+        file_transfer_agent = self._create_file_transfer_agent(
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
             source_from_stream=input_stream,
             force_put_overwrite=False,  # _upload_stream should respect user decision on overwriting
-            snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
-                self._connection
-            ),
-            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
+
+    def _create_file_transfer_agent(
+        self,
+        command: str,
+        ret: dict[str, Any],
+        /,
+        **kwargs,
+    ) -> SnowflakeFileTransferAgent:
+        from .file_transfer_agent import SnowflakeFileTransferAgent
+
+        return SnowflakeFileTransferAgent(
+            self,
+            command,
+            ret,
+            use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
+            iobound_tpe_limit=self._connection.iobound_tpe_limit,
+            unsafe_file_write=self._connection.unsafe_file_write,
+            snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
+                self._connection
+            ),
+            reraise_error_in_file_transfer_work_function=self._connection._reraise_error_in_file_transfer_work_function,
+            **kwargs,
+        )
 
 
 class DictCursor(SnowflakeCursor):
