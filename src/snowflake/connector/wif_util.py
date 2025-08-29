@@ -187,7 +187,7 @@ def create_aws_attestation(
     )
 
 
-def get_gcp_access_token(session_manager: SessionManager | None = None) -> str:
+def get_gcp_access_token(session_manager: SessionManager) -> str:
     """Gets a GCP access token from the metadata server.
 
     If the application isn't running on GCP or no credentials were found, raises an error.
@@ -204,18 +204,24 @@ def get_gcp_access_token(session_manager: SessionManager | None = None) -> str:
         return res.json()["access_token"]
     except Exception as e:
         raise ProgrammingError(
-            msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
+            msg=f"Error fetching GCP access token: {e}. Ensure the application is running on GCP.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
 
 
 def get_gcp_identity_token_via_impersonation(
-    impersonation_path: list[str], session_manager: SessionManager | None = None
+    impersonation_path: list[str], session_manager: SessionManager
 ) -> str:
     """Gets a GCP identity token from the metadata server.
 
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
+    if not impersonation_path:
+        raise ProgrammingError(
+            msg="Error: impersonation_path cannot be empty.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+
     current_sa_token = get_gcp_access_token(session_manager)
     impersonation_path = [
         f"projects/-/serviceAccounts/{client_id}" for client_id in impersonation_path
@@ -236,12 +242,12 @@ def get_gcp_identity_token_via_impersonation(
         return res.json()["token"]
     except Exception as e:
         raise ProgrammingError(
-            msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
+            msg=f"Error fetching GCP identity token for impersonated GCP service account '{impersonation_path[-1]}': {e}. Ensure the application is running on GCP.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
 
 
-def get_gcp_identity_token(session_manager: SessionManager | None = None) -> str:
+def get_gcp_identity_token(session_manager: SessionManager) -> str:
     """Gets a GCP identity token from the metadata server.
 
     If the application isn't running on GCP or no credentials were found, raises an error.
@@ -258,14 +264,14 @@ def get_gcp_identity_token(session_manager: SessionManager | None = None) -> str
         return res.content.decode("utf-8")
     except Exception as e:
         raise ProgrammingError(
-            msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
+            msg=f"Error fetching GCP identity token: {e}. Ensure the application is running on GCP.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
 
 
 def create_gcp_attestation(
+    session_manager: SessionManager,
     impersonation_path: list[str] | None = None,
-    session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for GCP.
 
@@ -385,7 +391,7 @@ def create_attestation(
     elif provider == AttestationProvider.AZURE:
         return create_azure_attestation(entra_resource, session_manager)
     elif provider == AttestationProvider.GCP:
-        return create_gcp_attestation(impersonation_path, session_manager)
+        return create_gcp_attestation(session_manager, impersonation_path)
     elif provider == AttestationProvider.OIDC:
         return create_oidc_attestation(token)
     else:

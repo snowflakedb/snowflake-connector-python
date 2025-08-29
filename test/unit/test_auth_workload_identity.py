@@ -294,7 +294,7 @@ def test_explicit_gcp_metadata_server_error_bubbles_up(exception):
         with pytest.raises(ProgrammingError) as excinfo:
             auth_class.prepare(conn=None)
 
-    assert "Error fetching GCP metadata:" in str(excinfo.value)
+    assert "Error fetching GCP identity token:" in str(excinfo.value)
     assert "Ensure the application is running on GCP." in str(excinfo.value)
 
 
@@ -323,7 +323,7 @@ def test_explicit_gcp_generates_unique_assertion_content(
 
 
 @mock.patch("snowflake.connector.session_manager.SessionManager.post")
-def test_gcp_does_impersonation(
+def test_gcp_calls_correct_apis_and_populates_auth_data_for_final_sa(
     mock_post_request, fake_gce_metadata_service: FakeGceMetadataService
 ):
     fake_gce_metadata_service.sub = "sa1"
@@ -353,6 +353,11 @@ def test_gcp_does_impersonation(
     )
 
     assert auth_class.assertion_content == '{"_provider":"GCP","sub":"sa3"}'
+    assert extract_api_data(auth_class) == {
+        "AUTHENTICATOR": "WORKLOAD_IDENTITY",
+        "PROVIDER": "GCP",
+        "TOKEN": sa3_id_token,
+    }
 
 
 # -- Azure Tests --
