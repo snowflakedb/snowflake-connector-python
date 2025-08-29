@@ -352,8 +352,7 @@ def test_gcp_does_impersonation(
         },
     )
 
-    print(auth_class.__dict__)
-    assert auth_class is None
+    assert auth_class.assertion_content == '{"_provider":"GCP","sub":"sa3"}'
 
 
 # -- Azure Tests --
