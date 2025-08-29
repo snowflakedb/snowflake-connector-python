@@ -20,6 +20,9 @@ from .session_manager import SessionManager
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
 DEFAULT_ENTRA_SNOWFLAKE_RESOURCE = "api://fd3f753b-eed3-462c-b6a7-a4b5bb650aad"
+GCP_METADATA_SERVICE_ACCOUNT_BASE_URL = (
+    "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default"
+)
 
 
 @unique
@@ -184,43 +187,75 @@ def create_aws_attestation(
     )
 
 
-class GCPTokenType(Enum):
-    ACCESS_TOKEN = 1
-    IDENTITY_TOKEN = 2
-
-
-def get_gcp_workload_token(
-    gcp_token_type: GCPTokenType, session_manager: SessionManager | None = None
-) -> str:
-    """Gets a GCP token from the metadata server.
+def get_gcp_access_token(session_manager: SessionManager | None = None) -> str:
+    """Gets a GCP access token from the metadata server.
 
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
-    if gcp_token_type == GCPTokenType.IDENTITY_TOKEN:
-        metadata_url = f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}"
-    elif gcp_token_type == GCPTokenType.ACCESS_TOKEN:
-        metadata_url = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
-    else:
-        raise ProgrammingError(
-            msg=f"Invalid GCP token type: {gcp_token_type}",
-            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-        )
-
     try:
         res = session_manager.request(
             method="GET",
-            url=metadata_url,
+            url=f"{GCP_METADATA_SERVICE_ACCOUNT_BASE_URL}/token",
             headers={
                 "Metadata-Flavor": "Google",
             },
         )
         res.raise_for_status()
-        if gcp_token_type == GCPTokenType.IDENTITY_TOKEN:
-            return res.content.decode("utf-8")
-        elif gcp_token_type == GCPTokenType.ACCESS_TOKEN:
-            return res.json()["access_token"]
-            # return json.loads(res.content.decode("utf-8"))["access_token"]
+        return res.json()["access_token"]
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
 
+
+def get_gcp_identity_token_via_impersonation(
+    impersonation_path: list[str], session_manager: SessionManager | None = None
+) -> str:
+    """Gets a GCP identity token from the metadata server.
+
+    If the application isn't running on GCP or no credentials were found, raises an error.
+    """
+    current_sa_token = get_gcp_access_token(session_manager)
+    impersonation_path = [
+        f"projects/-/serviceAccounts/{client_id}" for client_id in impersonation_path
+    ]
+    try:
+        res = session_manager.post(
+            url=f"https://iamcredentials.googleapis.com/v1/{impersonation_path[-1]}:generateIdToken",
+            headers={
+                "Authorization": f"Bearer {current_sa_token}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "delegates": impersonation_path[:-1],
+                "audience": SNOWFLAKE_AUDIENCE,
+            },
+        )
+        res.raise_for_status()
+        return res.json()["token"]
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+
+
+def get_gcp_identity_token(session_manager: SessionManager | None = None) -> str:
+    """Gets a GCP identity token from the metadata server.
+
+    If the application isn't running on GCP or no credentials were found, raises an error.
+    """
+    try:
+        res = session_manager.request(
+            method="GET",
+            url=f"{GCP_METADATA_SERVICE_ACCOUNT_BASE_URL}/identity?audience={SNOWFLAKE_AUDIENCE}",
+            headers={
+                "Metadata-Flavor": "Google",
+            },
+        )
+        res.raise_for_status()
+        return res.content.decode("utf-8")
     except Exception as e:
         raise ProgrammingError(
             msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
@@ -236,42 +271,12 @@ def create_gcp_attestation(
 
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
-    if not impersonation_path:
-        jwt_str = get_gcp_workload_token(GCPTokenType.IDENTITY_TOKEN, session_manager)
-    else:
-        current_sa_token = get_gcp_workload_token(
-            GCPTokenType.ACCESS_TOKEN, session_manager
+    if impersonation_path:
+        jwt_str = get_gcp_identity_token_via_impersonation(
+            impersonation_path, session_manager
         )
-
-        # Impersonate service accounts to get an access token for the target service account
-        impersonation_path = [
-            f"projects/-/serviceAccounts/{client_id}"
-            for client_id in impersonation_path
-        ]
-        headers = {
-            "Authorization": f"Bearer {current_sa_token}",
-            "Content-Type": "application/json",
-        }
-        body = {
-            "delegates": impersonation_path[:-1],
-            "audience": SNOWFLAKE_AUDIENCE,
-        }
-
-        try:
-            res = session_manager.request(
-                method="POST",
-                url=f"https://iamcredentials.googleapis.com/v1/{impersonation_path[-1]}:generateIdToken",
-                headers=headers,
-                json=body,
-            )
-            res.raise_for_status()
-
-            jwt_str = res.json()["token"]
-        except Exception as e:
-            raise ProgrammingError(
-                msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
-                errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-            )
+    else:
+        jwt_str = get_gcp_identity_token(session_manager)
 
     _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     return WorkloadIdentityAttestation(

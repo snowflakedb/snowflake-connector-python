@@ -40,16 +40,11 @@ def gen_dummy_id_token(
     )
 
 
-def gen_dummy_access_token() -> str:
-    """Generates a dummy ID token using the given subject and issuer."""
-    now = str(int(time()))
+def gen_dummy_access_token(sub="test-subject") -> str:
+    """Generates a dummy access token using the given subject."""
     key = "secret"
-    logger.debug("Generating dummy access token")
-    return jwt.encode(
-        payload={"iat": now, "exp": str(int(now) + 60 * 60)},
-        key=key,
-        algorithm="HS256",
-    )
+    logger.debug(f"Generating dummy access token for subject {sub}")
+    return (sub + key).encode("utf-8").hex()
 
 
 def build_response(content: bytes, status_code: int = 200, headers=None) -> Response:
@@ -303,7 +298,7 @@ class FakeGceMetadataService(FakeMetadataService):
             == "/computeMetadata/v1/instance/service-accounts/default/token"
             and headers.get("Metadata-Flavor") == "Google"
         ):
-            self.token = gen_dummy_access_token()
+            self.token = gen_dummy_access_token(sub=self.sub)
             ret = {
                 "access_token": self.token,
                 "expires_in": 3599,
