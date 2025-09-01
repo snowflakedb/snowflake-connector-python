@@ -68,5 +68,5 @@ jobs:
 
       - name: Run pytest
         run: |
-          pytest -n auto -vv test/integ/test_large_result_set.py test/integ/aio/test_large_result_set_async.py test/integ/test_put_get_with_azure_token.py test/integ/aio/test_put_get_with_azure_token_async.py test/integ/test_put_get_with_aws_token.py test/integ/aio/test_put_get_with_aws_token_async.py
+          pytest -vv test/integ/test_large_result_set.py test/integ/aio/test_large_result_set_async.py test/integ/test_put_get_with_azure_token.py test/integ/aio/test_put_get_with_azure_token_async.py test/integ/test_put_get_with_aws_token.py test/integ/aio/test_put_get_with_aws_token_async.py
           # pytest -vv -n auto test/integ/test_connection.py test/integ/aio/test_aio_connection.py -k name_loading
