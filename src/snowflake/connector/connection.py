@@ -393,6 +393,42 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),
+    # CRL (Certificate Revocation List) configuration parameters
+    "cert_revocation_check_mode": (
+        "DISABLED",
+        (type(None), str),
+    ),  # CRL revocation check mode: DISABLED, ENABLED, ADVISORY
+    "allow_certificates_without_crl_url": (
+        False,
+        (type(None), bool),
+    ),  # Allow certificates without CRL distribution points
+    "crl_connection_timeout_ms": (
+        3000,
+        (type(None), int),
+    ),  # Connection timeout for CRL downloads in milliseconds
+    "crl_read_timeout_ms": (
+        3000,
+        (type(None), int),
+    ),  # Read timeout for CRL downloads in milliseconds
+    "crl_cache_validity_hours": (
+        24,
+        (type(None), int),
+    ),  # CRL cache validity time in hours
+    "enable_crl_cache": (True, (type(None), bool)),  # Enable CRL caching
+    "enable_crl_file_cache": (True, (type(None), bool)),  # Enable file-based CRL cache
+    "crl_cache_dir": (None, (type(None), str)),  # Directory for CRL file cache
+    "crl_cache_removal_delay_days": (
+        7,
+        (type(None), int),
+    ),  # Days to keep expired CRL files before removal
+    "crl_cache_cleanup_interval_hours": (
+        1,
+        (type(None), int),
+    ),  # CRL cache cleanup interval in hours
+    "crl_cache_start_cleanup": (
+        True,
+        (type(None), bool),
+    ),  # Run CRL cache cleanup in the background
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -620,6 +656,62 @@ class SnowflakeConnection:
             return OCSPMode.FAIL_OPEN
         else:
             return OCSPMode.FAIL_CLOSED
+
+    # CRL (Certificate Revocation List) configuration properties
+    @property
+    def cert_revocation_check_mode(self) -> str:
+        """Certificate revocation check mode: DISABLED, ENABLED, or ADVISORY."""
+        return self._cert_revocation_check_mode
+
+    @property
+    def allow_certificates_without_crl_url(self) -> bool:
+        """Whether to allow certificates without CRL distribution points."""
+        return self._allow_certificates_without_crl_url
+
+    @property
+    def crl_connection_timeout_ms(self) -> int:
+        """Connection timeout for CRL downloads in milliseconds."""
+        return self._crl_connection_timeout_ms
+
+    @property
+    def crl_read_timeout_ms(self) -> int:
+        """Read timeout for CRL downloads in milliseconds."""
+        return self._crl_read_timeout_ms
+
+    @property
+    def crl_cache_validity_hours(self) -> int:
+        """CRL cache validity time in hours."""
+        return self._crl_cache_validity_hours
+
+    @property
+    def enable_crl_cache(self) -> bool:
+        """Whether CRL caching is enabled."""
+        return self._enable_crl_cache
+
+    @property
+    def enable_crl_file_cache(self) -> bool:
+        """Whether file-based CRL cache is enabled."""
+        return self._enable_crl_file_cache
+
+    @property
+    def crl_cache_dir(self) -> str | None:
+        """Directory for CRL file cache."""
+        return self._crl_cache_dir
+
+    @property
+    def crl_cache_removal_delay_days(self) -> int:
+        """Days to keep expired CRL files before removal."""
+        return self._crl_cache_removal_delay_days
+
+    @property
+    def crl_cache_cleanup_interval_hours(self) -> int:
+        """CRL cache cleanup interval in hours."""
+        return self._crl_cache_cleanup_interval_hours
+
+    @property
+    def crl_cache_start_cleanup(self) -> bool:
+        """Whether to start CRL cache cleanup immediately."""
+        return self._crl_cache_start_cleanup
 
     @property
     def session_id(self) -> int:
