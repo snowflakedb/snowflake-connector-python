@@ -25,6 +25,9 @@ class FakeConnection(SnowflakeConnection):
         self._log_max_query_length = 0
         self._reuse_results = None
         self._reraise_error_in_file_transfer_work_function = False
+        self._enable_stage_s3_privatelink_for_us_east_1 = False
+        self._iobound_tpe_limit = None
+        self._unsafe_file_write = False
 
 
 @pytest.mark.parametrize(
