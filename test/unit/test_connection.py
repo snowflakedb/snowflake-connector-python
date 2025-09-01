@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import stat
 import sys
 from pathlib import Path
@@ -201,11 +200,11 @@ def test_is_still_running():
 
 
 @pytest.mark.skipolddriver
-def test_partner_env_var(mock_post_requests):
+def test_partner_env_var(mock_post_requests, monkeypatch):
     PARTNER_NAME = "Amanda"
 
-    with patch.dict(os.environ, {ENV_VAR_PARTNER: PARTNER_NAME}):
-        assert fake_connector().application == PARTNER_NAME
+    monkeypatch.setenv(ENV_VAR_PARTNER, PARTNER_NAME)
+    assert fake_connector().application == PARTNER_NAME
 
     assert (
         mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == PARTNER_NAME

@@ -20,6 +20,7 @@ from ..urllib3.exceptions import (
     NewConnectionError,
     ProtocolError,
 )
+
 from ..urllib3.exceptions import ProxyError as _ProxyError
 from ..urllib3.exceptions import ReadTimeoutError, ResponseError
 from ..urllib3.exceptions import SSLError as _SSLError
@@ -56,7 +57,7 @@ from .utils import (
 )
 
 try:
-    from ..urllib3.contrib.socks import SOCKSProxyManager
+    from urllib3.contrib.socks import SOCKSProxyManager
 except ImportError:
 
     def SOCKSProxyManager(*args, **kwargs):
