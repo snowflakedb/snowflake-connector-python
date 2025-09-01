@@ -146,3 +146,18 @@ def pytest_runtest_setup(item) -> None:
         pytest.skip("cannot run this test on public Snowflake deployment")
     elif INTERNAL_SKIP_TAGS.intersection(test_tags) and not running_on_public_ci():
         pytest.skip("cannot run this test on private Snowflake deployment")
+
+    if "auth" in test_tags:
+        if os.getenv("RUN_AUTH_TESTS") != "true":
+            pytest.skip("Skipping auth test in current environment")
+
+
+def get_server_parameter_value(connection, parameter_name: str) -> str | None:
+    """Get server parameter value, returns None if parameter doesn't exist."""
+    try:
+        with connection.cursor() as cur:
+            cur.execute(f"show parameters like '{parameter_name}'")
+            ret = cur.fetchone()
+            return ret[1] if ret else None
+    except Exception:
+        return None
