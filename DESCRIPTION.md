@@ -7,7 +7,6 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.17.4(TBD)
 
 - v3.17.3(September 05,2025)
   - Enhanced configuration file permission warning messages.
