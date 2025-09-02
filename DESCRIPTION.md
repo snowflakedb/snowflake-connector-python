@@ -7,6 +7,12 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.17.3(September 02,2025)
+  - Enhanced configuration file permission warning messages.
+    - Improved warning messages for readable permission issues to include clear instructions on how to skip warnings using the `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` environment variable.
+  - Fixed the bug with staging pandas dataframes on AWS - the regional endpoint is used when required
+    - This addresses the issue with `create_dataframe` call on Snowpark
+
 - v3.17.2(August 23,2025)
   - Fixed a bug where platform_detection was retrying failed requests with warnings to non-existent endpoints.
   - Added disabling endpoint-based platform detection by setting `platform_detection_timeout_seconds` to zero.
