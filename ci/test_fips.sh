@@ -30,6 +30,6 @@ pip freeze
 cd $CONNECTOR_DIR
 
 # Run tests in parallel using pytest-xdist
-pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test --ignore=test/integ/aio --ignore=test/unit/aio
+pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test --ignore=test/integ/aio_it --ignore=test/unit/aio
 
 deactivate
