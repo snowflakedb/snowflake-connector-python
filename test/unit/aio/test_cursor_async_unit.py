@@ -187,6 +187,7 @@ class TestUploadDownloadMethods(IsolatedAsyncioTestCase):
 
         fake_conn = FakeConnection()
         fake_conn._file_operation_parser = MagicMock()
+        fake_conn._file_operation_parser.parse_file_operation = AsyncMock()
         fake_conn._stream_downloader = MagicMock()
         fake_conn._stream_downloader.download_as_stream = AsyncMock()
 

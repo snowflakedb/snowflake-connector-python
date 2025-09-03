@@ -23,7 +23,7 @@ from snowflake.connector import (
     ProgrammingError,
 )
 from snowflake.connector._sql_util import get_file_transfer_type
-from snowflake.connector.aio._build_upload_agent import BindUploadAgent
+from snowflake.connector.aio._bind_upload_agent import BindUploadAgent
 from snowflake.connector.aio._result_batch import (
     ResultBatch,
     create_batches_from_response,
@@ -235,7 +235,10 @@ class SnowflakeCursor(SnowflakeCursorSync):
         else:
             # or detect it.
             self._is_file_transfer = get_file_transfer_type(query) is not None
-        logger.debug("is_file_transfer: %s", self._is_file_transfer is not None)
+        logger.debug(
+            "is_file_transfer: %s",
+            self._is_file_transfer if self._is_file_transfer is not None else "None",
+        )
 
         real_timeout = (
             timeout if timeout and timeout > 0 else self._connection.network_timeout
@@ -800,7 +803,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 bind_stage = None
                 if (
                     bind_size
-                    > self.connection._session_parameters[
+                    >= self.connection._session_parameters[
                         "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
                     ]
                     > 0
@@ -1085,7 +1088,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             self.reset()
 
         # Interpret the file operation.
-        ret = self.connection._file_operation_parser.parse_file_operation(
+        ret = await self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
             local_file_name=None,
             target_directory=target_directory,
@@ -1124,7 +1127,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             self.reset()
 
         # Interpret the file operation.
-        ret = self.connection._file_operation_parser.parse_file_operation(
+        ret = await self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
             local_file_name=local_file_name,
             target_directory=None,
@@ -1156,7 +1159,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             IO[bytes]: A stream to read from.
         """
         # Interpret the file operation.
-        ret = self.connection._file_operation_parser.parse_file_operation(
+        ret = await self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
             local_file_name=None,
             target_directory=None,
@@ -1192,7 +1195,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             self.reset()
 
         # Interpret the file operation.
-        ret = self.connection._file_operation_parser.parse_file_operation(
+        ret = await self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
             local_file_name=None,
             target_directory=None,
