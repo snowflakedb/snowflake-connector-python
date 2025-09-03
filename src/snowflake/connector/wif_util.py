@@ -146,7 +146,7 @@ def get_aws_sts_hostname(region: str, partition: str) -> str:
 
 
 def create_aws_attestation(
-    session_manager: SessionManager | None = None,
+    impersonation_path: list[str] | None = None,
 ) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for AWS.
 
@@ -154,6 +154,26 @@ def create_aws_attestation(
     """
     # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
     session = boto3.session.Session()
+    if impersonation_path:
+        sts_client = boto3.client("sts")
+        for arn in impersonation_path:
+            # Assume target role
+            response = sts_client.assume_role(
+                RoleArn=arn, RoleSessionName="identity-federation-session"
+            )
+
+        # Use the credentials from the last assumed role
+        creds = response["Credentials"]
+        access_key = creds["AccessKeyId"]
+        secret_key = creds["SecretAccessKey"]
+        session_token = creds["SessionToken"]
+
+        session = boto3.Session(
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            aws_session_token=session_token,
+        )
+
     aws_creds = session.get_credentials()
     if not aws_creds:
         raise ProgrammingError(
@@ -387,7 +407,7 @@ def create_attestation(
     )
 
     if provider == AttestationProvider.AWS:
-        return create_aws_attestation(session_manager)
+        return create_aws_attestation(impersonation_path)
     elif provider == AttestationProvider.AZURE:
         return create_azure_attestation(entra_resource, session_manager)
     elif provider == AttestationProvider.GCP:
