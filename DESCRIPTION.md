@@ -7,7 +7,7 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.17.4(September 03,2025)
+- v3.18.0(TBD)
   - Added support for service account impersonation for Workload Identity Federation on GCP workloads only
 
 - v3.17.3(September 02,2025)
