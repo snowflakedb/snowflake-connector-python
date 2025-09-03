@@ -1122,7 +1122,9 @@ async def test_select_year_month_interval_arrow(conn_cnx, use_numpy):
             f"create or replace table {table} (c1 interval year to month)"
         )
         await cursor.execute(f"insert into {table} values {values}")
-        result = await conn.cursor().execute(f"select * from {table}").fetchall()
+        result = await (
+            await conn.cursor().execute(f"select * from {table}")
+        ).fetchall()
         result = [r[0] for r in result]
         assert result == expected
 
@@ -1162,7 +1164,9 @@ async def test_select_day_time_interval_arrow(conn_cnx, use_numpy):
             f"create or replace table {table} (c1 interval day(5) to second)"
         )
         await cursor.execute(f"insert into {table} values {values}")
-        result = await conn.cursor().execute(f"select * from {table}").fetchall()
+        result = await (
+            await conn.cursor().execute(f"select * from {table}")
+        ).fetchall()
         result = [r[0] for r in result]
         assert result == expected
 

@@ -1088,7 +1088,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             self.reset()
 
         # Interpret the file operation.
-        ret = self.connection._file_operation_parser.parse_file_operation(
+        ret = await self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
             local_file_name=None,
             target_directory=target_directory,
@@ -1127,7 +1127,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             self.reset()
 
         # Interpret the file operation.
-        ret = self.connection._file_operation_parser.parse_file_operation(
+        ret = await self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
             local_file_name=local_file_name,
             target_directory=None,
@@ -1159,7 +1159,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             IO[bytes]: A stream to read from.
         """
         # Interpret the file operation.
-        ret = self.connection._file_operation_parser.parse_file_operation(
+        ret = await self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
             local_file_name=None,
             target_directory=None,
@@ -1195,7 +1195,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             self.reset()
 
         # Interpret the file operation.
-        ret = self.connection._file_operation_parser.parse_file_operation(
+        ret = await self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
             local_file_name=None,
             target_directory=None,
