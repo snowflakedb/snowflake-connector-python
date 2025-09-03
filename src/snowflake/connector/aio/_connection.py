@@ -797,16 +797,16 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         except ReauthenticationRequest as ex:
             # cached id_token expiration error, we have cleaned id_token and try to authenticate again
             logger.debug("ID token expired. Reauthenticating...: %s", ex)
-            if isinstance(auth_instance, AuthByIdToken):
+            if type(auth_instance) in (
+                AuthByIdToken,
+                AuthByOauthCode,
+                AuthByOauthCredentials,
+            ):
                 # Note: SNOW-733835 IDToken auth needs to authenticate through
                 #  SSO if it has expired
                 await self._reauthenticate()
             else:
-                # TODO pczajka: check if this is correct
-                # For OAuth and other auth types, call their reauthenticate method
-                await auth_instance.reauthenticate(conn=self)
-                # The reauthenticate method will call authenticate_with_retry internally,
-                # so we don't need to call _authenticate again here
+                await self._authenticate(auth_instance)
 
     async def autocommit(self, mode) -> None:
         """Sets autocommit mode to True, or False. Defaults to True."""
