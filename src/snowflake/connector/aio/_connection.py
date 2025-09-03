@@ -33,7 +33,6 @@ from ..connection import _get_private_bytes_from_file
 from ..constants import (
     _CONNECTIVITY_ERR_MSG,
     ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
-    ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -527,10 +526,9 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         is_kwargs_empty = not connection_init_kwargs
 
         if "application" not in connection_init_kwargs:
-            if ENV_VAR_PARTNER in os.environ.keys():
-                connection_init_kwargs["application"] = os.environ[ENV_VAR_PARTNER]
-            elif "streamlit" in sys.modules:
-                connection_init_kwargs["application"] = "streamlit"
+            app = self._detect_application()
+            if app:
+                connection_init_kwargs["application"] = app
 
         if "insecure_mode" in connection_init_kwargs:
             warn_message = "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
