@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Generator
 from unittest import mock
+from unittest.mock import MagicMock
 
 import numpy.random
 import pytest
@@ -542,7 +543,10 @@ def test_table_location_building(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
                 sf_connector_version_df.get(),
@@ -592,7 +596,10 @@ def test_stage_location_building(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
                 sf_connector_version_df.get(),
@@ -644,7 +651,10 @@ def test_use_scoped_object(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             cnx._update_parameters({"PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS": True})
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
@@ -702,7 +712,10 @@ def test_file_format_location_building(
         with mock.patch(
             "snowflake.connector.cursor.SnowflakeCursor.execute",
             side_effect=mocked_execute,
-        ) as m_execute:
+        ) as m_execute, mock.patch(
+            "snowflake.connector.cursor.SnowflakeCursor._upload",
+            side_effect=MagicMock(),
+        ) as _:
             success, nchunks, nrows, _ = write_pandas(
                 cnx,
                 sf_connector_version_df.get(),
@@ -1125,3 +1138,49 @@ def test_pandas_with_single_quote(
             )
         finally:
             cnx.execute_string(f"drop table if exists {table_name}")
+
+
+@pytest.mark.parametrize("bulk_upload_chunks", [True, False])
+def test_write_pandas_bulk_chunks_upload(conn_cnx, bulk_upload_chunks):
+    """Tests whether overwriting table using a Pandas DataFrame works as expected."""
+    random_table_name = random_string(5, "userspoints_")
+    df_data = [("Dash", 50), ("Luke", 20), ("Mark", 10), ("John", 30)]
+    df = pandas.DataFrame(df_data, columns=["name", "points"])
+
+    table_name = random_table_name
+    col_id = "id"
+    col_name = "name"
+    col_points = "points"
+
+    create_sql = (
+        f"CREATE OR REPLACE TABLE {table_name}"
+        f"({col_name} STRING, {col_points} INT, {col_id} INT AUTOINCREMENT)"
+    )
+
+    select_count_sql = f"SELECT count(*) FROM {table_name}"
+    drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        cnx.execute_string(create_sql)
+        try:
+            # Write dataframe with 1 row
+            success, nchunks, nrows, _ = write_pandas(
+                cnx,
+                df,
+                random_table_name,
+                quote_identifiers=False,
+                auto_create_table=False,
+                overwrite=True,
+                index=True,
+                on_error="continue",
+                chunk_size=1,
+                bulk_upload_chunks=bulk_upload_chunks,
+            )
+            # Check write_pandas output
+            assert success
+            assert nchunks == 4
+            assert nrows == 4
+            result = cnx.cursor(DictCursor).execute(select_count_sql).fetchone()
+            # Check number of rows
+            assert result["COUNT(*)"] == 4
+        finally:
+            cnx.execute_string(drop_sql)
