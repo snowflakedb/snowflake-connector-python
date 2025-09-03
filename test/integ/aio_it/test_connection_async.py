@@ -1423,7 +1423,7 @@ async def test_is_valid(conn_cnx):
 async def test_no_auth_connection_negative_case():
     # AuthNoAuth does not exist in old drivers, so we import at test level to
     # skip importing it for old driver tests.
-    from test.integ.aio.conftest import create_connection
+    from test.integ.aio_it.conftest import create_connection
 
     from snowflake.connector.aio.auth._no_auth import AuthNoAuth
 
