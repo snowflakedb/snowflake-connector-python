@@ -31,6 +31,7 @@ from snowflake.connector.options import pandas
 from snowflake.connector.result_set import ResultSet as ResultSetSync
 
 from .. import NotSupportedError
+from ..errors import Error
 from ..options import pyarrow as pa
 from ..result_batch import DownloadMetrics
 from ..telemetry import TelemetryField
@@ -55,6 +56,7 @@ class ResultSetIterator:
         **kw: Any,
     ) -> None:
         self._is_fetch_all = kw.pop("is_fetch_all", False)
+        self._cursor = kw.pop("cursor", None)
         self._first_batch_iter = first_batch_iter
         self._unfetched_batches = unfetched_batches
         self._final = final
@@ -75,12 +77,31 @@ class ResultSetIterator:
 
     async def fetch_all_data(self):
         rets = list(self._first_batch_iter)
+        # Check for exceptions in the first batch
+        connection = self._kw.get("connection")
+
+        for item in rets:
+            if isinstance(item, Exception):
+                Error.errorhandler_wrapper_from_ready_exception(
+                    connection,
+                    self._cursor,
+                    item,
+                )
+
         tasks = [
             self._download_batch_and_convert_to_list(result_batch)
             for result_batch in self._unfetched_batches
         ]
         batches = await asyncio.gather(*tasks)
         for batch in batches:
+            # Check for exceptions in each batch before extending
+            for item in batch:
+                if isinstance(item, Exception):
+                    Error.errorhandler_wrapper_from_ready_exception(
+                        connection,
+                        self._cursor,
+                        item,
+                    )
             rets.extend(batch)
             # yield to avoid blocking the event loop for too long when processing large result sets
             # await asyncio.sleep(0)
@@ -195,6 +216,7 @@ class ResultSet(ResultSetSync):
             unfetched_batches,
             self._finish_iterating,
             self.prefetch_thread_num,
+            cursor=self._cursor,
             is_fetch_all=is_fetch_all,
             **kwargs,
         )
