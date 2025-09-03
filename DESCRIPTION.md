@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v3.18.0(TBD)
+  - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP workloads only
+
 - v3.17.3(September 02,2025)
   - Enhanced configuration file permission warning messages.
     - Improved warning messages for readable permission issues to include clear instructions on how to skip warnings using the `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` environment variable.
