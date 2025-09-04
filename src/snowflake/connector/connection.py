@@ -1358,14 +1358,19 @@ class SnowflakeConnection:
                     )
                 if (
                     self._workload_identity_impersonation_path
-                    and self._workload_identity_provider != AttestationProvider.GCP
+                    and self._workload_identity_provider
+                    not in (
+                        AttestationProvider.GCP,
+                        AttestationProvider.AWS,
+                        AttestationProvider.AZURE,
+                    )
                 ):
                     Error.errorhandler_wrapper(
                         self,
                         None,
                         ProgrammingError,
                         {
-                            "msg": "workload_identity_impersonation_path is currently only supported for GCP.",
+                            "msg": "workload_identity_impersonation_path is currently only supported for GCP, AWS, and Azure.",
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
