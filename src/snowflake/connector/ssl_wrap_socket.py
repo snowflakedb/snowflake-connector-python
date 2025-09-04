@@ -20,6 +20,7 @@ import certifi
 import OpenSSL.SSL
 
 from .constants import OCSPMode
+from .crl import CRLConfig, CRLValidator
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
 from .session_manager import SessionManager
@@ -29,6 +30,8 @@ from .vendored.urllib3.util import ssl_ as ssl_
 
 DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
 FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE
+DEFAULT_CRL_CONFIG: CRLConfig = CRLConfig()
+FEATURE_CRL_CONFIG: CRLConfig = DEFAULT_CRL_CONFIG
 
 """
 OCSP Response cache file name
@@ -88,11 +91,13 @@ def reset_current_session_manager(token) -> None:
 def inject_into_urllib3() -> None:
     """Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP."""
     log.debug("Injecting ssl_wrap_socket_with_ocsp")
-    connection_.ssl_wrap_socket = ssl_wrap_socket_with_ocsp
+    connection_.ssl_wrap_socket = ssl_wrap_socket_with_cert_revocation_checks
 
 
 @wraps(ssl_.ssl_wrap_socket)
-def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
+def ssl_wrap_socket_with_cert_revocation_checks(
+    *args: Any, **kwargs: Any
+) -> WrappedSocket:
     # Extract host_name
     hostname_index = get_args(ssl_.ssl_wrap_socket).args.index("server_hostname")
     server_hostname = (
@@ -148,6 +153,29 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
             "This connection does not perform OCSP checks. "
             "Revocation status of the certificate will not be checked against OCSP Responder."
         )
+
+    log.debug(
+        "CRL Check Mode: %s",
+        FEATURE_CRL_CONFIG.cert_revocation_check_mode.name,
+    )
+    with CRLValidator.from_config(
+        FEATURE_CRL_CONFIG, get_current_session_manager()
+    ) as validator:
+        if not validator.validate_connection(ret.connection):
+            raise OperationalError(
+                msg=(
+                    "The certificate is revoked or "
+                    "could not be validated via CRL: hostname={}".format(
+                        server_hostname
+                    )
+                ),
+                errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+            )
+        else:
+            log.debug(
+                "This connection does not perform CRL checks."
+                "Revocation status of the certificate will not be checked against CRL Responder."
+            )
 
     return ret
 
