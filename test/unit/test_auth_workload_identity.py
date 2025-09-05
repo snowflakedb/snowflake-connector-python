@@ -136,6 +136,7 @@ def test_explicit_oidc_valid_inline_token_plumbed_to_api():
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "OIDC",
         "TOKEN": dummy_token,
+        "CLIENT_ENVIRONMENT": {"IMPERSONATION_PATH_LENGTH": 0},
     }
 
 
@@ -191,6 +192,7 @@ def test_explicit_aws_encodes_audience_host_signature_to_api(
     data = extract_api_data(auth_class)
     assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
     assert data["PROVIDER"] == "AWS"
+    assert data["CLIENT_ENVIRONMENT"]["IMPERSONATION_PATH_LENGTH"] == 0
     verify_aws_token(data["TOKEN"], fake_aws_environment.region)
 
 
@@ -324,6 +326,7 @@ def test_explicit_gcp_plumbs_token_to_api(
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "GCP",
         "TOKEN": fake_gce_metadata_service.token,
+        "CLIENT_ENVIRONMENT": {"IMPERSONATION_PATH_LENGTH": 0},
     }
 
 
@@ -373,6 +376,7 @@ def test_gcp_calls_correct_apis_and_populates_auth_data_for_final_sa(
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "GCP",
         "TOKEN": sa3_id_token,
+        "CLIENT_ENVIRONMENT": {"IMPERSONATION_PATH_LENGTH": 2},
     }
 
 
@@ -425,6 +429,7 @@ def test_explicit_azure_plumbs_token_to_api(fake_azure_metadata_service):
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "AZURE",
         "TOKEN": fake_azure_metadata_service.token,
+        "CLIENT_ENVIRONMENT": {"IMPERSONATION_PATH_LENGTH": 0},
     }
 
 

@@ -226,13 +226,6 @@ class Auth:
         if session_parameters:
             body["data"]["SESSION_PARAMETERS"] = session_parameters
 
-        from . import AuthByWorkloadIdentity
-
-        if isinstance(auth_instance, AuthByWorkloadIdentity):
-            body["data"]["IMPERSONATION_PATH_LENGTH"] = len(
-                auth_instance.impersonation_path or []
-            )
-
         logger.debug(
             "body['data']: %s",
             {
