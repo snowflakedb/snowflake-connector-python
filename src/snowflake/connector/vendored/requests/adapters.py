@@ -20,7 +20,6 @@ from ..urllib3.exceptions import (
     NewConnectionError,
     ProtocolError,
 )
-
 from ..urllib3.exceptions import ProxyError as _ProxyError
 from ..urllib3.exceptions import ReadTimeoutError, ResponseError
 from ..urllib3.exceptions import SSLError as _SSLError
