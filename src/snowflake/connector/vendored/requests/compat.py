@@ -13,7 +13,7 @@ import sys
 # -------
 # urllib3
 # -------
-from urllib3 import __version__ as urllib3_version
+from ..urllib3 import __version__ as urllib3_version
 
 # Detect which major version of urllib3 is being used.
 try:
