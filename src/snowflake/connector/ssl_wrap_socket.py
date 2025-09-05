@@ -8,6 +8,7 @@ from __future__ import annotations
 #
 # and added OCSP validator on the top.
 import logging
+import ssl
 import time
 import weakref
 from contextvars import ContextVar
@@ -40,7 +41,8 @@ log = logging.getLogger(__name__)
 
 # Store a *weak* reference so that the context variable doesn’t prolong the
 # lifetime of the SessionManager. Once all owning connections are GC-ed the
-# weakref goes dead and OCSP will fall back to its local manager (but most likely won't be used ever again anyway).
+# weakref goes dead and OCSP will fall back to its local manager (but most
+# likely won't be used ever again anyway).
 _CURRENT_SESSION_MANAGER: ContextVar[weakref.ref[SessionManager] | None] = ContextVar(
     "_CURRENT_SESSION_MANAGER",
     default=None,
@@ -71,7 +73,10 @@ def set_current_session_manager(sm: SessionManager | None) -> Any:
     Called from SnowflakeConnection so that OCSP downloads
     use the same proxy / header configuration as the initiating connection.
 
-    Alternative approach would be moving method inject_into_urllib3() inside connection initialization, but in case this delay (from module import time to connection initialization time) would cause some code to break we stayed with this approach, having in mind soon OCSP deprecation.
+    Alternative approach would be moving method inject_into_urllib3() inside
+    connection initialization, but in case this delay (from module import time
+    to connection initialization time) would cause some code to break we stayed
+    with this approach, having in mind soon OCSP deprecation.
     """
     return _CURRENT_SESSION_MANAGER.set(weakref.ref(sm) if sm is not None else None)
 
@@ -83,6 +88,35 @@ def reset_current_session_manager(token) -> None:
     except Exception:
         # ignore invalid token errors
         pass
+
+
+def _build_pyopenssl_context_with_ca_and_partial_chain(
+    cafile: str | None,
+) -> PyOpenSSLContext:
+    ctx = PyOpenSSLContext(ssl_.PROTOCOL_TLS_CLIENT)
+    try:
+        # Ensure certificate verification is enabled
+        ctx.verify_mode = ssl.CERT_REQUIRED
+    except Exception:
+        pass
+    try:
+        if cafile:
+            ctx.load_verify_locations(cafile=cafile, capath=None)
+    except Exception:
+        pass
+    # Enable partial-chain verification so intermediates in trust store can
+    # terminate chains
+    try:
+        store = ctx._ctx.get_cert_store()
+        from OpenSSL import crypto as _crypto
+
+        if hasattr(_crypto, "X509StoreFlags") and hasattr(
+            _crypto.X509StoreFlags, "PARTIAL_CHAIN"
+        ):
+            store.set_flags(_crypto.X509StoreFlags.PARTIAL_CHAIN)
+    except Exception:
+        pass
+    return ctx
 
 
 def inject_into_urllib3() -> None:
@@ -120,10 +154,57 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
     if not ca_certs_in_args and not kwargs.get("ca_certs"):
         kwargs["ca_certs"] = certifi.where()
 
+    # Ensure PyOpenSSL context with partial-chain is used if no suitable context provided
+    try:
+        provided_ctx = kwargs.get("ssl_context", None)
+        if not isinstance(provided_ctx, PyOpenSSLContext):
+            cafile_for_ctx = kwargs.get("ca_certs")
+            if not cafile_for_ctx:
+                import os as _os
+
+                cafile_for_ctx = _os.environ.get(
+                    "REQUESTS_CA_BUNDLE"
+                ) or _os.environ.get("SSL_CERT_FILE")
+            kwargs["ssl_context"] = _build_pyopenssl_context_with_ca_and_partial_chain(
+                cafile_for_ctx
+            )
+    except Exception:
+        pass
+
+    # If a PyOpenSSLContext is provided, ensure it trusts the provided CA and
+    # partial-chain is enabled
+    try:
+        provided_ctx = kwargs.get("ssl_context", None)
+        if isinstance(provided_ctx, PyOpenSSLContext):
+            caf = kwargs.get("ca_certs")
+            if not caf:
+                import os as _os
+
+                caf = _os.environ.get("REQUESTS_CA_BUNDLE") or _os.environ.get(
+                    "SSL_CERT_FILE"
+                )
+            try:
+                if caf:
+                    provided_ctx.load_verify_locations(cafile=caf, capath=None)
+            except Exception:
+                pass
+            try:
+                store = provided_ctx._ctx.get_cert_store()
+                from OpenSSL import crypto as _crypto
+
+                if hasattr(_crypto, "X509StoreFlags") and hasattr(
+                    _crypto.X509StoreFlags, "PARTIAL_CHAIN"
+                ):
+                    store.set_flags(_crypto.X509StoreFlags.PARTIAL_CHAIN)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     ret = ssl_.ssl_wrap_socket(*args, **kwargs)
 
     log.debug(
-        "OCSP Mode: %s, " "OCSP response cache file name: %s",
+        "OCSP Mode: %s, OCSP response cache file name: %s",
         FEATURE_OCSP_MODE.name,
         FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
     )
@@ -137,10 +218,7 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
         ).validate(server_hostname, ret.connection)
         if not v:
             raise OperationalError(
-                msg=(
-                    "The certificate is revoked or "
-                    "could not be validated: hostname={}".format(server_hostname)
-                ),
+                msg=f"The certificate is revoked or could not be validated: hostname={server_hostname}",
                 errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
             )
     else:
