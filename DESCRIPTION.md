@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v3.18.0(TBD)
   - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP workloads only
+  - Added support for intermediate cetificates as roots when they are stored in the trust store
 
 - v3.17.3(September 02,2025)
   - Enhanced configuration file permission warning messages.

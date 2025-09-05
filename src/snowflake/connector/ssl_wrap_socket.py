@@ -8,6 +8,7 @@ from __future__ import annotations
 #
 # and added OCSP validator on the top.
 import logging
+import os
 import ssl
 import time
 import weakref
@@ -37,6 +38,53 @@ OCSP Response cache file name
 FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME: str | None = None
 
 log = logging.getLogger(__name__)
+
+
+# Helper utilities (private)
+def _resolve_cafile(kwargs: dict[str, Any]) -> str | None:
+    """Resolve CA bundle path from kwargs or standard environment variables.
+
+    Precedence:
+      1) kwargs['ca_certs'] if provided by caller
+      2) REQUESTS_CA_BUNDLE
+      3) SSL_CERT_FILE
+    """
+    caf = kwargs.get("ca_certs")
+    if caf:
+        return caf
+    return os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
+
+
+def _ensure_partial_chain_on_context(ctx: PyOpenSSLContext, cafile: str | None) -> None:
+    """Load CA bundle (when provided) and enable OpenSSL partial-chain support on ctx."""
+    if cafile:
+        try:
+            ctx.load_verify_locations(cafile=cafile, capath=None)
+        except (ssl.SSLError, OSError, ValueError):
+            # Leave context unchanged; handshake/validation surfaces failures
+            pass
+    try:
+        store = ctx._ctx.get_cert_store()
+        from OpenSSL import crypto as _crypto
+
+        if hasattr(_crypto, "X509StoreFlags") and hasattr(
+            _crypto.X509StoreFlags, "PARTIAL_CHAIN"
+        ):
+            store.set_flags(_crypto.X509StoreFlags.PARTIAL_CHAIN)
+    except (AttributeError, ImportError, OpenSSL.SSL.Error, OSError, ValueError):
+        # Best-effort; if not available, default chain building applies
+        pass
+
+
+def _build_context_with_partial_chain(cafile: str | None) -> PyOpenSSLContext:
+    """Create PyOpenSSL context configured for CERT_REQUIRED and partial-chain trust."""
+    ctx = PyOpenSSLContext(ssl_.PROTOCOL_TLS_CLIENT)
+    try:
+        ctx.verify_mode = ssl.CERT_REQUIRED
+    except Exception:
+        pass
+    _ensure_partial_chain_on_context(ctx, cafile)
+    return ctx
 
 
 # Store a *weak* reference so that the context variable doesn’t prolong the
@@ -90,35 +138,6 @@ def reset_current_session_manager(token) -> None:
         pass
 
 
-def _build_pyopenssl_context_with_ca_and_partial_chain(
-    cafile: str | None,
-) -> PyOpenSSLContext:
-    ctx = PyOpenSSLContext(ssl_.PROTOCOL_TLS_CLIENT)
-    try:
-        # Ensure certificate verification is enabled
-        ctx.verify_mode = ssl.CERT_REQUIRED
-    except Exception:
-        pass
-    try:
-        if cafile:
-            ctx.load_verify_locations(cafile=cafile, capath=None)
-    except Exception:
-        pass
-    # Enable partial-chain verification so intermediates in trust store can
-    # terminate chains
-    try:
-        store = ctx._ctx.get_cert_store()
-        from OpenSSL import crypto as _crypto
-
-        if hasattr(_crypto, "X509StoreFlags") and hasattr(
-            _crypto.X509StoreFlags, "PARTIAL_CHAIN"
-        ):
-            store.set_flags(_crypto.X509StoreFlags.PARTIAL_CHAIN)
-    except Exception:
-        pass
-    return ctx
-
-
 def inject_into_urllib3() -> None:
     """Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP."""
     log.debug("Injecting ssl_wrap_socket_with_ocsp")
@@ -155,51 +174,16 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
         kwargs["ca_certs"] = certifi.where()
 
     # Ensure PyOpenSSL context with partial-chain is used if no suitable context provided
-    try:
-        provided_ctx = kwargs.get("ssl_context", None)
-        if not isinstance(provided_ctx, PyOpenSSLContext):
-            cafile_for_ctx = kwargs.get("ca_certs")
-            if not cafile_for_ctx:
-                import os as _os
-
-                cafile_for_ctx = _os.environ.get(
-                    "REQUESTS_CA_BUNDLE"
-                ) or _os.environ.get("SSL_CERT_FILE")
-            kwargs["ssl_context"] = _build_pyopenssl_context_with_ca_and_partial_chain(
-                cafile_for_ctx
-            )
-    except Exception:
-        pass
+    provided_ctx = kwargs.get("ssl_context", None)
+    if not isinstance(provided_ctx, PyOpenSSLContext):
+        cafile_for_ctx = _resolve_cafile(kwargs)
+        kwargs["ssl_context"] = _build_context_with_partial_chain(cafile_for_ctx)
 
     # If a PyOpenSSLContext is provided, ensure it trusts the provided CA and
     # partial-chain is enabled
-    try:
-        provided_ctx = kwargs.get("ssl_context", None)
-        if isinstance(provided_ctx, PyOpenSSLContext):
-            caf = kwargs.get("ca_certs")
-            if not caf:
-                import os as _os
-
-                caf = _os.environ.get("REQUESTS_CA_BUNDLE") or _os.environ.get(
-                    "SSL_CERT_FILE"
-                )
-            try:
-                if caf:
-                    provided_ctx.load_verify_locations(cafile=caf, capath=None)
-            except Exception:
-                pass
-            try:
-                store = provided_ctx._ctx.get_cert_store()
-                from OpenSSL import crypto as _crypto
-
-                if hasattr(_crypto, "X509StoreFlags") and hasattr(
-                    _crypto.X509StoreFlags, "PARTIAL_CHAIN"
-                ):
-                    store.set_flags(_crypto.X509StoreFlags.PARTIAL_CHAIN)
-            except Exception:
-                pass
-    except Exception:
-        pass
+    provided_ctx = kwargs.get("ssl_context", None)
+    if isinstance(provided_ctx, PyOpenSSLContext):
+        _ensure_partial_chain_on_context(provided_ctx, _resolve_cafile(kwargs))
 
     ret = ssl_.ssl_wrap_socket(*args, **kwargs)
 
