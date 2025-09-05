@@ -1362,7 +1362,6 @@ class SnowflakeConnection:
                     not in (
                         AttestationProvider.GCP,
                         AttestationProvider.AWS,
-                        AttestationProvider.AZURE,
                     )
                 ):
                     Error.errorhandler_wrapper(
@@ -1370,7 +1369,7 @@ class SnowflakeConnection:
                         None,
                         ProgrammingError,
                         {
-                            "msg": "workload_identity_impersonation_path is currently only supported for GCP, AWS, and Azure.",
+                            "msg": "workload_identity_impersonation_path is currently only supported for GCP and AWS.",
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )

@@ -146,7 +146,10 @@ def get_aws_sts_hostname(region: str, partition: str) -> str:
 
 
 def get_aws_session(impersonation_path: list[str] | None = None):
-    """Creates a boto3 session with the appropriate credentials. If impersonation_path is provided, uses role at end of the path."""
+    """Creates a boto3 session with the appropriate credentials.
+
+    If impersonation_path is provided, this uses the role at the end of the path. Otherwise, this uses the role attached to the current workload.
+    """
     session = boto3.session.Session()
 
     impersonation_path = impersonation_path or []
@@ -155,7 +158,7 @@ def get_aws_session(impersonation_path: list[str] | None = None):
             RoleArn=arn, RoleSessionName="identity-federation-session"
         )
         creds = response["Credentials"]
-        session = boto3.Session(
+        session = boto3.session.Session(
             aws_access_key_id=creds["AccessKeyId"],
             aws_secret_access_key=creds["SecretAccessKey"],
             aws_session_token=creds["SessionToken"],
