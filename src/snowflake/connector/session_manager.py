@@ -7,7 +7,7 @@ import functools
 import itertools
 import logging
 from dataclasses import dataclass, field, replace
-from typing import Any, Callable, Generator, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Generator, Mapping
 
 from .compat import urlparse
 from .proxy import get_proxy_url
@@ -19,6 +19,9 @@ from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
 from .vendored.urllib3 import PoolManager, Retry
 from .vendored.urllib3.poolmanager import ProxyManager
 from .vendored.urllib3.util.url import parse_url
+
+if TYPE_CHECKING:
+    from .vendored.urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
 logger = logging.getLogger(__name__)
 REQUESTS_RETRY = 1  # requests library builtin retry
@@ -56,7 +59,9 @@ def _propagate_session_manager_to_ocsp(generator_func):
 class ProxySupportAdapter(HTTPAdapter):
     """This Adapter creates proper headers for Proxy CONNECT messages."""
 
-    def get_connection_with_tls_context(self, request, verify, proxies=None, cert=None):
+    def get_connection_with_tls_context(
+        self, request, verify, proxies=None, cert=None
+    ) -> HTTPConnectionPool | HTTPSConnectionPool:
         proxy = select_proxy(request.url, proxies)
         try:
             host_params, pool_kwargs = self.build_connection_pool_key_attributes(
