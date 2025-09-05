@@ -40,9 +40,8 @@ def gen_dummy_id_token(
     )
 
 
-def gen_dummy_access_token(sub="test-subject") -> str:
+def gen_dummy_access_token(sub="test-subject", key="secret") -> str:
     """Generates a dummy access token using the given subject."""
-    key = "secret"
     logger.debug(f"Generating dummy access token for subject {sub}")
     return (sub + key).encode("utf-8").hex()
 
@@ -368,6 +367,12 @@ class FakeAwsEnvironment:
     def __init__(self):
         # Defaults used for generating a token. Can be overriden in individual tests.
         self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-34afe100cad287fab"
+        # Path of roles that can be assumed. Empty if no impersonation is allowed.
+        # Can be overriden in individual tests.
+        self.assumption_path = []
+        self.num_assumptions = 0
+        self.last_assume_role_response = None
+
         self.caller_identity = {"Arn": self.arn}
         self.region = "us-east-1"
         self.credentials = Credentials(access_key="ak", secret_key="sk")
@@ -375,6 +380,42 @@ class FakeAwsEnvironment:
             b'{"region": "us-east-1", "instanceId": "i-1234567890abcdef0"}'
         )
         self.metadata_token = "test-token"
+
+    def assume_role(self, RoleArn, RoleSessionName):
+        if (
+            self.assumption_path
+            and RoleArn == self.assumption_path[self.num_assumptions]
+        ):
+            if self.num_assumptions != 0:
+                last_arn = self.assumption_path[self.num_assumptions - 1]
+                last_output = [
+                    self.last_assume_role_response["Credentials"]["AccessKeyId"],
+                    self.last_assume_role_response["Credentials"]["SecretAccessKey"],
+                    self.last_assume_role_response["Credentials"]["SessionToken"],
+                ]
+                expected_input = [
+                    gen_dummy_access_token(last_arn, "access_key"),
+                    gen_dummy_access_token(last_arn, "secret_key"),
+                    gen_dummy_access_token(last_arn, "session_token"),
+                ]
+                if expected_input != last_output:
+                    return {}
+
+            arn = self.assumption_path[self.num_assumptions]
+            logger.info(arn)
+            self.last_assume_role_response = {
+                "Credentials": {
+                    "AccessKeyId": gen_dummy_access_token(arn, "access_key"),
+                    "SecretAccessKey": gen_dummy_access_token(arn, "secret_key"),
+                    "SessionToken": gen_dummy_access_token(arn, "session_token"),
+                    "Expiration": int(time()) + 60 * 60,
+                },
+                "AssumedRoleUser": {"AssumedRoleId": hash(arn), "Arn": arn},
+                "ResponseMetadata": {},
+            }
+            self.num_assumptions += 1
+            return self.last_assume_role_response
+        return {}
 
     def get_region(self):
         return self.region
@@ -399,6 +440,7 @@ class FakeAwsEnvironment:
     def boto3_client(self, *args, **kwargs):
         mock_client = mock.Mock()
         mock_client.get_caller_identity.return_value = self.caller_identity
+        mock_client.assume_role = self.assume_role
         return mock_client
 
     def __enter__(self):
@@ -438,6 +480,9 @@ class FakeAwsEnvironment:
                 "snowflake.connector.platform_detection.boto3.client",
                 side_effect=self.boto3_client,
             )
+        )
+        self.patchers.append(
+            mock.patch("boto3.session.Session.client", side_effect=self.boto3_client)
         )
         for patcher in self.patchers:
             patcher.__enter__()

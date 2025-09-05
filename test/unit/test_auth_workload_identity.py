@@ -274,6 +274,28 @@ def test_get_aws_sts_hostname_invalid_inputs(region, partition):
     assert "Invalid AWS partition" in str(excinfo.value)
 
 
+def test_aws_calls_correct_apis_and_populates_auth_data_for_final_role(
+    fake_aws_environment: FakeAwsEnvironment,
+):
+    impersonation_path = [
+        "arn:aws:iam::123456789:role/role2",
+        "arn:aws:iam::123456789:role/role3",
+    ]
+    fake_aws_environment.assumption_path = impersonation_path
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AWS, impersonation_path=impersonation_path
+    )
+    auth_class.prepare(conn=None)
+
+    assert (
+        auth_class.assertion_content
+        == '{"_provider":"AWS","partition":"aws","region":"us-east-1"}'
+    )
+    api_data = extract_api_data(auth_class)
+    assert api_data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
+    assert api_data["PROVIDER"] == "AWS"
+
+
 # -- GCP Tests --
 
 
