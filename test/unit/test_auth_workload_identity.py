@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from base64 import b64decode
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
@@ -17,7 +16,13 @@ from snowflake.connector.vendored.requests.exceptions import (
 )
 from snowflake.connector.wif_util import AttestationProvider, get_aws_sts_hostname
 
-from ..csp_helpers import FakeAwsEnvironment, FakeGceMetadataService, gen_dummy_id_token
+from ..csp_helpers import (
+    FakeAwsEnvironment,
+    FakeGceMetadataService,
+    build_response,
+    gen_dummy_access_token,
+    gen_dummy_id_token,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +294,7 @@ def test_explicit_gcp_metadata_server_error_bubbles_up(exception):
         with pytest.raises(ProgrammingError) as excinfo:
             auth_class.prepare(conn=None)
 
-    assert "Error fetching GCP metadata:" in str(excinfo.value)
+    assert "Error fetching GCP identity token:" in str(excinfo.value)
     assert "Ensure the application is running on GCP." in str(excinfo.value)
 
 
@@ -315,6 +320,44 @@ def test_explicit_gcp_generates_unique_assertion_content(
     auth_class.prepare(conn=None)
 
     assert auth_class.assertion_content == '{"_provider":"GCP","sub":"123456"}'
+
+
+@mock.patch("snowflake.connector.session_manager.SessionManager.post")
+def test_gcp_calls_correct_apis_and_populates_auth_data_for_final_sa(
+    mock_post_request, fake_gce_metadata_service: FakeGceMetadataService
+):
+    fake_gce_metadata_service.sub = "sa1"
+    impersonation_path = ["sa2", "sa3"]
+    sa1_access_token = gen_dummy_access_token("sa1")
+    sa3_id_token = gen_dummy_id_token("sa3")
+
+    mock_post_request.return_value = build_response(
+        json.dumps({"token": sa3_id_token}).encode("utf-8")
+    )
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.GCP, impersonation_path=impersonation_path
+    )
+    auth_class.prepare(conn=None)
+
+    mock_post_request.assert_called_once_with(
+        url="https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/sa3:generateIdToken",
+        headers={
+            "Authorization": f"Bearer {sa1_access_token}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "delegates": ["projects/-/serviceAccounts/sa2"],
+            "audience": "snowflakecomputing.com",
+        },
+    )
+
+    assert auth_class.assertion_content == '{"_provider":"GCP","sub":"sa3"}'
+    assert extract_api_data(auth_class) == {
+        "AUTHENTICATOR": "WORKLOAD_IDENTITY",
+        "PROVIDER": "GCP",
+        "TOKEN": sa3_id_token,
+    }
 
 
 # -- Azure Tests --
@@ -414,11 +457,11 @@ def test_explicit_azure_omits_client_id_if_not_set(fake_azure_metadata_service):
     assert fake_azure_metadata_service.requested_client_id is None
 
 
-def test_explicit_azure_uses_explicit_client_id_if_set(fake_azure_metadata_service):
-    with mock.patch.dict(
-        os.environ, {"MANAGED_IDENTITY_CLIENT_ID": "custom-client-id"}
-    ):
-        auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-        auth_class.prepare(conn=None)
+def test_explicit_azure_uses_explicit_client_id_if_set(
+    fake_azure_metadata_service, monkeypatch
+):
+    monkeypatch.setenv("MANAGED_IDENTITY_CLIENT_ID", "custom-client-id")
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+    auth_class.prepare(conn=None)
 
     assert fake_azure_metadata_service.requested_client_id == "custom-client-id"

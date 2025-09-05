@@ -1236,11 +1236,11 @@ def test_disable_query_context_cache(conn_cnx) -> None:
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.parametrize(
-    "mode",
-    ("file", "env"),
-)
-def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
+@pytest.mark.parametrize("mode", ("file", "env"))
+@pytest.mark.parametrize("connection_name", ["default", "custom_connection_for_test"])
+def test_connection_name_loading(
+    monkeypatch, db_parameters, tmp_path, mode, connection_name
+):
     import tomlkit
 
     doc = tomlkit.document()
@@ -1250,16 +1250,16 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
         # If anything unexpected fails here, don't want to expose password
         for k, v in db_parameters.items():
             default_con[k] = v
-        doc["default"] = default_con
+        doc[connection_name] = default_con
         with monkeypatch.context() as m:
             if mode == "env":
-                m.setenv("SF_CONNECTIONS", tomlkit.dumps(doc))
+                m.setenv("SNOWFLAKE_CONNECTIONS", tomlkit.dumps(doc))
             else:
                 tmp_connections_file = tmp_path / "connections.toml"
                 tmp_connections_file.write_text(tomlkit.dumps(doc))
                 tmp_connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
             with snowflake.connector.connect(
-                connection_name="default",
+                connection_name=connection_name,
                 connections_file_path=tmp_connections_file,
             ) as conn:
                 with conn.cursor() as cur:
@@ -1274,7 +1274,8 @@ def test_connection_name_loading(monkeypatch, db_parameters, tmp_path, mode):
 
 
 @pytest.mark.skipolddriver
-def test_default_connection_name_loading(monkeypatch, db_parameters):
+@pytest.mark.parametrize("connection_name", ["default", "custom_connection_for_test"])
+def test_default_connection_name_loading(monkeypatch, db_parameters, connection_name):
     import tomlkit
 
     doc = tomlkit.document()
@@ -1283,10 +1284,10 @@ def test_default_connection_name_loading(monkeypatch, db_parameters):
         # If anything unexpected fails here, don't want to expose password
         for k, v in db_parameters.items():
             default_con[k] = v
-        doc["default"] = default_con
+        doc[connection_name] = default_con
         with monkeypatch.context() as m:
             m.setenv("SNOWFLAKE_CONNECTIONS", tomlkit.dumps(doc))
-            m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", "default")
+            m.setenv("SNOWFLAKE_DEFAULT_CONNECTION_NAME", connection_name)
             with snowflake.connector.connect() as conn:
                 with conn.cursor() as cur:
                     assert cur.execute("select 1;").fetchall() == [

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import stat
 import sys
 from pathlib import Path
@@ -201,11 +200,11 @@ def test_is_still_running():
 
 
 @pytest.mark.skipolddriver
-def test_partner_env_var(mock_post_requests):
+def test_partner_env_var(mock_post_requests, monkeypatch):
     PARTNER_NAME = "Amanda"
 
-    with patch.dict(os.environ, {ENV_VAR_PARTNER: PARTNER_NAME}):
-        assert fake_connector().application == PARTNER_NAME
+    monkeypatch.setenv(ENV_VAR_PARTNER, PARTNER_NAME)
+    assert fake_connector().application == PARTNER_NAME
 
     assert (
         mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == PARTNER_NAME
@@ -632,6 +631,7 @@ def test_otel_error_message(caplog, mock_post_requests):
             "workload_identity_entra_resource",
             "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
         ),
+        ("workload_identity_impersonation_path", ["subject-b", "subject-c"]),
     ],
 )
 def test_cannot_set_dependent_params_without_wlid_authenticator(
@@ -676,6 +676,71 @@ def test_workload_identity_provider_is_required_for_wif_authenticator(
             "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY"
             in str(excinfo.value)
         )
+
+
+@pytest.mark.parametrize(
+    "provider_param",
+    [
+        # Strongly-typed values.
+        AttestationProvider.AWS,
+        AttestationProvider.AZURE,
+        AttestationProvider.OIDC,
+        # String values.
+        "AWS",
+        "AZURE",
+        "OIDC",
+    ],
+)
+def test_workload_identity_impersonation_path_unsupported_for_non_gcp_providers(
+    monkeypatch, provider_param
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        with pytest.raises(ProgrammingError) as excinfo:
+            snowflake.connector.connect(
+                account="account",
+                authenticator="WORKLOAD_IDENTITY",
+                workload_identity_provider=provider_param,
+                workload_identity_impersonation_path=[
+                    "sa2@project.iam.gserviceaccount.com"
+                ],
+            )
+        assert (
+            "workload_identity_impersonation_path is currently only supported for GCP."
+            in str(excinfo.value)
+        )
+
+
+@pytest.mark.parametrize(
+    "provider_param",
+    [
+        AttestationProvider.GCP,
+        "GCP",
+    ],
+)
+def test_workload_identity_impersonation_path_supported_for_gcp_provider(
+    monkeypatch, provider_param
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        conn = snowflake.connector.connect(
+            account="account",
+            authenticator="WORKLOAD_IDENTITY",
+            workload_identity_provider=provider_param,
+            workload_identity_impersonation_path=[
+                "sa2@project.iam.gserviceaccount.com"
+            ],
+        )
+        assert conn.auth_class.provider == AttestationProvider.GCP
+        assert conn.auth_class.impersonation_path == [
+            "sa2@project.iam.gserviceaccount.com"
+        ]
 
 
 @pytest.mark.parametrize(

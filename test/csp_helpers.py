@@ -40,6 +40,13 @@ def gen_dummy_id_token(
     )
 
 
+def gen_dummy_access_token(sub="test-subject") -> str:
+    """Generates a dummy access token using the given subject."""
+    key = "secret"
+    logger.debug(f"Generating dummy access token for subject {sub}")
+    return (sub + key).encode("utf-8").hex()
+
+
 def build_response(content: bytes, status_code: int = 200, headers=None) -> Response:
     """Builds a requests.Response object with the given status code and content."""
     response = Response()
@@ -285,6 +292,19 @@ class FakeGceMetadataService(FakeMetadataService):
             audience = query_string["audience"][0]
             self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=audience)
             return build_response(self.token.encode("utf-8"))
+        elif (
+            method == "GET"
+            and parsed_url.path
+            == "/computeMetadata/v1/instance/service-accounts/default/token"
+            and headers.get("Metadata-Flavor") == "Google"
+        ):
+            self.token = gen_dummy_access_token(sub=self.sub)
+            ret = {
+                "access_token": self.token,
+                "expires_in": 3599,
+                "token_type": "Bearer",
+            }
+            return build_response(json.dumps(ret).encode("utf-8"))
         else:
             # Reject malformed requests.
             raise HTTPError()
