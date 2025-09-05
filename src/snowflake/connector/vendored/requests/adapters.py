@@ -56,7 +56,7 @@ from .utils import (
 )
 
 try:
-    from urllib3.contrib.socks import SOCKSProxyManager
+    from ..urllib3.contrib.socks import SOCKSProxyManager
 except ImportError:
 
     def SOCKSProxyManager(*args, **kwargs):

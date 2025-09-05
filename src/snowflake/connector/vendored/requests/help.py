@@ -21,7 +21,7 @@ except ImportError:
     chardet = None
 
 try:
-    from urllib3.contrib import pyopenssl
+    from ..urllib3.contrib import pyopenssl
 except ImportError:
     pyopenssl = None
     OpenSSL = None
