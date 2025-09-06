@@ -79,7 +79,7 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         ).value
         body["data"]["TOKEN"] = self.attestation.credential
         body["data"].setdefault("CLIENT_ENVIRONMENT", {})[
-            "IMPERSONATION_PATH_LENGTH"
+            "WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH"
         ] = len(self.impersonation_path or [])
 
     def prepare(
