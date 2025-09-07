@@ -174,7 +174,7 @@ async def test_query_large_result_set(conn_cnx, db_parameters, ingest_data, capl
                 "for log type {}".format(field.value)
             )
 
-        # disable the check for now - SNOW-2311540
+        # TODO: disable the check for now - SNOW-2311540
         # aws_request_present = False
         expected_token_prefix = "X-Amz-Signature="
         for line in caplog.text.splitlines():

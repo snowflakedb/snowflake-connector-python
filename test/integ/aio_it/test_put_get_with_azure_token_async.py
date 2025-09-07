@@ -90,7 +90,7 @@ async def test_put_get_with_azure(tmpdir, aio_connection, from_path, caplog):
         await csr.execute(f"drop table if exists {table_name}")
         await aio_connection.close()
 
-    # disable the check for now - SNOW-2311540
+    # TODO: disable the check for now - SNOW-2311540
     # azure_request_present = False
     expected_token_prefix = "sig="
     for line in caplog.text.splitlines():
@@ -103,7 +103,7 @@ async def test_put_get_with_azure(tmpdir, aio_connection, from_path, caplog):
                 in line
             ), "connectionpool logger is leaking sensitive information"
 
-    # disable the check for now - SNOW-2311540
+    # TODO: disable the check for now - SNOW-2311540
     # assert (
     #     azure_request_present
     # ), "Azure URL was not found in logs, so it can't be assumed that no leaks happened in it"
