@@ -88,7 +88,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                 ext.sources += [
                     os.path.join(
                         NANOARROW_ARROW_ITERATOR_SRC_DIR,
-                        *((file,) if isinstance(file, str) else file)
+                        *((file,) if isinstance(file, str) else file),
                     )
                     for file in {
                         "ArrayConverter.cpp",
@@ -173,6 +173,34 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                 self.compiler._compile = original__compile
 
     cmd_class = {"build_ext": MyBuildExt}
+
+from setuptools.command.egg_info import egg_info
+
+
+class SmartEggInfoCommand(egg_info):
+    """Custom egg_info command that auto-adds AWS extra unless slim is specified."""
+
+    def finalize_options(self):
+        super().finalize_options()
+
+        # Check if slim is being requested via environment variable
+        # (This is the most reliable way to detect slim installation intent)
+        is_slim_install = os.environ.get("SNOWFLAKE_SLIM_INSTALL", "").lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+
+        # If not slim, automatically merge AWS dependencies into install_requires
+        if not is_slim_install and hasattr(self.distribution, "extras_require"):
+            aws_extras = self.distribution.extras_require.get("aws", [])
+            if aws_extras:
+                # Add AWS dependencies to install_requires
+                self.distribution.install_requires += aws_extras
+
+
+# Update command classes
+cmd_class["egg_info"] = SmartEggInfoCommand
 
 setup(
     version=version,
