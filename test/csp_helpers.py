@@ -370,8 +370,7 @@ class FakeAwsEnvironment:
         # Path of roles that can be assumed. Empty if no impersonation is allowed.
         # Can be overriden in individual tests.
         self.assumption_path = []
-        self.num_assumptions = 0
-        self.last_assume_role_response = None
+        self.assume_role_call_count = 0
 
         self.caller_identity = {"Arn": self.arn}
         self.region = "us-east-1"
@@ -381,29 +380,14 @@ class FakeAwsEnvironment:
         )
         self.metadata_token = "test-token"
 
-    def assume_role(self, RoleArn, RoleSessionName):
+    def assume_role(self, **kwargs):
         if (
             self.assumption_path
-            and RoleArn == self.assumption_path[self.num_assumptions]
+            and kwargs["RoleArn"] == self.assumption_path[self.assume_role_call_count]
         ):
-            if self.num_assumptions != 0:
-                last_arn = self.assumption_path[self.num_assumptions - 1]
-                last_output = [
-                    self.last_assume_role_response["Credentials"]["AccessKeyId"],
-                    self.last_assume_role_response["Credentials"]["SecretAccessKey"],
-                    self.last_assume_role_response["Credentials"]["SessionToken"],
-                ]
-                expected_input = [
-                    gen_dummy_access_token(last_arn, "access_key"),
-                    gen_dummy_access_token(last_arn, "secret_key"),
-                    gen_dummy_access_token(last_arn, "session_token"),
-                ]
-                if expected_input != last_output:
-                    return {}
-
-            arn = self.assumption_path[self.num_assumptions]
-            logger.info(arn)
-            self.last_assume_role_response = {
+            arn = self.assumption_path[self.assume_role_call_count]
+            self.assume_role_call_count += 1
+            return {
                 "Credentials": {
                     "AccessKeyId": gen_dummy_access_token(arn, "access_key"),
                     "SecretAccessKey": gen_dummy_access_token(arn, "secret_key"),
@@ -413,8 +397,6 @@ class FakeAwsEnvironment:
                 "AssumedRoleUser": {"AssumedRoleId": hash(arn), "Arn": arn},
                 "ResponseMetadata": {},
             }
-            self.num_assumptions += 1
-            return self.last_assume_role_response
         return {}
 
     def get_region(self):

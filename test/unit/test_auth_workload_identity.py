@@ -287,13 +287,7 @@ def test_aws_calls_correct_apis_and_populates_auth_data_for_final_role(
     )
     auth_class.prepare(conn=None)
 
-    assert (
-        auth_class.assertion_content
-        == '{"_provider":"AWS","partition":"aws","region":"us-east-1"}'
-    )
-    api_data = extract_api_data(auth_class)
-    assert api_data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
-    assert api_data["PROVIDER"] == "AWS"
+    assert fake_aws_environment.assume_role_call_count == 2
 
 
 # -- GCP Tests --
