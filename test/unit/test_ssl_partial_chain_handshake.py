@@ -150,7 +150,7 @@ def test_partial_chain_handshake_succeeds_with_intermediate_as_anchor():
     host, port = addr_holder[0]
 
     # Build PyOpenSSL context with only intermediate as trust anchor
-    ctx = ssw._build_pyopenssl_context_with_ca_and_partial_chain(
+    ctx = ssw._build_context_with_partial_chain(
         None
     )  # pylint: disable=protected-access
     # Load intermediate into store via PEM file path by reusing helper
