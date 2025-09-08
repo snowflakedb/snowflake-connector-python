@@ -33,6 +33,7 @@ class AuthByOauthCode(AuthByPluginAsync, AuthByOauthCodeSync):
         token_cache: TokenCache | None = None,
         refresh_token_enabled: bool = False,
         external_browser_timeout: int | None = None,
+        enable_single_use_refresh_tokens: bool = False,
         **kwargs,
     ) -> None:
         """Initializes an instance with OAuth authorization code parameters."""
@@ -52,6 +53,7 @@ class AuthByOauthCode(AuthByPluginAsync, AuthByOauthCodeSync):
             token_cache=token_cache,
             refresh_token_enabled=refresh_token_enabled,
             external_browser_timeout=external_browser_timeout,
+            enable_single_use_refresh_tokens=enable_single_use_refresh_tokens,
             **kwargs,
         )
 
