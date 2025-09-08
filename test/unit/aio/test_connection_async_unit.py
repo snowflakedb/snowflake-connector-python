@@ -621,7 +621,7 @@ async def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requ
             account="account", authenticator="WORKLOAD_IDENTITY"
         )
     assert (
-        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable to use the 'WORKLOAD_IDENTITY' authenticator"
+        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable true to use the 'WORKLOAD_IDENTITY' authenticator"
         in str(excinfo.value)
     )
 
@@ -635,7 +635,7 @@ async def test_connection_params_are_plumbed_into_authbyworkloadidentity(monkeyp
             "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
             mock_authenticate,
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "")  # Can be set to anything.
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = await snowflake.connector.aio.connect(
             account="my_account_1",
@@ -684,7 +684,7 @@ async def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
             "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
             mock_authenticate,
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "")
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = await snowflake.connector.aio.connect(
             connections_file_path=connections_file
