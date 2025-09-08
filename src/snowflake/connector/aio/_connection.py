@@ -378,16 +378,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
-                if ENV_VAR_EXPERIMENTAL_AUTHENTICATION not in os.environ:
-                    Error.errorhandler_wrapper(
-                        self,
-                        None,
-                        ProgrammingError,
-                        {
-                            "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable to use the '{WORKLOAD_IDENTITY_AUTHENTICATOR}' authenticator.",
-                            "errno": ER_INVALID_WIF_SETTINGS,
-                        },
-                    )
+                self._check_experimental_authentication_flag()
                 # Standardize the provider enum.
                 if self._workload_identity_provider and isinstance(
                     self._workload_identity_provider, str
