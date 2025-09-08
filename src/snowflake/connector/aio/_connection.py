@@ -336,6 +336,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     ),
                     refresh_token_enabled=features.refresh_token_enabled,
                     external_browser_timeout=self._external_browser_timeout,
+                    enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
                 self._check_experimental_authentication_flag()

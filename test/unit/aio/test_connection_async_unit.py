@@ -695,3 +695,28 @@ async def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
             == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
         )
         assert conn.auth_class.token == "my_token"
+
+
+@pytest.mark.parametrize("rtr_enabled", [True, False])
+async def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode_async(
+    monkeypatch, rtr_enabled: bool
+):
+    async def mock_authenticate(*_):
+        pass
+
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
+            mock_authenticate,
+        )
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
+
+        conn = await snowflake.connector.aio.connect(
+            account="my_account_1",
+            user="user",
+            oauth_client_id="client_id",
+            oauth_client_secret="client_secret",
+            authenticator="OAUTH_AUTHORIZATION_CODE",
+            oauth_enable_single_use_refresh_tokens=rtr_enabled,
+        )
+        assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled
