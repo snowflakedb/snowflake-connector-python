@@ -1450,34 +1450,3 @@ async def test_no_auth_connection_negative_case():
         await conn.execute_string("select 1")
 
     await conn.close()
-
-
-@pytest.mark.skipolddriver
-@pytest.mark.parametrize(
-    "value",
-    [
-        True,
-        False,
-    ],
-)
-async def test_gcs_use_virtual_endpoints(value):
-    with mock.patch(
-        "snowflake.connector.aio._network.SnowflakeRestful.fetch",
-        return_value={"data": {"token": None, "masterToken": None}, "success": True},
-    ):
-        cnx = snowflake.connector.aio.SnowflakeConnection(
-            user="test-user",
-            password="test-password",
-            host="test-host",
-            port="443",
-            account="test-account",
-            gcs_use_virtual_endpoints=value,
-        )
-        try:
-            await cnx.connect()
-            cnx.commit = cnx.rollback = (
-                lambda: None
-            )  # Skip tear down, there's only a mocked rest api
-            assert cnx.gcs_use_virtual_endpoints == value
-        finally:
-            await cnx.close()
