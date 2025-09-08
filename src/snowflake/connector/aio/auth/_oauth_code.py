@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# this code mostly falls back to sync implementation
+# TODO: SNOW-2324426
 class AuthByOauthCode(AuthByPluginAsync, AuthByOauthCodeSync):
     """Async version of OAuth authorization code authenticator."""
 
