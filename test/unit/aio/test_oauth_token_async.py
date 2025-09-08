@@ -20,6 +20,7 @@ import snowflake.connector.errors
 from snowflake.connector.token_cache import TokenCache, TokenKey, TokenType
 
 from ...wiremock.wiremock_utils import WiremockClient
+from ..test_oauth_token import omit_oauth_urls_check  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,7 @@ async def test_oauth_code_successful_flow_async(
     wiremock_generic_mappings_dir,
     webbrowser_mock_sync,
     monkeypatch,
+    omit_oauth_urls_check,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
@@ -195,6 +197,7 @@ async def test_oauth_code_invalid_state_async(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock_sync,
     monkeypatch,
+    omit_oauth_urls_check,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
@@ -269,6 +272,7 @@ async def test_oauth_code_token_request_error_async(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock_sync,
     monkeypatch,
+    omit_oauth_urls_check,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
@@ -308,6 +312,7 @@ async def test_oauth_code_browser_timeout_async(
     wiremock_oauth_authorization_code_dir,
     webbrowser_mock_sync,
     monkeypatch,
+    omit_oauth_urls_check,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
@@ -350,6 +355,7 @@ async def test_oauth_code_custom_urls_async(
     wiremock_generic_mappings_dir,
     webbrowser_mock_sync,
     monkeypatch,
+    omit_oauth_urls_check,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
@@ -393,6 +399,7 @@ async def test_oauth_code_successful_refresh_token_flow_async(
     wiremock_generic_mappings_dir,
     monkeypatch,
     temp_cache_async,
+    omit_oauth_urls_check,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
@@ -453,6 +460,7 @@ async def test_oauth_code_expired_refresh_token_flow_async(
     webbrowser_mock_sync,
     monkeypatch,
     temp_cache_async,
+    omit_oauth_urls_check,  # noqa: F811
 ) -> None:
     monkeypatch.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
@@ -555,7 +563,6 @@ async def test_client_creds_successful_flow_async(
             protocol="http",
             role="ANALYST",
             oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/token-request",
-            oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/oauth/authorize",
             host=wiremock_client.wiremock_host,
             port=wiremock_client.wiremock_http_port,
         )
