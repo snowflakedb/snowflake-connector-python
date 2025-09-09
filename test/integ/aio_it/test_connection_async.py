@@ -34,7 +34,7 @@ from snowflake.connector.errorcode import (
     ER_NO_ACCOUNT_NAME,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from snowflake.connector.errors import Error, InterfaceError
+from snowflake.connector.errors import Error
 from snowflake.connector.network import APPLICATION_SNOWSQL, ReauthenticationRequest
 from snowflake.connector.sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from snowflake.connector.telemetry import TelemetryField
@@ -51,6 +51,11 @@ try:
     from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
 except ImportError:  # Keep olddrivertest from breaking
     ER_FAILED_PROCESSING_QMARK = 252012
+
+try:
+    from snowflake.connector.errors import HttpError
+except ImportError:
+    pass
 
 
 async def test_basic(conn_testaccount):
@@ -395,9 +400,9 @@ async def test_drop_create_user(conn_cnx, db_parameters):
 
 @pytest.mark.timeout(15)
 @pytest.mark.skipolddriver
-async def test_invalid_account_timeout():
-    with pytest.raises(InterfaceError):
-        async with snowflake.connector.aio.SnowflakeConnection(
+async def test_invalid_account_timeout(conn_cnx):
+    with pytest.raises(HttpError):
+        async with conn_cnx(
             account="bogus", user="test", password="test", login_timeout=5
         ):
             pass
@@ -433,7 +438,7 @@ async def test_eu_connection(tmpdir):
     import os
 
     os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_ENABLED"] = "true"
-    with pytest.raises(InterfaceError):
+    with pytest.raises(HttpError):
         # must reach Snowflake
         async with snowflake.connector.aio.SnowflakeConnection(
             account="testaccount1234",
@@ -458,7 +463,7 @@ async def test_us_west_connection(tmpdir):
     Notes:
         Region is deprecated.
     """
-    with pytest.raises(InterfaceError):
+    with pytest.raises(HttpError):
         # must reach Snowflake
         async with snowflake.connector.aio.SnowflakeConnection(
             account="testaccount1234",
