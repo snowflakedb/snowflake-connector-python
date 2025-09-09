@@ -39,6 +39,7 @@ from ..errors import (
     OperationalError,
     ProgrammingError,
     RefreshTokenError,
+    RevocationCheckError,
 )
 from ..network import (
     ACCEPT_TYPE_APPLICATION_SNOWFLAKE,
@@ -644,6 +645,9 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 raise RetryRequest(err_msg)
             self._handle_unknown_error(method, full_url, headers, data, conn)
             return {}
+        except RevocationCheckError as rce:
+            rce.exception_telemetry(rce.msg, None, self._connection)
+            raise rce
         except RetryRequest as e:
             cause = e.args[0]
             if no_retry:
