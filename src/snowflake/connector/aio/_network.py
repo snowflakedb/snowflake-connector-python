@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 import OpenSSL.SSL
 from urllib3.util.url import parse_url
 
-from ..compat import FORBIDDEN, OK, UNAUTHORIZED, urlencode, urlparse
+from ..compat import FORBIDDEN, OK, UNAUTHORIZED, urlencode, urlparse, urlsplit
 from ..constants import (
     _CONNECTIVITY_ERR_MSG,
     HTTP_HEADER_ACCEPT,
@@ -29,13 +29,14 @@ from ..errorcode import (
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_FAILED_TO_RENEW_SESSION,
     ER_FAILED_TO_REQUEST,
+    ER_HTTP_GENERAL_ERROR,
     ER_RETRYABLE_CODE,
 )
 from ..errors import (
     DatabaseError,
     Error,
     ForbiddenError,
-    InterfaceError,
+    HttpError,
     OperationalError,
     ProgrammingError,
     RefreshTokenError,
@@ -122,10 +123,10 @@ def raise_failed_request_error(
     Error.errorhandler_wrapper(
         connection,
         None,
-        InterfaceError,
+        HttpError,
         {
-            "msg": f"{response.status} {response.reason}: {method} {url}",
-            "errno": ER_FAILED_TO_REQUEST,
+            "msg": f"{response.status} {response.reason}: {method} {urlsplit(url).netloc}{urlsplit(url).path}",
+            "errno": ER_HTTP_GENERAL_ERROR + response.status,
             "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
         },
     )
@@ -686,6 +687,15 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             retry_ctx.increment()
 
             reason = getattr(cause, "errno", 0)
+            if reason is None:
+                reason = 0
+            else:
+                reason = (
+                    reason - ER_HTTP_GENERAL_ERROR
+                    if reason >= ER_HTTP_GENERAL_ERROR
+                    else reason
+                )
+
             retry_ctx.retry_reason = reason
             # notes: in sync implementation we check ECONNRESET in error message and close low level urllib session
             #  we do not have the logic here because aiohttp handles low level connection close-reopen for us
