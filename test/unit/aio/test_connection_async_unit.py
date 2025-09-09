@@ -684,7 +684,7 @@ async def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
             "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
             mock_authenticate,
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "")
+        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = await snowflake.connector.aio.connect(
             connections_file_path=connections_file
