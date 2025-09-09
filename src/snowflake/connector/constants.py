@@ -183,6 +183,16 @@ FIELD_TYPES: tuple[FieldType, ...] = (
     FieldType(
         name="FILE", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()
     ),
+    FieldType(
+        name="INTERVAL_YEAR_MONTH",
+        dbapi_type=[DBAPI_TYPE_NUMBER],
+        pa_type=lambda _: pa.int64(),
+    ),
+    FieldType(
+        name="INTERVAL_DAY_TIME",
+        dbapi_type=[DBAPI_TYPE_NUMBER],
+        pa_type=lambda _: pa.int64(),
+    ),
 )
 
 FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
@@ -428,7 +438,6 @@ DAY_IN_SECONDS = 60 * 60 * 24
 # TODO: all env variables definitions should be here
 ENV_VAR_PARTNER = "SF_PARTNER"
 ENV_VAR_TEST_MODE = "SNOWFLAKE_TEST_MODE"
-ENV_VAR_EXPERIMENTAL_AUTHENTICATION = "SF_ENABLE_EXPERIMENTAL_AUTHENTICATION"  # Needed to enable new strong auth features during the private preview.
 
 
 _DOMAIN_NAME_MAP = {_DEFAULT_HOSTNAME_TLD: "GLOBAL", _CHINA_HOSTNAME_TLD: "CHINA"}

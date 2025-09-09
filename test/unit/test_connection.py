@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import stat
 import sys
 from pathlib import Path
@@ -42,6 +41,7 @@ except ImportError:
     AuthByDefault = AuthByOkta = AuthByOAuth = AuthByWebBrowser = MagicMock
 
 try:  # pragma: no cover
+    import snowflake.connector.vendored.requests as requests
     from snowflake.connector.auth import AuthByUsrPwdMfa
     from snowflake.connector.config_manager import CONFIG_MANAGER
     from snowflake.connector.constants import (
@@ -56,6 +56,14 @@ except ImportError:
     class AuthByUsrPwdMfa(AuthByDefault):
         def __init__(self, password: str, mfa_token: str) -> None:
             pass
+
+
+@pytest.fixture(autouse=True)
+def mock_detect_platforms():
+    with patch(
+        "snowflake.connector.auth._auth.detect_platforms", return_value=[]
+    ) as mock_detect:
+        yield mock_detect
 
 
 def fake_connector(**kwargs) -> snowflake.connector.SnowflakeConnection:
@@ -157,6 +165,16 @@ def test_connection_ignore_exception(mockSnowflakeRestfulPostRequest):
 
 
 @pytest.mark.skipolddriver
+def test_invalid_authenticator():
+    with pytest.raises(ProgrammingError) as excinfo:
+        snowflake.connector.connect(
+            account="account",
+            authenticator="INVALID",
+        )
+    assert "Unknown authenticator: INVALID" in str(excinfo.value)
+
+
+@pytest.mark.skipolddriver
 def test_is_still_running():
     """Checks that is_still_running returns expected results."""
     statuses = [
@@ -182,11 +200,11 @@ def test_is_still_running():
 
 
 @pytest.mark.skipolddriver
-def test_partner_env_var(mock_post_requests):
+def test_partner_env_var(mock_post_requests, monkeypatch):
     PARTNER_NAME = "Amanda"
 
-    with patch.dict(os.environ, {ENV_VAR_PARTNER: PARTNER_NAME}):
-        assert fake_connector().application == PARTNER_NAME
+    monkeypatch.setenv(ENV_VAR_PARTNER, PARTNER_NAME)
+    assert fake_connector().application == PARTNER_NAME
 
     assert (
         mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == PARTNER_NAME
@@ -613,6 +631,7 @@ def test_otel_error_message(caplog, mock_post_requests):
             "workload_identity_entra_resource",
             "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
         ),
+        ("workload_identity_impersonation_path", ["subject-b", "subject-c"]),
     ],
 )
 def test_cannot_set_dependent_params_without_wlid_authenticator(
@@ -631,32 +650,130 @@ def test_cannot_set_dependent_params_without_wlid_authenticator(
     )
 
 
-def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
-    with pytest.raises(ProgrammingError) as excinfo:
-        snowflake.connector.connect(
-            account="account", authenticator="WORKLOAD_IDENTITY"
-        )
-    assert (
-        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable true to use the 'WORKLOAD_IDENTITY' authenticator"
-        in str(excinfo.value)
-    )
-
-
-def test_connection_params_are_plumbed_into_authbyworkloadidentity(monkeypatch):
+@pytest.mark.parametrize(
+    "provider_param",
+    [
+        None,
+        "",
+        "INVALID",
+    ],
+)
+def test_workload_identity_provider_is_required_for_wif_authenticator(
+    monkeypatch, provider_param
+):
     with monkeypatch.context() as m:
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
+
+        with pytest.raises(ProgrammingError) as excinfo:
+            snowflake.connector.connect(
+                account="account",
+                authenticator="WORKLOAD_IDENTITY",
+                provider=provider_param,
+            )
+        assert (
+            "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY"
+            in str(excinfo.value)
+        )
+
+
+@pytest.mark.parametrize(
+    "provider_param",
+    [
+        # Strongly-typed values.
+        AttestationProvider.AWS,
+        AttestationProvider.AZURE,
+        AttestationProvider.OIDC,
+        # String values.
+        "AWS",
+        "AZURE",
+        "OIDC",
+    ],
+)
+def test_workload_identity_impersonation_path_unsupported_for_non_gcp_providers(
+    monkeypatch, provider_param
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        with pytest.raises(ProgrammingError) as excinfo:
+            snowflake.connector.connect(
+                account="account",
+                authenticator="WORKLOAD_IDENTITY",
+                workload_identity_provider=provider_param,
+                workload_identity_impersonation_path=[
+                    "sa2@project.iam.gserviceaccount.com"
+                ],
+            )
+        assert (
+            "workload_identity_impersonation_path is currently only supported for GCP."
+            in str(excinfo.value)
+        )
+
+
+@pytest.mark.parametrize(
+    "provider_param",
+    [
+        AttestationProvider.GCP,
+        "GCP",
+    ],
+)
+def test_workload_identity_impersonation_path_supported_for_gcp_provider(
+    monkeypatch, provider_param
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
+
+        conn = snowflake.connector.connect(
+            account="account",
+            authenticator="WORKLOAD_IDENTITY",
+            workload_identity_provider=provider_param,
+            workload_identity_impersonation_path=[
+                "sa2@project.iam.gserviceaccount.com"
+            ],
+        )
+        assert conn.auth_class.provider == AttestationProvider.GCP
+        assert conn.auth_class.impersonation_path == [
+            "sa2@project.iam.gserviceaccount.com"
+        ]
+
+
+@pytest.mark.parametrize(
+    "provider_param, parsed_provider",
+    [
+        # Strongly-typed values.
+        (AttestationProvider.AWS, AttestationProvider.AWS),
+        (AttestationProvider.AZURE, AttestationProvider.AZURE),
+        (AttestationProvider.GCP, AttestationProvider.GCP),
+        (AttestationProvider.OIDC, AttestationProvider.OIDC),
+        # String values.
+        ("AWS", AttestationProvider.AWS),
+        ("AZURE", AttestationProvider.AZURE),
+        ("GCP", AttestationProvider.GCP),
+        ("OIDC", AttestationProvider.OIDC),
+    ],
+)
+def test_connection_params_are_plumbed_into_authbyworkloadidentity(
+    monkeypatch, provider_param, parsed_provider
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
+        )
 
         conn = snowflake.connector.connect(
             account="my_account_1",
-            workload_identity_provider=AttestationProvider.AWS,
+            workload_identity_provider=provider_param,
             workload_identity_entra_resource="api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
             token="my_token",
             authenticator="WORKLOAD_IDENTITY",
         )
-        assert conn.auth_class.provider == AttestationProvider.AWS
+        assert conn.auth_class.provider == parsed_provider
         assert (
             conn.auth_class.entra_resource
             == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
@@ -689,7 +806,6 @@ def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = snowflake.connector.connect(connections_file_path=connections_file)
         assert conn.auth_class.provider == AttestationProvider.OIDC
@@ -708,7 +824,6 @@ def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
         m.setattr(
             "snowflake.connector.SnowflakeConnection._authenticate", lambda *_: None
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = snowflake.connector.connect(
             account="my_account_1",
@@ -719,3 +834,126 @@ def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode(
             oauth_enable_single_use_refresh_tokens=rtr_enabled,
         )
         assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled
+
+
+# Skip for old drivers because the connection config of
+# reraise_error_in_file_transfer_work_function is newly introduced.
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("reraise_enabled", [True, False, None])
+def test_reraise_error_in_file_transfer_work_function_config(
+    reraise_enabled: bool | None,
+):
+    """Test that reraise_error_in_file_transfer_work_function config is
+    properly set on connection."""
+
+    with mock.patch(
+        "snowflake.connector.network.SnowflakeRestful._post_request",
+        return_value={
+            "data": {
+                "serverVersion": "a.b.c",
+            },
+            "code": None,
+            "message": None,
+            "success": True,
+        },
+    ):
+        if reraise_enabled is not None:
+            # Create a connection with the config set to the value of reraise_enabled.
+            conn = fake_connector(
+                **{"reraise_error_in_file_transfer_work_function": reraise_enabled}
+            )
+        else:
+            # Special test setup: when reraise_enabled is None, create a
+            # connection without setting the config.
+            conn = fake_connector()
+
+        # When reraise_enabled is None, we expect a default value of False,
+        # so taking bool() on it also makes sense.
+        expected_value = bool(reraise_enabled)
+        actual_value = conn._reraise_error_in_file_transfer_work_function
+        assert actual_value == expected_value
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
+def test_large_query_through_proxy(
+    wiremock_generic_mappings_dir,
+    wiremock_target_proxy_pair,
+    wiremock_mapping_dir,
+    proxy_env_vars,
+    proxy_method,
+):
+    target_wm, proxy_wm = wiremock_target_proxy_pair
+
+    password_mapping = wiremock_mapping_dir / "auth/password/successful_flow.json"
+    multi_chunk_request_mapping = (
+        wiremock_mapping_dir / "queries/select_large_request_successful.json"
+    )
+    disconnect_mapping = (
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+    telemetry_mapping = wiremock_generic_mappings_dir / "telemetry.json"
+    chunk_1_mapping = wiremock_mapping_dir / "queries/chunk_1.json"
+    chunk_2_mapping = wiremock_mapping_dir / "queries/chunk_2.json"
+
+    # Configure mappings with proxy header verification
+    expected_headers = {"Via": {"contains": "wiremock"}}
+
+    target_wm.import_mapping(password_mapping, expected_headers=expected_headers)
+    target_wm.add_mapping_with_default_placeholders(
+        multi_chunk_request_mapping, expected_headers
+    )
+    target_wm.add_mapping(disconnect_mapping, expected_headers=expected_headers)
+    target_wm.add_mapping(telemetry_mapping, expected_headers=expected_headers)
+    target_wm.add_mapping_with_default_placeholders(chunk_1_mapping, expected_headers)
+    target_wm.add_mapping_with_default_placeholders(chunk_2_mapping, expected_headers)
+
+    # Configure proxy based on test parameter
+    set_proxy_env_vars, clear_proxy_env_vars = proxy_env_vars
+    connect_kwargs = {
+        "user": "testUser",
+        "password": "testPassword",
+        "account": "testAccount",
+        "host": target_wm.wiremock_host,
+        "port": target_wm.wiremock_http_port,
+        "protocol": "http",
+        "warehouse": "TEST_WH",
+    }
+
+    if proxy_method == "explicit_args":
+        connect_kwargs.update(
+            {
+                "proxy_host": proxy_wm.wiremock_host,
+                "proxy_port": str(proxy_wm.wiremock_http_port),
+                "proxy_user": "proxyUser",
+                "proxy_password": "proxyPass",
+            }
+        )
+        clear_proxy_env_vars()  # Ensure no env vars interfere
+    else:  # env_vars
+        proxy_url = f"http://proxyUser:proxyPass@{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}"
+        set_proxy_env_vars(proxy_url)
+
+    row_count = 50_000
+    with snowflake.connector.connect(**connect_kwargs) as conn:
+        cursors = conn.execute_string(
+            f"select seq4() as n from table(generator(rowcount => {row_count}));"
+        )
+        assert len(cursors[0]._result_set.batches) > 1  # We need to have remote results
+    assert list(cursors[0])
+
+    # Ensure proxy saw query
+    proxy_reqs = requests.get(f"{proxy_wm.http_host_with_port}/__admin/requests").json()
+    assert any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in proxy_reqs["requests"]
+    )
+
+    # Ensure backend saw query
+    target_reqs = requests.get(
+        f"{target_wm.http_host_with_port}/__admin/requests"
+    ).json()
+    assert any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in target_reqs["requests"]
+    )

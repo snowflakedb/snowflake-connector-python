@@ -7,13 +7,45 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.16.1(TBD)
-  - Added in-band OCSP exception telemetry.
-  - Added `APPLICATION_PATH` within `CLIENT_ENVIRONMENT` to distinguish between multiple scripts using the PythonConnector in the same environment.
-  - Disabled token caching for OAuth Client Credentials authentication
+- v3.18.0(TBD)
+  - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP workloads only
+
+- v3.17.3(September 02,2025)
+  - Enhanced configuration file permission warning messages.
+    - Improved warning messages for readable permission issues to include clear instructions on how to skip warnings using the `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` environment variable.
+  - Fixed the bug with staging pandas dataframes on AWS - the regional endpoint is used when required
+    - This addresses the issue with `create_dataframe` call on Snowpark
+
+- v3.17.2(August 23,2025)
+  - Fixed a bug where platform_detection was retrying failed requests with warnings to non-existent endpoints.
+  - Added disabling endpoint-based platform detection by setting `platform_detection_timeout_seconds` to zero.
+
+- v3.17.1(August 17,2025)
+  - Added `infer_schema` parameter to `write_pandas` to perform schema inference on the passed data.
+  - Namespace `snowlake` reverted back to non-module.
+
+- v3.17.0(August 16,2025)
   - Added in-band HTTP exception telemetry.
-  - Fixed a bug where timezoned timestamps fetched as pandas.DataFrame or pyarrow.Table would overflow for the sake of unnecessary precision. In the case where an overflow cannot be prevented a clear error will be raised now.
-  - Fix OAuth authenticator values.
+  - Added an `unsafe_skip_file_permissions_check` flag to skip file permission checks on the cache and configuration.
+  - Added `APPLICATION_PATH` within `CLIENT_ENVIRONMENT` to distinguish between multiple scripts using the Python Connector in the same environment.
+  - Added basic JSON support for Interval types.
+  - Added in-band OCSP exception telemetry.
+  - Added support for new authentication methods with Workload Identity Federation (WIF).
+    - Added the `WORKLOAD_IDENTITY` value for the authenticator type.
+    - Added the `workload_identity_provider` and `workload_identity_entra_resource` parameters.
+  - Added support for the `use_vectorized_scanner` parameter in the write_pandas function.
+  - Added support of proxy setup using connection parameters without emitting environment variables.
+  - Added populating of `type_code` in `ResultMetadata` for interval types.
+  - Introduced the `snowflake_version` property to the connection.
+  - Moved `OAUTH_TYPE` to `CLIENT_ENVIROMENT`.
+  - Relaxed the `pyarrow` version constrain; versions >= 19 can now be used.
+  - Disabled token caching for OAuth Client Credentials authentication.
+  - Fixed OAuth authenticator values.
+  - Fixed a bug where a PAT with an external session authenticator was used while `external_session_id` was not provided in `SnowflakeRestful.fetch`.
+  - Fixed the case-sensitivity of `Oauth` and `programmatic_access_token` authenticator values.
+  - Fixed unclear error messages for incorrect `authenticator` values.
+  - Fixed GCS staging by ensuring the endpoint has a scheme.
+  - Fixed a bug where time-zoned timestamps fetched as a `pandas.DataFrame` or `pyarrow.Table` would overflow due to unnecessary precision. A clear error will now be raised if an overflow cannot be prevented.
 
 - v3.16.0(July 04,2025)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4.

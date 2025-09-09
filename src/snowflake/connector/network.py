@@ -1,27 +1,19 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import collections
-import contextlib
 import gzip
-import itertools
 import json
 import logging
 import re
 import time
 import uuid
-from collections import OrderedDict
 from threading import Lock
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Generator
 
 import OpenSSL.SSL
 
 from snowflake.connector.secret_detector import SecretDetector
 from snowflake.connector.vendored.requests.models import PreparedRequest
-from snowflake.connector.vendored.urllib3.connectionpool import (
-    HTTPConnectionPool,
-    HTTPSConnectionPool,
-)
 
 from . import ssl_wrap_socket
 from .compat import (
@@ -87,6 +79,7 @@ from .errors import (
     ServiceUnavailableError,
     TooManyRequests,
 )
+from .session_manager import ProxySupportAdapterFactory, SessionManager, SessionPool
 from .sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
     SQLSTATE_CONNECTION_REJECTED,
@@ -100,18 +93,14 @@ from .time_util import (
 from .tool.probe_connection import probe_connection
 from .vendored import requests
 from .vendored.requests import Response, Session
-from .vendored.requests.adapters import HTTPAdapter
 from .vendored.requests.auth import AuthBase
 from .vendored.requests.exceptions import (
     ConnectionError,
     ConnectTimeout,
-    InvalidProxyURL,
     ReadTimeout,
     SSLError,
 )
-from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
 from .vendored.urllib3.exceptions import ProtocolError
-from .vendored.urllib3.poolmanager import ProxyManager
 from .vendored.urllib3.util.url import parse_url
 
 if TYPE_CHECKING:
@@ -127,7 +116,6 @@ ssl_wrap_socket.inject_into_urllib3()
 APPLICATION_SNOWSQL = "SnowSQL"
 
 # requests parameters
-REQUESTS_RETRY = 1  # requests library builtin retry
 DEFAULT_SOCKET_CONNECT_TIMEOUT = 1 * 60  # don't reduce less than 45 seconds
 
 # return codes
@@ -169,7 +157,6 @@ CLIENT_VERSION = CLIENT_VERSION
 PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
 
 NO_TOKEN = "no-token"
-NO_EXTERNAL_SESSION_ID = "no-external-session-id"
 
 STATUS_TO_EXCEPTION: dict[int, type[Error]] = {
     INTERNAL_SERVER_ERROR: InternalServerError,
@@ -251,42 +238,6 @@ def is_login_request(url: str) -> bool:
     return "login-request" in parse_url(url).path
 
 
-class ProxySupportAdapter(HTTPAdapter):
-    """This Adapter creates proper headers for Proxy CONNECT messages."""
-
-    def get_connection(
-        self, url: str, proxies: OrderedDict | None = None
-    ) -> HTTPConnectionPool | HTTPSConnectionPool:
-        proxy = select_proxy(url, proxies)
-        parsed_url = urlparse(url)
-
-        if proxy:
-            proxy = prepend_scheme_if_needed(proxy, "http")
-            proxy_url = parse_url(proxy)
-            if not proxy_url.host:
-                raise InvalidProxyURL(
-                    "Please check proxy URL. It is malformed"
-                    " and could be missing the host."
-                )
-            proxy_manager = self.proxy_manager_for(proxy)
-
-            if isinstance(proxy_manager, ProxyManager):
-                # Add Host to proxy header SNOW-232777
-                proxy_manager.proxy_headers["Host"] = parsed_url.hostname
-            else:
-                logger.debug(
-                    f"Unable to set 'Host' to proxy manager of type {type(proxy_manager)} as"
-                    f" it does not have attribute 'proxy_headers'."
-                )
-            conn = proxy_manager.connection_from_url(url)
-        else:
-            # Only scheme should be lower case
-            url = parsed_url.geturl()
-            conn = self.poolmanager.connection_from_url(url)
-
-        return conn
-
-
 class RetryRequest(Exception):
     """Signal to retry request."""
 
@@ -332,52 +283,9 @@ class PATWithExternalSessionAuth(AuthBase):
             del r.headers[HEADER_AUTHORIZATION_KEY]
         if self.token != NO_TOKEN:
             r.headers[HEADER_AUTHORIZATION_KEY] = "Bearer " + self.token
-        if self.external_session_id != NO_EXTERNAL_SESSION_ID:
+        if self.external_session_id:
             r.headers[HEADER_EXTERNAL_SESSION_KEY] = self.external_session_id
         return r
-
-
-class SessionPool:
-    def __init__(self, rest: SnowflakeRestful) -> None:
-        # A stack of the idle sessions
-        self._idle_sessions: list[Session] = []
-        self._active_sessions: set[Session] = set()
-        self._rest: SnowflakeRestful = rest
-
-    def get_session(self) -> Session:
-        """Returns a session from the session pool or creates a new one."""
-        try:
-            session = self._idle_sessions.pop()
-        except IndexError:
-            session = self._rest.make_requests_session()
-        self._active_sessions.add(session)
-        return session
-
-    def return_session(self, session: Session) -> None:
-        """Places an active session back into the idle session stack."""
-        try:
-            self._active_sessions.remove(session)
-        except KeyError:
-            logger.debug("session doesn't exist in the active session pool. Ignored...")
-        self._idle_sessions.append(session)
-
-    def __str__(self) -> str:
-        total_sessions = len(self._active_sessions) + len(self._idle_sessions)
-        return (
-            f"SessionPool {len(self._active_sessions)}/{total_sessions} active sessions"
-        )
-
-    def close(self) -> None:
-        """Closes all active and idle sessions in this session pool."""
-        if self._active_sessions:
-            logger.debug(f"Closing {len(self._active_sessions)} active sessions")
-        for s in itertools.chain(self._active_sessions, self._idle_sessions):
-            try:
-                s.close()
-            except Exception as e:
-                logger.info(f"Session cleanup failed: {e}")
-        self._active_sessions.clear()
-        self._idle_sessions.clear()
 
 
 # Customizable JSONEncoder to support additional types.
@@ -399,16 +307,21 @@ class SnowflakeRestful:
         protocol: str = "http",
         inject_client_pause: int = 0,
         connection: SnowflakeConnection | None = None,
+        session_manager: SessionManager | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._protocol = protocol
         self._inject_client_pause = inject_client_pause
         self._connection = connection
+        if session_manager is None:
+            session_manager = (
+                connection._session_manager
+                if (connection and connection._session_manager)
+                else SessionManager(adapter_factory=ProxySupportAdapterFactory())
+            )
+        self._session_manager = session_manager
         self._lock_token = Lock()
-        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
-            lambda: SessionPool(self)
-        )
 
         # OCSP mode (OCSPMode.FAIL_OPEN by default)
         ssl_wrap_socket.FEATURE_OCSP_MODE = (
@@ -473,6 +386,14 @@ class SnowflakeRestful:
     def server_url(self) -> str:
         return f"{self._protocol}://{self._host}:{self._port}"
 
+    @property
+    def session_manager(self) -> SessionManager:
+        return self._session_manager
+
+    @property
+    def sessions_map(self) -> dict[str, SessionPool]:
+        return self.session_manager.sessions_map
+
     def close(self) -> None:
         if hasattr(self, "_token"):
             del self._token
@@ -483,8 +404,7 @@ class SnowflakeRestful:
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
 
-        for session_pool in self._sessions_map.values():
-            session_pool.close()
+        self.session_manager.close()
 
     def request(
         self,
@@ -912,7 +832,7 @@ class SnowflakeRestful:
         include_retry_reason = self._connection._enable_retry_reason_in_query_response
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
-        with self._use_requests_session(full_url) as session:
+        with self.use_requests_session(full_url) as session:
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,
                 _include_retry_reason=include_retry_reason,
@@ -953,7 +873,7 @@ class SnowflakeRestful:
         retry_ctx,
         no_retry: bool = False,
         token=NO_TOKEN,
-        external_session_id=NO_EXTERNAL_SESSION_ID,
+        external_session_id=None,
         **kwargs,
     ):
         conn = self._connection
@@ -1272,40 +1192,5 @@ class SnowflakeRestful:
         except Exception as err:
             raise err
 
-    def make_requests_session(self) -> Session:
-        s = requests.Session()
-        s.mount("http://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        s.mount("https://", ProxySupportAdapter(max_retries=REQUESTS_RETRY))
-        s._reuse_count = itertools.count()
-        return s
-
-    @contextlib.contextmanager
-    def _use_requests_session(self, url: str | None = None):
-        """Session caching context manager.
-
-        Notes:
-            The session is not closed until close() is called so each session may be used multiple times.
-        """
-        # short-lived session, not added to the _sessions_map
-        if self._connection.disable_request_pooling:
-            session = self.make_requests_session()
-            try:
-                yield session
-            finally:
-                session.close()
-        else:
-            try:
-                hostname = urlparse(url).hostname
-            except Exception:
-                hostname = None
-
-            session_pool: SessionPool = self._sessions_map[hostname]
-            session = session_pool.get_session()
-            logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
-            try:
-                yield session
-            finally:
-                session_pool.return_session(session)
-                logger.debug(
-                    f"Session status for SessionPool '{hostname}', {session_pool}"
-                )
+    def use_requests_session(self, url=None) -> Generator[Session, Any, None]:
+        return self.session_manager.use_requests_session(url)

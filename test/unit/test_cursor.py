@@ -24,6 +24,10 @@ class FakeConnection(SnowflakeConnection):
     def __init__(self):
         self._log_max_query_length = 0
         self._reuse_results = None
+        self._reraise_error_in_file_transfer_work_function = False
+        self._enable_stage_s3_privatelink_for_us_east_1 = False
+        self._iobound_tpe_limit = None
+        self._unsafe_file_write = False
 
 
 @pytest.mark.parametrize(
@@ -120,6 +124,8 @@ class TestUploadDownloadMethods(TestCase):
         #   - download_as_stream of connection._stream_downloader
         fake_conn._file_operation_parser.parse_file_operation.assert_called_once()
         fake_conn._stream_downloader.download_as_stream.assert_not_called()
+        MockFileTransferAgent.assert_called_once()
+        assert MockFileTransferAgent.call_args.kwargs.get("use_s3_regional_url", False)
         mock_file_transfer_agent_instance.execute.assert_called_once()
 
     @patch("snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent")
@@ -138,6 +144,8 @@ class TestUploadDownloadMethods(TestCase):
         #   - download_as_stream of connection._stream_downloader
         fake_conn._file_operation_parser.parse_file_operation.assert_called_once()
         fake_conn._stream_downloader.download_as_stream.assert_not_called()
+        MockFileTransferAgent.assert_called_once()
+        assert MockFileTransferAgent.call_args.kwargs.get("use_s3_regional_url", False)
         mock_file_transfer_agent_instance.execute.assert_called_once()
 
     @patch("snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent")
@@ -156,6 +164,7 @@ class TestUploadDownloadMethods(TestCase):
         #   - execute in SnowflakeFileTransferAgent
         fake_conn._file_operation_parser.parse_file_operation.assert_called_once()
         fake_conn._stream_downloader.download_as_stream.assert_called_once()
+        MockFileTransferAgent.assert_not_called()
         mock_file_transfer_agent_instance.execute.assert_not_called()
 
     @patch("snowflake.connector.file_transfer_agent.SnowflakeFileTransferAgent")
@@ -175,6 +184,8 @@ class TestUploadDownloadMethods(TestCase):
         #   - download_as_stream of connection._stream_downloader
         fake_conn._file_operation_parser.parse_file_operation.assert_called_once()
         fake_conn._stream_downloader.download_as_stream.assert_not_called()
+        MockFileTransferAgent.assert_called_once()
+        assert MockFileTransferAgent.call_args.kwargs.get("use_s3_regional_url", False)
         mock_file_transfer_agent_instance.execute.assert_called_once()
 
     def _setup_mocks(self, MockFileTransferAgent):
@@ -184,6 +195,10 @@ class TestUploadDownloadMethods(TestCase):
         fake_conn = FakeConnection()
         fake_conn._file_operation_parser = MagicMock()
         fake_conn._stream_downloader = MagicMock()
+        # this should be true on all new AWS deployments to use regional endpoints for staging operations
+        fake_conn._enable_stage_s3_privatelink_for_us_east_1 = True
+        fake_conn._iobound_tpe_limit = 1
+        fake_conn._unsafe_file_write = False
 
         cursor = SnowflakeCursor(fake_conn)
         cursor.reset = MagicMock()

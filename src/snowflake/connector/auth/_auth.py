@@ -52,6 +52,8 @@ from ..network import (
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
+from ..platform_detection import detect_platforms
+from ..session_manager import SessionManager
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..version import VERSION
@@ -101,6 +103,8 @@ class Auth:
         login_timeout: int | None = None,
         network_timeout: int | None = None,
         socket_timeout: int | None = None,
+        platform_detection_timeout_seconds: float | None = None,
+        session_manager: SessionManager | None = None,
     ):
         return {
             "data": {
@@ -122,6 +126,10 @@ class Auth:
                     "LOGIN_TIMEOUT": login_timeout,
                     "NETWORK_TIMEOUT": network_timeout,
                     "SOCKET_TIMEOUT": socket_timeout,
+                    "PLATFORM": detect_platforms(
+                        platform_detection_timeout_seconds=platform_detection_timeout_seconds,
+                        session_manager=session_manager.clone(max_retries=0),
+                    ),
                 },
             },
         }
@@ -177,6 +185,8 @@ class Auth:
             self._rest._connection.login_timeout,
             self._rest._connection._network_timeout,
             self._rest._connection._socket_timeout,
+            self._rest._connection.platform_detection_timeout_seconds,
+            session_manager=self._rest.session_manager.clone(use_pooling=False),
         )
 
         body = copy.deepcopy(body_template)
@@ -542,7 +552,9 @@ class Auth:
 
     def get_token_cache(self) -> TokenCache:
         if self._token_cache is None:
-            self._token_cache = TokenCache.make()
+            self._token_cache = TokenCache.make(
+                skip_file_permissions_check=self._rest._connection._unsafe_skip_file_permissions_check
+            )
         return self._token_cache
 
 

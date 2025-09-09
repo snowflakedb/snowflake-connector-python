@@ -19,6 +19,9 @@ PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws.py.gpg"
 [ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp.py.gpg"
 gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters.py
 
+# Decrypt private key file
+gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" "${CONNECTOR_DIR}/.github/workflows/parameters/public/rsa_keys/rsa_key_python_${cloud_provider}.p8.gpg" > "test/rsa_key_python_${cloud_provider}.p8"
+
 rm -rf venv
 python3.12 -m venv venv
 . venv/bin/activate
