@@ -1,0 +1,67 @@
+{
+  "mappings": [
+    {
+      "scenarioName": "OAuth token request error",
+      "requiredScenarioState": "Started",
+      "newScenarioState": "Authorized",
+      "request": {
+        "urlPathPattern": "/oauth/authorize",
+        "queryParameters": {
+          "response_type": {
+            "equalTo": "code"
+          },
+          "scope": {
+            "equalTo": "session:role:ANALYST"
+          },
+          "code_challenge_method": {
+            "equalTo": "S256"
+          },
+          "redirect_uri": {
+            "equalTo": "http://localhost:8009/snowflake/oauth-redirect"
+          },
+          "code_challenge": {
+            "matches": ".*"
+          },
+          "state": {
+            "matches": ".*"
+          },
+          "client_id": {
+            "equalTo": "123"
+          }
+        },
+        "method": "GET"
+      },
+      "response": {
+        "status": 302,
+        "headers": {
+          "Location": "http://localhost:8009/snowflake/oauth-redirect?code=123&state=abc123"
+        }
+      }
+    },
+    {
+      "scenarioName": "OAuth token request error",
+      "requiredScenarioState": "Authorized",
+      "newScenarioState": "Token request error",
+      "request": {
+        "urlPathPattern": "/oauth/token-request.*",
+        "method": "POST",
+        "headers": {
+          "Authorization": {
+            "contains": "Basic"
+          },
+          "Content-Type": {
+            "contains": "application/x-www-form-urlencoded; charset=UTF-8"
+          }
+        },
+        "bodyPatterns": [
+          {
+            "contains": "grant_type=authorization_code&code=123&redirect_uri=http%3A%2F%2Flocalhost%3A8009%2Fsnowflake%2Foauth-redirect&code_verifier="
+          }
+        ]
+      },
+      "response": {
+        "status": 400
+      }
+    }
+  ]
+}
