@@ -54,9 +54,7 @@ class PandasUserOnceWarnings(UserWarning):
 
 
 # Configure user-pandas warnings to print only once
-warnings.simplefilter(
-    "once", PandasUserOnceWarnings, module="snowflake.connector.pandas_tools"
-)
+warnings.simplefilter("once", PandasUserOnceWarnings)
 
 
 def chunk_helper(
