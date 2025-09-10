@@ -389,9 +389,9 @@ class FakeAwsEnvironment:
             self.assume_role_call_count += 1
             return {
                 "Credentials": {
-                    "AccessKeyId": gen_dummy_access_token(arn, "access_key"),
-                    "SecretAccessKey": gen_dummy_access_token(arn, "secret_key"),
-                    "SessionToken": gen_dummy_access_token(arn, "session_token"),
+                    "AccessKeyId": "access_key",
+                    "SecretAccessKey": "secret_key",
+                    "SessionToken": "session_token",
                     "Expiration": int(time()) + 60 * 60,
                 },
                 "AssumedRoleUser": {"AssumedRoleId": hash(arn), "Arn": arn},

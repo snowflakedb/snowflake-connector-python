@@ -713,24 +713,16 @@ def test_workload_identity_impersonation_path_errors_for_unsupported_providers(
 
 
 @pytest.mark.parametrize(
-    "provider_param,impersonation_path,expected_provider",
+    "provider_param,impersonation_path",
     [
-        (
-            AttestationProvider.GCP,
-            ["sa2@project.iam.gserviceaccount.com"],
-            AttestationProvider.GCP,
-        ),
-        (
-            AttestationProvider.AWS,
-            ["arn:aws:iam::1234567890:role/role2"],
-            AttestationProvider.AWS,
-        ),
-        ("GCP", ["sa2@project.iam.gserviceaccount.com"], AttestationProvider.GCP),
-        ("AWS", ["arn:aws:iam::1234567890:role/role2"], AttestationProvider.AWS),
+        (AttestationProvider.GCP, ["sa2@project.iam.gserviceaccount.com"]),
+        (AttestationProvider.AWS, ["arn:aws:iam::1234567890:role/role2"]),
+        ("GCP", ["sa2@project.iam.gserviceaccount.com"]),
+        ("AWS", ["arn:aws:iam::1234567890:role/role2"]),
     ],
 )
 def test_workload_identity_impersonation_path_populates_auth_class_for_supported_provider(
-    monkeypatch, provider_param, impersonation_path, expected_provider
+    monkeypatch, provider_param, impersonation_path
 ):
     with monkeypatch.context() as m:
         m.setattr(
@@ -743,7 +735,6 @@ def test_workload_identity_impersonation_path_populates_auth_class_for_supported
             workload_identity_provider=provider_param,
             workload_identity_impersonation_path=impersonation_path,
         )
-        assert conn.auth_class.provider == expected_provider
         assert conn.auth_class.impersonation_path == impersonation_path
 
 

@@ -274,7 +274,7 @@ def test_get_aws_sts_hostname_invalid_inputs(region, partition):
     assert "Invalid AWS partition" in str(excinfo.value)
 
 
-def test_aws_calls_correct_apis_and_populates_auth_data_for_final_role(
+def test_aws_impersonation_calls_correct_apis_for_each_role_in_impersonation_path(
     fake_aws_environment: FakeAwsEnvironment,
 ):
     impersonation_path = [
