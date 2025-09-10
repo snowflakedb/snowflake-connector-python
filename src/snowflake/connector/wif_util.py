@@ -7,14 +7,20 @@ from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum, unique
 
-import boto3
 import jwt
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-from botocore.utils import InstanceMetadataRegionFetcher
+
+try:
+    import boto3
+    from botocore.auth import SigV4Auth
+    from botocore.awsrequest import AWSRequest
+    from botocore.utils import InstanceMetadataRegionFetcher
+
+    BOTO_AVAILABLE = True
+except ImportError:
+    BOTO_AVAILABLE = False
 
 from .errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
-from .errors import ProgrammingError
+from .errors import MissingDependencyError, ProgrammingError
 from .session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
@@ -173,6 +179,12 @@ def create_aws_attestation(
 
     If the application isn't running on AWS or no credentials were found, raises an error.
     """
+    if not BOTO_AVAILABLE:
+        raise MissingDependencyError(
+            msg="boto3 or botocore dependency is not installed. [boto] extension is required for the AWS provider.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+
     # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
     session = get_aws_session(impersonation_path)
 

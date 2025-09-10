@@ -1,17 +1,25 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from concurrent.futures.thread import ThreadPoolExecutor
 from enum import Enum
 from functools import cache
 
-import boto3
-from botocore.config import Config
-from botocore.utils import IMDSFetcher
+try:
+    import boto3
+    from botocore.config import Config
+    from botocore.utils import IMDSFetcher
+
+    BOTO_AVAILABLE = True
+except ImportError:
+    BOTO_AVAILABLE = False
 
 from .session_manager import SessionManager
 from .vendored.requests import RequestException, Timeout
+
+logger = logging.getLogger(__name__)
 
 
 class _DetectionState(Enum):
@@ -37,6 +45,10 @@ def is_ec2_instance(platform_detection_timeout_seconds: float):
     Returns:
         _DetectionState: DETECTED if running on EC2, NOT_DETECTED otherwise.
     """
+    if not BOTO_AVAILABLE:
+        logger.debug("boto3 is not available, skipping EC2 instance detection")
+        return _DetectionState.NOT_DETECTED
+
     try:
         fetcher = IMDSFetcher(
             timeout=platform_detection_timeout_seconds, num_attempts=1
@@ -102,6 +114,10 @@ def has_aws_identity(platform_detection_timeout_seconds: float):
     Returns:
         _DetectionState: DETECTED if valid AWS identity exists, NOT_DETECTED otherwise.
     """
+    if not BOTO_AVAILABLE:
+        logger.debug("boto3 is not available, skipping AWS identity detection")
+        return _DetectionState.NOT_DETECTED
+
     try:
         config = Config(
             connect_timeout=platform_detection_timeout_seconds,
