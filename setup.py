@@ -5,6 +5,7 @@ import sys
 import warnings
 
 from setuptools import Extension, setup
+from setuptools.command.egg_info import egg_info
 
 CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
 NANOARROW_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp", "ArrowIterator")
@@ -174,8 +175,6 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
 
     cmd_class = {"build_ext": MyBuildExt}
 
-from setuptools.command.egg_info import egg_info
-
 
 class SmartEggInfoCommand(egg_info):
     """Custom egg_info command that auto-adds AWS extra unless slim is specified."""
@@ -185,18 +184,15 @@ class SmartEggInfoCommand(egg_info):
 
         # Check if slim is being requested via environment variable
         # (This is the most reliable way to detect slim installation intent)
-        is_slim_install = os.environ.get("SNOWFLAKE_SLIM_INSTALL", "").lower() in (
+        no_boto_install = os.environ.get("SNOWFLAKE_NO_BOTO", "").lower() in [
             "1",
             "true",
             "yes",
-        )
-
-        # If not slim, automatically merge AWS dependencies into install_requires
-        if not is_slim_install and hasattr(self.distribution, "extras_require"):
-            aws_extras = self.distribution.extras_require.get("aws", [])
-            if aws_extras:
-                # Add AWS dependencies to install_requires
-                self.distribution.install_requires += aws_extras
+        ]
+        # if not explicitly excluded, add boto dependencies to install_requires
+        if not no_boto_install:
+            boto_extras = self.distribution.extras_require.get("boto", [])
+            self.distribution.install_requires += boto_extras
 
 
 # Update command classes
