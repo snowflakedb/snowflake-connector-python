@@ -39,9 +39,14 @@ for flag in options_def:
 extensions = None
 cmd_class = {}
 
-SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS = os.environ.get(
-    "SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS", "false"
-).lower() in ("y", "yes", "t", "true", "1", "on")
+_POSITIVE_VALUES = ("y", "yes", "t", "true", "1", "on")
+SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS = (
+    os.environ.get("SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS", "false").lower()
+    in _POSITIVE_VALUES
+)
+SNOWFLAKE_NO_BOTO = (
+    os.environ.get("SNOWFLAKE_NO_BOTO", "false").lower() in _POSITIVE_VALUES
+)
 
 try:
     from Cython.Build import cythonize
@@ -182,15 +187,8 @@ class SmartEggInfoCommand(egg_info):
     def finalize_options(self):
         super().finalize_options()
 
-        # Check if slim is being requested via environment variable
-        # (This is the most reliable way to detect slim installation intent)
-        no_boto_install = os.environ.get("SNOWFLAKE_NO_BOTO", "").lower() in [
-            "1",
-            "true",
-            "yes",
-        ]
         # if not explicitly excluded, add boto dependencies to install_requires
-        if not no_boto_install:
+        if not SNOWFLAKE_NO_BOTO:
             boto_extras = self.distribution.extras_require.get("boto", [])
             self.distribution.install_requires += boto_extras
 
