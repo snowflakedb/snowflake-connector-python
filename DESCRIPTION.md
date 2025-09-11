@@ -16,6 +16,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added support for intermediate certificates as roots when they are stored in the trust store
   - Bumped up vendored `urllib3` to `2.5.0` and `requests` to `v2.32.5`
   - Dropped support for OpenSSL versions older than 1.1.1
+  - Fixed the return type of `SnowflakeConnection.cursor(cursor_class)` to match the type of `cursor_class`
   - Constrained the types of `fetchone`, `fetchmany`, `fetchall`
     - As part of this fix, `DictCursor` is no longer a subclass of `SnowflakeCursor`; use `SnowflakeCursorBase` as a superclass of both.
 
