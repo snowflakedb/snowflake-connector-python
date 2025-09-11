@@ -1,18 +1,25 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import copy
 import inspect
 import sys
 import time
+from typing import Optional, get_type_hints
 from unittest.mock import Mock, PropertyMock
 
 import pytest
 
 import snowflake.connector.errors
 from snowflake.connector.compat import IS_WINDOWS
+from snowflake.connector.connection import SnowflakeConnection
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
 from snowflake.connector.network import SnowflakeRestful
+from snowflake.connector.wif_util import (
+    AttestationProvider,
+    WorkloadIdentityAttestation,
+)
 
 from .mock_utils import mock_connection
 
@@ -138,6 +145,47 @@ def _mock_auth_mfa_rest_response_timeout(url, headers, body, **kwargs):
 
     mock_cnt += 1
     return ret
+
+
+def _get_most_derived_subclasses(cls):
+    subclasses = cls.__subclasses__()
+    if not subclasses:
+        return [cls]
+    most_derived = []
+    for subclass in subclasses:
+        most_derived.extend(_get_most_derived_subclasses(subclass))
+    return most_derived
+
+
+def _get_default_args_for_class(cls):
+    def _get_default_arg_for_type(t, name):
+        if getattr(t, "__origin__", None) is Optional:
+            return None
+        if t is str:
+            if "url" in name or "uri" in name:
+                return "https://example.com"
+            return name
+        if t is int:
+            return 0
+        if t is bool:
+            return False
+        if t is float:
+            return 0.0
+        if t is AttestationProvider:
+            return AttestationProvider.GCP
+        return None
+
+    sig = inspect.signature(cls.__init__)
+    type_hints = get_type_hints(
+        cls.__init__, localns={"SnowflakeConnection": SnowflakeConnection}
+    )
+
+    args = {}
+    for param in sig.parameters.values():
+        if param.name != "self":
+            param_type = type_hints.get(param.name, str)
+            args[param.name] = _get_default_arg_for_type(param_type, param.name)
+    return args
 
 
 @pytest.mark.skipif(
@@ -337,3 +385,51 @@ def test_authbyplugin_abc_api():
 'password': <Parameter "password: 'str'">, \
 'kwargs': <Parameter "**kwargs: 'Any'">})"""
         )
+
+
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="Typing using '|' requires python 3.10 or higher (PEP 604)",
+)
+@pytest.mark.parametrize("auth_method", _get_most_derived_subclasses(AuthByPlugin))
+def test_auth_prepare_body_does_not_overwrite_fields(auth_method):
+    ocsp_mode = Mock()
+    ocsp_mode.name = "ocsp_mode"
+    session_manager = Mock()
+    session_manager.clone = lambda max_retries: "session_manager"
+
+    req_body_before = Auth.base_auth_data(
+        "user",
+        "account",
+        "application",
+        "internal_application_name",
+        "internal_application_version",
+        ocsp_mode,
+        login_timeout=60 * 60,
+        network_timeout=60 * 60,
+        socket_timeout=60 * 60,
+        platform_detection_timeout_seconds=0.2,
+        session_manager=session_manager,
+    )
+    req_body_after = copy.deepcopy(req_body_before)
+    additional_args = _get_default_args_for_class(auth_method)
+    auth_class = auth_method(**additional_args)
+    auth_class.attestation = WorkloadIdentityAttestation(
+        provider=AttestationProvider.GCP,
+        credential=None,
+        user_identifier_components=None,
+    )
+    auth_class.update_body(req_body_after)
+
+    # Check that the values in the body before are a strict subset of the values in the body after.
+    # Must use all() for this comparison because lists are not hashable
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )
+    req_body_before["data"].pop("CLIENT_ENVIRONMENT")
+    req_body_after["data"].pop("CLIENT_ENVIRONMENT")
+    assert set(req_body_before["data"].items()) <= set(req_body_after["data"].items())
