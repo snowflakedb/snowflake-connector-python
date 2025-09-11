@@ -363,13 +363,11 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
     def __init__(
         self,
         connection: SnowflakeConnection,
-        use_dict_result: bool = False,
     ) -> None:
         """Inits a SnowflakeCursor with a connection.
 
         Args:
             connection: The connection that created this cursor.
-            use_dict_result: Decides whether to use dict result or not.
         """
         self._connection: SnowflakeConnection = connection
 
@@ -404,7 +402,6 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._result: Iterator[tuple] | Iterator[dict] | None = None
         self._result_set: ResultSet | None = None
         self._result_state: ResultState = ResultState.DEFAULT
-        self._use_dict_result = use_dict_result
         self.query: str | None = None
         # TODO: self._query_result_format could be defined as an enum
         self._query_result_format: str | None = None
@@ -1939,6 +1936,10 @@ class SnowflakeCursor(SnowflakeCursorBase[tuple[Any, ...]]):
         is_file_transfer: Whether, or not the current command is a put, or get.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._use_dict_result = False
+
     def fetchone(self) -> tuple[Any, ...] | None:
         row = self._fetchone()
         assert row is None or isinstance(row, tuple)
@@ -1948,11 +1949,9 @@ class SnowflakeCursor(SnowflakeCursorBase[tuple[Any, ...]]):
 class DictCursor(SnowflakeCursorBase[dict[str, Any]]):
     """Cursor returning results in a dictionary."""
 
-    def __init__(self, connection) -> None:
-        super().__init__(
-            connection,
-            use_dict_result=True,
-        )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._use_dict_result = True
 
     def fetchone(self) -> dict[str, Any] | None:
         row = self._fetchone()
