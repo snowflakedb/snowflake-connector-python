@@ -10,6 +10,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.18.0(TBD)
   - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP and AWS workloads only
   - Fixed `get_results_from_sfqid` when using `DictCursor` and executing multiple statements at once
+  - Constrained the types of `fetchone`, `fetchmany`, `fetchall`
+    - As part of this fix, `DictCursor` is no longer a subclass of `SnowflakeCursor`; use `SnowflakeCursorBase` as a superclass of both.
 
 - v3.17.3(September 02,2025)
   - Enhanced configuration file permission warning messages.
