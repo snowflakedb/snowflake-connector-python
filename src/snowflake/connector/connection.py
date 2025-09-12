@@ -337,9 +337,9 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), str),
         # SNOW-1825621: OAUTH implementation
     ),
-    "oauth_token_request_mode": (
-        None,
-        (type(None), str),
+    "oauth_credentials_in_body": (
+        False,
+        bool,
         # SNOW-2300649: Option to send client credentials in body
     ),
     "oauth_authorization_url": (
@@ -1316,7 +1316,7 @@ class SnowflakeConnection:
                         host=self.host, port=self.port
                     ),
                     scope=self._oauth_scope,
-                    token_request_mode=self._oauth_token_request_mode,
+                    credentials_in_body=self._oauth_credentials_in_body,
                     connection=self,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
