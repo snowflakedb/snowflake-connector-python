@@ -68,6 +68,8 @@ void CArrowTableIterator::convertIfNeeded(ArrowSchema* columnSchema,
     case SnowflakeType::Type::DATE:
     case SnowflakeType::Type::REAL:
     case SnowflakeType::Type::TEXT:
+    case SnowflakeType::Type::INTERVAL_YEAR_MONTH:
+    case SnowflakeType::Type::INTERVAL_DAY_TIME:
     case SnowflakeType::Type::VARIANT:
     case SnowflakeType::Type::VECTOR: {
       // Do not need to convert
