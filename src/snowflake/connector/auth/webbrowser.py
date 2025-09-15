@@ -173,7 +173,14 @@ class AuthByWebBrowser(AuthByPlugin):
 
             logger.debug("step 2: open a browser")
             print(f"Going to open: {sso_url} to authenticate...")
-            if not self._webbrowser.open_new(sso_url):
+            browser_opened = self._webbrowser.open_new(sso_url)
+            if (
+                browser_opened
+                or os.getenv("SNOWFLAKE_FORCE_AUTH_SERVER", "False").lower() == "true"
+            ):
+                logger.debug("step 3: accept SAML token")
+                self._receive_saml_token(conn, socket_connection)
+            else:
                 print(
                     "We were unable to open a browser window for you, "
                     "please open the url above manually then paste the "
@@ -195,9 +202,6 @@ class AuthByWebBrowser(AuthByPlugin):
                         },
                     )
                     return
-            else:
-                logger.debug("step 3: accept SAML token")
-                self._receive_saml_token(conn, socket_connection)
         finally:
             socket_connection.close()
 
