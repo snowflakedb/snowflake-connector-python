@@ -214,6 +214,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "workload_identity_provider": (None, (type(None), AttestationProvider)),
     "workload_identity_entra_resource": (None, (type(None), str)),
+    "workload_identity_impersonation_path": (None, (type(None), list[str])),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -1361,10 +1362,28 @@ class SnowflakeConnection:
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
+                if (
+                    self._workload_identity_impersonation_path
+                    and self._workload_identity_provider
+                    not in (
+                        AttestationProvider.GCP,
+                        AttestationProvider.AWS,
+                    )
+                ):
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": "workload_identity_impersonation_path is currently only supported for GCP and AWS.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
                 self.auth_class = AuthByWorkloadIdentity(
                     provider=self._workload_identity_provider,
                     token=self._token,
                     entra_resource=self._workload_identity_entra_resource,
+                    impersonation_path=self._workload_identity_impersonation_path,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
@@ -1537,6 +1556,7 @@ class SnowflakeConnection:
             workload_identity_dependent_options = [
                 "workload_identity_provider",
                 "workload_identity_entra_resource",
+                "workload_identity_impersonation_path",
             ]
             for dependent_option in workload_identity_dependent_options:
                 if (

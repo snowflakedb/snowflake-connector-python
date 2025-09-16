@@ -40,6 +40,12 @@ def gen_dummy_id_token(
     )
 
 
+def gen_dummy_access_token(sub="test-subject", key="secret") -> str:
+    """Generates a dummy access token using the given subject."""
+    logger.debug(f"Generating dummy access token for subject {sub}")
+    return (sub + key).encode("utf-8").hex()
+
+
 def build_response(content: bytes, status_code: int = 200, headers=None) -> Response:
     """Builds a requests.Response object with the given status code and content."""
     response = Response()
@@ -285,6 +291,19 @@ class FakeGceMetadataService(FakeMetadataService):
             audience = query_string["audience"][0]
             self.token = gen_dummy_id_token(sub=self.sub, iss=self.iss, aud=audience)
             return build_response(self.token.encode("utf-8"))
+        elif (
+            method == "GET"
+            and parsed_url.path
+            == "/computeMetadata/v1/instance/service-accounts/default/token"
+            and headers.get("Metadata-Flavor") == "Google"
+        ):
+            self.token = gen_dummy_access_token(sub=self.sub)
+            ret = {
+                "access_token": self.token,
+                "expires_in": 3599,
+                "token_type": "Bearer",
+            }
+            return build_response(json.dumps(ret).encode("utf-8"))
         else:
             # Reject malformed requests.
             raise HTTPError()
@@ -348,6 +367,11 @@ class FakeAwsEnvironment:
     def __init__(self):
         # Defaults used for generating a token. Can be overriden in individual tests.
         self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-34afe100cad287fab"
+        # Path of roles that can be assumed. Empty if no impersonation is allowed.
+        # Can be overriden in individual tests.
+        self.assumption_path = []
+        self.assume_role_call_count = 0
+
         self.caller_identity = {"Arn": self.arn}
         self.region = "us-east-1"
         self.credentials = Credentials(access_key="ak", secret_key="sk")
@@ -355,6 +379,25 @@ class FakeAwsEnvironment:
             b'{"region": "us-east-1", "instanceId": "i-1234567890abcdef0"}'
         )
         self.metadata_token = "test-token"
+
+    def assume_role(self, **kwargs):
+        if (
+            self.assumption_path
+            and kwargs["RoleArn"] == self.assumption_path[self.assume_role_call_count]
+        ):
+            arn = self.assumption_path[self.assume_role_call_count]
+            self.assume_role_call_count += 1
+            return {
+                "Credentials": {
+                    "AccessKeyId": "access_key",
+                    "SecretAccessKey": "secret_key",
+                    "SessionToken": "session_token",
+                    "Expiration": int(time()) + 60 * 60,
+                },
+                "AssumedRoleUser": {"AssumedRoleId": hash(arn), "Arn": arn},
+                "ResponseMetadata": {},
+            }
+        return {}
 
     def get_region(self):
         return self.region
@@ -379,6 +422,7 @@ class FakeAwsEnvironment:
     def boto3_client(self, *args, **kwargs):
         mock_client = mock.Mock()
         mock_client.get_caller_identity.return_value = self.caller_identity
+        mock_client.assume_role = self.assume_role
         return mock_client
 
     def __enter__(self):
@@ -418,6 +462,9 @@ class FakeAwsEnvironment:
                 "snowflake.connector.platform_detection.boto3.client",
                 side_effect=self.boto3_client,
             )
+        )
+        self.patchers.append(
+            mock.patch("boto3.session.Session.client", side_effect=self.boto3_client)
         )
         for patcher in self.patchers:
             patcher.__enter__()
