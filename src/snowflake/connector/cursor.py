@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import abc
 import collections
 import logging
 import os
@@ -19,6 +20,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Generic,
     Iterator,
     Literal,
     NamedTuple,
@@ -86,6 +88,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .result_batch import ResultBatch
 
 T = TypeVar("T", bound=collections.abc.Sequence)
+FetchRow = TypeVar("FetchRow", bound=tuple[Any, ...] | dict[str, Any])
 
 logger = getLogger(__name__)
 
@@ -332,29 +335,7 @@ class ResultState(Enum):
     RESET = 3
 
 
-class SnowflakeCursor:
-    """Implementation of Cursor object that is returned from Connection.cursor() method.
-
-    Attributes:
-        description: A list of namedtuples about metadata for all columns.
-        rowcount: The number of records updated or selected. If not clear, -1 is returned.
-        rownumber: The current 0-based index of the cursor in the result set or None if the index cannot be
-            determined.
-        sfqid: Snowflake query id in UUID form. Include this in the problem report to the customer support.
-        sqlstate: Snowflake SQL State code.
-        timestamp_output_format: Snowflake timestamp_output_format for timestamps.
-        timestamp_ltz_output_format: Snowflake output format for LTZ timestamps.
-        timestamp_tz_output_format: Snowflake output format for TZ timestamps.
-        timestamp_ntz_output_format: Snowflake output format for NTZ timestamps.
-        date_output_format: Snowflake output format for dates.
-        time_output_format: Snowflake output format for times.
-        timezone: Snowflake timezone.
-        binary_output_format: Snowflake output format for binary fields.
-        arraysize: The default number of rows fetched by fetchmany.
-        connection: The connection object by which the cursor was created.
-        errorhandle: The class that handles error handling.
-        is_file_transfer: Whether, or not the current command is a put, or get.
-    """
+class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
     # TODO:
     #    Most of these attributes have no reason to be properties, we could just store them in public variables.
@@ -382,13 +363,11 @@ class SnowflakeCursor:
     def __init__(
         self,
         connection: SnowflakeConnection,
-        use_dict_result: bool = False,
     ) -> None:
         """Inits a SnowflakeCursor with a connection.
 
         Args:
             connection: The connection that created this cursor.
-            use_dict_result: Decides whether to use dict result or not.
         """
         self._connection: SnowflakeConnection = connection
 
@@ -423,7 +402,6 @@ class SnowflakeCursor:
         self._result: Iterator[tuple] | Iterator[dict] | None = None
         self._result_set: ResultSet | None = None
         self._result_state: ResultState = ResultState.DEFAULT
-        self._use_dict_result = use_dict_result
         self.query: str | None = None
         # TODO: self._query_result_format could be defined as an enum
         self._query_result_format: str | None = None
@@ -1514,7 +1492,11 @@ class SnowflakeCursor:
 
         return self
 
-    def fetchone(self) -> dict | tuple | None:
+    @abc.abstractmethod
+    def fetchone(self) -> FetchRow:
+        pass
+
+    def _fetchone(self) -> dict[str, Any] | tuple[Any, ...] | None:
         """Fetches one row."""
         if self._prefetch_hook is not None:
             self._prefetch_hook()
@@ -1539,7 +1521,7 @@ class SnowflakeCursor:
             else:
                 return None
 
-    def fetchmany(self, size: int | None = None) -> list[tuple] | list[dict]:
+    def fetchmany(self, size: int | None = None) -> list[FetchRow]:
         """Fetches the number of specified rows."""
         if size is None:
             size = self.arraysize
@@ -1565,7 +1547,7 @@ class SnowflakeCursor:
 
         return ret
 
-    def fetchall(self) -> list[tuple] | list[dict]:
+    def fetchall(self) -> list[FetchRow]:
         """Fetches all of the results."""
         ret = []
         while True:
@@ -1925,14 +1907,51 @@ class SnowflakeCursor:
         )
 
 
-class DictCursor(SnowflakeCursor):
+class SnowflakeCursor(SnowflakeCursorBase[tuple[Any, ...]]):
+    """Implementation of Cursor object that is returned from Connection.cursor() method.
+
+    Attributes:
+        description: A list of namedtuples about metadata for all columns.
+        rowcount: The number of records updated or selected. If not clear, -1 is returned.
+        rownumber: The current 0-based index of the cursor in the result set or None if the index cannot be
+            determined.
+        sfqid: Snowflake query id in UUID form. Include this in the problem report to the customer support.
+        sqlstate: Snowflake SQL State code.
+        timestamp_output_format: Snowflake timestamp_output_format for timestamps.
+        timestamp_ltz_output_format: Snowflake output format for LTZ timestamps.
+        timestamp_tz_output_format: Snowflake output format for TZ timestamps.
+        timestamp_ntz_output_format: Snowflake output format for NTZ timestamps.
+        date_output_format: Snowflake output format for dates.
+        time_output_format: Snowflake output format for times.
+        timezone: Snowflake timezone.
+        binary_output_format: Snowflake output format for binary fields.
+        arraysize: The default number of rows fetched by fetchmany.
+        connection: The connection object by which the cursor was created.
+        errorhandle: The class that handles error handling.
+        is_file_transfer: Whether, or not the current command is a put, or get.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._use_dict_result = False
+
+    def fetchone(self) -> tuple[Any, ...] | None:
+        row = self._fetchone()
+        assert row is None or isinstance(row, tuple)
+        return row
+
+
+class DictCursor(SnowflakeCursorBase[dict[str, Any]]):
     """Cursor returning results in a dictionary."""
 
-    def __init__(self, connection) -> None:
-        super().__init__(
-            connection,
-            use_dict_result=True,
-        )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._use_dict_result = True
+
+    def fetchone(self) -> dict[str, Any] | None:
+        row = self._fetchone()
+        assert row is None or isinstance(row, dict)
+        return row
 
 
 def __getattr__(name):
