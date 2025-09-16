@@ -14,6 +14,7 @@ pytestmark = [
 
 import snowflake.connector.cursor
 from snowflake.connector import ProgrammingError, errors
+from snowflake.connector.cursor import DictCursor, SnowflakeCursor
 
 try:  # pragma: no cover
     from snowflake.connector.constants import (
@@ -153,10 +154,11 @@ def test_binding_multi(conn_cnx, style: str, skip_to_last_set: bool):
             )
 
 
-def test_async_exec_multi(conn_cnx, skip_to_last_set: bool):
+@pytest.mark.parametrize("cursor_class", [SnowflakeCursor, DictCursor])
+def test_async_exec_multi(conn_cnx, cursor_class, skip_to_last_set: bool):
     """Tests whether async execution query works within a multi-statement"""
     with conn_cnx() as con:
-        with con.cursor() as cur:
+        with con.cursor(cursor_class) as cur:
             cur.execute_async(
                 "select 1; select 2; select count(*) from table(generator(timeLimit => 1)); select 'b';",
                 num_statements=4,
@@ -165,14 +167,29 @@ def test_async_exec_multi(conn_cnx, skip_to_last_set: bool):
             assert con.is_still_running(con.get_query_status(q_id))
         _wait_while_query_running(con, q_id, sleep_time=1)
     with conn_cnx() as con:
-        with con.cursor() as cur:
+        with con.cursor(cursor_class) as cur:
             _wait_until_query_success(con, q_id, num_checks=3, sleep_per_check=1)
             assert con.get_query_status_throw_if_error(q_id) == QueryStatus.SUCCESS
+
+            if cursor_class == SnowflakeCursor:
+                expected = [
+                    [(1,)],
+                    [(2,)],
+                    lambda x: len(x) == 1 and len(x[0]) == 1 and x[0][0] > 0,
+                    [("b",)],
+                ]
+            elif cursor_class == DictCursor:
+                expected = [
+                    [{"1": 1}],
+                    [{"2": 2}],
+                    lambda x: len(x) == 1 and len(x[0]) == 1 and x[0]["COUNT(*)"] > 0,
+                    [{"'B'": "b"}],
+                ]
 
             cur.get_results_from_sfqid(q_id)
             _check_multi_statement_results(
                 cur,
-                checks=[[(1,)], [(2,)], lambda x: x > [(0,)], [("b",)]],
+                checks=expected,
                 skip_to_last_set=skip_to_last_set,
             )
 
