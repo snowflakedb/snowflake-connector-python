@@ -277,9 +277,7 @@ def test_auth_webbrowser_fail_webbrowser(
         )
     captured = capsys.readouterr()
     assert captured.out == (
-        "Initiating login request with your identity provider. A browser window "
-        "should have opened for you to complete the login. If you can't see it, "
-        "check existing browser windows, or your OS settings. Press CTRL+C to "
+        "Initiating login request with your identity provider. Press CTRL+C to "
         f"abort and try again...\nGoing to open: {REF_SSO_URL if disable_console_login else REF_CONSOLE_LOGIN_SSO_URL} to authenticate...\nWe were unable to open a browser window for "
         "you, please open the url above manually then paste the URL you "
         "are redirected to into the terminal.\n"
@@ -336,10 +334,10 @@ def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
         )
         captured = capsys.readouterr()
         assert captured.out == (
-            "Initiating login request with your identity provider. A browser window "
+            "Initiating login request with your identity provider. Press CTRL+C to "
+            f"abort and try again...\nGoing to open: {REF_SSO_URL if disable_console_login else REF_CONSOLE_LOGIN_SSO_URL} to authenticate...\nA browser window "
             "should have opened for you to complete the login. If you can't see it, "
-            "check existing browser windows, or your OS settings. Press CTRL+C to "
-            f"abort and try again...\nGoing to open: {REF_SSO_URL if disable_console_login else REF_CONSOLE_LOGIN_SSO_URL} to authenticate...\n"
+            "check existing browser windows, or your OS settings.\n"
         )
         assert rest._connection.errorhandler.called  # an error
         assert auth.assertion_content is None
