@@ -1279,8 +1279,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
         await self.connection.get_query_status_throw_if_error(
             sfqid
         )  # Trigger an exception if query failed
-        klass = self.__class__
-        self._inner_cursor = klass(self.connection)
+        self._inner_cursor = SnowflakeCursor(self.connection)
         self._sfqid = sfqid
         self._prefetch_hook = wait_until_ready
 
