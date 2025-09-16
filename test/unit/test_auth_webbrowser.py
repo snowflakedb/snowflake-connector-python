@@ -749,6 +749,75 @@ def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(monkeypatc
         assert auth.assertion_content == ref_token
 
 
+@pytest.mark.parametrize("force_auth_server", [True, False])
+@patch("secrets.token_bytes", return_value=PROOF_KEY)
+def test_auth_webbrowser_force_auth_server(_, monkeypatch, force_auth_server):
+    """Authentication by WebBrowser with SNOWFLAKE_FORCE_AUTH_SERVER environment variable."""
+    ref_token = "MOCK_TOKEN"
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY, disable_console_login=True)
+
+    # Set environment variable
+    if force_auth_server:
+        monkeypatch.setenv("SNOWFLAKE_FORCE_AUTH_SERVER", "true")
+    else:
+        monkeypatch.delenv("SNOWFLAKE_FORCE_AUTH_SERVER", raising=False)
+
+    # mock socket
+    mock_socket_pkg = _init_socket(
+        recv_side_effect_func=recv_setup([successful_web_callback(ref_token)])
+    )
+
+    # mock webbrowser - simulate browser failing to open
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = False
+
+    # Mock select.select to return socket client
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
+        )
+
+        if force_auth_server:
+            # When SNOWFLAKE_FORCE_AUTH_SERVER is true, should continue with server flow even if browser fails
+            auth.prepare(
+                conn=rest._connection,
+                authenticator=AUTHENTICATOR,
+                service_name=SERVICE_NAME,
+                account=ACCOUNT,
+                user=USER,
+                password=PASSWORD,
+            )
+            assert not rest._connection.errorhandler.called  # no error
+            assert auth.assertion_content == ref_token
+            body = {"data": {}}
+            auth.update_body(body)
+            assert body["data"]["TOKEN"] == ref_token
+            assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
+            assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
+        else:
+            # When SNOWFLAKE_FORCE_AUTH_SERVER is false/unset, should fall back to manual URL input
+            with patch("builtins.input", return_value=f"http://example.com/sso?token={ref_token}"):
+                auth.prepare(
+                    conn=rest._connection,
+                    authenticator=AUTHENTICATOR,
+                    service_name=SERVICE_NAME,
+                    account=ACCOUNT,
+                    user=USER,
+                    password=PASSWORD,
+                )
+                assert not rest._connection.errorhandler.called  # no error
+                assert auth.assertion_content == ref_token
+                body = {"data": {}}
+                auth.update_body(body)
+                assert body["data"]["TOKEN"] == ref_token
+                assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
+                assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
+
+
 @pytest.mark.parametrize("authenticator", ["EXTERNALBROWSER", "externalbrowser"])
 def test_externalbrowser_authenticator_is_case_insensitive(monkeypatch, authenticator):
     """Test that external browser authenticator is case insensitive."""
