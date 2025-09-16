@@ -14,7 +14,7 @@ def perform_put_fetch_get_fail_closed(connection_parameters: dict, num_records: 
     Args:
         connection_parameters (dict): A dictionary containing connection details such as
                                        host, port, user, password, account, schema, etc.
-        num_records (int): Number of records to generate and PUT. Default is 10,000.
+        num_records (int): Number of records to generate and PUT. Default is 1,000.
     """
     try:
         with connect(connection_parameters) as conn:
@@ -92,7 +92,7 @@ def perform_put_fetch_get_fail_closed(connection_parameters: dict, num_records: 
 @prober_function
 def perform_put_fetch_get_100_lines_fail_closed(connection_parameters: dict):
     """
-    Performs a PUT and GET operation for 1,000 rows using the provided connection parameters in fail_close mode.
+    Performs a PUT and GET operation for 100 rows using the provided connection parameters in fail_close mode.
 
     Args:
         connection_parameters (dict): A dictionary containing connection details such as
