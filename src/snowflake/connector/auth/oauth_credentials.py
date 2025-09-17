@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -17,10 +16,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class TokenRequestMode(StrEnum):
-    header_only = "header_only"
-    header_and_body = "header_and_body"
-
 class AuthByOauthCredentials(AuthByOAuthBase):
     """Authenticates user by OAuth credentials - a client_id/client_secret pair."""
 
@@ -32,7 +27,7 @@ class AuthByOauthCredentials(AuthByOAuthBase):
         token_request_url: str,
         scope: str,
         connection: SnowflakeConnection | None = None,
-        token_request_mode: str | None = None,
+        credentials_in_body: bool = False,
         **kwargs,
     ) -> None:
         self._validate_client_credentials_present(client_id, client_secret, connection)
@@ -46,7 +41,7 @@ class AuthByOauthCredentials(AuthByOAuthBase):
             **kwargs,
         )
         self._application = application
-        self._token_request_mode = TokenRequestMode[token_request_mode] if token_request_mode else TokenRequestMode.header_only
+        self._credentials_in_body = credentials_in_body
         self._origin: str | None = None
 
     def _get_oauth_type_id(self) -> str:
@@ -67,7 +62,7 @@ class AuthByOauthCredentials(AuthByOAuthBase):
             "grant_type": "client_credentials",
             "scope": self._scope,
         }
-        if self._token_request_mode is TokenRequestMode.header_and_body:
+        if self._credentials_in_body:
             fields["client_id"] = self._client_id
             fields["client_secret"] = self._client_secret
         return self._get_request_token_response(conn, fields)
