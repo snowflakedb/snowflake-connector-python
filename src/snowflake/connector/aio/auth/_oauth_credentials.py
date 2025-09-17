@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 from ...auth.oauth_credentials import (
     AuthByOauthCredentials as AuthByOauthCredentialsSync,
 )
-from ...token_cache import TokenCache
 from ._by_plugin import AuthByPlugin as AuthByPluginAsync
 
 if TYPE_CHECKING:
@@ -27,8 +26,6 @@ class AuthByOauthCredentials(AuthByPluginAsync, AuthByOauthCredentialsSync):
         client_secret: str,
         token_request_url: str,
         scope: str,
-        token_cache: TokenCache | None = None,
-        refresh_token_enabled: bool = False,
         connection: SnowflakeConnection | None = None,
         **kwargs,
     ) -> None:
@@ -43,8 +40,6 @@ class AuthByOauthCredentials(AuthByPluginAsync, AuthByOauthCredentialsSync):
             client_secret=client_secret,
             token_request_url=token_request_url,
             scope=scope,
-            token_cache=token_cache,
-            refresh_token_enabled=refresh_token_enabled,
             connection=connection,
             **kwargs,
         )
