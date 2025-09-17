@@ -59,7 +59,7 @@ def perform_put_fetch_get_fail_closed(connection_parameters: dict, num_records: 
                 count_data_from_table(table_name, num_records, cur, "cloudprober_driver_python_data_transferred_completely_fail_closed")
 
                 logger.error("Comparing fetched data with CSV file")
-                compare_fetched_data(table_name, file_name, cur, "cloudprober_driver_python_data_integrity_fail_closed")   
+                compare_fetched_data(table_name, file_name, cur, metric_name="cloudprober_driver_python_data_integrity_fail_closed")   
 
                 logger.error("Performing GET operation")
                 execute_get_command(stage_name, conn, "cloudprober_driver_python_perform_get_fail_closed")
