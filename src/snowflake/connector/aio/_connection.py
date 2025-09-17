@@ -348,12 +348,6 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                         host=self.host, port=self.port
                     ),
                     scope=self._oauth_scope,
-                    token_cache=(
-                        auth.get_token_cache()
-                        if self._client_store_temporary_credential
-                        else None
-                    ),
-                    refresh_token_enabled=self._oauth_enable_refresh_tokens,
                     connection=self,
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
