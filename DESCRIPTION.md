@@ -9,6 +9,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v3.18.0(TBD)
   - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP and AWS workloads only
+  - Fixed `get_results_from_sfqid` when using `DictCursor` and executing multiple statements at once
+  - Added the `oauth_credentials_in_body` parameter supporting an option to send the oauth client credentials in the request body
   - Added the `SNOWFLAKE_AUTH_FORCE_SERVER` environment variable to force the use of the local-listening server when using the `externalbrowser` auth method
     - This allows headless environments (like Docker or Airflow) running locally to still auth via a browser
 
