@@ -101,13 +101,15 @@ def test_oauth_client_credentials_parameters(
         user="<unused-user>",
         service_name=None,
     )
-    if expected_credentials_in_body:
-        assert (
-            str_fields
-            == "{'grant_type': 'client_credentials', 'scope': '', 'client_id': 'test_client_id', 'client_secret': 'test_client}"
-        )
-    else:
-        assert str_fields == "{'grant_type': 'client_credentials', 'scope': ''}"
+    credential_fields = (
+        ", 'client_id': 'test_client_id', 'client_secret': 'test_client_secret'"
+        if expected_credentials_in_body
+        else ""
+    )
+    assert (
+        str_fields
+        == "{'grant_type': 'client_credentials', 'scope': ''" + credential_fields + "}"
+    )
 
     conn.close()
 
