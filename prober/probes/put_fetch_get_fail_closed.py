@@ -1,4 +1,4 @@
-from put_fetch_get import *
+from probes.put_fetch_get import *
 from probes.logging_config import initialize_logger
 from probes.login import connect
 from probes.registry import prober_function
