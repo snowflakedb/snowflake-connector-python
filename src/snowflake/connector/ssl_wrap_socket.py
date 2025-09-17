@@ -14,7 +14,7 @@ import time
 import weakref
 from contextvars import ContextVar
 from functools import wraps
-from inspect import getfullargspec as get_args
+from inspect import signature as _sig
 from socket import socket
 from typing import Any
 
@@ -146,46 +146,26 @@ def inject_into_urllib3() -> None:
 
 @wraps(ssl_.ssl_wrap_socket)
 def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
-    # Extract host_name
-    hostname_index = get_args(ssl_.ssl_wrap_socket).args.index("server_hostname")
-    server_hostname = (
-        args[hostname_index]
-        if len(args) > hostname_index
-        else kwargs.get("server_hostname", None)
-    )
-    # Remove context if present
-    ssl_context_index = get_args(ssl_.ssl_wrap_socket).args.index("ssl_context")
-    context_in_args = len(args) > ssl_context_index
-    ssl_context = (
-        args[hostname_index] if context_in_args else kwargs.get("ssl_context", None)
-    )
-    if not isinstance(ssl_context, PyOpenSSLContext):
-        # Create new default context
-        if context_in_args:
-            new_args = list(args)
-            new_args[ssl_context_index] = None
-            args = tuple(new_args)
-        else:
-            del kwargs["ssl_context"]
-    # Fix ca certs location
-    ca_certs_index = get_args(ssl_.ssl_wrap_socket).args.index("ca_certs")
-    ca_certs_in_args = len(args) > ca_certs_index
-    if not ca_certs_in_args and not kwargs.get("ca_certs"):
-        kwargs["ca_certs"] = certifi.where()
+    # Bind passed args/kwargs to the underlying signature to support both positional and keyword calls
+    bound = _sig(ssl_.ssl_wrap_socket).bind_partial(*args, **kwargs)
+    params = bound.arguments
 
-    # Ensure PyOpenSSL context with partial-chain is used if no suitable context provided
-    provided_ctx = kwargs.get("ssl_context", None)
+    server_hostname = params.get("server_hostname")
+
+    # Ensure CA bundle default if not provided
+    if not params.get("ca_certs"):
+        params["ca_certs"] = certifi.where()
+
+    # Ensure PyOpenSSL context with partial-chain is used if none or wrong type provided
+    provided_ctx = params.get("ssl_context")
     if not isinstance(provided_ctx, PyOpenSSLContext):
-        cafile_for_ctx = _resolve_cafile(kwargs)
-        kwargs["ssl_context"] = _build_context_with_partial_chain(cafile_for_ctx)
+        cafile_for_ctx = _resolve_cafile(params)
+        params["ssl_context"] = _build_context_with_partial_chain(cafile_for_ctx)
+    else:
+        # If a PyOpenSSLContext is provided, ensure it trusts the provided CA and partial-chain is enabled
+        _ensure_partial_chain_on_context(provided_ctx, _resolve_cafile(params))
 
-    # If a PyOpenSSLContext is provided, ensure it trusts the provided CA and
-    # partial-chain is enabled
-    provided_ctx = kwargs.get("ssl_context", None)
-    if isinstance(provided_ctx, PyOpenSSLContext):
-        _ensure_partial_chain_on_context(provided_ctx, _resolve_cafile(kwargs))
-
-    ret = ssl_.ssl_wrap_socket(*args, **kwargs)
+    ret = ssl_.ssl_wrap_socket(**params)
 
     log.debug(
         "OCSP Mode: %s, OCSP response cache file name: %s",
