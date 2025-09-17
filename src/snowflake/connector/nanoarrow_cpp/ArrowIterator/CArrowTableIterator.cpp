@@ -69,7 +69,6 @@ void CArrowTableIterator::convertIfNeeded(ArrowSchema* columnSchema,
     case SnowflakeType::Type::REAL:
     case SnowflakeType::Type::TEXT:
     case SnowflakeType::Type::INTERVAL_YEAR_MONTH:
-    case SnowflakeType::Type::INTERVAL_DAY_TIME:
     case SnowflakeType::Type::VARIANT:
     case SnowflakeType::Type::VECTOR: {
       // Do not need to convert
@@ -173,6 +172,24 @@ void CArrowTableIterator::convertIfNeeded(ArrowSchema* columnSchema,
           break;
         }
       }
+      break;
+    }
+
+    case SnowflakeType::Type::INTERVAL_DAY_TIME: {
+      int scale = 9;
+      if (metadata != nullptr) {
+        struct ArrowStringView scaleString = ArrowCharView(nullptr);
+        returnCode = ArrowMetadataGetValue(metadata, ArrowCharView("scale"),
+                                           &scaleString);
+        SF_CHECK_ARROW_RC(returnCode,
+                          "[Snowflake Exception] error getting 'scale' "
+                          "from Arrow metadata, error code: %d",
+                          returnCode);
+        scale =
+            std::stoi(std::string(scaleString.data, scaleString.size_bytes));
+      }
+      convertIntervalDayTimeColumn_nanoarrow(&columnSchemaView, columnArray,
+                                             scale);
       break;
     }
 
@@ -494,6 +511,73 @@ void CArrowTableIterator::
                         returnCode);
     }
   }
+  returnCode = ArrowArrayFinishBuildingDefault(newArray, &error);
+  SF_CHECK_ARROW_RC(returnCode,
+                    "[Snowflake Exception] error finishing building arrow "
+                    "array: %s, error code: %d",
+                    ArrowErrorMessage(&error), returnCode);
+  field->schema->release(field->schema);
+  ArrowSchemaMove(newSchema, field->schema);
+  columnArray->array->release(columnArray->array);
+  ArrowArrayMove(newArray, columnArray->array);
+}
+
+void CArrowTableIterator::convertIntervalDayTimeColumn_nanoarrow(
+    ArrowSchemaView* field, ArrowArrayView* columnArray, const int scale) {
+  int returnCode = 0;
+  nanoarrow::UniqueSchema newUniqueField;
+  nanoarrow::UniqueArray newUniqueArray;
+  ArrowSchema* newSchema = newUniqueField.get();
+  ArrowArray* newArray = newUniqueArray.get();
+  ArrowError error;
+
+  // create new schema
+  ArrowSchemaInit(newSchema);
+  newSchema->flags &=
+      (field->schema->flags & ARROW_FLAG_NULLABLE);  // map to nullable()
+
+  returnCode = ArrowSchemaSetTypeDateTime(newSchema, NANOARROW_TYPE_DURATION,
+                                          NANOARROW_TIME_UNIT_NANO, NULL);
+  SF_CHECK_ARROW_RC(returnCode,
+                    "[Snowflake Exception] error setting arrow schema type "
+                    "DateTime, error code: %d",
+                    returnCode);
+
+  returnCode = ArrowSchemaSetName(newSchema, field->schema->name);
+  SF_CHECK_ARROW_RC(
+      returnCode,
+      "[Snowflake Exception] error setting schema name, error code: %d",
+      returnCode);
+
+  returnCode = ArrowArrayInitFromSchema(newArray, newSchema, &error);
+  SF_CHECK_ARROW_RC(returnCode,
+                    "[Snowflake Exception] error initializing ArrowArrayView "
+                    "from schema : %s, error code: %d",
+                    ArrowErrorMessage(&error), returnCode);
+
+  returnCode = ArrowArrayStartAppending(newArray);
+  SF_CHECK_ARROW_RC(
+      returnCode,
+      "[Snowflake Exception] error appending arrow array, error code: %d",
+      returnCode);
+
+  for (int64_t rowIdx = 0; rowIdx < columnArray->array->length; rowIdx++) {
+    if (ArrowArrayViewIsNull(columnArray, rowIdx)) {
+      returnCode = ArrowArrayAppendNull(newArray, 1);
+      SF_CHECK_ARROW_RC(returnCode,
+                        "[Snowflake Exception] error appending null to arrow "
+                        "array, error code: %d",
+                        returnCode);
+    } else {
+      auto originalVal = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
+      returnCode = ArrowArrayAppendInt(newArray, originalVal);
+      SF_CHECK_ARROW_RC(returnCode,
+                        "[Snowflake Exception] error appending int to arrow "
+                        "array, error code: %d",
+                        returnCode);
+    }
+  }
+
   returnCode = ArrowArrayFinishBuildingDefault(newArray, &error);
   SF_CHECK_ARROW_RC(returnCode,
                     "[Snowflake Exception] error finishing building arrow "
