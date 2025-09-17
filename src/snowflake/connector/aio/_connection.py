@@ -310,7 +310,6 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
-                self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -318,6 +317,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     application=self.application,
                     client_id=self._oauth_client_id,
                     client_secret=self._oauth_client_secret,
+                    host=self.host,
                     authentication_url=self._oauth_authorization_url.format(
                         host=self.host, port=self.port
                     ),
@@ -337,7 +337,6 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
-                self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -355,6 +354,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                         else None
                     ),
                     refresh_token_enabled=self._oauth_enable_refresh_tokens,
+                    connection=self,
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
                 self.auth_class = AuthByPAT(self._token)
