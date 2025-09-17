@@ -387,6 +387,50 @@ async def test_oauth_code_custom_urls_async(
 
 @pytest.mark.skipolddriver
 @patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
+async def test_oauth_code_local_application_custom_urls_successful_flow_async(
+    wiremock_client: WiremockClient,
+    wiremock_oauth_authorization_code_dir,
+    wiremock_generic_mappings_dir,
+    webbrowser_mock_sync,
+    monkeypatch,
+    omit_oauth_urls_check,  # noqa: F811
+) -> None:
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
+
+    wiremock_client.import_mapping(
+        wiremock_oauth_authorization_code_dir
+        / "external_idp_custom_urls_local_application.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_login_successful.json"
+    )
+    wiremock_client.add_mapping(
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+
+    with mock.patch("webbrowser.open", new=webbrowser_mock_sync.open):
+        with mock.patch("secrets.token_urlsafe", return_value="abc123"):
+            cnx = SnowflakeConnection(
+                user="testUser",
+                authenticator="OAUTH_AUTHORIZATION_CODE",
+                oauth_client_id="",
+                oauth_client_secret="",
+                account="testAccount",
+                protocol="http",
+                role="ANALYST",
+                oauth_token_request_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/tokenrequest",
+                oauth_authorization_url=f"http://{wiremock_client.wiremock_host}:{wiremock_client.wiremock_http_port}/authorization",
+                oauth_redirect_uri="http://localhost:8009/snowflake/oauth-redirect",
+                host=wiremock_client.wiremock_host,
+                port=wiremock_client.wiremock_http_port,
+            )
+
+            await cnx.connect()
+            await cnx.close()
+
+
+@pytest.mark.skipolddriver
+@patch("snowflake.connector.auth._http_server.AuthHttpServer.DEFAULT_TIMEOUT", 30)
 async def test_oauth_code_successful_refresh_token_flow_async(
     wiremock_client: WiremockClient,
     wiremock_oauth_refresh_token_dir,

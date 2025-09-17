@@ -29,6 +29,7 @@ class AuthByOauthCredentials(AuthByPluginAsync, AuthByOauthCredentialsSync):
         scope: str,
         token_cache: TokenCache | None = None,
         refresh_token_enabled: bool = False,
+        connection: SnowflakeConnection | None = None,
         **kwargs,
     ) -> None:
         """Initializes an instance with OAuth client credentials parameters."""
@@ -44,6 +45,7 @@ class AuthByOauthCredentials(AuthByPluginAsync, AuthByOauthCredentialsSync):
             scope=scope,
             token_cache=token_cache,
             refresh_token_enabled=refresh_token_enabled,
+            connection=connection,
             **kwargs,
         )
 
