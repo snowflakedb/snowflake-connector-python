@@ -27,6 +27,7 @@ class AuthByOauthCredentials(AuthByOAuthBase):
         token_request_url: str,
         scope: str,
         connection: SnowflakeConnection | None = None,
+        credentials_in_body: bool = False,
         **kwargs,
     ) -> None:
         self._validate_client_credentials_present(client_id, client_secret, connection)
@@ -40,6 +41,7 @@ class AuthByOauthCredentials(AuthByOAuthBase):
             **kwargs,
         )
         self._application = application
+        self._credentials_in_body = credentials_in_body
         self._origin: str | None = None
 
     def _get_oauth_type_id(self) -> str:
@@ -60,4 +62,7 @@ class AuthByOauthCredentials(AuthByOAuthBase):
             "grant_type": "client_credentials",
             "scope": self._scope,
         }
+        if self._credentials_in_body:
+            fields["client_id"] = self._client_id
+            fields["client_secret"] = self._client_secret
         return self._get_request_token_response(conn, fields)
