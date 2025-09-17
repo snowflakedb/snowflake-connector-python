@@ -8,7 +8,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v3.18.0(TBD)
-  - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP and AWS workloads only
+  - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP and AWS workloads only.
+  - Added the `oauth_credentials_in_body` parameter supporting an option to send the oauth client credentials in the request body.
 
 - v3.17.3(September 02,2025)
   - Enhanced configuration file permission warning messages.
