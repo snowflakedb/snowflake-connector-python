@@ -174,7 +174,12 @@ class ResultSet(ResultSetSync):
         result_chunks: list[JSONResultBatch] | list[ArrowResultBatch],
         prefetch_thread_num: int,
     ) -> None:
-        super().__init__(cursor, result_chunks, prefetch_thread_num)
+        super().__init__(
+            cursor,
+            result_chunks,
+            prefetch_thread_num,
+            use_mp=False,  # async code depends on aio rather than multiprocessing
+        )
         self.batches = cast(
             Union[list[JSONResultBatch], list[ArrowResultBatch]], self.batches
         )
