@@ -180,7 +180,7 @@ class AuthByWebBrowser(AuthByPlugin):
 
             if (
                 browser_opened
-                or os.getenv("SNOWFLAKE_FORCE_AUTH_SERVER", "False").lower() == "true"
+                or os.getenv("SNOWFLAKE_AUTH_FORCE_SERVER", "False").lower() == "true"
             ):
                 logger.debug("step 3: accept SAML token")
                 self._receive_saml_token(conn, socket_connection)

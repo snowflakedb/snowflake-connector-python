@@ -752,15 +752,15 @@ def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(monkeypatc
 @pytest.mark.parametrize("force_auth_server", [True, False])
 @patch("secrets.token_bytes", return_value=PROOF_KEY)
 def test_auth_webbrowser_force_auth_server(_, monkeypatch, force_auth_server):
-    """Authentication by WebBrowser with SNOWFLAKE_FORCE_AUTH_SERVER environment variable."""
+    """Authentication by WebBrowser with SNOWFLAKE_AUTH_FORCE_SERVER environment variable."""
     ref_token = "MOCK_TOKEN"
     rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY, disable_console_login=True)
 
     # Set environment variable
     if force_auth_server:
-        monkeypatch.setenv("SNOWFLAKE_FORCE_AUTH_SERVER", "true")
+        monkeypatch.setenv("SNOWFLAKE_AUTH_FORCE_SERVER", "true")
     else:
-        monkeypatch.delenv("SNOWFLAKE_FORCE_AUTH_SERVER", raising=False)
+        monkeypatch.delenv("SNOWFLAKE_AUTH_FORCE_SERVER", raising=False)
 
     # mock socket
     mock_socket_pkg = _init_socket(
@@ -782,7 +782,7 @@ def test_auth_webbrowser_force_auth_server(_, monkeypatch, force_auth_server):
         )
 
         if force_auth_server:
-            # When SNOWFLAKE_FORCE_AUTH_SERVER is true, should continue with server flow even if browser fails
+            # When SNOWFLAKE_AUTH_FORCE_SERVER is true, should continue with server flow even if browser fails
             auth.prepare(
                 conn=rest._connection,
                 authenticator=AUTHENTICATOR,
@@ -799,7 +799,7 @@ def test_auth_webbrowser_force_auth_server(_, monkeypatch, force_auth_server):
             assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
             assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
         else:
-            # When SNOWFLAKE_FORCE_AUTH_SERVER is false/unset, should fall back to manual URL input
+            # When SNOWFLAKE_AUTH_FORCE_SERVER is false/unset, should fall back to manual URL input
             with patch("builtins.input", return_value=f"http://example.com/sso?token={ref_token}"):
                 auth.prepare(
                     conn=rest._connection,
