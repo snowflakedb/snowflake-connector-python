@@ -29,11 +29,13 @@ class AuthByOauthCode(AuthByPluginAsync, AuthByOauthCodeSync):
         token_request_url: str,
         redirect_uri: str,
         scope: str,
+        host: str,
         pkce_enabled: bool = True,
         token_cache: TokenCache | None = None,
         refresh_token_enabled: bool = False,
         external_browser_timeout: int | None = None,
         enable_single_use_refresh_tokens: bool = False,
+        connection: SnowflakeConnection | None = None,
         **kwargs,
     ) -> None:
         """Initializes an instance with OAuth authorization code parameters."""
@@ -49,11 +51,13 @@ class AuthByOauthCode(AuthByPluginAsync, AuthByOauthCodeSync):
             token_request_url=token_request_url,
             redirect_uri=redirect_uri,
             scope=scope,
+            host=host,
             pkce_enabled=pkce_enabled,
             token_cache=token_cache,
             refresh_token_enabled=refresh_token_enabled,
             external_browser_timeout=external_browser_timeout,
             enable_single_use_refresh_tokens=enable_single_use_refresh_tokens,
+            connection=connection,
             **kwargs,
         )
 
