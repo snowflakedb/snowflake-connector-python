@@ -28,9 +28,7 @@ def test_wrapper_injects_pyopenssl_context(monkeypatch):
     captured = {}
 
     def fake_ssl_wrap_socket(  # pylint: disable=unused-argument,too-many-arguments,too-many-positional-arguments
-        sock,
-        ssl_context=None,
-        **kwargs
+        sock, ssl_context=None, **kwargs
     ):
         # Assert that our wrapper provided a PyOpenSSLContext
         captured["ctx_is_pyopenssl"] = isinstance(ssl_context, PyOpenSSLContext)
