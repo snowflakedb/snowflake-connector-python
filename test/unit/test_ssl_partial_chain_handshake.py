@@ -1,12 +1,17 @@
 """Integration-style unit test for partial-chain TLS handshake."""
 
+import ipaddress as _ip
 import socket
 import ssl
 import tempfile as _tempfile
 import threading
+from datetime import datetime, timedelta, timezone
 
-import OpenSSL
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 import snowflake.connector.ssl_wrap_socket as ssw  # pylint: disable=import-error
 from snowflake.connector.constants import OCSPMode  # pylint: disable=import-error
@@ -25,70 +30,88 @@ def disable_ocsp_checks():
 
 def _create_key():
     """Create a new RSA key for certificate generation."""
-    k = OpenSSL.crypto.PKey()
-    k.generate_key(OpenSSL.crypto.TYPE_RSA, 2048)
-    return k
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
 
 def _create_cert(subject_cn, issuer_cert, issuer_key, is_ca, subject_key, ca=False):
     """Create a certificate signed by issuer or self-signed if issuer is None."""
-    cert = OpenSSL.crypto.X509()
-    cert.set_version(2)
-    cert.set_serial_number(1)
-    subj = cert.get_subject()
-    subj.CN = subject_cn
-    cert.gmtime_adj_notBefore(0)
-    cert.gmtime_adj_notAfter(60 * 60)
-    cert.set_pubkey(subject_key)
-    if issuer_cert is None:
-        issuer = subj
-    else:
-        issuer = issuer_cert.get_subject()
-    cert.set_issuer(issuer)
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, subject_cn)])
+    issuer_name = subject if issuer_cert is None else issuer_cert.subject
+
+    builder = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer_name)
+        .public_key(subject_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc) - timedelta(minutes=1))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(hours=1))
+    )
+
     if is_ca:
-        cert.add_extensions(
-            [
-                OpenSSL.crypto.X509Extension(
-                    b"basicConstraints", True, b"CA:TRUE, pathlen:1"
-                ),
-                OpenSSL.crypto.X509Extension(
-                    b"keyUsage", True, b"keyCertSign, cRLSign"
-                ),
-                OpenSSL.crypto.X509Extension(
-                    b"subjectKeyIdentifier", False, b"hash", subject=cert
-                ),
-            ]
+        builder = builder.add_extension(
+            x509.BasicConstraints(ca=True, path_length=1), critical=True
+        ).add_extension(
+            x509.KeyUsage(
+                digital_signature=False,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=True,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
         )
     else:
-        cert.add_extensions(
-            [
-                OpenSSL.crypto.X509Extension(b"basicConstraints", True, b"CA:FALSE"),
-                OpenSSL.crypto.X509Extension(b"extendedKeyUsage", False, b"serverAuth"),
-                OpenSSL.crypto.X509Extension(
-                    b"subjectAltName", False, b"DNS:localhost,IP:127.0.0.1"
+        builder = (
+            builder.add_extension(
+                x509.BasicConstraints(ca=False, path_length=None), critical=True
+            )
+            .add_extension(
+                x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False
+            )
+            .add_extension(
+                x509.SubjectAlternativeName(
+                    [
+                        x509.DNSName("localhost"),
+                        x509.IPAddress(_ip.ip_address("127.0.0.1")),
+                    ]
                 ),
-            ]
+                critical=False,
+            )
         )
-    if issuer_cert is not None:
-        cert.add_extensions(
-            [
-                OpenSSL.crypto.X509Extension(
-                    b"authorityKeyIdentifier",
-                    False,
-                    b"keyid:always,issuer:always",
-                    issuer=issuer_cert,
-                ),
-            ]
-        )
-    cert.sign(issuer_key if issuer_key is not None else subject_key, "sha256")
+
+    # Subject Key Identifier
+    builder = builder.add_extension(
+        x509.SubjectKeyIdentifier.from_public_key(subject_key.public_key()),
+        critical=False,
+    )
+    # Authority Key Identifier (referencing issuer public key)
+    authority_pubkey = (
+        subject_key.public_key() if issuer_key is None else issuer_key.public_key()
+    )
+    builder = builder.add_extension(
+        x509.AuthorityKeyIdentifier.from_issuer_public_key(authority_pubkey),
+        critical=False,
+    )
+
+    signer_key = issuer_key if issuer_key is not None else subject_key
+    cert = builder.sign(private_key=signer_key, algorithm=hashes.SHA256())
     return cert
 
 
 def _pem(obj, is_key=False):
     """Return PEM-encoded certificate or key."""
     if is_key:
-        return OpenSSL.crypto.dump_privatekey(OpenSSL.crypto.FILETYPE_PEM, obj)
-    return OpenSSL.crypto.dump_certificate(OpenSSL.crypto.FILETYPE_PEM, obj)
+        return obj.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    return obj.public_bytes(encoding=serialization.Encoding.PEM)
 
 
 def _run_tls_server(server_cert_pem, server_key_pem, chain_pem, ready_evt, addr_holder):
