@@ -51,6 +51,14 @@ from snowflake.connector.errors import (
 from snowflake.connector.wif_util import AttestationProvider
 
 
+@pytest.fixture(autouse=True)
+def mock_detect_platforms():
+    with patch(
+        "snowflake.connector.auth._auth.detect_platforms", return_value=[]
+    ) as mock_detect:
+        yield mock_detect
+
+
 def fake_connector(**kwargs) -> snowflake.connector.aio.SnowflakeConnection:
     return snowflake.connector.aio.SnowflakeConnection(
         user="user",
