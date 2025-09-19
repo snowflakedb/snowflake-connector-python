@@ -9,11 +9,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v3.17.4(September 22,2025)
   - Added support for intermediate certificates as roots when they are stored in the trust store
-
-- v3.17.4(September 22,2025)
-
-   -N/A
-
   - Bumped up vendored `urllib3` to `2.5.0` and `requests` to `v2.32.5`
 
 - v3.17.3(September 02,2025)
