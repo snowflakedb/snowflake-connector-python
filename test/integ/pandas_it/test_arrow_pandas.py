@@ -85,14 +85,7 @@ def test_interval_year_month(conn_cnx):
     reason="arrow_iterator extension is not built, or pandas is missing.",
 )
 def test_interval_day_time(conn_cnx):
-    cases = [
-        "0 00:00:51",
-        # "0 0:0:0.0",
-        # "12 3:4:5.678",
-        # "-1 2:3:4.567",
-        # "999999999 23:59:59.999999",
-        # "-99999 23:59:59.999999"
-    ]
+    cases = ["106751 23:47:16.854775807", "0 0:0:0.0", "-5 0:0:0.0"]
     table = "test_arrow_day_time_interval"
     values = "(" + "),(".join([f"'{c}'" for c in cases]) + ")"
     with conn_cnx() as conn:
@@ -789,7 +782,11 @@ def validate_pandas(
                                 int(year_month_list[1]) * 12 + int(year_month_list[2])
                             )
                     elif data_type == "interval_day_time":
-                        c_case = pandas.Timedelta(cases[i])
+                        timedelta_split_days = cases[i].split(" ")
+                        pandas_timedelta_str = (
+                            timedelta_split_days[0] + " days " + timedelta_split_days[1]
+                        )
+                        c_case = pandas.to_timedelta(pandas_timedelta_str)
                     elif data_type == "time":
                         time_str_len = 8 if scale == 0 else 9 + scale
                         c_case = cases[i].strip()[:time_str_len]

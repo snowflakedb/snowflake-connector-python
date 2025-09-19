@@ -569,7 +569,10 @@ void CArrowTableIterator::convertIntervalDayTimeColumn_nanoarrow(
                         "array, error code: %d",
                         returnCode);
     } else {
-      auto originalVal = ArrowArrayViewGetIntUnsafe(columnArray, rowIdx);
+      ArrowDecimal arrowDecimal;
+      ArrowDecimalInit(&arrowDecimal, 128, 38, 0);
+      ArrowArrayViewGetDecimalUnsafe(columnArray, rowIdx, &arrowDecimal);
+      auto originalVal = ArrowDecimalGetIntUnsafe(&arrowDecimal);
       returnCode = ArrowArrayAppendInt(newArray, originalVal);
       SF_CHECK_ARROW_RC(returnCode,
                         "[Snowflake Exception] error appending int to arrow "
