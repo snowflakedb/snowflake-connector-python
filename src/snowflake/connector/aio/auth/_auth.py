@@ -102,6 +102,7 @@ class Auth(AuthSync):
             self._rest._connection._login_timeout,
             self._rest._connection._network_timeout,
             self._rest._connection._socket_timeout,
+            self._rest._connection._platform_detection_timeout_seconds,
         )
 
         body = copy.deepcopy(body_template)

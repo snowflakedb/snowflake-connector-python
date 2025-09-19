@@ -11,14 +11,14 @@ from .csp_helpers_async import (
     FakeAzureFunctionMetadataServiceAsync,
     FakeAzureVmMetadataServiceAsync,
     FakeGceMetadataServiceAsync,
-    NoMetadataServiceAsync,
+    UnavailableMetadataService,
 )
 
 
 @pytest.fixture
-def no_metadata_service():
+def unavailable_metadata_service():
     """Emulates an environment without any metadata service."""
-    with NoMetadataServiceAsync() as server:
+    with UnavailableMetadataService() as server:
         yield server
 
 
