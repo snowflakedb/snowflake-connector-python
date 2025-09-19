@@ -71,7 +71,11 @@ def get_driver_version() -> str:
     return snowflake.connector.__version__
 
 
-def setup_schema(cursor: snowflake.connector.cursor.SnowflakeCursor, schema_name: str, metric_name: str = "cloudprober_driver_python_create_schema"):
+def setup_schema(
+    cursor: snowflake.connector.cursor.SnowflakeCursor,
+    schema_name: str,
+    metric_name: str = "cloudprober_driver_python_create_schema",
+):
     """
     Sets up the schema in Snowflake.
 
@@ -96,7 +100,9 @@ def setup_schema(cursor: snowflake.connector.cursor.SnowflakeCursor, schema_name
 
 
 def setup_database(
-    cursor: snowflake.connector.cursor.SnowflakeCursor, database_name: str, metric_name: str = "cloudprober_driver_python_create_database"
+    cursor: snowflake.connector.cursor.SnowflakeCursor,
+    database_name: str,
+    metric_name: str = "cloudprober_driver_python_create_database",
 ):
     """
     Sets up the database in Snowflake.
@@ -122,7 +128,9 @@ def setup_database(
 
 
 def setup_warehouse(
-    cursor: snowflake.connector.cursor.SnowflakeCursor, warehouse_name: str, metric_name: str = "cloudprober_driver_python_setup_warehouse"
+    cursor: snowflake.connector.cursor.SnowflakeCursor,
+    warehouse_name: str,
+    metric_name: str = "cloudprober_driver_python_setup_warehouse",
 ):
     """
     Sets up the warehouse in Snowflake.
@@ -147,7 +155,10 @@ def setup_warehouse(
         sys.exit(1)
 
 
-def create_data_table(cursor: snowflake.connector.cursor.SnowflakeCursor, metric_name: str = "cloudprober_driver_python_create_table") -> str:
+def create_data_table(
+    cursor: snowflake.connector.cursor.SnowflakeCursor,
+    metric_name: str = "cloudprober_driver_python_create_table",
+) -> str:
     """
     Creates a data table in Snowflake with the specified schema.
 
@@ -184,7 +195,10 @@ def create_data_table(cursor: snowflake.connector.cursor.SnowflakeCursor, metric
     return table_name
 
 
-def create_data_stage(cursor: snowflake.connector.cursor.SnowflakeCursor, metric_name: str = "cloudprober_driver_python_create_stage") -> str:
+def create_data_stage(
+    cursor: snowflake.connector.cursor.SnowflakeCursor,
+    metric_name: str = "cloudprober_driver_python_create_stage",
+) -> str:
     """
     Creates a stage in Snowflake for data upload.
 
@@ -215,7 +229,10 @@ def create_data_stage(cursor: snowflake.connector.cursor.SnowflakeCursor, metric
 
 
 def copy_into_table_from_stage(
-    table_name: str, stage_name: str, cur: snowflake.connector.cursor.SnowflakeCursor, metric_name: str = "cloudprober_driver_python_copy_data_from_stage_into_table"
+    table_name: str,
+    stage_name: str,
+    cur: snowflake.connector.cursor.SnowflakeCursor,
+    metric_name: str = "cloudprober_driver_python_copy_data_from_stage_into_table",
 ):
     """
     Copies data from a stage into a specified table in Snowflake.
@@ -252,7 +269,10 @@ def copy_into_table_from_stage(
 
 
 def put_file_to_stage(
-    file_name: str, stage_name: str, cur: snowflake.connector.cursor.SnowflakeCursor, metric_name: str = "cloudprober_driver_python_perform_put"
+    file_name: str,
+    stage_name: str,
+    cur: snowflake.connector.cursor.SnowflakeCursor,
+    metric_name: str = "cloudprober_driver_python_perform_put",
 ):
     """
     Uploads a file to a specified stage in Snowflake.
@@ -286,7 +306,10 @@ def put_file_to_stage(
 
 
 def count_data_from_table(
-    table_name: str, num_records: int, cur: snowflake.connector.cursor.SnowflakeCursor, metric_name: str = "cloudprober_driver_python_data_transferred_completely"
+    table_name: str,
+    num_records: int,
+    cur: snowflake.connector.cursor.SnowflakeCursor,
+    metric_name: str = "cloudprober_driver_python_data_transferred_completely",
 ):
     try:
         count = cur.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
@@ -313,7 +336,7 @@ def compare_fetched_data(
     cur: snowflake.connector.cursor.SnowflakeCursor,
     repetitions: int = 10,
     fetch_limit: int = 100,
-    metric_name: str = "cloudprober_driver_python_data_integrity"
+    metric_name: str = "cloudprober_driver_python_data_integrity",
 ):
     """
     Compares the data fetched from the table with the data in the CSV file.
@@ -352,7 +375,11 @@ def compare_fetched_data(
         sys.exit(1)
 
 
-def execute_get_command(stage_name: str, conn: snowflake.connector.SnowflakeConnection, metric_name: str = "cloudprober_driver_python_perform_get"):
+def execute_get_command(
+    stage_name: str,
+    conn: snowflake.connector.SnowflakeConnection,
+    metric_name: str = "cloudprober_driver_python_perform_get",
+):
     """
     Downloads a file from a specified stage in Snowflake.
 
