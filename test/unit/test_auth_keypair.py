@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+from test.helpers import apply_auth_class_update_body, create_mock_auth_body
 from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
@@ -61,6 +62,22 @@ def test_auth_keypair(authenticator):
     assert not rest._connection.errorhandler.called  # not error
     assert rest.token == "TOKEN"
     assert rest.master_token == "MASTER_TOKEN"
+
+
+def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
+    private_key_der, _ = generate_key_pair(2048)
+    auth_class = AuthByKeyPair(private_key=private_key_der)
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = apply_auth_class_update_body(auth_class, req_body_before)
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )
 
 
 def test_auth_keypair_abc():
