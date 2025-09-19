@@ -33,10 +33,12 @@ def connect(connection_parameters: dict):
             role=connection_parameters["role"],
             authenticator=connection_parameters["authenticator"],
             private_key=connection_parameters["private_key"],
+            ocsp_fail_open=connection_parameters.get("ocsp_fail_open", True),
         )
         return connection
     except Exception as e:
         logger.error(f"Error connecting to Snowflake: {e}")
+        return None
 
 
 @prober_function
