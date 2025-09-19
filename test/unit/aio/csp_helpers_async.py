@@ -20,7 +20,7 @@ from ...csp_helpers import (
     FakeAzureVmMetadataService,
     FakeGceMetadataService,
     FakeMetadataService,
-    NoMetadataService,
+    UnavailableMetadataService,
 )
 
 
@@ -97,7 +97,9 @@ class FakeMetadataServiceAsync(FakeMetadataService):
         return self
 
 
-class NoMetadataServiceAsync(FakeMetadataServiceAsync, NoMetadataService):
+class UnavailableMetadataServiceAsync(
+    FakeMetadataServiceAsync, UnavailableMetadataService
+):
     pass
 
 

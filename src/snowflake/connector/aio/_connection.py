@@ -113,9 +113,14 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         # note we don't call super here because asyncio can not/is not recommended
         # to perform async operation in the __init__ while in the sync connection we
         # perform connect
+
         self._conn_parameters = self._init_connection_parameters(
             kwargs, connection_name, connections_file_path
         )
+        # SNOW-2352456: disable endpoint-based platform detection queries for async connection
+        if "platform_detection_timeout_seconds" not in kwargs:
+            self._platform_detection_timeout_seconds = 0.0
+
         self._connected = False
         self.expired = False
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
