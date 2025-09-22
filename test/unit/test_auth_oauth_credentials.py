@@ -4,6 +4,8 @@
 #
 
 
+from test.helpers import apply_auth_class_update_body, create_mock_auth_body
+
 import pytest
 
 from snowflake.connector.auth import AuthByOauthCredentials
@@ -23,6 +25,27 @@ def test_auth_oauth_credentials_oauth_type():
     auth.update_body(body)
     assert (
         body["data"]["CLIENT_ENVIRONMENT"]["OAUTH_TYPE"] == "oauth_client_credentials"
+    )
+
+
+def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
+    auth_class = AuthByOauthCredentials(
+        "app",
+        "clientId",
+        "clientSecret",
+        "https://example.com/oauth/token",
+        "scope",
+    )
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = apply_auth_class_update_body(auth_class, req_body_before)
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
     )
 
 

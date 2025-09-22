@@ -4,6 +4,7 @@
 #
 
 import unittest.mock as mock
+from test.helpers import apply_auth_class_update_body, create_mock_auth_body
 from unittest.mock import patch
 
 import pytest
@@ -41,6 +42,32 @@ def test_auth_oauth_auth_code_oauth_type(omit_oauth_urls_check):
     auth.update_body(body)
     assert (
         body["data"]["CLIENT_ENVIRONMENT"]["OAUTH_TYPE"] == "oauth_authorization_code"
+    )
+
+
+def test_auth_prepare_body_does_not_overwrite_client_environment_fields(
+    omit_oauth_urls_check,
+):
+    auth_class = AuthByOauthCode(
+        "app",
+        "clientId",
+        "clientSecret",
+        "auth_url",
+        "tokenRequestUrl",
+        "redirectUri:{port}",
+        "scope",
+        "host",
+    )
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = apply_auth_class_update_body(auth_class, req_body_before)
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
     )
 
 
