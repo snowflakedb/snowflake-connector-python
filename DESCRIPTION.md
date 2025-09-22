@@ -13,6 +13,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added the `oauth_credentials_in_body` parameter supporting an option to send the oauth client credentials in the request body
   - Added support for intermediate certificates as roots when they are stored in the trust store
   - Bumped up vendored `urllib3` to `2.5.0` and `requests` to `v2.32.5`
+  - Fix retry behavior for `ECONNRESET` error
 
 - v3.17.3(September 02,2025)
   - Enhanced configuration file permission warning messages.
