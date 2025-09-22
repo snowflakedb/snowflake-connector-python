@@ -4,6 +4,7 @@ from __future__ import annotations
 import inspect
 import sys
 import time
+from test.helpers import apply_auth_class_update_body, create_mock_auth_body
 from unittest.mock import Mock, PropertyMock
 
 import pytest
@@ -337,3 +338,19 @@ def test_authbyplugin_abc_api():
 'password': <Parameter "password: 'str'">, \
 'kwargs': <Parameter "**kwargs: 'Any'">})"""
         )
+
+
+def test_auth_by_default_prepare_body_does_not_overwrite_client_environment_fields():
+    password = "testpassword"
+    auth_class = AuthByDefault(password)
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = apply_auth_class_update_body(auth_class, req_body_before)
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )

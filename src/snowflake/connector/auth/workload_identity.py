@@ -78,6 +78,9 @@ class AuthByWorkloadIdentity(AuthByPlugin):
             self.attestation
         ).value
         body["data"]["TOKEN"] = self.attestation.credential
+        body["data"].setdefault("CLIENT_ENVIRONMENT", {})[
+            "WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH"
+        ] = len(self.impersonation_path or [])
 
     def prepare(
         self, *, conn: SnowflakeConnection | None, **kwargs: typing.Any
