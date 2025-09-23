@@ -399,39 +399,40 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         bool,
     ),
     # CRL (Certificate Revocation List) configuration parameters
+    # The default setup is specified in CRLConfig class
     "cert_revocation_check_mode": (
-        "DISABLED",
+        None,
         (type(None), str),
     ),  # CRL revocation check mode: DISABLED, ENABLED, ADVISORY
     "allow_certificates_without_crl_url": (
-        False,
+        None,
         (type(None), bool),
     ),  # Allow certificates without CRL distribution points
     "crl_connection_timeout_ms": (
-        3000,
+        None,
         (type(None), int),
     ),  # Connection timeout for CRL downloads in milliseconds
     "crl_read_timeout_ms": (
-        3000,
+        None,
         (type(None), int),
     ),  # Read timeout for CRL downloads in milliseconds
     "crl_cache_validity_hours": (
-        24,
+        None,
         (type(None), int),
     ),  # CRL cache validity time in hours
-    "enable_crl_cache": (True, (type(None), bool)),  # Enable CRL caching
-    "enable_crl_file_cache": (True, (type(None), bool)),  # Enable file-based CRL cache
+    "enable_crl_cache": (None, (type(None), bool)),  # Enable CRL caching
+    "enable_crl_file_cache": (None, (type(None), bool)),  # Enable file-based CRL cache
     "crl_cache_dir": (None, (type(None), str)),  # Directory for CRL file cache
     "crl_cache_removal_delay_days": (
-        7,
+        None,
         (type(None), int),
     ),  # Days to keep expired CRL files before removal
     "crl_cache_cleanup_interval_hours": (
-        1,
+        None,
         (type(None), int),
     ),  # CRL cache cleanup interval in hours
     "crl_cache_start_cleanup": (
-        True,
+        None,
         (type(None), bool),
     ),  # Run CRL cache cleanup in the background
 }

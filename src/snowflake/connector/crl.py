@@ -81,41 +81,98 @@ class CRLConfig:
             ValueError: If session_manager is not available in the connection
         """
         # Extract CRL-specific configuration parameters from connection properties
-        cert_revocation_check_mode_str = connection.cert_revocation_check_mode
-        if isinstance(cert_revocation_check_mode_str, str):
+        if isinstance(connection.cert_revocation_check_mode, str):
             try:
                 cert_revocation_check_mode = CertRevocationCheckMode(
-                    cert_revocation_check_mode_str
+                    connection.cert_revocation_check_mode
                 )
             except ValueError:
                 logger.warning(
-                    f"Invalid cert_revocation_check_mode: {cert_revocation_check_mode_str}, "
+                    f"Invalid cert_revocation_check_mode: {connection.cert_revocation_check_mode}, "
                     "defaulting to DISABLED"
                 )
                 cert_revocation_check_mode = CertRevocationCheckMode.DISABLED
+        elif isinstance(connection.cert_revocation_check_mode, CertRevocationCheckMode):
+            cert_revocation_check_mode = connection.cert_revocation_check_mode
         else:
-            cert_revocation_check_mode = cert_revocation_check_mode_str
+            logger.warning(
+                f"Unsupported value for cert_revocation_check_mode: {connection.cert_revocation_check_mode}, "
+                "defaulting to DISABLED"
+            )
+            cert_revocation_check_mode = CertRevocationCheckMode.DISABLED
+
+        if cert_revocation_check_mode == CertRevocationCheckMode.DISABLED:
+            # The rest of the parameters don't matter if CRL checking is disabled
+            return cls(cert_revocation_check_mode=cert_revocation_check_mode)
 
         # Handle cache validity time from hours to timedelta
-        cache_validity_time = timedelta(hours=connection.crl_cache_validity_hours)
+        cache_validity_time = (
+            cls.cache_validity_time
+            if connection.crl_cache_validity_hours is None
+            else timedelta(hours=connection.crl_cache_validity_hours)
+        )
 
         # Handle cache directory path
-        crl_cache_dir = connection.crl_cache_dir
-        if crl_cache_dir is not None and not isinstance(crl_cache_dir, Path):
-            crl_cache_dir = Path(crl_cache_dir)
+        crl_cache_dir = (
+            cls.crl_cache_dir
+            if connection.crl_cache_dir is None
+            else Path(connection.crl_cache_dir)
+        )
+
+        # Apply default value logic for all other parameters when connection attribute is None
+        allow_certificates_without_crl_url = (
+            cls.allow_certificates_without_crl_url
+            if connection.allow_certificates_without_crl_url is None
+            else connection.allow_certificates_without_crl_url
+        )
+        connection_timeout_ms = (
+            cls.connection_timeout_ms
+            if connection.crl_connection_timeout_ms is None
+            else connection.crl_connection_timeout_ms
+        )
+        read_timeout_ms = (
+            cls.read_timeout_ms
+            if connection.crl_read_timeout_ms is None
+            else connection.crl_read_timeout_ms
+        )
+        enable_crl_cache = (
+            cls.enable_crl_cache
+            if connection.enable_crl_cache is None
+            else connection.enable_crl_cache
+        )
+        enable_crl_file_cache = (
+            cls.enable_crl_file_cache
+            if connection.enable_crl_file_cache is None
+            else connection.enable_crl_file_cache
+        )
+        crl_cache_removal_delay_days = (
+            cls.crl_cache_removal_delay_days
+            if connection.crl_cache_removal_delay_days is None
+            else connection.crl_cache_removal_delay_days
+        )
+        crl_cache_cleanup_interval_hours = (
+            cls.crl_cache_cleanup_interval_hours
+            if connection.crl_cache_cleanup_interval_hours is None
+            else connection.crl_cache_cleanup_interval_hours
+        )
+        crl_cache_start_cleanup = (
+            cls.crl_cache_start_cleanup
+            if connection.crl_cache_start_cleanup is None
+            else connection.crl_cache_start_cleanup
+        )
 
         return cls(
             cert_revocation_check_mode=cert_revocation_check_mode,
-            allow_certificates_without_crl_url=connection.allow_certificates_without_crl_url,
-            connection_timeout_ms=connection.crl_connection_timeout_ms,
-            read_timeout_ms=connection.crl_read_timeout_ms,
+            allow_certificates_without_crl_url=allow_certificates_without_crl_url,
+            connection_timeout_ms=connection_timeout_ms,
+            read_timeout_ms=read_timeout_ms,
             cache_validity_time=cache_validity_time,
-            enable_crl_cache=connection.enable_crl_cache,
-            enable_crl_file_cache=connection.enable_crl_file_cache,
+            enable_crl_cache=enable_crl_cache,
+            enable_crl_file_cache=enable_crl_file_cache,
             crl_cache_dir=crl_cache_dir,
-            crl_cache_removal_delay_days=connection.crl_cache_removal_delay_days,
-            crl_cache_cleanup_interval_hours=connection.crl_cache_cleanup_interval_hours,
-            crl_cache_start_cleanup=connection.crl_cache_start_cleanup,
+            crl_cache_removal_delay_days=crl_cache_removal_delay_days,
+            crl_cache_cleanup_interval_hours=crl_cache_cleanup_interval_hours,
+            crl_cache_start_cleanup=crl_cache_start_cleanup,
         )
 
 
@@ -123,19 +180,19 @@ class CRLValidator:
     def __init__(
         self,
         session_manager: SessionManager | Any,
-        cert_revocation_check_mode: CertRevocationCheckMode = CertRevocationCheckMode.DISABLED,
-        allow_certificates_without_crl_url: bool = False,
-        connection_timeout_ms: int | None = None,
-        read_timeout_ms: int | None = None,
-        cache_validity_time: timedelta | None = None,
+        cert_revocation_check_mode: CertRevocationCheckMode = CRLConfig.cert_revocation_check_mode,
+        allow_certificates_without_crl_url: bool = CRLConfig.allow_certificates_without_crl_url,
+        connection_timeout_ms: int = CRLConfig.connection_timeout_ms,
+        read_timeout_ms: int = CRLConfig.read_timeout_ms,
+        cache_validity_time: timedelta = CRLConfig.cache_validity_time,
         cache_manager: CRLCacheManager | None = None,
     ):
         self._session_manager = session_manager
         self._cert_revocation_check_mode = cert_revocation_check_mode
         self._allow_certificates_without_crl_url = allow_certificates_without_crl_url
-        self._connection_timeout_ms = connection_timeout_ms or 3000
-        self._read_timeout_ms = read_timeout_ms or 3000
-        self._cache_validity_time = cache_validity_time or timedelta(hours=24)
+        self._connection_timeout_ms = connection_timeout_ms
+        self._read_timeout_ms = read_timeout_ms
+        self._cache_validity_time = cache_validity_time
         self._cache_manager = cache_manager or CRLCacheManager.noop()
 
     @classmethod
