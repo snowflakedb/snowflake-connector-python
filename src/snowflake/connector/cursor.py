@@ -20,13 +20,16 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Dict,
     Generic,
     Iterator,
     Literal,
     NamedTuple,
     NoReturn,
     Sequence,
+    Tuple,
     TypeVar,
+    Union,
     overload,
 )
 
@@ -88,7 +91,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .result_batch import ResultBatch
 
 T = TypeVar("T", bound=collections.abc.Sequence)
-FetchRow = TypeVar("FetchRow", bound=tuple[Any, ...] | dict[str, Any])
+FetchRow = TypeVar("FetchRow", bound=Union[Tuple[Any, ...], Dict[str, Any]])
 
 logger = getLogger(__name__)
 
@@ -425,6 +428,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         except compat.BASE_EXCEPTION_CLASS as e:
             if logger.getEffectiveLevel() <= logging.INFO:
                 logger.info(e)
+
+    @property
+    @abc.abstractmethod
+    def _use_dict_result(self) -> bool: ...
 
     @property
     def description(self) -> list[ResultMetadata]:
@@ -1936,26 +1943,28 @@ class SnowflakeCursor(SnowflakeCursorBase[tuple[Any, ...]]):
         is_file_transfer: Whether, or not the current command is a put, or get.
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._use_dict_result = False
+    @property
+    def _use_dict_result(self) -> bool:
+        return False
 
     def fetchone(self) -> tuple[Any, ...] | None:
         row = self._fetchone()
-        assert row is None or isinstance(row, tuple)
+        if not (row is None or isinstance(row, tuple)):
+            raise TypeError(f"fetchone got unexpected result: {row}")
         return row
 
 
 class DictCursor(SnowflakeCursorBase[dict[str, Any]]):
     """Cursor returning results in a dictionary."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._use_dict_result = True
+    @property
+    def _use_dict_result(self) -> bool:
+        return True
 
     def fetchone(self) -> dict[str, Any] | None:
         row = self._fetchone()
-        assert row is None or isinstance(row, dict)
+        if not (row is None or isinstance(row, dict)):
+            raise TypeError(f"fetchone got unexpected result: {row}")
         return row
 
 
