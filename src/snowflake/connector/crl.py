@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum, unique
 from logging import getLogger
 from pathlib import Path
@@ -287,7 +287,7 @@ class CRLValidator:
     def _is_short_lived_certificate(cert: x509.Certificate) -> bool:
         """Check if certificate is short-lived (validity <= 5 days)"""
         try:
-            # Use UTC versions to avoid deprecation warnings
+            # Use timezone.utc versions to avoid deprecation warnings
             validity_period = cert.not_valid_after_utc - cert.not_valid_before_utc
         except AttributeError:
             # Fallback for older versions
@@ -323,7 +323,7 @@ class CRLValidator:
     def _download_crl(
         self, crl_url: str
     ) -> tuple[x509.CertificateRevocationList | None, datetime | None]:
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         try:
             logger.debug("Trying to download CRL from: %s", crl_url)
             response = self._session_manager.get(crl_url, timeout=30)
@@ -359,7 +359,7 @@ class CRLValidator:
         self, cert: x509.Certificate, parent: x509.Certificate, crl_url: str
     ) -> _CRLValidationResult:
         """Check if certificate is revoked according to CRL"""
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         logger.debug("Trying to get cached CRL for %s", crl_url)
         cached_crl = self._get_crl_from_cache(crl_url)
         if (

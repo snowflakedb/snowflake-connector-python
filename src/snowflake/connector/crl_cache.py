@@ -9,7 +9,7 @@ import threading
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import TracebackType
 
@@ -169,7 +169,7 @@ class CRLInMemoryCache(CRLCache):
 
     def cleanup(self) -> None:
         """Remove expired and evicted entries from memory cache."""
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         logger.debug(f"Cleaning up in-memory CRL cache at {now}")
 
         with self._lock:
@@ -268,7 +268,9 @@ class CRLFileCache(CRLCache):
 
                     # Get file modification time as download time
                     stat_info = crl_file_path.stat()
-                    download_time = datetime.fromtimestamp(stat_info.st_mtime, tz=UTC)
+                    download_time = datetime.fromtimestamp(
+                        stat_info.st_mtime, tz=timezone.utc
+                    )
 
                     # Read and parse the CRL
                     with open(crl_file_path, "rb") as f:
@@ -316,7 +318,7 @@ class CRLFileCache(CRLCache):
         try:
             # Get file modification time
             stat_info = crl_cache_file.stat()
-            download_time = datetime.fromtimestamp(stat_info.st_mtime, tz=UTC)
+            download_time = datetime.fromtimestamp(stat_info.st_mtime, tz=timezone.utc)
 
             # Check if file should be removed based on removal delay
             removal_time = download_time + self._removal_delay
@@ -327,7 +329,7 @@ class CRLFileCache(CRLCache):
 
     def cleanup(self) -> None:
         """Remove expired files from disk cache."""
-        now = datetime.now(UTC)
+        now = datetime.now(timezone.utc)
         logger.debug(f"Cleaning up file-based CRL cache at {now}")
 
         removed_count = 0
