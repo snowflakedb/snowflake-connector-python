@@ -13,7 +13,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added the `oauth_credentials_in_body` parameter supporting an option to send the oauth client credentials in the request body
   - Added support for intermediate certificates as roots when they are stored in the trust store
   - Added the `SNOWFLAKE_AUTH_FORCE_SERVER` environment variable to force the use of the local-listening server when using the `externalbrowser` auth method
-    - This allows headless environments (like Docker or Airflow) running locally to still auth via a browser
+    - This allows headless environments (like Docker or Airflow) running locally to auth via a browser URL
+  - Bumped up vendored `urllib3` to `2.5.0` and `requests` to `v2.32.5`
 
 - v3.17.3(September 02,2025)
   - Enhanced configuration file permission warning messages.

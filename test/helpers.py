@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 import math
 import os
 import random
@@ -12,6 +13,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from snowflake.connector.auth._auth import Auth
 from snowflake.connector.compat import OK
 
 if TYPE_CHECKING:
@@ -260,3 +262,30 @@ def _arrow_error_stream_random_input_test(use_table_iterator):
     # error instance users get should be the same
     assert len(exception_result)
     assert len(result_array) == 0
+
+
+def create_mock_auth_body():
+    ocsp_mode = Mock()
+    ocsp_mode.name = "ocsp_mode"
+    session_manager = Mock()
+    session_manager.clone = lambda max_retries: "session_manager"
+
+    return Auth.base_auth_data(
+        "user",
+        "account",
+        "application",
+        "internal_application_name",
+        "internal_application_version",
+        ocsp_mode,
+        login_timeout=60 * 60,
+        network_timeout=60 * 60,
+        socket_timeout=60 * 60,
+        platform_detection_timeout_seconds=0.2,
+        session_manager=session_manager,
+    )
+
+
+def apply_auth_class_update_body(auth_class, req_body_before):
+    req_body_after = copy.deepcopy(req_body_before)
+    auth_class.update_body(req_body_after)
+    return req_body_after
