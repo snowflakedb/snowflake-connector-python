@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import tempfile
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -25,7 +25,7 @@ from snowflake.connector.crl_cache import (
 
 @pytest.fixture(scope="module")
 def download_time():
-    return datetime.now(UTC) - timedelta(minutes=30)
+    return datetime.now(timezone.utc) - timedelta(minutes=30)
 
 
 @pytest.fixture(scope="module")
@@ -79,8 +79,8 @@ def crl() -> x509.CertificateRevocationList:
     # Build the CRL
     builder = x509.CertificateRevocationListBuilder()
     builder = builder.issuer_name(issuer)
-    builder = builder.last_update(datetime.now(UTC))
-    builder = builder.next_update(datetime.now(UTC) + timedelta(days=1))
+    builder = builder.last_update(datetime.now(timezone.utc))
+    builder = builder.next_update(datetime.now(timezone.utc) + timedelta(days=1))
 
     # Sign the CRL
     crl = builder.sign(private_key, hashes.SHA256(), backend=default_backend())
@@ -102,7 +102,7 @@ def test_cache_entry_creation(crl, download_time):
 
 def test_is_crl_expired_false_when_not_expired(cache_entry):
     """Test CRL expiration check when not expired"""
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
 
     assert not cache_entry.is_crl_expired_by(now)
 
@@ -110,7 +110,7 @@ def test_is_crl_expired_false_when_not_expired(cache_entry):
 def test_is_evicted_false_when_not_evicted(crl, download_time):
     """Test cache eviction check when not evicted"""
     entry = CRLCacheEntry(crl, download_time)
-    current_time = datetime.now(UTC)
+    current_time = datetime.now(timezone.utc)
     cache_validity = timedelta(hours=24)
 
     assert not entry.is_evicted_by(current_time, cache_validity)
@@ -118,9 +118,9 @@ def test_is_evicted_false_when_not_evicted(crl, download_time):
 
 def test_is_evicted_true_when_evicted(crl, download_time):
     """Test cache eviction check when evicted"""
-    old_download_time = datetime.now(UTC) - timedelta(days=2)
+    old_download_time = datetime.now(timezone.utc) - timedelta(days=2)
     entry = CRLCacheEntry(crl, old_download_time)
-    current_time = datetime.now(UTC)
+    current_time = datetime.now(timezone.utc)
     cache_validity = timedelta(hours=1)  # Short validity period
 
     assert entry.is_evicted_by(current_time, cache_validity)
@@ -153,7 +153,7 @@ def test_noop_singleton_behavior():
 
 def test_memory_put_and_get(crl, crl_url, download_time, memory_cache):
     """Test storing and retrieving from memory cache"""
-    download_time = datetime.now(UTC)
+    download_time = datetime.now(timezone.utc)
     entry = CRLCacheEntry(crl, download_time)
 
     memory_cache.put(crl_url, entry)
@@ -175,7 +175,7 @@ def test_memory_cleanup_removes_evicted_entries(
 ):
     """Test that cleanup removes evicted entries"""
     # Add an old entry that should be evicted
-    old_time = datetime.now(UTC) - timedelta(hours=2)
+    old_time = datetime.now(timezone.utc) - timedelta(hours=2)
     old_entry = CRLCacheEntry(crl, old_time)
     memory_cache.put(crl_url, old_entry)
     assert memory_cache.get(crl_url) is not None
@@ -186,7 +186,7 @@ def test_memory_cleanup_removes_evicted_entries(
 
 def test_disk_put_and_get(crl, crl_url, download_time, disk_cache):
     """Test storing and retrieving from file cache"""
-    # download_time = datetime.now(UTC)
+    # download_time = datetime.now(timezone.utc)
     entry = CRLCacheEntry(crl, download_time)
 
     disk_cache.put(crl_url, entry)
@@ -287,8 +287,8 @@ def test_should_create_different_cache_entries_for_same_crl_with_different_downl
     crl, crl_url, mem_cache_mock, disk_cache_mock, cache_mgr
 ):
     """Test creating different cache entries for same CRL with different download times"""
-    first_put_time = datetime.now(UTC) - timedelta(hours=1)
-    second_put_time = datetime.now(UTC)
+    first_put_time = datetime.now(timezone.utc) - timedelta(hours=1)
+    second_put_time = datetime.now(timezone.utc)
 
     cache_mgr.put(crl_url, crl, first_put_time)
     cache_mgr.put(crl_url, crl, second_put_time)
