@@ -416,7 +416,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._first_chunk_time = None
 
         self._log_max_query_length = connection.log_max_query_length
-        self._inner_cursor: SnowflakeCursor | None = None
+        self._inner_cursor: SnowflakeCursorBase | None = None
         self._prefetch_hook = None
         self._rownumber: int | None = None
 
@@ -1722,20 +1722,31 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             # Unset this function, so that we don't block anymore
             self._prefetch_hook = None
 
-            if (
-                self._inner_cursor._total_rowcount == 1
-                and self._inner_cursor.fetchall()
-                == [("Multiple statements executed successfully.",)]
+            if self._inner_cursor._total_rowcount == 1 and _is_successful_multi_stmt(
+                self._inner_cursor.fetchall()
             ):
                 url = f"/queries/{sfqid}/result"
                 ret = self._connection.rest.request(url=url, method="get")
                 if "data" in ret and "resultIds" in ret["data"]:
                     self._init_multi_statement_results(ret["data"])
 
+        def _is_successful_multi_stmt(rows: list[Any]) -> bool:
+            if len(rows) != 1:
+                return False
+            row = rows[0]
+            if isinstance(row, tuple):
+                return row == ("Multiple statements executed successfully.",)
+            elif isinstance(row, dict):
+                return row == {
+                    "multiple statement execution": "Multiple statements executed successfully."
+                }
+            else:
+                return False
+
         self.connection.get_query_status_throw_if_error(
             sfqid
         )  # Trigger an exception if query failed
-        self._inner_cursor = SnowflakeCursor(self.connection)
+        self._inner_cursor = self.__class__(self.connection)
         self._sfqid = sfqid
         self._prefetch_hook = wait_until_ready
 
