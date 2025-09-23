@@ -1445,13 +1445,9 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                         return self
                 bind_size = len(seqparams) * row_size
                 bind_stage = None
-                if (
-                    bind_size
-                    >= self.connection._session_parameters[
-                        "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
-                    ]
-                    > 0
-                ):
+                binding_threshold = self.connection._session_parameters["CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"]
+                assert isinstance(binding_threshold, int)
+                if bind_size >= binding_threshold > 0:
                     # bind stage optimization
                     try:
                         rows = self.connection._write_params_to_byte_rows(seqparams)
@@ -1472,7 +1468,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 return self
 
         self.reset()
-        if "num_statements" not in kwargs:
+        num_statements = kwargs.get("num_statements")
+        if num_statements is None:
             # fall back to old driver behavior when the user does not provide the parameter to enable
             #  multi-statement optimizations for executemany
             for param in seqparams:
@@ -1493,9 +1490,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 query = command * len(seqparams)
                 params = [param for parameters in seqparams for param in parameters]
 
-            kwargs["num_statements"]: int = kwargs.get("num_statements") * len(
-                seqparams
-            )
+            kwargs["num_statements"]: int = num_statements * len(seqparams)
 
             self.execute(query, params, _do_reset=False, **kwargs)
 
