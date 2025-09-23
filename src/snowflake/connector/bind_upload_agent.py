@@ -14,7 +14,7 @@ from ._utils import (
 from .errors import BindUploadError, Error
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .cursor import SnowflakeCursor
+    from .cursor import SnowflakeCursorBase
 
 logger = getLogger(__name__)
 
@@ -23,7 +23,7 @@ class BindUploadAgent:
 
     def __init__(
         self,
-        cursor: SnowflakeCursor,
+        cursor: SnowflakeCursorBase,
         rows: list[bytes],
         stream_buffer_size: int = 1024 * 1024 * 10,
     ) -> None:

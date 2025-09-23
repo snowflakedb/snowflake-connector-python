@@ -81,6 +81,7 @@ repos:
             (?x)^src/snowflake/connector/(
                 constants
                 | compat
+                | cursor
                 | dbapi
                 | description
                 | errorcode
