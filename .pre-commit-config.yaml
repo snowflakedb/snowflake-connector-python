@@ -51,7 +51,7 @@ repos:
     hooks:
     -   id: check-no-native-http
         name: Check for native HTTP calls
-        entry: python ci/pre-commit/check_no_native_http.py
+        entry: python3 ci/pre-commit/check_no_native_http.py
         language: system
         files: ^src/snowflake/connector/.*\.py$
         exclude: |
@@ -62,7 +62,7 @@ repos:
         args: [--show-fixes]
     -   id: check-optional-imports
         name: Check for direct imports of modules which might be unavailable
-        entry: python ci/pre-commit/check_optional_imports.py
+        entry: python3 ci/pre-commit/check_optional_imports.py
         language: system
         files: ^src/snowflake/connector/.*\.py$
         exclude: src/snowflake/connector/options.py
