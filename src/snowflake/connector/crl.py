@@ -81,7 +81,9 @@ class CRLConfig:
             ValueError: If session_manager is not available in the connection
         """
         # Extract CRL-specific configuration parameters from connection properties
-        if isinstance(connection.cert_revocation_check_mode, str):
+        if connection.cert_revocation_check_mode is None:
+            cert_revocation_check_mode = cls.cert_revocation_check_mode
+        elif isinstance(connection.cert_revocation_check_mode, str):
             try:
                 cert_revocation_check_mode = CertRevocationCheckMode(
                     connection.cert_revocation_check_mode
@@ -89,17 +91,17 @@ class CRLConfig:
             except ValueError:
                 logger.warning(
                     f"Invalid cert_revocation_check_mode: {connection.cert_revocation_check_mode}, "
-                    "defaulting to DISABLED"
+                    f"defaulting to {cls.cert_revocation_check_mode}"
                 )
-                cert_revocation_check_mode = CertRevocationCheckMode.DISABLED
+                cert_revocation_check_mode = cls.cert_revocation_check_mode
         elif isinstance(connection.cert_revocation_check_mode, CertRevocationCheckMode):
             cert_revocation_check_mode = connection.cert_revocation_check_mode
         else:
             logger.warning(
                 f"Unsupported value for cert_revocation_check_mode: {connection.cert_revocation_check_mode}, "
-                "defaulting to DISABLED"
+                f"defaulting to {cls.cert_revocation_check_mode}"
             )
-            cert_revocation_check_mode = CertRevocationCheckMode.DISABLED
+            cert_revocation_check_mode = cls.cert_revocation_check_mode
 
         if cert_revocation_check_mode == CertRevocationCheckMode.DISABLED:
             # The rest of the parameters don't matter if CRL checking is disabled
