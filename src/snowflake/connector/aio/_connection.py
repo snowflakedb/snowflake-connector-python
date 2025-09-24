@@ -375,8 +375,6 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
-                self._check_experimental_authentication_flag()
-
                 if isinstance(self._workload_identity_provider, str):
                     self._workload_identity_provider = AttestationProvider.from_string(
                         self._workload_identity_provider
