@@ -181,8 +181,8 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
     cmd_class = {"build_ext": MyBuildExt}
 
 
-class SmartEggInfoCommand(egg_info):
-    """Custom egg_info command that auto-adds AWS extra unless slim is specified."""
+class SetDefaultInstallationExtras(egg_info):
+    """Adds AWS extra unless SNOWFLAKE_NO_BOTO is specified."""
 
     def finalize_options(self):
         super().finalize_options()
@@ -194,7 +194,7 @@ class SmartEggInfoCommand(egg_info):
 
 
 # Update command classes
-cmd_class["egg_info"] = SmartEggInfoCommand
+cmd_class["egg_info"] = SetDefaultInstallationExtras
 
 setup(
     version=version,
