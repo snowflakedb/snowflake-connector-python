@@ -35,6 +35,7 @@ for test_file in pathlib.Path(__file__).parent.glob("*.py"):
                 "ocsp_response_validation_cache.json.lock",
                 "ocsp_response_validation_cache.json",
                 "ocsp_response_cache.json",
+                "crls",
             }
             and not platform.system() == "Windows"
         ) or (
@@ -42,6 +43,7 @@ for test_file in pathlib.Path(__file__).parent.glob("*.py"):
             == {
                 "ocsp_response_validation_cache.json",
                 "ocsp_response_cache.json",
+                "crls",
             }
             and platform.system() == "Windows"
         ), str(
