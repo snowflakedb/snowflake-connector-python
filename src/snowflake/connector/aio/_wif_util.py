@@ -5,13 +5,15 @@ import logging
 import os
 from base64 import b64encode
 
-import aioboto3
-from aiobotocore.utils import AioInstanceMetadataRegionFetcher
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
+from snowflake.connector.options import (
+    aioboto3,
+    aiobotocore,
+    botocore,
+    installed_aioboto,
+)
 
 from ..errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
-from ..errors import ProgrammingError
+from ..errors import MissingDependencyError, ProgrammingError
 from ..wif_util import (
     DEFAULT_ENTRA_SNOWFLAKE_RESOURCE,
     SNOWFLAKE_AUDIENCE,
@@ -31,7 +33,9 @@ async def get_aws_region() -> str:
     if "AWS_REGION" in os.environ:  # Lambda
         region = os.environ["AWS_REGION"]
     else:  # EC2
-        region = await AioInstanceMetadataRegionFetcher().retrieve_region()
+        region = (
+            await aiobotocore.utils.AioInstanceMetadataRegionFetcher().retrieve_region()
+        )
 
     if not region:
         raise ProgrammingError(
@@ -46,6 +50,12 @@ async def create_aws_attestation() -> WorkloadIdentityAttestation:
 
     If the application isn't running on AWS or no credentials were found, raises an error.
     """
+    if not installed_aioboto:
+        raise MissingDependencyError(
+            msg="AWS Workload Identity Federation can't be used because aioboto3 or aiobotocore optional dependency is not installed. Try installing missing dependencies.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+
     session = aioboto3.Session()
     aws_creds = await session.get_credentials()
     if not aws_creds:
@@ -57,7 +67,7 @@ async def create_aws_attestation() -> WorkloadIdentityAttestation:
     region = await get_aws_region()
     partition = session.get_partition_for_region(region)
     sts_hostname = get_aws_sts_hostname(region, partition)
-    request = AWSRequest(
+    request = botocore.awsrequest.AWSRequest(
         method="POST",
         url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
         headers={
@@ -66,7 +76,7 @@ async def create_aws_attestation() -> WorkloadIdentityAttestation:
         },
     )
 
-    SigV4Auth(aws_creds, "sts", region).add_auth(request)
+    botocore.auth.SigV4Auth(aws_creds, "sts", region).add_auth(request)
 
     assertion_dict = {
         "url": request.url,
