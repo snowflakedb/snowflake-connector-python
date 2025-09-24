@@ -66,7 +66,27 @@ class FakeMetadataServiceAsync(FakeMetadataService):
             async def read(self):
                 return self._content
 
-        if not parsed_url.hostname == self.expected_hostname:
+            async def text(self):
+                return self._content.decode("utf-8")
+
+            async def json(self):
+                import json
+
+                return json.loads(self._content.decode("utf-8"))
+
+            def raise_for_status(self):
+                if not self.ok:
+                    import aiohttp
+
+                    raise aiohttp.ClientResponseError(
+                        request_info=None,
+                        history=None,
+                        status=self.status,
+                        message=f"HTTP {self.status}",
+                        headers={},
+                    )
+
+        if parsed_url.hostname not in self.expected_hostnames:
             logger.debug(
                 f"Received async request to unexpected hostname {parsed_url.hostname}"
             )
@@ -85,12 +105,19 @@ class FakeMetadataServiceAsync(FakeMetadataService):
             # Convert requests exceptions to aiohttp exceptions so they get caught properly
             raise aiohttp.ClientError() from e
 
+    def _async_get(self, url, headers=None, timeout=None, **kwargs):
+        """Entry point for the aiohttp get mock."""
+        return self._async_request("GET", url, headers=headers, timeout=timeout)
+
     def __enter__(self):
         self.reset_defaults()
         self.patchers = []
         # Mock aiohttp for async requests
         self.patchers.append(
             mock.patch("aiohttp.ClientSession.request", side_effect=self._async_request)
+        )
+        self.patchers.append(
+            mock.patch("aiohttp.ClientSession.get", side_effect=self._async_get)
         )
         for patcher in self.patchers:
             patcher.__enter__()
