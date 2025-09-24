@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-CHECKED_MODULES = ["boto3", "botocore"]
+CHECKED_MODULES = ["boto3", "botocore", "pandas", "pyarrow", "keyring"]
 
 
 @dataclass(frozen=True)
@@ -32,6 +32,14 @@ class ImportChecker(ast.NodeVisitor):
     def __init__(self, filename: str):
         self.filename = filename
         self.violations: List[ImportViolation] = []
+
+    def visit_If(self, node: ast.If):
+        # Always visit the condition, but ignore imports inside "if TYPE_CHECKING:" blocks
+        if getattr(node.test, "id", None) == "TYPE_CHECKING":
+            # Skip the body and orelse for TYPE_CHECKING blocks
+            pass
+        else:
+            self.generic_visit(node)
 
     def visit_Import(self, node: ast.Import):
         """Check import statements."""
