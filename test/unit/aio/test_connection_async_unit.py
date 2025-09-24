@@ -623,17 +623,6 @@ async def test_cannot_set_dependent_params_without_wlid_authenticator(
     )
 
 
-async def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
-    with pytest.raises(ProgrammingError) as excinfo:
-        await snowflake.connector.aio.connect(
-            account="account", authenticator="WORKLOAD_IDENTITY"
-        )
-    assert (
-        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable true to use the 'WORKLOAD_IDENTITY' authenticator"
-        in str(excinfo.value)
-    )
-
-
 @pytest.mark.parametrize(
     "provider_param",
     [
@@ -650,7 +639,6 @@ async def test_workload_identity_provider_is_required_for_wif_authenticator(
             "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
             lambda *_: None,
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         with pytest.raises(ProgrammingError) as excinfo:
             await snowflake.connector.aio.connect(
@@ -691,7 +679,6 @@ async def test_connection_params_are_plumbed_into_authbyworkloadidentity(
             "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
             mock_authenticate,
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = await snowflake.connector.aio.connect(
             account="my_account_1",
@@ -740,7 +727,6 @@ async def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
             "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
             mock_authenticate,
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = await snowflake.connector.aio.connect(
             connections_file_path=connections_file
@@ -765,7 +751,6 @@ async def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode_a
             "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
             mock_authenticate,
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = await snowflake.connector.aio.connect(
             account="my_account_1",
