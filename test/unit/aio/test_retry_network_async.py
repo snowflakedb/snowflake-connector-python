@@ -18,6 +18,7 @@ from uuid import uuid4
 import aiohttp
 import OpenSSL.SSL
 import pytest
+from aiohttp import ClientSSLError
 
 import snowflake.connector.aio
 from snowflake.connector.aio._network import SnowflakeRestful
@@ -41,6 +42,7 @@ from snowflake.connector.errors import (
     ServiceUnavailableError,
 )
 from snowflake.connector.network import STATUS_TO_EXCEPTION, RetryRequest
+from snowflake.connector.vendored.requests.exceptions import SSLError
 
 pytestmark = pytest.mark.skipolddriver
 
@@ -454,3 +456,60 @@ async def test_retry_request_timeout(mockSessionRequest, next_action_result):
     # 13 seconds should be enough for authenticator to attempt thrice
     # however, loosen restrictions to avoid thread scheduling causing failure
     assert 1 < mockSessionRequest.call_count < 5
+
+
+async def test_sslerror_with_econnreset_retries():
+    """Test that SSLError with ECONNRESET raises RetryRequest."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    default_parameters = {
+        "method": "POST",
+        "full_url": "https://testaccount.snowflakecomputing.com/",
+        "headers": {},
+        "data": '{"code": 12345}',
+        "token": None,
+    }
+
+    # Test SSLError with ECONNRESET in the message
+    econnreset_ssl_error = ClientSSLError(
+        MagicMock(), SSLError("Connection broken: ECONNRESET")
+    )
+    session = MagicMock()
+    session.request = Mock(side_effect=econnreset_ssl_error)
+
+    with pytest.raises(RetryRequest, match="Connection broken: ECONNRESET"):
+        await rest._request_exec(session=session, **default_parameters)
+
+
+async def test_sslerror_without_econnreset_does_not_retry():
+    """Test that SSLError without ECONNRESET does not retry but raises OperationalError."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    default_parameters = {
+        "method": "POST",
+        "full_url": "https://testaccount.snowflakecomputing.com/",
+        "headers": {},
+        "data": '{"code": 12345}',
+        "token": None,
+    }
+
+    # Test SSLError without ECONNRESET in the message
+    regular_ssl_error = SSLError("SSL handshake failed")
+    session = MagicMock()
+    session.request = Mock(side_effect=regular_ssl_error)
+
+    # This should raise OperationalError, not RetryRequest
+    with pytest.raises(OperationalError):
+        await rest._request_exec(session=session, **default_parameters)

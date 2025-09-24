@@ -238,6 +238,10 @@ def is_login_request(url: str) -> bool:
     return "login-request" in parse_url(url).path
 
 
+def is_econnreset_exception(e: Exception) -> bool:
+    return "ECONNRESET" in repr(e)
+
+
 class RetryRequest(Exception):
     """Signal to retry request."""
 
@@ -965,7 +969,7 @@ class SnowflakeRestful:
                 )
             retry_ctx.retry_reason = reason
 
-            if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
+            if is_econnreset_exception(e):
                 # connection is reset by the server, the underlying connection is broken and can not be reused
                 # we need a new urllib3 http(s) connection in this case.
                 # We need to first close the old one so that urllib3 pool manager can create a new connection
@@ -1146,6 +1150,8 @@ class SnowflakeRestful:
             finally:
                 raw_ret.close()  # ensure response is closed
         except SSLError as se:
+            if is_econnreset_exception(se):
+                raise RetryRequest(se)
             msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
             logger.debug(msg)
             # the following code is for backward compatibility with old versions of python connector which calls

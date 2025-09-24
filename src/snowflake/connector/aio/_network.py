@@ -68,6 +68,7 @@ from ..network import SnowflakeRestful as SnowflakeRestfulSync
 from ..network import (
     SnowflakeRestfulJsonEncoder,
     get_http_retryable_error,
+    is_econnreset_exception,
     is_login_request,
     is_retryable_http_code,
 )
@@ -791,6 +792,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             finally:
                 raw_ret.close()  # ensure response is closed
         except (aiohttp.ClientSSLError, aiohttp.ClientConnectorSSLError) as se:
+            if is_econnreset_exception(se):
+                raise RetryRequest(se.os_error)
             msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
             logger.debug(msg)
             # the following code is for backward compatibility with old versions of python connector which calls
