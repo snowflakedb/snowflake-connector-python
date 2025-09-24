@@ -7,8 +7,7 @@ from base64 import b64encode
 
 import aioboto3
 from aiobotocore.utils import AioInstanceMetadataRegionFetcher
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
+from snowflake.connector.options import botocore
 
 from ..errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from ..errors import ProgrammingError
@@ -57,7 +56,7 @@ async def create_aws_attestation() -> WorkloadIdentityAttestation:
     region = await get_aws_region()
     partition = session.get_partition_for_region(region)
     sts_hostname = get_aws_sts_hostname(region, partition)
-    request = AWSRequest(
+    request = botocore.awsrequest.AWSRequest(
         method="POST",
         url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
         headers={
@@ -66,7 +65,7 @@ async def create_aws_attestation() -> WorkloadIdentityAttestation:
         },
     )
 
-    SigV4Auth(aws_creds, "sts", region).add_auth(request)
+    botocore.auth.SigV4Auth(aws_creds, "sts", region).add_auth(request)
 
     assertion_dict = {
         "url": request.url,
