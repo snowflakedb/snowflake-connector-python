@@ -199,11 +199,8 @@ def test_platform_detection_timeout(conn_cnx):
 
     Creates a connection with platform_detection_timeout parameter.
     """
-    cnx = conn_cnx(timezone="UTC", platform_detection_timeout_seconds=2.5)
-    try:
+    with conn_cnx(timezone="UTC", platform_detection_timeout_seconds=2.5) as cnx:
         assert cnx.platform_detection_timeout_seconds == 2.5
-    finally:
-        cnx.close()
 
 
 def test_bad_db(conn_cnx):
