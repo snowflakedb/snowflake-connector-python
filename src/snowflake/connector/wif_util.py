@@ -9,15 +9,12 @@ from enum import Enum, unique
 
 import jwt
 
-try:
-    import boto3
-    from botocore.auth import SigV4Auth
-    from botocore.awsrequest import AWSRequest
-    from botocore.utils import InstanceMetadataRegionFetcher
+from .options import boto3, botocore, installed_boto
 
-    BOTO_AVAILABLE = True
-except ImportError:
-    BOTO_AVAILABLE = False
+if installed_boto:
+    SigV4Auth = botocore.auth.SigV4Auth
+    AWSRequest = botocore.awsrequest.AWSRequest
+    InstanceMetadataRegionFetcher = botocore.utils.InstanceMetadataRegionFetcher
 
 from .errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import MissingDependencyError, ProgrammingError
@@ -179,9 +176,9 @@ def create_aws_attestation(
 
     If the application isn't running on AWS or no credentials were found, raises an error.
     """
-    if not BOTO_AVAILABLE:
+    if not installed_boto:
         raise MissingDependencyError(
-            msg="boto3 or botocore dependency is not installed. [boto] extension is required for the AWS provider.",
+            msg="AWS Workload Identity Federation can't be used because boto3 or botocore optional dependency is not installed. Try installing missing dependencies.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
 
