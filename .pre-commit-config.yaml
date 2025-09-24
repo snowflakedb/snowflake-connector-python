@@ -65,6 +65,7 @@ repos:
         entry: python ci/pre-commit/check_optional_imports.py
         language: system
         files: ^src/snowflake/connector/.*\.py$
+        exclude: src/snowflake/connector/options.py
         args: [--show-fixes]
 -   repo: https://github.com/PyCQA/flake8
     rev: 7.1.1
