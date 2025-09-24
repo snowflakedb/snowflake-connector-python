@@ -15,7 +15,7 @@ class AuthByWorkloadIdentity(AuthByPluginAsync, AuthByWorkloadIdentitySync):
     def __init__(
         self,
         *,
-        provider: AttestationProvider | None = None,
+        provider: AttestationProvider,
         token: str | None = None,
         entra_resource: str | None = None,
         **kwargs,
