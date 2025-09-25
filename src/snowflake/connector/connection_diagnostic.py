@@ -240,6 +240,10 @@ class ConnectionDiagnostic:
 
                 context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                 context.load_verify_locations(certifi.where())
+                # Best-effort: enable partial-chain when supported
+                _partial_flag = getattr(ssl, "VERIFY_X509_PARTIAL_CHAIN", 0)
+                if _partial_flag and hasattr(context, "verify_flags"):
+                    context.verify_flags |= _partial_flag
                 sock = context.wrap_socket(conn, server_hostname=host)
                 certificate = ssl.DER_cert_to_PEM_cert(sock.getpeercert(True))
                 http_request = f"""GET / {host}:{port} HTTP/1.1\r\n
