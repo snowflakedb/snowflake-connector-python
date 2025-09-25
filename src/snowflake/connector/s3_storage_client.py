@@ -425,6 +425,16 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             self.meta.result_status = ResultStatus.NOT_FOUND_FILE
             return None
         else:
+            # Since HEAD doesn't fetch response body, we need to repeat
+            get_response = self._send_request_with_authentication_and_retry(
+                url=url, verb="GET", retry_id=retry_id
+            )
+            logger.debug(
+                f"An unknown error has occurred while checking if {filename} existed\n"
+                f"The response status code is: {response.status_code}\n"
+                f"The response's headers are: {get_response.headers}\n"
+                f"The response's body is: {get_response.text}"
+            )
             response.raise_for_status()
 
     def _prepare_file_metadata(self) -> dict[str, Any]:
@@ -467,6 +477,12 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             self.upload_id = ET.fromstring(response.content)[2].text
             self.etags = [None] * self.num_of_chunks
         else:
+            logger.debug(
+                "An unknown error has occurred while initiating multipart upload\n"
+                f"The response status code is: {response.status_code}\n"
+                f"The response's headers are: {response.headers}\n"
+                f"The response's body is: {response.text}"
+            )
             response.raise_for_status()
 
     def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
@@ -483,6 +499,12 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 x_amz_headers=s3_metadata,
                 headers={HTTP_HEADER_CONTENT_TYPE: HTTP_HEADER_VALUE_OCTET_STREAM},
                 unsigned_payload=True,
+            )
+            logger.debug(
+                "An unknown error has occurred while uploading a singlepart chunk\n"
+                f"The response status code is: {response.status_code}\n"
+                f"The response's headers are: {response.headers}\n"
+                f"The response's body is: {response.text}"
             )
             response.raise_for_status()
         else:
@@ -503,6 +525,12 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
             if response.status_code == 200:
                 self.etags[chunk_id] = response.headers["ETag"]
+            logger.debug(
+                "An unknown error has occurred while uploading a multipart chunk\n"
+                f"The response status code is: {response.status_code}\n"
+                f"The response's headers are: {response.headers}\n"
+                f"The response's body is: {response.text}"
+            )
             response.raise_for_status()
 
     def _complete_multipart_upload(self) -> None:
@@ -531,6 +559,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             payload=ET.tostring(root),
             query_parts=dict(query_parts),
         )
+        if not response.ok:
+            logger.debug(
+                "An unknown error has occurred while completing a multipart upload\n"
+                f"The response status code is: {response.status_code}\n"
+                f"The response's headers are: {response.headers}\n"
+                f"The response's body is: {response.text}"
+            )
         response.raise_for_status()
 
     def _abort_multipart_upload(self) -> None:
@@ -549,6 +584,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             retry_id=retry_id,
             query_parts=dict(query_parts),
         )
+        if not response.ok:
+            logger.debug(
+                "An unknown error has occurred while aborting a multipart upload\n"
+                f"The response status code is: {response.status_code}\n"
+                f"The response's headers are: {response.headers}\n"
+                f"The response's body is: {response.text}"
+            )
         response.raise_for_status()
 
     def download_chunk(self, chunk_id: int) -> None:
@@ -565,6 +607,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             if response.status_code == 200:
                 self.write_downloaded_chunk(0, response.content)
                 self.meta.result_status = ResultStatus.DOWNLOADED
+            if not response.ok:
+                logger.debug(
+                    "An unknown error has occurred while downloading a singlepart chunk\n"
+                    f"The response status code is: {response.status_code}\n"
+                    f"The response's headers are: {response.headers}\n"
+                    f"The response's body is: {response.text}"
+                )
             response.raise_for_status()
         else:
             chunk_size = self.chunk_size
@@ -581,6 +630,13 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             )
             if response.status_code in (200, 206):
                 self.write_downloaded_chunk(chunk_id, response.content)
+            if not response.ok:
+                logger.debug(
+                    "An unknown error has occurred while downloading a multipart chunk\n"
+                    f"The response status code is: {response.status_code}\n"
+                    f"The response's headers are: {response.headers}\n"
+                    f"The response's body is: {response.text}"
+                )
             response.raise_for_status()
 
     def _get_bucket_accelerate_config(self, bucket_name: str) -> bool:
