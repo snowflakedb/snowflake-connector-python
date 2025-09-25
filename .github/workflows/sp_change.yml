@@ -1,0 +1,22 @@
+name: Stored Procedure Change Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, labeled, unlabeled]
+    branches:
+      - main
+    paths:
+      - 'src/snowflake/connector/cpp/**'
+      - 'src/snowflake/connector/*.py*'
+      - '!src/snowflake/connector/*ocsp*'
+      - '!src/snowflake/connector/*telemetry*'
+
+jobs:
+  check_sp_change:
+    runs-on: ubuntu-latest
+    if: ${{!contains(github.event.pull_request.labels.*.name, 'NO-CHANGE-IN-SP')}}
+    steps:
+    - name: Ensure the developer has been aware of whether this change should be ported to stored procedure
+      run: |
+        echo "If this change doesn't need to be ported to stored procedure, add `NO-CHANGE-IN-SP` label to your PR to skip this merge gate"
+        exit 1
