@@ -21,7 +21,6 @@ async def test_auth_oauth_credentials():
         client_secret="test_client_secret",
         token_request_url="https://example.com/token",
         scope="session:role:test_role",
-        refresh_token_enabled=False,
     )
 
     body = {"data": {}}

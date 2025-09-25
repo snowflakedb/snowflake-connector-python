@@ -92,8 +92,6 @@ from .errorcode import (
     ER_INVALID_VALUE,
     ER_INVALID_WIF_SETTINGS,
     ER_NO_ACCOUNT_NAME,
-    ER_NO_CLIENT_ID,
-    ER_NO_CLIENT_SECRET,
     ER_NO_NUMPY,
     ER_NO_PASSWORD,
     ER_NO_USER,
@@ -109,6 +107,7 @@ from .network import (
     OAUTH_AUTHENTICATOR,
     OAUTH_AUTHORIZATION_CODE,
     OAUTH_CLIENT_CREDENTIALS,
+    PAT_WITH_EXTERNAL_SESSION,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
@@ -230,6 +229,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # snowflake
     "client_prefetch_threads": (4, int),  # snowflake
     "client_fetch_threads": (None, (type(None), int)),
+    "client_fetch_use_mp": (False, bool),
     "numpy": (False, bool),  # snowflake
     "ocsp_response_cache_filename": (None, (type(None), str)),  # snowflake internal
     "converter_class": (DefaultConverterClass(), SnowflakeConverter),
@@ -340,7 +340,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-1825621: OAUTH implementation
     ),
-    "oauth_redirect_uri": ("http://127.0.0.1/", str),
+    "oauth_redirect_uri": ("http://127.0.0.1", str),
     "oauth_scope": (
         "",
         str,
@@ -364,6 +364,11 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # SNOW-XXXXX: remove the check_arrow_conversion_error_on_every_column flag
+    "external_session_id": (
+        None,
+        str,
+        # SNOW-2096721: External (Spark) session ID
+    ),
     "unsafe_file_write": (
         False,
         bool,
@@ -428,7 +433,9 @@ class SnowflakeConnection:
             See the backoff_policies module for details and implementation examples.
         client_session_keep_alive_heartbeat_frequency: Heartbeat frequency to keep connection alive in seconds.
         client_prefetch_threads: Number of threads to download the result set.
-        client_fetch_threads: Number of threads to fetch staged query results.
+        client_fetch_threads: Number of threads (or processes) to fetch staged query results.
+            If not specified, reuses client_prefetch_threads value.
+        client_fetch_use_mp: Enables multiprocessing for fetching query results in parallel.
         rest: Snowflake REST API object. Internal use only. Maybe removed in a later release.
         application: Application name to communicate with Snowflake as. By default, this is "PythonConnector".
         errorhandler: Handler used with errors. By default, an exception will be raised on error.
@@ -700,6 +707,10 @@ class SnowflakeConnection:
         if value is not None:
             value = min(max(1, value), MAX_CLIENT_FETCH_THREADS)
         self._client_fetch_threads = value
+
+    @property
+    def client_fetch_use_mp(self) -> bool:
+        return self._client_fetch_use_mp
 
     @property
     def rest(self) -> SnowflakeRestful | None:
@@ -1207,7 +1218,6 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == OAUTH_AUTHORIZATION_CODE:
-                self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1215,6 +1225,7 @@ class SnowflakeConnection:
                     application=self.application,
                     client_id=self._oauth_client_id,
                     client_secret=self._oauth_client_secret,
+                    host=self.host,
                     authentication_url=self._oauth_authorization_url.format(
                         host=self.host, port=self.port
                     ),
@@ -1234,7 +1245,6 @@ class SnowflakeConnection:
                     enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
                 )
             elif self._authenticator == OAUTH_CLIENT_CREDENTIALS:
-                self._check_oauth_parameters()
                 if self._role and (self._oauth_scope == ""):
                     # if role is known then let's inject it into scope
                     self._oauth_scope = _OAUTH_DEFAULT_SCOPE.format(role=self._role)
@@ -1246,12 +1256,7 @@ class SnowflakeConnection:
                         host=self.host, port=self.port
                     ),
                     scope=self._oauth_scope,
-                    token_cache=(
-                        auth.get_token_cache()
-                        if self._client_store_temporary_credential
-                        else None
-                    ),
-                    refresh_token_enabled=self._oauth_enable_refresh_tokens,
+                    connection=self,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
@@ -1271,6 +1276,15 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
                 self.auth_class = AuthByPAT(self._token)
+            elif self._authenticator == PAT_WITH_EXTERNAL_SESSION:
+                # We don't need to do a POST to /v1/login-request to get session and master tokens at the startup
+                # time. PAT with external (Spark) session ID creates a new session when it encounters the unique
+                # (PAT, external session ID) combination for the first time and then onwards use the (PAT, external
+                # session id) as a key to identify and authenticate the session. So we bypass actual AuthN here.
+                self.auth_class = AuthNoAuth()
+                self._rest.set_pat_and_external_session(
+                    self._token, self._external_session_id
+                )
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
                 self._check_experimental_authentication_flag()
                 # Standardize the provider enum.
@@ -1405,6 +1419,7 @@ class SnowflakeConnection:
                 OAUTH_AUTHENTICATOR,
                 USR_PWD_MFA_AUTHENTICATOR,
                 WORKLOAD_IDENTITY_AUTHENTICATOR,
+                PAT_WITH_EXTERNAL_SESSION,
             ]:
                 self._authenticator = auth_tmp
 
@@ -1420,6 +1435,7 @@ class SnowflakeConnection:
             NO_AUTH_AUTHENTICATOR,
             WORKLOAD_IDENTITY_AUTHENTICATOR,
             PROGRAMMATIC_ACCESS_TOKEN,
+            PAT_WITH_EXTERNAL_SESSION,
         }
 
         if not (self._master_token and self._session_token):
@@ -1468,6 +1484,7 @@ class SnowflakeConnection:
                     KEY_PAIR_AUTHENTICATOR,
                     PROGRAMMATIC_ACCESS_TOKEN,
                     WORKLOAD_IDENTITY_AUTHENTICATOR,
+                    PAT_WITH_EXTERNAL_SESSION,
                 )
                 and not self._password
             ):
@@ -2231,54 +2248,6 @@ class SnowflakeConnection:
                 {
                     "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable true to use the '{self._authenticator}' authenticator.",
                     "errno": ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
-                },
-            )
-
-    def _check_oauth_parameters(self) -> None:
-        if self._oauth_client_id is None:
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": "Oauth code flow requirement 'client_id' is empty",
-                    "errno": ER_NO_CLIENT_ID,
-                },
-            )
-        if self._oauth_client_secret is None:
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": "Oauth code flow requirement 'client_secret' is empty",
-                    "errno": ER_NO_CLIENT_SECRET,
-                },
-            )
-        if (
-            self._oauth_authorization_url
-            and not self._oauth_authorization_url.startswith("https://")
-        ):
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": "OAuth supports only authorization urls that use 'https' scheme",
-                    "errno": ER_INVALID_VALUE,
-                },
-            )
-        if self._oauth_redirect_uri and not (
-            self._oauth_redirect_uri.startswith("http://")
-            or self._oauth_redirect_uri.startswith("https://")
-        ):
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": "OAuth supports only authorization urls that use 'http(s)' scheme",
-                    "errno": ER_INVALID_VALUE,
                 },
             )
 
