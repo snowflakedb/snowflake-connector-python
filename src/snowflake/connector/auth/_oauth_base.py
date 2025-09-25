@@ -138,6 +138,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         scope: str,
         token_cache: TokenCache | None,
         refresh_token_enabled: bool,
+        credentials_in_body: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -151,6 +152,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         self._client_secret = client_secret
         self._token_request_url = token_request_url
         self._scope = scope
+        self._credentials_in_body = credentials_in_body
         if refresh_token_enabled:
             logger.debug("oauth refresh token is going to be used if needed")
             self._scope += (" " if self._scope else "") + "offline_access"
@@ -405,14 +407,17 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         return None, None
 
     def _create_token_request_headers(self) -> dict[str, str]:
-        return {
-            "Authorization": "Basic "
-            + base64.b64encode(
-                f"{self._client_id}:{self._client_secret}".encode()
-            ).decode(),
+        headers = {
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         }
+        # Added this condition to avoid sending authorization header when
+        # client_id/client_secret are sent in the body
+        if not self._credentials_in_body:
+            headers['Authorization'] = "Basic " + base64.b64encode(
+                f"{self._client_id}:{self._client_secret}".encode()
+            ).decode()
+        return headers
 
     @staticmethod
     def _resolve_proxy_url(

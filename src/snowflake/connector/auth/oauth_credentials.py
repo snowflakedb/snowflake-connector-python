@@ -38,10 +38,10 @@ class AuthByOauthCredentials(AuthByOAuthBase):
             scope=scope,
             token_cache=None,
             refresh_token_enabled=False,
+            credentials_in_body=credentials_in_body,
             **kwargs,
         )
         self._application = application
-        self._credentials_in_body = credentials_in_body
         self._origin: str | None = None
 
     def _get_oauth_type_id(self) -> str:
