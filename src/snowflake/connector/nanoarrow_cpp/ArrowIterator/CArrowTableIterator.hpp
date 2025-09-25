@@ -95,7 +95,7 @@ class CArrowTableIterator : public CArrowIterator {
                                    const int scale);
 
   /**
-   * convert Snowflake Interval Day-Time column (Arrow in64/decimal128) to
+   * convert Snowflake Interval Day-Time column (Arrow int64/decimal128) to
    * Arrow Duration column
    */
   void convertIntervalDayTimeColumn_nanoarrow(ArrowSchemaView* field,
