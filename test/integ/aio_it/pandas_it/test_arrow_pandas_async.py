@@ -662,6 +662,26 @@ async def test_vector(conn_cnx, is_public_test):
             await finish(conn, table)
 
 
+@pytest.mark.skipif(
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.",
+)
+async def test_interval_year_month(conn_cnx):
+    cases = ["1-2", "-1-3", "999999999-11", "-999999999-11"]
+    table = "test_arrow_year_month_interval"
+    values = "(" + "),(".join([f"'{c}'" for c in cases]) + ")"
+    async with conn_cnx() as conn:
+        cursor = conn.cursor()
+        await cursor.execute("alter session set feature_interval_types=enabled")
+        await cursor.execute(
+            f"create or replace table {table} (a interval year to month)"
+        )
+        await cursor.execute(f"insert into {table} values {values}")
+        sql_text = f"select a from {table}"
+        await validate_pandas(conn, sql_text, cases, 1, "one", "interval_year_month")
+        await finish(conn, table)
+
+
 async def validate_pandas(
     cnx_table,
     sql,
@@ -740,6 +760,23 @@ async def validate_pandas(
                         c_case = Decimal(cases[i])
                     elif data_type == "date":
                         c_case = datetime.strptime(cases[i], "%Y-%m-%d").date()
+                    elif data_type == "interval_year_month":
+                        year_month_list = cases[i].split("-")
+                        if len(year_month_list) == 2:
+                            c_case = int(year_month_list[0]) * 12 + int(
+                                year_month_list[1]
+                            )
+                        else:
+                            # negative value
+                            c_case = -(
+                                int(year_month_list[1]) * 12 + int(year_month_list[2])
+                            )
+                    elif data_type == "interval_day_time":
+                        timedelta_split_days = cases[i].split(" ")
+                        pandas_timedelta_str = (
+                            timedelta_split_days[0] + " days " + timedelta_split_days[1]
+                        )
+                        c_case = pandas.to_timedelta(pandas_timedelta_str)
                     elif data_type == "time":
                         time_str_len = 8 if scale == 0 else 9 + scale
                         c_case = cases[i].strip()[:time_str_len]
@@ -1550,3 +1587,23 @@ async def test_fetch_with_pandas_nullable_types(conn_cnx):
         df = await cursor_table.fetch_pandas_all(types_mapper=dtype_mapping.get)
         pandas._testing.assert_series_equal(df.dtypes, expected_dtypes)
         assert df.to_string() == expected_df_to_string
+
+
+@pytest.mark.skipif(
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.",
+)
+async def test_interval_day_time(conn_cnx):
+    cases = ["106751 23:47:16.854775807", "0 0:0:0.0", "-5 0:0:0.0"]
+    table = "test_arrow_day_time_interval"
+    values = "(" + "),(".join([f"'{c}'" for c in cases]) + ")"
+    async with conn_cnx() as conn:
+        cursor = conn.cursor()
+        await cursor.execute("alter session set feature_interval_types=enabled")
+        await cursor.execute(
+            f"create or replace table {table} (a interval day to second)"
+        )
+        await cursor.execute(f"insert into {table} values {values}")
+        sql_text = f"select a from {table}"
+        await validate_pandas(conn, sql_text, cases, 1, "one", "interval_day_time")
+        await finish(conn, table)
