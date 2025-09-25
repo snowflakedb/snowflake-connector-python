@@ -78,7 +78,7 @@ def test_query_can_be_empty_with_dataframe_ast():
         cursor.execute("", _dataframe_ast="ABCD")
 
 
-@patch("snowflake.connector.cursor.SnowflakeCursor._SnowflakeCursor__cancel_query")
+@patch("snowflake.connector.cursor.SnowflakeCursor._SnowflakeCursorBase__cancel_query")
 def test_cursor_execute_timeout(mockCancelQuery):
     def mock_cmd_query(*args, **kwargs):
         time.sleep(10)
