@@ -58,6 +58,7 @@ from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..version import VERSION
 from .no_auth import AuthNoAuth
+from .oauth import AuthByOAuth
 
 if TYPE_CHECKING:
     from . import AuthByPlugin
@@ -373,7 +374,11 @@ class Auth:
                         sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     )
                 )
-            elif errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE:
+            elif (errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE) and (
+                # SNOW-2329031: OAuth v1.0 does not support token renewal,
+                # for backward compatibility, we do not raise an exception here
+                not isinstance(auth_instance, AuthByOAuth)
+            ):
                 raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=ret["message"],
