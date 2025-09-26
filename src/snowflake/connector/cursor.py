@@ -69,6 +69,7 @@ from .errorcode import (
 from .errors import (
     DatabaseError,
     Error,
+    ErrorHandler,
     IntegrityError,
     InterfaceError,
     NotSupportedError,
@@ -223,7 +224,7 @@ class ResultMetadataV2:
         )
 
         fields = col.get("fields")
-        processed_fields: Optional[List[ResultMetadataV2]] = None
+        processed_fields: list[ResultMetadataV2] | None = None
         if fields is not None:
             if col_type in {"VECTOR", "ARRAY", "OBJECT", "MAP"}:
                 processed_fields = [
@@ -372,12 +373,9 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         Args:
             connection: The connection that created this cursor.
         """
-        self._connection: SnowflakeConnection = connection
+        self._connection: SnowflakeConnection | None = connection
 
-        self._errorhandler: Callable[
-            [SnowflakeConnection, SnowflakeCursor, type[Error], dict[str, str]],
-            None,
-        ] = Error.default_errorhandler
+        self._errorhandler = Error.default_errorhandler
         self.messages: list[
             tuple[type[Error] | type[Exception], dict[str, str | bool]]
         ] = []
@@ -413,11 +411,11 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
         self._lock_canceling = Lock()
 
-        self._first_chunk_time = None
+        self._first_chunk_time: int | None = None
 
         self._log_max_query_length = connection.log_max_query_length
         self._inner_cursor: SnowflakeCursorBase | None = None
-        self._prefetch_hook = None
+        self._prefetch_hook: Callable[[], None] | None = None
         self._rownumber: int | None = None
 
         self.reset()
@@ -434,14 +432,14 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
     def _use_dict_result(self) -> bool: ...
 
     @property
-    def description(self) -> list[ResultMetadata]:
+    def description(self) -> list[ResultMetadata] | None:
         if self._description is None:
             return None
 
         return [meta._to_result_metadata_v1() for meta in self._description]
 
     @property
-    def _description_internal(self) -> list[ResultMetadataV2]:
+    def _description_internal(self) -> list[ResultMetadataV2] | None:
         """Return the new format of result metadata for a query.
 
         This method is for internal use only.
@@ -454,7 +452,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
     @property
     def rownumber(self) -> int | None:
-        return self._rownumber if self._rownumber >= 0 else None
+        return self._rownumber if self._rownumber and self._rownumber >= 0 else None
 
     @property
     def sfqid(self) -> str | None:
@@ -517,16 +515,17 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._arraysize = int(value)
 
     @property
-    def connection(self) -> SnowflakeConnection:
+    def connection(self) -> SnowflakeConnection | None:
         return self._connection
 
     @property
-    def errorhandler(self) -> Callable:
+    def errorhandler(self) -> ErrorHandler:
         return self._errorhandler
 
     @errorhandler.setter
-    def errorhandler(self, value: Callable | None) -> None:
+    def errorhandler(self, value: ErrorHandler | None) -> None:
         logger.debug("setting errorhandler: %s", value)
+        # TODO: why is value `ErrorHandler | None` if it always errors on None?
         if value is None:
             raise ProgrammingError("Invalid errorhandler is specified")
         self._errorhandler = value
@@ -557,6 +556,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         Returns:
             The input parameters.
         """
+        assert self._connection is not None
         marker_format = "%s" if self._connection.is_pyformat else "?"
         command = (
             f"CALL {procname}({', '.join([marker_format for _ in range(len(args))])})"
@@ -588,7 +588,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         query: str,
         timeout: int = 0,
         statement_params: dict[str, str] | None = None,
-        binding_params: tuple | dict[str, dict[str, str]] = None,
+        binding_params: tuple | dict[str, dict[str, str]] | None = None,
         binding_stage: str | None = None,
         is_internal: bool = False,
         describe_only: bool = False,
@@ -597,6 +597,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         _no_retry: bool = False,
         dataframe_ast: str | None = None,
     ) -> dict[str, Any]:
+        assert self._connection is not None
         del self.messages[:]
 
         if statement_params is not None and not isinstance(statement_params, dict):
@@ -772,6 +773,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         command: str,
         params: Sequence[Any] | dict[Any, Any] | None = None,
     ) -> str:
+        assert self._connection is not None
+        assert self.connection is not None
         # pyformat/format paramstyle
         # client side binding
         processed_params = self._connection._process_params_pyformat(params, self)
@@ -796,7 +799,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             and processed_params is not None
         ) or (
             not self.connection._interpolate_empty_sequences
-            and len(processed_params) > 0
+            and len(processed_params) > 0  # type: ignore[arg-type] # TODO: handle when processed_params is None
         ):
             query = command % processed_params
         else:
@@ -813,14 +816,14 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         _exec_async: bool = False,
         _no_retry: bool = False,
         _do_reset: bool = True,
-        _put_callback: SnowflakeProgressPercentage = None,
-        _put_azure_callback: SnowflakeProgressPercentage = None,
+        _put_callback: SnowflakeProgressPercentage | None = None,
+        _put_azure_callback: SnowflakeProgressPercentage | None = None,
         _put_callback_output_stream: IO[str] = sys.stdout,
-        _get_callback: SnowflakeProgressPercentage = None,
-        _get_azure_callback: SnowflakeProgressPercentage = None,
+        _get_callback: SnowflakeProgressPercentage | None = None,
+        _get_azure_callback: SnowflakeProgressPercentage | None = None,
         _get_callback_output_stream: IO[str] = sys.stdout,
         _show_progress_bar: bool = True,
-        _statement_params: dict[str, str] | None = None,
+        _statement_params: dict[str, str | int] | None = None,
         _is_internal: bool = False,
         _describe_only: bool = False,
         _no_results: Literal[False] = False,
@@ -830,6 +833,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
+        _force_qmark_paramstyle: bool = False,
         _dataframe_ast: str | None = None,
     ) -> Self | None: ...
 
@@ -843,14 +847,14 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         _exec_async: bool = False,
         _no_retry: bool = False,
         _do_reset: bool = True,
-        _put_callback: SnowflakeProgressPercentage = None,
-        _put_azure_callback: SnowflakeProgressPercentage = None,
+        _put_callback: SnowflakeProgressPercentage | None = None,
+        _put_azure_callback: SnowflakeProgressPercentage | None = None,
         _put_callback_output_stream: IO[str] = sys.stdout,
-        _get_callback: SnowflakeProgressPercentage = None,
-        _get_azure_callback: SnowflakeProgressPercentage = None,
+        _get_callback: SnowflakeProgressPercentage | None = None,
+        _get_azure_callback: SnowflakeProgressPercentage | None = None,
         _get_callback_output_stream: IO[str] = sys.stdout,
         _show_progress_bar: bool = True,
-        _statement_params: dict[str, str] | None = None,
+        _statement_params: dict[str, str | int] | None = None,
         _is_internal: bool = False,
         _describe_only: bool = False,
         _no_results: Literal[True] = True,
@@ -860,6 +864,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         _skip_upload_on_content_match: bool = False,
         file_stream: IO[bytes] | None = None,
         num_statements: int | None = None,
+        _force_qmark_paramstyle: bool = False,
         _dataframe_ast: str | None = None,
     ) -> dict[str, Any] | None: ...
 
@@ -872,14 +877,14 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         _exec_async: bool = False,
         _no_retry: bool = False,
         _do_reset: bool = True,
-        _put_callback: SnowflakeProgressPercentage = None,
-        _put_azure_callback: SnowflakeProgressPercentage = None,
+        _put_callback: SnowflakeProgressPercentage | None = None,
+        _put_azure_callback: SnowflakeProgressPercentage | None = None,
         _put_callback_output_stream: IO[str] = sys.stdout,
-        _get_callback: SnowflakeProgressPercentage = None,
-        _get_azure_callback: SnowflakeProgressPercentage = None,
+        _get_callback: SnowflakeProgressPercentage | None = None,
+        _get_azure_callback: SnowflakeProgressPercentage | None = None,
         _get_callback_output_stream: IO[str] = sys.stdout,
         _show_progress_bar: bool = True,
-        _statement_params: dict[str, str] | None = None,
+        _statement_params: dict[str, str | int] | None = None,
         _is_internal: bool = False,
         _describe_only: bool = False,
         _no_results: bool = False,
@@ -974,6 +979,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             "dataframe_ast": _dataframe_ast,
         }
 
+        assert self._connection is not None
         if self._connection.is_pyformat and not _force_qmark_paramstyle:
             query = self._preprocess_pyformat_query(command, params)
         else:
@@ -992,7 +998,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                     )
 
                 kwargs["binding_params"] = self._connection._process_params_qmarks(
-                    params, self
+                    params, self  # type: ignore[arg-type] # TODO: handle when params is dict and errorhandler_wrapper doesn't throw an exception
                 )
 
         m = DESC_TABLE_RE.match(query)
@@ -1038,6 +1044,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 # session parameters
                 param = m.group(1).upper()
                 value = m.group(2)
+                assert self._connection is not None
+                assert self._connection.converter is not None
                 self._connection.converter.set_parameter(param, value)
 
             if "resultIds" in data:
@@ -1074,7 +1082,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 self._total_rowcount = len(data["rowset"]) if "rowset" in data else -1
 
             if _exec_async:
-                self.connection._async_sfqids[self._sfqid] = None
+                assert self.connection is not None
+                self.connection._async_sfqids[self._sfqid] = None  # type: ignore[index] # TODO: Handle when self._sfqid is None
             if _no_results:
                 self._total_rowcount = (
                     ret["data"]["total"]
@@ -1128,7 +1137,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         kwargs["_exec_async"] = True
         return self.execute(*args, **kwargs)
 
-    def describe(self, *args: Any, **kwargs: Any) -> list[ResultMetadata]:
+    def describe(self, *args: Any, **kwargs: Any) -> list[ResultMetadata] | None:
         """Obtain the schema of the result without executing the query.
 
         This function takes the same arguments as execute, please refer to that function
@@ -1144,7 +1153,9 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             return None
         return [meta._to_result_metadata_v1() for meta in self._description]
 
-    def _describe_internal(self, *args: Any, **kwargs: Any) -> list[ResultMetadataV2]:
+    def _describe_internal(
+        self, *args: Any, **kwargs: Any
+    ) -> list[ResultMetadataV2] | None:
         """Obtain the schema of the result without executing the query.
 
         This function takes the same arguments as execute, please refer to that function
@@ -1160,6 +1171,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         return self._description
 
     def _format_query_for_log(self, query: str) -> str:
+        assert self._connection is not None
         return self._connection._format_query_for_log(query)
 
     def _is_dml(self, data: dict[Any, Any]) -> bool:
@@ -1176,7 +1188,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
             self._total_rowcount = data["total"]
 
-        self._description: list[ResultMetadataV2] = [
+        self._description = [
             ResultMetadataV2.from_column(col) for col in data["rowtype"]
         ]
 
@@ -1189,6 +1201,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 "Number of results in first chunk: %s", result_chunks[0].rowcount
             )
 
+        assert self._connection is not None
         self._result_set = ResultSet(
             self,
             result_chunks,
@@ -1236,6 +1249,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         global CAN_USE_ARROW_RESULT_FORMAT
 
         if not CAN_USE_ARROW_RESULT_FORMAT:
+            assert self._connection is not None
             if self._connection.application == "SnowSQL":
                 msg = "Currently SnowSQL doesn't support the result set in Apache Arrow format."
                 errno = ER_NO_PYARROW_SNOWSQL
@@ -1271,9 +1285,11 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 },
             )
 
-    def query_result(self, qid: str) -> SnowflakeCursor:
+    def query_result(self, qid: str) -> Self:
         """Query the result of a previously executed query."""
         url = f"/queries/{qid}/result"
+        assert self._connection is not None
+        assert self._connection.rest is not None
         ret = self._connection.rest.request(url=url, method="get")
         self._sfqid = (
             ret["data"]["queryId"]
@@ -1317,6 +1333,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._log_telemetry_job_data(
             TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
         )
+        assert self._result_set is not None
         return self._result_set._fetch_arrow_batches()
 
     @overload
@@ -1339,6 +1356,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
+        assert self._result_set is not None
         return self._result_set._fetch_arrow_all(force_return_table=force_return_table)
 
     def fetch_pandas_batches(self, **kwargs: Any) -> Iterator[DataFrame]:
@@ -1351,6 +1369,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._log_telemetry_job_data(
             TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.TRUE
         )
+        assert self._result_set is not None
         return self._result_set._fetch_pandas_batches(**kwargs)
 
     def fetch_pandas_all(self, **kwargs: Any) -> DataFrame:
@@ -1373,9 +1392,12 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._log_telemetry_job_data(
             TelemetryField.PANDAS_FETCH_ALL, TelemetryData.TRUE
         )
+        assert self._result_set is not None
         return self._result_set._fetch_pandas_all(**kwargs)
 
     def abort_query(self, qid: str) -> bool:
+        assert self._connection is not None
+        assert self._connection.rest is not None
         url = f"/queries/{qid}/abort-request"
         ret = self._connection.rest.request(url=url, method="post")
         return ret.get("success")
@@ -1385,10 +1407,12 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         command: str,
         seqparams: Sequence[Any] | dict[str, Any],
         **kwargs: Any,
-    ) -> SnowflakeCursor:
+    ) -> Self:
         """Executes a command/query with the given set of parameters sequentially."""
+        assert self._connection is not None
+        assert self.connection is not None
         logger.debug("executing many SQLs/commands")
-        command = command.strip(" \t\n\r") if command else None
+        command = command.strip(" \t\n\r") if command else None  # type: ignore[assignment] # TODO: None will break subsequent code
 
         if not seqparams:
             logger.warning(
@@ -1416,7 +1440,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                         },
                     )
 
-                fmt = m.group(1)
+                fmt = m.group(1)  # type: ignore[union-attr] # TODO: Handle when m is None and errorhandler_wrapper doesn't throw an exception
                 values = []
                 for param in seqparams:
                     logger.debug(f"parameter: {param}")
@@ -1429,7 +1453,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             else:
                 logger.debug("bulk insert")
                 # sanity check
-                row_size = len(seqparams[0])
+                row_size = len(seqparams[0])  # type: ignore[index] # TODO: handle when seqparams is dict
                 for row in seqparams:
                     if len(row) != row_size:
                         error_value = {
@@ -1443,16 +1467,16 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                         return self
                 bind_size = len(seqparams) * row_size
                 bind_stage = None
-                if (
-                    bind_size
-                    >= self.connection._session_parameters[
-                        "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
-                    ]
-                    > 0
-                ):
+                binding_threshold = self.connection._session_parameters[
+                    "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
+                ]
+                assert isinstance(binding_threshold, int)
+                if bind_size >= binding_threshold > 0:
                     # bind stage optimization
                     try:
-                        rows = self.connection._write_params_to_byte_rows(seqparams)
+                        rows = self.connection._write_params_to_byte_rows(
+                            seqparams  # type: ignore[arg-type] # TODO: handle when seqparams is dict
+                        )
                         bind_uploader = BindUploadAgent(self, rows)
                         bind_uploader.upload()
                         bind_stage = bind_uploader.stage_path
@@ -1470,7 +1494,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 return self
 
         self.reset()
-        if "num_statements" not in kwargs:
+        num_statements = kwargs.get("num_statements")
+        if num_statements is None:
             # fall back to old driver behavior when the user does not provide the parameter to enable
             #  multi-statement optimizations for executemany
             for param in seqparams:
@@ -1491,16 +1516,14 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 query = command * len(seqparams)
                 params = [param for parameters in seqparams for param in parameters]
 
-            kwargs["num_statements"]: int = kwargs.get("num_statements") * len(
-                seqparams
-            )
+            kwargs["num_statements"] = num_statements * len(seqparams)
 
             self.execute(query, params, _do_reset=False, **kwargs)
 
         return self
 
     @abc.abstractmethod
-    def fetchone(self) -> FetchRow:
+    def fetchone(self) -> FetchRow | None:
         pass
 
     def _fetchone(self) -> dict[str, Any] | tuple[Any, ...] | None:
@@ -1517,6 +1540,13 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             self._result_state = ResultState.VALID
 
         try:
+            # Keep throwing the same TypeError as before, except tell mypy
+            # this branch doesn't continue
+            # TODO: Handle this explicitly, instead of simply catching TypeErrors
+            if self._result is None:
+                next(None)  # type: ignore
+                raise Exception("unreachable: the previous line should have thrown")
+
             _next = next(self._result, None)
             if isinstance(_next, Exception):
                 Error.errorhandler_wrapper_from_ready_exception(
@@ -1525,6 +1555,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                     _next,
                 )
             if _next is not None:
+                assert self._rownumber is not None
                 self._rownumber += 1
             return _next
         except TypeError as err:
@@ -1569,7 +1600,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             ret.append(row)
         return ret
 
-    def nextset(self) -> SnowflakeCursor | None:
+    def nextset(self) -> Self | None:
         """
         Fetches the next set of results if the previously executed query was multi-statement so that subsequent calls
         to any of the fetch*() methods will return rows from the next query's set of results. Returns None if no more
@@ -1623,6 +1654,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             self._result = None
             self._inner_cursor = None
         self._prefetch_hook = None
+        assert self.connection is not None
         if not self.connection._reuse_results:
             self._result_set = None
 
@@ -1638,12 +1670,17 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         if self._sequence_counter >= 0 and not self.is_closed():
             logger.debug("canceled. %s, request_id: %s", query, self._request_id)
             with self._lock_canceling:
-                self._connection._cancel_query(query, self._request_id)
+                assert self._connection is not None
+                self._connection._cancel_query(
+                    query,
+                    self._request_id,  # type: ignore[arg-type] # TODO: What should happen if self._request_id is None?
+                )
 
     def _log_telemetry_job_data(
         self, telemetry_field: TelemetryField, value: Any
     ) -> None:
         """Builds an instance of TelemetryData with the given field and logs it."""
+        assert self._connection is not None
         ts = get_time_millis()
         try:
             self._connection._log_telemetry(
@@ -1683,6 +1720,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
         def wait_until_ready() -> None:
             """Makes sure query has finished executing and once it has retrieves results."""
+            assert self.connection is not None
             no_data_counter = 0
             retry_pattern_pos = 0
             while True:
@@ -1711,6 +1749,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                     error_message=f"Status of query '{sfqid}' is {status.name}, results are unavailable",
                     error_cls=DatabaseError,
                 )
+            assert self._inner_cursor is not None
             self._inner_cursor.execute(f"select * from table(result_scan('{sfqid}'))")
             self._result = self._inner_cursor._result
             self._query_result_format = self._inner_cursor._query_result_format
@@ -1726,6 +1765,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
                 self._inner_cursor.fetchall()
             ):
                 url = f"/queries/{sfqid}/result"
+                assert self._connection is not None
+                assert self._connection.rest is not None
                 ret = self._connection.rest.request(url=url, method="get")
                 if "data" in ret and "resultIds" in ret["data"]:
                     self._init_multi_statement_results(ret["data"])
@@ -1743,6 +1784,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             else:
                 return False
 
+        assert self.connection is not None
         self.connection.get_query_status_throw_if_error(
             sfqid
         )  # Trigger an exception if query failed
@@ -1786,6 +1828,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             self.reset()
 
         # Interpret the file operation.
+        assert self.connection is not None
         ret = self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
             local_file_name=None,
@@ -1823,6 +1866,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             self.reset()
 
         # Interpret the file operation.
+        assert self.connection is not None
         ret = self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
             local_file_name=local_file_name,
@@ -1853,6 +1897,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         Returns:
             IO[bytes]: A stream to read from.
         """
+        assert self.connection is not None
+
         # Interpret the file operation.
         ret = self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
@@ -1887,6 +1933,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             self.reset()
 
         # Interpret the file operation.
+        assert self.connection is not None
         ret = self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
             local_file_name=None,
@@ -1914,6 +1961,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         **kwargs,
     ) -> SnowflakeFileTransferAgent:
         from .file_transfer_agent import SnowflakeFileTransferAgent
+
+        assert self._connection is not None
 
         return SnowflakeFileTransferAgent(
             self,
