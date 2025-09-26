@@ -22,7 +22,7 @@ import certifi
 import OpenSSL.SSL
 
 from .constants import OCSPMode
-from .crl import CRLConfig, CRLValidator
+from .crl import CertRevocationCheckMode, CRLConfig, CRLValidator
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
 from .session_manager import SessionManager
@@ -173,6 +173,32 @@ def ssl_wrap_socket_with_cert_revocation_checks(
     ret = ssl_.ssl_wrap_socket(**params)
 
     log.debug(
+        "CRL Check Mode: %s",
+        FEATURE_CRL_CONFIG.cert_revocation_check_mode.name,
+    )
+    if (
+        FEATURE_CRL_CONFIG.cert_revocation_check_mode
+        != CertRevocationCheckMode.DISABLED
+    ):
+        crl_validator = CRLValidator.from_config(
+            FEATURE_CRL_CONFIG, get_current_session_manager()
+        )
+        if not crl_validator.validate_connection(ret.connection):
+            raise OperationalError(
+                msg=(
+                    "The certificate is revoked or "
+                    "could not be validated via CRL: hostname={}".format(
+                        server_hostname
+                    )
+                ),
+                errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+            )
+        log.debug(
+            "The certificate revocation check was successful. No additional checks will be performed."
+        )
+        return ret
+
+    log.debug(
         "OCSP Mode: %s, OCSP response cache file name: %s",
         FEATURE_OCSP_MODE.name,
         FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
@@ -195,29 +221,6 @@ def ssl_wrap_socket_with_cert_revocation_checks(
             "This connection does not perform OCSP checks. "
             "Revocation status of the certificate will not be checked against OCSP Responder."
         )
-
-    log.debug(
-        "CRL Check Mode: %s",
-        FEATURE_CRL_CONFIG.cert_revocation_check_mode.name,
-    )
-    with CRLValidator.from_config(
-        FEATURE_CRL_CONFIG, get_current_session_manager()
-    ) as validator:
-        if not validator.validate_connection(ret.connection):
-            raise OperationalError(
-                msg=(
-                    "The certificate is revoked or "
-                    "could not be validated via CRL: hostname={}".format(
-                        server_hostname
-                    )
-                ),
-                errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
-            )
-        else:
-            log.debug(
-                "This connection does not perform CRL checks."
-                "Revocation status of the certificate will not be checked against CRL Responder."
-            )
 
     return ret
 
