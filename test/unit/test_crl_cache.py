@@ -56,8 +56,18 @@ def disk_cache_mock():
 
 @pytest.fixture(scope="function")
 def cache_mgr(mem_cache_mock, disk_cache_mock):
-    with CRLCacheManager(mem_cache_mock, disk_cache_mock, timedelta(seconds=0)) as mgr:
-        yield mgr
+    mgr = CRLCacheManager(mem_cache_mock, disk_cache_mock)
+    yield mgr
+
+
+@pytest.fixture(scope="function")
+def cache_factory():
+    """Fixture that provides CRLCacheFactory and ensures cleanup after each test."""
+    from snowflake.connector.crl_cache import CRLCacheFactory
+
+    yield CRLCacheFactory
+    # Always reset the factory after each test to prevent test pollution
+    CRLCacheFactory.reset()
 
 
 @pytest.fixture(scope="module")
@@ -304,56 +314,52 @@ def test_should_create_different_cache_entries_for_same_crl_with_different_downl
     assert second_memory_call.args == (crl_url, CRLCacheEntry(crl, second_put_time))
 
 
-def test_cleanup_loop_starts_and_stops_properly(mem_cache_mock, disk_cache_mock):
+def test_cleanup_loop_starts_and_stops_properly(cache_factory):
     """Test that the cleanup loop starts and stops properly"""
+    # Initially by default the cleanup is not running
+    assert not cache_factory.is_periodic_cleanup_running()
 
-    with CRLCacheManager(
-        mem_cache_mock, disk_cache_mock, timedelta(milliseconds=50)
-    ) as manager:
+    # Start the cleanup loop
+    cache_factory.start_periodic_cleanup(timedelta(milliseconds=50))
 
-        # Initially by default the cleanup is not running
-        assert not manager.is_periodic_cleanup_running()
+    # Verify cleanup executor is created
+    assert cache_factory.is_periodic_cleanup_running()
 
-        # Start the cleanup loop
-        manager.start_periodic_cleanup()
+    # Stop the cleanup loop
+    cache_factory.stop_periodic_cleanup()
 
-        # Verify cleanup executor is created
-        assert manager.is_periodic_cleanup_running()
-
-        # Stop the cleanup loop
-        manager.stop_periodic_cleanup()
-
-        # Verify cleanup is properly stopped
-        assert not manager.is_periodic_cleanup_running()
+    # Verify cleanup is properly stopped
+    assert not cache_factory.is_periodic_cleanup_running()
 
 
 def test_cleanup_loop_calls_cleanup_on_both_caches_periodically(
-    mem_cache_mock, disk_cache_mock
+    cache_factory, mem_cache_mock, disk_cache_mock
 ):
     """Test that the cleanup loop calls cleanup on both memory and file caches periodically"""
+    # Set up singleton instances to be cleaned
+    cache_factory._memory_cache_instance = mem_cache_mock
+    cache_factory._file_cache_instance = disk_cache_mock
 
-    with CRLCacheManager(
-        mem_cache_mock, disk_cache_mock, timedelta(milliseconds=50)
-    ) as manager:
+    # Start the cleanup loop
+    cache_factory.start_periodic_cleanup(timedelta(milliseconds=50))
 
-        # Start the cleanup loop
-        manager.start_periodic_cleanup()
+    # Wait for at least 2 cleanup cycles to occur
+    time.sleep(0.15)
 
-        # Wait for at least 2 cleanup cycles to occur
-        time.sleep(0.15)
+    # Stop the cleanup loop
+    cache_factory.stop_periodic_cleanup()
 
-        # Stop the cleanup loop
-        manager.stop_periodic_cleanup()
+    # Verify that cleanup was called on both caches at least once
+    assert mem_cache_mock.cleanup.call_count >= 1
+    assert disk_cache_mock.cleanup.call_count >= 1
 
-        # Verify that cleanup was called on both caches at least once
-        assert mem_cache_mock.cleanup.call_count >= 1
-        assert disk_cache_mock.cleanup.call_count >= 1
-
-        # Verify both caches were called the same number of times
-        assert mem_cache_mock.cleanup.call_count == disk_cache_mock.cleanup.call_count
+    # Verify both caches were called the same number of times
+    assert mem_cache_mock.cleanup.call_count == disk_cache_mock.cleanup.call_count
 
 
-def test_cleanup_loop_handles_exceptions_gracefully(mem_cache_mock, disk_cache_mock):
+def test_cleanup_loop_handles_exceptions_gracefully(
+    cache_factory, mem_cache_mock, disk_cache_mock
+):
     """Test that the cleanup loop handles exceptions gracefully and continues running"""
 
     # Make memory cache cleanup raise an exception on first call, then work normally
@@ -370,88 +376,293 @@ def test_cleanup_loop_handles_exceptions_gracefully(mem_cache_mock, disk_cache_m
         None,
     ]
 
-    with CRLCacheManager(
-        mem_cache_mock, disk_cache_mock, timedelta(milliseconds=50), start_cleanup=True
-    ) as manager:
-        # Wait for multiple cleanup cycles to occur
-        time.sleep(0.15)  # To allow for multiple cleanup cycles
+    # Set up singleton instances to be cleaned
+    cache_factory._memory_cache_instance = mem_cache_mock
+    cache_factory._file_cache_instance = disk_cache_mock
 
-        # Stop the cleanup loop
-        manager.stop_periodic_cleanup()
+    # Start the cleanup loop
+    cache_factory.start_periodic_cleanup(timedelta(milliseconds=50))
 
-        # Verify that cleanup was attempted multiple times despite the exception
-        assert mem_cache_mock.cleanup.call_count > 1
-        assert disk_cache_mock.cleanup.call_count > 1
+    # Wait for multiple cleanup cycles to occur
+    time.sleep(0.15)
+
+    # Stop the cleanup loop
+    cache_factory.stop_periodic_cleanup()
+
+    # Verify that cleanup was attempted multiple times despite the exception
+    assert mem_cache_mock.cleanup.call_count > 1
+    assert disk_cache_mock.cleanup.call_count > 1
 
 
 def test_cleanup_loop_stops_gracefully_with_shutdown_event(
-    mem_cache_mock, disk_cache_mock
+    cache_factory, mem_cache_mock, disk_cache_mock
 ):
     """Test that the cleanup loop stops gracefully when shutdown event is set"""
 
-    # longer interval to test shutdown
-    with CRLCacheManager(
-        mem_cache_mock, disk_cache_mock, timedelta(hours=1), start_cleanup=True
-    ) as manager:
-        # Give it a moment to make first cleanup cycle
-        time.sleep(0.1)
+    # Set up singleton instances to be cleaned
+    cache_factory._memory_cache_instance = mem_cache_mock
+    cache_factory._file_cache_instance = disk_cache_mock
 
-        # Stop the cleanup loop - this should interrupt the wait
-        manager.stop_periodic_cleanup()
+    # Start cleanup with longer interval to test shutdown
+    cache_factory.start_periodic_cleanup(timedelta(hours=1))
 
-        # Verify cleanup was called at least once (initial call)
-        assert mem_cache_mock.cleanup.call_count == 1
-        assert disk_cache_mock.cleanup.call_count == 1
+    # Give it a moment to make first cleanup cycle
+    time.sleep(0.1)
+
+    # Stop the cleanup loop - this should interrupt the wait
+    cache_factory.stop_periodic_cleanup()
+
+    # Verify cleanup was called at least once (initial call)
+    assert mem_cache_mock.cleanup.call_count == 1
+    assert disk_cache_mock.cleanup.call_count == 1
 
 
-def test_cleanup_loop_double_stop_is_safe(mem_cache_mock, disk_cache_mock):
+def test_cleanup_loop_double_stop_is_safe(cache_factory):
     """Test that calling stop_periodic_cleanup multiple times is safe"""
-    with CRLCacheManager(
-        mem_cache_mock, disk_cache_mock, timedelta(milliseconds=50)
-    ) as manager:
-        # Start the cleanup loop
-        manager.start_periodic_cleanup()
-        assert manager.is_periodic_cleanup_running()
+    # Start the cleanup loop
+    cache_factory.start_periodic_cleanup(timedelta(milliseconds=50))
+    assert cache_factory.is_periodic_cleanup_running()
 
-        # Stop it once
-        manager.stop_periodic_cleanup()
-        assert not manager.is_periodic_cleanup_running()
+    # Stop it once
+    cache_factory.stop_periodic_cleanup()
+    assert not cache_factory.is_periodic_cleanup_running()
 
-        # Stop it again - should not raise any exceptions
-        manager.stop_periodic_cleanup()
-        assert not manager.is_periodic_cleanup_running()
+    # Stop it again - should not raise any exceptions
+    cache_factory.stop_periodic_cleanup()
+    assert not cache_factory.is_periodic_cleanup_running()
 
 
 def test_cleanup_loop_double_start_is_safe_and_restarts(
-    mem_cache_mock, disk_cache_mock
+    cache_factory, mem_cache_mock, disk_cache_mock
 ):
     """Test that calling start_periodic_cleanup multiple times creates new executors"""
-    with CRLCacheManager(
-        mem_cache_mock, disk_cache_mock, timedelta(hours=1), start_cleanup=False
-    ) as manager:
+    # Set up singleton instances to be cleaned
+    cache_factory._memory_cache_instance = mem_cache_mock
+    cache_factory._file_cache_instance = disk_cache_mock
 
-        for i in range(1, 3):
-            manager.start_periodic_cleanup()
-            time.sleep(0.1)
-            # The cleanup should be in the running state and by this moment successfully made exactly one additional cleanup cycle
-            assert manager.is_periodic_cleanup_running()
-            assert mem_cache_mock.cleanup.call_count == i
-            assert disk_cache_mock.cleanup.call_count == i
-
-
-def test_cleanup_loop_context_manager_stops_cleanup(mem_cache_mock, disk_cache_mock):
-    """Test that using CRLCacheManager as context manager properly stops cleanup"""
-    with CRLCacheManager(
-        mem_cache_mock, disk_cache_mock, timedelta(milliseconds=50), start_cleanup=True
-    ) as manager:
-        assert manager.is_periodic_cleanup_running()
-        # Let it run briefly
+    for i in range(1, 3):
+        cache_factory.start_periodic_cleanup(timedelta(hours=1))
         time.sleep(0.1)
-        assert manager.is_periodic_cleanup_running()
+        # The cleanup should be in the running state and by this moment successfully made exactly one additional cleanup cycle
+        assert cache_factory.is_periodic_cleanup_running()
+        assert mem_cache_mock.cleanup.call_count == i
+        assert disk_cache_mock.cleanup.call_count == i
 
-    # After exiting context, cleanup should be stopped
-    assert not manager.is_periodic_cleanup_running()
 
-    # Verify cleanup was called
-    assert mem_cache_mock.cleanup.call_count
-    assert disk_cache_mock.cleanup.call_count
+# New comprehensive error handling tests
+def test_file_cache_directory_creation_error():
+    """Test CRLFileCache handles directory creation errors gracefully"""
+    import tempfile
+    from unittest.mock import patch
+
+    from snowflake.connector.crl_cache import CRLFileCache
+
+    # Create a path that would cause permission error
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cache_dir = Path(temp_dir) / "restricted"
+
+        # Mock os.makedirs to raise PermissionError
+        with patch("os.makedirs", side_effect=PermissionError("Permission denied")):
+            cache = CRLFileCache(cache_dir=cache_dir)
+
+            # Should still work, but directory operations may fail gracefully
+            entry = CRLCacheEntry(b"test_crl", datetime.now(timezone.utc))
+            # This should not crash even if directory creation fails
+            cache.put("test_key", entry)
+
+
+def test_file_cache_file_write_error():
+    """Test CRLFileCache handles file write errors gracefully"""
+    import tempfile
+    from unittest.mock import mock_open, patch
+
+    from snowflake.connector.crl_cache import CRLCacheEntry, CRLFileCache
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cache_dir = Path(temp_dir)
+        cache = CRLFileCache(cache_dir=cache_dir)
+
+        entry = CRLCacheEntry(b"test_crl", datetime.now(timezone.utc))
+
+        # Mock open to raise IOError on write
+        mock_file = mock_open()
+        mock_file.return_value.write.side_effect = IOError("Disk full")
+
+        with patch("builtins.open", mock_file):
+            # Should not crash, but may log error
+            cache.put("test_key", entry)
+
+
+def test_file_cache_file_read_error():
+    """Test CRLFileCache handles file read errors gracefully"""
+    import tempfile
+    from unittest.mock import patch
+
+    from snowflake.connector.crl_cache import CRLCacheEntry, CRLFileCache
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cache_dir = Path(temp_dir)
+        cache = CRLFileCache(cache_dir=cache_dir)
+
+        # First put a valid entry
+        entry = CRLCacheEntry(b"test_crl", datetime.now(timezone.utc))
+        cache.put("test_key", entry)
+
+        # Mock open to raise IOError on read
+        with patch("builtins.open", side_effect=IOError("File corrupted")):
+            # Should return None instead of crashing
+            result = cache.get("test_key")
+            assert result is None
+
+
+def test_file_cache_cleanup_file_removal_error():
+    """Test CRLFileCache cleanup handles file removal errors gracefully"""
+    import tempfile
+    from unittest.mock import patch
+
+    from snowflake.connector.crl_cache import CRLCacheEntry, CRLFileCache
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cache_dir = Path(temp_dir)
+        cache = CRLFileCache(cache_dir=cache_dir, removal_delay=timedelta(seconds=0))
+
+        # Put an entry that should be removed immediately
+        entry = CRLCacheEntry(
+            b"test_crl", datetime.now(timezone.utc) - timedelta(days=1)
+        )
+        cache.put("test_key", entry)
+
+        # Mock os.remove to raise PermissionError
+        with patch("os.remove", side_effect=PermissionError("File in use")):
+            # Should not crash during cleanup
+            cache.cleanup()
+
+
+def test_factory_warning_messages_for_memory_cache():
+    """Test CRLCacheFactory logs appropriate warning for memory cache parameter mismatch"""
+    from unittest.mock import patch
+
+    from snowflake.connector.crl_cache import CRLCacheFactory
+
+    try:
+        # First call with one validity time
+        cache1 = CRLCacheFactory.get_memory_cache(timedelta(hours=1))
+
+        # Second call with different validity time should log warning
+        with patch("snowflake.connector.crl_cache.logger.warning") as mock_warning:
+            cache2 = CRLCacheFactory.get_memory_cache(timedelta(hours=2))
+
+            # Should return same instance
+            assert cache1 is cache2
+
+            # Should have logged warning with human-readable message
+            mock_warning.assert_called_once()
+            warning_msg = mock_warning.call_args[0][0]
+            assert "CRLs in-memory cache has already been initialized" in warning_msg
+            assert "1:00:00" in warning_msg  # Original time
+            assert "2:00:00" in warning_msg  # New time
+    finally:
+        CRLCacheFactory.reset()
+
+
+def test_factory_warning_messages_for_file_cache():
+    """Test CRLCacheFactory logs appropriate warning for file cache parameter mismatch"""
+    import tempfile
+    from unittest.mock import patch
+
+    from snowflake.connector.crl_cache import CRLCacheFactory
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir1, tempfile.TemporaryDirectory() as temp_dir2:
+            cache_dir1 = Path(temp_dir1)
+            cache_dir2 = Path(temp_dir2)
+
+            # First call with one directory and delay
+            cache1 = CRLCacheFactory.get_file_cache(cache_dir1, timedelta(days=7))
+
+            # Second call with different parameters should log warnings
+            with patch("snowflake.connector.crl_cache.logger.warning") as mock_warning:
+                cache2 = CRLCacheFactory.get_file_cache(cache_dir2, timedelta(days=14))
+
+                # Should return same instance
+                assert cache1 is cache2
+
+                # Should have logged two warnings (for directory and delay)
+                assert mock_warning.call_count == 2
+
+                # Check warning messages
+                warning_calls = [call[0][0] for call in mock_warning.call_args_list]
+                dir_warning = next(
+                    msg for msg in warning_calls if "cache directory" in msg
+                )
+                delay_warning = next(
+                    msg for msg in warning_calls if "removal delay" in msg
+                )
+
+                assert "CRLs file cache has already been initialized" in dir_warning
+                assert "CRLs file cache has already been initialized" in delay_warning
+                assert str(cache_dir1) in dir_warning
+                assert str(cache_dir2) in dir_warning
+                assert "7 days" in delay_warning
+                assert "14 days" in delay_warning
+    finally:
+        CRLCacheFactory.reset()
+
+
+def test_platform_specific_cache_path():
+    """Test _get_default_crl_cache_path returns platform-appropriate path"""
+    from unittest.mock import patch
+
+    from snowflake.connector.crl_cache import _get_default_crl_cache_path
+
+    # Test on different platforms
+    with patch("platform.system") as mock_system:
+        # Test Windows
+        mock_system.return_value = "Windows"
+        with patch.dict(
+            "os.environ", {"APPDATA": "C:\\Users\\Test\\AppData\\Roaming"}, clear=True
+        ):
+            path = _get_default_crl_cache_path()
+            assert "AppData" in str(path)
+            assert "snowflake" in str(path).lower()
+
+        # Test macOS
+        mock_system.return_value = "Darwin"
+        with patch.dict("os.environ", {"HOME": "/Users/test"}, clear=True):
+            path = _get_default_crl_cache_path()
+            assert "Library" in str(path)
+            assert "snowflake" in str(path).lower()
+
+        # Test Linux
+        mock_system.return_value = "Linux"
+        with patch.dict("os.environ", {"HOME": "/home/test"}, clear=True):
+            path = _get_default_crl_cache_path()
+            assert ".cache" in str(path)
+            assert "snowflake" in str(path).lower()
+
+
+def test_atexit_handler_error_handling():
+    """Test atexit cleanup handler handles errors gracefully"""
+    from unittest.mock import patch
+
+    from snowflake.connector.crl_cache import CRLCacheFactory
+
+    try:
+        # Start cleanup to register atexit handler
+        CRLCacheFactory.start_periodic_cleanup(timedelta(seconds=0.1))
+
+        # Mock stop_periodic_cleanup to raise exception
+        with patch.object(
+            CRLCacheFactory,
+            "stop_periodic_cleanup",
+            side_effect=Exception("Test error"),
+        ):
+            # Calling atexit handler should not raise exception
+            try:
+                CRLCacheFactory._atexit_cleanup_handler()
+            except Exception as e:
+                pytest.fail(f"Atexit handler should not raise exceptions: {e}")
+    finally:
+        # Manual cleanup since we mocked the stop method
+        with patch.object(CRLCacheFactory, "stop_periodic_cleanup", side_effect=None):
+            CRLCacheFactory.reset()

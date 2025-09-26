@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import atexit
 import hashlib
 import logging
 import os
@@ -11,13 +12,11 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import TracebackType
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from filelock import BaseFileLock, FileLock
-from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
 
@@ -349,16 +348,12 @@ class CRLFileCache(CRLCache):
 class CRLCacheManager:
     """
     Cache manager that coordinates between in-memory and file-based CRL caches.
-
-    Provides automatic cleanup of expired entries and proper lifecycle management.
     """
 
     def __init__(
         self,
         memory_cache: CRLCache,
         file_cache: CRLCache,
-        cleanup_interval: timedelta,
-        start_cleanup: bool = False,
     ):
         """
         Initialize the cache manager.
@@ -366,21 +361,14 @@ class CRLCacheManager:
         Args:
             memory_cache: In-memory cache implementation
             file_cache: File-based cache implementation
-            cleanup_interval: How often to run cleanup tasks
-            start_cleanup: If true, immediately starts periodic cache cleanup background task
         """
         self._memory_cache = memory_cache
         self._file_cache = file_cache
-        self._cleanup_interval = cleanup_interval
-        self._cleanup_executor: ThreadPoolExecutor | None = None
-        self._cleanup_shutdown: threading.Event = threading.Event()
-        if start_cleanup:
-            self.start_periodic_cleanup()
 
     @classmethod
     def noop(cls) -> CRLCacheManager:
         """Create noop cache manager."""
-        return cls(NoopCRLCache(), NoopCRLCache(), timedelta(seconds=0), False)
+        return cls(NoopCRLCache(), NoopCRLCache())
 
     def get(self, crl_url: str) -> CRLCacheEntry | None:
         """
@@ -422,60 +410,174 @@ class CRLCacheManager:
         self._memory_cache.put(crl_url, entry)
         self._file_cache.put(crl_url, entry)
 
-    def start_periodic_cleanup(self) -> None:
-        """Start the periodic cleanup task."""
-        if self.is_periodic_cleanup_running():
-            logger.debug(
-                "Periodic cleanup already running, so it first be stopped before restarting."
+
+class CRLCacheFactory:
+    """
+    Factory class for creating singleton instances of CRL caches.
+
+    This factory ensures that only one instance of each cache type exists,
+    providing warnings when attempting to create instances with different parameters.
+    Also manages background cleanup of existing cache instances.
+    """
+
+    # Singleton instances
+    _memory_cache_instance = None
+    _file_cache_instance = None
+    _instance_lock = threading.RLock()
+
+    # Cleanup management
+    _cleanup_executor: ThreadPoolExecutor | None = None
+    _cleanup_shutdown: threading.Event = threading.Event()
+    _cleanup_interval: timedelta | None = None
+    _atexit_registered: bool = False
+
+    @classmethod
+    def get_memory_cache(cls, cache_validity_time: timedelta) -> CRLInMemoryCache:
+        """
+        Get or create a singleton CRLInMemoryCache instance.
+
+        Args:
+            cache_validity_time: How long cache entries remain valid
+
+        Returns:
+            The singleton CRLInMemoryCache instance
+        """
+        with cls._instance_lock:
+            if cls._memory_cache_instance is None:
+                cls._memory_cache_instance = CRLInMemoryCache(cache_validity_time)
+            elif cls._memory_cache_instance._cache_validity_time != cache_validity_time:
+                logger.warning(
+                    f"CRLs in-memory cache has already been initialized with cache validity time of {cls._memory_cache_instance._cache_validity_time}, "
+                    f"ignoring new cache validity time of {cache_validity_time}"
+                )
+            return cls._memory_cache_instance
+
+    @classmethod
+    def get_file_cache(
+        cls, cache_dir: Path | None = None, removal_delay: timedelta | None = None
+    ) -> CRLFileCache:
+        """
+        Get or create a singleton CRLFileCache instance.
+
+        Args:
+            cache_dir: Directory to store cached CRLs
+            removal_delay: How long to wait before removing expired files
+
+        Returns:
+            The singleton CRLFileCache instance
+        """
+        with cls._instance_lock:
+            if cls._file_cache_instance is None:
+                cls._file_cache_instance = CRLFileCache(cache_dir, removal_delay)
+            else:
+                # Check if parameters differ from existing instance
+                existing_cache_dir = cls._file_cache_instance._cache_dir
+                existing_removal_delay = cls._file_cache_instance._removal_delay
+                requested_cache_dir = cache_dir or _get_default_crl_cache_path()
+                requested_removal_delay = removal_delay or timedelta(days=7)
+
+                if existing_cache_dir != requested_cache_dir:
+                    logger.warning(
+                        f"CRLs file cache has already been initialized with cache directory '{existing_cache_dir}', "
+                        f"ignoring new cache directory '{requested_cache_dir}'"
+                    )
+                if existing_removal_delay != requested_removal_delay:
+                    logger.warning(
+                        f"CRLs file cache has already been initialized with removal delay of {existing_removal_delay}, "
+                        f"ignoring new removal delay of {requested_removal_delay}"
+                    )
+            return cls._file_cache_instance
+
+    @classmethod
+    def start_periodic_cleanup(cls, cleanup_interval: timedelta) -> None:
+        """
+        Start the periodic cleanup task for existing cache instances.
+
+        Args:
+            cleanup_interval: How often to run cleanup tasks
+        """
+        with cls._instance_lock:
+            if cls.is_periodic_cleanup_running():
+                logger.debug(
+                    "Periodic cleanup already running, so it will first be stopped before restarting."
+                )
+                cls.stop_periodic_cleanup()
+
+            cls._cleanup_interval = cleanup_interval
+            cls._cleanup_executor = ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="crl-cache-cleanup"
             )
-            self.stop_periodic_cleanup()
 
-        self._cleanup_executor = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="crl-cache-cleanup"
-        )
+            # Register atexit handler for graceful shutdown (only once)
+            if not cls._atexit_registered:
+                atexit.register(cls._atexit_cleanup_handler)
+                cls._atexit_registered = True
 
-        # Submit the cleanup task
-        self._cleanup_executor.submit(self._cleanup_loop)
+            # Submit the cleanup task
+            cls._cleanup_executor.submit(cls._cleanup_loop)
 
-        logger.debug(
-            f"Scheduled CRL cache cleanup task to run every {self._cleanup_interval.total_seconds()} seconds."
-        )
+            logger.debug(
+                f"Scheduled CRL cache cleanup task to run every {cleanup_interval.total_seconds()} seconds."
+            )
 
-    def stop_periodic_cleanup(self) -> None:
+    @classmethod
+    def stop_periodic_cleanup(cls) -> None:
         """Stop the periodic cleanup task."""
-        if self._cleanup_executor is None or self._cleanup_shutdown.is_set():
-            return
+        executor_to_shutdown = None
 
-        self._cleanup_shutdown.set()
-        self._cleanup_executor.shutdown(wait=True)
-        self._cleanup_shutdown.clear()
-        self._cleanup_executor = None
+        with cls._instance_lock:
+            if cls._cleanup_executor is None or cls._cleanup_shutdown.is_set():
+                return
 
-    def is_periodic_cleanup_running(self) -> bool:
+            cls._cleanup_shutdown.set()
+            executor_to_shutdown = cls._cleanup_executor
+
+        # Shutdown outside of lock to avoid deadlock
+        if executor_to_shutdown is not None:
+            executor_to_shutdown.shutdown(wait=True)
+
+        with cls._instance_lock:
+            cls._cleanup_shutdown.clear()
+            cls._cleanup_executor = None
+            cls._cleanup_interval = None
+
+    @classmethod
+    def is_periodic_cleanup_running(cls) -> bool:
         """Check if periodic cleanup task is running."""
-        return self._cleanup_executor is not None
+        with cls._instance_lock:
+            return cls._cleanup_executor is not None
 
-    def _cleanup_loop(self) -> None:
+    @classmethod
+    def _cleanup_loop(cls) -> None:
         """Main cleanup loop that runs periodically."""
-        while not self._cleanup_shutdown.is_set():
-            logger.debug(
-                f"Running periodic CRL cache cleanup with interval {self._cleanup_interval.total_seconds()} seconds"
-            )
-            try:
-                self._memory_cache.cleanup()
-            except Exception as e:
-                logger.error(
-                    f"An error occurred during scheduled CRL memory cache cleanup: {e}"
-                )
-            try:
-                self._file_cache.cleanup()
-            except Exception as e:
-                logger.error(
-                    f"An error occurred during scheduled CRL disk cache cleanup: {e}"
-                )
+        while not cls._cleanup_shutdown.is_set():
+            if cls._cleanup_interval is None:
+                break
 
-            shutdown = self._cleanup_shutdown.wait(
-                timeout=self._cleanup_interval.total_seconds()
+            logger.debug(
+                f"Running periodic CRL cache cleanup with interval {cls._cleanup_interval.total_seconds()} seconds"
+            )
+
+            # Clean memory cache only if it exists
+            if cls._memory_cache_instance is not None:
+                try:
+                    cls._memory_cache_instance.cleanup()
+                except Exception as e:
+                    logger.error(
+                        f"An error occurred during scheduled CRL memory cache cleanup: {e}"
+                    )
+
+            # Clean file cache only if it exists
+            if cls._file_cache_instance is not None:
+                try:
+                    cls._file_cache_instance.cleanup()
+                except Exception as e:
+                    logger.error(
+                        f"An error occurred during scheduled CRL disk cache cleanup: {e}"
+                    )
+
+            shutdown = cls._cleanup_shutdown.wait(
+                timeout=cls._cleanup_interval.total_seconds()
             )
             if shutdown:
                 logger.debug(
@@ -483,28 +585,29 @@ class CRLCacheManager:
                 )
                 break
 
-    def __del__(self):
-        """Cleanup when the object is destroyed."""
-        self.stop_periodic_cleanup()
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
+    @classmethod
+    def _atexit_cleanup_handler(cls) -> None:
         """
-
-        :param exc_type: the exception type if raised
-        :param exc_value: the exception value if raised
-        :param traceback: the exception traceback if raised
-
+        Atexit handler to ensure graceful shutdown of periodic cleanup on program exit.
         """
-        # To guarantee stopping the periodic background cleanup task
-        self.stop_periodic_cleanup()
+        try:
+            cls.stop_periodic_cleanup()
+            logger.debug("CRL cache cleanup stopped gracefully on program exit.")
+        except Exception as e:
+            # Don't raise exceptions in atexit handlers
+            logger.error(f"Error stopping CRL cache cleanup on program exit: {e}")
+
+    @classmethod
+    def reset(cls) -> None:
+        """
+        Reset the factory, clearing all singleton instances and stopping cleanup.
+        This is primarily useful for testing purposes.
+        """
+        with cls._instance_lock:
+            cls.stop_periodic_cleanup()
+            cls._memory_cache_instance = None
+            cls._file_cache_instance = None
+            cls._atexit_registered = False
 
 
 def _get_default_crl_cache_path() -> Path:

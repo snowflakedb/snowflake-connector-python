@@ -6,15 +6,14 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum, unique
 from logging import getLogger
 from pathlib import Path
-from types import TracebackType
 from typing import Any
 
 from cryptography import x509
 from cryptography.hazmat._oid import ExtensionOID
 from cryptography.hazmat.backends import default_backend
-from typing_extensions import Self
+from cryptography.hazmat.primitives import padding
 
-from .crl_cache import CRLCacheEntry, CRLCacheManager, CRLFileCache, CRLInMemoryCache
+from .crl_cache import CRLCacheEntry, CRLCacheManager
 from .session_manager import SessionManager
 
 logger = getLogger(__name__)
@@ -37,7 +36,7 @@ class CertRevocationCheckMode(Enum):
     ADVISORY = "ADVISORY"
 
 
-class _CRLValidationResult(Enum):
+class CRLValidationResult(Enum):
     """Certificate revocation validation result statuses"""
 
     REVOKED = "REVOKED"
@@ -217,13 +216,15 @@ class CRLValidator:
         # Create cache manager if caching is enabled
         cache_manager = None
         if config.enable_crl_cache:
-            # Create memory cache
-            memory_cache = CRLInMemoryCache(config.cache_validity_time)
+            from snowflake.connector.crl_cache import CRLCacheFactory
+
+            # Create memory cache using factory
+            memory_cache = CRLCacheFactory.get_memory_cache(config.cache_validity_time)
 
             # Create file cache if enabled
             if config.enable_crl_file_cache:
                 removal_delay = timedelta(days=config.crl_cache_removal_delay_days)
-                file_cache = CRLFileCache(
+                file_cache = CRLCacheFactory.get_file_cache(
                     cache_dir=config.crl_cache_dir, removal_delay=removal_delay
                 )
             else:
@@ -231,15 +232,18 @@ class CRLValidator:
 
                 file_cache = NoopCRLCache()
 
-            # Create cache manager with cleanup
-            cleanup_interval = timedelta(hours=config.crl_cache_cleanup_interval_hours)
-
+            # Create cache manager
             cache_manager = CRLCacheManager(
                 memory_cache=memory_cache,
                 file_cache=file_cache,
-                cleanup_interval=cleanup_interval,
-                start_cleanup=config.crl_cache_start_cleanup,
             )
+
+            # Start cleanup through factory if requested
+            if config.crl_cache_start_cleanup:
+                cleanup_interval = timedelta(
+                    hours=config.crl_cache_cleanup_interval_hours
+                )
+                CRLCacheFactory.start_periodic_cleanup(cleanup_interval)
         else:
             cache_manager = CRLCacheManager.noop()
 
@@ -281,7 +285,7 @@ class CRLValidator:
         for chain in certificate_chains:
             result = self._validate_single_chain(chain)
             # If any of the chains is valid, the whole check is considered positive
-            if result == _CRLValidationResult.UNREVOKED:
+            if result == CRLValidationResult.UNREVOKED:
                 return True
             results.append(result)
 
@@ -290,35 +294,35 @@ class CRLValidator:
             return False
 
         # We're in advisory mode, so any error is treated positively
-        return any(result == _CRLValidationResult.ERROR for result in results)
+        return any(result == CRLValidationResult.ERROR for result in results)
 
     def _validate_single_chain(
         self, chain: list[x509.Certificate]
-    ) -> _CRLValidationResult:
+    ) -> CRLValidationResult:
         """Validate a single certificate chain"""
         # An empty chain is considered an error
         if len(chain) == 0:
-            return _CRLValidationResult.ERROR
+            return CRLValidationResult.ERROR
         # the last certificate of the chain is considered the root and isn't validated
         results = []
         for i in range(len(chain) - 1):
             result = self._validate_certificate(chain[i], chain[i + 1])
-            if result == _CRLValidationResult.REVOKED:
-                return _CRLValidationResult.REVOKED
+            if result == CRLValidationResult.REVOKED:
+                return CRLValidationResult.REVOKED
             results.append(result)
 
-        if _CRLValidationResult.ERROR in results:
-            return _CRLValidationResult.ERROR
+        if CRLValidationResult.ERROR in results:
+            return CRLValidationResult.ERROR
 
-        return _CRLValidationResult.UNREVOKED
+        return CRLValidationResult.UNREVOKED
 
     def _validate_certificate(
-        self, cert: x509.Certificate, parent: x509.Certificate
-    ) -> _CRLValidationResult:
+        self, cert: x509.Certificate, ca_cert: x509.Certificate
+    ) -> CRLValidationResult:
         """Validate a single certificate against CRL"""
         # Check if certificate is short-lived (skip CRL check)
         if self._is_short_lived_certificate(cert):
-            return _CRLValidationResult.UNREVOKED
+            return CRLValidationResult.UNREVOKED
 
         # Extract CRL distribution points
         crl_urls = self._extract_crl_distribution_points(cert)
@@ -326,21 +330,21 @@ class CRLValidator:
         if not crl_urls:
             # No CRL URLs found
             if self._allow_certificates_without_crl_url:
-                return _CRLValidationResult.UNREVOKED
-            return _CRLValidationResult.ERROR
+                return CRLValidationResult.UNREVOKED
+            return CRLValidationResult.ERROR
 
-        results: list[_CRLValidationResult] = []
+        results: list[CRLValidationResult] = []
         # Check against each CRL URL
         for crl_url in crl_urls:
-            result = self._check_certificate_against_crl(cert, parent, crl_url)
-            if result == _CRLValidationResult.REVOKED:
+            result = self._check_certificate_against_crl_url(cert, ca_cert, crl_url)
+            if result == CRLValidationResult.REVOKED:
                 return result
             results.append(result)
 
-        if all(result == _CRLValidationResult.ERROR for result in results):
-            return _CRLValidationResult.ERROR
+        if all(result == CRLValidationResult.ERROR for result in results):
+            return CRLValidationResult.ERROR
 
-        return _CRLValidationResult.UNREVOKED
+        return CRLValidationResult.UNREVOKED
 
     @staticmethod
     def _is_short_lived_certificate(cert: x509.Certificate) -> bool:
@@ -379,24 +383,24 @@ class CRLValidator:
     ) -> None:
         self._cache_manager.put(crl_url, crl, ts)
 
-    def _download_crl(
-        self, crl_url: str
-    ) -> tuple[x509.CertificateRevocationList | None, datetime | None]:
-        now = datetime.now(timezone.utc)
+    def _fetch_crl_from_url(self, crl_url: str) -> bytes | None:
         try:
             logger.debug("Trying to download CRL from: %s", crl_url)
             response = self._session_manager.get(crl_url, timeout=30)
             response.raise_for_status()
-
+            return response.content
         except Exception:
             # CRL fetch or parsing failed
             logger.exception("Failed to download CRL from %s", crl_url)
-            return None, None
+            return None
 
+    def _download_crl(
+        self, crl_url: str
+    ) -> tuple[x509.CertificateRevocationList | None, datetime | None]:
+        crl_bytes, now = self._fetch_crl_from_url(crl_url), datetime.now(timezone.utc)
         try:
             logger.debug("Trying to parse CRL from: %s", crl_url)
-            crl = x509.load_der_x509_crl(response.content, backend=default_backend())
-
+            crl = x509.load_der_x509_crl(crl_bytes, backend=default_backend())
             # Check if CRL is expired
             try:
                 next_update = crl.next_update_utc
@@ -414,10 +418,10 @@ class CRLValidator:
             logger.exception("Failed to parse CRL from %s", crl_url)
             return None, None
 
-    def _check_certificate_against_crl(
-        self, cert: x509.Certificate, parent: x509.Certificate, crl_url: str
-    ) -> _CRLValidationResult:
-        """Check if certificate is revoked according to CRL"""
+    def _check_certificate_against_crl_url(
+        self, cert: x509.Certificate, ca_cert: x509.Certificate, crl_url: str
+    ) -> CRLValidationResult:
+        """Check if certificate is revoked according to CRL by the provided URL"""
         now = datetime.now(timezone.utc)
         logger.debug("Trying to get cached CRL for %s", crl_url)
         cached_crl = self._get_crl_from_cache(crl_url)
@@ -434,43 +438,37 @@ class CRLValidator:
 
         # If by some reason we didn't get a valid CRL we consider it a check error
         if crl is None:
-            return _CRLValidationResult.ERROR
+            return CRLValidationResult.ERROR
 
         # Check if certificate is revoked
+        return self._check_certificate_against_crl(cert, crl)
+
+    def _verify_crl_signature(
+        self, crl: x509.CertificateRevocationList, ca_cert: x509.Certificate
+    ) -> bool:
+        """Verify CRL signature with CA's public key"""
+        try:
+            ca_cert.public_key().verify(
+                crl.signature,
+                crl.tbs_certlist_bytes,
+                padding.PKCS7(),
+                crl.signature_hash_algorithm,
+            )
+            return True
+        except Exception as e:
+            logger.warning("CRL signature verification failed: %s", e)
+            return False
+
+    def _check_certificate_against_crl(
+        self, cert: x509.Certificate, crl: x509.CertificateRevocationList
+    ) -> CRLValidationResult:
+        """Check if certificate is revoked according to CRL"""
         revoked_cert = crl.get_revoked_certificate_by_serial_number(cert.serial_number)
         return (
-            _CRLValidationResult.REVOKED
+            CRLValidationResult.REVOKED
             if revoked_cert
-            else _CRLValidationResult.UNREVOKED
+            else CRLValidationResult.UNREVOKED
         )
-
-    def __enter__(self) -> Self:
-        """Enter the runtime context for the CRLValidator.
-
-        Returns:
-            Self: The CRLValidator instance
-        """
-        return self
-
-    def __exit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> None:
-        """Exit the runtime context for the CRLValidator.
-
-        Ensures proper cleanup of resources, particularly the cache manager
-        and any background cleanup tasks.
-
-        Args:
-            exc_type: The exception type if raised
-            exc_value: The exception value if raised
-            traceback: The exception traceback if raised
-        """
-        # Stop any periodic cleanup tasks in the cache manager
-        if self._cache_manager is not None:
-            self._cache_manager.stop_periodic_cleanup()
 
     def validate_connection(self, connection) -> bool:
         """
