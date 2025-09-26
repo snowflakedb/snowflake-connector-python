@@ -610,10 +610,33 @@ class CRLCacheFactory:
             cls._atexit_registered = False
 
 
+def _get_windows_home_path() -> Path:
+    try:
+        return Path.home()
+    except RuntimeError:
+        pass
+    if "USERPROFILE" in os.environ:
+        return Path(os.environ["USERPROFILE"])
+    if "HOMEDRIVE" in os.environ and "HOMEPATH" in os.environ:
+        return Path(os.environ["HOMEDRIVE"]) / os.environ["HOMEPATH"]
+    if "LOCALAPPDATA" in os.environ:
+        return Path(os.environ["LOCALAPPDATA"]).parent.parent
+    if "APPDATA" in os.environ:
+        return Path(os.environ["APPDATA"]).parent.parent
+    return Path("~")
+
+
 def _get_default_crl_cache_path() -> Path:
     """Return the default path to persist cached CRLs."""
     if platform.system() == "Windows":
-        return Path.home() / "AppData" / "Local" / "Snowflake" / "Caches" / "crls"
+        return (
+            _get_windows_home_path()
+            / "AppData"
+            / "Local"
+            / "Snowflake"
+            / "Caches"
+            / "crls"
+        )
     elif platform.system() == "Darwin":
         return Path.home() / "Library" / "Caches" / "Snowflake" / "crls"
     else:
