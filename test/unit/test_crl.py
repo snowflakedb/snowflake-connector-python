@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import logging
 import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -1425,3 +1426,71 @@ def test_crl_signature_verification_integration_with_validation_flow(
         # Even in ADVISORY mode, signature verification failure should return ERROR
         # We cannot trust a CRL whose signature cannot be verified
         assert result == CRLValidationResult.ERROR
+
+
+def test_crl_signature_verification_with_issuer_mismatch_warning(
+    cert_gen, session_manager, caplog
+):
+    """Test that we log a warning when CRL issuer doesn't match CA certificate subject"""
+    # Create a valid CRL signed by the test CA
+    crl_bytes = cert_gen.generate_valid_crl()
+    crl = x509.load_der_x509_crl(crl_bytes, backend=default_backend())
+
+    # Create a different CA certificate with different subject
+    different_ca_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048, backend=default_backend()
+    )
+    different_subject = x509.Name(
+        [x509.NameAttribute(NameOID.COMMON_NAME, "Different Subject CA")]
+    )
+    different_ca_cert = (
+        x509.CertificateBuilder()
+        .subject_name(different_subject)
+        .issuer_name(different_subject)
+        .public_key(different_ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(different_ca_key, hashes.SHA256(), backend=default_backend())
+    )
+
+    validator = CRLValidator(session_manager)
+
+    # Mock the _verify_crl_signature to return True to focus on the issuer check
+    with mock_patch.object(
+        validator, "_verify_crl_signature", return_value=True
+    ), mock_patch.object(
+        validator,
+        "_check_certificate_against_crl",
+        return_value=CRLValidationResult.UNREVOKED,
+    ), mock_patch.object(
+        validator, "_download_crl", return_value=(crl, datetime.now(timezone.utc))
+    ), caplog.at_level(
+        logging.WARNING
+    ):
+
+        # This should log a warning about issuer mismatch but still proceed
+        result = validator._check_certificate_against_crl_url(
+            cert_gen.ca_certificate,  # dummy cert
+            different_ca_cert,  # CA with different subject than CRL issuer
+            "http://test.crl",
+        )
+
+        # Should still return UNREVOKED since signature verification was mocked to succeed
+        assert result == CRLValidationResult.UNREVOKED
+
+        # Verify that the warning was logged
+        assert len(caplog.records) > 0
+        warning_found = any(
+            "CRL issuer" in record.message
+            and "does not match CA certificate subject" in record.message
+            for record in caplog.records
+            if record.levelno == logging.WARNING
+        )
+        assert (
+            warning_found
+        ), f"Expected warning about CRL issuer mismatch not found in logs: {[r.message for r in caplog.records]}"

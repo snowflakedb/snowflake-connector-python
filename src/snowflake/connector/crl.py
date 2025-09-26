@@ -441,6 +441,16 @@ class CRLValidator:
             return CRLValidationResult.ERROR
 
         # Verify CRL signature with CA public key
+        # Check if the CA certificate is the expected CRL issuer
+        if crl.issuer != ca_cert.subject:
+            logger.warning(
+                "CRL issuer (%s) does not match CA certificate subject (%s) for URL: %s",
+                crl.issuer,
+                ca_cert.subject,
+                crl_url,
+            )
+            # In most cases this indicates a configuration issue, but we'll still try verification
+
         if not self._verify_crl_signature(crl, ca_cert):
             logger.warning("CRL signature verification failed for URL: %s", crl_url)
             # Always return ERROR when signature verification fails
