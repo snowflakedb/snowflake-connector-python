@@ -11,7 +11,7 @@ from typing import Any
 from cryptography import x509
 from cryptography.hazmat._oid import ExtensionOID
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 
 from .crl_cache import CRLCacheEntry, CRLCacheManager
 from .session_manager import SessionManager
@@ -440,6 +440,13 @@ class CRLValidator:
         if crl is None:
             return CRLValidationResult.ERROR
 
+        # Verify CRL signature with CA public key
+        if not self._verify_crl_signature(crl, ca_cert):
+            logger.warning("CRL signature verification failed for URL: %s", crl_url)
+            # Always return ERROR when signature verification fails
+            # We cannot trust a CRL whose signature cannot be verified
+            return CRLValidationResult.ERROR
+
         # Check if certificate is revoked
         return self._check_certificate_against_crl(cert, crl)
 
@@ -448,12 +455,44 @@ class CRLValidator:
     ) -> bool:
         """Verify CRL signature with CA's public key"""
         try:
-            ca_cert.public_key().verify(
-                crl.signature,
-                crl.tbs_certlist_bytes,
-                padding.PKCS7(),
-                crl.signature_hash_algorithm,
+            # Get the signature algorithm from the CRL
+            signature_algorithm = crl.signature_algorithm_oid
+            hash_algorithm = crl.signature_hash_algorithm
+
+            logger.debug(
+                "Verifying CRL signature with algorithm: %s, hash: %s",
+                signature_algorithm,
+                hash_algorithm,
             )
+
+            # Determine the appropriate padding based on the signature algorithm
+            public_key = ca_cert.public_key()
+
+            # Handle different key types with appropriate signature verification
+            if isinstance(public_key, rsa.RSAPublicKey):
+                # For RSA signatures, we need to use PKCS1v15 padding
+                public_key.verify(
+                    crl.signature,
+                    crl.tbs_certlist_bytes,
+                    padding.PKCS1v15(),
+                    hash_algorithm,
+                )
+            elif isinstance(public_key, ec.EllipticCurvePublicKey):
+                # For EC signatures, use ECDSA algorithm
+                public_key.verify(
+                    crl.signature,
+                    crl.tbs_certlist_bytes,
+                    ec.ECDSA(hash_algorithm),
+                )
+            else:
+                # For other key types (DSA, etc.), try without padding
+                public_key.verify(
+                    crl.signature,
+                    crl.tbs_certlist_bytes,
+                    hash_algorithm,
+                )
+
+            logger.debug("CRL signature verification successful")
             return True
         except Exception as e:
             logger.warning("CRL signature verification failed: %s", e)

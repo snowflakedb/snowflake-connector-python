@@ -1139,13 +1139,16 @@ def test_crl_validator_check_certificate_against_crl_expired(
     validator = CRLValidator(session_manager, cache_manager=mock_cache_mgr)
     with mock_patch.object(
         validator, "_download_crl", return_value=(mock_crl, datetime.now())
-    ) as mock_download:
+    ) as mock_download, mock_patch.object(
+        validator, "_verify_crl_signature", return_value=True
+    ) as mock_verify:
         result = validator._check_certificate_against_crl_url(
             cert, parent, crl_urls.expired_ca
         )
         assert result == CRLValidationResult.UNREVOKED
         mock_cache_mgr.get.assert_called_once()
         mock_download.assert_called_once()
+        mock_verify.assert_called_once_with(mock_crl, parent)
 
 
 def test_crl_validator_validate_certificate_with_cache_hit(
@@ -1171,14 +1174,19 @@ def test_crl_validator_validate_certificate_with_cache_hit(
 
     # Mock CRL parsing and validation
     with mock_patch.object(
-        validator, "_check_certificate_against_crl", return_value=True
-    ) as mock_check:
+        validator,
+        "_check_certificate_against_crl",
+        return_value=CRLValidationResult.UNREVOKED,
+    ) as mock_check, mock_patch.object(
+        validator, "_verify_crl_signature", return_value=True
+    ) as mock_verify:
         result = validator._validate_certificate(cert, ca_cert)
 
         # Should use cached CRL
         assert result == CRLValidationResult.UNREVOKED
         mock_cache_manager.get.assert_called_once()
         mock_check.assert_called_once_with(cert, cached_entry.crl)
+        mock_verify.assert_called_once_with(cached_entry.crl, ca_cert)
 
 
 def test_crl_validator_validate_certificate_with_cache_miss(
@@ -1206,7 +1214,9 @@ def test_crl_validator_validate_certificate_with_cache_miss(
         validator,
         "_check_certificate_against_crl",
         return_value=CRLValidationResult.UNREVOKED,
-    ) as mock_check:
+    ) as mock_check, mock_patch.object(
+        validator, "_verify_crl_signature", return_value=True
+    ) as mock_verify:
 
         mock_crl = Mock()
         mock_crl.next_update_utc = datetime.now(timezone.utc) + timedelta(days=7)
@@ -1220,3 +1230,198 @@ def test_crl_validator_validate_certificate_with_cache_miss(
         mock_fetch.assert_called_once_with(crl_urls.valid_ca)
         mock_cache_manager.put.assert_called_once()
         mock_check.assert_called_once_with(cert, mock_crl)
+        mock_verify.assert_called_once_with(mock_crl, ca_cert)
+
+
+def test_crl_signature_verification_success(cert_gen, session_manager):
+    """Test successful CRL signature verification"""
+    # Create a valid CRL signed by the test CA
+    crl_bytes = cert_gen.generate_valid_crl()
+    crl = x509.load_der_x509_crl(crl_bytes, backend=default_backend())
+
+    validator = CRLValidator(session_manager)
+
+    # Should successfully verify the signature
+    result = validator._verify_crl_signature(crl, cert_gen.ca_certificate)
+    assert result is True
+
+
+def test_crl_signature_verification_failure_wrong_ca(cert_gen, session_manager):
+    """Test CRL signature verification failure with wrong CA certificate"""
+    # Create a CRL signed by the test CA
+    crl_bytes = cert_gen.generate_valid_crl()
+    crl = x509.load_der_x509_crl(crl_bytes, backend=default_backend())
+
+    # Create a different CA certificate
+    different_ca_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048, backend=default_backend()
+    )
+    different_ca_name = x509.Name(
+        [x509.NameAttribute(NameOID.COMMON_NAME, "Different CA")]
+    )
+    different_ca_cert = (
+        x509.CertificateBuilder()
+        .subject_name(different_ca_name)
+        .issuer_name(different_ca_name)
+        .public_key(different_ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(different_ca_key, hashes.SHA256(), backend=default_backend())
+    )
+
+    validator = CRLValidator(session_manager)
+
+    # Should fail to verify the signature with wrong CA
+    result = validator._verify_crl_signature(crl, different_ca_cert)
+    assert result is False
+
+
+def test_crl_signature_verification_with_ec_key(session_manager):
+    """Test CRL signature verification with EC (Elliptic Curve) keys"""
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    # Generate EC key pair for CA
+    ec_private_key = ec.generate_private_key(ec.SECP256R1(), backend=default_backend())
+
+    # Create EC CA certificate
+    ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "EC Test CA")])
+    ec_ca_cert = (
+        x509.CertificateBuilder()
+        .subject_name(ca_name)
+        .issuer_name(ca_name)
+        .public_key(ec_private_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .add_extension(
+            x509.KeyUsage(
+                key_cert_sign=True,
+                crl_sign=True,
+                digital_signature=False,
+                key_encipherment=False,
+                key_agreement=False,
+                content_commitment=False,
+                data_encipherment=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .sign(ec_private_key, hashes.SHA256(), backend=default_backend())
+    )
+
+    # Create CRL signed with EC key
+    builder = x509.CertificateRevocationListBuilder()
+    builder = builder.issuer_name(ec_ca_cert.subject)
+    builder = builder.last_update(datetime.now(timezone.utc))
+    builder = builder.next_update(datetime.now(timezone.utc) + timedelta(days=1))
+
+    ec_crl = builder.sign(ec_private_key, hashes.SHA256(), backend=default_backend())
+
+    validator = CRLValidator(session_manager)
+
+    # Should successfully verify EC signature
+    result = validator._verify_crl_signature(ec_crl, ec_ca_cert)
+    assert result is True
+
+
+def test_crl_signature_verification_with_corrupted_signature(cert_gen, session_manager):
+    """Test CRL signature verification with corrupted signature"""
+    # Create a valid CRL
+    crl_bytes = cert_gen.generate_valid_crl()
+    crl = x509.load_der_x509_crl(crl_bytes, backend=default_backend())
+
+    # Mock the CRL to have a corrupted signature
+    corrupted_crl = Mock(spec=x509.CertificateRevocationList)
+    corrupted_crl.signature_algorithm_oid = crl.signature_algorithm_oid
+    corrupted_crl.signature_hash_algorithm = crl.signature_hash_algorithm
+    corrupted_crl.signature = b"corrupted_signature_bytes"
+    corrupted_crl.tbs_certlist_bytes = crl.tbs_certlist_bytes
+
+    validator = CRLValidator(session_manager)
+
+    # Should fail to verify corrupted signature
+    result = validator._verify_crl_signature(corrupted_crl, cert_gen.ca_certificate)
+    assert result is False
+
+
+def test_crl_signature_verification_exception_handling(cert_gen, session_manager):
+    """Test CRL signature verification exception handling"""
+    # Create a valid CRL
+    crl_bytes = cert_gen.generate_valid_crl()
+    crl = x509.load_der_x509_crl(crl_bytes, backend=default_backend())
+
+    # Mock CA certificate that will cause an exception
+    mock_ca_cert = Mock(spec=x509.Certificate)
+    mock_ca_cert.public_key.side_effect = Exception("Test exception")
+
+    validator = CRLValidator(session_manager)
+
+    # Should handle exception gracefully and return False
+    result = validator._verify_crl_signature(crl, mock_ca_cert)
+    assert result is False
+
+
+def test_crl_signature_verification_integration_with_validation_flow(
+    cert_gen, crl_urls, session_manager
+):
+    """Test that signature verification is properly integrated into the validation flow"""
+    # Create certificate with CRL distribution point
+    cert = cert_gen.create_certificate_with_crl_distribution_points(
+        "CN=Test Server", [crl_urls.test_ca]
+    )
+
+    # Create a CRL signed by a different CA (should fail signature verification)
+    different_ca_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048, backend=default_backend()
+    )
+    different_ca_name = x509.Name(
+        [x509.NameAttribute(NameOID.COMMON_NAME, "Different CA")]
+    )
+
+    # Create CRL with different CA
+    builder = x509.CertificateRevocationListBuilder()
+    builder = builder.issuer_name(different_ca_name)
+    builder = builder.last_update(datetime.now(timezone.utc))
+    builder = builder.next_update(datetime.now(timezone.utc) + timedelta(days=1))
+
+    invalid_crl = builder.sign(
+        different_ca_key, hashes.SHA256(), backend=default_backend()
+    )
+    invalid_crl_bytes = invalid_crl.public_bytes(serialization.Encoding.DER)
+
+    # Test in ENABLED mode - should fail due to signature verification failure
+    validator_enabled = CRLValidator(
+        session_manager,
+        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
+    )
+
+    with mock_patch.object(
+        validator_enabled, "_fetch_crl_from_url", return_value=invalid_crl_bytes
+    ):
+        result = validator_enabled._validate_certificate(cert, cert_gen.ca_certificate)
+        assert result == CRLValidationResult.ERROR
+
+    # Test in ADVISORY mode - should also fail due to signature verification failure
+    # CRL signature verification failure always returns ERROR regardless of mode
+    validator_advisory = CRLValidator(
+        session_manager,
+        cert_revocation_check_mode=CertRevocationCheckMode.ADVISORY,
+    )
+
+    with mock_patch.object(
+        validator_advisory, "_fetch_crl_from_url", return_value=invalid_crl_bytes
+    ):
+        result = validator_advisory._validate_certificate(cert, cert_gen.ca_certificate)
+        # Even in ADVISORY mode, signature verification failure should return ERROR
+        # We cannot trust a CRL whose signature cannot be verified
+        assert result == CRLValidationResult.ERROR
