@@ -13,6 +13,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed `get_results_from_sfqid` when using `DictCursor` and executing multiple statements at once
   - Added the `oauth_credentials_in_body` parameter supporting an option to send the oauth client credentials in the request body
   - Fix retry behavior for `ECONNRESET` error
+  - Added an option to exclude `botocore` and `boto3` dependencies by setting `SNOWFLAKE_NO_BOTO` environment variable during installation
+  - Added support for pandas conversion for Day-time and Year-Month Interval types
 
 - v3.17.4(September 22,2025)
   - Added support for intermediate certificates as roots when they are stored in the trust store
