@@ -5,6 +5,7 @@ import logging
 import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 from unittest.mock import patch as mock_patch
@@ -844,7 +845,7 @@ def test_crl_config_from_connection_enabled_mode():
     assert config.cache_validity_time == timedelta(hours=12)
     assert not config.enable_crl_cache
     assert not config.enable_crl_file_cache
-    assert str(config.crl_cache_dir) == "/custom/path"
+    assert config.crl_cache_dir == Path("/custom/path")
     assert config.crl_cache_removal_delay_days == 14
     assert config.crl_cache_cleanup_interval_hours == 2
     assert config.crl_cache_start_cleanup

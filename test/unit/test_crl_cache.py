@@ -619,9 +619,7 @@ def test_platform_specific_cache_path():
     with patch("platform.system") as mock_system:
         # Test Windows
         mock_system.return_value = "Windows"
-        with patch.dict(
-            "os.environ", {"APPDATA": "C:\\Users\\Test\\AppData\\Roaming"}, clear=True
-        ):
+        with patch.dict("os.environ", {"USERPROFILE": "C:\\Users\\Test"}, clear=True):
             path = _get_default_crl_cache_path()
             assert "AppData" in str(path)
             assert "snowflake" in str(path).lower()
