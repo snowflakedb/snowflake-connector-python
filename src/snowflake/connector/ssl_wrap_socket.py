@@ -22,6 +22,7 @@ import certifi
 import OpenSSL.SSL
 
 from .constants import OCSPMode
+from .crl import CertRevocationCheckMode, CRLConfig, CRLValidator
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
 from .session_manager import SessionManager
@@ -31,6 +32,8 @@ from .vendored.urllib3.util import ssl_ as ssl_
 
 DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
 FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE
+DEFAULT_CRL_CONFIG: CRLConfig = CRLConfig()
+FEATURE_CRL_CONFIG: CRLConfig = DEFAULT_CRL_CONFIG
 
 """
 OCSP Response cache file name
@@ -141,11 +144,13 @@ def reset_current_session_manager(token) -> None:
 def inject_into_urllib3() -> None:
     """Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP."""
     log.debug("Injecting ssl_wrap_socket_with_ocsp")
-    connection_.ssl_wrap_socket = ssl_wrap_socket_with_ocsp
+    connection_.ssl_wrap_socket = ssl_wrap_socket_with_cert_revocation_checks
 
 
 @wraps(ssl_.ssl_wrap_socket)
-def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
+def ssl_wrap_socket_with_cert_revocation_checks(
+    *args: Any, **kwargs: Any
+) -> WrappedSocket:
     # Bind passed args/kwargs to the underlying signature to support both positional and keyword calls
     bound = _sig(ssl_.ssl_wrap_socket).bind_partial(*args, **kwargs)
     params = bound.arguments
@@ -166,6 +171,32 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
         _ensure_partial_chain_on_context(provided_ctx, _resolve_cafile(params))
 
     ret = ssl_.ssl_wrap_socket(**params)
+
+    log.debug(
+        "CRL Check Mode: %s",
+        FEATURE_CRL_CONFIG.cert_revocation_check_mode.name,
+    )
+    if (
+        FEATURE_CRL_CONFIG.cert_revocation_check_mode
+        != CertRevocationCheckMode.DISABLED
+    ):
+        crl_validator = CRLValidator.from_config(
+            FEATURE_CRL_CONFIG, get_current_session_manager()
+        )
+        if not crl_validator.validate_connection(ret.connection):
+            raise OperationalError(
+                msg=(
+                    "The certificate is revoked or "
+                    "could not be validated via CRL: hostname={}".format(
+                        server_hostname
+                    )
+                ),
+                errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+            )
+        log.debug(
+            "The certificate revocation check was successful. No additional checks will be performed."
+        )
+        return ret
 
     log.debug(
         "OCSP Mode: %s, OCSP response cache file name: %s",
