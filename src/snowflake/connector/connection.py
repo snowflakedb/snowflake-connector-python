@@ -20,12 +20,23 @@ from io import StringIO
 from logging import getLogger
 from threading import Lock
 from types import TracebackType
-from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    NamedTuple,
+    Sequence,
+    TypedDict,
+)
 from uuid import UUID
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+from typing_extensions import Unpack
 
 from . import errors
 from ._query_context_cache import QueryContextCache
@@ -124,6 +135,10 @@ from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
 from .wif_util import AttestationProvider
+
+if TYPE_CHECKING:
+    from os import PathLike
+
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -416,6 +431,53 @@ class TypeAndBinding(NamedTuple):
     binding: str | None
 
 
+class SnowflakeConnectionConfig(TypedDict):
+    """Configuration type for the SnowflakeConnection."""
+
+    insecure_mode: bool
+    disable_ocsp_checks: bool
+    ocsp_fail_open: bool
+    session_id: int
+    user: str
+    host: str
+    port: int
+    region: str
+    proxy_host: str
+    proxy_port: str
+    proxy_user: str
+    proxy_password: str
+    account: str
+    database: str
+    schema: str
+    warehouse: str
+    role: str
+    login_timeout: int
+    network_timeout: int
+    socket_timeout: int
+    backoff_policy: Callable[[], Generator[int]]
+    client_session_keep_alive_heartbeat_frequency: int
+    client_prefetch_threads: int
+    client_fetch_threads: int
+    rest: SnowflakeRestful
+    application: str
+    errorhandler: Callable
+    converter_class: type[SnowflakeConverter]
+    validate_default_parameters: bool
+    is_pyformat: bool
+    consent_cache_id_token: str
+    enable_stage_s3_privatelink_for_us_east_1: bool
+    enable_connection_diag: bool
+    connection_diag_log_path: PathLike[str] | str
+    connection_diag_whitelist_path: PathLike[str] | str
+    connection_diag_allowlist_path: PathLike[str] | str
+    json_result_force_utf8_decoding: bool
+    server_session_keep_alive: bool
+    token_file_path: PathLike[str] | str
+    unsafe_file_write: bool
+    gcs_use_virtual_endpoints: bool
+    check_arrow_conversion_error_on_every_column: bool
+
+
 class SnowflakeConnection:
     """Implementation of the connection object for the Snowflake Database.
 
@@ -488,8 +550,8 @@ class SnowflakeConnection:
     def __init__(
         self,
         connection_name: str | None = None,
-        connections_file_path: pathlib.Path | None = None,
-        **kwargs,
+        connections_file_path: PathLike[str] | None = None,
+        **kwargs: Unpack[SnowflakeConnectionConfig],
     ) -> None:
         """Create a new SnowflakeConnection.
 
@@ -701,7 +763,7 @@ class SnowflakeConnection:
         return int(self._socket_timeout) if self._socket_timeout is not None else None
 
     @property
-    def _backoff_generator(self) -> Iterator:
+    def _backoff_generator(self) -> Generator[int]:
         return self._backoff_policy()
 
     @property
@@ -1049,7 +1111,7 @@ class SnowflakeConnection:
         except Error as e:
             if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
                 logger.debug(
-                    "Autocommit feature is not enabled for this " "connection. Ignored"
+                    "Autocommit feature is not enabled for this connection. Ignored"
                 )
 
     def commit(self) -> None:
@@ -1230,7 +1292,7 @@ class SnowflakeConnection:
             elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
                 self._session_parameters[
                     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL
-                ] = (self._client_store_temporary_credential if IS_LINUX else True)
+                ] = self._client_store_temporary_credential if IS_LINUX else True
                 auth.read_temporary_credentials(
                     self.host,
                     self.user,
