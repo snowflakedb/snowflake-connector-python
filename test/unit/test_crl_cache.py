@@ -616,27 +616,28 @@ def test_platform_specific_cache_path():
     from snowflake.connector.crl_cache import _get_default_crl_cache_path
 
     # Test on different platforms
-    with patch("platform.system") as mock_system:
+    with patch("platform.system") as mock_system, patch(
+        "pathlib.Path.home"
+    ) as mock_home_path:
+        mock_home_path.return_value = Path("~")
+
         # Test Windows
         mock_system.return_value = "Windows"
-        with patch.dict("os.environ", {"USERPROFILE": "C:\\Users\\Test"}, clear=True):
-            path = _get_default_crl_cache_path()
-            assert "AppData" in str(path)
-            assert "snowflake" in str(path).lower()
+        path = _get_default_crl_cache_path()
+        assert "AppData" in str(path)
+        assert "snowflake" in str(path).lower()
 
         # Test macOS
         mock_system.return_value = "Darwin"
-        with patch.dict("os.environ", {"HOME": "/Users/test"}, clear=True):
-            path = _get_default_crl_cache_path()
-            assert "Library" in str(path)
-            assert "snowflake" in str(path).lower()
+        path = _get_default_crl_cache_path()
+        assert "Library" in str(path)
+        assert "snowflake" in str(path).lower()
 
         # Test Linux
         mock_system.return_value = "Linux"
-        with patch.dict("os.environ", {"HOME": "/home/test"}, clear=True):
-            path = _get_default_crl_cache_path()
-            assert ".cache" in str(path)
-            assert "snowflake" in str(path).lower()
+        path = _get_default_crl_cache_path()
+        assert ".cache" in str(path)
+        assert "snowflake" in str(path).lower()
 
 
 def test_atexit_handler_error_handling():
