@@ -5,7 +5,8 @@ import tempfile
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, mock_open
+from unittest.mock import patch as mock_patch
 
 import pytest
 from cryptography import x509
@@ -452,17 +453,14 @@ def test_cleanup_loop_double_start_is_safe_and_restarts(
 # New comprehensive error handling tests
 def test_file_cache_directory_creation_error():
     """Test CRLFileCache handles directory creation errors gracefully"""
-    import tempfile
-    from unittest.mock import patch
-
-    from snowflake.connector.crl_cache import CRLFileCache
-
     # Create a path that would cause permission error
     with tempfile.TemporaryDirectory() as temp_dir:
         cache_dir = Path(temp_dir) / "restricted"
 
         # Mock os.makedirs to raise PermissionError
-        with patch("os.makedirs", side_effect=PermissionError("Permission denied")):
+        with mock_patch(
+            "os.makedirs", side_effect=PermissionError("Permission denied")
+        ):
             cache = CRLFileCache(cache_dir=cache_dir)
 
             # Should still work, but directory operations may fail gracefully
@@ -473,11 +471,6 @@ def test_file_cache_directory_creation_error():
 
 def test_file_cache_file_write_error():
     """Test CRLFileCache handles file write errors gracefully"""
-    import tempfile
-    from unittest.mock import mock_open, patch
-
-    from snowflake.connector.crl_cache import CRLCacheEntry, CRLFileCache
-
     with tempfile.TemporaryDirectory() as temp_dir:
         cache_dir = Path(temp_dir)
         cache = CRLFileCache(cache_dir=cache_dir)
@@ -488,18 +481,13 @@ def test_file_cache_file_write_error():
         mock_file = mock_open()
         mock_file.return_value.write.side_effect = IOError("Disk full")
 
-        with patch("builtins.open", mock_file):
+        with mock_patch("builtins.open", mock_file):
             # Should not crash, but may log error
             cache.put("test_key", entry)
 
 
 def test_file_cache_file_read_error():
     """Test CRLFileCache handles file read errors gracefully"""
-    import tempfile
-    from unittest.mock import patch
-
-    from snowflake.connector.crl_cache import CRLCacheEntry, CRLFileCache
-
     with tempfile.TemporaryDirectory() as temp_dir:
         cache_dir = Path(temp_dir)
         cache = CRLFileCache(cache_dir=cache_dir)
@@ -509,7 +497,7 @@ def test_file_cache_file_read_error():
         cache.put("test_key", entry)
 
         # Mock open to raise IOError on read
-        with patch("builtins.open", side_effect=IOError("File corrupted")):
+        with mock_patch("builtins.open", side_effect=IOError("File corrupted")):
             # Should return None instead of crashing
             result = cache.get("test_key")
             assert result is None
@@ -517,11 +505,6 @@ def test_file_cache_file_read_error():
 
 def test_file_cache_cleanup_file_removal_error():
     """Test CRLFileCache cleanup handles file removal errors gracefully"""
-    import tempfile
-    from unittest.mock import patch
-
-    from snowflake.connector.crl_cache import CRLCacheEntry, CRLFileCache
-
     with tempfile.TemporaryDirectory() as temp_dir:
         cache_dir = Path(temp_dir)
         cache = CRLFileCache(cache_dir=cache_dir, removal_delay=timedelta(seconds=0))
@@ -533,90 +516,69 @@ def test_file_cache_cleanup_file_removal_error():
         cache.put("test_key", entry)
 
         # Mock os.remove to raise PermissionError
-        with patch("os.remove", side_effect=PermissionError("File in use")):
+        with mock_patch("os.remove", side_effect=PermissionError("File in use")):
             # Should not crash during cleanup
             cache.cleanup()
 
 
-def test_factory_warning_messages_for_memory_cache():
+def test_factory_warning_messages_for_memory_cache(cache_factory):
     """Test CRLCacheFactory logs appropriate warning for memory cache parameter mismatch"""
-    from unittest.mock import patch
+    # First call with one validity time
+    cache1 = cache_factory.get_memory_cache(timedelta(hours=1))
 
-    from snowflake.connector.crl_cache import CRLCacheFactory
+    # Second call with different validity time should log warning
+    with mock_patch("snowflake.connector.crl_cache.logger.warning") as mock_warning:
+        cache2 = cache_factory.get_memory_cache(timedelta(hours=2))
 
-    try:
-        # First call with one validity time
-        cache1 = CRLCacheFactory.get_memory_cache(timedelta(hours=1))
+        # Should return same instance
+        assert cache1 is cache2
 
-        # Second call with different validity time should log warning
-        with patch("snowflake.connector.crl_cache.logger.warning") as mock_warning:
-            cache2 = CRLCacheFactory.get_memory_cache(timedelta(hours=2))
+        # Should have logged warning with human-readable message
+        mock_warning.assert_called_once()
+        warning_msg = mock_warning.call_args[0][0]
+        assert "CRLs in-memory cache has already been initialized" in warning_msg
+        assert "1:00:00" in warning_msg  # Original time
+        assert "2:00:00" in warning_msg  # New time
+
+
+def test_factory_warning_messages_for_file_cache(cache_factory):
+    """Test CRLCacheFactory logs appropriate warning for file cache parameter mismatch"""
+    with tempfile.TemporaryDirectory() as temp_dir1, tempfile.TemporaryDirectory() as temp_dir2:
+        cache_dir1 = Path(temp_dir1)
+        cache_dir2 = Path(temp_dir2)
+
+        # First call with one directory and delay
+        cache1 = cache_factory.get_file_cache(cache_dir1, timedelta(days=7))
+
+        # Second call with different parameters should log warnings
+        with mock_patch("snowflake.connector.crl_cache.logger.warning") as mock_warning:
+            cache2 = cache_factory.get_file_cache(cache_dir2, timedelta(days=14))
 
             # Should return same instance
             assert cache1 is cache2
 
-            # Should have logged warning with human-readable message
-            mock_warning.assert_called_once()
-            warning_msg = mock_warning.call_args[0][0]
-            assert "CRLs in-memory cache has already been initialized" in warning_msg
-            assert "1:00:00" in warning_msg  # Original time
-            assert "2:00:00" in warning_msg  # New time
-    finally:
-        CRLCacheFactory.reset()
+            # Should have logged two warnings (for directory and delay)
+            assert mock_warning.call_count == 2
 
+            # Check warning messages
+            warning_calls = [call[0][0] for call in mock_warning.call_args_list]
+            dir_warning = next(msg for msg in warning_calls if "cache directory" in msg)
+            delay_warning = next(msg for msg in warning_calls if "removal delay" in msg)
 
-def test_factory_warning_messages_for_file_cache():
-    """Test CRLCacheFactory logs appropriate warning for file cache parameter mismatch"""
-    import tempfile
-    from unittest.mock import patch
-
-    from snowflake.connector.crl_cache import CRLCacheFactory
-
-    try:
-        with tempfile.TemporaryDirectory() as temp_dir1, tempfile.TemporaryDirectory() as temp_dir2:
-            cache_dir1 = Path(temp_dir1)
-            cache_dir2 = Path(temp_dir2)
-
-            # First call with one directory and delay
-            cache1 = CRLCacheFactory.get_file_cache(cache_dir1, timedelta(days=7))
-
-            # Second call with different parameters should log warnings
-            with patch("snowflake.connector.crl_cache.logger.warning") as mock_warning:
-                cache2 = CRLCacheFactory.get_file_cache(cache_dir2, timedelta(days=14))
-
-                # Should return same instance
-                assert cache1 is cache2
-
-                # Should have logged two warnings (for directory and delay)
-                assert mock_warning.call_count == 2
-
-                # Check warning messages
-                warning_calls = [call[0][0] for call in mock_warning.call_args_list]
-                dir_warning = next(
-                    msg for msg in warning_calls if "cache directory" in msg
-                )
-                delay_warning = next(
-                    msg for msg in warning_calls if "removal delay" in msg
-                )
-
-                assert "CRLs file cache has already been initialized" in dir_warning
-                assert "CRLs file cache has already been initialized" in delay_warning
-                assert str(cache_dir1) in dir_warning
-                assert str(cache_dir2) in dir_warning
-                assert "7 days" in delay_warning
-                assert "14 days" in delay_warning
-    finally:
-        CRLCacheFactory.reset()
+            assert "CRLs file cache has already been initialized" in dir_warning
+            assert "CRLs file cache has already been initialized" in delay_warning
+            assert str(cache_dir1) in dir_warning
+            assert str(cache_dir2) in dir_warning
+            assert "7 days" in delay_warning
+            assert "14 days" in delay_warning
 
 
 def test_platform_specific_cache_path():
     """Test _get_default_crl_cache_path returns platform-appropriate path"""
-    from unittest.mock import patch
-
     from snowflake.connector.crl_cache import _get_default_crl_cache_path
 
     # Test on different platforms
-    with patch("platform.system") as mock_system, patch(
+    with mock_patch("platform.system") as mock_system, mock_patch(
         "pathlib.Path.home"
     ) as mock_home_path:
         mock_home_path.return_value = Path("~")
@@ -640,28 +602,19 @@ def test_platform_specific_cache_path():
         assert "snowflake" in str(path).lower()
 
 
-def test_atexit_handler_error_handling():
+def test_atexit_handler_error_handling(cache_factory):
     """Test atexit cleanup handler handles errors gracefully"""
-    from unittest.mock import patch
+    # Start cleanup to register atexit handler
+    cache_factory.start_periodic_cleanup(timedelta(seconds=0.1))
 
-    from snowflake.connector.crl_cache import CRLCacheFactory
-
-    try:
-        # Start cleanup to register atexit handler
-        CRLCacheFactory.start_periodic_cleanup(timedelta(seconds=0.1))
-
-        # Mock stop_periodic_cleanup to raise exception
-        with patch.object(
-            CRLCacheFactory,
-            "stop_periodic_cleanup",
-            side_effect=Exception("Test error"),
-        ):
-            # Calling atexit handler should not raise exception
-            try:
-                CRLCacheFactory._atexit_cleanup_handler()
-            except Exception as e:
-                pytest.fail(f"Atexit handler should not raise exceptions: {e}")
-    finally:
-        # Manual cleanup since we mocked the stop method
-        with patch.object(CRLCacheFactory, "stop_periodic_cleanup", side_effect=None):
-            CRLCacheFactory.reset()
+    # Mock stop_periodic_cleanup to raise exception
+    with mock_patch.object(
+        cache_factory,
+        "stop_periodic_cleanup",
+        side_effect=Exception("Test error"),
+    ):
+        # Calling atexit handler should not raise exception
+        try:
+            cache_factory._atexit_cleanup_handler()
+        except Exception as e:
+            pytest.fail(f"Atexit handler should not raise exceptions: {e}")
