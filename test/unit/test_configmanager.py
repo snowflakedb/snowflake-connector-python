@@ -688,6 +688,10 @@ def test_error_config_file_writable_by_group(tmp_path):
     ):
         c1["b"]
 
+    # file permissions check can be skipped with unsafe_skip_file_permissions_check flag
+    c1.read_config(skip_file_permissions_check=True)
+    assert c1["b"] is True
+
 
 @pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
 def test_skip_warning_config_file_permissions(tmp_path, monkeypatch):
