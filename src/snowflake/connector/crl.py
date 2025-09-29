@@ -12,6 +12,7 @@ from cryptography import x509
 from cryptography.hazmat._oid import ExtensionOID
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
+from OpenSSL.SSL import Connection as SSLConnection
 
 from .crl_cache import CRLCacheEntry, CRLCacheManager
 from .session_manager import SessionManager
@@ -63,7 +64,7 @@ class CRLConfig:
     crl_cache_start_cleanup: bool = False
 
     @classmethod
-    def from_connection(cls, connection) -> CRLConfig:
+    def from_connection(cls, sf_connection) -> CRLConfig:
         """
         Create a CRLConfig instance from a SnowflakeConnection instance.
 
@@ -71,7 +72,7 @@ class CRLConfig:
         read-only properties and creates a CRLConfig instance.
 
         Args:
-            connection: SnowflakeConnection instance containing CRL configuration
+            sf_connection: SnowflakeConnection instance containing CRL configuration
 
         Returns:
             CRLConfig: Configured CRLConfig instance
@@ -80,24 +81,26 @@ class CRLConfig:
             ValueError: If session_manager is not available in the connection
         """
         # Extract CRL-specific configuration parameters from connection properties
-        if connection.cert_revocation_check_mode is None:
+        if sf_connection.cert_revocation_check_mode is None:
             cert_revocation_check_mode = cls.cert_revocation_check_mode
-        elif isinstance(connection.cert_revocation_check_mode, str):
+        elif isinstance(sf_connection.cert_revocation_check_mode, str):
             try:
                 cert_revocation_check_mode = CertRevocationCheckMode(
-                    connection.cert_revocation_check_mode
+                    sf_connection.cert_revocation_check_mode
                 )
             except ValueError:
                 logger.warning(
-                    f"Invalid cert_revocation_check_mode: {connection.cert_revocation_check_mode}, "
+                    f"Invalid cert_revocation_check_mode: {sf_connection.cert_revocation_check_mode}, "
                     f"defaulting to {cls.cert_revocation_check_mode}"
                 )
                 cert_revocation_check_mode = cls.cert_revocation_check_mode
-        elif isinstance(connection.cert_revocation_check_mode, CertRevocationCheckMode):
-            cert_revocation_check_mode = connection.cert_revocation_check_mode
+        elif isinstance(
+            sf_connection.cert_revocation_check_mode, CertRevocationCheckMode
+        ):
+            cert_revocation_check_mode = sf_connection.cert_revocation_check_mode
         else:
             logger.warning(
-                f"Unsupported value for cert_revocation_check_mode: {connection.cert_revocation_check_mode}, "
+                f"Unsupported value for cert_revocation_check_mode: {sf_connection.cert_revocation_check_mode}, "
                 f"defaulting to {cls.cert_revocation_check_mode}"
             )
             cert_revocation_check_mode = cls.cert_revocation_check_mode
@@ -106,60 +109,56 @@ class CRLConfig:
             # The rest of the parameters don't matter if CRL checking is disabled
             return cls(cert_revocation_check_mode=cert_revocation_check_mode)
 
-        # Handle cache validity time from hours to timedelta
+        # Apply default value logic for all other parameters when connection attribute is None
         cache_validity_time = (
             cls.cache_validity_time
-            if connection.crl_cache_validity_hours is None
-            else timedelta(hours=connection.crl_cache_validity_hours)
+            if sf_connection.crl_cache_validity_hours is None
+            else timedelta(hours=int(sf_connection.crl_cache_validity_hours))
         )
-
-        # Handle cache directory path
         crl_cache_dir = (
             cls.crl_cache_dir
-            if connection.crl_cache_dir is None
-            else Path(connection.crl_cache_dir)
+            if sf_connection.crl_cache_dir is None
+            else Path(sf_connection.crl_cache_dir)
         )
-
-        # Apply default value logic for all other parameters when connection attribute is None
         allow_certificates_without_crl_url = (
             cls.allow_certificates_without_crl_url
-            if connection.allow_certificates_without_crl_url is None
-            else connection.allow_certificates_without_crl_url
+            if sf_connection.allow_certificates_without_crl_url is None
+            else bool(sf_connection.allow_certificates_without_crl_url)
         )
         connection_timeout_ms = (
             cls.connection_timeout_ms
-            if connection.crl_connection_timeout_ms is None
-            else connection.crl_connection_timeout_ms
+            if sf_connection.crl_connection_timeout_ms is None
+            else int(sf_connection.crl_connection_timeout_ms)
         )
         read_timeout_ms = (
             cls.read_timeout_ms
-            if connection.crl_read_timeout_ms is None
-            else connection.crl_read_timeout_ms
+            if sf_connection.crl_read_timeout_ms is None
+            else int(sf_connection.crl_read_timeout_ms)
         )
         enable_crl_cache = (
             cls.enable_crl_cache
-            if connection.enable_crl_cache is None
-            else connection.enable_crl_cache
+            if sf_connection.enable_crl_cache is None
+            else bool(sf_connection.enable_crl_cache)
         )
         enable_crl_file_cache = (
             cls.enable_crl_file_cache
-            if connection.enable_crl_file_cache is None
-            else connection.enable_crl_file_cache
+            if sf_connection.enable_crl_file_cache is None
+            else bool(sf_connection.enable_crl_file_cache)
         )
         crl_cache_removal_delay_days = (
             cls.crl_cache_removal_delay_days
-            if connection.crl_cache_removal_delay_days is None
-            else connection.crl_cache_removal_delay_days
+            if sf_connection.crl_cache_removal_delay_days is None
+            else int(sf_connection.crl_cache_removal_delay_days)
         )
         crl_cache_cleanup_interval_hours = (
             cls.crl_cache_cleanup_interval_hours
-            if connection.crl_cache_cleanup_interval_hours is None
-            else connection.crl_cache_cleanup_interval_hours
+            if sf_connection.crl_cache_cleanup_interval_hours is None
+            else int(sf_connection.crl_cache_cleanup_interval_hours)
         )
         crl_cache_start_cleanup = (
             cls.crl_cache_start_cleanup
-            if connection.crl_cache_start_cleanup is None
-            else connection.crl_cache_start_cleanup
+            if sf_connection.crl_cache_start_cleanup is None
+            else bool(sf_connection.crl_cache_start_cleanup)
         )
 
         return cls(
@@ -386,7 +385,9 @@ class CRLValidator:
     def _fetch_crl_from_url(self, crl_url: str) -> bytes | None:
         try:
             logger.debug("Trying to download CRL from: %s", crl_url)
-            response = self._session_manager.get(crl_url, timeout=30)
+            response = self._session_manager.get(
+                crl_url, timeout=(self._connection_timeout_ms, self._read_timeout_ms)
+            )
             response.raise_for_status()
             return response.content
         except Exception:
@@ -519,7 +520,7 @@ class CRLValidator:
             else CRLValidationResult.UNREVOKED
         )
 
-    def validate_connection(self, connection) -> bool:
+    def validate_connection(self, connection: SSLConnection) -> bool:
         """
         Validate an OpenSSL connection against CRLs.
 
