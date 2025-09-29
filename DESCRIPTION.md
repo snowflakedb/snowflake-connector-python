@@ -15,6 +15,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added an option to exclude `botocore` and `boto3` dependencies by setting `SNOWFLAKE_NO_BOTO` environment variable during installation
   - Revert changing exception type in case of token expired scenario for `Oauth` authenticator back to `DatabaseError`
   - Added support for pandas conversion for Day-time and Year-Month Interval types
+  - Fixed behaviour of trying S3 Transfer Accelerate endpoint by default, and always getting HTTP403 due to permissions missing on purpose. Now /accelerate is not attempted.
 
 - v3.17.4(September 22,2025)
   - Added support for intermediate certificates as roots when they are stored in the trust store
