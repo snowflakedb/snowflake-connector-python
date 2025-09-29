@@ -431,8 +431,9 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
     @property
     @abc.abstractmethod
-    def _use_dict_result(self) -> bool: ...
+    def _use_dict_result(self) -> bool:
         """Decides whether results from helper functions are returned as a dict."""
+        pass
 
     @property
     def description(self) -> list[ResultMetadata]:
