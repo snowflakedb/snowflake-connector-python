@@ -81,7 +81,9 @@ async def test_query_can_be_empty_with_dataframe_ast():
         await cursor.execute("", _dataframe_ast="ABCD")
 
 
-@patch("snowflake.connector.aio._cursor.SnowflakeCursor._SnowflakeCursor__cancel_query")
+@patch(
+    "snowflake.connector.aio._cursor.SnowflakeCursor._SnowflakeCursorBase__cancel_query"
+)
 async def test_cursor_execute_timeout(mockCancelQuery):
     async def mock_cmd_query(*args, **kwargs):
         await asyncio.sleep(10)
