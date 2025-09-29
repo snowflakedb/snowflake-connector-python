@@ -7,13 +7,14 @@ import logging
 import os
 import pathlib
 import sys
+import typing
 import uuid
 import warnings
 from contextlib import suppress
 from io import StringIO
 from logging import getLogger
 from types import TracebackType
-from typing import Any, AsyncIterator, Iterable
+from typing import Any, AsyncIterator, Iterable, TypeVar
 
 from snowflake.connector import (
     DatabaseError,
@@ -72,7 +73,7 @@ from ..telemetry import TelemetryData, TelemetryField
 from ..time_util import get_time_millis
 from ..util_text import split_statements
 from ..wif_util import AttestationProvider
-from ._cursor import SnowflakeCursor
+from ._cursor import SnowflakeCursor, SnowflakeCursorBase
 from ._description import CLIENT_NAME
 from ._direct_file_operation_utils import FileOperationParser, StreamDownloader
 from ._network import SnowflakeRestful
@@ -106,6 +107,11 @@ logger = getLogger(__name__)
 # deep copy to avoid pollute sync config
 DEFAULT_CONFIGURATION = copy.deepcopy(DEFAULT_CONFIGURATION_SYNC)
 DEFAULT_CONFIGURATION["application"] = (CLIENT_NAME, (type(None), str))
+
+if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
+    CursorCls = TypeVar("CursorCls", bound=SnowflakeCursorBase, default=SnowflakeCursor)
+else:
+    CursorCls = TypeVar("CursorCls", bound=SnowflakeCursorBase)
 
 
 class SnowflakeConnection(SnowflakeConnectionSync):
@@ -1032,9 +1038,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         self._telemetry = TelemetryClient(self._rest)
         await self._log_telemetry_imported_packages()
 
-    def cursor(
-        self, cursor_class: type[SnowflakeCursor] = SnowflakeCursor
-    ) -> SnowflakeCursor:
+    def cursor(self, cursor_class: type[CursorCls] = SnowflakeCursor) -> CursorCls:
         logger.debug("cursor")
         if not self.rest:
             Error.errorhandler_wrapper(

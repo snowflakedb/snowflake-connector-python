@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import abc
 import asyncio
 import collections
 import logging
@@ -39,10 +40,11 @@ from snowflake.connector.cursor import (
     ASYNC_NO_DATA_MAX_RETRY,
     ASYNC_RETRY_PATTERN,
     DESC_TABLE_RE,
+    ResultMetadata,
+    ResultMetadataV2,
+    ResultState,
 )
-from snowflake.connector.cursor import DictCursor as DictCursorSync
-from snowflake.connector.cursor import ResultMetadata, ResultMetadataV2, ResultState
-from snowflake.connector.cursor import SnowflakeCursor as SnowflakeCursorSync
+from snowflake.connector.cursor import SnowflakeCursorBase as SnowflakeCursorBaseSync
 from snowflake.connector.cursor import T
 from snowflake.connector.errorcode import (
     ER_CURSOR_IS_CLOSED,
@@ -66,17 +68,20 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
+FetchRow = typing.TypeVar(
+    "FetchRow", bound=typing.Union[typing.Tuple[Any, ...], typing.Dict[str, Any]]
+)
 
-class SnowflakeCursor(SnowflakeCursorSync):
+
+class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[FetchRow]):
     def __init__(
         self,
         connection: SnowflakeConnection,
-        use_dict_result: bool = False,
     ):
-        super().__init__(connection, use_dict_result)
+        super().__init__(connection)
         # the following fixes type hint
         self._connection = typing.cast("SnowflakeConnection", self._connection)
-        self._inner_cursor: SnowflakeCursor | None = None
+        self._inner_cursor: SnowflakeCursorBase | None = None
         self._lock_canceling = asyncio.Lock()
         self._timebomb: asyncio.Task | None = None
         self._prefetch_hook: typing.Callable[[], typing.Awaitable] | None = None
@@ -894,8 +899,17 @@ class SnowflakeCursor(SnowflakeCursorSync):
             return None
         return [meta._to_result_metadata_v1() for meta in self._description]
 
-    async def fetchone(self) -> dict | tuple | None:
-        """Fetches one row."""
+    @abc.abstractmethod
+    async def fetchone(self) -> FetchRow:
+        pass
+
+    async def _fetchone(self) -> dict[str, Any] | tuple[Any, ...] | None:
+        """
+        Fetches one row.
+
+        Returns a dict if self._use_dict_result is True, otherwise
+        returns tuple.
+        """
         if self._prefetch_hook is not None:
             await self._prefetch_hook()
         if self._result is None and self._result_set is not None:
@@ -920,7 +934,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             else:
                 return None
 
-    async def fetchmany(self, size: int | None = None) -> list[tuple] | list[dict]:
+    async def fetchmany(self, size: int | None = None) -> list[FetchRow]:
         """Fetches the number of specified rows."""
         if size is None:
             size = self.arraysize
@@ -1248,20 +1262,31 @@ class SnowflakeCursor(SnowflakeCursorSync):
             # Unset this function, so that we don't block anymore
             self._prefetch_hook = None
 
-            if (
-                self._inner_cursor._total_rowcount == 1
-                and await self._inner_cursor.fetchall()
-                == [("Multiple statements executed successfully.",)]
+            if self._inner_cursor._total_rowcount == 1 and _is_successful_multi_stmt(
+                await self._inner_cursor.fetchall()
             ):
                 url = f"/queries/{sfqid}/result"
                 ret = await self._connection.rest.request(url=url, method="get")
                 if "data" in ret and "resultIds" in ret["data"]:
                     await self._init_multi_statement_results(ret["data"])
 
+        def _is_successful_multi_stmt(rows: list[Any]) -> bool:
+            if len(rows) != 1:
+                return False
+            row = rows[0]
+            if isinstance(row, tuple):
+                return row == ("Multiple statements executed successfully.",)
+            elif isinstance(row, dict):
+                return row == {
+                    "multiple statement execution": "Multiple statements executed successfully."
+                }
+            else:
+                return False
+
         await self.connection.get_query_status_throw_if_error(
             sfqid
         )  # Trigger an exception if query failed
-        self._inner_cursor = SnowflakeCursor(self.connection)
+        self._inner_cursor = self.__class__(self.connection)
         self._sfqid = sfqid
         self._prefetch_hook = wait_until_ready
 
@@ -1324,5 +1349,50 @@ class SnowflakeCursor(SnowflakeCursorSync):
         )
 
 
-class DictCursor(DictCursorSync, SnowflakeCursor):
-    pass
+class SnowflakeCursor(SnowflakeCursorBase[tuple[Any, ...]]):
+    """Implementation of Cursor object that is returned from Connection.cursor() method.
+
+    Attributes:
+        description: A list of namedtuples about metadata for all columns.
+        rowcount: The number of records updated or selected. If not clear, -1 is returned.
+        rownumber: The current 0-based index of the cursor in the result set or None if the index cannot be
+            determined.
+        sfqid: Snowflake query id in UUID form. Include this in the problem report to the customer support.
+        sqlstate: Snowflake SQL State code.
+        timestamp_output_format: Snowflake timestamp_output_format for timestamps.
+        timestamp_ltz_output_format: Snowflake output format for LTZ timestamps.
+        timestamp_tz_output_format: Snowflake output format for TZ timestamps.
+        timestamp_ntz_output_format: Snowflake output format for NTZ timestamps.
+        date_output_format: Snowflake output format for dates.
+        time_output_format: Snowflake output format for times.
+        timezone: Snowflake timezone.
+        binary_output_format: Snowflake output format for binary fields.
+        arraysize: The default number of rows fetched by fetchmany.
+        connection: The connection object by which the cursor was created.
+        errorhandle: The class that handles error handling.
+        is_file_transfer: Whether, or not the current command is a put, or get.
+    """
+
+    @property
+    def _use_dict_result(self) -> bool:
+        return False
+
+    async def fetchone(self) -> tuple[Any, ...] | None:
+        row = await self._fetchone()
+        if not (row is None or isinstance(row, tuple)):
+            raise TypeError(f"fetchone got unexpected result: {row}")
+        return row
+
+
+class DictCursor(SnowflakeCursorBase[dict[str, Any]]):
+    """Cursor returning results in a dictionary."""
+
+    @property
+    def _use_dict_result(self) -> bool:
+        return True
+
+    async def fetchone(self) -> dict[str, Any] | None:
+        row = await self._fetchone()
+        if not (row is None or isinstance(row, dict)):
+            raise TypeError(f"fetchone got unexpected result: {row}")
+        return row
