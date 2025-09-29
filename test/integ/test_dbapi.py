@@ -857,7 +857,8 @@ def test_callproc_invalid(conn_cnx):
             # stored procedure does not exist
             with pytest.raises(errors.ProgrammingError) as pe:
                 cur.callproc(name_sp)
-            assert pe.value.errno == 2140
+            # this value might differ between Snowflake environments
+            assert pe.value.errno in [2140, 2139]
 
             cur.execute(
                 f"""

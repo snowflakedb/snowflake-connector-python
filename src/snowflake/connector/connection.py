@@ -8,6 +8,7 @@ import pathlib
 import re
 import sys
 import traceback
+import typing
 import uuid
 import warnings
 import weakref
@@ -20,7 +21,16 @@ from io import StringIO
 from logging import getLogger
 from threading import Lock
 from types import TracebackType
-from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    NamedTuple,
+    Sequence,
+    TypeVar,
+)
 from uuid import UUID
 
 from cryptography.hazmat.backends import default_backend
@@ -76,7 +86,7 @@ from .constants import (
     QueryStatus,
 )
 from .converter import SnowflakeConverter
-from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor
+from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor, SnowflakeCursorBase
 from .description import (
     CLIENT_NAME,
     CLIENT_VERSION,
@@ -124,6 +134,11 @@ from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
 from .wif_util import AttestationProvider
+
+if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
+    CursorCls = TypeVar("CursorCls", bound=SnowflakeCursorBase, default=SnowflakeCursor)
+else:
+    CursorCls = TypeVar("CursorCls", bound=SnowflakeCursorBase)
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -214,6 +229,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "workload_identity_provider": (None, (type(None), AttestationProvider)),
     "workload_identity_entra_resource": (None, (type(None), str)),
+    "workload_identity_impersonation_path": (None, (type(None), list[str])),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -336,6 +352,11 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), str),
         # SNOW-1825621: OAUTH implementation
+    ),
+    "oauth_credentials_in_body": (
+        False,
+        bool,
+        # SNOW-2300649: Option to send client credentials in body
     ),
     "oauth_authorization_url": (
         "https://{host}:{port}/oauth/authorize",
@@ -1054,9 +1075,7 @@ class SnowflakeConnection:
         """Rolls back the current transaction."""
         self.cursor().execute("ROLLBACK")
 
-    def cursor(
-        self, cursor_class: type[SnowflakeCursor] = SnowflakeCursor
-    ) -> SnowflakeCursor:
+    def cursor(self, cursor_class: type[CursorCls] = SnowflakeCursor) -> CursorCls:
         """Creates a cursor object. Each statement will be executed in a new cursor object."""
         logger.debug("cursor")
         if not self.rest:
@@ -1311,6 +1330,7 @@ class SnowflakeConnection:
                         host=self.host, port=self.port
                     ),
                     scope=self._oauth_scope,
+                    credentials_in_body=self._oauth_credentials_in_body,
                     connection=self,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
@@ -1355,10 +1375,28 @@ class SnowflakeConnection:
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
+                if (
+                    self._workload_identity_impersonation_path
+                    and self._workload_identity_provider
+                    not in (
+                        AttestationProvider.GCP,
+                        AttestationProvider.AWS,
+                    )
+                ):
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": "workload_identity_impersonation_path is currently only supported for GCP and AWS.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
                 self.auth_class = AuthByWorkloadIdentity(
                     provider=self._workload_identity_provider,
                     token=self._token,
                     entra_resource=self._workload_identity_entra_resource,
+                    impersonation_path=self._workload_identity_impersonation_path,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
@@ -1531,6 +1569,7 @@ class SnowflakeConnection:
             workload_identity_dependent_options = [
                 "workload_identity_provider",
                 "workload_identity_entra_resource",
+                "workload_identity_impersonation_path",
             ]
             for dependent_option in workload_identity_dependent_options:
                 if (

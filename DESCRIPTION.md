@@ -7,10 +7,30 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.18(TBD)
+- v3.18.0(TBD)
+  - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP and AWS workloads only
+  - Fixed `get_results_from_sfqid` when using `DictCursor` and executing multiple statements at once
+  - Added the `oauth_credentials_in_body` parameter supporting an option to send the oauth client credentials in the request body
+  - Fix retry behavior for `ECONNRESET` error
+  - Added an option to exclude `botocore` and `boto3` dependencies by setting `SNOWFLAKE_NO_BOTO` environment variable during installation
+  - Revert changing exception type in case of token expired scenario for `Oauth` authenticator back to `DatabaseError`
+  - Added support for pandas conversion for Day-time and Year-Month Interval types
   - Enhanced configuration file security checks with stricter permission validation.
     - Configuration files writable by group or others now raise a `ConfigSourceError` with detailed permission information, preventing potential credential tampering.
+
+- v3.17.4(September 22,2025)
+  - Added support for intermediate certificates as roots when they are stored in the trust store
+  - Bumped up vendored `urllib3` to `2.5.0` and `requests` to `v2.32.5`
+  - Dropped support for OpenSSL versions older than 1.1.1
+  - Fixed the return type of `SnowflakeConnection.cursor(cursor_class)` to match the type of `cursor_class`
+  - Constrained the types of `fetchone`, `fetchmany`, `fetchall`
+    - As part of this fix, `DictCursor` is no longer a subclass of `SnowflakeCursor`; use `SnowflakeCursorBase` as a superclass of both.
+
+- v3.17.3(September 02,2025)
+  - Enhanced configuration file permission warning messages.
     - Improved warning messages for readable permission issues to include clear instructions on how to skip warnings using the `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` environment variable.
+  - Fixed the bug with staging pandas dataframes on AWS - the regional endpoint is used when required
+    - This addresses the issue with `create_dataframe` call on Snowpark
 
 - v3.17.2(August 23,2025)
   - Fixed a bug where platform_detection was retrying failed requests with warnings to non-existent endpoints.

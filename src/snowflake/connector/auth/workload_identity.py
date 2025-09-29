@@ -55,12 +55,14 @@ class AuthByWorkloadIdentity(AuthByPlugin):
         provider: AttestationProvider | None = None,
         token: str | None = None,
         entra_resource: str | None = None,
+        impersonation_path: list[str] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.provider = provider
         self.token = token
         self.entra_resource = entra_resource
+        self.impersonation_path = impersonation_path
 
         self.attestation: WorkloadIdentityAttestation | None = None
 
@@ -76,6 +78,9 @@ class AuthByWorkloadIdentity(AuthByPlugin):
             self.attestation
         ).value
         body["data"]["TOKEN"] = self.attestation.credential
+        body["data"].setdefault("CLIENT_ENVIRONMENT", {})[
+            "WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH"
+        ] = len(self.impersonation_path or [])
 
     def prepare(
         self, *, conn: SnowflakeConnection | None, **kwargs: typing.Any
@@ -85,6 +90,7 @@ class AuthByWorkloadIdentity(AuthByPlugin):
             self.provider,
             self.entra_resource,
             self.token,
+            self.impersonation_path,
             session_manager=(
                 conn._session_manager.clone(max_retries=0) if conn else None
             ),

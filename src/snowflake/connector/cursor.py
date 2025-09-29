@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import abc
 import collections
 import logging
 import os
@@ -19,12 +20,16 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Dict,
+    Generic,
     Iterator,
     Literal,
     NamedTuple,
     NoReturn,
     Sequence,
+    Tuple,
     TypeVar,
+    Union,
     overload,
 )
 
@@ -79,10 +84,14 @@ if TYPE_CHECKING:  # pragma: no cover
     from pyarrow import Table
 
     from .connection import SnowflakeConnection
-    from .file_transfer_agent import SnowflakeProgressPercentage
+    from .file_transfer_agent import (
+        SnowflakeFileTransferAgent,
+        SnowflakeProgressPercentage,
+    )
     from .result_batch import ResultBatch
 
 T = TypeVar("T", bound=collections.abc.Sequence)
+FetchRow = TypeVar("FetchRow", bound=Union[Tuple[Any, ...], Dict[str, Any]])
 
 logger = getLogger(__name__)
 
@@ -329,29 +338,7 @@ class ResultState(Enum):
     RESET = 3
 
 
-class SnowflakeCursor:
-    """Implementation of Cursor object that is returned from Connection.cursor() method.
-
-    Attributes:
-        description: A list of namedtuples about metadata for all columns.
-        rowcount: The number of records updated or selected. If not clear, -1 is returned.
-        rownumber: The current 0-based index of the cursor in the result set or None if the index cannot be
-            determined.
-        sfqid: Snowflake query id in UUID form. Include this in the problem report to the customer support.
-        sqlstate: Snowflake SQL State code.
-        timestamp_output_format: Snowflake timestamp_output_format for timestamps.
-        timestamp_ltz_output_format: Snowflake output format for LTZ timestamps.
-        timestamp_tz_output_format: Snowflake output format for TZ timestamps.
-        timestamp_ntz_output_format: Snowflake output format for NTZ timestamps.
-        date_output_format: Snowflake output format for dates.
-        time_output_format: Snowflake output format for times.
-        timezone: Snowflake timezone.
-        binary_output_format: Snowflake output format for binary fields.
-        arraysize: The default number of rows fetched by fetchmany.
-        connection: The connection object by which the cursor was created.
-        errorhandle: The class that handles error handling.
-        is_file_transfer: Whether, or not the current command is a put, or get.
-    """
+class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
     # TODO:
     #    Most of these attributes have no reason to be properties, we could just store them in public variables.
@@ -379,13 +366,11 @@ class SnowflakeCursor:
     def __init__(
         self,
         connection: SnowflakeConnection,
-        use_dict_result: bool = False,
     ) -> None:
         """Inits a SnowflakeCursor with a connection.
 
         Args:
             connection: The connection that created this cursor.
-            use_dict_result: Decides whether to use dict result or not.
         """
         self._connection: SnowflakeConnection = connection
 
@@ -420,7 +405,6 @@ class SnowflakeCursor:
         self._result: Iterator[tuple] | Iterator[dict] | None = None
         self._result_set: ResultSet | None = None
         self._result_state: ResultState = ResultState.DEFAULT
-        self._use_dict_result = use_dict_result
         self.query: str | None = None
         # TODO: self._query_result_format could be defined as an enum
         self._query_result_format: str | None = None
@@ -432,7 +416,7 @@ class SnowflakeCursor:
         self._first_chunk_time = None
 
         self._log_max_query_length = connection.log_max_query_length
-        self._inner_cursor: SnowflakeCursor | None = None
+        self._inner_cursor: SnowflakeCursorBase | None = None
         self._prefetch_hook = None
         self._rownumber: int | None = None
 
@@ -444,6 +428,12 @@ class SnowflakeCursor:
         except compat.BASE_EXCEPTION_CLASS as e:
             if logger.getEffectiveLevel() <= logging.INFO:
                 logger.info(e)
+
+    @property
+    @abc.abstractmethod
+    def _use_dict_result(self) -> bool:
+        """Decides whether results from helper functions are returned as a dict."""
+        pass
 
     @property
     def description(self) -> list[ResultMetadata]:
@@ -1064,11 +1054,7 @@ class SnowflakeCursor:
             )
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
-                from .file_transfer_agent import SnowflakeFileTransferAgent
-
-                # Decide whether to use the old, or new code path
-                sf_file_transfer_agent = SnowflakeFileTransferAgent(
-                    self,
+                sf_file_transfer_agent = self._create_file_transfer_agent(
                     query,
                     ret,
                     put_callback=_put_callback,
@@ -1084,13 +1070,6 @@ class SnowflakeCursor:
                     skip_upload_on_content_match=_skip_upload_on_content_match,
                     source_from_stream=file_stream,
                     multipart_threshold=data.get("threshold"),
-                    use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
-                    iobound_tpe_limit=self._connection.iobound_tpe_limit,
-                    unsafe_file_write=self._connection.unsafe_file_write,
-                    snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
-                        self._connection
-                    ),
-                    reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
                 )
                 sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
@@ -1522,8 +1501,17 @@ class SnowflakeCursor:
 
         return self
 
-    def fetchone(self) -> dict | tuple | None:
-        """Fetches one row."""
+    @abc.abstractmethod
+    def fetchone(self) -> FetchRow:
+        pass
+
+    def _fetchone(self) -> dict[str, Any] | tuple[Any, ...] | None:
+        """
+        Fetches one row.
+
+        Returns a dict if self._use_dict_result is True, otherwise
+        returns tuple.
+        """
         if self._prefetch_hook is not None:
             self._prefetch_hook()
         if self._result is None and self._result_set is not None:
@@ -1547,7 +1535,7 @@ class SnowflakeCursor:
             else:
                 return None
 
-    def fetchmany(self, size: int | None = None) -> list[tuple] | list[dict]:
+    def fetchmany(self, size: int | None = None) -> list[FetchRow]:
         """Fetches the number of specified rows."""
         if size is None:
             size = self.arraysize
@@ -1573,7 +1561,7 @@ class SnowflakeCursor:
 
         return ret
 
-    def fetchall(self) -> list[tuple] | list[dict]:
+    def fetchall(self) -> list[FetchRow]:
         """Fetches all of the results."""
         ret = []
         while True:
@@ -1736,21 +1724,31 @@ class SnowflakeCursor:
             # Unset this function, so that we don't block anymore
             self._prefetch_hook = None
 
-            if (
-                self._inner_cursor._total_rowcount == 1
-                and self._inner_cursor.fetchall()
-                == [("Multiple statements executed successfully.",)]
+            if self._inner_cursor._total_rowcount == 1 and _is_successful_multi_stmt(
+                self._inner_cursor.fetchall()
             ):
                 url = f"/queries/{sfqid}/result"
                 ret = self._connection.rest.request(url=url, method="get")
                 if "data" in ret and "resultIds" in ret["data"]:
                     self._init_multi_statement_results(ret["data"])
 
+        def _is_successful_multi_stmt(rows: list[Any]) -> bool:
+            if len(rows) != 1:
+                return False
+            row = rows[0]
+            if isinstance(row, tuple):
+                return row == ("Multiple statements executed successfully.",)
+            elif isinstance(row, dict):
+                return row == {
+                    "multiple statement execution": "Multiple statements executed successfully."
+                }
+            else:
+                return False
+
         self.connection.get_query_status_throw_if_error(
             sfqid
         )  # Trigger an exception if query failed
-        klass = self.__class__
-        self._inner_cursor = klass(self.connection)
+        self._inner_cursor = self.__class__(self.connection)
         self._sfqid = sfqid
         self._prefetch_hook = wait_until_ready
 
@@ -1786,8 +1784,6 @@ class SnowflakeCursor:
             _do_reset (bool, optional): Whether to reset the cursor before
                 downloading, by default we will reset the cursor.
         """
-        from .file_transfer_agent import SnowflakeFileTransferAgent
-
         if _do_reset:
             self.reset()
 
@@ -1801,14 +1797,9 @@ class SnowflakeCursor:
         )
 
         # Execute the file operation based on the interpretation above.
-        file_transfer_agent = SnowflakeFileTransferAgent(
-            self,
+        file_transfer_agent = self._create_file_transfer_agent(
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
-            snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
-                self._connection
-            ),
-            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
@@ -1829,7 +1820,6 @@ class SnowflakeCursor:
             _do_reset (bool, optional): Whether to reset the cursor before
                 uploading, by default we will reset the cursor.
         """
-        from .file_transfer_agent import SnowflakeFileTransferAgent
 
         if _do_reset:
             self.reset()
@@ -1844,15 +1834,10 @@ class SnowflakeCursor:
         )
 
         # Execute the file operation based on the interpretation above.
-        file_transfer_agent = SnowflakeFileTransferAgent(
-            self,
+        file_transfer_agent = self._create_file_transfer_agent(
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
             force_put_overwrite=False,  # _upload should respect user decision on overwriting
-            snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
-                self._connection
-            ),
-            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
@@ -1899,7 +1884,6 @@ class SnowflakeCursor:
             _do_reset (bool, optional): Whether to reset the cursor before
                 uploading, by default we will reset the cursor.
         """
-        from .file_transfer_agent import SnowflakeFileTransferAgent
 
         if _do_reset:
             self.reset()
@@ -1915,29 +1899,86 @@ class SnowflakeCursor:
         )
 
         # Execute the file operation based on the interpretation above.
-        file_transfer_agent = SnowflakeFileTransferAgent(
-            self,
+        file_transfer_agent = self._create_file_transfer_agent(
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
             source_from_stream=input_stream,
             force_put_overwrite=False,  # _upload_stream should respect user decision on overwriting
-            snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
-                self._connection
-            ),
-            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
 
+    def _create_file_transfer_agent(
+        self,
+        command: str,
+        ret: dict[str, Any],
+        /,
+        **kwargs,
+    ) -> SnowflakeFileTransferAgent:
+        from .file_transfer_agent import SnowflakeFileTransferAgent
 
-class DictCursor(SnowflakeCursor):
+        return SnowflakeFileTransferAgent(
+            self,
+            command,
+            ret,
+            use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
+            iobound_tpe_limit=self._connection.iobound_tpe_limit,
+            unsafe_file_write=self._connection.unsafe_file_write,
+            snowflake_server_dop_cap_for_file_transfer=_snowflake_max_parallelism_for_file_transfer(
+                self._connection
+            ),
+            reraise_error_in_file_transfer_work_function=self._connection._reraise_error_in_file_transfer_work_function,
+            **kwargs,
+        )
+
+
+class SnowflakeCursor(SnowflakeCursorBase[tuple[Any, ...]]):
+    """Implementation of Cursor object that is returned from Connection.cursor() method.
+
+    Attributes:
+        description: A list of namedtuples about metadata for all columns.
+        rowcount: The number of records updated or selected. If not clear, -1 is returned.
+        rownumber: The current 0-based index of the cursor in the result set or None if the index cannot be
+            determined.
+        sfqid: Snowflake query id in UUID form. Include this in the problem report to the customer support.
+        sqlstate: Snowflake SQL State code.
+        timestamp_output_format: Snowflake timestamp_output_format for timestamps.
+        timestamp_ltz_output_format: Snowflake output format for LTZ timestamps.
+        timestamp_tz_output_format: Snowflake output format for TZ timestamps.
+        timestamp_ntz_output_format: Snowflake output format for NTZ timestamps.
+        date_output_format: Snowflake output format for dates.
+        time_output_format: Snowflake output format for times.
+        timezone: Snowflake timezone.
+        binary_output_format: Snowflake output format for binary fields.
+        arraysize: The default number of rows fetched by fetchmany.
+        connection: The connection object by which the cursor was created.
+        errorhandle: The class that handles error handling.
+        is_file_transfer: Whether, or not the current command is a put, or get.
+    """
+
+    @property
+    def _use_dict_result(self) -> bool:
+        return False
+
+    def fetchone(self) -> tuple[Any, ...] | None:
+        row = self._fetchone()
+        if not (row is None or isinstance(row, tuple)):
+            raise TypeError(f"fetchone got unexpected result: {row}")
+        return row
+
+
+class DictCursor(SnowflakeCursorBase[dict[str, Any]]):
     """Cursor returning results in a dictionary."""
 
-    def __init__(self, connection) -> None:
-        super().__init__(
-            connection,
-            use_dict_result=True,
-        )
+    @property
+    def _use_dict_result(self) -> bool:
+        return True
+
+    def fetchone(self) -> dict[str, Any] | None:
+        row = self._fetchone()
+        if not (row is None or isinstance(row, dict)):
+            raise TypeError(f"fetchone got unexpected result: {row}")
+        return row
 
 
 def __getattr__(name):
