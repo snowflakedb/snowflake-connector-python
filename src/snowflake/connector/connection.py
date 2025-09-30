@@ -29,6 +29,10 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
 from . import errors, proxy
 from ._query_context_cache import QueryContextCache
+from ._utils import (
+    _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+)
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
     Auth,
@@ -55,7 +59,6 @@ from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
     _OAUTH_DEFAULT_SCOPE,
-    ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -84,7 +87,6 @@ from .description import (
 from .direct_file_operation_utils import FileOperationParser, StreamDownloader
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
-    ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
     ER_FAILED_TO_CONNECT_TO_DB,
@@ -193,6 +195,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # network timeout (infinite by default)
     "socket_timeout": (None, (type(None), int)),
     "external_browser_timeout": (120, int),
+    "platform_detection_timeout_seconds": (
+        None,
+        (type(None), float),
+    ),  # Platform detection timeout for CSP metadata endpoints
     "backoff_policy": (DEFAULT_BACKOFF_POLICY, Callable),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
@@ -373,6 +379,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # SNOW-1944208: add unsafe write flag
+    _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER: (
+        _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
+        int,  # type
+    ),  # snowflake internal
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -684,6 +694,14 @@ class SnowflakeConnection:
     def client_session_keep_alive_heartbeat_frequency(self, value) -> None:
         self._client_session_keep_alive_heartbeat_frequency = value
         self._validate_client_session_keep_alive_heartbeat_frequency()
+
+    @property
+    def platform_detection_timeout_seconds(self) -> float | None:
+        return self._platform_detection_timeout_seconds
+
+    @platform_detection_timeout_seconds.setter
+    def platform_detection_timeout_seconds(self, value) -> None:
+        self._platform_detection_timeout_seconds = value
 
     @property
     def client_prefetch_threads(self) -> int:
@@ -1286,13 +1304,19 @@ class SnowflakeConnection:
                     self._token, self._external_session_id
                 )
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
-                self._check_experimental_authentication_flag()
-                # Standardize the provider enum.
-                if self._workload_identity_provider and isinstance(
-                    self._workload_identity_provider, str
-                ):
+                if isinstance(self._workload_identity_provider, str):
                     self._workload_identity_provider = AttestationProvider.from_string(
                         self._workload_identity_provider
+                    )
+                if not self._workload_identity_provider:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"workload_identity_provider must be set to one of {','.join(AttestationProvider.all_string_values())} when authenticator is WORKLOAD_IDENTITY.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
                     )
                 self.auth_class = AuthByWorkloadIdentity(
                     provider=self._workload_identity_provider,
@@ -1448,7 +1472,10 @@ class SnowflakeConnection:
                     self,
                     None,
                     ProgrammingError,
-                    {"msg": "User is empty", "errno": ER_NO_USER},
+                    {
+                        "msg": f"User is empty, but it must be provided unless authenticator is one of {', '.join(empty_user_allowed_authenticators)}.",
+                        "errno": ER_NO_USER,
+                    },
                 )
 
             if self._private_key or self._private_key_file:
@@ -2238,18 +2265,6 @@ class SnowflakeConnection:
         except Exception as e:
             logger.debug("session could not be validated due to exception: %s", e)
             return False
-
-    def _check_experimental_authentication_flag(self) -> None:
-        if os.getenv(ENV_VAR_EXPERIMENTAL_AUTHENTICATION, "false").lower() != "true":
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable true to use the '{self._authenticator}' authenticator.",
-                    "errno": ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
-                },
-            )
 
     @staticmethod
     def _detect_application() -> None | str:

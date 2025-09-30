@@ -5,6 +5,7 @@
 import asyncio
 import json
 import logging
+import os
 from base64 import b64decode
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
@@ -99,16 +100,17 @@ async def test_explicit_oidc_invalid_inline_token_raises_error():
     auth_class = AuthByWorkloadIdentity(
         provider=AttestationProvider.OIDC, token=invalid_token
     )
-    with pytest.raises(ProgrammingError) as excinfo:
+    with pytest.raises(jwt.exceptions.DecodeError):
         await auth_class.prepare()
-    assert "No workload identity credential was found for 'OIDC'" in str(excinfo.value)
 
 
 async def test_explicit_oidc_no_token_raises_error():
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.OIDC, token=None)
     with pytest.raises(ProgrammingError) as excinfo:
         await auth_class.prepare()
-    assert "No workload identity credential was found for 'OIDC'" in str(excinfo.value)
+    assert "token must be provided if workload_identity_provider=OIDC" in str(
+        excinfo.value
+    )
 
 
 # -- AWS Tests --
@@ -122,7 +124,7 @@ async def test_explicit_aws_no_auth_raises_error(
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     with pytest.raises(ProgrammingError) as excinfo:
         await auth_class.prepare()
-    assert "No workload identity credential was found for 'AWS'" in str(excinfo.value)
+    assert "No AWS credentials were found" in str(excinfo.value)
 
 
 async def test_explicit_aws_encodes_audience_host_signature_to_api(
@@ -198,28 +200,14 @@ def _mock_aiohttp_exception(exception):
         asyncio.TimeoutError(),
     ],
 )
-async def test_explicit_gcp_metadata_server_error_raises_auth_error(exception):
+async def test_explicit_gcp_metadata_server_error_bubbles_up(exception):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.GCP)
 
     mock_request = _mock_aiohttp_exception(exception)
 
     with mock.patch("aiohttp.ClientSession.request", side_effect=mock_request):
-        with pytest.raises(ProgrammingError) as excinfo:
+        with pytest.raises(type(exception)):
             await auth_class.prepare()
-        assert "No workload identity credential was found for 'GCP'" in str(
-            excinfo.value
-        )
-
-
-async def test_explicit_gcp_wrong_issuer_raises_error(
-    fake_gce_metadata_service: FakeGceMetadataServiceAsync,
-):
-    fake_gce_metadata_service.iss = "not-google"
-
-    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.GCP)
-    with pytest.raises(ProgrammingError) as excinfo:
-        await auth_class.prepare()
-    assert "No workload identity credential was found for 'GCP'" in str(excinfo.value)
 
 
 async def test_explicit_gcp_plumbs_token_to_api(
@@ -257,26 +245,14 @@ async def test_explicit_gcp_generates_unique_assertion_content(
         aiohttp.ConnectionTimeoutError(),
     ],
 )
-async def test_explicit_azure_metadata_server_error_raises_auth_error(exception):
+async def test_explicit_azure_metadata_server_error_bubbles_up(exception):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
 
     mock_request = _mock_aiohttp_exception(exception)
 
     with mock.patch("aiohttp.ClientSession.request", side_effect=mock_request):
-        with pytest.raises(ProgrammingError) as excinfo:
+        with pytest.raises(type(exception)):
             await auth_class.prepare()
-        assert "No workload identity credential was found for 'AZURE'" in str(
-            excinfo.value
-        )
-
-
-async def test_explicit_azure_wrong_issuer_raises_error(fake_azure_metadata_service):
-    fake_azure_metadata_service.iss = "https://notazure.com"
-
-    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    with pytest.raises(ProgrammingError) as excinfo:
-        await auth_class.prepare()
-    assert "No workload identity credential was found for 'AZURE'" in str(excinfo.value)
 
 
 @pytest.mark.parametrize(
@@ -349,3 +325,21 @@ async def test_explicit_azure_uses_explicit_entra_resource(fake_azure_metadata_s
     token = fake_azure_metadata_service.token
     parsed = jwt.decode(token, options={"verify_signature": False})
     assert parsed["aud"] == "api://non-standard"
+
+
+async def test_explicit_azure_omits_client_id_if_not_set(fake_azure_metadata_service):
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+    await auth_class.prepare()
+    assert fake_azure_metadata_service.requested_client_id is None
+
+
+async def test_explicit_azure_uses_explicit_client_id_if_set(
+    fake_azure_metadata_service,
+):
+    with mock.patch.dict(
+        os.environ, {"MANAGED_IDENTITY_CLIENT_ID": "custom-client-id"}
+    ):
+        auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+        await auth_class.prepare()
+
+    assert fake_azure_metadata_service.requested_client_id == "custom-client-id"

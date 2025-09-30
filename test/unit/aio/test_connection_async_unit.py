@@ -51,6 +51,14 @@ from snowflake.connector.errors import (
 from snowflake.connector.wif_util import AttestationProvider
 
 
+@pytest.fixture(autouse=True)
+def mock_detect_platforms():
+    with patch(
+        "snowflake.connector.auth._auth.detect_platforms", return_value=[]
+    ) as mock_detect:
+        yield mock_detect
+
+
 def fake_connector(**kwargs) -> snowflake.connector.aio.SnowflakeConnection:
     return snowflake.connector.aio.SnowflakeConnection(
         user="user",
@@ -615,18 +623,54 @@ async def test_cannot_set_dependent_params_without_wlid_authenticator(
     )
 
 
-async def test_cannot_set_wlid_authenticator_without_env_variable(mock_post_requests):
-    with pytest.raises(ProgrammingError) as excinfo:
-        await snowflake.connector.aio.connect(
-            account="account", authenticator="WORKLOAD_IDENTITY"
+@pytest.mark.parametrize(
+    "provider_param",
+    [
+        None,
+        "",
+        "INVALID",
+    ],
+)
+async def test_workload_identity_provider_is_required_for_wif_authenticator(
+    monkeypatch, provider_param
+):
+    with monkeypatch.context() as m:
+        m.setattr(
+            "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
+            lambda *_: None,
         )
-    assert (
-        "Please set the 'SF_ENABLE_EXPERIMENTAL_AUTHENTICATION' environment variable true to use the 'WORKLOAD_IDENTITY' authenticator"
-        in str(excinfo.value)
-    )
+
+        with pytest.raises(ProgrammingError) as excinfo:
+            await snowflake.connector.aio.connect(
+                account="account",
+                authenticator="WORKLOAD_IDENTITY",
+                # TODO: fix after applying #2469
+                provider=provider_param,
+            )
+        assert (
+            "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY"
+            in str(excinfo.value)
+        )
 
 
-async def test_connection_params_are_plumbed_into_authbyworkloadidentity(monkeypatch):
+@pytest.mark.parametrize(
+    "provider_param, parsed_provider",
+    [
+        # Strongly-typed values.
+        (AttestationProvider.AWS, AttestationProvider.AWS),
+        (AttestationProvider.AZURE, AttestationProvider.AZURE),
+        (AttestationProvider.GCP, AttestationProvider.GCP),
+        (AttestationProvider.OIDC, AttestationProvider.OIDC),
+        # String values.
+        ("AWS", AttestationProvider.AWS),
+        ("AZURE", AttestationProvider.AZURE),
+        ("GCP", AttestationProvider.GCP),
+        ("OIDC", AttestationProvider.OIDC),
+    ],
+)
+async def test_connection_params_are_plumbed_into_authbyworkloadidentity(
+    monkeypatch, provider_param, parsed_provider
+):
     async def mock_authenticate(*_):
         pass
 
@@ -635,16 +679,15 @@ async def test_connection_params_are_plumbed_into_authbyworkloadidentity(monkeyp
             "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
             mock_authenticate,
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = await snowflake.connector.aio.connect(
             account="my_account_1",
-            workload_identity_provider=AttestationProvider.AWS,
+            workload_identity_provider=provider_param,
             workload_identity_entra_resource="api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b",
             token="my_token",
             authenticator="WORKLOAD_IDENTITY",
         )
-        assert conn.auth_class.provider == AttestationProvider.AWS
+        assert conn.auth_class.provider == parsed_provider
         assert (
             conn.auth_class.entra_resource
             == "api://0b2f151f-09a2-46eb-ad5a-39d5ebef917b"
@@ -684,7 +727,6 @@ async def test_toml_connection_params_are_plumbed_into_authbyworkloadidentity(
             "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
             mock_authenticate,
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = await snowflake.connector.aio.connect(
             connections_file_path=connections_file
@@ -709,7 +751,6 @@ async def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode_a
             "snowflake.connector.aio._connection.SnowflakeConnection._authenticate",
             mock_authenticate,
         )
-        m.setenv("SF_ENABLE_EXPERIMENTAL_AUTHENTICATION", "true")
 
         conn = await snowflake.connector.aio.connect(
             account="my_account_1",
