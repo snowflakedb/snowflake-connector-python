@@ -82,13 +82,6 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 self.stage_info["location"]
             )
         )
-        if str(self.s3location.bucket_name).lower().startswith("sfc-"):
-            # SNOW-2324060: no s3:GetAccelerateConfiguration and no intention to add either
-            # for internal stage, thus previously the client got HTTP403 on /accelerate call
-            logger.debug(
-                "Not attempting to get bucket transfer accelerate endpoint for internal stage."
-            )
-            use_accelerate_endpoint = False
         self.use_s3_regional_url = (
             use_s3_regional_url
             or "useS3RegionalUrl" in stage_info
@@ -127,9 +120,17 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             return False
         else:
             if use_accelerate_endpoint is None:
-                use_accelerate_endpoint = self._get_bucket_accelerate_config(
-                    self.s3location.bucket_name
-                )
+                if str(self.s3location.bucket_name).lower().startswith("sfc-"):
+                    # SNOW-2324060: no s3:GetAccelerateConfiguration and no intention to add either
+                    # for internal stage, thus previously the client got HTTP403 on /accelerate call
+                    logger.debug(
+                        "Not attempting to get bucket transfer accelerate endpoint for internal stage."
+                    )
+                    use_accelerate_endpoint = False
+                else:
+                    use_accelerate_endpoint = self._get_bucket_accelerate_config(
+                        self.s3location.bucket_name
+                    )
 
             if use_accelerate_endpoint:
                 self.endpoint = (
