@@ -1184,3 +1184,70 @@ def test_write_pandas_bulk_chunks_upload(conn_cnx, bulk_upload_chunks):
             assert result["COUNT(*)"] == 4
         finally:
             cnx.execute_string(drop_sql)
+
+
+@pytest.mark.parametrize(
+    "use_vectorized_scanner",
+    [
+        True,
+        False,
+    ],
+)
+def test_write_pandas_with_use_vectorized_scanner(
+    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
+    use_vectorized_scanner,
+    caplog,
+):
+    """Tests whether overwriting table using a Pandas DataFrame works as expected."""
+    random_table_name = random_string(5, "userspoints_")
+    df_data = [("Dash", 50)]
+    df = pandas.DataFrame(df_data, columns=["name", "points"])
+
+    table_name = random_table_name
+    col_id = "id"
+    col_name = "name"
+    col_points = "points"
+
+    create_sql = (
+        f"CREATE OR REPLACE TABLE {table_name}"
+        f"({col_name} STRING, {col_points} INT, {col_id} INT AUTOINCREMENT)"
+    )
+
+    drop_sql = f"DROP TABLE IF EXISTS {table_name}"
+    with conn_cnx() as cnx:  # type: SnowflakeConnection
+        original_cur = cnx.cursor().execute
+
+        def fake_execute(query, params=None, *args, **kwargs):
+            return original_cur(query, params, *args, **kwargs)
+
+        cnx.execute_string(create_sql)
+        try:
+            with mock.patch(
+                "snowflake.connector.cursor.SnowflakeCursor.execute",
+                side_effect=fake_execute,
+            ) as execute:
+                # Write dataframe with 1 row
+                success, nchunks, nrows, _ = write_pandas(
+                    cnx,
+                    df,
+                    random_table_name,
+                    quote_identifiers=False,
+                    auto_create_table=False,
+                    overwrite=True,
+                    index=True,
+                    use_vectorized_scanner=use_vectorized_scanner,
+                )
+                # Check write_pandas output
+                assert success
+                assert nchunks == 1
+                assert nrows == 1
+
+                for call in execute.call_args_list:
+                    if call.args[0].startswith("COPY"):
+                        assert (
+                            f"USE_VECTORIZED_SCANNER={use_vectorized_scanner}"
+                            in call.args[0]
+                        )
+
+        finally:
+            cnx.execute_string(drop_sql)

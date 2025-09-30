@@ -52,6 +52,7 @@ from ..errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_TO_CONNECT_TO_DB,
     ER_INVALID_VALUE,
+    ER_INVALID_WIF_SETTINGS,
 )
 from ..network import (
     DEFAULT_AUTHENTICATOR,
@@ -113,9 +114,14 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         # note we don't call super here because asyncio can not/is not recommended
         # to perform async operation in the __init__ while in the sync connection we
         # perform connect
+
         self._conn_parameters = self._init_connection_parameters(
             kwargs, connection_name, connections_file_path
         )
+        # SNOW-2352456: disable endpoint-based platform detection queries for async connection
+        if "platform_detection_timeout_seconds" not in kwargs:
+            self._platform_detection_timeout_seconds = 0.0
+
         self._connected = False
         self.expired = False
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
@@ -369,13 +375,19 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
-                self._check_experimental_authentication_flag()
-                # Standardize the provider enum.
-                if self._workload_identity_provider and isinstance(
-                    self._workload_identity_provider, str
-                ):
+                if isinstance(self._workload_identity_provider, str):
                     self._workload_identity_provider = AttestationProvider.from_string(
                         self._workload_identity_provider
+                    )
+                if not self._workload_identity_provider:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"workload_identity_provider must be set to one of {','.join(AttestationProvider.all_string_values())} when authenticator is WORKLOAD_IDENTITY.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
                     )
                 self.auth_class = AuthByWorkloadIdentity(
                     provider=self._workload_identity_provider,
