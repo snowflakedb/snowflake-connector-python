@@ -82,7 +82,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 self.stage_info["location"]
             )
         )
-        _bucket_name = self.s3location.bucket_name
+        _bucket_name = str(self.s3location.bucket_name)
         if _bucket_name and _bucket_name.lower().startswith("sfc-"):
             # SNOW-2324060: no s3:GetAccelerateConfiguration and no intention to add either
             # for internal stage, thus previously the client got HTTP403 on /accelerate call
