@@ -29,7 +29,7 @@ from snowflake.connector.errors import (
     DatabaseError,
     Error,
     ForbiddenError,
-    InterfaceError,
+    HttpError,
     OperationalError,
     OtherHTTPRetryableError,
     ServiceUnavailableError,
@@ -40,15 +40,22 @@ from snowflake.connector.network import (
     SnowflakeRestful,
 )
 
-from .mock_utils import mock_connection, mock_request_with_action, zero_backoff
+from .mock_utils import (
+    get_mock_session_manager,
+    mock_connection,
+    mock_request_with_action,
+    zero_backoff,
+)
 
 # We need these for our OldDriver tests. We run most up to date tests with the oldest supported driver version
 try:
     import snowflake.connector.vendored.urllib3.contrib.pyopenssl
     from snowflake.connector.vendored import requests, urllib3
+    from snowflake.connector.vendored.requests.exceptions import SSLError
 except ImportError:  # pragma: no cover
     import requests
     import urllib3
+    from requests.exceptions import SSLError
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -217,7 +224,7 @@ def test_request_exec():
 
     # unauthorized
     type(request_mock).status_code = PropertyMock(return_value=UNAUTHORIZED)
-    with pytest.raises(InterfaceError):
+    with pytest.raises(HttpError):
         rest._request_exec(session=session, **default_parameters)
 
     # unauthorized with catch okta unauthorized error
@@ -382,7 +389,9 @@ def test_secret_masking(caplog):
 
 
 def test_retry_connection_reset_error(caplog):
-    connection = mock_connection()
+    connection = mock_connection(
+        session_manager=get_mock_session_manager(allow_send=True)
+    )
     connection.errorhandler = Mock(return_value=None)
 
     rest = SnowflakeRestful(
@@ -470,3 +479,58 @@ def test_retry_request_timeout(mockSessionRequest, next_action_result):
     # 13 seconds should be enough for authenticator to attempt thrice
     # however, loosen restrictions to avoid thread scheduling causing failure
     assert 1 < mockSessionRequest.call_count < 5
+
+
+def test_sslerror_with_econnreset_retries():
+    """Test that SSLError with ECONNRESET raises RetryRequest."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    default_parameters = {
+        "method": "POST",
+        "full_url": "https://testaccount.snowflakecomputing.com/",
+        "headers": {},
+        "data": '{"code": 12345}',
+        "token": None,
+    }
+
+    # Test SSLError with ECONNRESET in the message
+    econnreset_ssl_error = SSLError("Connection broken: ECONNRESET")
+    session = MagicMock()
+    session.request = Mock(side_effect=econnreset_ssl_error)
+
+    with pytest.raises(RetryRequest, match="Connection broken: ECONNRESET"):
+        rest._request_exec(session=session, **default_parameters)
+
+
+def test_sslerror_without_econnreset_does_not_retry():
+    """Test that SSLError without ECONNRESET does not retry but raises OperationalError."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    default_parameters = {
+        "method": "POST",
+        "full_url": "https://testaccount.snowflakecomputing.com/",
+        "headers": {},
+        "data": '{"code": 12345}',
+        "token": None,
+    }
+
+    # Test SSLError without ECONNRESET in the message
+    regular_ssl_error = SSLError("SSL handshake failed")
+    session = MagicMock()
+    session.request = Mock(side_effect=regular_ssl_error)
+
+    # This should raise OperationalError, not RetryRequest
+    with pytest.raises(OperationalError):
+        rest._request_exec(session=session, **default_parameters)

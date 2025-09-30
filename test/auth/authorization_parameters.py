@@ -77,9 +77,16 @@ class AuthConnectionParameters:
     def get_base_connection_parameters(self) -> dict[str, Union[str, bool, int]]:
         return self.basic_config
 
+    def get_mfa_connection_parameters(self) -> dict[str, Union[str, bool, int]]:
+        config = self.basic_config.copy()
+        config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_MFA_USER")
+        config["password"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_MFA_PASSWORD")
+        config["authenticator"] = "USERNAME_PASSWORD_MFA"
+        return config
+
     def get_key_pair_connection_parameters(self):
         config = self.basic_config.copy()
-        config["authenticator"] = "KEY_PAIR_AUTHENTICATOR"
+        config["authenticator"] = "SNOWFLAKE_JWT"
         config["user"] = _get_env_variable("SNOWFLAKE_AUTH_TEST_BROWSER_USER")
 
         return config

@@ -1,0 +1,14 @@
+{
+  "request": {
+    "method": "GET",
+    "url": "/amazonaws/test/s3testaccount/stage/results/01bd1448-0100-0001-0000-0000001006f5_0/main/data_0_0_0_1?x-amz-server-side-encryption-customer-algorithm=AES256&response-content-encoding=gzip"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Encoding": "gzip",
+      "x-amz-server-side-encryption-customer-algorithm": "AES256"
+    },
+    "base64Body": "H4sIAM7YUGgC/4s21FHAiWIB81FB/x4AAAA="
+  }
+}

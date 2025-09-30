@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+from test.helpers import apply_auth_class_update_body, create_mock_auth_body
 from unittest.mock import Mock, PropertyMock, patch
 
+import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -36,7 +38,8 @@ def _create_mock_auth_keypair_rest_response():
     return _mock_auth_key_pair_rest_response
 
 
-def test_auth_keypair():
+@pytest.mark.parametrize("authenticator", ["SNOWFLAKE_JWT", "snowflake_jwt"])
+def test_auth_keypair(authenticator):
     """Simple Key Pair test."""
     private_key_der, public_key_der_encoded = generate_key_pair(2048)
     application = "testapplication"
@@ -45,7 +48,7 @@ def test_auth_keypair():
     auth_instance = AuthByKeyPair(private_key=private_key_der)
     auth_instance._retry_ctx.set_start_time()
     auth_instance.handle_timeout(
-        authenticator="SNOWFLAKE_JWT",
+        authenticator=authenticator,
         service_name=None,
         account=account,
         user=user,
@@ -59,6 +62,22 @@ def test_auth_keypair():
     assert not rest._connection.errorhandler.called  # not error
     assert rest.token == "TOKEN"
     assert rest.master_token == "MASTER_TOKEN"
+
+
+def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
+    private_key_der, _ = generate_key_pair(2048)
+    auth_class = AuthByKeyPair(private_key=private_key_der)
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = apply_auth_class_update_body(auth_class, req_body_before)
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )
 
 
 def test_auth_keypair_abc():

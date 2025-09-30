@@ -22,7 +22,6 @@ from typing import Any, NamedTuple
 # We use regular requests and urlib3 when we reach out to do OCSP checks, basically in this very narrow
 # part of the code where we want to call out to check for revoked certificates,
 # we don't want to use our hardened version of requests.
-import requests as generic_requests
 from asn1crypto.ocsp import CertId, OCSPRequest, SingleResponse
 from asn1crypto.x509 import Certificate
 from OpenSSL.SSL import Connection
@@ -53,6 +52,8 @@ from snowflake.connector.errorcode import (
 )
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.network import PYTHON_CONNECTOR_USER_AGENT
+from snowflake.connector.session_manager import SessionManager
+from snowflake.connector.ssl_wrap_socket import get_current_session_manager
 
 from . import constants
 from .backoff_policies import exponential_backoff
@@ -546,7 +547,11 @@ class OCSPServer:
                 if sf_cache_server_url is not None:
                     url = sf_cache_server_url
 
-            with generic_requests.Session() as session:
+            # Obtain SessionManager from ssl_wrap_socket context var if available
+            session_manager = get_current_session_manager(
+                use_pooling=False
+            ) or SessionManager(use_pooling=False)
+            with session_manager.use_requests_session() as session:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
                 backoff = exponential_backoff()()
@@ -1632,7 +1637,17 @@ class SnowflakeOCSP:
         if not self.is_enabled_fail_open():
             sf_max_retry = SnowflakeOCSP.CA_OCSP_RESPONDER_MAX_RETRY_FC
 
-        with generic_requests.Session() as session:
+        # Obtain SessionManager from ssl_wrap_socket context var if available;
+        # if none is set (e.g. standalone OCSP unit tests), fall back to a fresh
+        # instance. Clone first to inherit adapter/proxy config without sharing
+        # pools.
+        context_session_manager = get_current_session_manager(use_pooling=False)
+        session_manager: SessionManager = (
+            context_session_manager
+            if context_session_manager is not None
+            else SessionManager(use_pooling=False)
+        )
+        with session_manager.use_requests_session() as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = exponential_backoff()()

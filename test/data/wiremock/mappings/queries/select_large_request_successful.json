@@ -1,0 +1,413 @@
+{
+  "scenarioName": "Successful SELECT 1 flow",
+  "request": {
+    "urlPathPattern": "/queries/v1/query-request.*",
+    "method": "POST",
+    "headers": {
+      "Authorization": {
+        "equalTo": "Snowflake Token=\"session token\""
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": {
+      "data": {
+        "parameters": [
+          {
+            "name": "CLIENT_PREFETCH_THREADS",
+            "value": 4
+          },
+          {
+            "name": "TIMESTAMP_OUTPUT_FORMAT",
+            "value": "DY, DD MON YYYY HH24:MI:SS TZHTZM"
+          },
+          {
+            "name": "PYTHON_SNOWPARK_CLIENT_MIN_VERSION_FOR_AST",
+            "value": "1.29.0"
+          },
+          {
+            "name": "TIME_OUTPUT_FORMAT",
+            "value": "HH24:MI:SS"
+          },
+          {
+            "name": "CLIENT_RESULT_CHUNK_SIZE",
+            "value": 160
+          },
+          {
+            "name": "TIMESTAMP_TZ_OUTPUT_FORMAT",
+            "value": ""
+          },
+          {
+            "name": "CLIENT_SESSION_KEEP_ALIVE",
+            "value": false
+          },
+          {
+            "name": "PYTHON_SNOWPARK_USE_CTE_OPTIMIZATION_VERSION",
+            "value": "1.31.1"
+          },
+          {
+            "name": "CLIENT_METADATA_USE_SESSION_DATABASE",
+            "value": false
+          },
+          {
+            "name": "QUERY_CONTEXT_CACHE_SIZE",
+            "value": 5
+          },
+          {
+            "name": "PYTHON_SNOWPARK_USE_LARGE_QUERY_BREAKDOWN_OPTIMIZATION_VERSION",
+            "value": ""
+          },
+          {
+            "name": "ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1",
+            "value": false
+          },
+          {
+            "name": "TIMESTAMP_NTZ_OUTPUT_FORMAT",
+            "value": ""
+          },
+          {
+            "name": "CLIENT_RESULT_PREFETCH_THREADS",
+            "value": 1
+          },
+          {
+            "name": "CLIENT_METADATA_REQUEST_USE_CONNECTION_CTX",
+            "value": false
+          },
+          {
+            "name": "CLIENT_HONOR_CLIENT_TZ_FOR_TIMESTAMP_NTZ",
+            "value": true
+          },
+          {
+            "name": "CLIENT_MEMORY_LIMIT",
+            "value": 1536
+          },
+          {
+            "name": "CLIENT_TIMESTAMP_TYPE_MAPPING",
+            "value": "TIMESTAMP_LTZ"
+          },
+          {
+            "name": "TIMEZONE",
+            "value": "UTC"
+          },
+          {
+            "name": "PYTHON_SNOWPARK_USE_SQL_SIMPLIFIER",
+            "value": true
+          },
+          {
+            "name": "SNOWPARK_REQUEST_TIMEOUT_IN_SECONDS",
+            "value": 86400
+          },
+          {
+            "name": "PYTHON_SNOWPARK_USE_AST",
+            "value": false
+          },
+          {
+            "name": "SERVICE_NAME",
+            "value": ""
+          },
+          {
+            "name": "PYTHON_CONNECTOR_USE_NANOARROW",
+            "value": true
+          },
+          {
+            "name": "CLIENT_RESULT_PREFETCH_SLOTS",
+            "value": 2
+          },
+          {
+            "name": "PYTHON_SNOWPARK_LARGE_QUERY_BREAKDOWN_COMPLEXITY_LOWER_BOUND",
+            "value": 10000000
+          },
+          {
+            "name": "PYTHON_SNOWPARK_GENERATE_MULTILINE_QUERIES",
+            "value": true
+          },
+          {
+            "name": "CLIENT_DISABLE_INCIDENTS",
+            "value": true
+          },
+          {
+            "name": "CSV_TIMESTAMP_FORMAT",
+            "value": ""
+          },
+          {
+            "name": "BINARY_OUTPUT_FORMAT",
+            "value": "HEX"
+          },
+          {
+            "name": "CLIENT_TELEMETRY_SESSIONLESS_ENABLED",
+            "value": true
+          },
+          {
+            "name": "DATE_OUTPUT_FORMAT",
+            "value": "YYYY-MM-DD"
+          },
+          {
+            "name": "CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY",
+            "value": 3600
+          },
+          {
+            "name": "PYTHON_SNOWPARK_AUTO_CLEAN_UP_TEMP_TABLE_ENABLED",
+            "value": false
+          },
+          {
+            "name": "AUTOCOMMIT",
+            "value": true
+          },
+          {
+            "name": "PYTHON_SNOWPARK_REDUCE_DESCRIBE_QUERY_ENABLED",
+            "value": false
+          },
+          {
+            "name": "CLIENT_SESSION_CLONE",
+            "value": false
+          },
+          {
+            "name": "TIMESTAMP_LTZ_OUTPUT_FORMAT",
+            "value": ""
+          },
+          {
+            "name": "CLIENT_OUT_OF_BAND_TELEMETRY_ENABLED",
+            "value": false
+          },
+          {
+            "name": "PYTHON_SNOWPARK_DATAFRAME_JOIN_ALIAS_FIX_VERSION",
+            "value": ""
+          },
+          {
+            "name": "PYTHON_SNOWPARK_COLLECT_TELEMETRY_AT_CRITICAL_PATH_VERSION",
+            "value": "1.28.0"
+          },
+          {
+            "name": "PYTHON_SNOWPARK_AUTO_CLEAN_UP_TEMP_TABLE_ENABLED_VERSION",
+            "value": ""
+          },
+          {
+            "name": "CLIENT_TELEMETRY_ENABLED",
+            "value": true
+          },
+          {
+            "name": "PYTHON_SNOWPARK_ELIMINATE_NUMERIC_SQL_VALUE_CAST_ENABLED",
+            "value": false
+          },
+          {
+            "name": "CLIENT_USE_V1_QUERY_API",
+            "value": true
+          },
+          {
+            "name": "PYTHON_SNOWPARK_ENABLE_THREAD_SAFE_SESSION",
+            "value": true
+          },
+          {
+            "name": "CLIENT_RESULT_COLUMN_CASE_INSENSITIVE",
+            "value": false
+          },
+          {
+            "name": "CLIENT_ENABLE_LOG_INFO_STATEMENT_PARAMETERS",
+            "value": false
+          },
+          {
+            "name": "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD",
+            "value": 65280
+          },
+          {
+            "name": "PYTHON_SNOWPARK_COMPILATION_STAGE_ENABLED",
+            "value": true
+          },
+          {
+            "name": "PYTHON_SNOWPARK_LARGE_QUERY_BREAKDOWN_COMPLEXITY_UPPER_BOUND",
+            "value": 12000000
+          },
+          {
+            "name": "PYTHON_SNOWPARK_CLIENT_AST_MODE",
+            "value": 0
+          }
+        ],
+        "rowtype": [
+          {
+            "name": "C0",
+            "database": "TESTDB",
+            "schema": "PYTHON_CONNECTOR_TESTS_8F2FF429_1381_4ED5_83F2_6C0D7B29C1AE",
+            "table": "PYTHON_TESTS_DB65D4FD_B0D6_4B1E_A7EB_E95DC198CC2A",
+            "length": null,
+            "type": "fixed",
+            "scale": 0,
+            "precision": 38,
+            "nullable": true,
+            "byteLength": null,
+            "collation": null
+          },
+          {
+            "name": "C1",
+            "database": "TESTDB",
+            "schema": "PYTHON_CONNECTOR_TESTS_8F2FF429_1381_4ED5_83F2_6C0D7B29C1AE",
+            "table": "PYTHON_TESTS_DB65D4FD_B0D6_4B1E_A7EB_E95DC198CC2A",
+            "length": null,
+            "type": "fixed",
+            "scale": 0,
+            "precision": 38,
+            "nullable": true,
+            "byteLength": null,
+            "collation": null
+          },
+          {
+            "name": "C2",
+            "database": "TESTDB",
+            "schema": "PYTHON_CONNECTOR_TESTS_8F2FF429_1381_4ED5_83F2_6C0D7B29C1AE",
+            "table": "PYTHON_TESTS_DB65D4FD_B0D6_4B1E_A7EB_E95DC198CC2A",
+            "length": null,
+            "type": "fixed",
+            "scale": 0,
+            "precision": 38,
+            "nullable": true,
+            "byteLength": null,
+            "collation": null
+          },
+          {
+            "name": "C3",
+            "database": "TESTDB",
+            "schema": "PYTHON_CONNECTOR_TESTS_8F2FF429_1381_4ED5_83F2_6C0D7B29C1AE",
+            "table": "PYTHON_TESTS_DB65D4FD_B0D6_4B1E_A7EB_E95DC198CC2A",
+            "length": null,
+            "type": "fixed",
+            "scale": 0,
+            "precision": 38,
+            "nullable": true,
+            "byteLength": null,
+            "collation": null
+          },
+          {
+            "name": "C4",
+            "database": "TESTDB",
+            "schema": "PYTHON_CONNECTOR_TESTS_8F2FF429_1381_4ED5_83F2_6C0D7B29C1AE",
+            "table": "PYTHON_TESTS_DB65D4FD_B0D6_4B1E_A7EB_E95DC198CC2A",
+            "length": null,
+            "type": "fixed",
+            "scale": 0,
+            "precision": 38,
+            "nullable": true,
+            "byteLength": null,
+            "collation": null
+          },
+          {
+            "name": "C5",
+            "database": "TESTDB",
+            "schema": "PYTHON_CONNECTOR_TESTS_8F2FF429_1381_4ED5_83F2_6C0D7B29C1AE",
+            "table": "PYTHON_TESTS_DB65D4FD_B0D6_4B1E_A7EB_E95DC198CC2A",
+            "length": null,
+            "type": "fixed",
+            "scale": 0,
+            "precision": 38,
+            "nullable": true,
+            "byteLength": null,
+            "collation": null
+          },
+          {
+            "name": "C6",
+            "database": "TESTDB",
+            "schema": "PYTHON_CONNECTOR_TESTS_8F2FF429_1381_4ED5_83F2_6C0D7B29C1AE",
+            "table": "PYTHON_TESTS_DB65D4FD_B0D6_4B1E_A7EB_E95DC198CC2A",
+            "length": null,
+            "type": "fixed",
+            "scale": 0,
+            "precision": 38,
+            "nullable": true,
+            "byteLength": null,
+            "collation": null
+          },
+          {
+            "name": "C7",
+            "database": "TESTDB",
+            "schema": "PYTHON_CONNECTOR_TESTS_8F2FF429_1381_4ED5_83F2_6C0D7B29C1AE",
+            "table": "PYTHON_TESTS_DB65D4FD_B0D6_4B1E_A7EB_E95DC198CC2A",
+            "length": null,
+            "type": "fixed",
+            "scale": 0,
+            "precision": 38,
+            "nullable": true,
+            "byteLength": null,
+            "collation": null
+          },
+          {
+            "name": "C8",
+            "database": "TESTDB",
+            "schema": "PYTHON_CONNECTOR_TESTS_8F2FF429_1381_4ED5_83F2_6C0D7B29C1AE",
+            "table": "PYTHON_TESTS_DB65D4FD_B0D6_4B1E_A7EB_E95DC198CC2A",
+            "length": null,
+            "type": "fixed",
+            "scale": 0,
+            "precision": 38,
+            "nullable": true,
+            "byteLength": null,
+            "collation": null
+          },
+          {
+            "name": "C9",
+            "database": "TESTDB",
+            "schema": "PYTHON_CONNECTOR_TESTS_8F2FF429_1381_4ED5_83F2_6C0D7B29C1AE",
+            "table": "PYTHON_TESTS_DB65D4FD_B0D6_4B1E_A7EB_E95DC198CC2A",
+            "length": null,
+            "type": "fixed",
+            "scale": 0,
+            "precision": 38,
+            "nullable": true,
+            "byteLength": null,
+            "collation": null
+          }
+        ],
+
+        "rowset": [
+          [
+            "1"
+          ]
+        ],
+        "qrmk": "+ZSmIj7I0L0BnU3zdVnSaHH5MW6cwY0GmLtz/Un5zSM=",
+        "chunkHeaders": {
+          "x-amz-server-side-encryption-customer-key": "+ZSmIj7I0L0BnU3zdVnSaHH5MW6cwY0GmLtz/Un5zSM=",
+          "x-amz-server-side-encryption-customer-key-md5": "ByrEgrMhjgAEMRr1QA/nGg=="
+        },
+        "chunks": [
+          {
+            "url": "{{WIREMOCK_HTTP_HOST_WITH_PORT}}/amazonaws/test/s3testaccount/stage/results/01bd1448-0100-0001-0000-0000001006f5_0/main/data_0_0_0_1?x-amz-server-side-encryption-customer-algorithm=AES256&response-content-encoding=gzip",
+            "rowCount": 4096,
+            "uncompressedSize": 331328,
+            "compressedSize": 326422
+          },
+          {
+            "url": "{{WIREMOCK_HTTP_HOST_WITH_PORT}}/amazonaws/test/s3testaccount/stage/results/01bd1448-0100-0001-0000-0000001006f5_0/main/data_0_0_0_2?x-amz-server-side-encryption-customer-algorithm=AES256&response-content-encoding=gzip",
+            "rowCount": 4096,
+            "uncompressedSize": 331328,
+            "compressedSize": 326176
+          }
+        ],
+        "total": 50000,
+        "returned": 50000,
+        "queryId": "01bd137c-0100-0001-0000-0000001005b1",
+        "databaseProvider": null,
+        "finalDatabaseName": "TESTDB",
+        "finalSchemaName": "PYTHON_CONNECTOR_TESTS_8F2FF429_1381_4ED5_83F2_6C0D7B29C1AE",
+        "finalWarehouseName": "REGRESS",
+        "finalRoleName": "ACCOUNTADMIN",
+        "numberOfBinds": 0,
+        "arrayBindSupported": false,
+        "statementTypeId": 4096,
+        "version": 1,
+        "sendResultTime": 1750110502822,
+        "queryResultFormat": "json",
+        "queryContext": {
+          "entries": [
+            {
+              "id": 0,
+              "timestamp": 1748552075465658,
+              "priority": 0,
+              "context": "CAQ="
+            }
+          ]
+        }
+      },
+      "code": null,
+      "message": null,
+      "success": true
+    }
+  }
+}

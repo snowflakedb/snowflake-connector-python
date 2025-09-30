@@ -7,9 +7,61 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.16.1(TBD)
-  - Added in-band OCSP exception telemetry.
+- v3.18.0(TBD)
+  - Added support for checking certificates revocation using revocation lists (CRLs)
+  - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP and AWS workloads only
+  - Fixed `get_results_from_sfqid` when using `DictCursor` and executing multiple statements at once
+  - Added the `oauth_credentials_in_body` parameter supporting an option to send the oauth client credentials in the request body
+  - Fix retry behavior for `ECONNRESET` error
+  - Added an option to exclude `botocore` and `boto3` dependencies by setting `SNOWFLAKE_NO_BOTO` environment variable during installation
+  - Revert changing exception type in case of token expired scenario for `Oauth` authenticator back to `DatabaseError`
+  - Added support for pandas conversion for Day-time and Year-Month Interval types
   - Add `ocsp_root_certs_dict_lock_timeout` connection parameter to set the timeout (in seconds) for acquiring the lock on the OCSP root certs dictionary. Default value for this parameter is -1 which indicates no timeout.
+
+- v3.17.4(September 22,2025)
+  - Added support for intermediate certificates as roots when they are stored in the trust store
+  - Bumped up vendored `urllib3` to `2.5.0` and `requests` to `v2.32.5`
+  - Dropped support for OpenSSL versions older than 1.1.1
+  - Fixed the return type of `SnowflakeConnection.cursor(cursor_class)` to match the type of `cursor_class`
+  - Constrained the types of `fetchone`, `fetchmany`, `fetchall`
+    - As part of this fix, `DictCursor` is no longer a subclass of `SnowflakeCursor`; use `SnowflakeCursorBase` as a superclass of both.
+
+- v3.17.3(September 02,2025)
+  - Enhanced configuration file permission warning messages.
+    - Improved warning messages for readable permission issues to include clear instructions on how to skip warnings using the `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` environment variable.
+  - Fixed the bug with staging pandas dataframes on AWS - the regional endpoint is used when required
+    - This addresses the issue with `create_dataframe` call on Snowpark
+
+- v3.17.2(August 23,2025)
+  - Fixed a bug where platform_detection was retrying failed requests with warnings to non-existent endpoints.
+  - Added disabling endpoint-based platform detection by setting `platform_detection_timeout_seconds` to zero.
+
+- v3.17.1(August 17,2025)
+  - Added `infer_schema` parameter to `write_pandas` to perform schema inference on the passed data.
+  - Namespace `snowlake` reverted back to non-module.
+
+- v3.17.0(August 16,2025)
+  - Added in-band HTTP exception telemetry.
+  - Added an `unsafe_skip_file_permissions_check` flag to skip file permission checks on the cache and configuration.
+  - Added `APPLICATION_PATH` within `CLIENT_ENVIRONMENT` to distinguish between multiple scripts using the Python Connector in the same environment.
+  - Added basic JSON support for Interval types.
+  - Added in-band OCSP exception telemetry.
+  - Added support for new authentication methods with Workload Identity Federation (WIF).
+    - Added the `WORKLOAD_IDENTITY` value for the authenticator type.
+    - Added the `workload_identity_provider` and `workload_identity_entra_resource` parameters.
+  - Added support for the `use_vectorized_scanner` parameter in the write_pandas function.
+  - Added support of proxy setup using connection parameters without emitting environment variables.
+  - Added populating of `type_code` in `ResultMetadata` for interval types.
+  - Introduced the `snowflake_version` property to the connection.
+  - Moved `OAUTH_TYPE` to `CLIENT_ENVIROMENT`.
+  - Relaxed the `pyarrow` version constrain; versions >= 19 can now be used.
+  - Disabled token caching for OAuth Client Credentials authentication.
+  - Fixed OAuth authenticator values.
+  - Fixed a bug where a PAT with an external session authenticator was used while `external_session_id` was not provided in `SnowflakeRestful.fetch`.
+  - Fixed the case-sensitivity of `Oauth` and `programmatic_access_token` authenticator values.
+  - Fixed unclear error messages for incorrect `authenticator` values.
+  - Fixed GCS staging by ensuring the endpoint has a scheme.
+  - Fixed a bug where time-zoned timestamps fetched as a `pandas.DataFrame` or `pyarrow.Table` would overflow due to unnecessary precision. A clear error will now be raised if an overflow cannot be prevented.
 
 - v3.16.0(July 04,2025)
   - Bumped numpy dependency from <2.1.0 to <=2.2.4.

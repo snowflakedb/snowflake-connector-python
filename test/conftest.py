@@ -5,6 +5,8 @@ import os
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
+from test.test_utils.cross_module_fixtures.http_fixtures import *  # NOQA
+from test.test_utils.cross_module_fixtures.wiremock_fixtures import *  # NOQA
 from typing import Generator
 
 import pytest
@@ -148,6 +150,10 @@ def pytest_runtest_setup(item) -> None:
     if "auth" in test_tags:
         if os.getenv("RUN_AUTH_TESTS") != "true":
             pytest.skip("Skipping auth test in current environment")
+
+    if "wif" in test_tags:
+        if os.getenv("RUN_WIF_TESTS") != "true":
+            pytest.skip("Skipping WIF test in current environment")
 
 
 def get_server_parameter_value(connection, parameter_name: str) -> str | None:

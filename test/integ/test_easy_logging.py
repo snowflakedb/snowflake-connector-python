@@ -14,8 +14,10 @@ try:
 
     from snowflake.connector.config_manager import CONFIG_MANAGER
     from snowflake.connector.constants import CONFIG_FILE
-except ModuleNotFoundError:
-    pass
+except ImportError:
+    tomlkit = None
+    CONFIG_MANAGER = None
+    CONFIG_FILE = None
 
 
 @pytest.fixture(scope="function")
@@ -34,6 +36,8 @@ def temp_config_file(tmp_path_factory):
 
 @pytest.fixture(scope="function")
 def config_file_setup(request, temp_config_file, log_directory):
+    if CONFIG_MANAGER is None:
+        pytest.skip("CONFIG_MANAGER not available in old driver")
     param = request.param
     CONFIG_MANAGER.file_path = Path(temp_config_file)
     configs = {
@@ -50,6 +54,9 @@ def config_file_setup(request, temp_config_file, log_directory):
         CONFIG_MANAGER.file_path = CONFIG_FILE
 
 
+@pytest.mark.skipif(
+    CONFIG_MANAGER is None, reason="CONFIG_MANAGER not available in old driver"
+)
 @pytest.mark.parametrize("config_file_setup", ["save_logs"], indirect=True)
 def test_save_logs(db_parameters, config_file_setup, log_directory):
     create_connection("default")
@@ -66,6 +73,9 @@ def test_save_logs(db_parameters, config_file_setup, log_directory):
         getLogger("boto3").setLevel(0)
 
 
+@pytest.mark.skipif(
+    CONFIG_MANAGER is None, reason="CONFIG_MANAGER not available in old driver"
+)
 @pytest.mark.parametrize("config_file_setup", ["no_save_logs"], indirect=True)
 def test_no_save_logs(config_file_setup, log_directory):
     create_connection("default")

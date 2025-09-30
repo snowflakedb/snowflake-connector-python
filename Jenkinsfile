@@ -33,7 +33,8 @@ timestamps {
         string(name: 'client_git_commit', value: scmInfo.GIT_COMMIT),
         string(name: 'client_git_branch', value: scmInfo.GIT_BRANCH),
         string(name: 'parent_job', value: env.JOB_NAME),
-        string(name: 'parent_build_number', value: env.BUILD_NUMBER)
+        string(name: 'parent_build_number', value: env.BUILD_NUMBER),
+        string(name: 'USE_PASSWORD', value: 'true')
       ]
       parallel(
       'Test': {
@@ -68,6 +69,18 @@ timestamps {
             sh '''\
             |#!/bin/bash -e
             |$WORKSPACE/ci/test_authentication.sh
+            '''.stripMargin()
+          }
+        }
+      },
+      'Test WIF': {
+        stage('Test WIF') {
+          withCredentials([
+            string(credentialsId: 'sfctest0-parameters-secret', variable: 'PARAMETERS_SECRET')
+          ]) {
+            sh '''\
+            |#!/bin/bash -e
+            |$WORKSPACE/ci/test_wif.sh
             '''.stripMargin()
           }
         }

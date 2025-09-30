@@ -20,7 +20,7 @@ class IntervalYearMonthConverter : public IColumnConverter {
  private:
   ArrowArrayView* m_array;
   PyObject* m_context;
-  bool m_useNumpy;
+  const char* m_method;
 };
 
 class IntervalDayTimeConverterInt : public IColumnConverter {

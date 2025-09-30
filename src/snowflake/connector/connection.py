@@ -8,6 +8,7 @@ import pathlib
 import re
 import sys
 import traceback
+import typing
 import uuid
 import warnings
 import weakref
@@ -15,19 +16,28 @@ from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import suppress
 from difflib import get_close_matches
-from functools import partial
+from functools import cached_property, partial
 from io import StringIO
 from logging import getLogger
 from threading import Lock
 from types import TracebackType
-from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    NamedTuple,
+    Sequence,
+    TypeVar,
+)
 from uuid import UUID
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
-from . import errors, proxy
+from . import errors
 from ._query_context_cache import QueryContextCache
 from ._utils import (
     _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
@@ -59,7 +69,6 @@ from .constants import (
     _CONNECTIVITY_ERR_MSG,
     _DOMAIN_NAME_MAP,
     _OAUTH_DEFAULT_SCOPE,
-    ENV_VAR_EXPERIMENTAL_AUTHENTICATION,
     ENV_VAR_PARTNER,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
@@ -77,7 +86,7 @@ from .constants import (
     QueryStatus,
 )
 from .converter import SnowflakeConverter
-from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor
+from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor, SnowflakeCursorBase
 from .description import (
     CLIENT_NAME,
     CLIENT_VERSION,
@@ -88,7 +97,6 @@ from .description import (
 from .direct_file_operation_utils import FileOperationParser, StreamDownloader
 from .errorcode import (
     ER_CONNECTION_IS_CLOSED,
-    ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_PROCESSING_QMARK,
     ER_FAILED_TO_CONNECT_TO_DB,
@@ -119,12 +127,18 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
+from .session_manager import HttpConfig, ProxySupportAdapterFactory, SessionManager
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
 from .wif_util import AttestationProvider
+
+if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
+    CursorCls = TypeVar("CursorCls", bound=SnowflakeCursorBase, default=SnowflakeCursor)
+else:
+    CursorCls = TypeVar("CursorCls", bound=SnowflakeCursorBase)
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -197,6 +211,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # network timeout (infinite by default)
     "socket_timeout": (None, (type(None), int)),
     "external_browser_timeout": (120, int),
+    "platform_detection_timeout_seconds": (
+        None,
+        (type(None), float),
+    ),  # Platform detection timeout for CSP metadata endpoints
     "backoff_policy": (DEFAULT_BACKOFF_POLICY, Callable),
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
@@ -211,6 +229,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "authenticator": (DEFAULT_AUTHENTICATOR, (type(None), str)),
     "workload_identity_provider": (None, (type(None), AttestationProvider)),
     "workload_identity_entra_resource": (None, (type(None), str)),
+    "workload_identity_impersonation_path": (None, (type(None), list[str])),
     "mfa_callback": (None, (type(None), Callable)),
     "password_callback": (None, (type(None), Callable)),
     "auth_class": (None, (type(None), AuthByPlugin)),
@@ -334,6 +353,11 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), str),
         # SNOW-1825621: OAUTH implementation
     ),
+    "oauth_credentials_in_body": (
+        False,
+        bool,
+        # SNOW-2300649: Option to send client credentials in body
+    ),
     "oauth_authorization_url": (
         "https://{host}:{port}/oauth/authorize",
         str,
@@ -377,10 +401,59 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         str,
         # SNOW-2096721: External (Spark) session ID
     ),
+    "unsafe_file_write": (
+        False,
+        bool,
+    ),  # SNOW-1944208: add unsafe write flag
+    "unsafe_skip_file_permissions_check": (
+        False,
+        bool,
+    ),  # SNOW-2127911: add flag to opt-out file permissions check
     _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER: (
         _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
         int,  # type
     ),  # snowflake internal
+    "reraise_error_in_file_transfer_work_function": (
+        False,
+        bool,
+    ),
+    # CRL (Certificate Revocation List) configuration parameters
+    # The default setup is specified in CRLConfig class
+    "cert_revocation_check_mode": (
+        None,
+        (type(None), str),
+    ),  # CRL revocation check mode: DISABLED, ENABLED, ADVISORY
+    "allow_certificates_without_crl_url": (
+        None,
+        (type(None), bool),
+    ),  # Allow certificates without CRL distribution points
+    "crl_connection_timeout_ms": (
+        None,
+        (type(None), int),
+    ),  # Connection timeout for CRL downloads in milliseconds
+    "crl_read_timeout_ms": (
+        None,
+        (type(None), int),
+    ),  # Read timeout for CRL downloads in milliseconds
+    "crl_cache_validity_hours": (
+        None,
+        (type(None), int),
+    ),  # CRL cache validity time in hours
+    "enable_crl_cache": (None, (type(None), bool)),  # Enable CRL caching
+    "enable_crl_file_cache": (None, (type(None), bool)),  # Enable file-based CRL cache
+    "crl_cache_dir": (None, (type(None), str)),  # Directory for CRL file cache
+    "crl_cache_removal_delay_days": (
+        None,
+        (type(None), int),
+    ),  # Days to keep expired CRL files before removal
+    "crl_cache_cleanup_interval_hours": (
+        None,
+        (type(None), int),
+    ),  # CRL cache cleanup interval in hours
+    "crl_cache_start_cleanup": (
+        None,
+        (type(None), bool),
+    ),  # Run CRL cache cleanup in the background
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -490,8 +563,13 @@ class SnowflakeConnection:
         If overwriting values from the default connection is desirable, supply
         the name explicitly.
         """
+        self._unsafe_skip_file_permissions_check = kwargs.get(
+            "unsafe_skip_file_permissions_check", False
+        )
         # initiate easy logging during every connection
-        easy_logging = EasyLoggingConfigPython()
+        easy_logging = EasyLoggingConfigPython(
+            skip_config_file_permissions_check=self._unsafe_skip_file_permissions_check
+        )
         easy_logging.create_log()
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
@@ -511,7 +589,11 @@ class SnowflakeConnection:
             PLATFORM,
         )
 
-        self._rest = None
+        # Placeholder attributes; will be initialized in connect()
+        self._http_config: HttpConfig | None = None
+        self._session_manager: SessionManager | None = None
+        self._rest: SnowflakeRestful | None = None
+
         for name, (value, _) in DEFAULT_CONFIGURATION.items():
             setattr(self, f"_{name}", value)
 
@@ -550,7 +632,9 @@ class SnowflakeConnection:
             for i, s in enumerate(CONFIG_MANAGER._slices):
                 if s.section == "connections":
                     CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
-                    CONFIG_MANAGER.read_config()
+                    CONFIG_MANAGER.read_config(
+                        skip_file_permissions_check=self._unsafe_skip_file_permissions_check
+                    )
                     break
         if connection_name is not None:
             connections = CONFIG_MANAGER["connections"]
@@ -598,6 +682,62 @@ class SnowflakeConnection:
             return OCSPMode.FAIL_OPEN
         else:
             return OCSPMode.FAIL_CLOSED
+
+    # CRL (Certificate Revocation List) configuration properties
+    @property
+    def cert_revocation_check_mode(self) -> str | None:
+        """Certificate revocation check mode: DISABLED, ENABLED, or ADVISORY."""
+        return self._cert_revocation_check_mode
+
+    @property
+    def allow_certificates_without_crl_url(self) -> bool | None:
+        """Whether to allow certificates without CRL distribution points."""
+        return self._allow_certificates_without_crl_url
+
+    @property
+    def crl_connection_timeout_ms(self) -> int | None:
+        """Connection timeout for CRL downloads in milliseconds."""
+        return self._crl_connection_timeout_ms
+
+    @property
+    def crl_read_timeout_ms(self) -> int | None:
+        """Read timeout for CRL downloads in milliseconds."""
+        return self._crl_read_timeout_ms
+
+    @property
+    def crl_cache_validity_hours(self) -> int | None:
+        """CRL cache validity time in hours."""
+        return self._crl_cache_validity_hours
+
+    @property
+    def enable_crl_cache(self) -> bool | None:
+        """Whether CRL caching is enabled."""
+        return self._enable_crl_cache
+
+    @property
+    def enable_crl_file_cache(self) -> bool | None:
+        """Whether file-based CRL cache is enabled."""
+        return self._enable_crl_file_cache
+
+    @property
+    def crl_cache_dir(self) -> str | None:
+        """Directory for CRL file cache."""
+        return self._crl_cache_dir
+
+    @property
+    def crl_cache_removal_delay_days(self) -> int | None:
+        """Days to keep expired CRL files before removal."""
+        return self._crl_cache_removal_delay_days
+
+    @property
+    def crl_cache_cleanup_interval_hours(self) -> int | None:
+        """CRL cache cleanup interval in hours."""
+        return self._crl_cache_cleanup_interval_hours
+
+    @property
+    def crl_cache_start_cleanup(self) -> bool | None:
+        """Whether to start CRL cache cleanup immediately."""
+        return self._crl_cache_start_cleanup
 
     @property
     def session_id(self) -> int:
@@ -693,6 +833,14 @@ class SnowflakeConnection:
     def client_session_keep_alive_heartbeat_frequency(self, value) -> None:
         self._client_session_keep_alive_heartbeat_frequency = value
         self._validate_client_session_keep_alive_heartbeat_frequency()
+
+    @property
+    def platform_detection_timeout_seconds(self) -> float | None:
+        return self._platform_detection_timeout_seconds
+
+    @platform_detection_timeout_seconds.setter
+    def platform_detection_timeout_seconds(self, value) -> None:
+        self._platform_detection_timeout_seconds = value
 
     @property
     def client_prefetch_threads(self) -> int:
@@ -874,6 +1022,14 @@ class SnowflakeConnection:
     def check_arrow_conversion_error_on_every_column(self) -> bool:
         return self._check_arrow_conversion_error_on_every_column
 
+    @cached_property
+    def snowflake_version(self) -> str:
+        # The result from SELECT CURRENT_VERSION() is `<version> <internal hash>`,
+        # and we only need the first part
+        return str(
+            self.cursor().execute("SELECT CURRENT_VERSION()").fetchall()[0][0]
+        ).split(" ")[0]
+
     @check_arrow_conversion_error_on_every_column.setter
     def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
         self._check_arrow_conversion_error_on_every_column = value
@@ -883,6 +1039,16 @@ class SnowflakeConnection:
         logger.debug("connect")
         if len(kwargs) > 0:
             self.__config(**kwargs)
+
+        self._http_config = HttpConfig(
+            adapter_factory=ProxySupportAdapterFactory(),
+            use_pooling=(not self.disable_request_pooling),
+            proxy_host=self.proxy_host,
+            proxy_port=self.proxy_port,
+            proxy_user=self.proxy_user,
+            proxy_password=self.proxy_password,
+        )
+        self._session_manager = SessionManager(self._http_config)
 
         if self.enable_connection_diag:
             exceptions_dict = {}
@@ -899,6 +1065,7 @@ class SnowflakeConnection:
                 proxy_port=self.proxy_port,
                 proxy_user=self.proxy_user,
                 proxy_password=self.proxy_password,
+                session_manager=self._session_manager.clone(use_pooling=False),
             )
             try:
                 connection_diag.run_test()
@@ -1006,9 +1173,7 @@ class SnowflakeConnection:
         """Rolls back the current transaction."""
         self.cursor().execute("ROLLBACK")
 
-    def cursor(
-        self, cursor_class: type[SnowflakeCursor] = SnowflakeCursor
-    ) -> SnowflakeCursor:
+    def cursor(self, cursor_class: type[CursorCls] = SnowflakeCursor) -> CursorCls:
         """Creates a cursor object. Each statement will be executed in a new cursor object."""
         logger.debug("cursor")
         if not self.rest:
@@ -1081,16 +1246,13 @@ class SnowflakeConnection:
             use_numpy=self._numpy, support_negative_year=self._support_negative_year
         )
 
-        proxy.set_proxies(
-            self.proxy_host, self.proxy_port, self.proxy_user, self.proxy_password
-        )
-
         self._rest = SnowflakeRestful(
             host=self.host,
             port=self.port,
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
             connection=self,
+            session_manager=self._session_manager,  # connection shares the session pool used for making Backend related requests
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 
@@ -1169,6 +1331,7 @@ class SnowflakeConnection:
                     raise TypeError("auth_class must be a child class of AuthByKeyPair")
                     # TODO: add telemetry for custom auth
                 self.auth_class = self.auth_class
+            # match authentivator - validation happens in __config
             elif self._authenticator == DEFAULT_AUTHENTICATOR:
                 self.auth_class = AuthByDefault(
                     password=self._password,
@@ -1265,12 +1428,7 @@ class SnowflakeConnection:
                         host=self.host, port=self.port
                     ),
                     scope=self._oauth_scope,
-                    token_cache=(
-                        auth.get_token_cache()
-                        if self._client_store_temporary_credential
-                        else None
-                    ),
-                    refresh_token_enabled=self._oauth_enable_refresh_tokens,
+                    credentials_in_body=self._oauth_credentials_in_body,
                     connection=self,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
@@ -1301,18 +1459,42 @@ class SnowflakeConnection:
                     self._token, self._external_session_id
                 )
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
-                self._check_experimental_authentication_flag()
-                # Standardize the provider enum.
-                if self._workload_identity_provider and isinstance(
-                    self._workload_identity_provider, str
-                ):
+                if isinstance(self._workload_identity_provider, str):
                     self._workload_identity_provider = AttestationProvider.from_string(
                         self._workload_identity_provider
+                    )
+                if not self._workload_identity_provider:
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": f"workload_identity_provider must be set to one of {','.join(AttestationProvider.all_string_values())} when authenticator is WORKLOAD_IDENTITY.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
+                if (
+                    self._workload_identity_impersonation_path
+                    and self._workload_identity_provider
+                    not in (
+                        AttestationProvider.GCP,
+                        AttestationProvider.AWS,
+                    )
+                ):
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": "workload_identity_impersonation_path is currently only supported for GCP and AWS.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
                     )
                 self.auth_class = AuthByWorkloadIdentity(
                     provider=self._workload_identity_provider,
                     token=self._token,
                     entra_resource=self._workload_identity_entra_resource,
+                    impersonation_path=self._workload_identity_impersonation_path,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/
@@ -1415,11 +1597,6 @@ class SnowflakeConnection:
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
 
-        if "unsafe_file_write" in kwargs:
-            self._unsafe_file_write = kwargs["unsafe_file_write"]
-        else:
-            self._unsafe_file_write = False
-
         logger.info(
             f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), 'GLOBAL')} Snowflake domain"
         )
@@ -1428,20 +1605,30 @@ class SnowflakeConnection:
         # type to be the same as the custom auth class
         if self._auth_class:
             self._authenticator = self._auth_class.type_.value
-
-        if self._authenticator:
-            # Only upper self._authenticator if it is a non-okta link
+        elif self._authenticator:
+            # Validate authenticator and convert it to uppercase if it is a non-okta link
             auth_tmp = self._authenticator.upper()
-            if auth_tmp in [  # Non-okta authenticators
+            if auth_tmp in [
                 DEFAULT_AUTHENTICATOR,
                 EXTERNAL_BROWSER_AUTHENTICATOR,
                 KEY_PAIR_AUTHENTICATOR,
                 OAUTH_AUTHENTICATOR,
+                OAUTH_AUTHORIZATION_CODE,
+                OAUTH_CLIENT_CREDENTIALS,
                 USR_PWD_MFA_AUTHENTICATOR,
                 WORKLOAD_IDENTITY_AUTHENTICATOR,
+                PROGRAMMATIC_ACCESS_TOKEN,
                 PAT_WITH_EXTERNAL_SESSION,
             ]:
                 self._authenticator = auth_tmp
+            elif auth_tmp.startswith("HTTPS://"):
+                # okta authenticator link
+                pass
+            else:
+                raise ProgrammingError(
+                    msg=f"Unknown authenticator: {self._authenticator}",
+                    errno=ER_INVALID_VALUE,
+                )
 
         # read OAuth token from
         token_file_path = kwargs.get("token_file_path")
@@ -1468,7 +1655,10 @@ class SnowflakeConnection:
                     self,
                     None,
                     ProgrammingError,
-                    {"msg": "User is empty", "errno": ER_NO_USER},
+                    {
+                        "msg": f"User is empty, but it must be provided unless authenticator is one of {', '.join(empty_user_allowed_authenticators)}.",
+                        "errno": ER_NO_USER,
+                    },
                 )
 
             if self._private_key or self._private_key_file:
@@ -1477,6 +1667,7 @@ class SnowflakeConnection:
             workload_identity_dependent_options = [
                 "workload_identity_provider",
                 "workload_identity_entra_resource",
+                "workload_identity_impersonation_path",
             ]
             for dependent_option in workload_identity_dependent_options:
                 if (
@@ -2258,18 +2449,6 @@ class SnowflakeConnection:
         except Exception as e:
             logger.debug("session could not be validated due to exception: %s", e)
             return False
-
-    def _check_experimental_authentication_flag(self) -> None:
-        if os.getenv(ENV_VAR_EXPERIMENTAL_AUTHENTICATION, "false").lower() != "true":
-            Error.errorhandler_wrapper(
-                self,
-                None,
-                ProgrammingError,
-                {
-                    "msg": f"Please set the '{ENV_VAR_EXPERIMENTAL_AUTHENTICATION}' environment variable true to use the '{self._authenticator}' authenticator.",
-                    "errno": ER_EXPERIMENTAL_AUTHENTICATION_NOT_SUPPORTED,
-                },
-            )
 
     @staticmethod
     def _detect_application() -> None | str:
