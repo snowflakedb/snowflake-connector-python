@@ -82,6 +82,14 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
                 self.stage_info["location"]
             )
         )
+        _bucket_name = self.s3location.bucket_name
+        if _bucket_name and _bucket_name.lower().startswith("sfc-"):
+            # SNOW-2324060: no s3:GetAccelerateConfiguration and no intention to add either
+            # for internal stage, thus previously the client got HTTP403 on /accelerate call
+            logger.debug(
+                "Not attempting to get bucket transfer accelerate endpoint for internal stage."
+            )
+            use_accelerate_endpoint = False
         self.use_s3_regional_url = (
             use_s3_regional_url
             or "useS3RegionalUrl" in stage_info
@@ -120,13 +128,9 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             return False
         else:
             if use_accelerate_endpoint is None:
-                # SNOW-2324060: no s3:GetAccelerateConfiguration and no intention to add either,
-                # thus previously the client got HTTP403 on /accelerate call
-                logger.debug(
-                    "No use_accelerate_endpoint was specified, "
-                    "not attempting to get bucket transfer accelerate endpoint."
+                use_accelerate_endpoint = self._get_bucket_accelerate_config(
+                    self.s3location.bucket_name
                 )
-                use_accelerate_endpoint = False
 
             if use_accelerate_endpoint:
                 self.endpoint = (
@@ -587,3 +591,24 @@ class SnowflakeS3RestClient(SnowflakeStorageClient):
             if response.status_code in (200, 206):
                 self.write_downloaded_chunk(chunk_id, response.content)
             response.raise_for_status()
+
+    def _get_bucket_accelerate_config(self, bucket_name: str) -> bool:
+        query_parts = (("accelerate", ""),)
+        query_string = self._construct_query_string(query_parts)
+        url = f"https://{bucket_name}.s3.amazonaws.com/?{query_string}"
+        retry_id = "accelerate"
+        self.retry_count[retry_id] = 0
+        response = self._send_request_with_authentication_and_retry(
+            url=url, verb="GET", retry_id=retry_id, query_parts=dict(query_parts)
+        )
+        if response.status_code == 200:
+            config = ET.fromstring(response.text)
+            namespace = config.tag[: config.tag.index("}") + 1]
+            statusTag = f"{namespace}Status"
+            found = config.find(statusTag)
+            use_accelerate_endpoint = (
+                False if found is None else (found.text == "Enabled")
+            )
+            logger.debug(f"use_accelerate_endpoint: {use_accelerate_endpoint}")
+            return use_accelerate_endpoint
+        return False
