@@ -188,7 +188,7 @@ def test_partial_chain_handshake_succeeds_with_intermediate_as_anchor():
     s.connect((host, port))
 
     # The wrapper expects kwargs similar to urllib3; use provided context
-    ws = ssw.ssl_wrap_socket_with_ocsp(
+    ws = ssw.ssl_wrap_socket_with_cert_revocation_checks(
         sock=s,
         server_hostname="localhost",
         ssl_context=ctx,
