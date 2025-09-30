@@ -9,9 +9,11 @@ import queue
 import stat
 import tempfile
 import threading
+import time
 import warnings
 import weakref
 from unittest import mock
+from unittest.mock import MagicMock, PropertyMock, patch
 from uuid import uuid4
 
 import pytest
@@ -1579,6 +1581,119 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
             assert "This connection does not perform OCSP checks." not in caplog.text
         else:
             assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_root_certs_dict_lock_timeout_fail_open(conn_cnx, caplog):
+    def mock_acquire_times_out(timeout=None):
+        """Mock acquire method that always times out after the specified timeout."""
+        if timeout is not None and timeout > 0:
+            time.sleep(timeout)
+        return False
+
+    override_config = {
+        "ocsp_fail_open": True,
+        "ocsp_root_certs_dict_lock_timeout": 0.1,
+    }
+
+    caplog.set_level(logging.INFO, "snowflake.connector.ocsp_snowflake")
+
+    with patch(
+        "snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK"
+    ) as mock_lock:
+        snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT = {}
+
+        mock_lock.acquire = MagicMock(side_effect=mock_acquire_times_out)
+        mock_lock.release = MagicMock()
+
+        with conn_cnx(**override_config) as conn:
+            try:
+                with conn.cursor() as cur:
+                    assert cur.execute("select 1").fetchall() == [(1,)]
+
+                if mock_lock.acquire.called:
+                    mock_lock.acquire.assert_called_with(timeout=0.1)
+                    assert conn._ocsp_root_certs_dict_lock_timeout == 0.1
+            finally:
+                conn.close()
+
+
+@pytest.mark.skipolddriver
+def test_root_certs_dict_lock_timeout(conn_cnx, caplog):
+    config_fail_close = {
+        "ocsp_fail_open": False,
+        "ocsp_root_certs_dict_lock_timeout": 1,
+    }
+
+    caplog.set_level(logging.INFO, "snowflake.connector.ocsp_snowflake")
+
+    with patch(
+        "snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK"
+    ) as mock_lock:
+        snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT = {}
+
+        type(mock_lock).acquire = PropertyMock(return_value=lambda timeout: False)
+        type(mock_lock).release = PropertyMock(return_value=lambda: None)
+
+        with conn_cnx(**config_fail_close) as conn:
+            with conn.cursor() as cur:
+                assert cur.execute("select 1").fetchall() == [(1,)]
+
+            assert conn._ocsp_root_certs_dict_lock_timeout == 1
+            conn.close()
+
+    caplog.clear()
+
+    config_fail_open = {
+        "ocsp_fail_open": True,  # fail-open mode
+        "ocsp_root_certs_dict_lock_timeout": 2,  # 2 second timeout
+    }
+
+    caplog.set_level(logging.INFO, "snowflake.connector.ocsp_snowflake")
+
+    with patch(
+        "snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK"
+    ) as mock_lock:
+        snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT = {}
+
+        type(mock_lock).acquire = PropertyMock(return_value=lambda timeout: False)
+        type(mock_lock).release = PropertyMock(return_value=lambda: None)
+
+        with conn_cnx(**config_fail_open) as conn:
+            with conn.cursor() as cur:
+                assert cur.execute("select 1").fetchall() == [(1,)]
+
+            assert conn._ocsp_root_certs_dict_lock_timeout == 2
+            conn.close()
+
+    caplog.clear()
+
+    config_short_timeout = {
+        "ocsp_fail_open": True,
+        "ocsp_root_certs_dict_lock_timeout": 0.001,
+    }
+
+    with conn_cnx(**config_short_timeout) as conn:
+        try:
+            with conn.cursor() as cur:
+                assert cur.execute("select 1").fetchall() == [(1,)]
+
+            assert conn._ocsp_root_certs_dict_lock_timeout == 0.001
+        finally:
+            conn.close()
+
+    config_no_timeout = {
+        "ocsp_fail_open": True,
+    }
+
+    with conn_cnx(**config_no_timeout) as conn:
+        try:
+            with conn.cursor() as cur:
+                assert cur.execute("select 1").fetchall() == [(1,)]
+
+            assert conn._ocsp_root_certs_dict_lock_timeout == -1
+        finally:
+            conn.close()
 
 
 @pytest.mark.skipolddriver
