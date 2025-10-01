@@ -1584,7 +1584,7 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
 
 
 @pytest.mark.skipolddriver
-def test_root_certs_dict_lock_timeout_fail_open(conn_cnx, caplog):
+def test_root_certs_dict_lock_timeout_fail_open(conn_cnx):
     """Test OCSP root certificates lock timeout with fail-open mode and side effect mock."""
 
     def mock_acquire_times_out(timeout=None):
@@ -1597,8 +1597,6 @@ def test_root_certs_dict_lock_timeout_fail_open(conn_cnx, caplog):
         "ocsp_fail_open": True,
         "ocsp_root_certs_dict_lock_timeout": 0.1,
     }
-
-    caplog.set_level(logging.INFO, "snowflake.connector.ocsp_snowflake")
 
     with patch(
         "snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK"
@@ -1629,15 +1627,13 @@ def test_root_certs_dict_lock_timeout_fail_open(conn_cnx, caplog):
     ],
 )
 def test_root_certs_dict_lock_timeout_with_property_mock(
-    conn_cnx, caplog, ocsp_fail_open, timeout_value, expected_timeout
+    conn_cnx, ocsp_fail_open, timeout_value, expected_timeout
 ):
     """Test OCSP root certificates lock timeout with property mock for different configurations."""
     config = {
         "ocsp_fail_open": ocsp_fail_open,
         "ocsp_root_certs_dict_lock_timeout": timeout_value,
     }
-
-    caplog.set_level(logging.INFO, "snowflake.connector.ocsp_snowflake")
 
     with patch(
         "snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK"
@@ -1653,8 +1649,6 @@ def test_root_certs_dict_lock_timeout_with_property_mock(
 
             assert conn._ocsp_root_certs_dict_lock_timeout == expected_timeout
             conn.close()
-
-    caplog.clear()
 
 
 @pytest.mark.skipolddriver
