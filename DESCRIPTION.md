@@ -16,6 +16,10 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added an option to exclude `botocore` and `boto3` dependencies by setting `SNOWFLAKE_NO_BOTO` environment variable during installation
   - Revert changing exception type in case of token expired scenario for `Oauth` authenticator back to `DatabaseError`
   - Added support for pandas conversion for Day-time and Year-Month Interval types
+  - Enhanced configuration file security checks with stricter permission validation.
+    - Configuration files writable by group or others now raise a `ConfigSourceError` with detailed permission information, preventing potential credential tampering.
+  - Fix "No AWS region was found" error if AWS region was set in `AWS_DEFAULT_REGION` variable instead of `AWS_REGION` for `WORKLOAD_IDENTITY` authenticator
+  - Add `ocsp_root_certs_dict_lock_timeout` connection parameter to set the timeout (in seconds) for acquiring the lock on the OCSP root certs dictionary. Default value for this parameter is -1 which indicates no timeout.
   - Fixed behaviour of trying S3 Transfer Accelerate endpoint by default for internal stages, and always getting HTTP403 due to permissions missing on purpose. Now /accelerate is not attempted. (snowflakedb/snowflake-connector-python#2556)
 
 - v3.17.4(September 22,2025)
