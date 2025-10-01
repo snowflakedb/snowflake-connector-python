@@ -70,6 +70,7 @@ from .constants import (
     _DOMAIN_NAME_MAP,
     _OAUTH_DEFAULT_SCOPE,
     ENV_VAR_PARTNER,
+    OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -243,6 +244,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
     "disable_ocsp_checks": (False, bool),
     "ocsp_fail_open": (True, bool),  # fail open on ocsp issues, default true
+    "ocsp_root_certs_dict_lock_timeout": (
+        OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,  # no timeout
+        int,
+    ),
     "inject_client_pause": (0, int),  # snowflake internal
     "session_parameters": (None, (type(None), dict)),  # snowflake session parameters
     "autocommit": (None, (type(None), bool)),  # snowflake
@@ -481,6 +486,7 @@ class SnowflakeConnection:
             validates the TLS certificate but doesn't check revocation status with OCSP provider.
         ocsp_fail_open: Whether or not the connection is in fail open mode. Fail open mode decides if TLS certificates
             continue to be validated. Revoked certificates are blocked. Any other exceptions are disregarded.
+        ocsp_root_certs_dict_lock_timeout: Timeout for the OCSP root certs dict lock in seconds. Default value is -1, which means no timeout.
         session_id: The session ID of the connection.
         user: The user name used in the connection.
         host: The host name the connection attempts to connect to.
