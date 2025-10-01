@@ -58,6 +58,7 @@ from snowflake.connector.ssl_wrap_socket import get_current_session_manager
 from . import constants
 from .backoff_policies import exponential_backoff
 from .cache import CacheEntry, SFDictCache, SFDictFileCache
+from .constants import OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
 from .telemetry import TelemetryField, generate_telemetry_data_dict
 from .url_util import extract_top_level_domain_from_hostname, url_encode_str
 from .util_text import _base64_bytes_to_str
@@ -1037,7 +1038,7 @@ class SnowflakeOCSP:
         use_ocsp_cache_server=None,
         use_post_method: bool = True,
         use_fail_open: bool = True,
-        root_certs_dict_lock_timeout: int = -1,
+        root_certs_dict_lock_timeout: int = OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
         **kwargs,
     ) -> None:
         self.test_mode = os.getenv("SF_OCSP_TEST_MODE", None)

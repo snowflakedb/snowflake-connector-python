@@ -70,6 +70,7 @@ from .constants import (
     _DOMAIN_NAME_MAP,
     _OAUTH_DEFAULT_SCOPE,
     ENV_VAR_PARTNER,
+    OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -242,6 +243,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
     "disable_ocsp_checks": (False, bool),
     "ocsp_fail_open": (True, bool),  # fail open on ocsp issues, default true
+    "ocsp_root_certs_dict_lock_timeout": (
+        OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,  # no timeout
+        int,
+    ),
     "inject_client_pause": (0, int),  # snowflake internal
     "session_parameters": (None, (type(None), dict)),  # snowflake session parameters
     "autocommit": (None, (type(None), bool)),  # snowflake
@@ -392,10 +397,6 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         True,
         bool,
     ),  # SNOW-XXXXX: remove the check_arrow_conversion_error_on_every_column flag
-    "ocsp_root_certs_dict_lock_timeout": (
-        -1,
-        int,
-    ),
     "external_session_id": (
         None,
         str,
@@ -484,6 +485,7 @@ class SnowflakeConnection:
             validates the TLS certificate but doesn't check revocation status with OCSP provider.
         ocsp_fail_open: Whether or not the connection is in fail open mode. Fail open mode decides if TLS certificates
             continue to be validated. Revoked certificates are blocked. Any other exceptions are disregarded.
+        ocsp_root_certs_dict_lock_timeout: Timeout for the OCSP root certs dict lock in seconds. Default value is -1, which means no timeout.
         session_id: The session ID of the connection.
         user: The user name used in the connection.
         host: The host name the connection attempts to connect to.
@@ -537,7 +539,6 @@ class SnowflakeConnection:
         token_file_path: The file path of the token file. If both token and token_file_path are provided, the token in token_file_path will be used.
         unsafe_file_write: When true, files downloaded by GET will be saved with 644 permissions. Otherwise, files will be saved with safe - owner-only permissions: 600.
         check_arrow_conversion_error_on_every_column: When true, the error check after the conversion from arrow to python types will happen for every column in the row. This is a new behaviour which fixes the bug that caused the type errors to trigger silently when occurring at any place other than last column in a row. To revert the previous (faulty) behaviour, please set this flag to false.
-        ocsp_root_certs_dict_lock_timeout: Timeout for the OCSP root certs dict lock in seconds. Default value is -1, which means no timeout.
     """
 
     OCSP_ENV_LOCK = Lock()
