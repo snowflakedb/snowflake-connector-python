@@ -9,7 +9,6 @@ import queue
 import stat
 import tempfile
 import threading
-import time
 import warnings
 import weakref
 from unittest import mock
@@ -1587,12 +1586,6 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
 def test_root_certs_dict_lock_timeout_fail_open(conn_cnx):
     """Test OCSP root certificates lock timeout with fail-open mode and side effect mock."""
 
-    def mock_acquire_times_out(timeout=None):
-        """Mock acquire method that always times out after the specified timeout."""
-        if timeout is not None and timeout > 0:
-            time.sleep(timeout)
-        return False
-
     override_config = {
         "ocsp_fail_open": True,
         "ocsp_root_certs_dict_lock_timeout": 0.1,
@@ -1603,7 +1596,7 @@ def test_root_certs_dict_lock_timeout_fail_open(conn_cnx):
     ) as mock_lock:
         snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT = {}
 
-        mock_lock.acquire = MagicMock(side_effect=mock_acquire_times_out)
+        mock_lock.acquire = MagicMock(return_value=False)
         mock_lock.release = MagicMock()
 
         with conn_cnx(**override_config) as conn:
