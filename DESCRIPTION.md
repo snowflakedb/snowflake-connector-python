@@ -9,7 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v4.1.0(TBD)
 
-- v4.0.0(October 04,2025)
+- v4.0.0(October 01,2025)
   - Added support for checking certificates revocation using revocation lists (CRLs)
   - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP and AWS workloads only
   - Fixed `get_results_from_sfqid` when using `DictCursor` and executing multiple statements at once
