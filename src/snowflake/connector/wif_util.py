@@ -98,7 +98,7 @@ def get_aws_region() -> str:
     """Get the current AWS workload's region, or raises an error if it's missing."""
 
     region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
-    
+
     if not region:
         # Fallback for EC2 environments
         # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
@@ -109,7 +109,7 @@ def get_aws_region() -> str:
             msg="No AWS region was found. Ensure the application is running on AWS.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
-        
+
     return region
 
 
