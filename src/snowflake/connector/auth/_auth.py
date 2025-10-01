@@ -124,7 +124,7 @@ class Auth:
                     "PYTHON_RUNTIME": IMPLEMENTATION,
                     "PYTHON_COMPILER": COMPILER,
                     "OCSP_MODE": ocsp_mode.name,
-                    "CRL_REVOCATION_CHECK_MODE": crl_revocation_check_mode.name,
+                    "CRL_REVOCATION_CHECK_MODE": crl_revocation_check_mode,
                     "TRACING": logger.getEffectiveLevel(),
                     "LOGIN_TIMEOUT": login_timeout,
                     "NETWORK_TIMEOUT": network_timeout,

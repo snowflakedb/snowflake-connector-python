@@ -86,6 +86,7 @@ from .constants import (
     QueryStatus,
 )
 from .converter import SnowflakeConverter
+from .crl import CRLConfig
 from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor, SnowflakeCursorBase
 from .description import (
     CLIENT_NAME,
@@ -586,6 +587,7 @@ class SnowflakeConnection:
 
         # Placeholder attributes; will be initialized in connect()
         self._http_config: HttpConfig | None = None
+        self._crl_config: CRLConfig | None = None
         self._session_manager: SessionManager | None = None
         self._rest: SnowflakeRestful | None = None
 
@@ -643,6 +645,8 @@ class SnowflakeConnection:
             # connection_name is None and kwargs was empty when called
             kwargs = _get_default_connection_params()
         self.__set_error_attributes()
+        # Initialize CRL configuration
+        self._crl_config: CRLConfig = CRLConfig.from_connection(self)
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
         self.expired = False
@@ -682,57 +686,79 @@ class SnowflakeConnection:
     @property
     def cert_revocation_check_mode(self) -> str | None:
         """Certificate revocation check mode: DISABLED, ENABLED, or ADVISORY."""
-        return self._cert_revocation_check_mode
+        if not self._crl_config:
+            return self._cert_revocation_check_mode
+        return self._crl_config.cert_revocation_check_mode.value
 
     @property
     def allow_certificates_without_crl_url(self) -> bool | None:
         """Whether to allow certificates without CRL distribution points."""
-        return self._allow_certificates_without_crl_url
+        if not self._crl_config:
+            return self._allow_certificates_without_crl_url
+        return self._crl_config.allow_certificates_without_crl_url
 
     @property
     def crl_connection_timeout_ms(self) -> int | None:
         """Connection timeout for CRL downloads in milliseconds."""
-        return self._crl_connection_timeout_ms
+        if not self._crl_config:
+            return self._crl_connection_timeout_ms
+        return self._crl_config.connection_timeout_ms
 
     @property
     def crl_read_timeout_ms(self) -> int | None:
         """Read timeout for CRL downloads in milliseconds."""
-        return self._crl_read_timeout_ms
+        if not self._crl_config:
+            return self._crl_read_timeout_ms
+        return self._crl_config.read_timeout_ms
 
     @property
     def crl_cache_validity_hours(self) -> int | None:
         """CRL cache validity time in hours."""
-        return self._crl_cache_validity_hours
+        if not self._crl_config:
+            return self._crl_cache_validity_hours
+        return self._crl_config.cache_validity_hours
 
     @property
     def enable_crl_cache(self) -> bool | None:
         """Whether CRL caching is enabled."""
-        return self._enable_crl_cache
+        if not self._crl_config:
+            return self._enable_crl_cache
+        return self._crl_config.enable_crl_cache
 
     @property
     def enable_crl_file_cache(self) -> bool | None:
         """Whether file-based CRL cache is enabled."""
-        return self._enable_crl_file_cache
+        if not self._crl_config:
+            return self._enable_crl_file_cache
+        return self._crl_config.enable_crl_file_cache
 
     @property
     def crl_cache_dir(self) -> str | None:
         """Directory for CRL file cache."""
-        return self._crl_cache_dir
+        if not self._crl_config:
+            return self._crl_cache_dir
+        return self._crl_config.crl_cache_dir
 
     @property
     def crl_cache_removal_delay_days(self) -> int | None:
         """Days to keep expired CRL files before removal."""
-        return self._crl_cache_removal_delay_days
+        if not self._crl_config:
+            return self._crl_cache_removal_delay_days
+        return self._crl_config.crl_cache_removal_delay_days
 
     @property
     def crl_cache_cleanup_interval_hours(self) -> int | None:
         """CRL cache cleanup interval in hours."""
-        return self._crl_cache_cleanup_interval_hours
+        if not self._crl_config:
+            return self._crl_cache_cleanup_interval_hours
+        return self._crl_config.crl_cache_cleanup_interval_hours
 
     @property
     def crl_cache_start_cleanup(self) -> bool | None:
         """Whether to start CRL cache cleanup immediately."""
-        return self._crl_cache_start_cleanup
+        if not self._crl_config:
+            return self._crl_cache_start_cleanup
+        return self._crl_config.crl_cache_start_cleanup
 
     @property
     def session_id(self) -> int:
