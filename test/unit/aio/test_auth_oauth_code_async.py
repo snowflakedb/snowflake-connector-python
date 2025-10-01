@@ -40,7 +40,7 @@ async def test_auth_oauth_code(omit_oauth_urls_check):  # noqa: F811
     # Check that OAuth authenticator is set
     assert body["data"]["AUTHENTICATOR"] == "OAUTH", body
     # OAuth type should be set to authorization_code
-    assert body["data"]["OAUTH_TYPE"] == "authorization_code", body
+    assert body["data"]["OAUTH_TYPE"] == "oauth_authorization_code", body
 
     # Clean up environment variable
     del os.environ["SF_ENABLE_EXPERIMENTAL_AUTHENTICATION"]

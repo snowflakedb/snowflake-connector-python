@@ -29,7 +29,7 @@ async def test_auth_oauth_credentials():
     # Check that OAuth authenticator is set
     assert body["data"]["AUTHENTICATOR"] == "OAUTH", body
     # OAuth type should be set to client_credentials
-    assert body["data"]["OAUTH_TYPE"] == "client_credentials", body
+    assert body["data"]["OAUTH_TYPE"] == "oauth_client_credentials", body
 
     # Clean up environment variable
     del os.environ["SF_ENABLE_EXPERIMENTAL_AUTHENTICATION"]
