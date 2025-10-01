@@ -27,7 +27,7 @@ _T = TypeVar("_T")
 
 LOGGER = logging.getLogger(__name__)
 READABLE_BY_OTHERS = stat.S_IRGRP | stat.S_IROTH
-
+WRITABLE_BY_OTHERS = stat.S_IWGRP | stat.S_IWOTH
 
 SKIP_WARNING_ENV_VAR = "SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE"
 
@@ -336,6 +336,18 @@ class ConfigManager:
                     f"Fail to read configuration file from {str(filep)} due to no permission on its parent directory"
                 )
                 continue
+
+            # Check for writable by others - this should raise an error
+            if (
+                not IS_WINDOWS  # Skip checking on Windows
+                and sliceoptions.check_permissions  # Skip checking if this file couldn't hold sensitive information
+                and filep.stat().st_mode & WRITABLE_BY_OTHERS != 0
+            ):
+                file_stat = filep.stat()
+                file_permissions = oct(file_stat.st_mode)[-3:]
+                raise ConfigSourceError(
+                    f"file '{str(filep)}' is writable by group or others — this poses a security risk because it allows unauthorized users to modify sensitive settings. Your Permission: {file_permissions}"
+                )
 
             # Check for readable by others or wrong ownership - this should warn
             if (
