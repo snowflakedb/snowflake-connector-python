@@ -16,6 +16,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added an option to exclude `botocore` and `boto3` dependencies by setting `SNOWFLAKE_NO_BOTO` environment variable during installation
   - Revert changing exception type in case of token expired scenario for `Oauth` authenticator back to `DatabaseError`
   - Added support for pandas conversion for Day-time and Year-Month Interval types
+  - Add `ocsp_root_certs_dict_lock_timeout` connection parameter to set the timeout (in seconds) for acquiring the lock on the OCSP root certs dictionary. Default value for this parameter is -1 which indicates no timeout.
 
 - v3.17.4(September 22,2025)
   - Added support for intermediate certificates as roots when they are stored in the trust store
