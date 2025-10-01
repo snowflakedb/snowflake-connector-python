@@ -17,6 +17,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fix retry behavior for `ECONNRESET` error
   - Added an option to exclude `botocore` and `boto3` dependencies by setting `SNOWFLAKE_NO_BOTO` environment variable during installation
   - Revert changing exception type in case of token expired scenario for `Oauth` authenticator back to `DatabaseError`
+  - Enhanced configuration file security checks with stricter permission validation.
+    - Configuration files writable by group or others now raise a `ConfigSourceError` with detailed permission information, preventing potential credential tampering.
   - Added support for pandas conversion for Day-time and Year-Month Interval types
   - Fixed the return type of `SnowflakeConnection.cursor(cursor_class)` to match the type of `cursor_class`
   - Constrained the types of `fetchone`, `fetchmany`, `fetchall`
