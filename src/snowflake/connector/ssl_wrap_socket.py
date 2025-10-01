@@ -21,7 +21,7 @@ from typing import Any
 import certifi
 import OpenSSL.SSL
 
-from .constants import OCSPMode
+from .constants import OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT, OCSPMode
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
 from .session_manager import SessionManager
@@ -31,6 +31,9 @@ from .vendored.urllib3.util import ssl_ as ssl_
 
 DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
 FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE
+FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT: int = (
+    OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
+)
 
 """
 OCSP Response cache file name
@@ -179,6 +182,7 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
             ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
             use_fail_open=FEATURE_OCSP_MODE == OCSPMode.FAIL_OPEN,
             hostname=server_hostname,
+            root_certs_dict_lock_timeout=FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT,
         ).validate(server_hostname, ret.connection)
         if not v:
             raise OperationalError(
