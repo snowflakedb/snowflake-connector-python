@@ -42,6 +42,7 @@ from .constants import (
     HTTP_HEADER_SERVICE_NAME,
     HTTP_HEADER_USER_AGENT,
 )
+from .crl import CRLConfig
 from .description import (
     CLIENT_NAME,
     CLIENT_VERSION,
@@ -238,6 +239,10 @@ def is_login_request(url: str) -> bool:
     return "login-request" in parse_url(url).path
 
 
+def is_econnreset_exception(e: Exception) -> bool:
+    return "ECONNRESET" in repr(e)
+
+
 class RetryRequest(Exception):
     """Signal to retry request."""
 
@@ -332,6 +337,13 @@ class SnowflakeRestful:
         # cache file name (enabled by default)
         ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
             self._connection._ocsp_response_cache_filename if self._connection else None
+        )
+
+        # CRL mode (should be DISABLED by default)
+        ssl_wrap_socket.FEATURE_CRL_CONFIG = (
+            CRLConfig.from_connection(self._connection)
+            if self._connection
+            else ssl_wrap_socket.DEFAULT_CRL_CONFIG
         )
 
         # This is to address the issue where requests hangs
@@ -965,7 +977,7 @@ class SnowflakeRestful:
                 )
             retry_ctx.retry_reason = reason
 
-            if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
+            if is_econnreset_exception(e):
                 # connection is reset by the server, the underlying connection is broken and can not be reused
                 # we need a new urllib3 http(s) connection in this case.
                 # We need to first close the old one so that urllib3 pool manager can create a new connection
@@ -1146,6 +1158,8 @@ class SnowflakeRestful:
             finally:
                 raw_ret.close()  # ensure response is closed
         except SSLError as se:
+            if is_econnreset_exception(se):
+                raise RetryRequest(se)
             msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
             logger.debug(msg)
             # the following code is for backward compatibility with old versions of python connector which calls

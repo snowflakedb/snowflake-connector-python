@@ -8,7 +8,22 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v3.18.0(TBD)
+  - Added support for checking certificates revocation using revocation lists (CRLs)
   - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP and AWS workloads only
+  - Fixed `get_results_from_sfqid` when using `DictCursor` and executing multiple statements at once
+  - Added the `oauth_credentials_in_body` parameter supporting an option to send the oauth client credentials in the request body
+  - Fix retry behavior for `ECONNRESET` error
+  - Added an option to exclude `botocore` and `boto3` dependencies by setting `SNOWFLAKE_NO_BOTO` environment variable during installation
+  - Revert changing exception type in case of token expired scenario for `Oauth` authenticator back to `DatabaseError`
+  - Added support for pandas conversion for Day-time and Year-Month Interval types
+
+- v3.17.4(September 22,2025)
+  - Added support for intermediate certificates as roots when they are stored in the trust store
+  - Bumped up vendored `urllib3` to `2.5.0` and `requests` to `v2.32.5`
+  - Dropped support for OpenSSL versions older than 1.1.1
+  - Fixed the return type of `SnowflakeConnection.cursor(cursor_class)` to match the type of `cursor_class`
+  - Constrained the types of `fetchone`, `fetchmany`, `fetchall`
+    - As part of this fix, `DictCursor` is no longer a subclass of `SnowflakeCursor`; use `SnowflakeCursorBase` as a superclass of both.
 
 - v3.17.3(September 02,2025)
   - Enhanced configuration file permission warning messages.
