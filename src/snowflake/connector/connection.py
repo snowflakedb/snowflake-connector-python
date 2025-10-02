@@ -15,7 +15,7 @@ from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import suppress
 from difflib import get_close_matches
-from functools import partial
+from functools import cached_property, partial
 from io import StringIO
 from logging import getLogger
 from threading import Lock
@@ -379,6 +379,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),  # SNOW-1944208: add unsafe write flag
+    "unsafe_skip_file_permissions_check": (
+        False,
+        bool,
+    ),  # SNOW-2127911: add flag to opt-out file permissions check
     _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER: (
         _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,  # default value
         int,  # type
@@ -491,8 +495,13 @@ class SnowflakeConnection:
         If overwriting values from the default connection is desirable, supply
         the name explicitly.
         """
+        self._unsafe_skip_file_permissions_check = kwargs.get(
+            "unsafe_skip_file_permissions_check", False
+        )
         # initiate easy logging during every connection
-        easy_logging = EasyLoggingConfigPython()
+        easy_logging = EasyLoggingConfigPython(
+            skip_config_file_permissions_check=self._unsafe_skip_file_permissions_check
+        )
         easy_logging.create_log()
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
@@ -551,7 +560,9 @@ class SnowflakeConnection:
             for i, s in enumerate(CONFIG_MANAGER._slices):
                 if s.section == "connections":
                     CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
-                    CONFIG_MANAGER.read_config()
+                    CONFIG_MANAGER.read_config(
+                        skip_file_permissions_check=self._unsafe_skip_file_permissions_check
+                    )
                     break
         if connection_name is not None:
             connections = CONFIG_MANAGER["connections"]
@@ -882,6 +893,14 @@ class SnowflakeConnection:
     @property
     def check_arrow_conversion_error_on_every_column(self) -> bool:
         return self._check_arrow_conversion_error_on_every_column
+
+    @cached_property
+    def snowflake_version(self) -> str:
+        # The result from SELECT CURRENT_VERSION() is `<version> <internal hash>`,
+        # and we only need the first part
+        return str(
+            self.cursor().execute("SELECT CURRENT_VERSION()").fetchall()[0][0]
+        ).split(" ")[0]
 
     @check_arrow_conversion_error_on_every_column.setter
     def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:

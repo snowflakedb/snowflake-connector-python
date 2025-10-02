@@ -71,6 +71,18 @@ timestamps {
             '''.stripMargin()
           }
         }
+      },
+      'Test WIF': {
+        stage('Test WIF') {
+          withCredentials([
+            string(credentialsId: 'sfctest0-parameters-secret', variable: 'PARAMETERS_SECRET')
+          ]) {
+            sh '''\
+            |#!/bin/bash -e
+            |$WORKSPACE/ci/test_wif.sh
+            '''.stripMargin()
+          }
+        }
       }
     )
   }

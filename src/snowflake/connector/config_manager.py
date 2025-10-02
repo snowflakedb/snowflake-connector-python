@@ -295,6 +295,7 @@ class ConfigManager:
 
     def read_config(
         self,
+        skip_file_permissions_check: bool = False,
     ) -> None:
         """Read and cache config file contents.
 
@@ -310,8 +311,11 @@ class ConfigManager:
         read_config_file = tomlkit.TOMLDocument()
 
         # Read in all of the config slices
+        config_slice_options = ConfigSliceOptions(
+            check_permissions=not skip_file_permissions_check
+        )
         for filep, sliceoptions, section in itertools.chain(
-            ((self.file_path, ConfigSliceOptions(), None),),
+            ((self.file_path, config_slice_options, None),),
             self._slices,
         ):
             if sliceoptions.only_in_slice:

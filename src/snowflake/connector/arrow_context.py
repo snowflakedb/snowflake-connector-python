@@ -13,6 +13,7 @@ from pytz import UTC
 
 from .constants import PARAMETER_TIMEZONE
 from .converter import _generate_tzinfo_from_tzoffset
+from .interval_util import interval_year_month_to_string
 
 if TYPE_CHECKING:
     from numpy import datetime64, float64, int64, timedelta64
@@ -163,6 +164,9 @@ class ArrowConverterContext:
 
     def DECFLOAT_to_numpy_float64(self, exponent: int, significand: bytes) -> float64:
         return numpy.float64(self.DECFLOAT_to_decimal(exponent, significand))
+
+    def INTERVAL_YEAR_MONTH_to_str(self, months: int) -> str:
+        return interval_year_month_to_string(months)
 
     def INTERVAL_YEAR_MONTH_to_numpy_timedelta(self, months: int) -> timedelta64:
         return numpy.timedelta64(months, "M")

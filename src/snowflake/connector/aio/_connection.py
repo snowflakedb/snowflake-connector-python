@@ -130,6 +130,22 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         # Set up the file operation parser and stream downloader.
         self._file_operation_parser = FileOperationParser(self)
         self._stream_downloader = StreamDownloader(self)
+        self._snowflake_version: str | None = None
+
+    @property
+    async def snowflake_version(self) -> str:
+        # The result from SELECT CURRENT_VERSION() is `<version> <internal hash>`,
+        # and we only need the first part
+        if self._snowflake_version is None:
+            self._snowflake_version = str(
+                (
+                    await (
+                        await self.cursor().execute("SELECT CURRENT_VERSION()")
+                    ).fetchall()
+                )[0][0]
+            ).split(" ")[0]
+
+        return self._snowflake_version
 
     def __enter__(self):
         # async connection does not support sync context manager
@@ -545,7 +561,12 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         connections_file_path: pathlib.Path | None = None,
     ) -> dict:
         ret_kwargs = connection_init_kwargs
-        easy_logging = EasyLoggingConfigPython()
+        self._unsafe_skip_file_permissions_check = ret_kwargs.get(
+            "unsafe_skip_file_permissions_check", False
+        )
+        easy_logging = EasyLoggingConfigPython(
+            skip_config_file_permissions_check=self._unsafe_skip_file_permissions_check
+        )
         easy_logging.create_log()
         self._lock_sequence_counter = asyncio.Lock()
         self.sequence_counter = 0
@@ -605,7 +626,9 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             for i, s in enumerate(CONFIG_MANAGER._slices):
                 if s.section == "connections":
                     CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
-                    CONFIG_MANAGER.read_config()
+                    CONFIG_MANAGER.read_config(
+                        skip_file_permissions_check=self._unsafe_skip_file_permissions_check
+                    )
                     break
         if connection_name is not None:
             connections = CONFIG_MANAGER["connections"]
