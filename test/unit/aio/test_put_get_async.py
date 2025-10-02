@@ -193,7 +193,7 @@ def test_strip_stage_prefix_from_dst_file_name_for_download():
         )
 
 
-def _setup_test_for_async_task_error_propagation(tmp_path):
+def _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, reraise_param_value):
     """Helper to set up common test infrastructure for async error propagation tests.
 
     Returns:
@@ -205,6 +205,9 @@ def _setup_test_for_async_task_error_propagation(tmp_path):
 
     # Mock cursor
     mock_cursor = mock.MagicMock(autospec=SnowflakeCursor)
+    mock_cursor.connection._reraise_error_in_file_transfer_work_function = (
+        reraise_param_value
+    )
 
     # Create file transfer agent
     agent = SnowflakeFileTransferAgent(
@@ -230,7 +233,13 @@ def _setup_test_for_async_task_error_propagation(tmp_path):
             },
             "success": True,
         },
+        reraise_error_in_file_transfer_work_function=reraise_param_value,
     )
+
+    # Ensure flag is set on the agent
+    assert (
+        agent._reraise_error_in_file_transfer_work_function == reraise_param_value
+    ), f"expected {reraise_param_value}, got {agent._reraise_error_in_file_transfer_work_function}"
 
     # Parse command and initialize file metadata
     agent._parse_command()
@@ -271,19 +280,45 @@ def _setup_test_for_async_task_error_propagation(tmp_path):
 # Skip for old drivers because the connection config of
 # reraise_error_in_file_transfer_work_function is newly introduced.
 @pytest.mark.skipolddriver
-async def test_async_reraises_file_transfer_work_fn_error(tmp_path):
-    """Async tasks raising should propagate to caller (main loop) during transfer()."""
+async def test_python_reraise_file_transfer_work_fn_error_as_is(tmp_path):
+    """When reraise_error_in_file_transfer_work_function is True, exceptions are reraised immediately."""
     agent, test_exception, mock_client, mock_create_client_patch = (
-        _setup_test_for_async_task_error_propagation(tmp_path)
+        _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, True)
     )
 
     with mock_create_client_patch as mock_create_client:
         mock_create_client.return_value = mock_client
 
+        # Test that with the connection config
+        # reraise_error_in_file_transfer_work_function is True, the
+        # exception is reraised immediately in main thread of transfer.
         with pytest.raises(Exception) as exc_info:
             await agent.transfer(agent._file_metadata)
 
+        # Verify it's the same exception we injected
         assert exc_info.value is test_exception
 
-        # Verify that prepare_upload was awaited (work function executed)
+        # Verify that prepare_upload was called (showing the work function was executed)
+        mock_client.prepare_upload.assert_awaited_once()
+
+
+@pytest.mark.skipolddriver
+async def test_python_not_reraise_file_transfer_work_fn_error_as_is(tmp_path):
+    """When reraise_error_in_file_transfer_work_function is False, errors are stored and execution continues."""
+    agent, test_exception, mock_client, mock_create_client_patch = (
+        _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, False)
+    )
+
+    with mock_create_client_patch as mock_create_client:
+        mock_create_client.return_value = mock_client
+
+        # Verify that with the connection config
+        # reraise_error_in_file_transfer_work_function is False, the
+        # exception is not reraised (but instead stored in file metadata).
+        await agent.transfer(agent._file_metadata)
+
+        # Verify that the error was stored in the file metadata
+        assert agent._file_metadata[0].error_details is test_exception
+
+        # Verify that prepare_upload was called
         mock_client.prepare_upload.assert_awaited_once()
