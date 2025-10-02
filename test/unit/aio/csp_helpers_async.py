@@ -172,9 +172,6 @@ class FakeAwsEnvironmentAsync(FakeAwsEnvironment):
     async def get_region(self):
         return self.region
 
-    async def get_arn(self):
-        return self.arn
-
     async def get_credentials(self):
         return self.credentials
 
@@ -208,13 +205,6 @@ class FakeAwsEnvironmentAsync(FakeAwsEnvironment):
             mock.patch(
                 "snowflake.connector.aio._wif_util.get_aws_region",
                 side_effect=async_get_region,
-            )
-        )
-
-        self.patchers.append(
-            mock.patch(
-                "snowflake.connector.aio._wif_util.get_aws_arn",
-                side_effect=async_get_arn,
             )
         )
 

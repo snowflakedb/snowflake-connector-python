@@ -20,7 +20,6 @@ from ..wif_util import (
     WorkloadIdentityAttestation,
     create_oidc_attestation,
     extract_iss_and_sub_without_signature_verification,
-    get_aws_partition,
     get_aws_sts_hostname,
 )
 
@@ -42,19 +41,6 @@ async def get_aws_region() -> str:
     return region
 
 
-async def get_aws_arn() -> str:
-    """Get the current AWS workload's ARN."""
-    session = aioboto3.Session()
-    async with session.client("sts") as client:
-        caller_identity = await client.get_caller_identity()
-        if not caller_identity or "Arn" not in caller_identity:
-            raise ProgrammingError(
-                msg="No AWS identity was found. Ensure the application is running on AWS with an IAM role attached.",
-                errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-            )
-        return caller_identity["Arn"]
-
-
 async def create_aws_attestation() -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for AWS.
 
@@ -69,8 +55,7 @@ async def create_aws_attestation() -> WorkloadIdentityAttestation:
         )
 
     region = await get_aws_region()
-    arn = await get_aws_arn()
-    partition = get_aws_partition(arn)
+    partition = session.get_partition_for_region(region)
     sts_hostname = get_aws_sts_hostname(region, partition)
     request = AWSRequest(
         method="POST",
@@ -89,8 +74,10 @@ async def create_aws_attestation() -> WorkloadIdentityAttestation:
         "headers": dict(request.headers.items()),
     }
     credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
+    # Unlike other providers, for AWS, we only include general identifiers (region and partition)
+    # rather than specific user identifiers, since we don't actually execute a GetCallerIdentity call.
     return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"arn": arn}
+        AttestationProvider.AWS, credential, {"region": region, "partition": partition}
     )
 
 
