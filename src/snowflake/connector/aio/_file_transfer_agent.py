@@ -59,6 +59,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
         source_from_stream: IO[bytes] | None = None,
         use_s3_regional_url: bool = False,
         unsafe_file_write: bool = False,
+        reraise_error_in_file_transfer_work_function: bool = False,
     ) -> None:
         super().__init__(
             cursor=cursor,
@@ -78,6 +79,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
             source_from_stream=source_from_stream,
             use_s3_regional_url=use_s3_regional_url,
             unsafe_file_write=unsafe_file_write,
+            reraise_error_in_file_transfer_work_function=reraise_error_in_file_transfer_work_function,
         )
 
     async def execute(self) -> None:
@@ -181,6 +183,9 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                     await asyncio.gather(*finish_download_upload_tasks)
                 except Exception as error:
                     done_client.meta.error_details = error
+                    if self._reraise_error_in_file_transfer_work_function:
+                        # Propagate task exceptions to the caller to fail the transfer early.
+                        raise
 
         def transfer_done_cb(
             task: asyncio.Task,
