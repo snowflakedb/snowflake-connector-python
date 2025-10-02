@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from os import chmod, path
 from unittest import mock
@@ -190,3 +191,99 @@ def test_strip_stage_prefix_from_dst_file_name_for_download():
         agent._strip_stage_prefix_from_dst_file_name_for_download.assert_called_with(
             file
         )
+
+
+def _setup_test_for_async_task_error_propagation(tmp_path):
+    """Helper to set up common test infrastructure for async error propagation tests.
+
+    Returns:
+        tuple: (agent, test_exception, mock_client, mock_create_client)
+    """
+
+    file1 = tmp_path / "file1"
+    file1.write_text("test content")
+
+    # Mock cursor
+    mock_cursor = mock.MagicMock(autospec=SnowflakeCursor)
+
+    # Create file transfer agent
+    agent = SnowflakeFileTransferAgent(
+        mock_cursor,
+        "PUT some_file.txt",
+        {
+            "data": {
+                "command": "UPLOAD",
+                "src_locations": [str(file1)],
+                "sourceCompression": "none",
+                "parallel": 1,
+                "stageInfo": {
+                    "creds": {
+                        "AZURE_SAS_TOKEN": "sas_token",
+                    },
+                    "location": "some_bucket",
+                    "region": "no_region",
+                    "locationType": "AZURE",
+                    "path": "remote_loc",
+                    "endPoint": "",
+                    "storageAccount": "storage_account",
+                },
+            },
+            "success": True,
+        },
+    )
+
+    # Parse command and initialize file metadata
+    agent._parse_command()
+    agent._init_file_metadata()
+    agent._process_file_compression_type()
+
+    # Create a custom exception to be raised by the async work function
+    test_exception = Exception("Test work function failure")
+
+    async def mock_upload_chunk_with_delay(*args, **kwargs):
+        await asyncio.sleep(0.05)
+        raise test_exception
+
+    # Set up mock client patch, which we will activate in each unit test case.
+    mock_client = mock.AsyncMock()
+    mock_client.upload_chunk.side_effect = mock_upload_chunk_with_delay
+
+    # Set up mock client attributes needed for the transfer flow
+    mock_client.meta = agent._file_metadata[0]
+    mock_client.num_of_chunks = 1
+    mock_client.successful_transfers = 0
+    mock_client.failed_transfers = 0
+    mock_client.lock = mock.MagicMock()
+    # Mock methods that would be called during cleanup
+    mock_client.finish_upload = mock.AsyncMock()
+    mock_client.delete_client_data = mock.MagicMock()
+
+    # Patch async client factory to return our async mock client
+    mock_create_client = mock.patch.object(
+        agent,
+        "_create_file_transfer_client",
+        new=mock.AsyncMock(return_value=mock_client),
+    )
+
+    return agent, test_exception, mock_client, mock_create_client
+
+
+# Skip for old drivers because the connection config of
+# reraise_error_in_file_transfer_work_function is newly introduced.
+@pytest.mark.skipolddriver
+async def test_async_reraises_file_transfer_work_fn_error(tmp_path):
+    """Async tasks raising should propagate to caller (main loop) during transfer()."""
+    agent, test_exception, mock_client, mock_create_client_patch = (
+        _setup_test_for_async_task_error_propagation(tmp_path)
+    )
+
+    with mock_create_client_patch as mock_create_client:
+        mock_create_client.return_value = mock_client
+
+        with pytest.raises(Exception) as exc_info:
+            await agent.transfer(agent._file_metadata)
+
+        assert exc_info.value is test_exception
+
+        # Verify that prepare_upload was awaited (work function executed)
+        mock_client.prepare_upload.assert_awaited_once()
