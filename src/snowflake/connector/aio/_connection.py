@@ -130,6 +130,22 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         # Set up the file operation parser and stream downloader.
         self._file_operation_parser = FileOperationParser(self)
         self._stream_downloader = StreamDownloader(self)
+        self._snowflake_version: str | None = None
+
+    @property
+    async def snowflake_version(self) -> str:
+        # The result from SELECT CURRENT_VERSION() is `<version> <internal hash>`,
+        # and we only need the first part
+        if self._snowflake_version is None:
+            self._snowflake_version = str(
+                (
+                    await (
+                        await self.cursor().execute("SELECT CURRENT_VERSION()")
+                    ).fetchall()
+                )[0][0]
+            ).split(" ")[0]
+
+        return self._snowflake_version
 
     def __enter__(self):
         # async connection does not support sync context manager
