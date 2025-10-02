@@ -1519,12 +1519,12 @@ async def test_snowflake_version():
 
     # Assert that conn.snowflake_version is a string.
     assert isinstance(
-        conn.snowflake_version, str
-    ), f"snowflake_version should be a string, but got {type(conn.snowflake_version)}"
+        await conn.snowflake_version, str
+    ), f"snowflake_version should be a string, but got {type(await conn.snowflake_version)}"
 
     # Assert that conn.snowflake_version is in the format of "x.y.z", where
     # x, y and z are numbers.
     version_pattern = r"^\d+\.\d+\.\d+$"
     assert re.match(
-        version_pattern, conn.snowflake_version
-    ), f"snowflake_version should match pattern 'x.y.z', but got '{conn.snowflake_version}'"
+        version_pattern, await conn.snowflake_version
+    ), f"snowflake_version should match pattern 'x.y.z', but got '{await conn.snowflake_version}'"
