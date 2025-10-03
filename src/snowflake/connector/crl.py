@@ -54,7 +54,7 @@ class CRLConfig:
     )
     allow_certificates_without_crl_url: bool = False
     connection_timeout_ms: int = 3000
-    read_timeout_ms: int = 3000
+    read_timeout_ms: int = 90000  # 90s
     cache_validity_time: timedelta = timedelta(hours=24)
     enable_crl_cache: bool = True
     enable_crl_file_cache: bool = True
@@ -276,9 +276,7 @@ class CRLValidator:
 
         if certificate_chains is None or len(certificate_chains) == 0:
             logger.warning("Certificate chains are empty")
-            if self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY:
-                return True
-            return False
+            return self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
 
         results = []
         for chain in certificate_chains:
@@ -549,25 +547,16 @@ class CRLValidator:
         Returns:
             List of certificate chains, where each chain is a list of x509.Certificate objects
         """
-        from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
-
         try:
-            cert_chain = connection.get_peer_cert_chain()
+            # Convert OpenSSL certificates to cryptography x509 certificates
+            cert_chain = connection.get_peer_cert_chain(as_cryptography=True)
             if not cert_chain:
                 logger.debug("No certificate chain found in connection")
                 return []
-
-            # Convert OpenSSL certificates to cryptography x509 certificates
-            x509_chain = []
-            for cert_openssl in cert_chain:
-                cert_der = dump_certificate(FILETYPE_ASN1, cert_openssl)
-                cert_x509 = x509.load_der_x509_certificate(cert_der, default_backend())
-                x509_chain.append(cert_x509)
-
             logger.debug(
-                "Extracted %d certificates for CRL validation", len(x509_chain)
+                "Extracted %d certificates for CRL validation", len(cert_chain)
             )
-            return [x509_chain]  # Return as a single chain
+            return [cert_chain]  # Return as a single chain
 
         except Exception as e:
             logger.warning(
