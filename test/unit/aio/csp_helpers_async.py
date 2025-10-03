@@ -232,7 +232,7 @@ class FakeAwsEnvironmentAsync(FakeAwsEnvironment):
         )
 
         # Start the additional async patches
-        for patcher in self.patchers[-4:]:  # Only start the new patches we just added
+        for patcher in self.patchers[-3:]:  # Only start the new patches we just added
             patcher.__enter__()
         return self
 

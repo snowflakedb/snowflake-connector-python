@@ -156,7 +156,7 @@ async def test_explicit_aws_uses_regional_hostnames(
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     await auth_class.prepare()
 
-    data = extract_api_data(auth_class)
+    data = await extract_api_data(auth_class)
     decoded_token = json.loads(b64decode(data["TOKEN"]))
     hostname_from_url = urlparse(decoded_token["url"]).hostname
     hostname_from_header = decoded_token["headers"]["Host"]
