@@ -1495,3 +1495,67 @@ def test_crl_signature_verification_with_issuer_mismatch_warning(
         assert (
             warning_found
         ), f"Expected warning about CRL issuer mismatch not found in logs: {[r.message for r in caplog.records]}"
+
+
+@pytest.mark.parametrize(
+    "issue_date,validity_days,expected",
+    [
+        (
+            # Issued before March 15, 2024 - not short-lived
+            datetime(2023, 3, 14, tzinfo=timezone.utc),
+            3,
+            False,
+        ),
+        (
+            # Issued on March 15, 2024, should use 10-day rule
+            datetime(2024, 3, 15, tzinfo=timezone.utc),
+            10,
+            True,
+        ),
+        (
+            # Issued on March 15, 2024, should use 10-day rule
+            datetime(2024, 3, 15, tzinfo=timezone.utc),
+            11,
+            False,
+        ),
+        (
+            # Issued on March 15, 2024, should use 10-day rule
+            datetime(2024, 3, 15),
+            10,
+            True,
+        ),
+        (
+            # Issued on March 15, 2024, should use 10-day rule
+            datetime(2024, 3, 15),
+            11,
+            False,
+        ),
+        (
+            # Issued on March 15, 2026, should use 7-day rule
+            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            7,
+            True,
+        ),
+        (
+            # Issued on March 15, 2026, should use 7-day rule
+            datetime(2026, 3, 15, tzinfo=timezone.utc),
+            8,
+            False,
+        ),
+        (
+            # Issued on March 15, 2026, should use 7-day rule
+            datetime(2026, 3, 15),
+            7,
+            True,
+        ),
+        (
+            # Issued on March 15, 2026, should use 7-day rule
+            datetime(2026, 3, 15),
+            8,
+            False,
+        ),
+    ],
+)
+def test_is_short_lived_certificate(cert_gen, issue_date, validity_days, expected):
+    cert = cert_gen.create_short_lived_certificate(validity_days, issue_date)
+    assert CRLValidator._is_short_lived_certificate(cert) == expected
