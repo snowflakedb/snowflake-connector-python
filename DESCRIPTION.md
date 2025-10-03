@@ -10,6 +10,11 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - v3.18.0(TBD)
   - Added support for pandas conversion for Day-time and Year-Month Interval types
 
+- v3.18.0(October 06,2025)
+
+   -N/A
+
+
 - v3.17.4(September 22,2025)
   - Added support for intermediate certificates as roots when they are stored in the trust store
   - Bumped up vendored `urllib3` to `2.5.0` and `requests` to `v2.32.5`
