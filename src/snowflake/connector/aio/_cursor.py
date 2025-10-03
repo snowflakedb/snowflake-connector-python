@@ -686,6 +686,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
                     multipart_threshold=data.get("threshold"),
                     use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
                     unsafe_file_write=self._connection.unsafe_file_write,
+                    reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
                 )
                 await sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
@@ -1100,6 +1101,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             self,
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
+            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         await file_transfer_agent.execute()
         await self._init_result_and_meta(file_transfer_agent.result())
@@ -1140,6 +1142,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
             force_put_overwrite=False,  # _upload should respect user decision on overwriting
+            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         await file_transfer_agent.execute()
         await self._init_result_and_meta(file_transfer_agent.result())
@@ -1210,6 +1213,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             ret,
             source_from_stream=input_stream,
             force_put_overwrite=False,  # _upload should respect user decision on overwriting
+            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         await file_transfer_agent.execute()
         await self._init_result_and_meta(file_transfer_agent.result())

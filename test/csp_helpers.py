@@ -358,9 +358,6 @@ class FakeAwsEnvironment:
     def get_region(self):
         return self.region
 
-    def get_arn(self):
-        return self.arn
-
     def get_credentials(self):
         return self.credentials
 
@@ -405,11 +402,6 @@ class FakeAwsEnvironment:
             mock.patch(
                 "snowflake.connector.wif_util.get_aws_region",
                 side_effect=self.get_region,
-            )
-        )
-        self.patchers.append(
-            mock.patch(
-                "snowflake.connector.wif_util.get_aws_arn", side_effect=self.get_arn
             )
         )
         self.patchers.append(

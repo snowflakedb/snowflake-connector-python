@@ -139,10 +139,19 @@ async def test_explicit_aws_encodes_audience_host_signature_to_api(
     verify_aws_token(data["TOKEN"], fake_aws_environment.region)
 
 
-async def test_explicit_aws_uses_regional_hostname(
-    fake_aws_environment: FakeAwsEnvironmentAsync,
+@pytest.mark.parametrize(
+    "region,expected_hostname",
+    [
+        ("us-east-1", "sts.us-east-1.amazonaws.com"),
+        ("af-south-1", "sts.af-south-1.amazonaws.com"),
+        ("us-gov-west-1", "sts.us-gov-west-1.amazonaws.com"),
+        ("cn-north-1", "sts.cn-north-1.amazonaws.com.cn"),
+    ],
+)
+async def test_explicit_aws_uses_regional_hostnames(
+    fake_aws_environment: FakeAwsEnvironmentAsync, region: str, expected_hostname: str
 ):
-    fake_aws_environment.region = "antarctica-northeast-3"
+    fake_aws_environment.region = region
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     await auth_class.prepare()
@@ -152,7 +161,6 @@ async def test_explicit_aws_uses_regional_hostname(
     hostname_from_url = urlparse(decoded_token["url"]).hostname
     hostname_from_header = decoded_token["headers"]["Host"]
 
-    expected_hostname = "sts.antarctica-northeast-3.amazonaws.com"
     assert expected_hostname == hostname_from_url
     assert expected_hostname == hostname_from_header
 
@@ -167,7 +175,7 @@ async def test_explicit_aws_generates_unique_assertion_content(
     await auth_class.prepare()
 
     assert (
-        '{"_provider":"AWS","arn":"arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"}'
+        '{"_provider":"AWS","partition":"aws","region":"us-east-1"}'
         == auth_class.assertion_content
     )
 

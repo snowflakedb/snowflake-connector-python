@@ -348,3 +348,136 @@ def test_server_dop_cap(tmp_path):
     # and due to the server DoP cap, each of them will have a thread count
     # of 1.
     assert len(list(filter(lambda e: e.args == (1,), tpe.call_args_list))) == 3
+
+
+def _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, reraise_param_value):
+    """Helper function to set up common test infrastructure for tests related to re-raising file transfer work function error.
+
+    Returns:
+        tuple: (agent, test_exception, mock_client, mock_create_client)
+    """
+
+    file1 = tmp_path / "file1"
+    file1.write_text("test content")
+
+    # Mock cursor with connection attribute
+    mock_cursor = mock.MagicMock(autospec=SnowflakeCursor)
+    mock_cursor.connection._reraise_error_in_file_transfer_work_function = (
+        reraise_param_value
+    )
+
+    # Create file transfer agent
+    agent = SnowflakeFileTransferAgent(
+        mock_cursor,
+        "PUT some_file.txt",
+        {
+            "data": {
+                "command": "UPLOAD",
+                "src_locations": [str(file1)],
+                "sourceCompression": "none",
+                "parallel": 1,
+                "stageInfo": {
+                    "creds": {
+                        "AZURE_SAS_TOKEN": "sas_token",
+                    },
+                    "location": "some_bucket",
+                    "region": "no_region",
+                    "locationType": "AZURE",
+                    "path": "remote_loc",
+                    "endPoint": "",
+                    "storageAccount": "storage_account",
+                },
+            },
+            "success": True,
+        },
+        reraise_error_in_file_transfer_work_function=reraise_param_value,
+    )
+
+    # Quick check to make sure the field _reraise_error_in_file_transfer_work_function is correctly populated
+    assert (
+        agent._reraise_error_in_file_transfer_work_function == reraise_param_value
+    ), f"expected {reraise_param_value}, got {agent._reraise_error_in_file_transfer_work_function}"
+
+    # Parse command and initialize file metadata
+    agent._parse_command()
+    agent._init_file_metadata()
+    agent._process_file_compression_type()
+
+    # Create a custom exception to be raised by the work function
+    test_exception = Exception("Test work function failure")
+
+    def mock_upload_chunk_with_delay(*args, **kwargs):
+        import time
+
+        time.sleep(0.2)
+        raise test_exception
+
+    # Set up mock client patch, which we will activate in each unit test case.
+    mock_create_client = mock.patch.object(agent, "_create_file_transfer_client")
+    mock_client = mock.MagicMock()
+    mock_client.upload_chunk.side_effect = mock_upload_chunk_with_delay
+
+    # Set up mock client attributes needed for the transfer flow
+    mock_client.meta = agent._file_metadata[0]
+    mock_client.num_of_chunks = 1
+    mock_client.successful_transfers = 0
+    mock_client.failed_transfers = 0
+    mock_client.lock = mock.MagicMock()
+    # Mock methods that would be called during cleanup
+    mock_client.finish_upload = mock.MagicMock()
+    mock_client.delete_client_data = mock.MagicMock()
+
+    return agent, test_exception, mock_client, mock_create_client
+
+
+# Skip for old drivers because the connection config of
+# reraise_error_in_file_transfer_work_function is newly introduced.
+@pytest.mark.skipolddriver
+def test_python_reraise_file_transfer_work_fn_error_as_is(tmp_path):
+    """Tests that when reraise_error_in_file_transfer_work_function config is True,
+    exceptions are reraised immediately without continuing execution after transfer().
+    """
+    agent, test_exception, mock_client, mock_create_client_patch = (
+        _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, True)
+    )
+
+    with mock_create_client_patch as mock_create_client:
+        mock_create_client.return_value = mock_client
+
+        # Test that with the connection config
+        # reraise_error_in_file_transfer_work_function is True, the
+        # exception is reraised immediately in main thread of transfer.
+        with pytest.raises(Exception) as exc_info:
+            agent.transfer(agent._file_metadata)
+
+        # Verify it's the same exception we injected
+        assert exc_info.value is test_exception
+
+        # Verify that prepare_upload was called (showing the work function was executed)
+        mock_client.prepare_upload.assert_called_once()
+
+
+# Skip for old drivers because the connection config of
+# reraise_error_in_file_transfer_work_function is newly introduced.
+@pytest.mark.skipolddriver
+def test_python_not_reraise_file_transfer_work_fn_error_as_is(tmp_path):
+    """Tests that when reraise_error_in_file_transfer_work_function config is False (default),
+    where exceptions are stored in file metadata but execution continues.
+    """
+    agent, test_exception, mock_client, mock_create_client_patch = (
+        _setup_test_for_reraise_file_transfer_work_fn_error(tmp_path, False)
+    )
+
+    with mock_create_client_patch as mock_create_client:
+        mock_create_client.return_value = mock_client
+
+        # Verify that with the connection config
+        # reraise_error_in_file_transfer_work_function is False, the
+        # exception is not reraised (but instead stored in file metadata).
+        agent.transfer(agent._file_metadata)
+
+        # Verify that the error was stored in the file metadata
+        assert agent._file_metadata[0].error_details is test_exception
+
+        # Verify that prepare_upload was called
+        mock_client.prepare_upload.assert_called_once()
