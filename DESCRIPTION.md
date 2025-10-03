@@ -7,7 +7,10 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v3.18.0(TBD)
+- v3.19.0(TBD)
+  - N/A
+
+- v3.18.0(October 03,2025)
   - Added support for pandas conversion for Day-time and Year-Month Interval types
 
 - v3.17.4(September 22,2025)
