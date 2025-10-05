@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import collections
 import contextlib
 import gzip
-import itertools
 import json
 import logging
 import re
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 import OpenSSL.SSL
 from urllib3.util.url import parse_url
@@ -21,7 +19,6 @@ from ..constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
     HTTP_HEADER_USER_AGENT,
-    OCSPMode,
 )
 from ..errorcode import (
     ER_CONNECTION_IS_CLOSED,
@@ -67,7 +64,6 @@ from ..network import (
     ReauthenticationRequest,
     RetryRequest,
 )
-from ..network import SessionPool as SessionPoolSync
 from ..network import SnowflakeRestful as SnowflakeRestfulSync
 from ..network import (
     SnowflakeRestfulJsonEncoder,
@@ -83,7 +79,7 @@ from ..sqlstate import (
 )
 from ..time_util import TimeoutBackoffCtx
 from ._description import CLIENT_NAME
-from ._ssl_connector import SnowflakeSSLConnector
+from ._session_manager import SessionManager, SnowflakeSSLConnectorFactory
 
 if TYPE_CHECKING:
     from snowflake.connector.aio import SnowflakeConnection
@@ -132,23 +128,6 @@ def raise_failed_request_error(
     )
 
 
-class SessionPool(SessionPoolSync):
-    def __init__(self, rest: SnowflakeRestful) -> None:
-        super().__init__(rest)
-
-    async def close(self):
-        """Closes all active and idle sessions in this session pool."""
-        if self._active_sessions:
-            logger.debug(f"Closing {len(self._active_sessions)} active sessions")
-        for s in itertools.chain(set(self._active_sessions), set(self._idle_sessions)):
-            try:
-                await s.close()
-            except Exception as e:
-                logger.info(f"Session cleanup failed: {e}")
-        self._active_sessions.clear()
-        self._idle_sessions.clear()
-
-
 class SnowflakeRestful(SnowflakeRestfulSync):
     def __init__(
         self,
@@ -157,15 +136,19 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         protocol: str = "http",
         inject_client_pause: int = 0,
         connection: SnowflakeConnection | None = None,
+        session_manager: SessionManager | None = None,
     ):
         super().__init__(host, port, protocol, inject_client_pause, connection)
         self._lock_token = asyncio.Lock()
-        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
-            lambda: SessionPool(self)
-        )
-        self._ocsp_mode = (
-            self._connection._ocsp_mode() if self._connection else OCSPMode.FAIL_OPEN
-        )
+
+        if session_manager is None:
+            session_manager = (
+                connection._session_manager
+                if (connection and connection._session_manager)
+                else SessionManager(connector_factory=SnowflakeSSLConnectorFactory())
+            )
+        self._session_manager = session_manager
+
         if self._connection and self._connection.proxy_host:
             self._get_proxy_headers = lambda url: {"Host": parse_url(url).hostname}
         else:
@@ -181,8 +164,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         if hasattr(self, "_mfa_token"):
             del self._mfa_token
 
-        for session_pool in self._sessions_map.values():
-            await session_pool.close()
+        await self._session_manager.close()
 
     async def request(
         self,
@@ -867,35 +849,11 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             ) from err
 
     def make_requests_session(self) -> aiohttp.ClientSession:
-        s = aiohttp.ClientSession(
-            connector=SnowflakeSSLConnector(snowflake_ocsp_mode=self._ocsp_mode),
-            trust_env=True,  # this is for proxy support, proxy.set_proxy will set envs and trust_env allows reading env
-        )
-        return s
+        return self._session_manager.make_session()
 
     @contextlib.asynccontextmanager
     async def _use_requests_session(
         self, url: str | None = None
-    ) -> aiohttp.ClientSession:
-        if self._connection.disable_request_pooling:
-            session = self.make_requests_session()
-            try:
-                yield session
-            finally:
-                await session.close()
-        else:
-            try:
-                hostname = urlparse(url).hostname
-            except Exception:
-                hostname = None
-
-            session_pool: SessionPool = self._sessions_map[hostname]
-            session = session_pool.get_session()
-            logger.debug(f"Session status for SessionPool '{hostname}', {session_pool}")
-            try:
-                yield session
-            finally:
-                session_pool.return_session(session)
-                logger.debug(
-                    f"Session status for SessionPool '{hostname}', {session_pool}"
-                )
+    ) -> AsyncGenerator[aiohttp.ClientSession]:
+        async with self._session_manager.use_requests_session(url) as session:
+            yield session
