@@ -109,7 +109,7 @@ class CRLConfig:
         cache_validity_time = (
             cls.cache_validity_time
             if sf_connection.crl_cache_validity_hours is None
-            else timedelta(hours=int(sf_connection.crl_cache_validity_hours))
+            else timedelta(hours=float(sf_connection.crl_cache_validity_hours))
         )
         crl_cache_dir = (
             cls.crl_cache_dir
