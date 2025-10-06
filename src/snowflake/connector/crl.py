@@ -105,10 +105,6 @@ class CRLConfig:
             )
             cert_revocation_check_mode = cls.cert_revocation_check_mode
 
-        if cert_revocation_check_mode == CertRevocationCheckMode.DISABLED:
-            # The rest of the parameters don't matter if CRL checking is disabled
-            return cls(cert_revocation_check_mode=cert_revocation_check_mode)
-
         # Apply default value logic for all other parameters when connection attribute is None
         cache_validity_time = (
             cls.cache_validity_time

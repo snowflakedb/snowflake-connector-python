@@ -439,7 +439,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     ),  # Read timeout for CRL downloads in milliseconds
     "crl_cache_validity_hours": (
         None,
-        (type(None), int),
+        (type(None), float),
     ),  # CRL cache validity time in hours
     "enable_crl_cache": (None, (type(None), bool)),  # Enable CRL caching
     "enable_crl_file_cache": (None, (type(None), bool)),  # Enable file-based CRL cache
@@ -651,8 +651,6 @@ class SnowflakeConnection:
             # connection_name is None and kwargs was empty when called
             kwargs = _get_default_connection_params()
         self.__set_error_attributes()
-        # Initialize CRL configuration
-        self._crl_config: CRLConfig = CRLConfig.from_connection(self)
         self.connect(**kwargs)
         self._telemetry = TelemetryClient(self._rest)
         self.expired = False
@@ -699,8 +697,11 @@ class SnowflakeConnection:
     @property
     def allow_certificates_without_crl_url(self) -> bool | None:
         """Whether to allow certificates without CRL distribution points."""
+        print("crl_config:", self._crl_config)
         if not self._crl_config:
+            print("returning[s]:", self._allow_certificates_without_crl_url)
             return self._allow_certificates_without_crl_url
+        print("returning[c]:", self._crl_config.allow_certificates_without_crl_url)
         return self._crl_config.allow_certificates_without_crl_url
 
     @property
@@ -718,11 +719,11 @@ class SnowflakeConnection:
         return self._crl_config.read_timeout_ms
 
     @property
-    def crl_cache_validity_hours(self) -> int | None:
+    def crl_cache_validity_hours(self) -> float | None:
         """CRL cache validity time in hours."""
         if not self._crl_config:
             return self._crl_cache_validity_hours
-        return self._crl_config.cache_validity_hours
+        return self._crl_config.cache_validity_time.total_seconds() / 3600
 
     @property
     def enable_crl_cache(self) -> bool | None:
@@ -743,7 +744,7 @@ class SnowflakeConnection:
         """Directory for CRL file cache."""
         if not self._crl_config:
             return self._crl_cache_dir
-        return self._crl_config.crl_cache_dir
+        return str(self._crl_config.crl_cache_dir)
 
     @property
     def crl_cache_removal_delay_days(self) -> int | None:
@@ -1066,6 +1067,8 @@ class SnowflakeConnection:
         logger.debug("connect")
         if len(kwargs) > 0:
             self.__config(**kwargs)
+
+        self._crl_config: CRLConfig = CRLConfig.from_connection(self)
 
         self._http_config = HttpConfig(
             adapter_factory=ProxySupportAdapterFactory(),
