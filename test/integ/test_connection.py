@@ -1077,7 +1077,7 @@ def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
 
     assert rest_sm_1.sessions_map or disable_request_pooling
 
-    with rest_sm_1.use_requests_session("https://example.com"):
+    with rest_sm_1.use_session("https://example.com"):
         ocsp_sm_1 = get_current_session_manager(create_default_if_missing=False)
         assert ocsp_sm_1 is not rest_sm_1
         assert ocsp_sm_1.config == rest_sm_1.config
@@ -1096,7 +1096,7 @@ def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
     assert rest_sm_2.sessions_map or disable_request_pooling
     assert rest_sm_2 is not rest_sm_1
 
-    with rest_sm_2.use_requests_session("https://example.com"):
+    with rest_sm_2.use_session("https://example.com"):
         ocsp_sm_2 = get_current_session_manager(create_default_if_missing=False)
         assert ocsp_sm_2 is not rest_sm_2
         assert ocsp_sm_2.config == rest_sm_2.config

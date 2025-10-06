@@ -31,7 +31,7 @@ def create_session(
     """
     if num_sessions == 0:
         return
-    with manager.use_requests_session(url):
+    with manager.use_session(url):
         create_session(manager, num_sessions - 1, url)
 
 
@@ -147,7 +147,7 @@ def test_reuse_sessions_within_pool(make_session_mock):
 def test_clone_independence():
     """`clone` should return an independent manager sharing only the adapter_factory."""
     manager = SessionManager()
-    with manager.use_requests_session(URL_SFC_TEST_0):
+    with manager.use_session(URL_SFC_TEST_0):
         pass
     assert HOST_SFC_TEST_0 in manager.sessions_map
 
@@ -157,7 +157,7 @@ def test_clone_independence():
     assert clone.adapter_factory is manager.adapter_factory
     assert clone.sessions_map == {}
 
-    with clone.use_requests_session(URL_SFC_S3_STAGE_1):
+    with clone.use_session(URL_SFC_S3_STAGE_1):
         pass
 
     assert HOST_SFC_S3_STAGE in clone.sessions_map
@@ -189,7 +189,7 @@ def test_clone_independent_pools():
     )
 
     # Use the base manager – this should register a pool for the hostname
-    with base.use_requests_session("https://example.com"):
+    with base.use_session("https://example.com"):
         pass
     assert "example.com" in base.sessions_map
 
@@ -198,7 +198,7 @@ def test_clone_independent_pools():
     assert clone.sessions_map == {}
 
     # After use the clone should have its own pool, distinct from the base’s pool
-    with clone.use_requests_session("https://example.com"):
+    with clone.use_session("https://example.com"):
         pass
     assert "example.com" in clone.sessions_map
     assert clone.sessions_map["example.com"] is not base.sessions_map["example.com"]
