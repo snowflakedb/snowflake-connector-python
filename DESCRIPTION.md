@@ -25,7 +25,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
     - As part of this fix, `DictCursor` is no longer a subclass of `SnowflakeCursor`; use `SnowflakeCursorBase` as a superclass of both.
   - Fix "No AWS region was found" error if AWS region was set in `AWS_DEFAULT_REGION` variable instead of `AWS_REGION` for `WORKLOAD_IDENTITY` authenticator
   - Add `ocsp_root_certs_dict_lock_timeout` connection parameter to set the timeout (in seconds) for acquiring the lock on the OCSP root certs dictionary. Default value for this parameter is -1 which indicates no timeout.
-  - Fixed behaviour of trying S3 Transfer Accelerate endpoint by default for internal stages, and always getting HTTP403 due to permissions missing on purpose. Now /accelerate is not attempted. (snowflakedb/snowflake-connector-python#2556)
+  - Fixed behaviour of trying S3 Transfer Accelerate endpoint by default for internal stages, and always getting HTTP403 due to permissions missing on purpose. Now /accelerate is not attempted.
 
 - v3.17.4(September 22,2025)
   - Added support for intermediate certificates as roots when they are stored in the trust store
