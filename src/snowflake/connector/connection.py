@@ -697,11 +697,8 @@ class SnowflakeConnection:
     @property
     def allow_certificates_without_crl_url(self) -> bool | None:
         """Whether to allow certificates without CRL distribution points."""
-        print("crl_config:", self._crl_config)
         if not self._crl_config:
-            print("returning[s]:", self._allow_certificates_without_crl_url)
             return self._allow_certificates_without_crl_url
-        print("returning[c]:", self._crl_config.allow_certificates_without_crl_url)
         return self._crl_config.allow_certificates_without_crl_url
 
     @property
@@ -744,6 +741,8 @@ class SnowflakeConnection:
         """Directory for CRL file cache."""
         if not self._crl_config:
             return self._crl_cache_dir
+        if not self._crl_config.crl_cache_dir:
+            return None
         return str(self._crl_config.crl_cache_dir)
 
     @property
