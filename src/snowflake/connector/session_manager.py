@@ -7,7 +7,7 @@ import functools
 import itertools
 import logging
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, Callable, Generator, Mapping
+from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Mapping, TypeVar
 
 from .compat import urlparse
 from .vendored import requests
@@ -25,6 +25,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 REQUESTS_RETRY = 1  # requests library builtin retry
+
+# Generic type for session objects (requests.Session, aiohttp.ClientSession, etc.) - no specific interface is required
+SessionT = TypeVar("SessionT")
 
 
 def _propagate_session_manager_to_ocsp(generator_func):
@@ -104,23 +107,45 @@ class ProxySupportAdapterFactory(AdapterFactory):
 
 
 @dataclass(frozen=True)
-class HttpConfig:
+class BaseHttpConfig:
     """Immutable HTTP configuration shared by SessionManager instances."""
+
+    use_pooling: bool = True
+    max_retries: int | None = REQUESTS_RETRY
+
+    def copy_with(self, **overrides: Any) -> BaseHttpConfig:
+        """Return a new config with overrides applied."""
+        return replace(self, **overrides)
+
+
+@dataclass(frozen=True)
+class HttpConfig(BaseHttpConfig):
+    """HTTP configuration specific to requests library."""
 
     adapter_factory: Callable[..., HTTPAdapter] = field(
         default_factory=ProxySupportAdapterFactory
     )
-    use_pooling: bool = True
-    max_retries: int | None = REQUESTS_RETRY
 
-    def copy_with(self, **overrides: Any) -> HttpConfig:
-        """Return a new HttpConfig with overrides applied."""
-        return replace(self, **overrides)
+    def get_adapter(self, **override_adapter_factory_kwargs) -> HTTPAdapter:
+        # We pass here only chosen attributes as kwargs to make the arguments received by the factory as compliant with the HttpAdapter constructor interface as possible.
+        # We could consider passing the whole HttpConfig as kwarg to the factory if necessary in the future.
+        attributes_for_adapter_factory = frozenset(
+            {
+                "max_retries",
+            }
+        )
+
+        self_kwargs_for_adapter_factory = {
+            attr_name: getattr(self, attr_name)
+            for attr_name in attributes_for_adapter_factory
+        }
+        self_kwargs_for_adapter_factory.update(override_adapter_factory_kwargs)
+        return self.adapter_factory(**self_kwargs_for_adapter_factory)
 
 
-class SessionPool:
+class SessionPool(Generic[SessionT]):
     """
-    Component responsible for storing and reusing established instances of requests.Session class.
+    Component responsible for storing and reusing established session instances.
 
     This approach is especially useful in scenarios where multiple requests would have to be sent
     to the same host in short period of time. Instead of repeatedly establishing a new TCP connection
@@ -129,15 +154,17 @@ class SessionPool:
 
     Sessions are created using the factory method make_session of a passed instance of the
     SessionManager class.
+
+    Generic over SessionT to support different session types (requests.Session, aiohttp.ClientSession, etc.)
     """
 
     def __init__(self, manager: SessionManager) -> None:
         # A stack of the idle sessions
-        self._idle_sessions = []
-        self._active_sessions = set()
+        self._idle_sessions: list[SessionT] = []
+        self._active_sessions: set[SessionT] = set()
         self._manager = manager
 
-    def get_session(self) -> Session:
+    def get_session(self) -> SessionT:
         """Returns a session from the session pool or creates a new one."""
         try:
             session = self._idle_sessions.pop()
@@ -146,7 +173,7 @@ class SessionPool:
         self._active_sessions.add(session)
         return session
 
-    def return_session(self, session: Session) -> None:
+    def return_session(self, session: SessionT) -> None:
         """Places an active session back into the idle session stack."""
         try:
             self._active_sessions.remove(session)
@@ -177,11 +204,11 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
     """
     Mixin that provides HTTP methods (get, post, put, etc.) mirroring requests.Session, maintaining their default argument behavior (e.g., HEAD uses allow_redirects=False).
     These wrappers manage the SessionManager's use of pooled/non-pooled sessions and delegate the actual request to the corresponding session.<verb>() method.
-    The subclass must implement use_requests_session to yield a *requests.Session* instance.
+    The subclass must implement use_session to yield a *requests.Session* instance.
     """
 
     @abc.abstractmethod
-    def use_requests_session(self, url: str, use_pooling: bool) -> Session: ...
+    def use_session(self, url: str, use_pooling: bool) -> Session: ...
 
     def get(
         self,
@@ -192,7 +219,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         use_pooling: bool | None = None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.get(url, headers=headers, timeout=timeout, **kwargs)
 
     def options(
@@ -204,7 +231,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         use_pooling: bool | None = None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.options(url, headers=headers, timeout=timeout, **kwargs)
 
     def head(
@@ -216,7 +243,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         use_pooling: bool | None = None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.head(url, headers=headers, timeout=timeout, **kwargs)
 
     def post(
@@ -230,7 +257,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         json=None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.post(
                 url,
                 headers=headers,
@@ -250,7 +277,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         data=None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.put(
                 url, headers=headers, timeout=timeout, data=data, **kwargs
             )
@@ -265,7 +292,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         data=None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.patch(
                 url, headers=headers, timeout=timeout, data=data, **kwargs
             )
@@ -279,7 +306,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         use_pooling: bool | None = None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.delete(url, headers=headers, timeout=timeout, **kwargs)
 
 
@@ -399,7 +426,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
 
     @contextlib.contextmanager
     @_propagate_session_manager_to_ocsp
-    def use_requests_session(
+    def use_session(
         self, url: str | bytes | None = None, use_pooling: bool | None = None
     ) -> Generator[Session, Any, None]:
         use_pooling = use_pooling if use_pooling is not None else self.use_pooling
@@ -433,7 +460,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
         This wraps :pymeth:`use_session` so callers don’t have to manage the
         context manager themselves.
         """
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.request(
                 method=method.upper(),
                 url=url,

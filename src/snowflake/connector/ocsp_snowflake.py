@@ -551,7 +551,7 @@ class OCSPServer:
             session_manager = get_current_session_manager(
                 use_pooling=False
             ) or SessionManager(use_pooling=False)
-            with session_manager.use_requests_session() as session:
+            with session_manager.use_session() as session:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
                 backoff = exponential_backoff()()
@@ -1633,7 +1633,7 @@ class SnowflakeOCSP:
             if context_session_manager is not None
             else SessionManager(use_pooling=False)
         )
-        with session_manager.use_requests_session() as session:
+        with session_manager.use_session() as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = exponential_backoff()()
