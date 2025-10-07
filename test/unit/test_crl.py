@@ -76,6 +76,27 @@ class CertificateChain:
     leaf_cert: x509.Certificate
 
 
+@dataclass
+class CrossSignedCertificateChain:
+    #        CA
+    #     /     \
+    #  rootA   rootB
+    #   /            \
+    #  A --(AsignB)--> B
+    #    <-(BsignA)--
+    #     \       /
+    #    leafA leafB
+    #        \/
+    #     subject
+
+    rootA: x509.Certificate
+    rootB: x509.Certificate
+    AsignB: x509.Certificate
+    BsignA: x509.Certificate
+    leafA: x509.Certificate
+    leafB: x509.Certificate
+
+
 @pytest.fixture(scope="module")
 def cert_gen():
     class CertificateGeneratorUtil:
@@ -255,6 +276,123 @@ def cert_gen():
             )
 
             return CertificateChain(root_cert, intermediate_cert, leaf_cert)
+
+        def create_cross_signed_chain(self) -> CertificateChain:
+            A_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            B_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            leaf_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+
+            A_name = x509.Name(
+                [
+                    x509.NameAttribute(
+                        NameOID.COMMON_NAME,
+                        f"Test CA A {self.random.randint(1, 10000)}",
+                    )
+                ]
+            )
+            B_name = x509.Name(
+                [
+                    x509.NameAttribute(
+                        NameOID.COMMON_NAME,
+                        f"Test CA B {self.random.randint(1, 10000)}",
+                    )
+                ]
+            )
+            leaf_name = x509.Name(
+                [
+                    x509.NameAttribute(
+                        NameOID.COMMON_NAME,
+                        f"Test Leaf {self.random.randint(1, 10000)}",
+                    )
+                ]
+            )
+            rootA_cert = (
+                x509.CertificateBuilder()
+                .subject_name(A_name)
+                .issuer_name(self.ca_certificate.subject)
+                .public_key(A_key.public_key())
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(datetime.now(timezone.utc))
+                .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+                .add_extension(
+                    x509.BasicConstraints(ca=True, path_length=None),
+                    critical=True,
+                )
+                .sign(self.ca_private_key, hashes.SHA256())
+            )
+            rootB_cert = (
+                x509.CertificateBuilder()
+                .subject_name(B_name)
+                .issuer_name(self.ca_certificate.subject)
+                .public_key(B_key.public_key())
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(datetime.now(timezone.utc))
+                .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+                .add_extension(
+                    x509.BasicConstraints(ca=True, path_length=None),
+                    critical=True,
+                )
+                .sign(self.ca_private_key, hashes.SHA256())
+            )
+            BsignA_cert = (
+                x509.CertificateBuilder()
+                .subject_name(A_name)
+                .issuer_name(B_name)
+                .public_key(A_key.public_key())
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(datetime.now(timezone.utc))
+                .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+                .add_extension(
+                    x509.BasicConstraints(ca=False, path_length=None),
+                    critical=True,
+                )
+                .sign(B_key, hashes.SHA256())
+            )
+            AsignB_cert = (
+                x509.CertificateBuilder()
+                .subject_name(B_name)
+                .issuer_name(A_name)
+                .public_key(B_key.public_key())
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(datetime.now(timezone.utc))
+                .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+                .add_extension(
+                    x509.BasicConstraints(ca=False, path_length=None),
+                    critical=True,
+                )
+                .sign(A_key, hashes.SHA256())
+            )
+            leafA_cert = (
+                x509.CertificateBuilder()
+                .subject_name(leaf_name)
+                .issuer_name(A_name)
+                .public_key(leaf_key.public_key())
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(datetime.now(timezone.utc))
+                .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+                .add_extension(
+                    x509.BasicConstraints(ca=False, path_length=None),
+                    critical=True,
+                )
+                .sign(A_key, hashes.SHA256())
+            )
+            leafB_cert = (
+                x509.CertificateBuilder()
+                .subject_name(leaf_name)
+                .issuer_name(B_name)
+                .public_key(leaf_key.public_key())
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(datetime.now(timezone.utc))
+                .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+                .add_extension(
+                    x509.BasicConstraints(ca=False, path_length=None),
+                    critical=True,
+                )
+                .sign(B_key, hashes.SHA256())
+            )
+            return CrossSignedCertificateChain(
+                rootA_cert, rootB_cert, AsignB_cert, BsignA_cert, leafA_cert, leafB_cert
+            )
 
         def create_short_lived_certificate(
             self, validity_days: int, issuance_date: datetime
@@ -467,6 +605,79 @@ def test_should_validate_multiple_chains_and_return_first_valid_with_no_crl_urls
     assert result, "Should return true when at least one valid chain is found"
 
 
+def test_cross_signed_certificate_chain(cert_gen, session_manager, mock_ssl_context):
+    """Test validation of cross-signed certificate chain"""
+    chain = cert_gen.create_cross_signed_chain()
+    validator = CRLValidator(
+        session_manager,
+        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
+        allow_certificates_without_crl_url=True,
+        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+    )
+
+    # provide full chain in arbitrary order
+    chains = [
+        [
+            chain.leafA,
+            chain.AsignB,
+            chain.leafB,
+            chain.BsignA,
+            chain.rootB,
+            chain.rootA,
+        ]
+    ]
+    assert validator.validate_certificate_chains(chains)
+
+    # only A is signed by CA
+    chains = [
+        [
+            chain.leafA,
+            chain.AsignB,
+            chain.leafB,
+            chain.BsignA,
+            # chain.rootB,
+            chain.rootA,
+        ]
+    ]
+    assert validator.validate_certificate_chains(chains)
+
+    # nor A nor B is signed by CA
+    chains = [
+        [
+            chain.leafA,
+            chain.AsignB,
+            chain.leafB,
+            chain.BsignA,
+            # chain.rootB,
+            # chain.rootA,
+        ]
+    ]
+    assert not validator.validate_certificate_chains(chains)
+
+
+def test_cross_signed_certificate_chain_revoked_CA(
+    cert_gen, session_manager, mock_ssl_context
+):
+    chain = cert_gen.create_cross_signed_chain()
+    chains = [
+        [
+            chain.leafA,
+            chain.AsignB,
+            chain.leafB,
+            chain.BsignA,
+            chain.rootB,
+            chain.rootA,
+        ]
+    ]
+    validator = CRLValidator(
+        session_manager,
+        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
+        allow_certificates_without_crl_url=True,
+        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+    )
+    assert validator.validate_certificate_chains(chains)
+
+
 @responses.activate
 def test_should_validate_non_revoked_certificate_successfully(
     cert_gen, crl_urls, session_manager, mock_ssl_context
@@ -487,6 +698,37 @@ def test_should_validate_non_revoked_certificate_successfully(
         "CN=Test Server", [crl_urls.test_ca]
     )
     chain = [cert, cert_gen.ca_certificate]
+
+    validator = CRLValidator(
+        session_manager,
+        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
+        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+    )
+
+    assert validator.validate_certificate_chains([chain])
+    assert resp.call_count
+
+
+@responses.activate
+def test_should_validate_non_revoked_certificate_successfully_if_root_not_provided_on_chain(
+    cert_gen, crl_urls, session_manager, mock_ssl_context
+):
+    """Test validation of non-revoked certificate"""
+    # Setup mock HTTP client
+    crl_content = cert_gen.generate_valid_crl()
+    resp = responses.add(
+        responses.GET,
+        crl_urls.test_ca,
+        body=crl_content,
+        status=200,
+        content_type="application/pkcs7-mime",
+    )
+
+    # Create certificate with CRL distribution point
+    cert = cert_gen.create_certificate_with_crl_distribution_points(
+        "CN=Test Server", [crl_urls.test_ca]
+    )
+    chain = [cert]
 
     validator = CRLValidator(
         session_manager,

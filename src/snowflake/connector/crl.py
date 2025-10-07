@@ -337,9 +337,6 @@ class CRLValidator:
             # REVOKED - all paths are revoked
             # ERROR - some certificates on potentially unrevoked paths can't be verified
             # None - ignore this path (cycle detected)
-            print("traverse_chain", cert)
-            print(cert.issuer)
-            print(cert.subject)
             if self._is_certificate_trusted_by_os(cert):
                 # found a trusted certificate
                 return CRLValidationResult.UNREVOKED
@@ -396,7 +393,6 @@ class CRLValidator:
         self, cert: x509.Certificate, ca_cert: x509.Certificate
     ) -> CRLValidationResult:
         # validate certificate can be called multiple times with the same certificate
-        print("validate_certificate_with_cache", cert)
         if cert not in self._validate_certificate_cache:
             self._validate_certificate_cache[cert] = self._validate_certificate(
                 cert, ca_cert
@@ -408,7 +404,6 @@ class CRLValidator:
     ) -> CRLValidationResult:
         """Validate a single certificate against CRL"""
         # Check if certificate is short-lived (skip CRL check)
-        print("validate_certificate", cert)
         if self._is_short_lived_certificate(cert):
             return CRLValidationResult.UNREVOKED
 
