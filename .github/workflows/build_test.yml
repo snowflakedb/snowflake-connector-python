@@ -518,9 +518,17 @@ jobs:
         with:
           files: .tox/coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
+          flags: coverage
+          name: coverage-${{ github.run_id }}
+          fail_ci_if_error: false
+          verbose: true
       - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
+        if: ${{ always() }}
         uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: junit_results/*.xml
+          flags: test-results
+          name: test-results-${{ github.run_id }}
+          fail_ci_if_error: false
+          verbose: true
