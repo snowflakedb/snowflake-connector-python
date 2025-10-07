@@ -334,17 +334,24 @@ class CRLValidator:
             # REVOKED - all paths are revoked
             # ERROR - some certificates on potentially unrevoked paths can't be verified
             # None - ignore this path (cycle detected)
-            if cert.subject in is_being_visited:
-                # cycle detected - invalid path
-                return None
+            print("traverse_chain", cert)
+            print(cert.issuer)
+            print(cert.subject)
             if self._is_certificate_trusted_by_os(cert):
                 # found a trusted certificate
                 return CRLValidationResult.UNREVOKED
+            if cert.issuer in is_being_visited:
+                # cycle detected - invalid path
+                return None
+
+            print("> not trusted by OS")
 
             valid_results: list[tuple[CRLValidationResult, x509.Certificate]] = []
             for ca_cert in subject_certificates[cert.issuer]:
                 is_being_visited.add(cert.issuer)
+                print("> lets goooo", ca_cert)
                 ca_result = traverse_chain(ca_cert)
+                print("> ca_result", ca_result)
                 is_being_visited.remove(cert.issuer)
                 if ca_result is None:
                     # ignore invalid path result
@@ -382,17 +389,19 @@ class CRLValidator:
         self, cert: x509.Certificate, ca_cert: x509.Certificate
     ) -> CRLValidationResult:
         # validate certificate can be called multiple times with the same certificate
-        if cert in self._validate_certificate_cache:
-            return self._validate_certificate_cache[cert]
-        result = self._validate_certificate(cert, ca_cert)
-        self._validate_certificate_cache[cert] = result
-        return result
+        print("validate_certificate_with_cache", cert)
+        if cert not in self._validate_certificate_cache:
+            self._validate_certificate_cache[cert] = self._validate_certificate(
+                cert, ca_cert
+            )
+        return self._validate_certificate_cache[cert]
 
     def _validate_certificate(
         self, cert: x509.Certificate, ca_cert: x509.Certificate
     ) -> CRLValidationResult:
         """Validate a single certificate against CRL"""
         # Check if certificate is short-lived (skip CRL check)
+        print("validate_certificate", cert)
         if self._is_short_lived_certificate(cert):
             return CRLValidationResult.UNREVOKED
 
