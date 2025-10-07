@@ -636,25 +636,17 @@ def test_cross_signed_certificate_chain(cert_gen, session_manager):
     ]
     assert not validator.validate_certificate_chains(chains)
 
-
-def test_cross_signed_certificate_chain_revoked_CA(cert_gen, session_manager):
-    chain = cert_gen.create_cross_signed_chain()
+    # mingled A and B paths passed in one chain - A has no connection to CA, B has
     chains = [
         [
             chain.leafA,
             chain.AsignB,
             chain.leafB,
-            chain.BsignA,
+            # chain.BsignA,
             chain.rootB,
-            chain.rootA,
+            # chain.rootA,
         ]
     ]
-    validator = CRLValidator(
-        session_manager,
-        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        allow_certificates_without_crl_url=True,
-        trusted_certificates=[cert_gen.ca_certificate],
-    )
     assert validator.validate_certificate_chains(chains)
 
 

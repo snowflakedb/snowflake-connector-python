@@ -373,7 +373,18 @@ class CRLValidator:
             return CRLValidationResult.REVOKED
 
         is_being_visited.add(chain[0].subject)
-        return traverse_chain(chain[0])
+        error_result = False
+        revoked_result = False
+        for cert in subject_certificates[chain[0].subject]:
+            result = traverse_chain(cert)
+            if result == CRLValidationResult.UNREVOKED:
+                return result
+            error_result |= result == CRLValidationResult.ERROR
+            revoked_result |= result == CRLValidationResult.REVOKED
+
+        if error_result or not revoked_result:
+            return CRLValidationResult.ERROR
+        return CRLValidationResult.REVOKED
 
     def _is_certificate_trusted_by_os(self, cert: x509.Certificate) -> bool:
         if trusted_cert := self._trusted_ca.get(cert.subject):
