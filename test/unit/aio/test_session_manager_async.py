@@ -30,7 +30,7 @@ async def create_session(
     """
     if num_sessions == 0:
         return
-    async with manager.use_requests_session(url):
+    async with manager.use_session(url):
         await create_session(manager, num_sessions - 1, url)
 
 
@@ -151,7 +151,7 @@ async def test_reuse_sessions_within_pool(make_session_mock):
 async def test_clone_independence():
     """`clone` should return an independent manager sharing only the connector_factory."""
     manager = SessionManager()
-    async with manager.use_requests_session(URL_SFC_TEST_0):
+    async with manager.use_session(URL_SFC_TEST_0):
         pass
     assert HOST_SFC_TEST_0 in manager.sessions_map
 
@@ -161,7 +161,7 @@ async def test_clone_independence():
     assert clone.connector_factory is manager.connector_factory
     assert clone.sessions_map == {}
 
-    async with clone.use_requests_session(URL_SFC_S3_STAGE_1):
+    async with clone.use_session(URL_SFC_S3_STAGE_1):
         pass
 
     assert HOST_SFC_S3_STAGE in clone.sessions_map
@@ -196,7 +196,7 @@ async def test_clone_independent_pools():
     )
 
     # Use the base manager – this should register a pool for the hostname
-    async with base.use_requests_session("https://example.com"):
+    async with base.use_session("https://example.com"):
         pass
     assert "example.com" in base.sessions_map
 
@@ -205,7 +205,7 @@ async def test_clone_independent_pools():
     assert clone.sessions_map == {}
 
     # After use the clone should have its own pool, distinct from the base's pool
-    async with clone.use_requests_session("https://example.com"):
+    async with clone.use_session("https://example.com"):
         pass
     assert "example.com" in clone.sessions_map
     assert clone.sessions_map["example.com"] is not base.sessions_map["example.com"]
@@ -287,7 +287,7 @@ async def test_session_pool_lifecycle():
     manager = SessionManager(use_pooling=True)
 
     # Get a session - should create new one
-    async with manager.use_requests_session(URL_SFC_TEST_0):
+    async with manager.use_session(URL_SFC_TEST_0):
         assert HOST_SFC_TEST_0 in manager.sessions_map
         pool = manager.sessions_map[HOST_SFC_TEST_0]
         assert len(pool._active_sessions) == 1
@@ -298,7 +298,7 @@ async def test_session_pool_lifecycle():
     assert len(pool._idle_sessions) == 1
 
     # Reuse the same session
-    async with manager.use_requests_session(URL_SFC_TEST_0):
+    async with manager.use_session(URL_SFC_TEST_0):
         assert len(pool._active_sessions) == 1
         assert len(pool._idle_sessions) == 0
 
@@ -339,7 +339,7 @@ async def test_pickle_session_manager():
     manager = SessionManager(config)
 
     # Create some sessions
-    async with manager.use_requests_session(URL_SFC_TEST_0):
+    async with manager.use_session(URL_SFC_TEST_0):
         pass
 
     # Pickle and unpickle (sessions are discarded during pickle)

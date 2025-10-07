@@ -1757,8 +1757,8 @@ async def test_fetch_batches_with_sessions(conn_cnx):
             num_batches = len(await cur.get_result_batches())
 
             with mock.patch(
-                "snowflake.connector.aio._network.SnowflakeRestful._use_requests_session",
-                side_effect=con._rest._use_requests_session,
+                "snowflake.connector.aio._network.SnowflakeRestful._use_session",
+                side_effect=con._rest._use_session,
             ) as get_session_mock:
                 result = await cur.fetchall()
                 # all but one batch is downloaded using a session

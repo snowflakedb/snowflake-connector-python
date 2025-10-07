@@ -236,7 +236,7 @@ class ResultBatch(ResultBatchSync):
                         )
                     # Try to reuse a connection if possible
                     if connection and connection._rest is not None:
-                        async with connection._rest._use_requests_session() as session:
+                        async with connection._rest._use_session() as session:
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
