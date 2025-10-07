@@ -848,12 +848,9 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 errno=ER_FAILED_TO_REQUEST,
             ) from err
 
-    def make_requests_session(self) -> aiohttp.ClientSession:
-        return self._session_manager.make_session()
-
     @contextlib.asynccontextmanager
-    async def _use_requests_session(
+    async def _use_session(
         self, url: str | None = None
     ) -> AsyncGenerator[aiohttp.ClientSession]:
-        async with self._session_manager.use_requests_session(url) as session:
+        async with self._session_manager.use_session(url) as session:
             yield session

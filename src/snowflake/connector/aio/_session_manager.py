@@ -106,7 +106,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
     """
 
     @abc.abstractmethod
-    async def use_requests_session(
+    async def use_session(
         self, url: str, use_pooling: bool
     ) -> AsyncGenerator[aiohttp.ClientSession]: ...
 
@@ -266,7 +266,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
         )
 
     @contextlib.asynccontextmanager
-    async def use_requests_session(
+    async def use_session(
         self, url: str | bytes | None = None, use_pooling: bool | None = None
     ) -> AsyncGenerator[aiohttp.ClientSession]:
         """Async version of use_requests_session yielding aiohttp.ClientSession."""
