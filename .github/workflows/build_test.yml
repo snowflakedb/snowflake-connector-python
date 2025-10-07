@@ -470,7 +470,6 @@ jobs:
           dst_dir = Path(".") / ".tox"
           dst_dir.mkdir()
 
-          # Collect all .coverage files with unique names
           for src_file in src_dir.glob("**/.coverage"):
               artifact_name = src_file.parent.name
               dst_file = dst_dir / f".coverage.{artifact_name}"
@@ -487,7 +486,6 @@ jobs:
           dst_dir = Path(".") / "junit_results"
           dst_dir.mkdir()
 
-          # Collect all JUnit XML files with unique names
           junit_files = list(src_dir.glob("**/junit*.xml"))
           print(f"Found {len(junit_files)} JUnit XML files")
 
@@ -502,29 +500,27 @@ jobs:
               print("WARNING: No JUnit XML files found - this indicates test result generation issues")'
       - name: Combine coverages
         run: |
-          # Check if any coverage files exist before running coverage combine
           if [ -d ".tox" ] && [ "$(find .tox -name ".coverage*" -type f | wc -l)" -gt 0 ]; then
             python -m tox run -e coverage
           else
             echo "No coverage files found, skipping coverage combination"
-            # Create empty coverage files to prevent downstream failures
-            mkdir -p .tox
-            touch .tox/coverage.xml
-            touch .tox/htmlcov/index.html
           fi
       - name: Publish html coverage
+        if: ${{ success() }}
         uses: actions/upload-artifact@v4
         with:
           include-hidden-files: true
           name: overall_cov_html
           path: .tox/htmlcov
       - name: Publish xml coverage
+        if: ${{ success() }}
         uses: actions/upload-artifact@v4
         with:
           include-hidden-files: true
           name: overall_cov_xml
           path: .tox/coverage.xml
       - uses: codecov/codecov-action@v4
+        if: ${{ success() }}
         with:
           files: .tox/coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
