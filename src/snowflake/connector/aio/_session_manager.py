@@ -1,12 +1,27 @@
 from __future__ import annotations
 
+import sys
+from typing import TYPE_CHECKING
+
+from aiohttp import ClientRequest, ClientTimeout
+from aiohttp.client_proto import ResponseHandler
+from aiohttp.connector import Connection
+
+from .. import OperationalError
+from ..errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
+from ..ssl_wrap_socket import FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
+from ._ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
+
+if TYPE_CHECKING:
+    from aiohttp.tracing import Trace
+
 import abc
 import collections
 import contextlib
 import itertools
 import logging
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Mapping
+from dataclasses import dataclass, field
+from typing import Any, AsyncGenerator, Callable, Mapping
 
 import aiohttp
 
@@ -15,13 +30,82 @@ from ..constants import OCSPMode
 from ..session_manager import BaseHttpConfig
 from ..session_manager import SessionManager as SessionManagerSync
 from ..session_manager import SessionPool as SessionPoolSync
-from ._ssl_connector import SnowflakeSSLConnector
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
-REQUESTS_RETRY = 1  # requests library builtin retry
+
+
+class SnowflakeSSLConnector(aiohttp.TCPConnector):
+    def __init__(
+        self,
+        *args,
+        snowflake_ocsp_mode: OCSPMode = OCSPMode.FAIL_OPEN,
+        session_manager: SessionManager | None = None,
+        **kwargs,
+    ):
+        self._snowflake_ocsp_mode = snowflake_ocsp_mode
+        if session_manager is None:
+            logger.debug(
+                "SessionManager instance was not passed to SSLConnector - OCSP will use default settings which may be distinct from the customer's specific one. Code should always pass such instance so please verify why it isn't true in the current context"
+            )
+            session_manager = SessionManager()
+        self._session_manager = session_manager
+        if self._snowflake_ocsp_mode == OCSPMode.FAIL_OPEN and sys.version_info < (
+            3,
+            10,
+        ):
+            raise RuntimeError(
+                "Async Snowflake Python Connector requires Python 3.10+ for OCSP validation related features. "
+                "Please open a feature request issue in github if your want to use Python 3.9 or lower: "
+                "https://github.com/snowflakedb/snowflake-connector-python/issues/new/choose."
+            )
+
+        super().__init__(*args, **kwargs)
+
+    async def connect(
+        self, req: ClientRequest, traces: list[Trace], timeout: ClientTimeout
+    ) -> Connection:
+        connection = await super().connect(req, traces, timeout)
+        protocol = connection.protocol
+        if (
+            req.is_ssl()
+            and protocol is not None
+            and not getattr(protocol, "_snowflake_ocsp_validated", False)
+        ):
+            if self._snowflake_ocsp_mode == OCSPMode.DISABLE_OCSP_CHECKS:
+                logger.debug(
+                    "This connection does not perform OCSP checks. "
+                    "Revocation status of the certificate will not be checked against OCSP Responder."
+                )
+            else:
+                await self.validate_ocsp(
+                    req.url.host,
+                    protocol,
+                    session_manager=self._session_manager.clone(use_pooling=False),
+                )
+                protocol._snowflake_ocsp_validated = True
+        return connection
+
+    async def validate_ocsp(
+        self,
+        hostname: str,
+        protocol: ResponseHandler,
+        *,
+        session_manager: SessionManager,
+    ):
+
+        v = await SnowflakeOCSPAsn1Crypto(
+            ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+            use_fail_open=self._snowflake_ocsp_mode == OCSPMode.FAIL_OPEN,
+            hostname=hostname,
+        ).validate(hostname, protocol, session_manager=session_manager)
+        if not v:
+            raise OperationalError(
+                msg=(
+                    "The certificate is revoked or "
+                    "could not be validated: hostname={}".format(hostname)
+                ),
+                errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+            )
 
 
 class ConnectorFactory(abc.ABC):
@@ -31,8 +115,13 @@ class ConnectorFactory(abc.ABC):
 
 
 class SnowflakeSSLConnectorFactory(ConnectorFactory):
-    def __call__(self, *args, **kwargs) -> SnowflakeSSLConnector:
-        return SnowflakeSSLConnector(*args, **kwargs)
+    def __call__(
+        self,
+        *args,
+        session_manager: SessionManager,
+        **kwargs,
+    ) -> SnowflakeSSLConnector:
+        return SnowflakeSSLConnector(*args, session_manager=session_manager, **kwargs)
 
 
 @dataclass(frozen=True)
@@ -54,9 +143,19 @@ class AioHttpConfig(BaseHttpConfig):
     snowflake_ocsp_mode: OCSPMode = OCSPMode.FAIL_OPEN
     """OCSP validation mode obtained from connection._ocsp_mode()."""
 
-    def copy_with(self, **overrides: Any) -> AioHttpConfig:
-        """Return a new AioHttpConfig with overrides applied."""
-        return replace(self, **overrides)
+    def get_connector(
+        self, **override_connector_factory_kwargs
+    ) -> aiohttp.BaseConnector:
+        # We pass here only chosen attributes as kwargs to make the arguments received by the factory as compliant with the BaseConnector constructor interface as possible.
+        # We could consider passing the whole HttpConfig as kwarg to the factory if necessary in the future.
+        attributes_for_connector_factory = frozenset({"snowflake_ocsp_mode"})
+
+        self_kwargs_for_connector_factory = {
+            attr_name: getattr(self, attr_name)
+            for attr_name in attributes_for_connector_factory
+        }
+        self_kwargs_for_connector_factory.update(override_connector_factory_kwargs)
+        return self.connector_factory(**self_kwargs_for_connector_factory)
 
 
 class SessionPool(SessionPoolSync[aiohttp.ClientSession]):
@@ -256,7 +355,8 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
 
     def make_session(self) -> aiohttp.ClientSession:
         """Create a new aiohttp.ClientSession with configured connector."""
-        connector = self._cfg.connector_factory(
+        connector = self._cfg.get_connector(
+            session_manager=self.clone(),
             snowflake_ocsp_mode=self._cfg.snowflake_ocsp_mode,
         )
 

@@ -4,9 +4,9 @@ import json
 import logging
 import os
 from base64 import b64encode
+from typing import TYPE_CHECKING
 
 import aioboto3
-import aiohttp
 from aiobotocore.utils import AioInstanceMetadataRegionFetcher
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
@@ -22,6 +22,9 @@ from ..wif_util import (
     extract_iss_and_sub_without_signature_verification,
     get_aws_sts_hostname,
 )
+
+if TYPE_CHECKING:
+    from ._session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -81,29 +84,14 @@ async def create_aws_attestation() -> WorkloadIdentityAttestation:
     )
 
 
-async def try_metadata_service_call(
-    method: str, url: str, headers: dict, timeout_sec: int = 3
-) -> aiohttp.ClientResponse | None:
-    """Tries to make a HTTP request to the metadata service with the given URL, method, headers and timeout.
-
-    Raises an error if an error response or any exceptions are raised.
-    """
-    timeout = aiohttp.ClientTimeout(total=timeout_sec)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.request(method=method, url=url, headers=headers) as response:
-            response.raise_for_status()
-            # Create a copy of the response data since the response will be closed
-            content = await response.read()
-            response._content = content
-            return response
-
-
-async def create_gcp_attestation() -> WorkloadIdentityAttestation:
+async def create_gcp_attestation(
+    session_manager: SessionManager | None = None,
+) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for GCP.
 
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
-    res = await try_metadata_service_call(
+    res = await session_manager.request(
         method="GET",
         url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
         headers={
@@ -111,7 +99,8 @@ async def create_gcp_attestation() -> WorkloadIdentityAttestation:
         },
     )
 
-    jwt_str = res._content.decode("utf-8")
+    content = await res.content.read()
+    jwt_str = content.decode("utf-8")
     _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     return WorkloadIdentityAttestation(
         AttestationProvider.GCP, jwt_str, {"sub": subject}
@@ -120,6 +109,7 @@ async def create_gcp_attestation() -> WorkloadIdentityAttestation:
 
 async def create_azure_attestation(
     snowflake_entra_resource: str,
+    session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for Azure.
 
@@ -152,13 +142,14 @@ async def create_azure_attestation(
     if managed_identity_client_id:
         query_params += f"&client_id={managed_identity_client_id}"
 
-    res = await try_metadata_service_call(
+    res = await session_manager.request(
         method="GET",
         url=f"{url_without_query_string}?{query_params}",
         headers=headers,
     )
 
-    response_text = res._content.decode("utf-8")
+    content = await res.content.read()
+    response_text = content.decode("utf-8")
     response_data = json.loads(response_text)
     jwt_str = response_data.get("access_token")
     if not jwt_str:
@@ -177,6 +168,7 @@ async def create_attestation(
     provider: AttestationProvider | None,
     entra_resource: str | None = None,
     token: str | None = None,
+    session_manager: SessionManager | None = None,
 ) -> WorkloadIdentityAttestation:
     """Entry point to create an attestation using the given provider.
 
@@ -187,9 +179,9 @@ async def create_attestation(
     if provider == AttestationProvider.AWS:
         return await create_aws_attestation()
     elif provider == AttestationProvider.AZURE:
-        return await create_azure_attestation(entra_resource)
+        return await create_azure_attestation(entra_resource, session_manager)
     elif provider == AttestationProvider.GCP:
-        return await create_gcp_attestation()
+        return await create_gcp_attestation(session_manager)
     elif provider == AttestationProvider.OIDC:
         return create_oidc_attestation(token)
     else:

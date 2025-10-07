@@ -13,6 +13,7 @@ from snowflake.connector.aio._network import (
     raise_failed_request_error,
     raise_okta_unauthorized_error,
 )
+from snowflake.connector.aio._session_manager import SessionManager
 from snowflake.connector.aio._time_util import TimerContextManager
 from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.backoff_policies import exponential_backoff
@@ -111,6 +112,7 @@ def create_batches_from_response(
                     column_converters,
                     cursor._use_dict_result,
                     json_result_force_utf8_decoding=cursor._connection._json_result_force_utf8_decoding,
+                    session_manager=cursor._connection._session_manager.clone(),
                 )
                 for c in chunks
             ]
@@ -125,6 +127,7 @@ def create_batches_from_response(
                     cursor._connection._numpy,
                     schema,
                     cursor._connection._arrow_number_to_decimal,
+                    session_manager=cursor._connection._session_manager.clone(),
                 )
                 for c in chunks
             ]
@@ -137,6 +140,7 @@ def create_batches_from_response(
             schema,
             column_converters,
             cursor._use_dict_result,
+            session_manager=cursor._connection._session_manager.clone(),
         )
     elif rowset_b64 is not None:
         first_chunk = ArrowResultBatch.from_data(
@@ -147,6 +151,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
+            session_manager=cursor._connection._session_manager.clone(),
         )
     else:
         logger.error(f"Don't know how to construct ResultBatches from response: {data}")
@@ -158,6 +163,7 @@ def create_batches_from_response(
             cursor._connection._numpy,
             schema,
             cursor._connection._arrow_number_to_decimal,
+            session_manager=cursor._connection._session_manager.clone(),
         )
 
     return [first_chunk] + rest_of_chunks
@@ -204,7 +210,7 @@ class ResultBatch(ResultBatchSync):
         async def download_chunk(http_session):
             response, content, encoding = None, None, None
             logger.debug(
-                f"downloading result batch id: {self.id} with existing session {http_session}"
+                f"downloading result batch id: {self.id} with session {http_session}"
             )
             response = await http_session.get(**request_data)
             if response.status == OK:
@@ -234,18 +240,29 @@ class ResultBatch(ResultBatchSync):
                         request_data["timeout"] = aiohttp.ClientTimeout(
                             total=DOWNLOAD_TIMEOUT
                         )
-                    # Try to reuse a connection if possible
-                    if connection and connection._rest is not None:
-                        async with connection._rest._use_session() as session:
+                    # Use SessionManager with same fallback pattern as sync version
+                    if (
+                        connection
+                        and connection.rest
+                        and connection.rest.session_manager is not None
+                    ):
+                        # If connection was explicitly passed and not closed yet - we can reuse SessionManager with session pooling
+                        async with connection.rest.use_session() as session:
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
                             response, content, encoding = await download_chunk(session)
+                    elif self._session_manager is not None:
+                        # If connection is not accessible or was already closed, but cursors are now used to fetch the data - we will only reuse the http setup (through cloned SessionManager without session pooling)
+                        async with self._session_manager.use_session() as session:
+                            response, content, encoding = await download_chunk(session)
                     else:
-                        async with aiohttp.ClientSession() as session:
-                            logger.debug(
-                                f"downloading result batch id: {self.id} with new session"
-                            )
+                        # If there was no session manager cloned, then we are using a default Session Manager setup, since it is very unlikely to enter this part outside of testing
+                        logger.debug(
+                            f"downloading result batch id: {self.id} with new session through local session manager"
+                        )
+                        local_session_manager = SessionManager(use_pooling=False)
+                        async with local_session_manager.use_session() as session:
                             response, content, encoding = await download_chunk(session)
 
                     if response.status == OK:
