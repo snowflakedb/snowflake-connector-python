@@ -195,7 +195,7 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
             # rest_kwargs["timeout"] = (REQUEST_CONNECTION_TIMEOUT, REQUEST_READ_TIMEOUT)
             try:
                 if conn:
-                    async with conn._rest._use_requests_session(url) as session:
+                    async with conn._rest._use_session(url) as session:
                         logger.debug(f"storage client request with session {session}")
                         response = await session.request(verb, url, **rest_kwargs)
                 else:
