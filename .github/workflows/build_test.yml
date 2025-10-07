@@ -216,7 +216,6 @@ jobs:
        # To run a single test on GHA use the below command:
 #        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
         run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
-        continue-on-error: true
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
@@ -225,10 +224,8 @@ jobs:
          # To specify the test name (in single test mode) pass this env variable:
 #          SINGLE_TEST_NAME: test/path/filename.py::test_name
         shell: bash
-      - name: Combine coverages
-        run: python -m tox run -e coverage --skip-missing-interpreters false
-        shell: bash
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: coverage_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
@@ -236,6 +233,7 @@ jobs:
             .tox/.coverage
             .tox/coverage.xml
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: junit_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
@@ -284,7 +282,6 @@ jobs:
         run: python -m pip install tox>=4
       - name: Run tests
         run: python -m tox run -e olddriver
-        continue-on-error: true
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
@@ -317,7 +314,6 @@ jobs:
         run: python -m pip install tox>=4
       - name: Run tests
         run: python -m tox run -e noarrowextension
-        continue-on-error: true
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
@@ -358,7 +354,6 @@ jobs:
         shell: bash
       - name: Run tests
         run: ./ci/test_fips_docker.sh
-        continue-on-error: true
         env:
           PYTHON_VERSION: 3.9
           cloud_provider: ${{ matrix.cloud-provider }}
@@ -366,6 +361,7 @@ jobs:
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: coverage_linux-fips-3.9-${{ matrix.cloud-provider }}
@@ -373,6 +369,7 @@ jobs:
             .coverage
             coverage.xml
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: junit_linux-fips-3.9-${{ matrix.cloud-provider }}
@@ -419,7 +416,6 @@ jobs:
         shell: bash
       - name: Run tests
         run: ./ci/test_lambda_docker.sh ${PYTHON_VERSION}
-        continue-on-error: true
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
@@ -427,6 +423,7 @@ jobs:
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: coverage_linux-lambda-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
@@ -434,6 +431,7 @@ jobs:
             .coverage.py${{ env.shortver }}-lambda-ci
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: junit_linux-lambda-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
@@ -441,9 +439,8 @@ jobs:
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
 
   combine-coverage:
-    if: ${{ success() || failure() }}
+    if: always()
     name: Combine coverage
-    needs: [lint, test, test-fips, test-lambda]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
