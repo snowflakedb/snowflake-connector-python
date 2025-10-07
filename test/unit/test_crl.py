@@ -1559,3 +1559,39 @@ def test_crl_signature_verification_with_issuer_mismatch_warning(
 def test_is_short_lived_certificate(cert_gen, issue_date, validity_days, expected):
     cert = cert_gen.create_short_lived_certificate(validity_days, issue_date)
     assert CRLValidator._is_short_lived_certificate(cert) == expected
+
+
+def test_is_certificate_trusted_by_os(cert_gen):
+    """Test OS certificate trust validation."""
+    # Create a test certificate chain
+    chain = cert_gen.create_simple_chain()
+    cert = chain.leaf_cert
+
+    # Create a mock SSL context
+    mock_ssl_context = Mock()
+    # Mock get_ca_certs to return DER-encoded certificate bytes
+    cert_der = cert.public_bytes(serialization.Encoding.DER)
+    mock_ssl_context.get_ca_certs.return_value = [cert_der]
+
+    # Create a CRLValidator instance with SSL context
+    validator = CRLValidator(session_manager=Mock(), ssl_context=mock_ssl_context)
+
+    # Test with a certificate that's in the CA certificates list
+    result = validator._is_certificate_trusted_by_os(cert)
+    assert result is True
+
+    # Test with a certificate that's NOT in the CA certificates list
+    other_chain = cert_gen.create_simple_chain()
+    other_cert = other_chain.leaf_cert
+    result_other = validator._is_certificate_trusted_by_os(other_cert)
+    assert result_other is False
+
+    # Test that SSL context is stored correctly
+    assert validator._ssl_context is mock_ssl_context
+
+    # Test exception handling
+    mock_ssl_context.get_ca_certs.side_effect = Exception("Test error")
+    # Use a different certificate to avoid cache
+    exception_cert = chain.intermediate_cert
+    result_error = validator._is_certificate_trusted_by_os(exception_cert)
+    assert result_error is False

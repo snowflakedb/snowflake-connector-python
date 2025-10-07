@@ -13,6 +13,7 @@ from typing import Any
 from cryptography import x509
 from cryptography.hazmat._oid import ExtensionOID
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from OpenSSL.SSL import Connection as SSLConnection
 
@@ -201,7 +202,9 @@ class CRLValidator:
         self._validate_certificate_cache: dict[
             x509.Certificate, CRLValidationResult
         ] = {}
-        self._is_certificate_trusted_by_os_cache: dict[x509.Certificate, bool] = {}
+        self._trusted_ca_certificates: set[bytes] = set(
+            ssl_context.get_ca_certs(binary_form=True)
+        )
 
     @classmethod
     def from_config(
@@ -309,12 +312,11 @@ class CRLValidator:
         self, chain: list[x509.Certificate]
     ) -> CRLValidationResult:
         """
-        1. Generate a graph of certificate issuers (certificates are edges)
-        2. Returns:
-          a. UNREVOKED: If there is a path to any root certificate where all certificates are unrevoked.
-          b. REVOKED: If all paths to root certificates are revoked.
-          c. ERROR: If there is a path to any root certificate on which none certificate is revoked,
-             but some certificates can't be verified (and point 'a' is false).
+        Returns:
+          UNREVOKED: If there is a path to any trusted certificate where all certificates are unrevoked.
+          REVOKED: If all paths to trusted certificates are revoked.
+          ERROR: If there is a path to any trusted certificate on which none certificate is revoked,
+             but some certificates can't be verified.
         """
         # An empty chain is considered an error
         if len(chain) == 0:
@@ -328,7 +330,7 @@ class CRLValidator:
         is_being_visited: set[x509.Name] = set()
 
         def traverse_chain(cert: x509.Certificate) -> CRLValidationResult | None:
-            # UNREVOKED - unrevoked path found
+            # UNREVOKED - unrevoked path to a trusted certificate found
             # REVOKED - all paths are revoked
             # ERROR - some certificates on potentially unrevoked paths can't be verified
             # None - ignore this path (cycle detected)
@@ -336,6 +338,7 @@ class CRLValidator:
                 # cycle detected - invalid path
                 return None
             if self._is_certificate_trusted_by_os(cert):
+                # found a trusted certificate
                 return CRLValidationResult.UNREVOKED
 
             valid_results: list[tuple[CRLValidationResult, x509.Certificate]] = []
@@ -367,7 +370,13 @@ class CRLValidator:
             # no ERROR result found, all paths are REVOKED
             return CRLValidationResult.REVOKED
 
+        is_being_visited.add(chain[0].subject)
         return traverse_chain(chain[0])
+
+    def _is_certificate_trusted_by_os(self, cert: x509.Certificate) -> bool:
+        # DER format should be deterministic
+        cert_der = cert.public_bytes(serialization.Encoding.DER)
+        return cert_der in self._trusted_ca_certificates
 
     def _validate_certificate_with_cache(
         self, cert: x509.Certificate, ca_cert: x509.Certificate
@@ -647,55 +656,3 @@ class CRLValidator:
                 "Failed to extract certificate chain for CRL validation: %s", e
             )
             return []
-
-    def _is_certificate_trusted_by_os(self, cert: x509.Certificate) -> bool:
-        """
-        Check if a certificate is trusted by the operating system's certificate store using provided SSL context.
-
-        This method uses the SSL context's get_ca_certs() method to access the already-loaded
-        CA certificates, which is much more efficient than reloading certificates.
-
-        Args:
-            cert: The x509.Certificate to check for OS trust
-
-        Returns:
-            True if the certificate is trusted by the OS, False otherwise
-        """
-        if cert in self._is_certificate_trusted_by_os_cache:
-            return self._is_certificate_trusted_by_os_cache[cert]
-
-        try:
-            # Get the already-loaded CA certificates from the SSL context
-            ca_certs = self._ssl_context.get_ca_certs()
-
-            # Convert the certificate to the format used by get_ca_certs()
-            # get_ca_certs() returns subject as tuple of tuples: ((('attr', 'value'),), ...)
-            cert_subject_tuple = tuple(
-                ((attr.oid._name, attr.value),) for attr in cert.subject
-            )
-            # get_ca_certs() returns serial number as hex string
-            cert_serial_hex = format(cert.serial_number, "X")
-
-            # Check if the certificate matches any of the loaded CA certificates
-            for ca_cert in ca_certs:
-                if (
-                    ca_cert.get("subject") == cert_subject_tuple
-                    and ca_cert.get("serialNumber") == cert_serial_hex
-                ):
-                    logger.debug(
-                        "Certificate found in SSL context CA certificates: %s",
-                        cert.subject,
-                    )
-                    self._is_certificate_trusted_by_os_cache[cert] = True
-                    return True
-
-            logger.debug(
-                "Certificate not found in SSL context CA certificates: %s", cert.subject
-            )
-            self._is_certificate_trusted_by_os_cache[cert] = False
-            return False
-
-        except Exception as e:
-            logger.warning("Failed to check certificate trust using SSL context: %s", e)
-            self._is_certificate_trusted_by_os_cache[cert] = False
-            return False
