@@ -184,7 +184,9 @@ def ssl_wrap_socket_with_cert_revocation_checks(
         != CertRevocationCheckMode.DISABLED
     ):
         crl_validator = CRLValidator.from_config(
-            FEATURE_CRL_CONFIG, get_current_session_manager()
+            FEATURE_CRL_CONFIG,
+            get_current_session_manager(),
+            ssl_context=params["ssl_context"],
         )
         if not crl_validator.validate_connection(ret.connection):
             raise OperationalError(

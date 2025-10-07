@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import ssl
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum, unique
@@ -180,6 +182,7 @@ class CRLValidator:
     def __init__(
         self,
         session_manager: SessionManager | Any,
+        ssl_context: ssl.SSLContext,
         cert_revocation_check_mode: CertRevocationCheckMode = CRLConfig.cert_revocation_check_mode,
         allow_certificates_without_crl_url: bool = CRLConfig.allow_certificates_without_crl_url,
         connection_timeout_ms: int = CRLConfig.connection_timeout_ms,
@@ -188,16 +191,24 @@ class CRLValidator:
         cache_manager: CRLCacheManager | None = None,
     ):
         self._session_manager = session_manager
+        self._ssl_context = ssl_context
         self._cert_revocation_check_mode = cert_revocation_check_mode
         self._allow_certificates_without_crl_url = allow_certificates_without_crl_url
         self._connection_timeout_ms = connection_timeout_ms
         self._read_timeout_ms = read_timeout_ms
         self._cache_validity_time = cache_validity_time
         self._cache_manager = cache_manager or CRLCacheManager.noop()
+        self._validate_certificate_cache: dict[
+            x509.Certificate, CRLValidationResult
+        ] = {}
+        self._is_certificate_trusted_by_os_cache: dict[x509.Certificate, bool] = {}
 
     @classmethod
     def from_config(
-        cls, config: CRLConfig, session_manager: SessionManager
+        cls,
+        config: CRLConfig,
+        session_manager: SessionManager,
+        ssl_context: ssl.SSLContext,
     ) -> CRLValidator:
         """
         Create a CRLValidator instance from a CRLConfig.
@@ -248,6 +259,7 @@ class CRLValidator:
 
         return cls(
             session_manager=session_manager,
+            ssl_context=ssl_context,
             cert_revocation_check_mode=config.cert_revocation_check_mode,
             allow_certificates_without_crl_url=config.allow_certificates_without_crl_url,
             connection_timeout_ms=config.connection_timeout_ms,
@@ -296,22 +308,76 @@ class CRLValidator:
     def _validate_single_chain(
         self, chain: list[x509.Certificate]
     ) -> CRLValidationResult:
-        """Validate a single certificate chain"""
+        """
+        1. Generate a graph of certificate issuers (certificates are edges)
+        2. Returns:
+          a. UNREVOKED: If there is a path to any root certificate where all certificates are unrevoked.
+          b. REVOKED: If all paths to root certificates are revoked.
+          c. ERROR: If there is a path to any root certificate on which none certificate is revoked,
+             but some certificates can't be verified (and point 'a' is false).
+        """
         # An empty chain is considered an error
         if len(chain) == 0:
             return CRLValidationResult.ERROR
-        # the last certificate of the chain is considered the root and isn't validated
-        results = []
-        for i in range(len(chain) - 1):
-            result = self._validate_certificate(chain[i], chain[i + 1])
-            if result == CRLValidationResult.REVOKED:
-                return CRLValidationResult.REVOKED
-            results.append(result)
 
-        if CRLValidationResult.ERROR in results:
-            return CRLValidationResult.ERROR
+        subject_certificates: dict[x509.Name, list[x509.Certificate]] = defaultdict(
+            list
+        )
+        for cert in chain:
+            subject_certificates[cert.subject].append(cert)
+        is_being_visited: set[x509.Name] = set()
 
-        return CRLValidationResult.UNREVOKED
+        def traverse_chain(cert: x509.Certificate) -> CRLValidationResult | None:
+            # UNREVOKED - unrevoked path found
+            # REVOKED - all paths are revoked
+            # ERROR - some certificates on potentially unrevoked paths can't be verified
+            # None - ignore this path (cycle detected)
+            if cert.subject in is_being_visited:
+                # cycle detected - invalid path
+                return None
+            if self._is_certificate_trusted_by_os(cert):
+                return CRLValidationResult.UNREVOKED
+
+            valid_results: list[tuple[CRLValidationResult, x509.Certificate]] = []
+            for ca_cert in subject_certificates[cert.issuer]:
+                is_being_visited.add(cert.issuer)
+                ca_result = traverse_chain(ca_cert)
+                is_being_visited.remove(cert.issuer)
+                if ca_result is None:
+                    # ignore invalid path result
+                    continue
+                if ca_result == CRLValidationResult.UNREVOKED:
+                    # good path found
+                    return self._validate_certificate_with_cache(cert, ca_cert)
+                valid_results.append((ca_result, ca_cert))
+
+            if len(valid_results) == 0:
+                # "root" certificate not cought by "is_trusted_by_os" check
+                logger.warning("Root certificate not trusted by OS: %s", cert.subject)
+                return CRLValidationResult.ERROR
+
+            # check if there exists an ERROR path
+            for ca_result, ca_cert in valid_results:
+                if ca_result == CRLValidationResult.ERROR:
+                    cert_result = self._validate_certificate_with_cache(cert, ca_cert)
+                    if cert_result == CRLValidationResult.REVOKED:
+                        return CRLValidationResult.REVOKED
+                    return CRLValidationResult.ERROR
+
+            # no ERROR result found, all paths are REVOKED
+            return CRLValidationResult.REVOKED
+
+        return traverse_chain(chain[0])
+
+    def _validate_certificate_with_cache(
+        self, cert: x509.Certificate, ca_cert: x509.Certificate
+    ) -> CRLValidationResult:
+        # validate certificate can be called multiple times with the same certificate
+        if cert in self._validate_certificate_cache:
+            return self._validate_certificate_cache[cert]
+        result = self._validate_certificate(cert, ca_cert)
+        self._validate_certificate_cache[cert] = result
+        return result
 
     def _validate_certificate(
         self, cert: x509.Certificate, ca_cert: x509.Certificate
@@ -581,3 +647,55 @@ class CRLValidator:
                 "Failed to extract certificate chain for CRL validation: %s", e
             )
             return []
+
+    def _is_certificate_trusted_by_os(self, cert: x509.Certificate) -> bool:
+        """
+        Check if a certificate is trusted by the operating system's certificate store using provided SSL context.
+
+        This method uses the SSL context's get_ca_certs() method to access the already-loaded
+        CA certificates, which is much more efficient than reloading certificates.
+
+        Args:
+            cert: The x509.Certificate to check for OS trust
+
+        Returns:
+            True if the certificate is trusted by the OS, False otherwise
+        """
+        if cert in self._is_certificate_trusted_by_os_cache:
+            return self._is_certificate_trusted_by_os_cache[cert]
+
+        try:
+            # Get the already-loaded CA certificates from the SSL context
+            ca_certs = self._ssl_context.get_ca_certs()
+
+            # Convert the certificate to the format used by get_ca_certs()
+            # get_ca_certs() returns subject as tuple of tuples: ((('attr', 'value'),), ...)
+            cert_subject_tuple = tuple(
+                ((attr.oid._name, attr.value),) for attr in cert.subject
+            )
+            # get_ca_certs() returns serial number as hex string
+            cert_serial_hex = format(cert.serial_number, "X")
+
+            # Check if the certificate matches any of the loaded CA certificates
+            for ca_cert in ca_certs:
+                if (
+                    ca_cert.get("subject") == cert_subject_tuple
+                    and ca_cert.get("serialNumber") == cert_serial_hex
+                ):
+                    logger.debug(
+                        "Certificate found in SSL context CA certificates: %s",
+                        cert.subject,
+                    )
+                    self._is_certificate_trusted_by_os_cache[cert] = True
+                    return True
+
+            logger.debug(
+                "Certificate not found in SSL context CA certificates: %s", cert.subject
+            )
+            self._is_certificate_trusted_by_os_cache[cert] = False
+            return False
+
+        except Exception as e:
+            logger.warning("Failed to check certificate trust using SSL context: %s", e)
+            self._is_certificate_trusted_by_os_cache[cert] = False
+            return False
