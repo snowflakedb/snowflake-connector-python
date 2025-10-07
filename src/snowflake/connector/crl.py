@@ -202,9 +202,12 @@ class CRLValidator:
         self._validate_certificate_cache: dict[
             x509.Certificate, CRLValidationResult
         ] = {}
-        self._trusted_ca_certificates: set[bytes] = set(
-            ssl_context.get_ca_certs(binary_form=True)
-        )
+
+        # list of trusted CA and their certificates
+        self._trusted_ca: dict[x509.Name, x509.Certificate] = {}
+        for cert in ssl_context.get_ca_certs(binary_form=True):
+            cert = x509.load_der_x509_certificate(cert)
+            self._trusted_ca[cert.subject] = cert
 
     @classmethod
     def from_config(
@@ -340,18 +343,19 @@ class CRLValidator:
             if self._is_certificate_trusted_by_os(cert):
                 # found a trusted certificate
                 return CRLValidationResult.UNREVOKED
+            if cert.issuer in self._trusted_ca:
+                # issuer is trusted by OS
+                return self._validate_certificate_with_cache(
+                    cert, self._trusted_ca[cert.issuer]
+                )
             if cert.issuer in is_being_visited:
                 # cycle detected - invalid path
                 return None
 
-            print("> not trusted by OS")
-
             valid_results: list[tuple[CRLValidationResult, x509.Certificate]] = []
             for ca_cert in subject_certificates[cert.issuer]:
                 is_being_visited.add(cert.issuer)
-                print("> lets goooo", ca_cert)
                 ca_result = traverse_chain(ca_cert)
-                print("> ca_result", ca_result)
                 is_being_visited.remove(cert.issuer)
                 if ca_result is None:
                     # ignore invalid path result
@@ -381,9 +385,12 @@ class CRLValidator:
         return traverse_chain(chain[0])
 
     def _is_certificate_trusted_by_os(self, cert: x509.Certificate) -> bool:
-        # DER format should be deterministic
-        cert_der = cert.public_bytes(serialization.Encoding.DER)
-        return cert_der in self._trusted_ca_certificates
+        if trusted_cert := self._trusted_ca.get(cert.subject):
+            # Compare DER-encoded forms of certificates
+            cert_der = cert.public_bytes(serialization.Encoding.DER)
+            trusted_cert_der = trusted_cert.public_bytes(serialization.Encoding.DER)
+            return cert_der == trusted_cert_der
+        return False
 
     def _validate_certificate_with_cache(
         self, cert: x509.Certificate, ca_cert: x509.Certificate
