@@ -55,8 +55,8 @@ class CRLConfig:
         CertRevocationCheckMode.DISABLED
     )
     allow_certificates_without_crl_url: bool = False
-    connection_timeout_ms: int = 3000
-    read_timeout_ms: int = 90000  # 90s
+    connection_timeout_ms: int = 5000
+    read_timeout_ms: int = 5000  # 5s
     cache_validity_time: timedelta = timedelta(hours=24)
     enable_crl_cache: bool = True
     enable_crl_file_cache: bool = True
