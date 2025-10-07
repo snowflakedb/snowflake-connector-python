@@ -38,20 +38,6 @@ def session_manager() -> SessionManager | Any:
     return requests
 
 
-@pytest.fixture
-def mock_ssl_context():
-    def _mock_ssl_context(os_trusted_certs_list: list[x509.Certificate]):
-        mock_ssl_context = Mock()
-        der_encoded_certs = [
-            cert.public_bytes(serialization.Encoding.DER)
-            for cert in os_trusted_certs_list
-        ]
-        mock_ssl_context.get_ca_certs.return_value = der_encoded_certs
-        return mock_ssl_context
-
-    yield _mock_ssl_context
-
-
 @pytest.fixture(scope="module")
 def crl_urls():
     @dataclass
@@ -490,7 +476,7 @@ def cert_gen():
 
 
 def test_should_allow_connection_when_crl_validation_disabled(
-    cert_gen, session_manager, mock_ssl_context
+    cert_gen, session_manager
 ):
     """Test that connections are allowed when CRL validation is disabled"""
     chain = cert_gen.create_simple_chain()
@@ -499,39 +485,37 @@ def test_should_allow_connection_when_crl_validation_disabled(
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.DISABLED,
-        ssl_context=mock_ssl_context([chain.root_cert]),
+        trusted_certificates=[chain.root_cert],
     )
 
     assert validator.validate_certificate_chains(chains)
 
 
 def test_should_allow_connection_when_crl_validation_disabled_and_no_cert_chain(
-    session_manager, mock_ssl_context
+    session_manager,
 ):
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.DISABLED,
-        ssl_context=mock_ssl_context([]),
+        trusted_certificates=[],
     )
     assert validator.validate_certificate_chains([])
     assert validator.validate_certificate_chains(None)
 
 
-def test_should_fail_with_null_or_empty_certificate_chains(
-    cert_gen, session_manager, mock_ssl_context
-):
+def test_should_fail_with_null_or_empty_certificate_chains(cert_gen, session_manager):
     """Test that validator fails with null or empty certificate chains"""
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        ssl_context=mock_ssl_context([]),
+        trusted_certificates=[],
     )
     assert not validator.validate_certificate_chains([])
     assert not validator.validate_certificate_chains(None)
 
 
 def test_should_handle_certificates_without_crl_urls_in_enabled_mode(
-    cert_gen, session_manager, mock_ssl_context
+    cert_gen, session_manager
 ):
     """Test handling of certificates without CRL URLs in enabled mode"""
     chain = cert_gen.create_simple_chain()
@@ -540,13 +524,13 @@ def test_should_handle_certificates_without_crl_urls_in_enabled_mode(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
         allow_certificates_without_crl_url=False,
-        ssl_context=mock_ssl_context([chain.root_cert]),
+        trusted_certificates=[chain.root_cert],
     )
     assert not validator.validate_certificate_chains(chains)
 
 
 def test_should_allow_certificates_without_crl_urls_when_configured(
-    cert_gen, session_manager, mock_ssl_context
+    cert_gen, session_manager
 ):
     """Test that certificates without CRL URLs are allowed when configured"""
     chain = cert_gen.create_simple_chain()
@@ -556,14 +540,12 @@ def test_should_allow_certificates_without_crl_urls_when_configured(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
         allow_certificates_without_crl_url=True,
-        ssl_context=mock_ssl_context([chain.root_cert]),
+        trusted_certificates=[chain.root_cert],
     )
     assert validator.validate_certificate_chains(chains)
 
 
-def test_should_pass_in_advisory_mode_even_with_errors(
-    cert_gen, session_manager, mock_ssl_context
-):
+def test_should_pass_in_advisory_mode_even_with_errors(cert_gen, session_manager):
     """Test that validation passes in advisory mode even with errors"""
     chain = cert_gen.create_simple_chain()
     chains = [[chain.leaf_cert, chain.intermediate_cert, chain.root_cert]]
@@ -571,14 +553,14 @@ def test_should_pass_in_advisory_mode_even_with_errors(
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ADVISORY,
-        ssl_context=mock_ssl_context([chain.root_cert]),
+        trusted_certificates=[chain.root_cert],
     )
 
     assert validator.validate_certificate_chains(chains)
 
 
 def test_should_validate_multiple_chains_and_return_first_valid_with_no_crl_urls(
-    cert_gen, session_manager, mock_ssl_context
+    cert_gen, session_manager
 ):
     """Test validation of multiple chains and return first valid"""
     # Create a certificate that would be considered invalid (before March 2024)
@@ -598,21 +580,21 @@ def test_should_validate_multiple_chains_and_return_first_valid_with_no_crl_urls
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
         allow_certificates_without_crl_url=True,
-        ssl_context=mock_ssl_context([valid_chain.root_cert]),
+        trusted_certificates=[valid_chain.root_cert],
     )
 
     result = validator.validate_certificate_chains(chains)
     assert result, "Should return true when at least one valid chain is found"
 
 
-def test_cross_signed_certificate_chain(cert_gen, session_manager, mock_ssl_context):
+def test_cross_signed_certificate_chain(cert_gen, session_manager):
     """Test validation of cross-signed certificate chain"""
     chain = cert_gen.create_cross_signed_chain()
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
         allow_certificates_without_crl_url=True,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
 
     # provide full chain in arbitrary order
@@ -655,9 +637,7 @@ def test_cross_signed_certificate_chain(cert_gen, session_manager, mock_ssl_cont
     assert not validator.validate_certificate_chains(chains)
 
 
-def test_cross_signed_certificate_chain_revoked_CA(
-    cert_gen, session_manager, mock_ssl_context
-):
+def test_cross_signed_certificate_chain_revoked_CA(cert_gen, session_manager):
     chain = cert_gen.create_cross_signed_chain()
     chains = [
         [
@@ -673,14 +653,14 @@ def test_cross_signed_certificate_chain_revoked_CA(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
         allow_certificates_without_crl_url=True,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
     assert validator.validate_certificate_chains(chains)
 
 
 @responses.activate
 def test_should_validate_non_revoked_certificate_successfully(
-    cert_gen, crl_urls, session_manager, mock_ssl_context
+    cert_gen, crl_urls, session_manager
 ):
     """Test validation of non-revoked certificate"""
     # Setup mock HTTP client
@@ -702,7 +682,7 @@ def test_should_validate_non_revoked_certificate_successfully(
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
 
     assert validator.validate_certificate_chains([chain])
@@ -711,7 +691,7 @@ def test_should_validate_non_revoked_certificate_successfully(
 
 @responses.activate
 def test_should_validate_non_revoked_certificate_successfully_if_root_not_provided_on_chain(
-    cert_gen, crl_urls, session_manager, mock_ssl_context
+    cert_gen, crl_urls, session_manager
 ):
     """Test validation of non-revoked certificate"""
     # Setup mock HTTP client
@@ -733,7 +713,7 @@ def test_should_validate_non_revoked_certificate_successfully_if_root_not_provid
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
 
     assert validator.validate_certificate_chains([chain])
@@ -741,9 +721,7 @@ def test_should_validate_non_revoked_certificate_successfully_if_root_not_provid
 
 
 @responses.activate
-def test_should_fail_for_revoked_certificate(
-    cert_gen, crl_urls, session_manager, mock_ssl_context
-):
+def test_should_fail_for_revoked_certificate(cert_gen, crl_urls, session_manager):
     """Test failure for revoked certificate"""
     # Create certificate first
     cert = cert_gen.create_certificate_with_crl_distribution_points(
@@ -764,7 +742,7 @@ def test_should_fail_for_revoked_certificate(
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
 
     assert not validator.validate_certificate_chains([chain])
@@ -773,7 +751,7 @@ def test_should_fail_for_revoked_certificate(
 
 @responses.activate
 def test_should_allow_revoked_certificate_when_crl_validation_disabled(
-    cert_gen, crl_urls, session_manager, mock_ssl_context
+    cert_gen, crl_urls, session_manager
 ):
     """Test that revoked certificates are allowed when CRL validation is disabled"""
     # Create certificate first
@@ -794,7 +772,7 @@ def test_should_allow_revoked_certificate_when_crl_validation_disabled(
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.DISABLED,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
 
     assert validator.validate_certificate_chains([chain])
@@ -803,7 +781,7 @@ def test_should_allow_revoked_certificate_when_crl_validation_disabled(
 
 @responses.activate
 def test_should_pass_in_advisory_mode_with_crl_errors(
-    cert_gen, crl_urls, session_manager, mock_ssl_context
+    cert_gen, crl_urls, session_manager
 ):
     """Test that advisory mode passes even with CRL errors"""
     # Setup 404 response for CRL
@@ -817,7 +795,7 @@ def test_should_pass_in_advisory_mode_with_crl_errors(
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ADVISORY,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
 
     assert validator.validate_certificate_chains([chain])
@@ -826,7 +804,7 @@ def test_should_pass_in_advisory_mode_with_crl_errors(
 
 @responses.activate
 def test_should_fail_in_enabled_mode_with_crl_errors(
-    cert_gen, crl_urls, session_manager, mock_ssl_context
+    cert_gen, crl_urls, session_manager
 ):
     """Test that enabled mode fails with CRL errors"""
     # Setup 404 response for CRL
@@ -840,7 +818,7 @@ def test_should_fail_in_enabled_mode_with_crl_errors(
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
 
     assert not validator.validate_certificate_chains([chain])
@@ -849,7 +827,7 @@ def test_should_fail_in_enabled_mode_with_crl_errors(
 
 @responses.activate
 def test_should_validate_multiple_chains_and_success_if_just_one_valid(
-    cert_gen, crl_urls, session_manager, mock_ssl_context
+    cert_gen, crl_urls, session_manager
 ):
     """Test validation of multiple chains and return first valid"""
     # Create certificates
@@ -879,7 +857,7 @@ def test_should_validate_multiple_chains_and_success_if_just_one_valid(
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
 
     assert validator.validate_certificate_chains([invalid_chain, valid_chain])
@@ -888,9 +866,7 @@ def test_should_validate_multiple_chains_and_success_if_just_one_valid(
 
 
 @responses.activate
-def test_should_reject_expired_crl(
-    cert_gen, crl_urls, session_manager, mock_ssl_context
-):
+def test_should_reject_expired_crl(cert_gen, crl_urls, session_manager):
     """Test rejection of expired CRL"""
     # Setup mock HTTP client with expired CRL
     resp = responses.add(
@@ -909,16 +885,14 @@ def test_should_reject_expired_crl(
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
 
     assert not validator.validate_certificate_chains([chain])
     assert resp.call_count
 
 
-def test_should_skip_short_lived_certificates(
-    cert_gen, session_manager, mock_ssl_context
-):
+def test_should_skip_short_lived_certificates(cert_gen, session_manager):
     """Test that short-lived certificates skip CRL validation"""
     # Create short-lived certificate (5 days validity)
     short_lived_cert = cert_gen.create_short_lived_certificate(
@@ -929,7 +903,7 @@ def test_should_skip_short_lived_certificates(
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
 
     # Should pass without any HTTP calls (no responses setup)
@@ -938,7 +912,7 @@ def test_should_skip_short_lived_certificates(
 
 @responses.activate
 def test_should_handle_multiple_crl_distribution_points(
-    cert_gen, crl_urls, session_manager, mock_ssl_context
+    cert_gen, crl_urls, session_manager
 ):
     """Test handling of multiple CRL distribution points"""
     crl_content = cert_gen.generate_valid_crl()
@@ -971,7 +945,7 @@ def test_should_handle_multiple_crl_distribution_points(
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        ssl_context=mock_ssl_context([cert_gen.ca_certificate]),
+        trusted_certificates=[cert_gen.ca_certificate],
     )
 
     assert validator.validate_certificate_chains([chain])
@@ -979,23 +953,23 @@ def test_should_handle_multiple_crl_distribution_points(
     assert resp_backup.call_count
 
 
-def test_crl_validator_creation(session_manager, mock_ssl_context):
+def test_crl_validator_creation(session_manager):
     """Test that CRLValidator can be created properly"""
 
     # Test basic instantiation
-    validator = CRLValidator(session_manager, ssl_context=mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
     assert validator is not None
     assert isinstance(validator, CRLValidator)
 
     # Test that it works with from_config class method
     validator = CRLValidator.from_config(
-        CRLConfig(), session_manager, ssl_context=mock_ssl_context([])
+        CRLConfig(), session_manager, trusted_certificates=[]
     )
     assert validator is not None
     assert isinstance(validator, CRLValidator)
 
 
-def test_crl_validator_atexit_cleanup(session_manager, mock_ssl_context):
+def test_crl_validator_atexit_cleanup(session_manager):
     """Test that CRLValidator properly starts cleanup with atexit handler"""
     from snowflake.connector.crl_cache import CRLCacheFactory
 
@@ -1008,9 +982,7 @@ def test_crl_validator_atexit_cleanup(session_manager, mock_ssl_context):
 
     try:
         # Create validator which should start cleanup
-        CRLValidator.from_config(
-            config, session_manager, ssl_context=mock_ssl_context([])
-        )
+        CRLValidator.from_config(config, session_manager, trusted_certificates=[])
 
         # Verify cleanup is running through factory
         assert CRLCacheFactory.is_periodic_cleanup_running()
@@ -1028,14 +1000,14 @@ def test_crl_validator_atexit_cleanup(session_manager, mock_ssl_context):
         CRLCacheFactory.reset()
 
 
-def test_crl_validator_validate_connection(session_manager, mock_ssl_context):
+def test_crl_validator_validate_connection(session_manager):
     """Test the validate_connection method"""
     # Create a mock connection
     mock_connection = Mock()
 
     # Test with no certificate chain
     mock_connection.get_peer_cert_chain.return_value = []
-    validator = CRLValidator(session_manager, ssl_context=mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Should return True when disabled (default)
     assert validator.validate_connection(mock_connection)
@@ -1044,20 +1016,18 @@ def test_crl_validator_validate_connection(session_manager, mock_ssl_context):
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        ssl_context=mock_ssl_context([]),
+        trusted_certificates=[],
     )
     assert not validator.validate_connection(mock_connection)
 
 
 def test_crl_validator_extract_certificate_chains_from_connection(
-    cert_gen, session_manager, mock_ssl_context
+    cert_gen, session_manager
 ):
     """Test the _extract_certificate_chains_from_connection method"""
     chain = cert_gen.create_simple_chain()
 
-    validator = CRLValidator(
-        session_manager, ssl_context=mock_ssl_context([chain.root_cert])
-    )
+    validator = CRLValidator(session_manager, trusted_certificates=[chain.root_cert])
 
     # Test with no certificate chain
     mock_connection = Mock()
@@ -1268,9 +1238,7 @@ def test_crl_config_from_connection_none_mode():
 
 # Tests for CRL download and certificate checking functionality
 @responses.activate
-def test_crl_validator_download_crl_success(
-    cert_gen, session_manager, mock_ssl_context
-):
+def test_crl_validator_download_crl_success(cert_gen, session_manager):
     """Test successful CRL download"""
     # Setup mock CRL response with valid CRL data
     crl_url = "http://example.com/test.crl"
@@ -1285,7 +1253,7 @@ def test_crl_validator_download_crl_success(
     )
 
     validator = CRLValidator(
-        session_manager, ssl_context=mock_ssl_context([cert_gen.ca_certificate])
+        session_manager, trusted_certificates=[cert_gen.ca_certificate]
     )
 
     # Test the download method - it returns a tuple (crl, timestamp)
@@ -1296,13 +1264,13 @@ def test_crl_validator_download_crl_success(
 
 
 @responses.activate
-def test_crl_validator_download_crl_http_error(session_manager, mock_ssl_context):
+def test_crl_validator_download_crl_http_error(session_manager):
     """Test CRL download with HTTP error"""
     crl_url = "http://example.com/missing.crl"
 
     responses.add(responses.GET, crl_url, status=404)
 
-    validator = CRLValidator(session_manager, ssl_context=mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Should return (None, None) on HTTP error
     crl, timestamp = validator._download_crl(crl_url)
@@ -1311,7 +1279,7 @@ def test_crl_validator_download_crl_http_error(session_manager, mock_ssl_context
 
 
 @responses.activate
-def test_crl_validator_download_crl_network_timeout(session_manager, mock_ssl_context):
+def test_crl_validator_download_crl_network_timeout(session_manager):
     """Test CRL download with network timeout"""
     from requests.exceptions import Timeout
 
@@ -1321,7 +1289,7 @@ def test_crl_validator_download_crl_network_timeout(session_manager, mock_ssl_co
         session_manager,
         connection_timeout_ms=1000,
         read_timeout_ms=1000,
-        ssl_context=mock_ssl_context([]),
+        trusted_certificates=[],
     )
 
     # Mock requests to raise timeout
@@ -1336,13 +1304,13 @@ def test_crl_validator_download_crl_network_timeout(session_manager, mock_ssl_co
 
 
 @responses.activate
-def test_crl_validator_download_crl_network_error(session_manager, mock_ssl_context):
+def test_crl_validator_download_crl_network_error(session_manager):
     """Test CRL download with network connection error"""
     from requests.exceptions import ConnectionError
 
     crl_url = "http://example.com/unreachable.crl"
 
-    validator = CRLValidator(session_manager, ssl_context=mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Mock requests to raise connection error
     with mock_patch.object(
@@ -1354,14 +1322,14 @@ def test_crl_validator_download_crl_network_error(session_manager, mock_ssl_cont
 
 
 def test_crl_validator_extract_crl_distribution_points_success(
-    cert_gen, session_manager, mock_ssl_context
+    cert_gen, session_manager
 ):
     """Test successful extraction of CRL distribution points"""
     # Create certificate with CRL distribution points
     crl_urls = ["http://example.com/ca.crl", "http://backup.com/ca.crl"]
     cert = cert_gen.create_certificate_with_crl_distribution_points("CN=Test", crl_urls)
 
-    validator = CRLValidator(session_manager, mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     extracted_urls = validator._extract_crl_distribution_points(cert)
 
@@ -1371,14 +1339,14 @@ def test_crl_validator_extract_crl_distribution_points_success(
 
 
 def test_crl_validator_extract_crl_distribution_points_no_extension(
-    cert_gen, session_manager, mock_ssl_context
+    cert_gen, session_manager
 ):
     """Test extraction when certificate has no CRL distribution points"""
     # Create simple certificate without CRL distribution points
     chain = cert_gen.create_simple_chain()
     cert = chain.leaf_cert
 
-    validator = CRLValidator(session_manager, mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Should return empty list when no CRL extension found
     extracted_urls = validator._extract_crl_distribution_points(cert)
@@ -1386,7 +1354,7 @@ def test_crl_validator_extract_crl_distribution_points_no_extension(
 
 
 def test_crl_validator_check_certificate_against_crl_not_revoked(
-    cert_gen, session_manager, mock_ssl_context
+    cert_gen, session_manager
 ):
     """Test certificate checking against CRL - not revoked"""
     from cryptography.x509 import CertificateRevocationList
@@ -1399,16 +1367,14 @@ def test_crl_validator_check_certificate_against_crl_not_revoked(
     mock_crl = Mock(spec=CertificateRevocationList)
     mock_crl.get_revoked_certificate_by_serial_number.return_value = None
 
-    validator = CRLValidator(session_manager, mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Should return UNREVOKED
     result = validator._check_certificate_against_crl(cert, mock_crl)
     assert result == CRLValidationResult.UNREVOKED
 
 
-def test_crl_validator_check_certificate_against_crl_revoked(
-    cert_gen, session_manager, mock_ssl_context
-):
+def test_crl_validator_check_certificate_against_crl_revoked(cert_gen, session_manager):
     """Test certificate checking against CRL - revoked"""
     from cryptography.x509 import CertificateRevocationList, RevokedCertificate
 
@@ -1421,7 +1387,7 @@ def test_crl_validator_check_certificate_against_crl_revoked(
     mock_crl = Mock(spec=CertificateRevocationList)
     mock_crl.get_revoked_certificate_by_serial_number.return_value = mock_revoked_cert
 
-    validator = CRLValidator(session_manager, mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Should return REVOKED
     result = validator._check_certificate_against_crl(cert, mock_crl)
@@ -1429,7 +1395,7 @@ def test_crl_validator_check_certificate_against_crl_revoked(
 
 
 def test_crl_validator_check_certificate_against_crl_expired(
-    cert_gen, session_manager, crl_urls, mock_ssl_context
+    cert_gen, session_manager, crl_urls
 ):
     """Test certificate checking against expired CRL"""
 
@@ -1442,13 +1408,14 @@ def test_crl_validator_check_certificate_against_crl_expired(
     mock_crl = Mock(spec=x509.CertificateRevocationList)
     mock_crl.next_update_utc = datetime.now(timezone.utc) - timedelta(days=1)  # Expired
     mock_crl.get_revoked_certificate_by_serial_number.return_value = None
+    mock_crl.issuer = parent.subject
 
     # Cache will return an expired CRL
     mock_cache_mgr = Mock(spec=CRLCacheManager)
     mock_cache_mgr.get.return_value = CRLCacheEntry(mock_crl, datetime.now())
 
     validator = CRLValidator(
-        session_manager, cache_manager=mock_cache_mgr, ssl_context=mock_ssl_context([])
+        session_manager, cache_manager=mock_cache_mgr, trusted_certificates=[]
     )
     with mock_patch.object(
         validator, "_download_crl", return_value=(mock_crl, datetime.now())
@@ -1465,7 +1432,7 @@ def test_crl_validator_check_certificate_against_crl_expired(
 
 
 def test_crl_validator_validate_certificate_with_cache_hit(
-    cert_gen, session_manager, crl_urls, mock_ssl_context
+    cert_gen, session_manager, crl_urls
 ):
     """Test certificate validation with cache hit"""
 
@@ -1478,11 +1445,12 @@ def test_crl_validator_validate_certificate_with_cache_hit(
     # Mock cache manager with cache hit
     mock_crl = Mock(spec=x509.CertificateRevocationList)
     mock_crl.next_update_utc = datetime.now(timezone.utc) + timedelta(days=7)
+    mock_crl.issuer = ca_cert.subject
     mock_cache_manager = Mock()
     cached_entry = CRLCacheEntry(mock_crl, datetime.now(timezone.utc))
     mock_cache_manager.get.return_value = cached_entry
 
-    validator = CRLValidator(session_manager, ssl_context=mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
     validator._cache_manager = mock_cache_manager
 
     # Mock CRL parsing and validation
@@ -1503,7 +1471,7 @@ def test_crl_validator_validate_certificate_with_cache_hit(
 
 
 def test_crl_validator_validate_certificate_with_cache_miss(
-    cert_gen, session_manager, crl_urls, mock_ssl_context
+    cert_gen, session_manager, crl_urls
 ):
     """Test certificate validation with cache miss and download"""
     # Create certificate with CRL distribution points
@@ -1519,7 +1487,7 @@ def test_crl_validator_validate_certificate_with_cache_miss(
     validator = CRLValidator(
         session_manager,
         cache_manager=mock_cache_manager,
-        ssl_context=mock_ssl_context([]),
+        trusted_certificates=[],
     )
 
     # Mock successful download and validation
@@ -1534,11 +1502,10 @@ def test_crl_validator_validate_certificate_with_cache_miss(
     ) as mock_check, mock_patch.object(
         validator, "_verify_crl_signature", return_value=True
     ) as mock_verify:
-
         mock_crl = Mock()
         mock_crl.next_update_utc = datetime.now(timezone.utc) + timedelta(days=7)
+        mock_crl.issuer = ca_cert.subject  # Set the CRL issuer to match CA subject
         mock_load_crl.return_value = mock_crl
-
         result = validator._validate_certificate(cert, ca_cert)
 
         # Should download CRL and cache it
@@ -1550,26 +1517,20 @@ def test_crl_validator_validate_certificate_with_cache_miss(
         mock_verify.assert_called_once_with(mock_crl, ca_cert)
 
 
-def test_crl_signature_verification_success(
-    cert_gen,
-    session_manager,
-    mock_ssl_context,
-):
+def test_crl_signature_verification_success(cert_gen, session_manager):
     """Test successful CRL signature verification"""
     # Create a valid CRL signed by the test CA
     crl_bytes = cert_gen.generate_valid_crl()
     crl = x509.load_der_x509_crl(crl_bytes, backend=default_backend())
 
-    validator = CRLValidator(session_manager, ssl_context=mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Should successfully verify the signature
     result = validator._verify_crl_signature(crl, cert_gen.ca_certificate)
     assert result is True
 
 
-def test_crl_signature_verification_failure_wrong_ca(
-    cert_gen, session_manager, mock_ssl_context
-):
+def test_crl_signature_verification_failure_wrong_ca(cert_gen, session_manager):
     """Test CRL signature verification failure with wrong CA certificate"""
     # Create a CRL signed by the test CA
     crl_bytes = cert_gen.generate_valid_crl()
@@ -1597,14 +1558,14 @@ def test_crl_signature_verification_failure_wrong_ca(
         .sign(different_ca_key, hashes.SHA256(), backend=default_backend())
     )
 
-    validator = CRLValidator(session_manager, ssl_context=mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Should fail to verify the signature with wrong CA
     result = validator._verify_crl_signature(crl, different_ca_cert)
     assert result is False
 
 
-def test_crl_signature_verification_with_ec_key(session_manager, mock_ssl_context):
+def test_crl_signature_verification_with_ec_key(session_manager):
     """Test CRL signature verification with EC (Elliptic Curve) keys"""
     from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -1650,16 +1611,14 @@ def test_crl_signature_verification_with_ec_key(session_manager, mock_ssl_contex
 
     ec_crl = builder.sign(ec_private_key, hashes.SHA256(), backend=default_backend())
 
-    validator = CRLValidator(session_manager, ssl_context=mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Should successfully verify EC signature
     result = validator._verify_crl_signature(ec_crl, ec_ca_cert)
     assert result is True
 
 
-def test_crl_signature_verification_with_corrupted_signature(
-    cert_gen, session_manager, mock_ssl_context
-):
+def test_crl_signature_verification_with_corrupted_signature(cert_gen, session_manager):
     """Test CRL signature verification with corrupted signature"""
     # Create a valid CRL
     crl_bytes = cert_gen.generate_valid_crl()
@@ -1672,16 +1631,14 @@ def test_crl_signature_verification_with_corrupted_signature(
     corrupted_crl.signature = b"corrupted_signature_bytes"
     corrupted_crl.tbs_certlist_bytes = crl.tbs_certlist_bytes
 
-    validator = CRLValidator(session_manager, ssl_context=mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Should fail to verify corrupted signature
     result = validator._verify_crl_signature(corrupted_crl, cert_gen.ca_certificate)
     assert result is False
 
 
-def test_crl_signature_verification_exception_handling(
-    cert_gen, session_manager, mock_ssl_context
-):
+def test_crl_signature_verification_exception_handling(cert_gen, session_manager):
     """Test CRL signature verification exception handling"""
     # Create a valid CRL
     crl_bytes = cert_gen.generate_valid_crl()
@@ -1691,7 +1648,7 @@ def test_crl_signature_verification_exception_handling(
     mock_ca_cert = Mock(spec=x509.Certificate)
     mock_ca_cert.public_key.side_effect = Exception("Test exception")
 
-    validator = CRLValidator(session_manager, ssl_context=mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Should handle exception gracefully and return False
     result = validator._verify_crl_signature(crl, mock_ca_cert)
@@ -1699,7 +1656,7 @@ def test_crl_signature_verification_exception_handling(
 
 
 def test_crl_signature_verification_integration_with_validation_flow(
-    cert_gen, crl_urls, session_manager, mock_ssl_context
+    cert_gen, crl_urls, session_manager
 ):
     """Test that signature verification is properly integrated into the validation flow"""
     # Create certificate with CRL distribution point
@@ -1730,7 +1687,7 @@ def test_crl_signature_verification_integration_with_validation_flow(
     validator_enabled = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        ssl_context=mock_ssl_context([]),
+        trusted_certificates=[],
     )
 
     with mock_patch.object(
@@ -1744,7 +1701,7 @@ def test_crl_signature_verification_integration_with_validation_flow(
     validator_advisory = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ADVISORY,
-        ssl_context=mock_ssl_context([]),
+        trusted_certificates=[],
     )
 
     with mock_patch.object(
@@ -1757,12 +1714,12 @@ def test_crl_signature_verification_integration_with_validation_flow(
 
 
 def test_crl_signature_verification_with_issuer_mismatch_warning(
-    cert_gen, session_manager, caplog, mock_ssl_context
+    cert_gen, session_manager, caplog
 ):
     """Test that we log a warning when CRL issuer doesn't match CA certificate subject"""
     # Create a valid CRL signed by the test CA
-    crl_bytes = cert_gen.generate_valid_crl()
-    crl = x509.load_der_x509_crl(crl_bytes, backend=default_backend())
+    crl = Mock(spec=x509.CertificateRevocationList)
+    crl.issuer = cert_gen.ca_certificate.subject
 
     # Create a different CA certificate with different subject
     different_ca_key = rsa.generate_private_key(
@@ -1786,7 +1743,7 @@ def test_crl_signature_verification_with_issuer_mismatch_warning(
         .sign(different_ca_key, hashes.SHA256(), backend=default_backend())
     )
 
-    validator = CRLValidator(session_manager, ssl_context=mock_ssl_context([]))
+    validator = CRLValidator(session_manager, trusted_certificates=[])
 
     # Mock the _verify_crl_signature to return True to focus on the issuer check
     with mock_patch.object(
@@ -1808,8 +1765,8 @@ def test_crl_signature_verification_with_issuer_mismatch_warning(
             "http://test.crl",
         )
 
-        # Should still return UNREVOKED since signature verification was mocked to succeed
-        assert result == CRLValidationResult.UNREVOKED
+        # Should return ERROR due to issuer mismatch
+        assert result == CRLValidationResult.ERROR
 
         # Verify that the warning was logged
         assert len(caplog.records) > 0
@@ -1892,33 +1849,12 @@ def test_is_certificate_trusted_by_os(cert_gen):
     """Test OS certificate trust validation."""
     # Create a test certificate chain
     chain = cert_gen.create_simple_chain()
-    cert = chain.leaf_cert
-
-    # Create a mock SSL context
-    mock_ssl_context = Mock()
-    # Mock get_ca_certs to return DER-encoded certificate bytes
-    cert_der = cert.public_bytes(serialization.Encoding.DER)
-    mock_ssl_context.get_ca_certs.return_value = [cert_der]
 
     # Create a CRLValidator instance with SSL context
-    validator = CRLValidator(session_manager=Mock(), ssl_context=mock_ssl_context)
+    validator = CRLValidator(
+        session_manager=Mock(), trusted_certificates=[chain.root_cert]
+    )
 
     # Test with a certificate that's in the CA certificates list
-    result = validator._is_certificate_trusted_by_os(cert)
-    assert result is True
-
-    # Test with a certificate that's NOT in the CA certificates list
-    other_chain = cert_gen.create_simple_chain()
-    other_cert = other_chain.leaf_cert
-    result_other = validator._is_certificate_trusted_by_os(other_cert)
-    assert result_other is False
-
-    # Test that SSL context is stored correctly
-    assert validator._ssl_context is mock_ssl_context
-
-    # Test exception handling
-    mock_ssl_context.get_ca_certs.side_effect = Exception("Test error")
-    # Use a different certificate to avoid cache
-    exception_cert = chain.intermediate_cert
-    result_error = validator._is_certificate_trusted_by_os(exception_cert)
-    assert result_error is False
+    assert validator._is_certificate_trusted_by_os(chain.root_cert) is True
+    assert validator._is_certificate_trusted_by_os(chain.intermediate_cert) is False

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import ssl
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -179,7 +178,7 @@ class CRLValidator:
     def __init__(
         self,
         session_manager: SessionManager | Any,
-        ssl_context: ssl.SSLContext,
+        trusted_certificates: list[x509.Certificate],
         cert_revocation_check_mode: CertRevocationCheckMode = CRLConfig.cert_revocation_check_mode,
         allow_certificates_without_crl_url: bool = CRLConfig.allow_certificates_without_crl_url,
         connection_timeout_ms: int = CRLConfig.connection_timeout_ms,
@@ -188,7 +187,6 @@ class CRLValidator:
         cache_manager: CRLCacheManager | None = None,
     ):
         self._session_manager = session_manager
-        self._ssl_context = ssl_context
         self._cert_revocation_check_mode = cert_revocation_check_mode
         self._allow_certificates_without_crl_url = allow_certificates_without_crl_url
         self._connection_timeout_ms = connection_timeout_ms
@@ -201,8 +199,7 @@ class CRLValidator:
 
         # list of trusted CA and their certificates
         self._trusted_ca: dict[x509.Name, x509.Certificate] = {}
-        for cert in ssl_context.get_ca_certs(binary_form=True):
-            cert = x509.load_der_x509_certificate(cert)
+        for cert in trusted_certificates:
             self._trusted_ca[cert.subject] = cert
 
     @classmethod
@@ -210,7 +207,7 @@ class CRLValidator:
         cls,
         config: CRLConfig,
         session_manager: SessionManager,
-        ssl_context: ssl.SSLContext,
+        trusted_certificates: list[x509.Certificate],
     ) -> CRLValidator:
         """
         Create a CRLValidator instance from a CRLConfig.
@@ -221,6 +218,7 @@ class CRLValidator:
         Args:
             config: CRLConfig instance containing CRL-related parameters
             session_manager: SessionManager instance
+            trusted_certificates: List of trusted CA certificates
 
         Returns:
             CRLValidator: Configured CRLValidator instance
@@ -261,7 +259,7 @@ class CRLValidator:
 
         return cls(
             session_manager=session_manager,
-            ssl_context=ssl_context,
+            trusted_certificates=trusted_certificates,
             cert_revocation_check_mode=config.cert_revocation_check_mode,
             allow_certificates_without_crl_url=config.allow_certificates_without_crl_url,
             connection_timeout_ms=config.connection_timeout_ms,
