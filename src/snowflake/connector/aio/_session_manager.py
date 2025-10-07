@@ -5,7 +5,7 @@ import collections
 import contextlib
 import itertools
 import logging
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Mapping
 
 import aiohttp
@@ -54,9 +54,19 @@ class AioHttpConfig(BaseHttpConfig):
     snowflake_ocsp_mode: OCSPMode = OCSPMode.FAIL_OPEN
     """OCSP validation mode obtained from connection._ocsp_mode()."""
 
-    def copy_with(self, **overrides: Any) -> AioHttpConfig:
-        """Return a new AioHttpConfig with overrides applied."""
-        return replace(self, **overrides)
+    def get_connector(
+        self, **override_connector_factory_kwargs
+    ) -> aiohttp.BaseConnector:
+        # We pass here only chosen attributes as kwargs to make the arguments received by the factory as compliant with the BaseConnector constructor interface as possible.
+        # We could consider passing the whole HttpConfig as kwarg to the factory if necessary in the future.
+        attributes_for_connector_factory = frozenset({"snowflake_ocsp_mode"})
+
+        self_kwargs_for_connector_factory = {
+            attr_name: getattr(self, attr_name)
+            for attr_name in attributes_for_connector_factory
+        }
+        self_kwargs_for_connector_factory.update(override_connector_factory_kwargs)
+        return self.connector_factory(**self_kwargs_for_connector_factory)
 
 
 class SessionPool(SessionPoolSync[aiohttp.ClientSession]):
@@ -256,7 +266,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
 
     def make_session(self) -> aiohttp.ClientSession:
         """Create a new aiohttp.ClientSession with configured connector."""
-        connector = self._cfg.connector_factory(
+        connector = self._cfg.get_connector(
             snowflake_ocsp_mode=self._cfg.snowflake_ocsp_mode,
         )
 

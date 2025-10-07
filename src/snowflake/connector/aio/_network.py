@@ -567,7 +567,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         include_retry_reason = self._connection._enable_retry_reason_in_query_response
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
-        async with self._use_session(full_url) as session:
+        async with self.use_session(full_url) as session:
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,
                 _include_retry_reason=include_retry_reason,

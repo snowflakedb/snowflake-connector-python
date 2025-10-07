@@ -23,10 +23,10 @@ log = logging.getLogger(__name__)
 
 
 class SnowflakeSSLConnector(aiohttp.TCPConnector):
-    def __init__(self, *args, **kwargs):
-        self._snowflake_ocsp_mode = kwargs.pop(
-            "snowflake_ocsp_mode", OCSPMode.FAIL_OPEN
-        )
+    def __init__(
+        self, *args, snowflake_ocsp_mode: OCSPMode = OCSPMode.FAIL_OPEN, **kwargs
+    ):
+        self._snowflake_ocsp_mode = snowflake_ocsp_mode
         if self._snowflake_ocsp_mode == OCSPMode.FAIL_OPEN and sys.version_info < (
             3,
             10,
