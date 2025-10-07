@@ -25,6 +25,8 @@ import pytest
 import snowflake.connector.ocsp_snowflake
 from snowflake.connector.aio._ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.aio._ocsp_snowflake import OCSPCache, SnowflakeOCSP
+from snowflake.connector.aio._session_manager import AioHttpConfig, SessionManager
+from snowflake.connector.constants import OCSPMode
 from snowflake.connector.errors import RevocationCheckError
 from snowflake.connector.util_text import random_string
 
@@ -124,26 +126,60 @@ def random_ocsp_response_validation_cache():
         pass
 
 
-async def test_ocsp():
+@pytest.fixture
+def http_config():
+    """Fixture providing an AioHttpConfig with OCSP disabled to prevent circular validation.
+
+    When OCSP validation code uses a SessionManager, that SessionManager creates connectors
+    which should NOT try to validate OCSP again (infinite loop). So we disable OCSP checks
+    for the HTTP client used by OCSP validation itself.
+    """
+    return AioHttpConfig(
+        use_pooling=False,
+        trust_env=True,
+        snowflake_ocsp_mode=OCSPMode.DISABLE_OCSP_CHECKS,
+    )
+
+
+@pytest.fixture
+async def session_manager(http_config):
+    """Fixture providing a SessionManager instance for OCSP tests.
+
+    Each test gets a cloned manager to ensure test isolation. The base manager
+    is closed after all tests using it are complete.
+    """
+    base_manager = SessionManager(config=http_config)
+    try:
+        # Yield a clone for each test to ensure isolation
+        yield base_manager.clone()
+    finally:
+        await base_manager.close()
+
+
+async def test_ocsp(session_manager):
     """OCSP tests."""
     # reset the memory cache
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
     for url in TARGET_HOSTS:
         async with _asyncio_connect(url, timeout=5) as connection:
-            assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
+            assert await ocsp.validate(
+                url, connection, session_manager=session_manager
+            ), f"Failed to validate: {url}"
 
 
-async def test_ocsp_wo_cache_server():
+async def test_ocsp_wo_cache_server(session_manager):
     """OCSP Tests with Cache Server Disabled."""
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP(use_ocsp_cache_server=False)
     for url in TARGET_HOSTS:
         async with _asyncio_connect(url, timeout=5) as connection:
-            assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
+            assert await ocsp.validate(
+                url, connection, session_manager=session_manager
+            ), f"Failed to validate: {url}"
 
 
-async def test_ocsp_wo_cache_file():
+async def test_ocsp_wo_cache_file(session_manager):
     """OCSP tests without File cache.
 
     Notes:
@@ -164,14 +200,14 @@ async def test_ocsp_wo_cache_file():
         for url in TARGET_HOSTS:
             async with _asyncio_connect(url, timeout=5) as connection:
                 assert await ocsp.validate(
-                    url, connection
+                    url, connection, session_manager=session_manager
                 ), f"Failed to validate: {url}"
     finally:
         del environ["SF_OCSP_RESPONSE_CACHE_DIR"]
         OCSPCache.reset_cache_dir()
 
 
-async def test_ocsp_fail_open_w_single_endpoint():
+async def test_ocsp_fail_open_w_single_endpoint(session_manager):
     SnowflakeOCSP.clear_cache()
 
     try:
@@ -189,7 +225,7 @@ async def test_ocsp_fail_open_w_single_endpoint():
     try:
         async with _asyncio_connect("snowflake.okta.com") as connection:
             assert await ocsp.validate(
-                "snowflake.okta.com", connection
+                "snowflake.okta.com", connection, session_manager=session_manager
             ), "Failed to validate: {}".format("snowflake.okta.com")
     finally:
         del environ["SF_OCSP_TEST_MODE"]
@@ -201,7 +237,7 @@ async def test_ocsp_fail_open_w_single_endpoint():
     ER_OCSP_RESPONSE_CERT_STATUS_REVOKED is None,
     reason="No ER_OCSP_RESPONSE_CERT_STATUS_REVOKED is available.",
 )
-async def test_ocsp_fail_close_w_single_endpoint():
+async def test_ocsp_fail_close_w_single_endpoint(session_manager):
     SnowflakeOCSP.clear_cache()
 
     environ["SF_OCSP_TEST_MODE"] = "true"
@@ -214,7 +250,9 @@ async def test_ocsp_fail_close_w_single_endpoint():
 
     with pytest.raises(RevocationCheckError) as ex:
         async with _asyncio_connect("snowflake.okta.com") as connection:
-            await ocsp.validate("snowflake.okta.com", connection)
+            await ocsp.validate(
+                "snowflake.okta.com", connection, session_manager=session_manager
+            )
 
     try:
         assert (
@@ -226,7 +264,7 @@ async def test_ocsp_fail_close_w_single_endpoint():
         del environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"]
 
 
-async def test_ocsp_bad_validity():
+async def test_ocsp_bad_validity(session_manager):
     SnowflakeOCSP.clear_cache()
 
     environ["SF_OCSP_TEST_MODE"] = "true"
@@ -242,36 +280,38 @@ async def test_ocsp_bad_validity():
     async with _asyncio_connect("snowflake.okta.com") as connection:
 
         assert await ocsp.validate(
-            "snowflake.okta.com", connection
+            "snowflake.okta.com", connection, session_manager=session_manager
         ), "Connection should have passed with fail open"
     del environ["SF_OCSP_TEST_MODE"]
     del environ["SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY"]
 
 
-async def test_ocsp_single_endpoint():
+async def test_ocsp_single_endpoint(session_manager):
     environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"] = "True"
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
     ocsp.OCSP_CACHE_SERVER.NEW_DEFAULT_CACHE_SERVER_BASE_URL = "https://snowflake.preprod3.us-west-2-dev.external-zone.snowflakecomputing.com:8085/ocsp/"
     async with _asyncio_connect("snowflake.okta.com") as connection:
         assert await ocsp.validate(
-            "snowflake.okta.com", connection
+            "snowflake.okta.com", connection, session_manager=session_manager
         ), "Failed to validate: {}".format("snowflake.okta.com")
 
     del environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"]
 
 
-async def test_ocsp_by_post_method():
+async def test_ocsp_by_post_method(session_manager):
     """OCSP tests."""
     # reset the memory cache
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP(use_post_method=True)
     for url in TARGET_HOSTS:
         async with _asyncio_connect("snowflake.okta.com") as connection:
-            assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
+            assert await ocsp.validate(
+                url, connection, session_manager=session_manager
+            ), f"Failed to validate: {url}"
 
 
-async def test_ocsp_with_file_cache(tmpdir):
+async def test_ocsp_with_file_cache(tmpdir, session_manager):
     """OCSP tests and the cache server and file."""
     tmp_dir = str(tmpdir.mkdir("ocsp_response_cache"))
     cache_file_name = path.join(tmp_dir, "cache_file.txt")
@@ -281,11 +321,13 @@ async def test_ocsp_with_file_cache(tmpdir):
     ocsp = SFOCSP(ocsp_response_cache_uri="file://" + cache_file_name)
     for url in TARGET_HOSTS:
         async with _asyncio_connect("snowflake.okta.com") as connection:
-            assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
+            assert await ocsp.validate(
+                url, connection, session_manager=session_manager
+            ), f"Failed to validate: {url}"
 
 
 async def test_ocsp_with_bogus_cache_files(
-    tmpdir, random_ocsp_response_validation_cache
+    tmpdir, random_ocsp_response_validation_cache, session_manager
 ):
     with mock.patch(
         "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
@@ -294,7 +336,9 @@ async def test_ocsp_with_bogus_cache_files(
         from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
 
         """Attempts to use bogus OCSP response data."""
-        cache_file_name, target_hosts = await _store_cache_in_file(tmpdir)
+        cache_file_name, target_hosts = await _store_cache_in_file(
+            tmpdir, session_manager
+        )
 
         ocsp = SFOCSP()
         OCSPCache.read_ocsp_response_cache_file(ocsp, cache_file_name)
@@ -320,11 +364,13 @@ async def test_ocsp_with_bogus_cache_files(
         for hostname in target_hosts:
             async with _asyncio_connect("snowflake.okta.com") as connection:
                 assert await ocsp.validate(
-                    hostname, connection
+                    hostname, connection, session_manager=session_manager
                 ), f"Failed to validate: {hostname}"
 
 
-async def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_cache):
+async def test_ocsp_with_outdated_cache(
+    tmpdir, random_ocsp_response_validation_cache, session_manager
+):
     with mock.patch(
         "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
         random_ocsp_response_validation_cache,
@@ -332,7 +378,9 @@ async def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_
         from snowflake.connector.ocsp_snowflake import OCSPResponseValidationResult
 
         """Attempts to use outdated OCSP response cache file."""
-        cache_file_name, target_hosts = await _store_cache_in_file(tmpdir)
+        cache_file_name, target_hosts = await _store_cache_in_file(
+            tmpdir, session_manager
+        )
 
         ocsp = SFOCSP()
 
@@ -362,7 +410,7 @@ async def test_ocsp_with_outdated_cache(tmpdir, random_ocsp_response_validation_
         ), "must be empty. outdated cache should not be loaded"
 
 
-async def _store_cache_in_file(tmpdir, target_hosts=None):
+async def _store_cache_in_file(tmpdir, session_manager, target_hosts=None):
     if target_hosts is None:
         target_hosts = TARGET_HOSTS
     os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = str(tmpdir)
@@ -377,22 +425,24 @@ async def _store_cache_in_file(tmpdir, target_hosts=None):
     for hostname in target_hosts:
         async with _asyncio_connect("snowflake.okta.com") as connection:
             assert await ocsp.validate(
-                hostname, connection
+                hostname, connection, session_manager=session_manager
             ), f"Failed to validate: {hostname}"
     assert path.exists(filename), "OCSP response cache file"
     return filename, target_hosts
 
 
-async def test_ocsp_with_invalid_cache_file():
+async def test_ocsp_with_invalid_cache_file(session_manager):
     """OCSP tests with an invalid cache file."""
     SnowflakeOCSP.clear_cache()  # reset the memory cache
     ocsp = SFOCSP(ocsp_response_cache_uri="NEVER_EXISTS")
     for url in TARGET_HOSTS[0:1]:
         async with _asyncio_connect(url) as connection:
-            assert await ocsp.validate(url, connection), f"Failed to validate: {url}"
+            assert await ocsp.validate(
+                url, connection, session_manager=session_manager
+            ), f"Failed to validate: {url}"
 
 
-async def test_ocsp_cache_when_server_is_down(tmpdir):
+async def test_ocsp_cache_when_server_is_down(tmpdir, session_manager):
     """Test that OCSP validation handles server failures gracefully."""
     # Create a completely isolated cache for this test
     from snowflake.connector.cache import SFDictFileCache
@@ -426,7 +476,9 @@ async def test_ocsp_cache_when_server_is_down(tmpdir):
             # The main test: validation should succeed with fail-open behavior
             # even when server is down (BrokenPipeError)
             async with _asyncio_connect("snowflake.okta.com") as connection:
-                result = await ocsp.validate("snowflake.okta.com", connection)
+                result = await ocsp.validate(
+                    "snowflake.okta.com", connection, session_manager=session_manager
+                )
 
             # With fail-open enabled, validation should succeed despite server being down
             # The result should not be None (which would indicate complete failure)
@@ -435,7 +487,7 @@ async def test_ocsp_cache_when_server_is_down(tmpdir):
             ), "OCSP validation should succeed with fail-open when server is down"
 
 
-async def test_concurrent_ocsp_requests(tmpdir):
+async def test_concurrent_ocsp_requests(tmpdir, session_manager):
     """Run OCSP revocation checks in parallel. The memory and file caches are deleted randomly."""
     cache_file_name = path.join(str(tmpdir), "cache_file.txt")
     SnowflakeOCSP.clear_cache()  # reset the memory cache
@@ -444,13 +496,13 @@ async def test_concurrent_ocsp_requests(tmpdir):
     target_hosts = TARGET_HOSTS * 5
     await asyncio.gather(
         *[
-            _validate_certs_using_ocsp(hostname, cache_file_name)
+            _validate_certs_using_ocsp(hostname, cache_file_name, session_manager)
             for hostname in target_hosts
         ]
     )
 
 
-async def _validate_certs_using_ocsp(url, cache_file_name):
+async def _validate_certs_using_ocsp(url, cache_file_name, session_manager):
     """Validate OCSP response. Deleting memory cache and file cache randomly."""
     import logging
 
@@ -474,4 +526,4 @@ async def _validate_certs_using_ocsp(url, cache_file_name):
 
     async with _asyncio_connect(url) as connection:
         ocsp = SFOCSP(ocsp_response_cache_uri="file://" + cache_file_name)
-        await ocsp.validate(url, connection)
+        await ocsp.validate(url, connection, session_manager=session_manager)

@@ -15,6 +15,7 @@ from ..constants import FileHeader, ResultStatus
 from ..encryption_util import SnowflakeEncryptionUtil
 from ..errors import RequestExceedMaxRetryError
 from ..storage_client import SnowflakeStorageClient as SnowflakeStorageClientSync
+from ._session_manager import SessionManager
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -195,14 +196,17 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
             # rest_kwargs["timeout"] = (REQUEST_CONNECTION_TIMEOUT, REQUEST_READ_TIMEOUT)
             try:
                 if conn:
-                    async with conn._rest._use_session(url) as session:
+                    async with conn.rest.use_session(url=url) as session:
                         logger.debug(f"storage client request with session {session}")
                         response = await session.request(verb, url, **rest_kwargs)
                 else:
+                    # This path should be entered only in unusual scenarios - when entrypoint to transfer wasn't through
+                    # connection -> cursor. It is rather unit-tests-specific use case. Due to this fact we can create
+                    # SessionManager on the fly, if code ends up here, since we probably do not care about losing
+                    # proxy or HTTP setup.
                     logger.debug("storage client request with new session")
-                    response = await aiohttp.ClientSession().request(
-                        verb, url, **rest_kwargs
-                    )
+                    session_manager = SessionManager(use_pooling=False)
+                    response = await session_manager.request(verb, url, **rest_kwargs)
 
                 if await self._has_expired_presigned_url(response):
                     logger.debug(

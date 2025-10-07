@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from typing import Any
+import typing
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .. import SnowflakeConnection
 
 from ...auth.workload_identity import (
     AuthByWorkloadIdentity as AuthByWorkloadIdentitySync,
@@ -32,10 +36,15 @@ class AuthByWorkloadIdentity(AuthByPluginAsync, AuthByWorkloadIdentitySync):
     async def reset_secrets(self) -> None:
         AuthByWorkloadIdentitySync.reset_secrets(self)
 
-    async def prepare(self, **kwargs: Any) -> None:
+    async def prepare(
+        self, *, conn: SnowflakeConnection | None, **kwargs: typing.Any
+    ) -> None:
         """Fetch the token using async wif_util."""
         self.attestation = await create_attestation(
-            self.provider, self.entra_resource, self.token
+            self.provider,
+            self.entra_resource,
+            self.token,
+            session_manager=conn._session_manager.clone() if conn else None,
         )
 
     async def reauthenticate(self, **kwargs: Any) -> dict[str, bool]:

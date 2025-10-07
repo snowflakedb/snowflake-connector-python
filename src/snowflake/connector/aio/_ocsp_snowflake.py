@@ -5,9 +5,8 @@ import json
 import os
 import time
 from logging import getLogger
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import aiohttp
 from aiohttp.client_proto import ResponseHandler
 from asn1crypto.ocsp import CertId
 from asn1crypto.x509 import Certificate
@@ -32,17 +31,22 @@ from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP as SnowflakeOCSPSync
 from snowflake.connector.url_util import extract_top_level_domain_from_hostname
 
+if TYPE_CHECKING:
+    from snowflake.connector.aio._session_manager import SessionManager
+
 logger = getLogger(__name__)
 
 
 class OCSPServer(OCSPServerSync):
-    async def download_cache_from_server(self, ocsp):
+    async def download_cache_from_server(
+        self, ocsp, *, session_manager: SessionManager
+    ):
         if self.CACHE_SERVER_ENABLED:
             # if any of them is not cache, download the cache file from
             # OCSP response cache server.
             try:
                 retval = await OCSPServer._download_ocsp_response_cache(
-                    ocsp, self.CACHE_SERVER_URL
+                    ocsp, self.CACHE_SERVER_URL, session_manager=session_manager
                 )
                 if not retval:
                     raise RevocationCheckError(
@@ -69,7 +73,9 @@ class OCSPServer(OCSPServerSync):
                 raise
 
     @staticmethod
-    async def _download_ocsp_response_cache(ocsp, url, do_retry: bool = True) -> bool:
+    async def _download_ocsp_response_cache(
+        ocsp, url, *, session_manager: SessionManager, do_retry: bool = True
+    ) -> bool:
         """Downloads OCSP response cache from the cache server."""
         headers = {HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT}
         sf_timeout = SnowflakeOCSP.OCSP_CACHE_SERVER_CONNECTION_TIMEOUT
@@ -88,7 +94,7 @@ class OCSPServer(OCSPServerSync):
                 if sf_cache_server_url is not None:
                     url = sf_cache_server_url
 
-            async with aiohttp.ClientSession() as session:
+            async with session_manager.use_session() as session:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
                 backoff = exponential_backoff()()
@@ -174,6 +180,8 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         self,
         hostname: str | None,
         connection: ResponseHandler,
+        *,
+        session_manager: SessionManager,
         no_exception: bool = False,
     ) -> (
         list[
@@ -218,7 +226,12 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
             return None
 
         return await self._validate(
-            hostname, cert_data, telemetry_data, do_retry, no_exception
+            hostname,
+            cert_data,
+            telemetry_data,
+            session_manager=session_manager,
+            do_retry=do_retry,
+            no_exception=no_exception,
         )
 
     async def _validate(
@@ -226,12 +239,18 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         hostname: str | None,
         cert_data: list[tuple[Certificate, Certificate]],
         telemetry_data: OCSPTelemetryData,
+        *,
+        session_manager: SessionManager,
         do_retry: bool = True,
         no_exception: bool = False,
     ) -> list[tuple[Exception | None, Certificate, Certificate, CertId, bytes]]:
         """Validate certs sequentially if OCSP response cache server is used."""
         results = await self._validate_certificates_sequential(
-            cert_data, telemetry_data, hostname, do_retry=do_retry
+            cert_data,
+            telemetry_data,
+            hostname=hostname,
+            do_retry=do_retry,
+            session_manager=session_manager,
         )
 
         SnowflakeOCSP.OCSP_CACHE.update_file(self)
@@ -253,6 +272,8 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         issuer: Certificate,
         subject: Certificate,
         telemetry_data: OCSPTelemetryData,
+        *,
+        session_manager: SessionManager,
         hostname: str | None = None,
         do_retry: bool = True,
     ) -> tuple[
@@ -275,7 +296,8 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                 issuer,
                 subject,
                 telemetry_data,
-                hostname,
+                hostname=hostname,
+                session_manager=session_manager,
                 do_retry=do_retry,
                 cache_key=cache_key,
             )
@@ -292,6 +314,8 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
     async def _check_ocsp_response_cache_server(
         self,
         cert_data: list[tuple[Certificate, Certificate]],
+        *,
+        session_manager: SessionManager,
     ) -> None:
         """Checks if OCSP response is in cache, and if not it downloads the OCSP response cache from the server.
 
@@ -308,17 +332,23 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                 break
 
         if not in_cache:
-            await self.OCSP_CACHE_SERVER.download_cache_from_server(self)
+            await self.OCSP_CACHE_SERVER.download_cache_from_server(
+                self, session_manager=session_manager
+            )
 
     async def _validate_certificates_sequential(
         self,
         cert_data: list[tuple[Certificate, Certificate]],
         telemetry_data: OCSPTelemetryData,
+        *,
+        session_manager: SessionManager,
         hostname: str | None = None,
         do_retry: bool = True,
     ) -> list[tuple[Exception | None, Certificate, Certificate, CertId, bytes]]:
         try:
-            await self._check_ocsp_response_cache_server(cert_data)
+            await self._check_ocsp_response_cache_server(
+                cert_data, session_manager=session_manager
+            )
         except RevocationCheckError as rce:
             telemetry_data.set_event_sub_type(
                 OCSPTelemetryData.ERROR_CODE_MAP[rce.errno]
@@ -339,6 +369,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                     hostname=hostname,
                     telemetry_data=telemetry_data,
                     do_retry=do_retry,
+                    session_manager=session_manager,
                 )
                 for issuer, subject in cert_data
             ]
@@ -363,6 +394,8 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         issuer: Certificate,
         subject: Certificate,
         telemetry_data: OCSPTelemetryData,
+        *,
+        session_manager: SessionManager,
         hostname: str = None,
         do_retry: bool = True,
         **kwargs: Any,
@@ -377,7 +410,13 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                 telemetry_data.set_cache_hit(False)
                 logger.debug("getting OCSP response from CA's OCSP server")
                 ocsp_response = await self._fetch_ocsp_response(
-                    req, subject, cert_id, telemetry_data, hostname, do_retry
+                    req,
+                    subject,
+                    cert_id,
+                    telemetry_data,
+                    session_manager=session_manager,
+                    hostname=hostname,
+                    do_retry=do_retry,
                 )
             else:
                 ocsp_url = self.extract_ocsp_url(subject)
@@ -428,6 +467,8 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         subject,
         cert_id,
         telemetry_data,
+        *,
+        session_manager: SessionManager,
         hostname=None,
         do_retry: bool = True,
     ):
@@ -497,7 +538,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         if not self.is_enabled_fail_open():
             sf_max_retry = SnowflakeOCSP.CA_OCSP_RESPONDER_MAX_RETRY_FC
 
-        async with aiohttp.ClientSession() as session:
+        async with session_manager.use_session() as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = exponential_backoff()()

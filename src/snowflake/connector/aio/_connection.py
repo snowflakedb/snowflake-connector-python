@@ -200,7 +200,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
             connection=self,
-            session_manager=self._session_manager,
+            session_manager=self._session_manager,  # connection shares the session pool used for making Backend related requests
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 
@@ -592,6 +592,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             PLATFORM,
         )
 
+        # Placeholder attributes; will be initialized in connect()
         self._http_config: AioHttpConfig | None = None
         self._session_manager: SessionManager | None = None
         self._rest = None
