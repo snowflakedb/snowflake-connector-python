@@ -9,6 +9,8 @@ from __future__ import annotations
 # and added OCSP validator on the top.
 import logging
 import time
+import weakref
+from contextvars import ContextVar
 from functools import wraps
 from inspect import getfullargspec as get_args
 from socket import socket
@@ -20,6 +22,7 @@ import OpenSSL.SSL
 from .constants import OCSPMode
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
+from .session_manager import SessionManager
 from .vendored.urllib3 import connection as connection_
 from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
 from .vendored.urllib3.util import ssl_ as ssl_
@@ -33,6 +36,53 @@ OCSP Response cache file name
 FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME: str | None = None
 
 log = logging.getLogger(__name__)
+
+
+# Store a *weak* reference so that the context variable doesn’t prolong the
+# lifetime of the SessionManager. Once all owning connections are GC-ed the
+# weakref goes dead and OCSP will fall back to its local manager (but most likely won't be used ever again anyway).
+_CURRENT_SESSION_MANAGER: ContextVar[weakref.ref[SessionManager] | None] = ContextVar(
+    "_CURRENT_SESSION_MANAGER",
+    default=None,
+)
+
+
+def get_current_session_manager(
+    create_default_if_missing: bool = True, **clone_kwargs
+) -> SessionManager | None:
+    """Return the SessionManager associated with the current handshake, if any.
+
+    If the weak reference is dead or no manager was set, returns ``None``.
+    """
+    sm_weak_ref = _CURRENT_SESSION_MANAGER.get()
+    if sm_weak_ref is None:
+        return SessionManager() if create_default_if_missing else None
+    context_session_manager = sm_weak_ref()
+
+    if context_session_manager is None:
+        return SessionManager() if create_default_if_missing else None
+
+    return context_session_manager.clone(**clone_kwargs)
+
+
+def set_current_session_manager(sm: SessionManager | None) -> Any:
+    """Set the SessionManager for the current execution context.
+
+    Called from SnowflakeConnection so that OCSP downloads
+    use the same proxy / header configuration as the initiating connection.
+
+    Alternative approach would be moving method inject_into_urllib3() inside connection initialization, but in case this delay (from module import time to connection initialization time) would cause some code to break we stayed with this approach, having in mind soon OCSP deprecation.
+    """
+    return _CURRENT_SESSION_MANAGER.set(weakref.ref(sm) if sm is not None else None)
+
+
+def reset_current_session_manager(token) -> None:
+    """Restore previous SessionManager context stored in *token* (from ContextVar.set)."""
+    try:
+        _CURRENT_SESSION_MANAGER.reset(token)
+    except Exception:
+        # ignore invalid token errors
+        pass
 
 
 def inject_into_urllib3() -> None:

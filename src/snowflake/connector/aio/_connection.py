@@ -76,6 +76,11 @@ from ._cursor import SnowflakeCursor
 from ._description import CLIENT_NAME
 from ._direct_file_operation_utils import FileOperationParser, StreamDownloader
 from ._network import SnowflakeRestful
+from ._session_manager import (
+    AioHttpConfig,
+    SessionManager,
+    SnowflakeSSLConnectorFactory,
+)
 from ._telemetry import TelemetryClient
 from ._time_util import HeartBeatTimer
 from .auth import (
@@ -195,6 +200,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             protocol=self._protocol,
             inject_client_pause=self._inject_client_pause,
             connection=self,
+            session_manager=self._session_manager,  # connection shares the session pool used for making Backend related requests
         )
         logger.debug("REST API object was created: %s:%s", self.host, self.port)
 
@@ -586,6 +592,9 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             PLATFORM,
         )
 
+        # Placeholder attributes; will be initialized in connect()
+        self._http_config: AioHttpConfig | None = None
+        self._session_manager: SessionManager | None = None
         self._rest = None
         for name, (value, _) in DEFAULT_CONFIGURATION.items():
             setattr(self, f"_{name}", value)
@@ -997,6 +1006,14 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             self.__config(**kwargs)
         else:
             self.__config(**self._conn_parameters)
+
+        self._http_config = AioHttpConfig(
+            connector_factory=SnowflakeSSLConnectorFactory(),
+            use_pooling=not self.disable_request_pooling,
+            snowflake_ocsp_mode=self._ocsp_mode(),
+            trust_env=True,  # Required for proxy support via environment variables
+        )
+        self._session_manager = SessionManager(self._http_config)
 
         if self.enable_connection_diag:
             raise NotImplementedError(

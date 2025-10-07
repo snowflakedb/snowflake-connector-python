@@ -107,12 +107,13 @@ class FakeMetadataService(ABC):
         # thing being faked here.
         self.patchers.append(
             mock.patch(
-                "snowflake.connector.vendored.requests.request", side_effect=self
+                "snowflake.connector.vendored.requests.sessions.Session.request",
+                side_effect=self,
             )
         )
         self.patchers.append(
             mock.patch(
-                "snowflake.connector.vendored.requests.get",
+                "snowflake.connector.session_manager.SessionManager.get",
                 side_effect=self._handle_get,
             )
         )
