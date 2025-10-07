@@ -63,6 +63,10 @@ def test_crl_validation_advisory_mode(conn_cnx):
         assert cnx.cert_revocation_check_mode == "ADVISORY"
         assert cnx.allow_certificates_without_crl_url is False
         assert cnx.enable_crl_cache is True
+        assert cnx.crl_connection_timeout_ms == 3000
+        assert cnx.crl_read_timeout_ms == 3000
+        assert cnx.crl_cache_validity_hours == 1
+        assert cnx.crl_cache_dir is None
 
 
 @pytest.mark.skipolddriver
