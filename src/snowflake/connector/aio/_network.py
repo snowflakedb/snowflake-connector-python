@@ -567,7 +567,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         include_retry_reason = self._connection._enable_retry_reason_in_query_response
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
-        async with self._use_requests_session(full_url) as session:
+        async with self._use_session(full_url) as session:
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,
                 _include_retry_reason=include_retry_reason,
@@ -848,12 +848,9 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 errno=ER_FAILED_TO_REQUEST,
             ) from err
 
-    def make_requests_session(self) -> aiohttp.ClientSession:
-        return self._session_manager.make_session()
-
     @contextlib.asynccontextmanager
-    async def _use_requests_session(
+    async def _use_session(
         self, url: str | None = None
     ) -> AsyncGenerator[aiohttp.ClientSession]:
-        async with self._session_manager.use_requests_session(url) as session:
+        async with self._session_manager.use_session(url) as session:
             yield session
