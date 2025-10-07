@@ -224,10 +224,6 @@ jobs:
          # To specify the test name (in single test mode) pass this env variable:
 #          SINGLE_TEST_NAME: test/path/filename.py::test_name
         shell: bash
-      - name: Combine coverages
-        if: always()
-        run: python -m tox run -e coverage --skip-missing-interpreters false
-        shell: bash
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -364,10 +360,6 @@ jobs:
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
-      - name: Combine coverages
-        if: always()
-        run: python -m tox run -e coverage --skip-missing-interpreters false
-        shell: bash
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -430,10 +422,6 @@ jobs:
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
-      - name: Combine coverages
-        if: always()
-        run: python -m tox run -e coverage --skip-missing-interpreters false
-        shell: bash
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -453,6 +441,7 @@ jobs:
   combine-coverage:
     if: always()
     name: Combine coverage
+    needs: [lint, test, test-fips, test-lambda]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
