@@ -548,7 +548,7 @@ class CRLValidator:
                 ca_cert.subject,
                 crl_url,
             )
-            # In most cases this indicates a configuration issue, but we'll still try verification
+            return CRLValidationResult.ERROR
 
         if not self._verify_crl_signature(crl, ca_cert):
             logger.warning("CRL signature verification failed for URL: %s", crl_url)
