@@ -490,14 +490,14 @@ jobs:
           # Collect all JUnit XML files with unique names
           junit_files = list(src_dir.glob("**/junit*.xml"))
           print(f"Found {len(junit_files)} JUnit XML files")
-          
+
           for src_file in junit_files:
               artifact_name = src_file.parent.name
               original_name = src_file.name
               dst_file = dst_dir / f"{artifact_name}_{original_name}"
               print(f"Copying {src_file} to {dst_file}")
               shutil.copy(str(src_file), str(dst_file))
-              
+
           if not junit_files:
               print("WARNING: No JUnit XML files found - this indicates test result generation issues")'
       - name: Combine coverages
