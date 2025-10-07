@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v4.1.0(TBD)
+  - Added `CERT_REVOCATION_CHECK_MODE` to `CLIENT_ENVIRONMENT`
 
 - v4.0.0(October 01,2025)
   - Added support for checking certificates revocation using revocation lists (CRLs)
