@@ -8,8 +8,18 @@ in different modes: DISABLED, ADVISORY, and ENABLED.
 from __future__ import annotations
 
 import tempfile
+import warnings
 
 import pytest
+from cryptography.utils import CryptographyDeprecationWarning
+
+
+@pytest.fixture(autouse=True)
+def _ignore_deprecation_warnings():
+    """Fixture to handle deprecation warnings in all tests in this module."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", CryptographyDeprecationWarning)
+        yield
 
 
 @pytest.mark.skipolddriver
