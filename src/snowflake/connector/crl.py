@@ -457,7 +457,6 @@ class CRLValidator:
         if issue_date.tzinfo is None:
             issue_date = issue_date.replace(tzinfo=timezone.utc)
 
-        march_15_2024 = datetime(2024, 3, 15, tzinfo=timezone.utc)
         march_15_2026 = datetime(2026, 3, 15, tzinfo=timezone.utc)
         if issue_date >= march_15_2026:
             return validity_period.total_seconds() <= 604800  # 7 days in seconds
