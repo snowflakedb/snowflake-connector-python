@@ -459,9 +459,7 @@ class CRLValidator:
         march_15_2026 = datetime(2026, 3, 15, tzinfo=timezone.utc)
         if issue_date >= march_15_2026:
             return validity_period.total_seconds() <= 604800  # 7 days in seconds
-        if issue_date >= march_15_2024:
-            return validity_period.total_seconds() <= 864000  # 10 days in seconds
-        return False
+        return validity_period.total_seconds() <= 864000  # 10 days in seconds
 
     @staticmethod
     def _extract_crl_distribution_points(cert: x509.Certificate) -> list[str]:
