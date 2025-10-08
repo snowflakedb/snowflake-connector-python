@@ -664,7 +664,7 @@ def test_starfield_incident(cert_gen, session_manager):
             return CRLValidationResult.REVOKED
         return CRLValidationResult.UNREVOKED
 
-    validator._validate_certificate = mock_validate
+    validator._validate_certificate_is_not_revoked = mock_validate
 
     assert (
         validator._validate_single_chain([chain.leafA, chain.BsignA, chain.rootA])
@@ -684,7 +684,7 @@ def test_validate_single_chain(cert_gen, session_manager):
 
     # case 1: at least one valid path
     def mock_validate_with_special_cert(revoked_cert, error_result):
-        validator._validate_certificate_with_cache = lambda cert, _: (
+        validator._validate_certificate_is_not_revoked_with_cache = lambda cert, _: (
             error_result if cert == revoked_cert else CRLValidationResult.UNREVOKED
         )
 
@@ -702,7 +702,7 @@ def test_validate_single_chain(cert_gen, session_manager):
             return CRLValidationResult.REVOKED
         return CRLValidationResult.UNREVOKED
 
-    validator._validate_certificate_with_cache = mock_validate
+    validator._validate_certificate_is_not_revoked_with_cache = mock_validate
     assert validator._validate_single_chain(input_chain) == CRLValidationResult.REVOKED
 
     # case 3: revoked + error should result in revoked\
@@ -711,14 +711,14 @@ def test_validate_single_chain(cert_gen, session_manager):
             return CRLValidationResult.REVOKED
         return CRLValidationResult.ERROR
 
-    validator._validate_certificate_with_cache = mock_validate
+    validator._validate_certificate_is_not_revoked_with_cache = mock_validate
     assert validator._validate_single_chain(input_chain) == CRLValidationResult.REVOKED
 
     # case 4: no path to trusted certificate
     def mock_validate(cert, _):
         return CRLValidationResult.UNREVOKED
 
-    validator._validate_certificate_with_cache = mock_validate
+    validator._validate_certificate_is_not_revoked_with_cache = mock_validate
     assert (
         validator._validate_single_chain(
             [chain.leafA, chain.leafB, chain.AsignB, chain.BsignA]
@@ -734,7 +734,7 @@ def test_validate_single_chain(cert_gen, session_manager):
             return CRLValidationResult.ERROR
         return CRLValidationResult.UNREVOKED
 
-    validator._validate_certificate_with_cache = mock_validate
+    validator._validate_certificate_is_not_revoked_with_cache = mock_validate
     assert (
         validator._validate_single_chain(
             [chain.leafA, chain.rootA, chain.leafB, chain.rootB, chain.BsignA]
@@ -1546,7 +1546,7 @@ def test_crl_validator_validate_certificate_with_cache_hit(
     ) as mock_check, mock_patch.object(
         validator, "_verify_crl_signature", return_value=True
     ) as mock_verify:
-        result = validator._validate_certificate(cert, ca_cert)
+        result = validator._validate_certificate_is_not_revoked(cert, ca_cert)
 
         # Should use cached CRL
         assert result == CRLValidationResult.UNREVOKED
@@ -1591,7 +1591,7 @@ def test_crl_validator_validate_certificate_with_cache_miss(
         mock_crl.next_update_utc = datetime.now(timezone.utc) + timedelta(days=7)
         mock_crl.issuer = ca_cert.subject  # Set the CRL issuer to match CA subject
         mock_load_crl.return_value = mock_crl
-        result = validator._validate_certificate(cert, ca_cert)
+        result = validator._validate_certificate_is_not_revoked(cert, ca_cert)
 
         # Should download CRL and cache it
         assert result == CRLValidationResult.UNREVOKED
@@ -1780,7 +1780,9 @@ def test_crl_signature_verification_integration_with_validation_flow(
     with mock_patch.object(
         validator_enabled, "_fetch_crl_from_url", return_value=invalid_crl_bytes
     ):
-        result = validator_enabled._validate_certificate(cert, cert_gen.ca_certificate)
+        result = validator_enabled._validate_certificate_is_not_revoked(
+            cert, cert_gen.ca_certificate
+        )
         assert result == CRLValidationResult.ERROR
 
     # Test in ADVISORY mode - should also fail due to signature verification failure
@@ -1794,7 +1796,9 @@ def test_crl_signature_verification_integration_with_validation_flow(
     with mock_patch.object(
         validator_advisory, "_fetch_crl_from_url", return_value=invalid_crl_bytes
     ):
-        result = validator_advisory._validate_certificate(cert, cert_gen.ca_certificate)
+        result = validator_advisory._validate_certificate_is_not_revoked(
+            cert, cert_gen.ca_certificate
+        )
         # Even in ADVISORY mode, signature verification failure should return ERROR
         # We cannot trust a CRL whose signature cannot be verified
         assert result == CRLValidationResult.ERROR
@@ -2066,16 +2070,15 @@ def test_validate_certificate_signatures_in_chain(cert_gen, session_manager):
     )
 
 
-def test_is_certificate_trusted_by_os(cert_gen):
-    """Test OS certificate trust validation."""
-    # Create a test certificate chain
+def test_trusted_certificates_helpers(cert_gen):
     chain = cert_gen.create_simple_chain()
 
-    # Create a CRLValidator instance with SSL context
     validator = CRLValidator(
         session_manager=Mock(), trusted_certificates=[chain.root_cert]
     )
 
-    # Test with a certificate that's in the CA certificates list
     assert validator._is_certificate_trusted_by_os(chain.root_cert) is True
     assert validator._is_certificate_trusted_by_os(chain.intermediate_cert) is False
+
+    assert validator._get_trusted_ca_issuer(chain.intermediate_cert) is chain.root_cert
+    assert validator._get_trusted_ca_issuer(chain.leaf_cert) is None

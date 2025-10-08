@@ -193,14 +193,16 @@ class CRLValidator:
         self._read_timeout_ms = read_timeout_ms
         self._cache_validity_time = cache_validity_time
         self._cache_manager = cache_manager or CRLCacheManager.noop()
-        self._validate_certificate_cache: dict[
-            x509.Certificate, CRLValidationResult
-        ] = {}
 
         # list of trusted CA and their certificates
-        self._trusted_ca: dict[x509.Name, list(x509.Certificate)] = defaultdict(list)
+        self._trusted_ca: dict[x509.Name, list[x509.Certificate]] = defaultdict(list)
         for cert in trusted_certificates:
             self._trusted_ca[cert.subject].append(cert)
+
+        # declaration of validate_certificate_is_not_revoked function cache
+        self._cache_for__validate_certificate_is_not_revoked: dict[
+            x509.Certificate, CRLValidationResult
+        ] = {}
 
     @classmethod
     def from_config(
@@ -337,7 +339,9 @@ class CRLValidator:
 
             if trusted_ca_issuer := self._get_trusted_ca_issuer(cert):
                 logger.debug("Certificate signed by trusted CA: %s", cert.subject)
-                return self._validate_certificate_with_cache(cert, trusted_ca_issuer)
+                return self._validate_certificate_is_not_revoked_with_cache(
+                    cert, trusted_ca_issuer
+                )
 
             if cert.issuer in is_being_visited:
                 # cycle detected - invalid path
@@ -360,7 +364,9 @@ class CRLValidator:
                     continue
                 if ca_result == CRLValidationResult.UNREVOKED:
                     # good path found
-                    return self._validate_certificate_with_cache(cert, ca_cert)
+                    return self._validate_certificate_is_not_revoked_with_cache(
+                        cert, ca_cert
+                    )
                 valid_results.append((ca_result, ca_cert))
 
             if len(valid_results) == 0:
@@ -371,7 +377,9 @@ class CRLValidator:
             # check if there exists an ERROR path
             for ca_result, ca_cert in valid_results:
                 if ca_result == CRLValidationResult.ERROR:
-                    cert_result = self._validate_certificate_with_cache(cert, ca_cert)
+                    cert_result = self._validate_certificate_is_not_revoked_with_cache(
+                        cert, ca_cert
+                    )
                     if cert_result == CRLValidationResult.REVOKED:
                         return CRLValidationResult.REVOKED
                     return CRLValidationResult.ERROR
@@ -418,17 +426,17 @@ class CRLValidator:
         except Exception:
             return False
 
-    def _validate_certificate_with_cache(
+    def _validate_certificate_is_not_revoked_with_cache(
         self, cert: x509.Certificate, ca_cert: x509.Certificate
     ) -> CRLValidationResult:
         # validate certificate can be called multiple times with the same certificate
-        if cert not in self._validate_certificate_cache:
-            self._validate_certificate_cache[cert] = self._validate_certificate(
-                cert, ca_cert
+        if cert not in self._cache_for__validate_certificate_is_not_revoked:
+            self._cache_for__validate_certificate_is_not_revoked[cert] = (
+                self._validate_certificate_is_not_revoked(cert, ca_cert)
             )
-        return self._validate_certificate_cache[cert]
+        return self._cache_for__validate_certificate_is_not_revoked[cert]
 
-    def _validate_certificate(
+    def _validate_certificate_is_not_revoked(
         self, cert: x509.Certificate, ca_cert: x509.Certificate
     ) -> CRLValidationResult:
         """Validate a single certificate against CRL"""
