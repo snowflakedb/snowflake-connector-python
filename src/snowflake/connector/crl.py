@@ -669,6 +669,7 @@ class CRLValidator:
                     data,
                     hash_algorithm,
                 )
+            print("> verification successful")
             return True
         except Exception as e:
             logger.warning("%s verification failed: %s", signature_type.capitalize(), e)

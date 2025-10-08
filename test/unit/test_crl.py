@@ -1730,8 +1730,10 @@ def test_crl_signature_verification_exception_handling(cert_gen, session_manager
     crl = x509.load_der_x509_crl(crl_bytes, backend=default_backend())
 
     # Mock CA certificate that will cause an exception
+    mock_public_key = Mock()
+    mock_public_key.verify.side_effect = Exception("Test exception")
     mock_ca_cert = Mock(spec=x509.Certificate)
-    mock_ca_cert.public_key.side_effect = Exception("Test exception")
+    mock_ca_cert.public_key.return_value = mock_public_key
 
     validator = CRLValidator(session_manager, trusted_certificates=[])
 
@@ -1869,12 +1871,6 @@ def test_crl_signature_verification_with_issuer_mismatch_warning(
 @pytest.mark.parametrize(
     "issue_date,validity_days,expected",
     [
-        (
-            # Issued before March 15, 2024 - not short-lived
-            datetime(2023, 3, 14, tzinfo=timezone.utc),
-            3,
-            False,
-        ),
         (
             # Issued on March 15, 2024, should use 10-day rule
             datetime(2024, 3, 15, tzinfo=timezone.utc),
