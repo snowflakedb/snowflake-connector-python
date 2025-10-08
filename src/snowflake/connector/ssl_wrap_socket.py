@@ -16,7 +16,7 @@ from contextvars import ContextVar
 from functools import wraps
 from inspect import signature as _sig
 from socket import socket
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import certifi
 import OpenSSL.SSL
@@ -29,6 +29,9 @@ from .session_manager import SessionManager
 from .vendored.urllib3 import connection as connection_
 from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
 from .vendored.urllib3.util import ssl_ as ssl_
+
+if TYPE_CHECKING:
+    from cryptography import x509
 
 DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
 FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE
@@ -150,6 +153,17 @@ def inject_into_urllib3() -> None:
     connection_.ssl_wrap_socket = ssl_wrap_socket_with_cert_revocation_checks
 
 
+def _load_trusted_certificates(cafile: str | None) -> list[x509.Certificate]:
+    # Use default SSL context to load the CA file and get the certificates
+    ctx = ssl.create_default_context()
+    ctx.load_verify_locations(cafile=cafile)
+    certs = ctx.get_ca_certs(binary_form=True)
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.x509 import load_der_x509_certificate
+
+    return [load_der_x509_certificate(cert, default_backend()) for cert in certs]
+
+
 @wraps(ssl_.ssl_wrap_socket)
 def ssl_wrap_socket_with_cert_revocation_checks(
     *args: Any, **kwargs: Any
@@ -166,12 +180,12 @@ def ssl_wrap_socket_with_cert_revocation_checks(
 
     # Ensure PyOpenSSL context with partial-chain is used if none or wrong type provided
     provided_ctx = params.get("ssl_context")
+    cafile_for_ctx = _resolve_cafile(params)
     if not isinstance(provided_ctx, PyOpenSSLContext):
-        cafile_for_ctx = _resolve_cafile(params)
         params["ssl_context"] = _build_context_with_partial_chain(cafile_for_ctx)
     else:
         # If a PyOpenSSLContext is provided, ensure it trusts the provided CA and partial-chain is enabled
-        _ensure_partial_chain_on_context(provided_ctx, _resolve_cafile(params))
+        _ensure_partial_chain_on_context(provided_ctx, cafile_for_ctx)
 
     ret = ssl_.ssl_wrap_socket(**params)
 
@@ -184,7 +198,9 @@ def ssl_wrap_socket_with_cert_revocation_checks(
         != CertRevocationCheckMode.DISABLED
     ):
         crl_validator = CRLValidator.from_config(
-            FEATURE_CRL_CONFIG, get_current_session_manager()
+            FEATURE_CRL_CONFIG,
+            get_current_session_manager(),
+            trusted_certificates=_load_trusted_certificates(cafile_for_ctx),
         )
         if not crl_validator.validate_connection(ret.connection):
             raise OperationalError(
