@@ -1930,6 +1930,146 @@ def test_is_short_lived_certificate(cert_gen, issue_date, validity_days, expecte
     assert CRLValidator._is_short_lived_certificate(cert) == expected
 
 
+def test_validate_certificate_signatures(cert_gen, session_manager):
+    """Test that certificate validation fails with ERROR when signed by wrong key"""
+    # Create a certificate signed by the test CA
+    valid_cert = cert_gen.create_certificate_with_crl_distribution_points(
+        "CN=Test Server", []
+    )
+
+    # Create a different CA key pair
+    different_ca_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048, backend=default_backend()
+    )
+    different_cert = (
+        x509.CertificateBuilder()
+        .subject_name(valid_cert.subject)
+        .issuer_name(cert_gen.ca_certificate.subject)
+        .public_key(cert_gen.ca_private_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(different_ca_key, hashes.SHA256(), backend=default_backend())
+    )
+    short_lived_different_cert = (
+        x509.CertificateBuilder()
+        .subject_name(valid_cert.subject)
+        .issuer_name(cert_gen.ca_certificate.subject)
+        .public_key(different_ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=3))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(different_ca_key, hashes.SHA256(), backend=default_backend())
+    )
+
+    validator = CRLValidator(
+        session_manager,
+        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
+        allow_certificates_without_crl_url=True,
+        trusted_certificates=[cert_gen.ca_certificate],
+    )
+
+    # wrong signature - no path found = ERROR
+    assert (
+        validator._validate_single_chain([different_cert]) == CRLValidationResult.ERROR
+    )
+    # wrong signature - short-lived - no path found = ERROR
+    assert (
+        validator._validate_single_chain([short_lived_different_cert])
+        == CRLValidationResult.ERROR
+    )
+    # wrong signature does not stop from searching of new path
+    assert (
+        validator._validate_single_chain(
+            [different_cert, short_lived_different_cert, valid_cert]
+        )
+        == CRLValidationResult.UNREVOKED
+    )
+
+
+def test_validate_certificate_signatures_in_chain(cert_gen, session_manager):
+    """Test that certificate validation fails with ERROR when signed by wrong key"""
+    # Create a certificate chain signed by the test CA: leaf -> A -> B -> CA
+    # mingle with A -> B
+    chain = cert_gen.create_cross_signed_chain()
+
+    valid_cert = chain.BsignA
+
+    # Create a different CA key pair
+    different_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048, backend=default_backend()
+    )
+    different_cert = (
+        x509.CertificateBuilder()
+        .subject_name(valid_cert.subject)
+        .issuer_name(cert_gen.ca_certificate.subject)
+        .public_key(cert_gen.ca_private_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(different_key, hashes.SHA256(), backend=default_backend())
+    )
+    short_lived_different_cert = (
+        x509.CertificateBuilder()
+        .subject_name(valid_cert.subject)
+        .issuer_name(cert_gen.ca_certificate.subject)
+        .public_key(different_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=3))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(different_key, hashes.SHA256(), backend=default_backend())
+    )
+
+    validator = CRLValidator(
+        session_manager,
+        allow_certificates_without_crl_url=True,
+        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
+        trusted_certificates=[cert_gen.ca_certificate],
+    )
+
+    # wrong signature - no path found = ERROR
+    assert (
+        validator._validate_single_chain([chain.leafA, different_cert, chain.rootB])
+        == CRLValidationResult.ERROR
+    )
+    # wrong signature - short-lived - no path found = ERROR
+    assert (
+        validator._validate_single_chain(
+            [chain.leafA, short_lived_different_cert, chain.rootB]
+        )
+        == CRLValidationResult.ERROR
+    )
+    # wrong signature does not stop from searching of new path
+    assert (
+        validator._validate_single_chain(
+            [
+                chain.leafA,
+                different_cert,
+                short_lived_different_cert,
+                valid_cert,
+                chain.rootB,
+            ]
+        )
+        == CRLValidationResult.UNREVOKED
+    )
+
+
 def test_is_certificate_trusted_by_os(cert_gen):
     """Test OS certificate trust validation."""
     # Create a test certificate chain
