@@ -12,7 +12,7 @@ from typing import Any
 from cryptography import x509
 from cryptography.hazmat._oid import ExtensionOID
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 from OpenSSL.SSL import Connection as SSLConnection
 
@@ -198,9 +198,9 @@ class CRLValidator:
         ] = {}
 
         # list of trusted CA and their certificates
-        self._trusted_ca: dict[x509.Name, x509.Certificate] = {}
+        self._trusted_ca: dict[x509.Name, list(x509.Certificate)] = defaultdict(list)
         for cert in trusted_certificates:
-            self._trusted_ca[cert.subject] = cert
+            self._trusted_ca[cert.subject].append(cert)
 
     @classmethod
     def from_config(
@@ -332,24 +332,12 @@ class CRLValidator:
             # ERROR - some certificates on potentially unrevoked paths can't be verified, or no path to a trusted CA is detected
             # None - ignore this path (cycle detected)
             if self._is_certificate_trusted_by_os(cert):
-                # found a trusted certificate
                 logger.debug("Found trusted certificate: %s", cert.subject)
                 return CRLValidationResult.UNREVOKED
 
-            if cert.issuer in self._trusted_ca:
-                # issuer is trusted by OS
-                logger.debug("Found certificate with trusted issuer: %s", cert.issuer)
-                if self._verify_certificate_signature(
-                    cert, self._trusted_ca[cert.issuer]
-                ):
-                    return self._validate_certificate_with_cache(
-                        cert, self._trusted_ca[cert.issuer]
-                    )
-                else:
-                    logger.debug(
-                        "Certificate signature verification failed: for %s, looking for other paths",
-                        cert,
-                    )
+            if trusted_ca_issuer := self._get_trusted_ca_issuer(cert):
+                logger.debug("Certificate signed by trusted CA: %s", cert.subject)
+                return self._validate_certificate_with_cache(cert, trusted_ca_issuer)
 
             if cert.issuer in is_being_visited:
                 # cycle detected - invalid path
@@ -406,12 +394,29 @@ class CRLValidator:
         return CRLValidationResult.REVOKED
 
     def _is_certificate_trusted_by_os(self, cert: x509.Certificate) -> bool:
-        if trusted_cert := self._trusted_ca.get(cert.subject):
-            # Compare DER-encoded forms of certificates
-            cert_der = cert.public_bytes(serialization.Encoding.DER)
-            trusted_cert_der = trusted_cert.public_bytes(serialization.Encoding.DER)
-            return cert_der == trusted_cert_der
-        return False
+        if cert.subject not in self._trusted_ca:
+            return False
+
+        cert_der = cert.public_bytes(serialization.Encoding.DER)
+        return any(
+            cert_der == trusted_cert.public_bytes(serialization.Encoding.DER)
+            for trusted_cert in self._trusted_ca[cert.subject]
+        )
+
+    def _get_trusted_ca_issuer(self, cert: x509.Certificate) -> x509.Certificate | None:
+        for trusted_cert in self._trusted_ca[cert.issuer]:
+            if self._verify_certificate_signature(cert, trusted_cert):
+                return trusted_cert
+        return None
+
+    def _verify_certificate_signature(
+        self, cert: x509.Certificate, ca_cert: x509.Certificate
+    ) -> bool:
+        try:
+            cert.verify_directly_issued_by(ca_cert)
+            return True
+        except Exception:
+            return False
 
     def _validate_certificate_with_cache(
         self, cert: x509.Certificate, ca_cert: x509.Certificate
@@ -584,95 +589,52 @@ class CRLValidator:
         # Check if certificate is revoked
         return self._check_certificate_against_crl(cert, crl)
 
-    def _verify_certificate_signature(
-        self, cert: x509.Certificate, ca_cert: x509.Certificate
-    ) -> bool:
-        """Verify certificate signature with CA's public key"""
-        logger.debug(
-            "Verifying certificate signature of %s against %s public key", cert, ca_cert
-        )
-        return self._verify_signature(
-            public_key=ca_cert.public_key(),
-            signature=cert.signature,
-            data=cert.tbs_certificate_bytes,
-            hash_algorithm=cert.signature_hash_algorithm,
-            signature_type="certificate signature",
-        )
-
     def _verify_crl_signature(
         self, crl: x509.CertificateRevocationList, ca_cert: x509.Certificate
     ) -> bool:
         """Verify CRL signature with CA's public key"""
-        # Get the signature algorithm from the CRL
-        signature_algorithm = crl.signature_algorithm_oid
-        hash_algorithm = crl.signature_hash_algorithm
-
-        logger.debug(
-            "Verifying CRL signature with algorithm: %s, hash: %s",
-            signature_algorithm,
-            hash_algorithm,
-        )
-
-        result = self._verify_signature(
-            public_key=ca_cert.public_key(),
-            signature=crl.signature,
-            data=crl.tbs_certlist_bytes,
-            hash_algorithm=hash_algorithm,
-            signature_type="CRL signature",
-        )
-
-        if result:
-            logger.debug("CRL signature verification successful")
-        return result
-
-    def _verify_signature(
-        self,
-        public_key: rsa.RSAPublicKey | ec.EllipticCurvePublicKey | Any,
-        signature: bytes,
-        data: bytes,
-        hash_algorithm: hashes.HashAlgorithm,
-        signature_type: str = "signature",
-    ) -> bool:
-        """Verify a signature using a public key
-
-        Args:
-            public_key: The public key to use for verification
-            signature: The signature to verify
-            data: The data that was signed
-            hash_algorithm: The hash algorithm used in the signature
-            signature_type: Type of signature being verified (for logging)
-
-        Returns:
-            bool: True if verification succeeds, False otherwise
-        """
         try:
+            # Get the signature algorithm from the CRL
+            signature_algorithm = crl.signature_algorithm_oid
+            hash_algorithm = crl.signature_hash_algorithm
+
+            logger.debug(
+                "Verifying CRL signature with algorithm: %s, hash: %s",
+                signature_algorithm,
+                hash_algorithm,
+            )
+
+            # Determine the appropriate padding based on the signature algorithm
+            public_key = ca_cert.public_key()
+
             # Handle different key types with appropriate signature verification
             if isinstance(public_key, rsa.RSAPublicKey):
                 # For RSA signatures, we need to use PKCS1v15 padding
                 public_key.verify(
-                    signature,
-                    data,
+                    crl.signature,
+                    crl.tbs_certlist_bytes,
                     padding.PKCS1v15(),
                     hash_algorithm,
                 )
             elif isinstance(public_key, ec.EllipticCurvePublicKey):
                 # For EC signatures, use ECDSA algorithm
                 public_key.verify(
-                    signature,
-                    data,
+                    crl.signature,
+                    crl.tbs_certlist_bytes,
                     ec.ECDSA(hash_algorithm),
                 )
             else:
                 # For other key types (DSA, etc.), try without padding
                 public_key.verify(
-                    signature,
-                    data,
+                    crl.signature,
+                    crl.tbs_certlist_bytes,
                     hash_algorithm,
                 )
-            print("> verification successful")
+
+            logger.debug("CRL signature verification successful")
             return True
         except Exception as e:
-            logger.warning("%s verification failed: %s", signature_type.capitalize(), e)
+            logger.warning("CRL signature verification failed: %s", e)
             return False
 
     def _check_certificate_against_crl(
