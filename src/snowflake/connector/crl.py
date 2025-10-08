@@ -329,13 +329,15 @@ class CRLValidator:
         def traverse_chain(cert: x509.Certificate) -> CRLValidationResult | None:
             # UNREVOKED - unrevoked path to a trusted certificate found
             # REVOKED - all paths are revoked
-            # ERROR - some certificates on potentially unrevoked paths can't be verified
+            # ERROR - some certificates on potentially unrevoked paths can't be verified, or no path to a trusted CA is detected
             # None - ignore this path (cycle detected)
             if self._is_certificate_trusted_by_os(cert):
                 # found a trusted certificate
+                logger.debug("Found trusted certificate: %s", cert.subject)
                 return CRLValidationResult.UNREVOKED
             if cert.issuer in self._trusted_ca:
                 # issuer is trusted by OS
+                logger.debug("Found certificate with trusted issuer: %s", cert.issuer)
                 return self._validate_certificate_with_cache(
                     cert, self._trusted_ca[cert.issuer]
                 )
@@ -358,7 +360,7 @@ class CRLValidator:
 
             if len(valid_results) == 0:
                 # "root" certificate not cought by "is_trusted_by_os" check
-                logger.warning("Root certificate not trusted by OS: %s", cert.subject)
+                logger.debug("No path towards trusted anchor: %s", cert.subject)
                 return CRLValidationResult.ERROR
 
             # check if there exists an ERROR path
