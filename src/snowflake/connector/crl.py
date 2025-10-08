@@ -326,7 +326,7 @@ class CRLValidator:
         )
         for cert in chain:
             subject_certificates[cert.subject].append(cert)
-        is_being_visited: set[x509.Name] = set()
+        currently_visited_subjects: set[x509.Name] = set()
 
         def traverse_chain(cert: x509.Certificate) -> CRLValidationResult | None:
             # UNREVOKED - unrevoked path to a trusted certificate found
@@ -343,7 +343,7 @@ class CRLValidator:
                     cert, trusted_ca_issuer
                 )
 
-            if cert.issuer in is_being_visited:
+            if cert.issuer in currently_visited_subjects:
                 # cycle detected - invalid path
                 return None
 
@@ -356,9 +356,9 @@ class CRLValidator:
                     )
                     continue
 
-                is_being_visited.add(cert.issuer)
+                currently_visited_subjects.add(cert.issuer)
                 ca_result = traverse_chain(ca_cert)
-                is_being_visited.remove(cert.issuer)
+                currently_visited_subjects.remove(cert.issuer)
                 if ca_result is None:
                     # ignore invalid path result
                     continue
@@ -387,7 +387,7 @@ class CRLValidator:
             # no ERROR result found, all paths are REVOKED
             return CRLValidationResult.REVOKED
 
-        is_being_visited.add(chain[0].subject)
+        currently_visited_subjects.add(chain[0].subject)
         error_result = False
         revoked_result = False
         for cert in subject_certificates[chain[0].subject]:
