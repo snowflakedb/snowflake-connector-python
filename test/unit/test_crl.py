@@ -650,6 +650,99 @@ def test_cross_signed_certificate_chain(cert_gen, session_manager):
     assert validator.validate_certificate_chains(chains)
 
 
+def test_starfield_incident(cert_gen, session_manager):
+    # leaf is signed by A, who is signed by CA (revoked) and B, who is also a trusted CA
+    chain = cert_gen.create_cross_signed_chain()
+    validator = CRLValidator(
+        session_manager,
+        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
+        trusted_certificates=[cert_gen.ca_certificate, chain.rootB],
+    )
+
+    def mock_validate(cert, _):
+        if cert == chain.rootA:
+            return CRLValidationResult.REVOKED
+        return CRLValidationResult.UNREVOKED
+
+    validator._validate_certificate = mock_validate
+
+    assert (
+        validator._validate_single_chain([chain.leafA, chain.BsignA, chain.rootA])
+        == CRLValidationResult.UNREVOKED
+    )
+
+
+def test_validate_single_chain(cert_gen, session_manager):
+    chain = cert_gen.create_cross_signed_chain()
+    validator = CRLValidator(
+        session_manager,
+        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
+        trusted_certificates=[cert_gen.ca_certificate],
+    )
+
+    input_chain = [chain.leafA, chain.leafB, chain.rootA, chain.rootB]
+
+    # case 1: at least one valid path
+    def mock_validate_with_special_cert(revoked_cert, error_result):
+        validator._validate_certificate_with_cache = lambda cert, _: (
+            error_result if cert == revoked_cert else CRLValidationResult.UNREVOKED
+        )
+
+    for error_result in [CRLValidationResult.ERROR, CRLValidationResult.REVOKED]:
+        for revoked_cert in [chain.rootA, chain.rootB, chain.leafA, chain.leafB]:
+            mock_validate_with_special_cert(revoked_cert, error_result)
+            assert (
+                validator._validate_single_chain(input_chain)
+                == CRLValidationResult.UNREVOKED
+            )
+
+    # case 2: all paths revoked
+    def mock_validate(cert, _):
+        if cert in [chain.rootA, chain.rootB]:
+            return CRLValidationResult.REVOKED
+        return CRLValidationResult.UNREVOKED
+
+    validator._validate_certificate_with_cache = mock_validate
+    assert validator._validate_single_chain(input_chain) == CRLValidationResult.REVOKED
+
+    # case 3: revoked + error should result in revoked\
+    def mock_validate(cert, _):
+        if cert in [chain.rootA, chain.leafB]:
+            return CRLValidationResult.REVOKED
+        return CRLValidationResult.ERROR
+
+    validator._validate_certificate_with_cache = mock_validate
+    assert validator._validate_single_chain(input_chain) == CRLValidationResult.REVOKED
+
+    # case 4: no path to trusted certificate
+    def mock_validate(cert, _):
+        return CRLValidationResult.UNREVOKED
+
+    validator._validate_certificate_with_cache = mock_validate
+    assert (
+        validator._validate_single_chain(
+            [chain.leafA, chain.leafB, chain.AsignB, chain.BsignA]
+        )
+        == CRLValidationResult.ERROR
+    )
+
+    # case 5: only unrevoked path has an error
+    def mock_validate(cert, _):
+        if cert in [chain.rootA, chain.leafB]:
+            return CRLValidationResult.REVOKED
+        if cert == chain.BsignA:
+            return CRLValidationResult.ERROR
+        return CRLValidationResult.UNREVOKED
+
+    validator._validate_certificate_with_cache = mock_validate
+    assert (
+        validator._validate_single_chain(
+            [chain.leafA, chain.rootA, chain.leafB, chain.rootB, chain.BsignA]
+        )
+        == CRLValidationResult.ERROR
+    )
+
+
 @responses.activate
 def test_should_validate_non_revoked_certificate_successfully(
     cert_gen, crl_urls, session_manager
