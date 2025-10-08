@@ -490,7 +490,6 @@ jobs:
           dst_dir = Path(".") / "junit_results"
           dst_dir.mkdir()
           for src_file in src_dir.glob("*/junit*.xml"):
-              # Use artifact directory name to prevent filename conflicts
               artifact_name = src_file.parent.name
               dst_file = dst_dir / f"{artifact_name}_{src_file.name}"
               print("{} copy to {}".format(src_file, dst_file))
