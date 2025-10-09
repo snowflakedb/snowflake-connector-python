@@ -644,8 +644,7 @@ async def test_workload_identity_provider_is_required_for_wif_authenticator(
             await snowflake.connector.aio.connect(
                 account="account",
                 authenticator="WORKLOAD_IDENTITY",
-                # TODO: fix after applying #2469
-                provider=provider_param,
+                workload_identity_provider=provider_param,
             )
         assert (
             "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY"
