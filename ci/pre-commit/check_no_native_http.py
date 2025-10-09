@@ -869,7 +869,7 @@ class CallAnalyzer(ast.NodeVisitor):
                 node.lineno,
                 node.col_offset,
                 ViolationType.REQUESTS_SESSION,
-                "Direct use of requests.Session() is forbidden, use SessionManager.use_requests_session() instead",
+                "Direct use of requests.Session() is forbidden, use SessionManager.use_session() instead",
             )
         elif ModulePattern.is_http_method(func_name):
             return HTTPViolation(
@@ -1039,11 +1039,9 @@ def main():
             print()
             print("How to fix:")
             print("  - Replace requests.request() with SessionManager.request()")
+            print("  - Replace requests.Session() with SessionManager.use_session()")
             print(
-                "  - Replace requests.Session() with SessionManager.use_requests_session()"
-            )
-            print(
-                "  - Replace urllib3.PoolManager/ProxyManager() with session from session_manager.use_requests_session()"
+                "  - Replace urllib3.PoolManager/ProxyManager() with session from session_manager.use_session()"
             )
             print("  - Replace direct HTTP method imports with SessionManager usage")
             print("  - Use SessionManager for all HTTP operations")
