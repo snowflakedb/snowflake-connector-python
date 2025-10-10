@@ -164,18 +164,6 @@ jobs:
               image_name: windows-11-arm
               download_name: win_arm64
             python-version: "3.10"
-          - os:
-              image_name: windows-11-arm
-              download_name: win_arm64
-            python-version: "3.11"
-          - os:
-              image_name: windows-11-arm
-              download_name: win_arm64
-            python-version: "3.12"
-          - os:
-              image_name: windows-11-arm
-              download_name: win_arm64
-            python-version: "3.13"
 
     steps:
       - uses: actions/checkout@v4
