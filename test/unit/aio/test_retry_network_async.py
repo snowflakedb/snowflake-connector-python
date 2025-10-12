@@ -393,7 +393,7 @@ async def test_retry_connection_reset_error(caplog):
         raise OSError(104, "ECONNRESET")
 
     with patch(
-        "snowflake.connector.aio._ssl_connector.SnowflakeSSLConnector.connect"
+        "snowflake.connector.aio._session_manager.SnowflakeSSLConnector.connect"
     ) as mock_conn, patch("aiohttp.client_reqrep.ClientRequest.send", error_send):
         with caplog.at_level(logging.DEBUG):
             await rest.fetch(timeout=10, **default_parameters)

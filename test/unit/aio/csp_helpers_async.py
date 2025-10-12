@@ -6,6 +6,7 @@
 import logging
 import os
 from unittest import mock
+from unittest.mock import AsyncMock
 from urllib.parse import urlparse
 
 from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
@@ -40,21 +41,10 @@ def build_response(content: bytes, status_code: int = 200):
 
 
 class FakeMetadataServiceAsync(FakeMetadataService):
-    def _async_request(self, method, url, headers=None, timeout=None):
+    async def _async_request(self, method, url, headers=None, timeout=None, **kwargs):
         """Entry point for the aiohttp mock."""
         logger.debug(f"Received async request: {method} {url} {str(headers)}")
         parsed_url = urlparse(url)
-
-        # Create async context manager for aiohttp response
-        class AsyncResponseContextManager:
-            def __init__(self, response):
-                self.response = response
-
-            async def __aenter__(self):
-                return self.response
-
-            async def __aexit__(self, exc_type, exc_val, exc_tb):
-                pass
 
         # Create aiohttp-compatible response mock
         class AsyncResponse:
@@ -62,6 +52,9 @@ class FakeMetadataServiceAsync(FakeMetadataService):
                 self.ok = requests_response.ok
                 self.status = requests_response.status_code
                 self._content = requests_response.content
+                # Mock the StreamReader content attribute
+                self.content = AsyncMock()
+                self.content.read = AsyncMock(return_value=self._content)
 
             async def read(self):
                 return self._content
@@ -98,16 +91,16 @@ class FakeMetadataServiceAsync(FakeMetadataService):
         try:
             sync_response = self.handle_request(method, parsed_url, headers, timeout)
             async_response = AsyncResponse(sync_response)
-            return AsyncResponseContextManager(async_response)
+            return async_response
         except (HTTPError, ConnectTimeout) as e:
             import aiohttp
 
             # Convert requests exceptions to aiohttp exceptions so they get caught properly
             raise aiohttp.ClientError() from e
 
-    def _async_get(self, url, headers=None, timeout=None, **kwargs):
+    async def _async_get(self, url, headers=None, timeout=None, **kwargs):
         """Entry point for the aiohttp get mock."""
-        return self._async_request("GET", url, headers=headers, timeout=timeout)
+        return await self._async_request("GET", url, headers=headers, timeout=timeout)
 
     def __enter__(self):
         self.reset_defaults()

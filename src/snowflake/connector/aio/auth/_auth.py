@@ -103,7 +103,7 @@ class Auth(AuthSync):
             self._rest._connection._network_timeout,
             self._rest._connection._socket_timeout,
             self._rest._connection._platform_detection_timeout_seconds,
-            session_manager=self._rest.session_manager.clone(use_pooling=False),
+            http_config=self._rest.session_manager.config,  # AioHttpConfig extends BaseHttpConfig
         )
 
         body = copy.deepcopy(body_template)

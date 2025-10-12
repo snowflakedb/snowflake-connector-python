@@ -74,7 +74,7 @@ async def test_explicit_oidc_valid_inline_token_plumbed_to_api():
     auth_class = AuthByWorkloadIdentity(
         provider=AttestationProvider.OIDC, token=dummy_token
     )
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
 
     assert await extract_api_data(auth_class) == {
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
@@ -88,7 +88,7 @@ async def test_explicit_oidc_valid_inline_token_generates_unique_assertion_conte
     auth_class = AuthByWorkloadIdentity(
         provider=AttestationProvider.OIDC, token=dummy_token
     )
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
     assert (
         auth_class.assertion_content
         == '{"_provider":"OIDC","iss":"issuer-1","sub":"service-1"}'
@@ -101,13 +101,13 @@ async def test_explicit_oidc_invalid_inline_token_raises_error():
         provider=AttestationProvider.OIDC, token=invalid_token
     )
     with pytest.raises(jwt.exceptions.DecodeError):
-        await auth_class.prepare()
+        await auth_class.prepare(conn=None)
 
 
 async def test_explicit_oidc_no_token_raises_error():
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.OIDC, token=None)
     with pytest.raises(ProgrammingError) as excinfo:
-        await auth_class.prepare()
+        await auth_class.prepare(conn=None)
     assert "token must be provided if workload_identity_provider=OIDC" in str(
         excinfo.value
     )
@@ -123,7 +123,7 @@ async def test_explicit_aws_no_auth_raises_error(
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     with pytest.raises(ProgrammingError) as excinfo:
-        await auth_class.prepare()
+        await auth_class.prepare(conn=None)
     assert "No AWS credentials were found" in str(excinfo.value)
 
 
@@ -131,7 +131,7 @@ async def test_explicit_aws_encodes_audience_host_signature_to_api(
     fake_aws_environment: FakeAwsEnvironmentAsync,
 ):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
 
     data = await extract_api_data(auth_class)
     assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
@@ -154,7 +154,7 @@ async def test_explicit_aws_uses_regional_hostnames(
     fake_aws_environment.region = region
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
 
     data = await extract_api_data(auth_class)
     decoded_token = json.loads(b64decode(data["TOKEN"]))
@@ -172,7 +172,7 @@ async def test_explicit_aws_generates_unique_assertion_content(
         "arn:aws:sts::123456789:assumed-role/A-Different-Role/i-34afe100cad287fab"
     )
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
 
     assert (
         '{"_provider":"AWS","partition":"aws","region":"us-east-1"}'
@@ -184,18 +184,8 @@ async def test_explicit_aws_generates_unique_assertion_content(
 
 
 def _mock_aiohttp_exception(exception):
-    class MockResponse:
-        def __init__(self, exception):
-            self.exception = exception
-
-        async def __aenter__(self):
-            raise self.exception
-
-        async def __aexit__(self, exc_type, exc_val, exc_tb):
-            pass
-
-    def mock_request(*args, **kwargs):
-        return MockResponse(exception)
+    async def mock_request(*args, **kwargs):
+        raise exception
 
     return mock_request
 
@@ -215,14 +205,14 @@ async def test_explicit_gcp_metadata_server_error_bubbles_up(exception):
 
     with mock.patch("aiohttp.ClientSession.request", side_effect=mock_request):
         with pytest.raises(type(exception)):
-            await auth_class.prepare()
+            await auth_class.prepare(conn=None)
 
 
 async def test_explicit_gcp_plumbs_token_to_api(
     fake_gce_metadata_service: FakeGceMetadataServiceAsync,
 ):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.GCP)
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
 
     assert await extract_api_data(auth_class) == {
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
@@ -237,7 +227,7 @@ async def test_explicit_gcp_generates_unique_assertion_content(
     fake_gce_metadata_service.sub = "123456"
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.GCP)
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
 
     assert auth_class.assertion_content == '{"_provider":"GCP","sub":"123456"}'
 
@@ -260,7 +250,7 @@ async def test_explicit_azure_metadata_server_error_bubbles_up(exception):
 
     with mock.patch("aiohttp.ClientSession.request", side_effect=mock_request):
         with pytest.raises(type(exception)):
-            await auth_class.prepare()
+            await auth_class.prepare(conn=None)
 
 
 @pytest.mark.parametrize(
@@ -278,14 +268,14 @@ async def test_explicit_azure_v1_and_v2_issuers_accepted(
     fake_azure_metadata_service.iss = issuer
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
 
     assert issuer == json.loads(auth_class.assertion_content)["iss"]
 
 
 async def test_explicit_azure_plumbs_token_to_api(fake_azure_metadata_service):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
 
     assert await extract_api_data(auth_class) == {
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
@@ -303,7 +293,7 @@ async def test_explicit_azure_generates_unique_assertion_content(
     fake_azure_metadata_service.sub = "611ab25b-2e81-4e18-92a7-b21f2bebb269"
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
 
     assert (
         '{"_provider":"AZURE","iss":"https://sts.windows.net/2c0183ed-cf17-480d-b3f7-df91bc0a97cd","sub":"611ab25b-2e81-4e18-92a7-b21f2bebb269"}'
@@ -315,7 +305,7 @@ async def test_explicit_azure_uses_default_entra_resource_if_unspecified(
     fake_azure_metadata_service,
 ):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
 
     token = fake_azure_metadata_service.token
     parsed = jwt.decode(token, options={"verify_signature": False})
@@ -328,7 +318,7 @@ async def test_explicit_azure_uses_explicit_entra_resource(fake_azure_metadata_s
     auth_class = AuthByWorkloadIdentity(
         provider=AttestationProvider.AZURE, entra_resource="api://non-standard"
     )
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
 
     token = fake_azure_metadata_service.token
     parsed = jwt.decode(token, options={"verify_signature": False})
@@ -337,7 +327,7 @@ async def test_explicit_azure_uses_explicit_entra_resource(fake_azure_metadata_s
 
 async def test_explicit_azure_omits_client_id_if_not_set(fake_azure_metadata_service):
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-    await auth_class.prepare()
+    await auth_class.prepare(conn=None)
     assert fake_azure_metadata_service.requested_client_id is None
 
 
@@ -348,6 +338,6 @@ async def test_explicit_azure_uses_explicit_client_id_if_set(
         os.environ, {"MANAGED_IDENTITY_CLIENT_ID": "custom-client-id"}
     ):
         auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-        await auth_class.prepare()
+        await auth_class.prepare(conn=None)
 
     assert fake_azure_metadata_service.requested_client_id == "custom-client-id"

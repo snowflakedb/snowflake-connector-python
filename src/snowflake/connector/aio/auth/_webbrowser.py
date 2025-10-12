@@ -365,13 +365,13 @@ You can close this window now and go back where you started from.
         body = Auth.base_auth_data(
             user,
             account,
-            conn._rest._connection.application,
-            conn._rest._connection._internal_application_name,
-            conn._rest._connection._internal_application_version,
-            conn._rest._connection._ocsp_mode(),
-            conn._rest._connection.login_timeout,
-            conn._rest._connection._network_timeout,
-            session_manager=conn.rest.session_manager.clone(use_pooling=False),
+            conn.application,
+            conn._internal_application_name,
+            conn._internal_application_version,
+            conn._ocsp_mode(),
+            conn.login_timeout,
+            conn._network_timeout,
+            http_config=conn._session_manager.config,  # AioHttpConfig extends BaseHttpConfig
         )
 
         body["data"]["AUTHENTICATOR"] = authenticator
@@ -383,8 +383,8 @@ You can close this window now and go back where you started from.
             url,
             headers,
             json.dumps(body),
-            timeout=conn._rest._connection.login_timeout,
-            socket_timeout=conn._rest._connection.login_timeout,
+            timeout=conn.login_timeout,
+            socket_timeout=conn.login_timeout,
         )
         if not ret["success"]:
             await self._handle_failure(conn=conn, ret=ret)

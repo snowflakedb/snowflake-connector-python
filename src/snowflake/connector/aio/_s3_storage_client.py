@@ -425,8 +425,27 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
         """
         if response.status != 400:
             return False
-        message = await response.text()
-        if not message:
+        # Read body once; avoid a second read which can raise RuntimeError("Connection closed.")
+        try:
+            message = await response.text()
+        except RuntimeError as e:
+            logger.debug(
+                "S3 token-expiry check: failed to read error body, treating as not expired. error=%s",
+                type(e),
+            )
             return False
-        err = ET.fromstring(await response.read())
-        return err.find("Code").text == EXPIRED_TOKEN
+        if not message:
+            logger.debug(
+                "S3 token-expiry check: empty error body, treating as not expired"
+            )
+            return False
+        try:
+            err = ET.fromstring(message)
+        except ET.ParseError:
+            logger.debug(
+                "S3 token-expiry check: non-XML error body (len=%d), treating as not expired.",
+                len(message),
+            )
+            return False
+        code = err.find("Code")
+        return code is not None and code.text == EXPIRED_TOKEN

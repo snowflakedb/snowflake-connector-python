@@ -1402,8 +1402,8 @@ async def test_sessions_used(conn_cnx, fetch_fn_name, pass_connection):
 
             # check that sessions are used when connection is supplied
             with mock.patch(
-                "snowflake.connector.aio._network.SnowflakeRestful._use_session",
-                side_effect=cnx._rest._use_session,
+                "snowflake.connector.aio._network.SnowflakeRestful.use_session",
+                side_effect=cnx._rest.use_session,
             ) as get_session_mock:
                 await fetch_fn(connection=connection)
                 assert get_session_mock.call_count == (1 if pass_connection else 0)

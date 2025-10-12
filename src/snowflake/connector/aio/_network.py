@@ -849,7 +849,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             ) from err
 
     @contextlib.asynccontextmanager
-    async def _use_session(
+    async def use_session(
         self, url: str | None = None
     ) -> AsyncGenerator[aiohttp.ClientSession]:
         async with self._session_manager.use_session(url) as session:

@@ -741,6 +741,7 @@ async def test_invalid_connection_parameters_turned_off(conn_cnx):
         ) as conn:
             assert conn._autocommit == "True"
             assert conn._applucation == "this is a typo or my own variable"
+            assert len(warns) == 0
             assert not any(
                 "_autocommit" in w.message or "_applucation" in w.message for w in warns
             )
