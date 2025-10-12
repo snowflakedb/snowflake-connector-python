@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from test.unit.aio.mock_utils import mock_connection
-from unittest.mock import AsyncMock, Mock, PropertyMock, patch
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import aiohttp
 import pytest
@@ -227,10 +227,14 @@ async def test_auth_okta_step4_negative(caplog):
         nonlocal raise_token_refresh_error
         if raise_token_refresh_error:
             raise_token_refresh_error = False
-            return AsyncMock(status=429)
+            return MagicMock(status=429, close=lambda: None)
         else:
-            resp = AsyncMock(status=200)
-            resp.text.return_value = "success"
+
+            async def mock_text():
+                return "success"
+
+            resp = MagicMock(status=200, close=lambda: None)
+            resp.text = mock_text
             return resp
 
     with patch.object(
@@ -315,7 +319,11 @@ async def test_auth_okta_step5_negative(disable_saml_url_check):
 
 
 def _init_rest(
-    ref_sso_url, ref_token_url, success=True, message=None, disable_saml_url_check=False
+    ref_sso_url,
+    ref_token_url,
+    success=True,
+    message=None,
+    disable_saml_url_check=False,
 ):
     async def post_request(url, headers, body, **kwargs):
         _ = url
@@ -344,6 +352,7 @@ def _init_rest(
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
     connection._rest = rest
+    connection.rest = rest
     rest._post_request = post_request
     return rest
 

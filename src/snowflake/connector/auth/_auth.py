@@ -53,7 +53,8 @@ from ..network import (
     ReauthenticationRequest,
 )
 from ..platform_detection import detect_platforms
-from ..session_manager import SessionManager
+from ..session_manager import BaseHttpConfig, HttpConfig
+from ..session_manager import SessionManager as SyncSessionManager
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..version import VERSION
@@ -104,8 +105,17 @@ class Auth:
         network_timeout: int | None = None,
         socket_timeout: int | None = None,
         platform_detection_timeout_seconds: float | None = None,
-        session_manager: SessionManager | None = None,
+        session_manager: SyncSessionManager | None = None,
+        http_config: BaseHttpConfig | None = None,
     ):
+        # Create sync SessionManager for platform detection if config is provided
+        # Platform detection runs in threads and uses sync SessionManager
+        if http_config is not None and session_manager is None:
+            # Extract base fields (automatically excludes subclass-specific fields)
+            # Note: It won't be possible to pass adapter_factory from outer async-code to this part of code
+            sync_config = HttpConfig(**http_config.to_base_dict())
+            session_manager = SyncSessionManager(config=sync_config)
+
         return {
             "data": {
                 "CLIENT_APP_ID": internal_application_name,

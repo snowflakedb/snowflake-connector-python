@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -12,6 +13,8 @@ from botocore.utils import IMDSFetcher
 
 from .session_manager import SessionManager
 from .vendored.requests import RequestException, Timeout
+
+logger = logging.getLogger(__name__)
 
 
 class _DetectionState(Enum):
@@ -399,6 +402,9 @@ def detect_platforms(
 
         if session_manager is None:
             # This should never happen - we expect session manager to be passed from the outer scope
+            logger.debug(
+                "No session manager provided. HTTP settings may not be preserved. Using default."
+            )
             session_manager = SessionManager(use_pooling=False)
 
         # Run environment-only checks synchronously (no network calls, no threading overhead)

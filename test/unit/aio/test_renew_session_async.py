@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import logging
-from test.unit.mock_utils import mock_connection
+from test.unit.aio.mock_utils import mock_connection
 from unittest.mock import Mock, PropertyMock
 
 from snowflake.connector.aio._network import SnowflakeRestful

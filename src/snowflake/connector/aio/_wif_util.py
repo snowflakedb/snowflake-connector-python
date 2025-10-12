@@ -4,7 +4,6 @@ import json
 import logging
 import os
 from base64 import b64encode
-from typing import TYPE_CHECKING
 
 import aioboto3
 from aiobotocore.utils import AioInstanceMetadataRegionFetcher
@@ -22,9 +21,7 @@ from ..wif_util import (
     extract_iss_and_sub_without_signature_verification,
     get_aws_sts_hostname,
 )
-
-if TYPE_CHECKING:
-    from ._session_manager import SessionManager
+from ._session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -175,6 +172,9 @@ async def create_attestation(
     If an explicit entra_resource was provided to the connector, this will be used. Otherwise, the default Snowflake Entra resource will be used.
     """
     entra_resource = entra_resource or DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
+    session_manager = (
+        session_manager.clone() if session_manager else SessionManager(use_pooling=True)
+    )
 
     if provider == AttestationProvider.AWS:
         return await create_aws_attestation()

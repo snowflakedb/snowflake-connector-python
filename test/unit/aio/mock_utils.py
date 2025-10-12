@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
 
+from snowflake.connector.aio._session_manager import SessionManager
 from snowflake.connector.auth.by_plugin import DEFAULT_AUTH_CLASS_TIMEOUT
 from snowflake.connector.connection import DEFAULT_BACKOFF_POLICY
 
@@ -26,12 +27,31 @@ def mock_async_request_with_action(next_action, sleep=None):
     return mock_request
 
 
+def get_mock_session_manager(allow_send: bool = False):
+    """Create a mock async SessionManager that prevents actual network calls in tests."""
+
+    async def forbidden_connect(*args, **kwargs):
+        raise NotImplementedError("Unit test tried to make real network connection")
+
+    class MockSessionManager(SessionManager):
+        def make_session(self):
+            session = super().make_session()
+            if not allow_send:
+                # Block at connector._connect level (like sync blocks session.send)
+                # This allows patches on session.request to work
+                session.connector._connect = forbidden_connect
+            return session
+
+    return MockSessionManager()
+
+
 def mock_connection(
     login_timeout=DEFAULT_AUTH_CLASS_TIMEOUT,
     network_timeout=None,
     socket_timeout=None,
     backoff_policy=DEFAULT_BACKOFF_POLICY,
     disable_saml_url_check=False,
+    session_manager=None,
 ):
     return AsyncMock(
         _login_timeout=login_timeout,
@@ -42,5 +62,8 @@ def mock_connection(
         socket_timeout=socket_timeout,
         _backoff_policy=backoff_policy,
         backoff_policy=backoff_policy,
+        _backoff_generator=backoff_policy(),
         _disable_saml_url_check=disable_saml_url_check,
+        _session_manager=session_manager or get_mock_session_manager(),
+        _update_parameters=AsyncMock(return_value=None),
     )

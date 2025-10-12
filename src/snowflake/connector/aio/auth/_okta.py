@@ -123,6 +123,7 @@ class AuthByOkta(AuthByPluginAsync, AuthByOktaSync):
             conn._ocsp_mode(),
             conn.login_timeout,
             conn._network_timeout,
+            http_config=conn._session_manager.config,  # AioHttpConfig extends BaseHttpConfig
         )
 
         body["data"]["AUTHENTICATOR"] = authenticator
@@ -131,12 +132,12 @@ class AuthByOkta(AuthByPluginAsync, AuthByOktaSync):
             account,
             authenticator,
         )
-        ret = await conn._rest._post_request(
+        ret = await conn.rest._post_request(
             url,
             headers,
             json.dumps(body),
-            timeout=conn._rest._connection.login_timeout,
-            socket_timeout=conn._rest._connection.login_timeout,
+            timeout=conn.login_timeout,
+            socket_timeout=conn.login_timeout,
         )
 
         if not ret["success"]:
@@ -171,19 +172,19 @@ class AuthByOkta(AuthByPluginAsync, AuthByOktaSync):
             "username": user,
             "password": password,
         }
-        ret = await conn._rest.fetch(
+        ret = await conn.rest.fetch(
             "post",
             token_url,
             headers,
             data=json.dumps(data),
-            timeout=conn._rest._connection.login_timeout,
-            socket_timeout=conn._rest._connection.login_timeout,
+            timeout=conn.login_timeout,
+            socket_timeout=conn.login_timeout,
             catch_okta_unauthorized_error=True,
         )
         one_time_token = ret.get("sessionToken", ret.get("cookieToken"))
         if not one_time_token:
             Error.errorhandler_wrapper(
-                conn._rest._connection,
+                conn,
                 None,
                 DatabaseError,
                 {
@@ -221,7 +222,7 @@ class AuthByOkta(AuthByPluginAsync, AuthByOktaSync):
                     HTTP_HEADER_ACCEPT: "*/*",
                 }
                 remaining_timeout = timeout_time - time.time() if timeout_time else None
-                response_html = await conn._rest.fetch(
+                response_html = await conn.rest.fetch(
                     "get",
                     sso_url,
                     headers,

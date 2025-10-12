@@ -6,7 +6,7 @@ import contextlib
 import functools
 import itertools
 import logging
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Mapping, TypeVar
 
 from .compat import urlparse
@@ -116,6 +116,11 @@ class BaseHttpConfig:
     def copy_with(self, **overrides: Any) -> BaseHttpConfig:
         """Return a new config with overrides applied."""
         return replace(self, **overrides)
+
+    def to_base_dict(self) -> dict[str, Any]:
+        """Extract only BaseHttpConfig fields as a dict, excluding subclass-specific fields."""
+        base_field_names = {f.name for f in fields(BaseHttpConfig)}
+        return {k: v for k, v in asdict(self).items() if k in base_field_names}
 
 
 @dataclass(frozen=True)
