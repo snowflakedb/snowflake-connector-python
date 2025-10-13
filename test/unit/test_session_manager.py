@@ -13,12 +13,16 @@ from snowflake.connector.session_manager import (
 )
 from snowflake.connector.vendored.urllib3 import Retry
 
-HOST_SFC_TEST_0 = "sfctest0.snowflakecomputing.com"
-URL_SFC_TEST_0 = f"https://{HOST_SFC_TEST_0}:443/session/v1/login-request"
+# Module and class path constants for easier refactoring
+SESSION_MANAGER_MODULE = "snowflake.connector.session_manager"
+SESSION_MANAGER = f"{SESSION_MANAGER_MODULE}.SessionManager"
 
-HOST_SFC_S3_STAGE = "sfc-ds2-customer-stage.s3.amazonaws.com"
-URL_SFC_S3_STAGE_1 = f"https://{HOST_SFC_S3_STAGE}/rgm1-s-sfctest0/stages/"
-URL_SFC_S3_STAGE_2 = f"https://{HOST_SFC_S3_STAGE}/rgm1-s-sfctst0/stages/another-url"
+TEST_HOST_1 = "testaccount.example.com"
+TEST_URL_1 = f"https://{TEST_HOST_1}:443/session/v1/login-request"
+
+TEST_STORAGE_HOST = "test-customer-stage.s3.example.com"
+TEST_STORAGE_URL_1 = f"https://{TEST_STORAGE_HOST}/test-stage/stages/"
+TEST_STORAGE_URL_2 = f"https://{TEST_STORAGE_HOST}/test-stage/stages/another-url"
 
 
 def create_session(
@@ -37,9 +41,7 @@ def create_session(
 
 def close_and_assert(manager: SessionManager, expected_pool_count: int) -> None:
     """Close the manager and assert that close() was invoked on all expected pools."""
-    with mock.patch(
-        "snowflake.connector.session_manager.SessionPool.close"
-    ) as close_mock:
+    with mock.patch(f"{SESSION_MANAGER_MODULE}.SessionPool.close") as close_mock:
         manager.close()
         assert close_mock.call_count == expected_pool_count
 
@@ -48,7 +50,7 @@ ORIGINAL_MAKE_SESSION = SessionManager.make_session
 
 
 @mock.patch(
-    "snowflake.connector.session_manager.SessionManager.make_session",
+    f"{SESSION_MANAGER}.make_session",
     side_effect=ORIGINAL_MAKE_SESSION,
     autospec=True,
 )
@@ -56,8 +58,8 @@ def test_pooling_disabled(make_session_mock):
     """When pooling is disabled every request creates and closes a new Session."""
     manager = SessionManager(use_pooling=False)
 
-    create_session(manager, url=URL_SFC_TEST_0)
-    create_session(manager, url=URL_SFC_TEST_0)
+    create_session(manager, url=TEST_URL_1)
+    create_session(manager, url=TEST_URL_1)
 
     # Two independent sessions were created
     assert make_session_mock.call_count == 2
@@ -68,7 +70,7 @@ def test_pooling_disabled(make_session_mock):
 
 
 @mock.patch(
-    "snowflake.connector.session_manager.SessionManager.make_session",
+    f"{SESSION_MANAGER}.make_session",
     side_effect=ORIGINAL_MAKE_SESSION,
     autospec=True,
 )
@@ -78,13 +80,13 @@ def test_single_hostname_pooling(make_session_mock):
 
     # Create 5 sequential sessions for the same hostname
     for _ in range(5):
-        create_session(manager, url=URL_SFC_TEST_0)
+        create_session(manager, url=TEST_URL_1)
 
     # Only one underlying Session should have been created
     assert make_session_mock.call_count == 1
 
-    assert list(manager.sessions_map.keys()) == [HOST_SFC_TEST_0]
-    pool = manager.sessions_map[HOST_SFC_TEST_0]
+    assert list(manager.sessions_map.keys()) == [TEST_HOST_1]
+    pool = manager.sessions_map[TEST_HOST_1]
     assert len(pool._idle_sessions) == 1
     assert len(pool._active_sessions) == 0
 
@@ -92,7 +94,7 @@ def test_single_hostname_pooling(make_session_mock):
 
 
 @mock.patch(
-    "snowflake.connector.session_manager.SessionManager.make_session",
+    f"{SESSION_MANAGER}.make_session",
     side_effect=ORIGINAL_MAKE_SESSION,
     autospec=True,
 )
@@ -100,13 +102,13 @@ def test_multiple_hostnames_separate_pools(make_session_mock):
     """Different hostnames (and None) should create separate pools."""
     manager = SessionManager()
 
-    for url in [URL_SFC_TEST_0, URL_SFC_S3_STAGE_1, None]:
+    for url in [TEST_URL_1, TEST_STORAGE_URL_1, None]:
         create_session(manager, num_sessions=2, url=url)
 
-    # Two sessions created for each of the three keys (HOST_SFC_TEST_0, HOST_SFC_S3_STAGE, None)
+    # Two sessions created for each of the three keys (TEST_HOST_1, TEST_STORAGE_HOST, None)
     assert make_session_mock.call_count == 6
 
-    for expected_host in [HOST_SFC_TEST_0, HOST_SFC_S3_STAGE, None]:
+    for expected_host in [TEST_HOST_1, TEST_STORAGE_HOST, None]:
         assert expected_host in manager.sessions_map
 
     for pool in manager.sessions_map.values():
@@ -117,7 +119,7 @@ def test_multiple_hostnames_separate_pools(make_session_mock):
 
 
 @mock.patch(
-    "snowflake.connector.session_manager.SessionManager.make_session",
+    f"{SESSION_MANAGER}.make_session",
     side_effect=ORIGINAL_MAKE_SESSION,
     autospec=True,
 )
@@ -125,16 +127,16 @@ def test_reuse_sessions_within_pool(make_session_mock):
     """After many sequential sessions only one Session per hostname should exist."""
     manager = SessionManager()
 
-    for url in [URL_SFC_TEST_0, URL_SFC_S3_STAGE_1, URL_SFC_S3_STAGE_2, None]:
+    for url in [TEST_URL_1, TEST_STORAGE_URL_1, TEST_STORAGE_URL_2, None]:
         for _ in range(10):
             create_session(manager, url=url)
 
-    # One Session per unique hostname (URL_SFC_S3_STAGE_2 shares HOST_SFC_S3_STAGE)
+    # One Session per unique hostname (TEST_STORAGE_URL_2 shares TEST_STORAGE_HOST)
     assert make_session_mock.call_count == 3
 
     assert set(manager.sessions_map.keys()) == {
-        HOST_SFC_TEST_0,
-        HOST_SFC_S3_STAGE,
+        TEST_HOST_1,
+        TEST_STORAGE_HOST,
         None,
     }
     for pool in manager.sessions_map.values():
@@ -147,9 +149,9 @@ def test_reuse_sessions_within_pool(make_session_mock):
 def test_clone_independence():
     """`clone` should return an independent manager sharing only the adapter_factory."""
     manager = SessionManager()
-    with manager.use_session(URL_SFC_TEST_0):
+    with manager.use_session(TEST_URL_1):
         pass
-    assert HOST_SFC_TEST_0 in manager.sessions_map
+    assert TEST_HOST_1 in manager.sessions_map
 
     clone = manager.clone()
 
@@ -157,11 +159,11 @@ def test_clone_independence():
     assert clone.adapter_factory is manager.adapter_factory
     assert clone.sessions_map == {}
 
-    with clone.use_session(URL_SFC_S3_STAGE_1):
+    with clone.use_session(TEST_STORAGE_URL_1):
         pass
 
-    assert HOST_SFC_S3_STAGE in clone.sessions_map
-    assert HOST_SFC_S3_STAGE not in manager.sessions_map
+    assert TEST_STORAGE_HOST in clone.sessions_map
+    assert TEST_STORAGE_HOST not in manager.sessions_map
 
 
 def test_mount_adapters_and_pool_manager():
