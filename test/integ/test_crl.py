@@ -8,8 +8,18 @@ in different modes: DISABLED, ADVISORY, and ENABLED.
 from __future__ import annotations
 
 import tempfile
+import warnings
 
 import pytest
+from cryptography.utils import CryptographyDeprecationWarning
+
+
+@pytest.fixture(autouse=True)
+def _ignore_deprecation_warnings():
+    """Fixture to handle deprecation warnings in all tests in this module."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", CryptographyDeprecationWarning)
+        yield
 
 
 @pytest.mark.skipolddriver
@@ -63,6 +73,10 @@ def test_crl_validation_advisory_mode(conn_cnx):
         assert cnx.cert_revocation_check_mode == "ADVISORY"
         assert cnx.allow_certificates_without_crl_url is False
         assert cnx.enable_crl_cache is True
+        assert cnx.crl_connection_timeout_ms == 3000
+        assert cnx.crl_read_timeout_ms == 3000
+        assert cnx.crl_cache_validity_hours == 1
+        assert cnx.crl_cache_dir is None
 
 
 @pytest.mark.skipolddriver

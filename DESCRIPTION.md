@@ -9,8 +9,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v4.1.0(TBD)
 
-- v4.0.0(October 01,2025)
+- v4.0.0(October 09,2025)
   - Added support for checking certificates revocation using revocation lists (CRLs)
+  - Added `CERT_REVOCATION_CHECK_MODE` to `CLIENT_ENVIRONMENT`
   - Added the `workload_identity_impersonation_path` parameter to support service account impersonation for Workload Identity Federation on GCP and AWS workloads only
   - Fixed `get_results_from_sfqid` when using `DictCursor` and executing multiple statements at once
   - Added the `oauth_credentials_in_body` parameter supporting an option to send the oauth client credentials in the request body
@@ -19,12 +20,15 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Revert changing exception type in case of token expired scenario for `Oauth` authenticator back to `DatabaseError`
   - Enhanced configuration file security checks with stricter permission validation.
     - Configuration files writable by group or others now raise a `ConfigSourceError` with detailed permission information, preventing potential credential tampering.
-  - Added support for pandas conversion for Day-time and Year-Month Interval types
   - Fixed the return type of `SnowflakeConnection.cursor(cursor_class)` to match the type of `cursor_class`
   - Constrained the types of `fetchone`, `fetchmany`, `fetchall`
     - As part of this fix, `DictCursor` is no longer a subclass of `SnowflakeCursor`; use `SnowflakeCursorBase` as a superclass of both.
   - Fix "No AWS region was found" error if AWS region was set in `AWS_DEFAULT_REGION` variable instead of `AWS_REGION` for `WORKLOAD_IDENTITY` authenticator
   - Add `ocsp_root_certs_dict_lock_timeout` connection parameter to set the timeout (in seconds) for acquiring the lock on the OCSP root certs dictionary. Default value for this parameter is -1 which indicates no timeout.
+  - Fixed behaviour of trying S3 Transfer Accelerate endpoint by default for internal stages, and always getting HTTP403 due to permissions missing on purpose. Now /accelerate is not attempted.
+
+- v3.18.0(October 03,2025)
+  - Added support for pandas conversion for Day-time and Year-Month Interval types
 
 - v3.17.4(September 22,2025)
   - Added support for intermediate certificates as roots when they are stored in the trust store
