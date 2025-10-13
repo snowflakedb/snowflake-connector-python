@@ -412,6 +412,9 @@ def detect_platforms(
 
         if session_manager is None:
             # This should never happen - we expect session manager to be passed from the outer scope
+            logger.debug(
+                "No session manager provided. HTTP settings may not be preserved. Using default."
+            )
             session_manager = SessionManager(use_pooling=False, max_retries=0)
 
         # Run environment-only checks synchronously (no network calls, no threading overhead)
