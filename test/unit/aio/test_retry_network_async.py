@@ -45,6 +45,10 @@ from snowflake.connector.network import STATUS_TO_EXCEPTION, RetryRequest
 pytestmark = pytest.mark.skipolddriver
 
 
+# Module and class path constants for easier refactoring
+ASYNC_SESSION_MANAGER_MODULE = "snowflake.connector.aio._session_manager"
+ASYNC_SESSION_MANAGER = f"{ASYNC_SESSION_MANAGER_MODULE}.SessionManager"
+ASYNC_SNOWFLAKE_SSL_CONNECTOR = f"{ASYNC_SESSION_MANAGER_MODULE}.SnowflakeSSLConnector"
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -392,9 +396,9 @@ async def test_retry_connection_reset_error(caplog):
     async def error_send(*args, **kwargs):
         raise OSError(104, "ECONNRESET")
 
-    with patch(
-        "snowflake.connector.aio._session_manager.SnowflakeSSLConnector.connect"
-    ) as mock_conn, patch("aiohttp.client_reqrep.ClientRequest.send", error_send):
+    with patch(f"{ASYNC_SNOWFLAKE_SSL_CONNECTOR}.connect") as mock_conn, patch(
+        "aiohttp.client_reqrep.ClientRequest.send", error_send
+    ):
         with caplog.at_level(logging.DEBUG):
             await rest.fetch(timeout=10, **default_parameters)
 

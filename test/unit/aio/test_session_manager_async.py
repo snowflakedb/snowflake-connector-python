@@ -12,12 +12,16 @@ from snowflake.connector.aio._session_manager import (
 )
 from snowflake.connector.constants import OCSPMode
 
-HOST_SFC_TEST_0 = "sfctest0.snowflakecomputing.com"
-URL_SFC_TEST_0 = f"https://{HOST_SFC_TEST_0}:443/session/v1/login-request"
+# Module and class path constants for easier refactoring
+ASYNC_SESSION_MANAGER_MODULE = "snowflake.connector.aio._session_manager"
+ASYNC_SESSION_MANAGER = f"{ASYNC_SESSION_MANAGER_MODULE}.SessionManager"
 
-HOST_SFC_S3_STAGE = "sfc-ds2-customer-stage.s3.amazonaws.com"
-URL_SFC_S3_STAGE_1 = f"https://{HOST_SFC_S3_STAGE}/rgm1-s-sfctest0/stages/"
-URL_SFC_S3_STAGE_2 = f"https://{HOST_SFC_S3_STAGE}/rgm1-s-sfctst0/stages/another-url"
+TEST_HOST_1 = "testaccount.example.com"
+TEST_URL_1 = f"https://{TEST_HOST_1}:443/session/v1/login-request"
+
+TEST_STORAGE_HOST = "test-customer-stage.s3.example.com"
+TEST_STORAGE_URL_1 = f"https://{TEST_STORAGE_HOST}/test-stage/stages/"
+TEST_STORAGE_URL_2 = f"https://{TEST_STORAGE_HOST}/test-stage/stages/another-url"
 
 
 async def create_session(
@@ -46,9 +50,8 @@ async def close_and_assert(manager: SessionManager, expected_pool_count: int) ->
 ORIGINAL_MAKE_SESSION = SessionManager.make_session
 
 
-@pytest.mark.asyncio
 @mock.patch(
-    "snowflake.connector.aio._session_manager.SessionManager.make_session",
+    f"{ASYNC_SESSION_MANAGER}.make_session",
     side_effect=ORIGINAL_MAKE_SESSION,
     autospec=True,
 )
@@ -56,8 +59,8 @@ async def test_pooling_disabled(make_session_mock):
     """When pooling is disabled every request creates and closes a new Session."""
     manager = SessionManager(use_pooling=False)
 
-    await create_session(manager, url=URL_SFC_TEST_0)
-    await create_session(manager, url=URL_SFC_TEST_0)
+    await create_session(manager, url=TEST_URL_1)
+    await create_session(manager, url=TEST_URL_1)
 
     # Two independent sessions were created
     assert make_session_mock.call_count == 2
@@ -67,9 +70,8 @@ async def test_pooling_disabled(make_session_mock):
     await close_and_assert(manager, expected_pool_count=0)
 
 
-@pytest.mark.asyncio
 @mock.patch(
-    "snowflake.connector.aio._session_manager.SessionManager.make_session",
+    f"{ASYNC_SESSION_MANAGER}.make_session",
     side_effect=ORIGINAL_MAKE_SESSION,
     autospec=True,
 )
@@ -79,22 +81,21 @@ async def test_single_hostname_pooling(make_session_mock):
 
     # Create 5 sequential sessions for the same hostname
     for _ in range(5):
-        await create_session(manager, url=URL_SFC_TEST_0)
+        await create_session(manager, url=TEST_URL_1)
 
     # Only one underlying Session should have been created
     assert make_session_mock.call_count == 1
 
-    assert list(manager.sessions_map.keys()) == [HOST_SFC_TEST_0]
-    pool = manager.sessions_map[HOST_SFC_TEST_0]
+    assert list(manager.sessions_map.keys()) == [TEST_HOST_1]
+    pool = manager.sessions_map[TEST_HOST_1]
     assert len(pool._idle_sessions) == 1
     assert len(pool._active_sessions) == 0
 
     await close_and_assert(manager, expected_pool_count=1)
 
 
-@pytest.mark.asyncio
 @mock.patch(
-    "snowflake.connector.aio._session_manager.SessionManager.make_session",
+    f"{ASYNC_SESSION_MANAGER}.make_session",
     side_effect=ORIGINAL_MAKE_SESSION,
     autospec=True,
 )
@@ -102,13 +103,13 @@ async def test_multiple_hostnames_separate_pools(make_session_mock):
     """Different hostnames (and None) should create separate pools."""
     manager = SessionManager()
 
-    for url in [URL_SFC_TEST_0, URL_SFC_S3_STAGE_1, None]:
+    for url in [TEST_URL_1, TEST_STORAGE_URL_1, None]:
         await create_session(manager, num_sessions=2, url=url)
 
-    # Two sessions created for each of the three keys (HOST_SFC_TEST_0, HOST_SFC_S3_STAGE, None)
+    # Two sessions created for each of the three keys (TEST_HOST_1, TEST_STORAGE_HOST, None)
     assert make_session_mock.call_count == 6
 
-    for expected_host in [HOST_SFC_TEST_0, HOST_SFC_S3_STAGE, None]:
+    for expected_host in [TEST_HOST_1, TEST_STORAGE_HOST, None]:
         assert expected_host in manager.sessions_map
 
     for pool in manager.sessions_map.values():
@@ -118,9 +119,8 @@ async def test_multiple_hostnames_separate_pools(make_session_mock):
     await close_and_assert(manager, expected_pool_count=3)
 
 
-@pytest.mark.asyncio
 @mock.patch(
-    "snowflake.connector.aio._session_manager.SessionManager.make_session",
+    f"{ASYNC_SESSION_MANAGER}.make_session",
     side_effect=ORIGINAL_MAKE_SESSION,
     autospec=True,
 )
@@ -128,16 +128,16 @@ async def test_reuse_sessions_within_pool(make_session_mock):
     """After many sequential sessions only one Session per hostname should exist."""
     manager = SessionManager()
 
-    for url in [URL_SFC_TEST_0, URL_SFC_S3_STAGE_1, URL_SFC_S3_STAGE_2, None]:
+    for url in [TEST_URL_1, TEST_STORAGE_URL_1, TEST_STORAGE_URL_2, None]:
         for _ in range(10):
             await create_session(manager, url=url)
 
-    # One Session per unique hostname (URL_SFC_S3_STAGE_2 shares HOST_SFC_S3_STAGE)
+    # One Session per unique hostname (TEST_STORAGE_URL_2 shares TEST_STORAGE_HOST)
     assert make_session_mock.call_count == 3
 
     assert set(manager.sessions_map.keys()) == {
-        HOST_SFC_TEST_0,
-        HOST_SFC_S3_STAGE,
+        TEST_HOST_1,
+        TEST_STORAGE_HOST,
         None,
     }
     for pool in manager.sessions_map.values():
@@ -147,13 +147,12 @@ async def test_reuse_sessions_within_pool(make_session_mock):
     await close_and_assert(manager, expected_pool_count=3)
 
 
-@pytest.mark.asyncio
 async def test_clone_independence():
     """`clone` should return an independent manager sharing only the connector_factory."""
     manager = SessionManager()
-    async with manager.use_session(URL_SFC_TEST_0):
+    async with manager.use_session(TEST_URL_1):
         pass
-    assert HOST_SFC_TEST_0 in manager.sessions_map
+    assert TEST_HOST_1 in manager.sessions_map
 
     clone = manager.clone()
 
@@ -161,17 +160,16 @@ async def test_clone_independence():
     assert clone.connector_factory is manager.connector_factory
     assert clone.sessions_map == {}
 
-    async with clone.use_session(URL_SFC_S3_STAGE_1):
+    async with clone.use_session(TEST_STORAGE_URL_1):
         pass
 
-    assert HOST_SFC_S3_STAGE in clone.sessions_map
-    assert HOST_SFC_S3_STAGE not in manager.sessions_map
+    assert TEST_STORAGE_HOST in clone.sessions_map
+    assert TEST_STORAGE_HOST not in manager.sessions_map
 
     await manager.close()
     await clone.close()
 
 
-@pytest.mark.asyncio
 async def test_connector_factory_creates_sessions():
     """Verify that connector factory creates aiohttp sessions with proper connector."""
     manager = SessionManager()
@@ -185,7 +183,6 @@ async def test_connector_factory_creates_sessions():
     await session.close()
 
 
-@pytest.mark.asyncio
 async def test_clone_independent_pools():
     """A clone must *not* share its SessionPool objects with the original."""
     base = SessionManager(
@@ -214,7 +211,6 @@ async def test_clone_independent_pools():
     await clone.close()
 
 
-@pytest.mark.asyncio
 async def test_config_propagation():
     """Verify that config values are properly propagated to sessions."""
     config = AioHttpConfig(
@@ -237,7 +233,6 @@ async def test_config_propagation():
     await session.close()
 
 
-@pytest.mark.asyncio
 async def test_config_copy_with():
     """Test that copy_with creates a new config with overrides."""
     original_config = AioHttpConfig(
@@ -262,7 +257,6 @@ async def test_config_copy_with():
     assert new_config.snowflake_ocsp_mode == OCSPMode.FAIL_CLOSED
 
 
-@pytest.mark.asyncio
 async def test_from_config():
     """Test creating SessionManager from existing config."""
     config = AioHttpConfig(
@@ -281,15 +275,14 @@ async def test_from_config():
     assert manager2.config.trust_env is False  # original value preserved
 
 
-@pytest.mark.asyncio
 async def test_session_pool_lifecycle():
     """Test that session pool properly manages session lifecycle."""
     manager = SessionManager(use_pooling=True)
 
     # Get a session - should create new one
-    async with manager.use_session(URL_SFC_TEST_0):
-        assert HOST_SFC_TEST_0 in manager.sessions_map
-        pool = manager.sessions_map[HOST_SFC_TEST_0]
+    async with manager.use_session(TEST_URL_1):
+        assert TEST_HOST_1 in manager.sessions_map
+        pool = manager.sessions_map[TEST_HOST_1]
         assert len(pool._active_sessions) == 1
         assert len(pool._idle_sessions) == 0
 
@@ -298,14 +291,13 @@ async def test_session_pool_lifecycle():
     assert len(pool._idle_sessions) == 1
 
     # Reuse the same session
-    async with manager.use_session(URL_SFC_TEST_0):
+    async with manager.use_session(TEST_URL_1):
         assert len(pool._active_sessions) == 1
         assert len(pool._idle_sessions) == 0
 
     await manager.close()
 
 
-@pytest.mark.asyncio
 async def test_config_immutability():
     """Test that AioHttpConfig is immutable (frozen dataclass)."""
     config = AioHttpConfig(
@@ -327,7 +319,6 @@ async def test_config_immutability():
     assert new_config.trust_env is False
 
 
-@pytest.mark.asyncio
 async def test_pickle_session_manager():
     """Test that SessionManager can be pickled and unpickled."""
     import pickle
@@ -339,7 +330,7 @@ async def test_pickle_session_manager():
     manager = SessionManager(config)
 
     # Create some sessions
-    async with manager.use_session(URL_SFC_TEST_0):
+    async with manager.use_session(TEST_URL_1):
         pass
 
     # Pickle and unpickle (sessions are discarded during pickle)
@@ -350,8 +341,8 @@ async def test_pickle_session_manager():
     assert unpickled.config.trust_env is False
     assert unpickled.use_pooling is True
     # Pool structure preserved but sessions are empty after unpickling
-    assert HOST_SFC_TEST_0 in unpickled.sessions_map
-    pool = unpickled.sessions_map[HOST_SFC_TEST_0]
+    assert TEST_HOST_1 in unpickled.sessions_map
+    pool = unpickled.sessions_map[TEST_HOST_1]
     assert len(pool._idle_sessions) == 0
     assert len(pool._active_sessions) == 0
 
