@@ -1,0 +1,60 @@
+#!/bin/bash -e
+#
+# Test Snowflake Connector in Rocky Linux 9
+# NOTES:
+#   - Versions to be tested should be passed in as the first argument, e.g: "3.9 3.11". If omitted 3.9-3.13 will be assumed.
+#   - This script assumes that ../dist has the wheel(s) built for all versions to be tested
+#   - This is the script that test_rockylinux9_docker.sh runs inside of the docker container
+
+
+PYTHON_VERSIONS="${1:-3.9 3.11 3.12}"
+THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
+
+# Install one copy of tox using Python 3.11 (available on Rocky Linux 9)
+python3.11 -m pip install -U tox>=4
+
+source ${THIS_DIR}/log_analyze_setup.sh
+
+if [[ -d ${CLIENT_LOG_DIR_PATH_DOCKER} ]]; then
+    rm -rf ${CLIENT_LOG_DIR_PATH_DOCKER}/*
+else
+    mkdir ${CLIENT_LOG_DIR_PATH_DOCKER}
+fi
+
+# replace test password with a more complex one, and generate known ssm file
+python3.11 -m pip install -U snowflake-connector-python --only-binary=cffi >& /dev/null
+python3.11 ${THIS_DIR}/change_snowflake_test_pwd.py
+mv ${CONNECTOR_DIR}/test/parameters_jenkins.py ${CONNECTOR_DIR}/test/parameters.py
+
+# Fetch wiremock
+curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output ${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar
+
+# Run tests
+cd $CONNECTOR_DIR
+if [[ "$is_old_driver" == "true" ]]; then
+    # Old Driver Test
+    echo "[Info] Running old connector tests"
+    python3.11 -m tox -e olddriver
+else
+    for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
+        echo "[Info] Testing with ${PYTHON_VERSION}"
+        SHORT_VERSION=$(python3.11 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
+        
+        # Look for manylinux wheels (Rocky Linux 9 should be compatible with manylinux wheels)
+        CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/snowflake_connector_python*cp${SHORT_VERSION}*manylinux*.whl 2>/dev/null | sort -r | head -n 1)
+        
+        if [[ -z "$CONNECTOR_WHL" ]]; then
+            echo "[Warning] No manylinux wheel found for Python ${PYTHON_VERSION}, skipping..."
+            continue
+        fi
+        
+        # Test list equivalent to macOS (unit, integ, sso - no pandas on macOS per SNOW-1660226)
+        TEST_LIST=`echo py${PYTHON_VERSION/\./}-{unit,integ,sso}-ci | sed 's/ /,/g'`
+        TEST_ENVLIST=fix_lint,$TEST_LIST,py${PYTHON_VERSION/\./}-coverage
+        echo "[Info] Running tox for ${TEST_ENVLIST}"
+
+        python3.11 -m tox run -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
+    done
+fi
+

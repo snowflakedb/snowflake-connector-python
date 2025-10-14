@@ -446,10 +446,68 @@ jobs:
           path: |
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
 
+  test-rockylinux9:
+    name: Test Rocky Linux 9 rockylinux9-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Rocky Linux 9 has Python 3.9, 3.11, and 3.12 available
+        python-version: ["3.9", "3.11", "3.12"]
+        cloud-provider: [aws, azure, gcp]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup parameters file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Setup private key file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
+      - name: Download wheel(s)
+        uses: actions/download-artifact@v4
+        with:
+          name: manylinux_x86_64_py${{ matrix.python-version }}
+          path: dist
+      - name: Show wheels downloaded
+        run: ls -lh dist
+        shell: bash
+      - name: Run tests
+        run: ./ci/test_rockylinux9_docker.sh ${PYTHON_VERSION}
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          TOX_PARALLEL_NO_SPINNER: 1
+        shell: bash
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          include-hidden-files: true
+          name: coverage_rockylinux9-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            .tox/.coverage
+            .tox/coverage.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          include-hidden-files: true
+          name: junit_rockylinux9-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: |
+            .tox/junit.*.xml
+
   combine-coverage:
     if: always()
     name: Combine coverage
-    needs: [lint, test, test-fips, test-lambda]
+    needs: [lint, test, test-fips, test-lambda, test-rockylinux9]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
