@@ -38,4 +38,3 @@ WORKDIR /home/user
 RUN chmod 777 /home/user
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
-

@@ -42,4 +42,3 @@ docker run --network=host \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \
     ${CONTAINER_NAME}:1.0 \
     /home/user/snowflake-connector-python/ci/test_rockylinux9.sh ${PYTHON_ENV}
-

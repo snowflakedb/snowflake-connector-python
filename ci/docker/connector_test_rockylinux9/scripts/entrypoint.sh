@@ -11,4 +11,3 @@ useradd --shell /bin/bash -u $USER_ID -o -c "" -m user
 export HOME=/home/user
 
 /usr/local/bin/gosu user "$@"
-

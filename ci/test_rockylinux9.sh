@@ -40,15 +40,15 @@ else
     for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
         echo "[Info] Testing with ${PYTHON_VERSION}"
         SHORT_VERSION=$(python3.11 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
-        
+
         # Look for manylinux wheels (Rocky Linux 9 should be compatible with manylinux wheels)
         CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/snowflake_connector_python*cp${SHORT_VERSION}*manylinux*.whl 2>/dev/null | sort -r | head -n 1)
-        
+
         if [[ -z "$CONNECTOR_WHL" ]]; then
             echo "[Warning] No manylinux wheel found for Python ${PYTHON_VERSION}, skipping..."
             continue
         fi
-        
+
         # Test list equivalent to macOS (unit, integ, sso - no pandas on macOS per SNOW-1660226)
         TEST_LIST=`echo py${PYTHON_VERSION/\./}-{unit,integ,sso}-ci | sed 's/ /,/g'`
         TEST_ENVLIST=fix_lint,$TEST_LIST,py${PYTHON_VERSION/\./}-coverage
@@ -57,4 +57,3 @@ else
         python3.11 -m tox run -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
     done
 fi
-
