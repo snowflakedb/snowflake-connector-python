@@ -52,13 +52,13 @@ if [[ "$is_old_driver" == "true" ]]; then
 else
     for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
         echo "[Info] Testing with Python ${PYTHON_VERSION}"
-        
+
         # Check if the Python version is installed
         if ! command -v python${PYTHON_VERSION} &> /dev/null; then
             echo "[Warning] Python ${PYTHON_VERSION} not found, skipping..."
             continue
         fi
-        
+
         SHORT_VERSION=$(python${PYTHON_VERSION} -c "print('${PYTHON_VERSION}'.replace('.', ''))")
 
         # Look for manylinux wheels (Rocky Linux 9 should be compatible with manylinux wheels)
