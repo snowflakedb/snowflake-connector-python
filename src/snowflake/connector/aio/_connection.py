@@ -61,6 +61,7 @@ from ..network import (
     OAUTH_AUTHENTICATOR,
     OAUTH_AUTHORIZATION_CODE,
     OAUTH_CLIENT_CREDENTIALS,
+    PAT_WITH_EXTERNAL_SESSION,
     PROGRAMMATIC_ACCESS_TOKEN,
     REQUEST_ID,
     USR_PWD_MFA_AUTHENTICATOR,
@@ -247,7 +248,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 self._validate_client_prefetch_threads()
             )
 
-        # Setup authenticator
+        # Setup authenticator - validation happens in __config
         auth = Auth(self.rest)
 
         if self._session_token and self._master_token:
@@ -380,6 +381,12 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
                 self.auth_class = AuthByPAT(self._token)
+            elif self._authenticator == PAT_WITH_EXTERNAL_SESSION:
+                # TODO: SNOW-2344581: add support for PAT with external session ID for async connection
+                raise ProgrammingError(
+                    msg="PAT with external session ID is not supported for async connection.",
+                    errno=ER_INVALID_VALUE,
+                )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                     self._client_request_mfa_token if IS_LINUX else True
