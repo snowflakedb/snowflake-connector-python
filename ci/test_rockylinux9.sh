@@ -11,8 +11,12 @@ PYTHON_VERSIONS="${1:-3.9 3.11 3.12}"
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 
-# Install one copy of tox using Python 3.11 (available on Rocky Linux 9)
-python3.11 -m pip install -U tox>=4
+# Get first available Python version for initial setup
+SETUP_PYTHON_VERSION=$(echo ${PYTHON_VERSIONS} | awk '{print $1}')
+echo "[Info] Using Python ${SETUP_PYTHON_VERSION} for initial setup"
+
+# Install one copy of tox using the first available Python version
+python${SETUP_PYTHON_VERSION} -m pip install -U tox>=4
 
 source ${THIS_DIR}/log_analyze_setup.sh
 
@@ -25,8 +29,8 @@ fi
 # Replace test password with a more complex one, and generate known ssm file
 # This is only needed for Jenkins, not GitHub Actions
 if [[ "$GITHUB_ACTIONS" != "true" ]]; then
-    python3.11 -m pip install -U snowflake-connector-python --only-binary=cffi >& /dev/null
-    python3.11 ${THIS_DIR}/change_snowflake_test_pwd.py
+    python${SETUP_PYTHON_VERSION} -m pip install -U snowflake-connector-python --only-binary=cffi >& /dev/null
+    python${SETUP_PYTHON_VERSION} ${THIS_DIR}/change_snowflake_test_pwd.py
     mv ${CONNECTOR_DIR}/test/parameters_jenkins.py ${CONNECTOR_DIR}/test/parameters.py
 else
     echo "[Info] Running in GitHub Actions, skipping password change step"
@@ -44,11 +48,18 @@ cd $CONNECTOR_DIR
 if [[ "$is_old_driver" == "true" ]]; then
     # Old Driver Test
     echo "[Info] Running old connector tests"
-    python3.11 -m tox -e olddriver
+    python${SETUP_PYTHON_VERSION} -m tox -e olddriver
 else
     for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
-        echo "[Info] Testing with ${PYTHON_VERSION}"
-        SHORT_VERSION=$(python3.11 -c "print('${PYTHON_VERSION}'.replace('.', ''))")
+        echo "[Info] Testing with Python ${PYTHON_VERSION}"
+        
+        # Check if the Python version is installed
+        if ! command -v python${PYTHON_VERSION} &> /dev/null; then
+            echo "[Warning] Python ${PYTHON_VERSION} not found, skipping..."
+            continue
+        fi
+        
+        SHORT_VERSION=$(python${PYTHON_VERSION} -c "print('${PYTHON_VERSION}'.replace('.', ''))")
 
         # Look for manylinux wheels (Rocky Linux 9 should be compatible with manylinux wheels)
         CONNECTOR_WHL=$(ls $CONNECTOR_DIR/dist/snowflake_connector_python*cp${SHORT_VERSION}*manylinux*.whl 2>/dev/null | sort -r | head -n 1)
@@ -63,6 +74,6 @@ else
         TEST_ENVLIST=fix_lint,$TEST_LIST,py${PYTHON_VERSION/\./}-coverage
         echo "[Info] Running tox for ${TEST_ENVLIST}"
 
-        python3.11 -m tox run -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
+        python${PYTHON_VERSION} -m tox run -e ${TEST_ENVLIST} --installpkg ${CONNECTOR_WHL}
     done
 fi
