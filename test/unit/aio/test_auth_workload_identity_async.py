@@ -66,6 +66,77 @@ def test_mro():
     ) < AuthByWorkloadIdentity.mro().index(AuthByPluginSync)
 
 
+@mock.patch("snowflake.connector.aio._network.SnowflakeRestful._post_request")
+async def test_wif_authenticator_with_no_provider_raises_error(mock_post_request):
+    from snowflake.connector.aio import SnowflakeConnection
+
+    with pytest.raises(ProgrammingError) as excinfo:
+        conn = SnowflakeConnection(
+            account="account",
+            authenticator="WORKLOAD_IDENTITY",
+        )
+        await conn.connect()
+    assert (
+        "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY."
+        in str(excinfo.value)
+    )
+    # Ensure no network requests were made
+    mock_post_request.assert_not_called()
+
+
+@mock.patch("snowflake.connector.aio._network.SnowflakeRestful._post_request")
+async def test_wif_authenticator_with_invalid_provider_raises_error(mock_post_request):
+    from snowflake.connector.aio import SnowflakeConnection
+
+    with pytest.raises(ProgrammingError) as excinfo:
+        conn = SnowflakeConnection(
+            account="account",
+            authenticator="WORKLOAD_IDENTITY",
+            workload_identity_provider="INVALID",
+        )
+        await conn.connect()
+    assert (
+        "Unknown workload_identity_provider: 'INVALID'. Expected one of: AWS, AZURE, GCP, OIDC"
+        in str(excinfo.value)
+    )
+    # Ensure no network requests were made
+    mock_post_request.assert_not_called()
+
+
+@mock.patch("snowflake.connector.aio._network.SnowflakeRestful._post_request")
+@pytest.mark.parametrize("authenticator", ["WORKLOAD_IDENTITY", "workload_identity"])
+async def test_wif_authenticator_is_case_insensitive(
+    mock_post_request, fake_aws_environment, authenticator
+):
+    """Test that connect() with workload_identity authenticator creates AuthByWorkloadIdentity instance."""
+    from snowflake.connector.aio import SnowflakeConnection
+
+    # Mock the post request to prevent actual authentication attempt
+    async def mock_post(*args, **kwargs):
+        return {
+            "success": True,
+            "data": {
+                "token": "fake-token",
+                "masterToken": "fake-master-token",
+                "sessionId": "fake-session-id",
+            },
+        }
+
+    mock_post_request.side_effect = mock_post
+
+    connection = SnowflakeConnection(
+        account="testaccount",
+        authenticator=authenticator,
+        workload_identity_provider="AWS",
+    )
+    await connection.connect()
+
+    # Verify that the auth instance is of the correct type
+    assert isinstance(connection.auth_class, AuthByWorkloadIdentity)
+
+    await connection.close()
+
+
 # -- OIDC Tests --
 
 
@@ -100,8 +171,9 @@ async def test_explicit_oidc_invalid_inline_token_raises_error():
     auth_class = AuthByWorkloadIdentity(
         provider=AttestationProvider.OIDC, token=invalid_token
     )
-    with pytest.raises(jwt.exceptions.DecodeError):
+    with pytest.raises(ProgrammingError) as excinfo:
         await auth_class.prepare(conn=None)
+    assert "Invalid JWT token: " in str(excinfo.value)
 
 
 async def test_explicit_oidc_no_token_raises_error():
@@ -204,8 +276,11 @@ async def test_explicit_gcp_metadata_server_error_bubbles_up(exception):
     mock_request = _mock_aiohttp_exception(exception)
 
     with mock.patch("aiohttp.ClientSession.request", side_effect=mock_request):
-        with pytest.raises(type(exception)):
+        with pytest.raises(ProgrammingError) as excinfo:
             await auth_class.prepare(conn=None)
+
+    assert "Error fetching GCP metadata:" in str(excinfo.value)
+    assert "Ensure the application is running on GCP." in str(excinfo.value)
 
 
 async def test_explicit_gcp_plumbs_token_to_api(
@@ -249,8 +324,10 @@ async def test_explicit_azure_metadata_server_error_bubbles_up(exception):
     mock_request = _mock_aiohttp_exception(exception)
 
     with mock.patch("aiohttp.ClientSession.request", side_effect=mock_request):
-        with pytest.raises(type(exception)):
+        with pytest.raises(ProgrammingError) as excinfo:
             await auth_class.prepare(conn=None)
+    assert "Error fetching Azure metadata:" in str(excinfo.value)
+    assert "Ensure the application is running on Azure." in str(excinfo.value)
 
 
 @pytest.mark.parametrize(

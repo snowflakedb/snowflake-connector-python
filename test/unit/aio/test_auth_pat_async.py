@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from snowflake.connector.aio.auth import AuthByPAT
 from snowflake.connector.auth.by_plugin import AuthType
 from snowflake.connector.network import PROGRAMMATIC_ACCESS_TOKEN
@@ -33,7 +35,16 @@ async def test_auth_pat_reauthenticate():
     assert result == {"success": False}
 
 
-async def test_pat_authenticator_creates_auth_by_pat(monkeypatch):
+@pytest.mark.parametrize(
+    "authenticator, expected_auth_class",
+    [
+        ("PROGRAMMATIC_ACCESS_TOKEN", AuthByPAT),
+        ("programmatic_access_token", AuthByPAT),
+    ],
+)
+async def test_pat_authenticator_creates_auth_by_pat(
+    monkeypatch, authenticator, expected_auth_class
+):
     """Test that using PROGRAMMATIC_ACCESS_TOKEN authenticator creates AuthByPAT instance."""
     import snowflake.connector.aio
     from snowflake.connector.aio._network import SnowflakeRestful
@@ -60,14 +71,14 @@ async def test_pat_authenticator_creates_auth_by_pat(monkeypatch):
         account="account",
         database="TESTDB",
         warehouse="TESTWH",
-        authenticator=PROGRAMMATIC_ACCESS_TOKEN,
+        authenticator=authenticator,
         token="test_pat_token",
     )
 
     await conn.connect()
 
     # Verify that the auth_class is an instance of AuthByPAT
-    assert isinstance(conn.auth_class, AuthByPAT)
+    assert isinstance(conn.auth_class, expected_auth_class)
 
     await conn.close()
 

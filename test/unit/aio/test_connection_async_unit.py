@@ -646,10 +646,12 @@ async def test_workload_identity_provider_is_required_for_wif_authenticator(
                 authenticator="WORKLOAD_IDENTITY",
                 workload_identity_provider=provider_param,
             )
-        assert (
+        expected_error_msg = (
             "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY"
-            in str(excinfo.value)
+            if provider_param is None
+            else f"Unknown workload_identity_provider: '{provider_param}'. Expected one of: AWS, AZURE, GCP, OIDC"
         )
+        assert expected_error_msg in str(excinfo.value)
 
 
 @pytest.mark.parametrize(
@@ -760,3 +762,14 @@ async def test_single_use_refresh_tokens_option_is_plumbed_into_authbyauthcode_a
             oauth_enable_single_use_refresh_tokens=rtr_enabled,
         )
         assert conn.auth_class._enable_single_use_refresh_tokens == rtr_enabled
+
+
+@pytest.mark.skipolddriver
+async def test_invalid_authenticator():
+    with pytest.raises(ProgrammingError) as excinfo:
+        conn = snowflake.connector.aio.SnowflakeConnection(
+            account="account",
+            authenticator="INVALID",
+        )
+        await conn.connect()
+    assert "Unknown authenticator: INVALID" in str(excinfo.value)
