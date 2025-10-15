@@ -69,8 +69,7 @@ else
             continue
         fi
 
-        # Test list equivalent to macOS (unit, integ, sso - no pandas on macOS per SNOW-1660226)
-        TEST_LIST=`echo py${PYTHON_VERSION/\./}-{unit,integ,sso}-ci | sed 's/ /,/g'`
+        TEST_LIST=`echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
         TEST_ENVLIST=fix_lint,$TEST_LIST,py${PYTHON_VERSION/\./}-coverage
         echo "[Info] Running tox for ${TEST_ENVLIST}"
 

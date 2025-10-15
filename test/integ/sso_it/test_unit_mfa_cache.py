@@ -163,8 +163,6 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     if IS_LINUX:
         conn_cfg["client_request_mfa_token"] = True
 
-    # Mock keyring operations for all platforms to ensure test works in all environments
-    # (including Docker containers where keyring infrastructure may not be available)
     with patch("keyring.delete_password", Mock(side_effect=mock_del_password)), patch(
         "keyring.set_password", Mock(side_effect=mock_set_password)
     ), patch("keyring.get_password", Mock(side_effect=mock_get_password)):
