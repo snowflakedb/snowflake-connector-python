@@ -30,6 +30,10 @@ if [[ "$GITHUB_ACTIONS" != "true" ]]; then
     mv ${CONNECTOR_DIR}/test/parameters_jenkins.py ${CONNECTOR_DIR}/test/parameters.py
 else
     echo "[Info] Running in GitHub Actions, skipping password change step"
+    echo "[Info] Checking if test/parameters.py exists:"
+    ls -la ${CONNECTOR_DIR}/test/parameters.py || echo "[ERROR] parameters.py NOT FOUND!"
+    echo "[Info] Checking if RSA key file exists:"
+    ls -la ${CONNECTOR_DIR}/test/rsa_key_python_*.p8 || echo "[ERROR] RSA key NOT FOUND!"
 fi
 
 # Fetch wiremock
