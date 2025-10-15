@@ -22,10 +22,15 @@ else
     mkdir ${CLIENT_LOG_DIR_PATH_DOCKER}
 fi
 
-# replace test password with a more complex one, and generate known ssm file
-python3.11 -m pip install -U snowflake-connector-python --only-binary=cffi >& /dev/null
-python3.11 ${THIS_DIR}/change_snowflake_test_pwd.py
-mv ${CONNECTOR_DIR}/test/parameters_jenkins.py ${CONNECTOR_DIR}/test/parameters.py
+# Replace test password with a more complex one, and generate known ssm file
+# This is only needed for Jenkins, not GitHub Actions
+if [[ "$GITHUB_ACTIONS" != "true" ]]; then
+    python3.11 -m pip install -U snowflake-connector-python --only-binary=cffi >& /dev/null
+    python3.11 ${THIS_DIR}/change_snowflake_test_pwd.py
+    mv ${CONNECTOR_DIR}/test/parameters_jenkins.py ${CONNECTOR_DIR}/test/parameters.py
+else
+    echo "[Info] Running in GitHub Actions, skipping password change step"
+fi
 
 # Fetch wiremock
 curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output ${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar
