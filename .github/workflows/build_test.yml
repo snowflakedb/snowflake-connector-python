@@ -448,7 +448,7 @@ jobs:
 
   test-rockylinux9:
     name: Test Rocky Linux 9 rockylinux9-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
-    needs: build
+    needs: lint
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -457,7 +457,22 @@ jobs:
         python-version: ["3.9", "3.11", "3.12"]
         cloud-provider: [aws, azure, gcp]
     steps:
+      - name: Set shortver
+        run: echo "shortver=${longver//./}" >> $GITHUB_ENV
+        env:
+          longver: ${{ matrix.python-version }}
+        shell: bash
       - uses: actions/checkout@v4
+      - name: Build wheel for Rocky Linux
+        uses: pypa/cibuildwheel@v2.21.3
+        env:
+          CIBW_BUILD: cp${{ env.shortver }}-manylinux_x86_64
+          MACOSX_DEPLOYMENT_TARGET: 10.14
+        with:
+          output-dir: dist
+      - name: Show wheels built
+        run: ls -lh dist
+        shell: bash
       - name: Setup parameters file
         shell: bash
         env:
@@ -472,14 +487,6 @@ jobs:
         run: |
           gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
           .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
-      - name: Download wheel(s)
-        uses: actions/download-artifact@v4
-        with:
-          name: manylinux_x86_64_py${{ matrix.python-version }}
-          path: dist
-      - name: Show wheels downloaded
-        run: ls -lh dist
-        shell: bash
       - name: Run tests
         run: ./ci/test_rockylinux9_docker.sh ${PYTHON_VERSION}
         env:
