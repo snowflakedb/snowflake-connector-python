@@ -495,26 +495,11 @@ jobs:
           PYTEST_ADDOPTS: --color=yes --tb=short
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          include-hidden-files: true
-          name: coverage_rockylinux9-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
-          path: |
-            .tox/.coverage
-            .tox/coverage.xml
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          include-hidden-files: true
-          name: junit_rockylinux9-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
-          path: |
-            .tox/junit.*.xml
 
   combine-coverage:
     if: always()
     name: Combine coverage
-    needs: [lint, test, test-fips, test-lambda, test-rockylinux9]
+    needs: [lint, test, test-fips, test-lambda]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
