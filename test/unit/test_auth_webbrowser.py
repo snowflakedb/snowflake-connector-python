@@ -802,7 +802,10 @@ def test_auth_webbrowser_force_auth_server(_, monkeypatch, force_auth_server):
             assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
         else:
             # When SNOWFLAKE_AUTH_FORCE_SERVER is false/unset, should fall back to manual URL input
-            with patch("builtins.input", return_value=f"http://example.com/sso?token={ref_token}"):
+            with patch(
+                "builtins.input",
+                return_value=f"http://example.com/sso?token={ref_token}",
+            ):
                 auth.prepare(
                     conn=rest._connection,
                     authenticator=AUTHENTICATOR,
