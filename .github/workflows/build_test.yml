@@ -446,6 +446,56 @@ jobs:
           path: |
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
 
+  test-rockylinux9:
+    name: Test Rocky Linux 9 rockylinux9-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Rocky Linux 9 has Python 3.9, 3.11, and 3.12 available
+        python-version: ["3.9", "3.11", "3.12"]
+        cloud-provider: [aws, azure, gcp]
+    steps:
+      - name: Set shortver
+        run: echo "shortver=${longver//./}" >> $GITHUB_ENV
+        env:
+          longver: ${{ matrix.python-version }}
+        shell: bash
+      - uses: actions/checkout@v4
+      - name: Build wheel for Rocky Linux
+        uses: pypa/cibuildwheel@v2.21.3
+        env:
+          CIBW_BUILD: cp${{ env.shortver }}-manylinux_x86_64
+          MACOSX_DEPLOYMENT_TARGET: 10.14
+        with:
+          output-dir: dist
+      - name: Show wheels built
+        run: ls -lh dist
+        shell: bash
+      - name: Setup parameters file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Setup private key file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
+      - name: Run tests
+        run: ./ci/test_rockylinux9_docker.sh ${PYTHON_VERSION}
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          TOX_PARALLEL_NO_SPINNER: 1
+        shell: bash
+
   combine-coverage:
     if: always()
     name: Combine coverage
