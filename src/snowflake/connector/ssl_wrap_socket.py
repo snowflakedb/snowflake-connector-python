@@ -16,12 +16,13 @@ from contextvars import ContextVar
 from functools import wraps
 from inspect import signature as _sig
 from socket import socket
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import certifi
 import OpenSSL.SSL
 
-from .constants import OCSPMode
+from .constants import OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT, OCSPMode
+from .crl import CertRevocationCheckMode, CRLConfig, CRLValidator
 from .errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from .errors import OperationalError
 from .session_manager import SessionManager
@@ -29,8 +30,16 @@ from .vendored.urllib3 import connection as connection_
 from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
 from .vendored.urllib3.util import ssl_ as ssl_
 
+if TYPE_CHECKING:
+    from cryptography import x509
+
 DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
 FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE
+FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT: int = (
+    OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
+)
+DEFAULT_CRL_CONFIG: CRLConfig = CRLConfig()
+FEATURE_CRL_CONFIG: CRLConfig = DEFAULT_CRL_CONFIG
 
 """
 OCSP Response cache file name
@@ -141,11 +150,24 @@ def reset_current_session_manager(token) -> None:
 def inject_into_urllib3() -> None:
     """Monkey-patch urllib3 with PyOpenSSL-backed SSL-support and OCSP."""
     log.debug("Injecting ssl_wrap_socket_with_ocsp")
-    connection_.ssl_wrap_socket = ssl_wrap_socket_with_ocsp
+    connection_.ssl_wrap_socket = ssl_wrap_socket_with_cert_revocation_checks
+
+
+def _load_trusted_certificates(cafile: str | None) -> list[x509.Certificate]:
+    # Use default SSL context to load the CA file and get the certificates
+    ctx = ssl.create_default_context()
+    ctx.load_verify_locations(cafile=cafile)
+    certs = ctx.get_ca_certs(binary_form=True)
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.x509 import load_der_x509_certificate
+
+    return [load_der_x509_certificate(cert, default_backend()) for cert in certs]
 
 
 @wraps(ssl_.ssl_wrap_socket)
-def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
+def ssl_wrap_socket_with_cert_revocation_checks(
+    *args: Any, **kwargs: Any
+) -> WrappedSocket:
     # Bind passed args/kwargs to the underlying signature to support both positional and keyword calls
     bound = _sig(ssl_.ssl_wrap_socket).bind_partial(*args, **kwargs)
     params = bound.arguments
@@ -158,14 +180,42 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
 
     # Ensure PyOpenSSL context with partial-chain is used if none or wrong type provided
     provided_ctx = params.get("ssl_context")
+    cafile_for_ctx = _resolve_cafile(params)
     if not isinstance(provided_ctx, PyOpenSSLContext):
-        cafile_for_ctx = _resolve_cafile(params)
         params["ssl_context"] = _build_context_with_partial_chain(cafile_for_ctx)
     else:
         # If a PyOpenSSLContext is provided, ensure it trusts the provided CA and partial-chain is enabled
-        _ensure_partial_chain_on_context(provided_ctx, _resolve_cafile(params))
+        _ensure_partial_chain_on_context(provided_ctx, cafile_for_ctx)
 
     ret = ssl_.ssl_wrap_socket(**params)
+
+    log.debug(
+        "CRL Check Mode: %s",
+        FEATURE_CRL_CONFIG.cert_revocation_check_mode.name,
+    )
+    if (
+        FEATURE_CRL_CONFIG.cert_revocation_check_mode
+        != CertRevocationCheckMode.DISABLED
+    ):
+        crl_validator = CRLValidator.from_config(
+            FEATURE_CRL_CONFIG,
+            get_current_session_manager(),
+            trusted_certificates=_load_trusted_certificates(cafile_for_ctx),
+        )
+        if not crl_validator.validate_connection(ret.connection):
+            raise OperationalError(
+                msg=(
+                    "The certificate is revoked or "
+                    "could not be validated via CRL: hostname={}".format(
+                        server_hostname
+                    )
+                ),
+                errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+            )
+        log.debug(
+            "The certificate revocation check was successful. No additional checks will be performed."
+        )
+        return ret
 
     log.debug(
         "OCSP Mode: %s, OCSP response cache file name: %s",
@@ -179,6 +229,7 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
             ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
             use_fail_open=FEATURE_OCSP_MODE == OCSPMode.FAIL_OPEN,
             hostname=server_hostname,
+            root_certs_dict_lock_timeout=FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT,
         ).validate(server_hostname, ret.connection)
         if not v:
             raise OperationalError(

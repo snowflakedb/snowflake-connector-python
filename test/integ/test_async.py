@@ -18,8 +18,10 @@ except ImportError:
     QueryStatus = None
 
 
-@pytest.mark.parametrize("cursor_class", [SnowflakeCursor, DictCursor])
-def test_simple_async(conn_cnx, cursor_class):
+@pytest.mark.parametrize(
+    "cursor_class, row_type", [(SnowflakeCursor, tuple), (DictCursor, dict)]
+)
+def test_simple_async(conn_cnx, cursor_class, row_type):
     """Simple test to that shows the most simple usage of fire and forget.
 
     This test also makes sure that wait_until_ready function's sleeping is tested and
@@ -29,7 +31,9 @@ def test_simple_async(conn_cnx, cursor_class):
         with con.cursor(cursor_class) as cur:
             cur.execute_async("select count(*) from table(generator(timeLimit => 5))")
             cur.get_results_from_sfqid(cur.sfqid)
-            assert len(cur.fetchall()) == 1
+            rows = cur.fetchall()
+            assert len(rows) == 1
+            assert isinstance(rows[0], row_type)
             assert cur.rowcount
             assert cur.description
 
