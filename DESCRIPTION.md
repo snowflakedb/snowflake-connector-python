@@ -8,6 +8,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v4.1.0(TBD)
+  - Added the `SNOWFLAKE_AUTH_FORCE_SERVER` environment variable to force the use of the local-listening server when using the `externalbrowser` auth method
+    - This allows headless environments (like Docker or Airflow) running locally to auth via a browser URL
 
 - v4.0.0(October 09,2025)
   - Added support for checking certificates revocation using revocation lists (CRLs)
