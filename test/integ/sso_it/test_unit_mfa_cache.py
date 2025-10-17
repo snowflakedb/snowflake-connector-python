@@ -11,7 +11,7 @@ import snowflake.connector
 from snowflake.connector.errors import DatabaseError
 
 try:
-    from snowflake.connector.compat import IS_LINUX, IS_MACOS, IS_WINDOWS
+    from snowflake.connector.compat import IS_LINUX, IS_MACOS
 except ImportError:
     import platform
 
@@ -161,12 +161,7 @@ def test_mfa_cache(mockSnowflakeRestfulPostRequest):
     if IS_LINUX:
         conn_cfg["client_request_mfa_token"] = True
 
-    if IS_MACOS or IS_WINDOWS:
-        with patch(
-            "keyring.delete_password", Mock(side_effect=mock_del_password)
-        ), patch("keyring.set_password", Mock(side_effect=mock_set_password)), patch(
-            "keyring.get_password", Mock(side_effect=mock_get_password)
-        ):
-            test_body(conn_cfg)
-    else:
+    with patch("keyring.delete_password", Mock(side_effect=mock_del_password)), patch(
+        "keyring.set_password", Mock(side_effect=mock_set_password)
+    ), patch("keyring.get_password", Mock(side_effect=mock_get_password)):
         test_body(conn_cfg)
