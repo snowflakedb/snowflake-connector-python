@@ -1,9 +1,14 @@
 from unittest import mock
 
+import pytest
+
 from snowflake.connector import connect
 
 
-def test_mfa_token_cache():
+@pytest.mark.parametrize(
+    "authenticator", ["USERNAME_PASSWORD_MFA", "username_password_mfa"]
+)
+def test_mfa_token_cache(authenticator):
     with mock.patch(
         "snowflake.connector.network.SnowflakeRestful.fetch",
     ):
@@ -14,7 +19,7 @@ def test_mfa_token_cache():
                 account="account",
                 user="user",
                 password="password",
-                authenticator="username_password_mfa",
+                authenticator=authenticator,
                 client_store_temporary_credential=True,
                 client_request_mfa_token=True,
             ):
@@ -40,7 +45,7 @@ def test_mfa_token_cache():
                     account="account",
                     user="user",
                     password="password",
-                    authenticator="username_password_mfa",
+                    authenticator=authenticator,
                     client_store_temporary_credential=True,
                     client_request_mfa_token=True,
                 ):

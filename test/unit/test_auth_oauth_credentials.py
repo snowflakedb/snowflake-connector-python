@@ -3,15 +3,14 @@
 # Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
 #
 
-from __future__ import annotations
 
 import pytest
 
-from snowflake.connector.aio.auth import AuthByOauthCredentials
+from snowflake.connector.auth import AuthByOauthCredentials
 from snowflake.connector.errors import ProgrammingError
 
 
-async def test_auth_oauth_credentials_oauth_type():
+def test_auth_oauth_credentials_oauth_type():
     """Simple OAuth Client Credentials oauth type test."""
     auth = AuthByOauthCredentials(
         "app",
@@ -21,7 +20,7 @@ async def test_auth_oauth_credentials_oauth_type():
         "scope",
     )
     body = {"data": {}}
-    await auth.update_body(body)
+    auth.update_body(body)
     assert (
         body["data"]["CLIENT_ENVIRONMENT"]["OAUTH_TYPE"] == "oauth_client_credentials"
     )
@@ -30,13 +29,13 @@ async def test_auth_oauth_credentials_oauth_type():
 @pytest.mark.parametrize(
     "authenticator", ["OAUTH_CLIENT_CREDENTIALS", "oauth_client_credentials"]
 )
-async def test_oauth_client_credentials_authenticator_is_case_insensitive(
+def test_oauth_client_credentials_authenticator_is_case_insensitive(
     monkeypatch, authenticator
 ):
     """Test that OAuth client credentials authenticator is case insensitive."""
-    import snowflake.connector.aio
+    import snowflake.connector
 
-    async def mock_post_request(self, url, headers, json_body, **kwargs):
+    def mock_post_request(self, url, headers, json_body, **kwargs):
         return {
             "success": True,
             "message": None,
@@ -49,29 +48,25 @@ async def test_oauth_client_credentials_authenticator_is_case_insensitive(
         }
 
     monkeypatch.setattr(
-        snowflake.connector.aio._network.SnowflakeRestful,
-        "_post_request",
-        mock_post_request,
+        snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
     )
 
     # Mock the OAuth client credentials token request to avoid making HTTP requests
-    # Note: We need to mock _request_tokens which is called by the sync prepare() method
-    def mock_request_tokens(self, **kwargs):
+    def mock_get_request_token_response(self, connection, fields):
         # Simulate successful token retrieval
-        # Return a tuple directly (not a coroutine) since it's called from sync code
         return (
             "mock_access_token",
-            None,  # Client credentials doesn't use refresh tokens
-        )
+            None,
+        )  # Client credentials doesn't use refresh tokens
 
     monkeypatch.setattr(
         AuthByOauthCredentials,
-        "_request_tokens",
-        mock_request_tokens,
+        "_get_request_token_response",
+        mock_get_request_token_response,
     )
 
     # Create connection with OAuth client credentials authenticator
-    conn = snowflake.connector.aio.SnowflakeConnection(
+    conn = snowflake.connector.connect(
         user="testuser",
         account="testaccount",
         authenticator=authenticator,
@@ -79,15 +74,13 @@ async def test_oauth_client_credentials_authenticator_is_case_insensitive(
         oauth_client_secret="test_client_secret",
     )
 
-    await conn.connect()
-
     # Verify that the auth_class is an instance of AuthByOauthCredentials
     assert isinstance(conn.auth_class, AuthByOauthCredentials)
 
-    await conn.close()
+    conn.close()
 
 
-async def test_oauth_credentials_missing_client_id_raises_error():
+def test_oauth_credentials_missing_client_id_raises_error():
     """Test that missing client_id raises a ProgrammingError."""
     with pytest.raises(ProgrammingError) as excinfo:
         AuthByOauthCredentials(
@@ -100,7 +93,7 @@ async def test_oauth_credentials_missing_client_id_raises_error():
     assert "client_id' is empty" in str(excinfo.value)
 
 
-async def test_oauth_credentials_missing_client_secret_raises_error():
+def test_oauth_credentials_missing_client_secret_raises_error():
     """Test that missing client_secret raises a ProgrammingError."""
     with pytest.raises(ProgrammingError) as excinfo:
         AuthByOauthCredentials(
@@ -111,13 +104,3 @@ async def test_oauth_credentials_missing_client_secret_raises_error():
             "scope",
         )
     assert "client_secret' is empty" in str(excinfo.value)
-
-
-def test_mro():
-    """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
-    from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
-    from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
-
-    assert AuthByOauthCredentials.mro().index(
-        AuthByPluginAsync
-    ) < AuthByOauthCredentials.mro().index(AuthByPluginSync)

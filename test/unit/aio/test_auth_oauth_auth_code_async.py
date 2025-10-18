@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from snowflake.connector.auth import AuthByOauthCode
+from snowflake.connector.aio.auth import AuthByOauthCode
 from snowflake.connector.errors import ProgrammingError
 from snowflake.connector.network import OAUTH_AUTHORIZATION_CODE
 
@@ -19,13 +19,13 @@ def omit_oauth_urls_check():
         return authorization_url, redirect_uri
 
     with mock.patch(
-        "snowflake.connector.auth.oauth_code.AuthByOauthCode._validate_oauth_code_uris",
+        "snowflake.connector.aio.auth.AuthByOauthCode._validate_oauth_code_uris",
         side_effect=get_first_two_args,
     ):
         yield
 
 
-def test_auth_oauth_auth_code_oauth_type(omit_oauth_urls_check):
+async def test_auth_oauth_auth_code_oauth_type(omit_oauth_urls_check):
     """Simple OAuth Auth Code oauth type test."""
     auth = AuthByOauthCode(
         "app",
@@ -38,14 +38,14 @@ def test_auth_oauth_auth_code_oauth_type(omit_oauth_urls_check):
         "host",
     )
     body = {"data": {}}
-    auth.update_body(body)
+    await auth.update_body(body)
     assert (
         body["data"]["CLIENT_ENVIRONMENT"]["OAUTH_TYPE"] == "oauth_authorization_code"
     )
 
 
 @pytest.mark.parametrize("rtr_enabled", [True, False])
-def test_auth_oauth_auth_code_single_use_refresh_tokens(
+async def test_auth_oauth_auth_code_single_use_refresh_tokens(
     rtr_enabled: bool, omit_oauth_urls_check
 ):
     """Verifies that the enable_single_use_refresh_tokens option is plumbed into the authz code request."""
@@ -62,6 +62,7 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(
         enable_single_use_refresh_tokens=rtr_enabled,
     )
 
+    # Note: This must be a sync function because it's mocking a method called from sync code
     def fake_get_request_token_response(_, fields: dict[str, str]):
         if rtr_enabled:
             assert fields.get("enable_single_use_refresh_tokens") == "true"
@@ -70,14 +71,14 @@ def test_auth_oauth_auth_code_single_use_refresh_tokens(
         return ("access_token", "refresh_token")
 
     with patch(
-        "snowflake.connector.auth.AuthByOauthCode._do_authorization_request",
+        "snowflake.connector.aio.auth.AuthByOauthCode._do_authorization_request",
         return_value="abc",
     ):
         with patch(
-            "snowflake.connector.auth.AuthByOauthCode._get_request_token_response",
+            "snowflake.connector.aio.auth.AuthByOauthCode._get_request_token_response",
             side_effect=fake_get_request_token_response,
         ):
-            auth.prepare(
+            await auth.prepare(
                 conn=None,
                 authenticator=OAUTH_AUTHORIZATION_CODE,
                 service_name=None,
@@ -216,13 +217,14 @@ def test_eligible_for_default_client_credentials_via_constructor(
 @pytest.mark.parametrize(
     "authenticator", ["OAUTH_AUTHORIZATION_CODE", "oauth_authorization_code"]
 )
-def test_oauth_authorization_code_authenticator_is_case_insensitive(
+async def test_oauth_authorization_code_authenticator_is_case_insensitive(
     monkeypatch, authenticator
 ):
     """Test that OAuth authorization code authenticator is case insensitive."""
-    import snowflake.connector
+    import snowflake.connector.aio
+    from snowflake.connector.aio._network import SnowflakeRestful
 
-    def mock_post_request(self, url, headers, json_body, **kwargs):
+    async def mock_post_request(self, url, headers, json_body, **kwargs):
         return {
             "success": True,
             "message": None,
@@ -234,11 +236,11 @@ def test_oauth_authorization_code_authenticator_is_case_insensitive(
             },
         }
 
-    monkeypatch.setattr(
-        snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
-    )
+    monkeypatch.setattr(SnowflakeRestful, "_post_request", mock_post_request)
 
     # Mock the OAuth authorization flow to avoid opening browser and starting HTTP server
+    # Note: This must be a sync function (not async) because it's called from the sync
+    # parent class's prepare() method which calls _request_tokens() without await
     def mock_request_tokens(self, **kwargs):
         # Simulate successful token retrieval
         return ("mock_access_token", "mock_refresh_token")
@@ -246,7 +248,7 @@ def test_oauth_authorization_code_authenticator_is_case_insensitive(
     monkeypatch.setattr(AuthByOauthCode, "_request_tokens", mock_request_tokens)
 
     # Create connection with OAuth authorization code authenticator
-    conn = snowflake.connector.connect(
+    conn = snowflake.connector.aio.SnowflakeConnection(
         user="testuser",
         account="testaccount",
         authenticator=authenticator,
@@ -254,7 +256,19 @@ def test_oauth_authorization_code_authenticator_is_case_insensitive(
         oauth_client_secret="test_client_secret",
     )
 
+    await conn.connect()
+
     # Verify that the auth_class is an instance of AuthByOauthCode
     assert isinstance(conn.auth_class, AuthByOauthCode)
 
-    conn.close()
+    await conn.close()
+
+
+def test_mro():
+    """Ensure that methods from AuthByPluginAsync override those from AuthByPlugin."""
+    from snowflake.connector.aio.auth import AuthByPlugin as AuthByPluginAsync
+    from snowflake.connector.auth import AuthByPlugin as AuthByPluginSync
+
+    assert AuthByOauthCode.mro().index(AuthByPluginAsync) < AuthByOauthCode.mro().index(
+        AuthByPluginSync
+    )

@@ -88,16 +88,23 @@ async def create_gcp_attestation(
 
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
-    res = await session_manager.request(
-        method="GET",
-        url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
-        headers={
-            "Metadata-Flavor": "Google",
-        },
-    )
+    try:
+        res = await session_manager.request(
+            method="GET",
+            url=f"http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/identity?audience={SNOWFLAKE_AUDIENCE}",
+            headers={
+                "Metadata-Flavor": "Google",
+            },
+        )
 
-    content = await res.content.read()
-    jwt_str = content.decode("utf-8")
+        content = await res.content.read()
+        jwt_str = content.decode("utf-8")
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Error fetching GCP metadata: {e}. Ensure the application is running on GCP.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+
     _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
     return WorkloadIdentityAttestation(
         AttestationProvider.GCP, jwt_str, {"sub": subject}
@@ -139,15 +146,22 @@ async def create_azure_attestation(
     if managed_identity_client_id:
         query_params += f"&client_id={managed_identity_client_id}"
 
-    res = await session_manager.request(
-        method="GET",
-        url=f"{url_without_query_string}?{query_params}",
-        headers=headers,
-    )
+    try:
+        res = await session_manager.request(
+            method="GET",
+            url=f"{url_without_query_string}?{query_params}",
+            headers=headers,
+        )
 
-    content = await res.content.read()
-    response_text = content.decode("utf-8")
-    response_data = json.loads(response_text)
+        content = await res.content.read()
+        response_text = content.decode("utf-8")
+        response_data = json.loads(response_text)
+    except Exception as e:
+        raise ProgrammingError(
+            msg=f"Error fetching Azure metadata: {e}. Ensure the application is running on Azure.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+
     jwt_str = response_data.get("access_token")
     if not jwt_str:
         raise ProgrammingError(
