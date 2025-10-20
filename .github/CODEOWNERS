@@ -1,1 +1,4 @@
 * @snowflakedb/snow-drivers-warsaw
+
+# GitHub Advanced Security Secret Scanning config
+/.github/secret_scanning.yml @snowflakedb/prodsec-security-manager-write
