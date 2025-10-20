@@ -8,6 +8,7 @@ import pathlib
 import re
 import sys
 import traceback
+import typing
 import uuid
 import warnings
 import weakref
@@ -20,7 +21,16 @@ from io import StringIO
 from logging import getLogger
 from threading import Lock
 from types import TracebackType
-from typing import Any, Callable, Generator, Iterable, Iterator, NamedTuple, Sequence
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    Iterator,
+    NamedTuple,
+    Sequence,
+    TypeVar,
+)
 from uuid import UUID
 
 from cryptography.hazmat.backends import default_backend
@@ -60,6 +70,7 @@ from .constants import (
     _DOMAIN_NAME_MAP,
     _OAUTH_DEFAULT_SCOPE,
     ENV_VAR_PARTNER,
+    OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
     PARAMETER_AUTOCOMMIT,
     PARAMETER_CLIENT_PREFETCH_THREADS,
     PARAMETER_CLIENT_REQUEST_MFA_TOKEN,
@@ -76,7 +87,8 @@ from .constants import (
     QueryStatus,
 )
 from .converter import SnowflakeConverter
-from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor
+from .crl import CRLConfig
+from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor, SnowflakeCursorBase
 from .description import (
     CLIENT_NAME,
     CLIENT_VERSION,
@@ -124,6 +136,11 @@ from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
 from .wif_util import AttestationProvider
+
+if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
+    CursorCls = TypeVar("CursorCls", bound=SnowflakeCursorBase, default=SnowflakeCursor)
+else:
+    CursorCls = TypeVar("CursorCls", bound=SnowflakeCursorBase)
 
 DEFAULT_CLIENT_PREFETCH_THREADS = 4
 MAX_CLIENT_PREFETCH_THREADS = 10
@@ -227,6 +244,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "internal_application_version": (CLIENT_VERSION, (type(None), str)),
     "disable_ocsp_checks": (False, bool),
     "ocsp_fail_open": (True, bool),  # fail open on ocsp issues, default true
+    "ocsp_root_certs_dict_lock_timeout": (
+        OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,  # no timeout
+        int,
+    ),
     "inject_client_pause": (0, int),  # snowflake internal
     "session_parameters": (None, (type(None), dict)),  # snowflake session parameters
     "autocommit": (None, (type(None), bool)),  # snowflake
@@ -338,6 +359,11 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         (type(None), str),
         # SNOW-1825621: OAUTH implementation
     ),
+    "oauth_credentials_in_body": (
+        False,
+        bool,
+        # SNOW-2300649: Option to send client credentials in body
+    ),
     "oauth_authorization_url": (
         "https://{host}:{port}/oauth/authorize",
         str,
@@ -393,6 +419,43 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),
+    # CRL (Certificate Revocation List) configuration parameters
+    # The default setup is specified in CRLConfig class
+    "cert_revocation_check_mode": (
+        None,
+        (type(None), str),
+    ),  # CRL revocation check mode: DISABLED, ENABLED, ADVISORY
+    "allow_certificates_without_crl_url": (
+        None,
+        (type(None), bool),
+    ),  # Allow certificates without CRL distribution points
+    "crl_connection_timeout_ms": (
+        None,
+        (type(None), int),
+    ),  # Connection timeout for CRL downloads in milliseconds
+    "crl_read_timeout_ms": (
+        None,
+        (type(None), int),
+    ),  # Read timeout for CRL downloads in milliseconds
+    "crl_cache_validity_hours": (
+        None,
+        (type(None), float),
+    ),  # CRL cache validity time in hours
+    "enable_crl_cache": (None, (type(None), bool)),  # Enable CRL caching
+    "enable_crl_file_cache": (None, (type(None), bool)),  # Enable file-based CRL cache
+    "crl_cache_dir": (None, (type(None), str)),  # Directory for CRL file cache
+    "crl_cache_removal_delay_days": (
+        None,
+        (type(None), int),
+    ),  # Days to keep expired CRL files before removal
+    "crl_cache_cleanup_interval_hours": (
+        None,
+        (type(None), int),
+    ),  # CRL cache cleanup interval in hours
+    "crl_cache_start_cleanup": (
+        None,
+        (type(None), bool),
+    ),  # Run CRL cache cleanup in the background
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -423,6 +486,7 @@ class SnowflakeConnection:
             validates the TLS certificate but doesn't check revocation status with OCSP provider.
         ocsp_fail_open: Whether or not the connection is in fail open mode. Fail open mode decides if TLS certificates
             continue to be validated. Revoked certificates are blocked. Any other exceptions are disregarded.
+        ocsp_root_certs_dict_lock_timeout: Timeout for the OCSP root certs dict lock in seconds. Default value is -1, which means no timeout.
         session_id: The session ID of the connection.
         user: The user name used in the connection.
         host: The host name the connection attempts to connect to.
@@ -529,6 +593,7 @@ class SnowflakeConnection:
 
         # Placeholder attributes; will be initialized in connect()
         self._http_config: HttpConfig | None = None
+        self._crl_config: CRLConfig | None = None
         self._session_manager: SessionManager | None = None
         self._rest: SnowflakeRestful | None = None
 
@@ -620,6 +685,86 @@ class SnowflakeConnection:
             return OCSPMode.FAIL_OPEN
         else:
             return OCSPMode.FAIL_CLOSED
+
+    # CRL (Certificate Revocation List) configuration properties
+    @property
+    def cert_revocation_check_mode(self) -> str | None:
+        """Certificate revocation check mode: DISABLED, ENABLED, or ADVISORY."""
+        if not self._crl_config:
+            return self._cert_revocation_check_mode
+        return self._crl_config.cert_revocation_check_mode.value
+
+    @property
+    def allow_certificates_without_crl_url(self) -> bool | None:
+        """Whether to allow certificates without CRL distribution points."""
+        if not self._crl_config:
+            return self._allow_certificates_without_crl_url
+        return self._crl_config.allow_certificates_without_crl_url
+
+    @property
+    def crl_connection_timeout_ms(self) -> int | None:
+        """Connection timeout for CRL downloads in milliseconds."""
+        if not self._crl_config:
+            return self._crl_connection_timeout_ms
+        return self._crl_config.connection_timeout_ms
+
+    @property
+    def crl_read_timeout_ms(self) -> int | None:
+        """Read timeout for CRL downloads in milliseconds."""
+        if not self._crl_config:
+            return self._crl_read_timeout_ms
+        return self._crl_config.read_timeout_ms
+
+    @property
+    def crl_cache_validity_hours(self) -> float | None:
+        """CRL cache validity time in hours."""
+        if not self._crl_config:
+            return self._crl_cache_validity_hours
+        return self._crl_config.cache_validity_time.total_seconds() / 3600
+
+    @property
+    def enable_crl_cache(self) -> bool | None:
+        """Whether CRL caching is enabled."""
+        if not self._crl_config:
+            return self._enable_crl_cache
+        return self._crl_config.enable_crl_cache
+
+    @property
+    def enable_crl_file_cache(self) -> bool | None:
+        """Whether file-based CRL cache is enabled."""
+        if not self._crl_config:
+            return self._enable_crl_file_cache
+        return self._crl_config.enable_crl_file_cache
+
+    @property
+    def crl_cache_dir(self) -> str | None:
+        """Directory for CRL file cache."""
+        if not self._crl_config:
+            return self._crl_cache_dir
+        if not self._crl_config.crl_cache_dir:
+            return None
+        return str(self._crl_config.crl_cache_dir)
+
+    @property
+    def crl_cache_removal_delay_days(self) -> int | None:
+        """Days to keep expired CRL files before removal."""
+        if not self._crl_config:
+            return self._crl_cache_removal_delay_days
+        return self._crl_config.crl_cache_removal_delay_days
+
+    @property
+    def crl_cache_cleanup_interval_hours(self) -> int | None:
+        """CRL cache cleanup interval in hours."""
+        if not self._crl_config:
+            return self._crl_cache_cleanup_interval_hours
+        return self._crl_config.crl_cache_cleanup_interval_hours
+
+    @property
+    def crl_cache_start_cleanup(self) -> bool | None:
+        """Whether to start CRL cache cleanup immediately."""
+        if not self._crl_config:
+            return self._crl_cache_start_cleanup
+        return self._crl_config.crl_cache_start_cleanup
 
     @property
     def session_id(self) -> int:
@@ -922,6 +1067,8 @@ class SnowflakeConnection:
         if len(kwargs) > 0:
             self.__config(**kwargs)
 
+        self._crl_config: CRLConfig = CRLConfig.from_connection(self)
+
         self._http_config = HttpConfig(
             adapter_factory=ProxySupportAdapterFactory(),
             use_pooling=(not self.disable_request_pooling),
@@ -1055,9 +1202,7 @@ class SnowflakeConnection:
         """Rolls back the current transaction."""
         self.cursor().execute("ROLLBACK")
 
-    def cursor(
-        self, cursor_class: type[SnowflakeCursor] = SnowflakeCursor
-    ) -> SnowflakeCursor:
+    def cursor(self, cursor_class: type[CursorCls] = SnowflakeCursor) -> CursorCls:
         """Creates a cursor object. Each statement will be executed in a new cursor object."""
         logger.debug("cursor")
         if not self.rest:
@@ -1312,6 +1457,7 @@ class SnowflakeConnection:
                         host=self.host, port=self.port
                     ),
                     scope=self._oauth_scope,
+                    credentials_in_body=self._oauth_credentials_in_body,
                     connection=self,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:

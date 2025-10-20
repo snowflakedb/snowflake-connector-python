@@ -360,14 +360,14 @@ class ResultBatch(abc.ABC):
                         and connection.rest.session_manager is not None
                     ):
                         # If connection was explicitly passed and not closed yet - we can reuse SessionManager with session pooling
-                        with connection.rest.use_requests_session() as session:
+                        with connection.rest.use_session() as session:
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
                             response = session.request("get", **request_data)
                     elif self._session_manager is not None:
                         # If connection is not accessible or was already closed, but cursors are now used to fetch the data - we will only reuse the http setup (through cloned SessionManager without session pooling)
-                        with self._session_manager.use_requests_session() as session:
+                        with self._session_manager.use_session() as session:
                             response = session.request("get", **request_data)
                     else:
                         # If there was no session manager cloned, then we are using a default Session Manager setup, since it is very unlikely to enter this part outside of testing

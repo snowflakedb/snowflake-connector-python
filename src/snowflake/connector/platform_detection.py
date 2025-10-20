@@ -1,17 +1,22 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from concurrent.futures.thread import ThreadPoolExecutor
 from enum import Enum
 from functools import cache
 
-import boto3
-from botocore.config import Config
-from botocore.utils import IMDSFetcher
+from .options import boto3, botocore, installed_boto
+
+if installed_boto:
+    Config = botocore.config.Config
+    IMDSFetcher = botocore.utils.IMDSFetcher
 
 from .session_manager import SessionManager
 from .vendored.requests import RequestException, Timeout
+
+logger = logging.getLogger(__name__)
 
 
 class _DetectionState(Enum):
@@ -37,6 +42,10 @@ def is_ec2_instance(platform_detection_timeout_seconds: float):
     Returns:
         _DetectionState: DETECTED if running on EC2, NOT_DETECTED otherwise.
     """
+    if not installed_boto:
+        logger.debug("boto3 is not installed, skipping EC2 instance detection")
+        return _DetectionState.NOT_DETECTED
+
     try:
         fetcher = IMDSFetcher(
             timeout=platform_detection_timeout_seconds, num_attempts=1
@@ -102,6 +111,10 @@ def has_aws_identity(platform_detection_timeout_seconds: float):
     Returns:
         _DetectionState: DETECTED if valid AWS identity exists, NOT_DETECTED otherwise.
     """
+    if not installed_boto:
+        logger.debug("boto3 is not installed, skipping AWS identity detection")
+        return _DetectionState.NOT_DETECTED
+
     try:
         config = Config(
             connect_timeout=platform_detection_timeout_seconds,
@@ -399,6 +412,9 @@ def detect_platforms(
 
         if session_manager is None:
             # This should never happen - we expect session manager to be passed from the outer scope
+            logger.debug(
+                "No session manager provided. HTTP settings may not be preserved. Using default."
+            )
             session_manager = SessionManager(use_pooling=False, max_retries=0)
 
         # Run environment-only checks synchronously (no network calls, no threading overhead)

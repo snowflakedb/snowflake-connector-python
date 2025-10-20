@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+from test.helpers import apply_auth_class_update_body, create_mock_auth_body
+
 try:  # pragma: no cover
     from snowflake.connector.auth import AuthByOAuth
 except ImportError:
@@ -16,6 +18,22 @@ def test_auth_oauth():
     auth.update_body(body)
     assert body["data"]["TOKEN"] == token, body
     assert body["data"]["AUTHENTICATOR"] == "OAUTH", body
+
+
+def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
+    token = "oAuthToken"
+    auth_class = AuthByOAuth(token)
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = apply_auth_class_update_body(auth_class, req_body_before)
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )
 
 
 @pytest.mark.parametrize("authenticator", ["oauth", "OAUTH"])

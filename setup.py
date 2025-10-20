@@ -5,6 +5,7 @@ import sys
 import warnings
 
 from setuptools import Extension, setup
+from setuptools.command.egg_info import egg_info
 
 CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
 NANOARROW_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp", "ArrowIterator")
@@ -38,9 +39,14 @@ for flag in options_def:
 extensions = None
 cmd_class = {}
 
-SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS = os.environ.get(
-    "SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS", "false"
-).lower() in ("y", "yes", "t", "true", "1", "on")
+_POSITIVE_VALUES = ("y", "yes", "t", "true", "1", "on")
+SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS = (
+    os.environ.get("SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS", "false").lower()
+    in _POSITIVE_VALUES
+)
+SNOWFLAKE_NO_BOTO = (
+    os.environ.get("SNOWFLAKE_NO_BOTO", "false").lower() in _POSITIVE_VALUES
+)
 
 try:
     from Cython.Build import cythonize
@@ -88,7 +94,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                 ext.sources += [
                     os.path.join(
                         NANOARROW_ARROW_ITERATOR_SRC_DIR,
-                        *((file,) if isinstance(file, str) else file)
+                        *((file,) if isinstance(file, str) else file),
                     )
                     for file in {
                         "ArrayConverter.cpp",
@@ -173,6 +179,22 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                 self.compiler._compile = original__compile
 
     cmd_class = {"build_ext": MyBuildExt}
+
+
+class SetDefaultInstallationExtras(egg_info):
+    """Adds AWS extra unless SNOWFLAKE_NO_BOTO is specified."""
+
+    def finalize_options(self):
+        super().finalize_options()
+
+        # if not explicitly excluded, add boto dependencies to install_requires
+        if not SNOWFLAKE_NO_BOTO:
+            boto_extras = self.distribution.extras_require.get("boto", [])
+            self.distribution.install_requires += boto_extras
+
+
+# Update command classes
+cmd_class["egg_info"] = SetDefaultInstallationExtras
 
 setup(
     version=version,

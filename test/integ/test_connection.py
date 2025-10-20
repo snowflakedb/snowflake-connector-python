@@ -12,6 +12,7 @@ import threading
 import warnings
 import weakref
 from unittest import mock
+from unittest.mock import MagicMock, PropertyMock, patch
 from uuid import uuid4
 
 import pytest
@@ -1076,7 +1077,7 @@ def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
 
     assert rest_sm_1.sessions_map or disable_request_pooling
 
-    with rest_sm_1.use_requests_session("https://example.com"):
+    with rest_sm_1.use_session("https://example.com"):
         ocsp_sm_1 = get_current_session_manager(create_default_if_missing=False)
         assert ocsp_sm_1 is not rest_sm_1
         assert ocsp_sm_1.config == rest_sm_1.config
@@ -1095,7 +1096,7 @@ def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
     assert rest_sm_2.sessions_map or disable_request_pooling
     assert rest_sm_2 is not rest_sm_1
 
-    with rest_sm_2.use_requests_session("https://example.com"):
+    with rest_sm_2.use_session("https://example.com"):
         ocsp_sm_2 = get_current_session_manager(create_default_if_missing=False)
         assert ocsp_sm_2 is not rest_sm_2
         assert ocsp_sm_2.config == rest_sm_2.config
@@ -1579,6 +1580,88 @@ def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_enabled(
             assert "This connection does not perform OCSP checks." not in caplog.text
         else:
             assert "snowflake.connector.ocsp_snowflake" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+def test_root_certs_dict_lock_timeout_fail_open(conn_cnx):
+    """Test OCSP root certificates lock timeout with fail-open mode and side effect mock."""
+
+    override_config = {
+        "ocsp_fail_open": True,
+        "ocsp_root_certs_dict_lock_timeout": 0.1,
+    }
+
+    with patch(
+        "snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK"
+    ) as mock_lock:
+        snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT = {}
+
+        mock_lock.acquire = MagicMock(return_value=False)
+        mock_lock.release = MagicMock()
+
+        with conn_cnx(**override_config) as conn:
+            try:
+                with conn.cursor() as cur:
+                    assert cur.execute("select 1").fetchall() == [(1,)]
+
+                if mock_lock.acquire.called:
+                    mock_lock.acquire.assert_called_with(timeout=0.1)
+                    assert conn._ocsp_root_certs_dict_lock_timeout == 0.1
+            finally:
+                conn.close()
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "ocsp_fail_open,timeout_value,expected_timeout",
+    [
+        (False, 1, 1),  # fail-close mode with 1 second timeout
+        (True, 2, 2),  # fail-open mode with 2 second timeout
+    ],
+)
+def test_root_certs_dict_lock_timeout_with_property_mock(
+    conn_cnx, ocsp_fail_open, timeout_value, expected_timeout
+):
+    """Test OCSP root certificates lock timeout with property mock for different configurations."""
+    config = {
+        "ocsp_fail_open": ocsp_fail_open,
+        "ocsp_root_certs_dict_lock_timeout": timeout_value,
+    }
+
+    with patch(
+        "snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT_LOCK"
+    ) as mock_lock:
+        snowflake.connector.ocsp_snowflake.SnowflakeOCSP.ROOT_CERTIFICATES_DICT = {}
+
+        type(mock_lock).acquire = PropertyMock(return_value=lambda timeout: False)
+        type(mock_lock).release = PropertyMock(return_value=lambda: None)
+
+        with conn_cnx(**config) as conn:
+            with conn.cursor() as cur:
+                assert cur.execute("select 1").fetchall() == [(1,)]
+
+            assert conn._ocsp_root_certs_dict_lock_timeout == expected_timeout
+            conn.close()
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "config,expected_timeout",
+    [
+        ({"ocsp_fail_open": True, "ocsp_root_certs_dict_lock_timeout": 0.001}, 0.001),
+        ({"ocsp_fail_open": True}, -1),  # no timeout specified, should default to -1
+    ],
+)
+def test_root_certs_dict_lock_timeout_basic_config(conn_cnx, config, expected_timeout):
+    """Test OCSP root certificates lock timeout basic configuration without mocking."""
+    with conn_cnx(**config) as conn:
+        try:
+            with conn.cursor() as cur:
+                assert cur.execute("select 1").fetchall() == [(1,)]
+
+            assert conn._ocsp_root_certs_dict_lock_timeout == expected_timeout
+        finally:
+            conn.close()
 
 
 @pytest.mark.skipolddriver

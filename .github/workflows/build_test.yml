@@ -18,6 +18,14 @@ on:
             required: true
           tags:
             description: "Test scenario tags"
+            required: false
+            type: string
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+  pull-requests: write
 
 concurrency:
   # older builds for the same pull request number or branch should be cancelled
@@ -216,7 +224,6 @@ jobs:
        # To run a single test on GHA use the below command:
 #        run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-single-ci | sed 's/ /,/g'`
         run: python -m tox run -e `echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,sso}-ci | sed 's/ /,/g'`
-
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
@@ -225,10 +232,8 @@ jobs:
          # To specify the test name (in single test mode) pass this env variable:
 #          SINGLE_TEST_NAME: test/path/filename.py::test_name
         shell: bash
-      - name: Combine coverages
-        run: python -m tox run -e coverage --skip-missing-interpreters false
-        shell: bash
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: coverage_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
@@ -236,6 +241,7 @@ jobs:
             .tox/.coverage
             .tox/coverage.xml
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: junit_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
@@ -363,6 +369,7 @@ jobs:
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: coverage_linux-fips-3.9-${{ matrix.cloud-provider }}
@@ -370,6 +377,7 @@ jobs:
             .coverage
             coverage.xml
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: junit_linux-fips-3.9-${{ matrix.cloud-provider }}
@@ -423,6 +431,7 @@ jobs:
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: coverage_linux-lambda-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
@@ -430,14 +439,65 @@ jobs:
             .coverage.py${{ env.shortver }}-lambda-ci
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           include-hidden-files: true
           name: junit_linux-lambda-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
 
+  test-rockylinux9:
+    name: Test Rocky Linux 9 rockylinux9-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Rocky Linux 9 has Python 3.9, 3.11, and 3.12 available
+        python-version: ["3.9", "3.11", "3.12"]
+        cloud-provider: [aws, azure, gcp]
+    steps:
+      - name: Set shortver
+        run: echo "shortver=${longver//./}" >> $GITHUB_ENV
+        env:
+          longver: ${{ matrix.python-version }}
+        shell: bash
+      - uses: actions/checkout@v4
+      - name: Build wheel for Rocky Linux
+        uses: pypa/cibuildwheel@v2.21.3
+        env:
+          CIBW_BUILD: cp${{ env.shortver }}-manylinux_x86_64
+          MACOSX_DEPLOYMENT_TARGET: 10.14
+        with:
+          output-dir: dist
+      - name: Show wheels built
+        run: ls -lh dist
+        shell: bash
+      - name: Setup parameters file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/parameters_${{ matrix.cloud-provider }}.py.gpg > test/parameters.py
+      - name: Setup private key file
+        shell: bash
+        env:
+          PARAMETERS_SECRET: ${{ secrets.PARAMETERS_SECRET }}
+        run: |
+          gpg --quiet --batch --yes --decrypt --passphrase="$PARAMETERS_SECRET" \
+          .github/workflows/parameters/public/rsa_keys/rsa_key_python_${{ matrix.cloud-provider }}.p8.gpg > test/rsa_key_python_${{ matrix.cloud-provider }}.p8
+      - name: Run tests
+        run: ./ci/test_rockylinux9_docker.sh ${PYTHON_VERSION}
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          TOX_PARALLEL_NO_SPINNER: 1
+        shell: bash
+
   combine-coverage:
-    if: ${{ success() || failure() }}
+    if: always()
     name: Combine coverage
     needs: [lint, test, test-fips, test-lambda]
     runs-on: ubuntu-latest
@@ -469,6 +529,7 @@ jobs:
               dst_file = dst_dir / ".coverage.{}".format(src_file.parent.name[9:])
               print("{} copy to {}".format(src_file, dst_file))
               shutil.copy(str(src_file), str(dst_file))'
+
       - name: Collect all JUnit XML files to one dir
         run: |
           python -c '
@@ -478,33 +539,43 @@ jobs:
           src_dir = Path("artifacts")
           dst_dir = Path(".") / "junit_results"
           dst_dir.mkdir()
-          # Collect all JUnit XML files with different naming patterns
-          for pattern in ["*/junit.*.xml", "*/junit.py*-lambda-ci-dev.xml"]:
-              for src_file in src_dir.glob(pattern):
-                  dst_file = dst_dir / src_file.name
-                  print("{} copy to {}".format(src_file, dst_file))
-                  shutil.copy(str(src_file), str(dst_file))'
+          for src_file in src_dir.glob("*/junit*.xml"):
+              artifact_name = src_file.parent.name
+              dst_file = dst_dir / f"{artifact_name}_{src_file.name}"
+              print("{} copy to {}".format(src_file, dst_file))
+              shutil.copy(str(src_file), str(dst_file))'
       - name: Combine coverages
-        run: python -m tox run -e coverage
+        run: |
+          if [ -d ".tox" ] && [ "$(find .tox -name ".coverage*" -type f | wc -l)" -gt 0 ]; then
+            python -m tox run -e coverage
+          else
+            echo "No coverage files found, skipping coverage combination"
+          fi
       - name: Publish html coverage
+        if: ${{ success() }}
         uses: actions/upload-artifact@v4
         with:
           include-hidden-files: true
           name: overall_cov_html
           path: .tox/htmlcov
       - name: Publish xml coverage
+        if: ${{ success() }}
         uses: actions/upload-artifact@v4
         with:
           include-hidden-files: true
           name: overall_cov_xml
           path: .tox/coverage.xml
       - uses: codecov/codecov-action@v4
+        if: ${{ success() }}
         with:
           files: .tox/coverage.xml
           token: ${{ secrets.CODECOV_TOKEN }}
+          name: coverage-${{ github.run_id }}
+          fail_ci_if_error: false
+          verbose: true
       - name: Upload test results to Codecov
         if: ${{ !cancelled() }}
         uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: junit_results/junit.*.xml
+          files: junit_results/*.xml
