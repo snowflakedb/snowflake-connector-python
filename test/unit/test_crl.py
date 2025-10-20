@@ -72,8 +72,10 @@ class CrossSignedCertificateChain:
     #    <-(BsignA)--
     #     \       /
     #    leafA leafB
-    #        \/
-    #     subject
+    #        \   /
+    #       leaf_ca
+    #          |
+    #       subject
 
     rootA: x509.Certificate
     rootB: x509.Certificate
@@ -81,6 +83,7 @@ class CrossSignedCertificateChain:
     BsignA: x509.Certificate
     leafA: x509.Certificate
     leafB: x509.Certificate
+    final_cert: x509.Certificate
 
 
 @pytest.fixture(scope="module")
@@ -263,10 +266,11 @@ def cert_gen():
 
             return CertificateChain(root_cert, intermediate_cert, leaf_cert)
 
-        def create_cross_signed_chain(self) -> CertificateChain:
+        def create_cross_signed_chain(self) -> CrossSignedCertificateChain:
             A_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
             B_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
             leaf_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            subject_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
             A_name = x509.Name(
                 [
@@ -288,7 +292,15 @@ def cert_gen():
                 [
                     x509.NameAttribute(
                         NameOID.COMMON_NAME,
-                        f"Test Leaf {self.random.randint(1, 10000)}",
+                        f"Test CA Leaf {self.random.randint(1, 10000)}",
+                    )
+                ]
+            )
+            subject_name = x509.Name(
+                [
+                    x509.NameAttribute(
+                        NameOID.COMMON_NAME,
+                        f"Test Subject {self.random.randint(1, 10000)}",
                     )
                 ]
             )
@@ -329,7 +341,7 @@ def cert_gen():
                 .not_valid_before(datetime.now(timezone.utc))
                 .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
                 .add_extension(
-                    x509.BasicConstraints(ca=False, path_length=None),
+                    x509.BasicConstraints(ca=True, path_length=None),
                     critical=True,
                 )
                 .sign(B_key, hashes.SHA256())
@@ -343,7 +355,7 @@ def cert_gen():
                 .not_valid_before(datetime.now(timezone.utc))
                 .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
                 .add_extension(
-                    x509.BasicConstraints(ca=False, path_length=None),
+                    x509.BasicConstraints(ca=True, path_length=None),
                     critical=True,
                 )
                 .sign(A_key, hashes.SHA256())
@@ -357,7 +369,7 @@ def cert_gen():
                 .not_valid_before(datetime.now(timezone.utc))
                 .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
                 .add_extension(
-                    x509.BasicConstraints(ca=False, path_length=None),
+                    x509.BasicConstraints(ca=True, path_length=None),
                     critical=True,
                 )
                 .sign(A_key, hashes.SHA256())
@@ -371,13 +383,33 @@ def cert_gen():
                 .not_valid_before(datetime.now(timezone.utc))
                 .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
                 .add_extension(
-                    x509.BasicConstraints(ca=False, path_length=None),
+                    x509.BasicConstraints(ca=True, path_length=None),
                     critical=True,
                 )
                 .sign(B_key, hashes.SHA256())
             )
+            final_cert = (
+                x509.CertificateBuilder()
+                .subject_name(subject_name)
+                .issuer_name(leaf_name)
+                .public_key(subject_key.public_key())
+                .serial_number(x509.random_serial_number())
+                .not_valid_before(datetime.now(timezone.utc))
+                .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+                .add_extension(
+                    x509.BasicConstraints(ca=False, path_length=None),
+                    critical=True,
+                )
+                .sign(leaf_key, hashes.SHA256())
+            )
             return CrossSignedCertificateChain(
-                rootA_cert, rootB_cert, AsignB_cert, BsignA_cert, leafA_cert, leafB_cert
+                rootA_cert,
+                rootB_cert,
+                AsignB_cert,
+                BsignA_cert,
+                leafA_cert,
+                leafB_cert,
+                final_cert,
             )
 
         def create_short_lived_certificate(
@@ -600,8 +632,9 @@ def test_cross_signed_certificate_chain(cert_gen, session_manager):
     # provide full chain in arbitrary order
     chains = [
         [
-            chain.leafA,
+            chain.final_cert,
             chain.AsignB,
+            chain.leafA,
             chain.leafB,
             chain.BsignA,
             chain.rootB,
@@ -613,6 +646,7 @@ def test_cross_signed_certificate_chain(cert_gen, session_manager):
     # only A is signed by CA
     chains = [
         [
+            chain.final_cert,
             chain.leafA,
             chain.AsignB,
             chain.leafB,
@@ -626,6 +660,7 @@ def test_cross_signed_certificate_chain(cert_gen, session_manager):
     # nor A nor B is signed by CA
     chains = [
         [
+            chain.final_cert,
             chain.leafA,
             chain.AsignB,
             chain.leafB,
@@ -639,6 +674,7 @@ def test_cross_signed_certificate_chain(cert_gen, session_manager):
     # mingled A and B paths passed in one chain - A has no connection to CA, B has
     chains = [
         [
+            chain.final_cert,
             chain.leafA,
             chain.AsignB,
             chain.leafB,
@@ -680,7 +716,7 @@ def test_validate_single_chain(cert_gen, session_manager):
         trusted_certificates=[cert_gen.ca_certificate],
     )
 
-    input_chain = [chain.leafA, chain.leafB, chain.rootA, chain.rootB]
+    input_chain = [chain.final_cert, chain.leafA, chain.leafB, chain.rootA, chain.rootB]
 
     # case 1: at least one valid path
     def mock_validate_with_special_cert(revoked_cert, error_result):
@@ -721,7 +757,7 @@ def test_validate_single_chain(cert_gen, session_manager):
     validator._validate_certificate_is_not_revoked_with_cache = mock_validate
     assert (
         validator._validate_single_chain(
-            [chain.leafA, chain.leafB, chain.AsignB, chain.BsignA]
+            [chain.final_cert, chain.leafA, chain.leafB, chain.AsignB, chain.BsignA]
         )
         == CRLValidationResult.ERROR
     )
@@ -737,7 +773,14 @@ def test_validate_single_chain(cert_gen, session_manager):
     validator._validate_certificate_is_not_revoked_with_cache = mock_validate
     assert (
         validator._validate_single_chain(
-            [chain.leafA, chain.rootA, chain.leafB, chain.rootB, chain.BsignA]
+            [
+                chain.final_cert,
+                chain.leafA,
+                chain.rootA,
+                chain.leafB,
+                chain.rootB,
+                chain.BsignA,
+            ]
         )
         == CRLValidationResult.ERROR
     )
@@ -1932,20 +1975,16 @@ def test_is_short_lived_certificate(cert_gen, issue_date, validity_days, expecte
 
 def test_validate_certificate_signatures(cert_gen, session_manager):
     """Test that certificate validation fails with ERROR when signed by wrong key"""
-    # Create a certificate signed by the test CA
-    valid_cert = cert_gen.create_certificate_with_crl_distribution_points(
-        "CN=Test Server", []
-    )
-
-    # Create a different CA key pair
-    different_ca_key = rsa.generate_private_key(
+    # we will replace intermediate cert with one with a wrong signature
+    chain = cert_gen.create_simple_chain()
+    different_key = rsa.generate_private_key(
         public_exponent=65537, key_size=2048, backend=default_backend()
     )
     different_cert = (
         x509.CertificateBuilder()
-        .subject_name(valid_cert.subject)
-        .issuer_name(cert_gen.ca_certificate.subject)
-        .public_key(cert_gen.ca_private_key.public_key())
+        .subject_name(chain.intermediate_cert.subject)
+        .issuer_name(chain.intermediate_cert.issuer)
+        .public_key(chain.intermediate_cert.public_key())
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.now(timezone.utc))
         .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
@@ -1953,13 +1992,13 @@ def test_validate_certificate_signatures(cert_gen, session_manager):
             x509.BasicConstraints(ca=True, path_length=None),
             critical=True,
         )
-        .sign(different_ca_key, hashes.SHA256(), backend=default_backend())
+        .sign(different_key, hashes.SHA256(), backend=default_backend())
     )
     short_lived_different_cert = (
         x509.CertificateBuilder()
-        .subject_name(valid_cert.subject)
-        .issuer_name(cert_gen.ca_certificate.subject)
-        .public_key(different_ca_key.public_key())
+        .subject_name(chain.intermediate_cert.subject)
+        .issuer_name(chain.intermediate_cert.issuer)
+        .public_key(chain.intermediate_cert.public_key())
         .serial_number(x509.random_serial_number())
         .not_valid_before(datetime.now(timezone.utc))
         .not_valid_after(datetime.now(timezone.utc) + timedelta(days=3))
@@ -1967,29 +2006,40 @@ def test_validate_certificate_signatures(cert_gen, session_manager):
             x509.BasicConstraints(ca=True, path_length=None),
             critical=True,
         )
-        .sign(different_ca_key, hashes.SHA256(), backend=default_backend())
+        .sign(different_key, hashes.SHA256(), backend=default_backend())
     )
 
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
         allow_certificates_without_crl_url=True,
-        trusted_certificates=[cert_gen.ca_certificate],
+        trusted_certificates=[chain.root_cert],
     )
 
     # wrong signature - no path found = ERROR
     assert (
-        validator._validate_single_chain([different_cert]) == CRLValidationResult.ERROR
+        validator._validate_single_chain(
+            [chain.leaf_cert, different_cert, chain.root_cert]
+        )
+        == CRLValidationResult.ERROR
     )
     # wrong signature - short-lived - no path found = ERROR
     assert (
-        validator._validate_single_chain([short_lived_different_cert])
+        validator._validate_single_chain(
+            [chain.leaf_cert, short_lived_different_cert, chain.root_cert]
+        )
         == CRLValidationResult.ERROR
     )
     # wrong signature does not stop from searching of new path
     assert (
         validator._validate_single_chain(
-            [different_cert, short_lived_different_cert, valid_cert]
+            [
+                chain.leaf_cert,
+                different_cert,
+                short_lived_different_cert,
+                chain.intermediate_cert,
+                chain.root_cert,
+            ]
         )
         == CRLValidationResult.UNREVOKED
     )
@@ -2045,13 +2095,15 @@ def test_validate_certificate_signatures_in_chain(cert_gen, session_manager):
 
     # wrong signature - no path found = ERROR
     assert (
-        validator._validate_single_chain([chain.leafA, different_cert, chain.rootB])
+        validator._validate_single_chain(
+            [chain.final_cert, chain.leafA, different_cert, chain.rootB]
+        )
         == CRLValidationResult.ERROR
     )
     # wrong signature - short-lived - no path found = ERROR
     assert (
         validator._validate_single_chain(
-            [chain.leafA, short_lived_different_cert, chain.rootB]
+            [chain.final_cert, chain.leafA, short_lived_different_cert, chain.rootB]
         )
         == CRLValidationResult.ERROR
     )
@@ -2059,6 +2111,7 @@ def test_validate_certificate_signatures_in_chain(cert_gen, session_manager):
     assert (
         validator._validate_single_chain(
             [
+                chain.final_cert,
                 chain.leafA,
                 different_cert,
                 short_lived_different_cert,

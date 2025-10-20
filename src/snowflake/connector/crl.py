@@ -325,6 +325,9 @@ class CRLValidator:
             list
         )
         for cert in chain:
+            if not self._is_ca_certificate(cert):
+                logger.warning("Ignoring non-CA certificate: %s", cert)
+                continue
             subject_certificates[cert.subject].append(cert)
         currently_visited_subjects: set[x509.Name] = set()
 
@@ -387,19 +390,7 @@ class CRLValidator:
             # no ERROR result found, all paths are REVOKED
             return CRLValidationResult.REVOKED
 
-        currently_visited_subjects.add(chain[0].subject)
-        error_result = False
-        revoked_result = False
-        for cert in subject_certificates[chain[0].subject]:
-            result = traverse_chain(cert)
-            if result == CRLValidationResult.UNREVOKED:
-                return result
-            error_result |= result == CRLValidationResult.ERROR
-            revoked_result |= result == CRLValidationResult.REVOKED
-
-        if error_result or not revoked_result:
-            return CRLValidationResult.ERROR
-        return CRLValidationResult.REVOKED
+        return traverse_chain(chain[0])
 
     def _is_certificate_trusted_by_os(self, cert: x509.Certificate) -> bool:
         if cert.subject not in self._trusted_ca:
@@ -424,6 +415,18 @@ class CRLValidator:
             cert.verify_directly_issued_by(ca_cert)
             return True
         except Exception:
+            return False
+
+    @staticmethod
+    def _is_ca_certificate(ca_cert: x509.Certificate) -> bool:
+        # Check if a certificate has basicConstraints extension with CA flag set to True.
+        try:
+            basic_constraints = ca_cert.extensions.get_extension_for_oid(
+                ExtensionOID.BASIC_CONSTRAINTS
+            ).value
+            return basic_constraints.ca
+        except x509.ExtensionNotFound:
+            # If the extension is not present, the certificate is not a CA
             return False
 
     def _validate_certificate_is_not_revoked_with_cache(
