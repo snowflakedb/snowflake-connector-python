@@ -2123,6 +2123,155 @@ def test_validate_certificate_signatures_in_chain(cert_gen, session_manager):
     )
 
 
+def test_validate_expired_certificates(cert_gen, session_manager):
+    """Test that certificate validation fails with ERROR when certificate is expired"""
+    # We will replace intermediate cert with an expired one
+    chain = cert_gen.create_simple_chain()
+
+    # Create an expired certificate (expired 10 days ago)
+    expired_cert = (
+        x509.CertificateBuilder()
+        .subject_name(chain.intermediate_cert.subject)
+        .issuer_name(chain.intermediate_cert.issuer)
+        .public_key(chain.intermediate_cert.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc) - timedelta(days=365))
+        .not_valid_after(datetime.now(timezone.utc) - timedelta(days=10))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(cert_gen.ca_private_key, hashes.SHA256(), backend=default_backend())
+    )
+
+    # Create a short-lived expired certificate (expired 1 day ago)
+    short_lived_expired_cert = (
+        x509.CertificateBuilder()
+        .subject_name(chain.intermediate_cert.subject)
+        .issuer_name(chain.intermediate_cert.issuer)
+        .public_key(chain.intermediate_cert.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc) - timedelta(days=4))
+        .not_valid_after(datetime.now(timezone.utc) - timedelta(days=1))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(cert_gen.ca_private_key, hashes.SHA256(), backend=default_backend())
+    )
+
+    validator = CRLValidator(
+        session_manager,
+        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
+        allow_certificates_without_crl_url=True,
+        trusted_certificates=[chain.root_cert],
+    )
+
+    # expired cert - no path found = ERROR
+    assert (
+        validator._validate_single_chain(
+            [chain.leaf_cert, expired_cert, chain.root_cert]
+        )
+        == CRLValidationResult.ERROR
+    )
+    # expired short-lived cert - no path found = ERROR
+    assert (
+        validator._validate_single_chain(
+            [chain.leaf_cert, short_lived_expired_cert, chain.root_cert]
+        )
+        == CRLValidationResult.ERROR
+    )
+    # expired cert does not stop from searching for a valid path
+    assert (
+        validator._validate_single_chain(
+            [
+                chain.leaf_cert,
+                expired_cert,
+                short_lived_expired_cert,
+                chain.intermediate_cert,
+                chain.root_cert,
+            ]
+        )
+        == CRLValidationResult.UNREVOKED
+    )
+
+
+def test_validate_expired_certificates_in_chain(cert_gen, session_manager):
+    """Test that certificate validation fails with ERROR when certificate in chain is expired"""
+    # Create a certificate chain signed by the test CA: final_cert -> leafA -> A -> rootA -> CA
+    chain = cert_gen.create_cross_signed_chain()
+
+    valid_cert = chain.BsignA
+
+    # Create an expired certificate with the same subject as valid_cert
+    expired_cert = (
+        x509.CertificateBuilder()
+        .subject_name(valid_cert.subject)
+        .issuer_name(cert_gen.ca_certificate.subject)
+        .public_key(cert_gen.ca_private_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc) - timedelta(days=365))
+        .not_valid_after(datetime.now(timezone.utc) - timedelta(days=10))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(cert_gen.ca_private_key, hashes.SHA256(), backend=default_backend())
+    )
+
+    # Create a short-lived expired certificate
+    short_lived_expired_cert = (
+        x509.CertificateBuilder()
+        .subject_name(valid_cert.subject)
+        .issuer_name(cert_gen.ca_certificate.subject)
+        .public_key(cert_gen.ca_private_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc) - timedelta(days=4))
+        .not_valid_after(datetime.now(timezone.utc) - timedelta(days=1))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(cert_gen.ca_private_key, hashes.SHA256(), backend=default_backend())
+    )
+
+    validator = CRLValidator(
+        session_manager,
+        allow_certificates_without_crl_url=True,
+        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
+        trusted_certificates=[cert_gen.ca_certificate],
+    )
+
+    # expired cert - no path found = ERROR
+    assert (
+        validator._validate_single_chain(
+            [chain.final_cert, chain.leafA, expired_cert, chain.rootB]
+        )
+        == CRLValidationResult.ERROR
+    )
+    # expired short-lived cert - no path found = ERROR
+    assert (
+        validator._validate_single_chain(
+            [chain.final_cert, chain.leafA, short_lived_expired_cert, chain.rootB]
+        )
+        == CRLValidationResult.ERROR
+    )
+    # expired cert does not stop from searching for a valid path
+    assert (
+        validator._validate_single_chain(
+            [
+                chain.final_cert,
+                chain.leafA,
+                expired_cert,
+                short_lived_expired_cert,
+                valid_cert,
+                chain.rootB,
+            ]
+        )
+        == CRLValidationResult.UNREVOKED
+    )
+
+
 def test_trusted_certificates_helpers(cert_gen):
     chain = cert_gen.create_simple_chain()
 
@@ -2135,3 +2284,48 @@ def test_trusted_certificates_helpers(cert_gen):
 
     assert validator._get_trusted_ca_issuer(chain.intermediate_cert) is chain.root_cert
     assert validator._get_trusted_ca_issuer(chain.leaf_cert) is None
+
+
+@pytest.mark.parametrize(
+    "timedelta_before,timedelta_after,expected_result",
+    [
+        # Valid certificate (currently within validity period)
+        (timedelta(days=-1), timedelta(days=365), True),
+        # Expired certificate (after not_valid_after)
+        (timedelta(days=-365), timedelta(days=-1), False),
+        # Not yet valid certificate (before not_valid_before)
+        (timedelta(days=1), timedelta(days=365), False),
+        # Edge case - just became valid
+        (timedelta(seconds=-1), timedelta(days=365), True),
+        # Edge case - about to expire
+        (timedelta(days=-365), timedelta(seconds=1), True),
+    ],
+)
+def test_is_valid_certificate(timedelta_before, timedelta_after, expected_result):
+    """Test the _is_valid function for certificate validity checks
+
+    timedelta_before: offset from now to calculate not_valid_before (negative = past)
+    timedelta_after: offset from now to calculate not_valid_after (positive = future)
+    expected_result: expected result of _is_valid()
+    """
+    key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048, backend=default_backend()
+    )
+    cert_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Test Certificate")])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(cert_name)
+        .issuer_name(cert_name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now + timedelta_before)
+        .not_valid_after(now + timedelta_after)
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(key, hashes.SHA256(), backend=default_backend())
+    )
+
+    assert CRLValidator._is_valid(cert) is expected_result

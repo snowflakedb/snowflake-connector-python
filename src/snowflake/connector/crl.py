@@ -429,6 +429,39 @@ class CRLValidator:
             # If the extension is not present, the certificate is not a CA
             return False
 
+    @staticmethod
+    def _get_certificate_validity_dates(
+        cert: x509.Certificate,
+    ) -> tuple[datetime, datetime]:
+        # Extract UTC-aware validity dates from a certificate.
+
+        try:
+            # Use timezone-aware versions to avoid deprecation warnings
+            not_valid_before = cert.not_valid_before_utc
+            not_valid_after = cert.not_valid_after_utc
+        except AttributeError:
+            # Fallback for older versions without _utc methods
+            not_valid_before = cert.not_valid_before
+            not_valid_after = cert.not_valid_after
+
+            # Convert to UTC if not timezone-aware
+            if not_valid_before.tzinfo is None:
+                not_valid_before = not_valid_before.replace(tzinfo=timezone.utc)
+            if not_valid_after.tzinfo is None:
+                not_valid_after = not_valid_after.replace(tzinfo=timezone.utc)
+
+        return not_valid_before, not_valid_after
+
+    @staticmethod
+    def _is_valid(cert: x509.Certificate) -> bool:
+        # Check if a certificate is currently valid (not expired and not before validity period).
+
+        not_valid_before, not_valid_after = (
+            CRLValidator._get_certificate_validity_dates(cert)
+        )
+        now = datetime.now(timezone.utc)
+        return not_valid_before <= now <= not_valid_after
+
     def _validate_certificate_is_not_revoked_with_cache(
         self, cert: x509.Certificate, ca_cert: x509.Certificate
     ) -> CRLValidationResult:
@@ -477,18 +510,8 @@ class CRLValidator:
         - For certificates issued on or after 15 March 2026:
           validity period <= 7 days (604,800 seconds)
         """
-        try:
-            # Use timezone.utc versions to avoid deprecation warnings
-            issue_date = cert.not_valid_before_utc
-            validity_period = cert.not_valid_after_utc - cert.not_valid_before_utc
-        except AttributeError:
-            # Fallback for older versions
-            issue_date = cert.not_valid_before
-            validity_period = cert.not_valid_after - cert.not_valid_before
-
-        # Convert issue_date to UTC if it's not timezone-aware
-        if issue_date.tzinfo is None:
-            issue_date = issue_date.replace(tzinfo=timezone.utc)
+        issue_date, expiry_date = CRLValidator._get_certificate_validity_dates(cert)
+        validity_period = expiry_date - issue_date
 
         march_15_2026 = datetime(2026, 3, 15, tzinfo=timezone.utc)
         if issue_date >= march_15_2026:
