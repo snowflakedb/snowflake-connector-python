@@ -619,6 +619,11 @@ class CRLValidator:
             # We cannot trust a CRL whose signature cannot be verified
             return CRLValidationResult.ERROR
 
+        # Verify that the CRL URL matches the IDP extension
+        if not self._verify_against_idp_extension(crl, crl_url):
+            logger.warning("CRL URL does not match IDP extension for URL: %s", crl_url)
+            return CRLValidationResult.ERROR
+
         # Check if certificate is revoked
         return self._check_certificate_against_crl(cert, crl)
 
@@ -668,6 +673,52 @@ class CRLValidator:
             return True
         except Exception as e:
             logger.warning("CRL signature verification failed: %s", e)
+            return False
+
+    def _verify_against_idp_extension(
+        self, crl: x509.CertificateRevocationList, crl_url: str
+    ) -> bool:
+        # Verify that the CRL distribution point URL matches the IDP extension.
+        logger.debug(
+            "Trying to verify CRL URL against IDP extension for URL: %s", crl_url
+        )
+
+        try:
+            idp_extension = crl.extensions.get_extension_for_oid(
+                ExtensionOID.ISSUING_DISTRIBUTION_POINT
+            )
+            idp = idp_extension.value
+
+            # If the IDP has a distribution point, verify it matches the CRL URL
+            if not idp.full_name:
+                # according to baseline requirements this should not happen
+                # https://github.com/cabforum/servercert/blob/main/docs/BR.md
+                logger.debug(
+                    "IDP extension has no full_name - treating as invalid",
+                    crl_url,
+                )
+                return False
+
+            for name in idp.full_name:
+                if isinstance(name, x509.UniformResourceIdentifier):
+                    if name.value == crl_url:
+                        logger.debug("CRL URL matches IDP extension: %s", crl_url)
+                        return True
+            # If we found distribution points but none matched
+            logger.warning(
+                "CRL URL %s does not match any IDP distribution point", crl_url
+            )
+            return False
+
+        except x509.ExtensionNotFound:
+            # If the IDP extension is not present, consider it valid
+            logger.debug(
+                "No IDP extension found in CRL, treating as valid for URL: %s", crl_url
+            )
+            return True
+        except Exception as e:
+            # If we can't parse the IDP extension, log and treat as error
+            logger.warning("Failed to verify IDP extension: %s", e)
             return False
 
     def _check_certificate_against_crl(
