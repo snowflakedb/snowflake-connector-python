@@ -28,6 +28,6 @@ def test_error_telemetry_sync_connection():
     assert msg[TelemetryField.KEY_TYPE.value] == TelemetryField.SQL_EXCEPTION.value
     assert msg[TelemetryField.KEY_SOURCE.value] == conn.application
     assert msg[TelemetryField.KEY_EXCEPTION.value] == "Error"
-    assert msg[TelemetryField.KEY_USES_AIO.value] == "False"
+    assert msg[TelemetryField.KEY_USES_AIO.value] == "false"
     assert TelemetryField.KEY_DRIVER_TYPE.value in msg
     assert TelemetryField.KEY_DRIVER_VERSION.value in msg

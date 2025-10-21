@@ -152,8 +152,6 @@ class Error(Exception):
         telemetry_data: dict[str, Any],
     ) -> None:
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
-        from .aio._connection import SnowflakeConnection as AsyncSnowflakeConnection
-
         if (
             connection is not None
             and connection.telemetry_enabled
@@ -164,8 +162,8 @@ class Error(Exception):
             telemetry_data[TelemetryField.KEY_SOURCE.value] = connection.application
             telemetry_data[TelemetryField.KEY_EXCEPTION.value] = self.__class__.__name__
             telemetry_data[TelemetryField.KEY_USES_AIO.value] = str(
-                isinstance(connection, AsyncSnowflakeConnection)
-            )
+                self._is_aio_connection(connection)
+            ).lower()
             ts = get_time_millis()
             try:
                 result = connection._log_telemetry(
@@ -386,6 +384,18 @@ class Error(Exception):
                 sfqid=error_value.get("sfqid"),
             )
         return error_class(error_value)
+
+    @staticmethod
+    def _is_aio_connection(
+        connection: SnowflakeConnection | AsyncSnowflakeConnection,
+    ) -> bool:
+        try:
+            # Try import async connection. The import may fail if aio is not installed.
+            from .aio._connection import SnowflakeConnection as AsyncSnowflakeConnection
+
+            return isinstance(connection, AsyncSnowflakeConnection)
+        except ImportError:
+            return False
 
 
 class _Warning(Exception):
