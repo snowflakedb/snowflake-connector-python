@@ -292,7 +292,7 @@ class CRLValidator:
 
         if result == CRLValidationResult.UNREVOKED:
             return True
-        elif result == CRLValidationResult.REVOKED:
+        if result == CRLValidationResult.REVOKED:
             return False
         # In advisory mode, errors are treated positively
         return self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
