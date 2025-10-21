@@ -1468,6 +1468,10 @@ def test_crl_validator_check_certificate_against_crl_expired(
     mock_crl.next_update_utc = datetime.now(timezone.utc) - timedelta(days=1)  # Expired
     mock_crl.get_revoked_certificate_by_serial_number.return_value = None
     mock_crl.issuer = parent.subject
+    # Mock extensions to raise ExtensionNotFound for IDP extension
+    mock_crl.extensions.get_extension_for_oid.side_effect = x509.ExtensionNotFound(
+        "Extension not found", x509.oid.ExtensionOID.ISSUING_DISTRIBUTION_POINT
+    )
 
     # Cache will return an expired CRL
     mock_cache_mgr = Mock(spec=CRLCacheManager)
@@ -1505,6 +1509,10 @@ def test_crl_validator_validate_certificate_with_cache_hit(
     mock_crl = Mock(spec=x509.CertificateRevocationList)
     mock_crl.next_update_utc = datetime.now(timezone.utc) + timedelta(days=7)
     mock_crl.issuer = ca_cert.subject
+    # Mock extensions to raise ExtensionNotFound for IDP extension
+    mock_crl.extensions.get_extension_for_oid.side_effect = x509.ExtensionNotFound(
+        "Extension not found", x509.oid.ExtensionOID.ISSUING_DISTRIBUTION_POINT
+    )
     mock_cache_manager = Mock()
     cached_entry = CRLCacheEntry(mock_crl, datetime.now(timezone.utc))
     mock_cache_manager.get.return_value = cached_entry
@@ -1564,6 +1572,10 @@ def test_crl_validator_validate_certificate_with_cache_miss(
         mock_crl = Mock()
         mock_crl.next_update_utc = datetime.now(timezone.utc) + timedelta(days=7)
         mock_crl.issuer = ca_cert.subject  # Set the CRL issuer to match CA subject
+        # Mock extensions to raise ExtensionNotFound for IDP extension
+        mock_crl.extensions.get_extension_for_oid.side_effect = x509.ExtensionNotFound(
+            "Extension not found", x509.oid.ExtensionOID.ISSUING_DISTRIBUTION_POINT
+        )
         mock_load_crl.return_value = mock_crl
         result = validator._validate_certificate_is_not_revoked(cert, ca_cert)
 
@@ -2256,3 +2268,170 @@ def test_is_valid_certificate(timedelta_before, timedelta_after, expected_result
     )
 
     assert CRLValidator._is_valid(cert) is expected_result
+
+
+def test_verify_against_idp_extension_no_extension(cert_gen):
+    """Test IDP verification when CRL has no IDP extension - should pass"""
+    # Generate a CRL without IDP extension
+    crl_bytes = cert_gen.generate_valid_crl()
+    crl = x509.load_der_x509_crl(crl_bytes, backend=default_backend())
+
+    validator = CRLValidator(
+        session_manager=Mock(),
+        trusted_certificates=[cert_gen.ca_certificate],
+    )
+
+    # Should return True when no IDP extension is present
+    assert (
+        validator._verify_against_idp_extension(crl, "http://example.com/crl") is True
+    )
+
+
+@pytest.mark.parametrize(
+    "full_name_urls,crl_url,expected_result",
+    [
+        (
+            # matching single URL
+            ["http://example.com/test.crl"],
+            "http://example.com/test.crl",
+            True,
+        ),
+        (
+            # non-matching single URL
+            ["http://example.com/correct.crl"],
+            "http://example.com/wrong.crl",
+            False,
+        ),
+        (
+            # matching one of multiple URLs
+            [
+                "http://example.com/crl1.crl",
+                "http://example.com/crl2.crl",
+                "http://example.com/crl3.crl",
+            ],
+            "http://example.com/crl2.crl",
+            True,
+        ),
+        (
+            # non-matching with multiple URLs
+            [
+                "http://example.com/crl1.crl",
+                "http://example.com/crl2.crl",
+                "http://example.com/crl3.crl",
+            ],
+            "http://example.com/wrong.crl",
+            False,
+        ),
+        (
+            # no full_name (violates baseline requirements)
+            None,
+            "http://example.com/crl",
+            False,
+        ),
+    ],
+)
+def test_verify_against_idp_extension_with_full_name(
+    cert_gen, full_name_urls, crl_url, expected_result
+):
+    """Test IDP verification with various full_name configurations"""
+
+    full_name = (
+        [x509.UniformResourceIdentifier(url) for url in full_name_urls]
+        if full_name_urls
+        else None
+    )
+    # Build CRL with IDP extension
+    crl = (
+        x509.CertificateRevocationListBuilder()
+        .issuer_name(cert_gen.ca_certificate.subject)
+        .last_update(datetime.now(timezone.utc))
+        .next_update(datetime.now(timezone.utc) + timedelta(days=1))
+        .add_extension(
+            x509.IssuingDistributionPoint(
+                full_name=full_name,
+                relative_name=None,
+                only_contains_user_certs=True,
+                only_contains_ca_certs=False,
+                only_some_reasons=None,
+                indirect_crl=False,
+                only_contains_attribute_certs=False,
+            ),
+            critical=True,
+        )
+        .sign(cert_gen.ca_private_key, hashes.SHA256(), backend=default_backend())
+    )
+
+    validator = CRLValidator(
+        session_manager=Mock(),
+        trusted_certificates=[cert_gen.ca_certificate],
+    )
+
+    # Verify the result matches expected
+    assert validator._verify_against_idp_extension(crl, crl_url) is expected_result
+
+
+@responses.activate
+def test_check_certificate_against_crl_url_with_idp_mismatch(
+    cert_gen, session_manager, crl_urls
+):
+    """CRL validation should fail when IDP URL doesn't match"""
+    chain = cert_gen.create_simple_chain()
+
+    # Create a test CA for signing the CRL
+    test_ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    test_ca_cert = (
+        x509.CertificateBuilder()
+        .subject_name(chain.root_cert.subject)
+        .issuer_name(chain.root_cert.subject)
+        .public_key(test_ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.now(timezone.utc))
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=365))
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
+        )
+        .sign(test_ca_key, hashes.SHA256())
+    )
+
+    # Create a CRL with IDP extension pointing to a different URL
+    builder = x509.CertificateRevocationListBuilder()
+    builder = builder.issuer_name(test_ca_cert.subject)
+    builder = builder.last_update(datetime.now(timezone.utc))
+    builder = builder.next_update(datetime.now(timezone.utc) + timedelta(days=1))
+
+    # Add IDP extension with different URL than the one we'll use to fetch
+    idp = x509.IssuingDistributionPoint(
+        full_name=[x509.UniformResourceIdentifier("http://different.com/crl.crl")],
+        relative_name=None,
+        only_contains_user_certs=False,
+        only_contains_ca_certs=False,
+        only_some_reasons=None,
+        indirect_crl=False,
+        only_contains_attribute_certs=False,
+    )
+    builder = builder.add_extension(idp, critical=False)
+
+    crl = builder.sign(test_ca_key, hashes.SHA256(), backend=default_backend())
+    crl_bytes = crl.public_bytes(serialization.Encoding.DER)
+
+    # Mock the HTTP response
+    responses.add(
+        responses.GET,
+        crl_urls.test_ca,
+        body=crl_bytes,
+        status=200,
+        content_type="application/pkix-crl",
+    )
+
+    validator = CRLValidator(
+        session_manager=session_manager,
+        trusted_certificates=[test_ca_cert],
+    )
+
+    # Check certificate against CRL URL - should fail due to IDP mismatch
+    result = validator._check_certificate_against_crl_url(
+        chain.leaf_cert, test_ca_cert, crl_urls.test_ca
+    )
+
+    assert result == CRLValidationResult.ERROR
