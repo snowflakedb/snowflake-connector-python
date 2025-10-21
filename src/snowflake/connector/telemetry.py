@@ -51,6 +51,7 @@ class TelemetryField(Enum):
     KEY_REASON = "reason"
     KEY_VALUE = "value"
     KEY_EXCEPTION = "exception"
+    KEY_USES_AIO = "uses_aio"
     # Reserved UpperCamelName keys
     KEY_ERROR_NUMBER = "ErrorNumber"
     KEY_ERROR_MESSAGE = "ErrorMessage"

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
-import asyncio
 import inspect
 import logging
 import os
@@ -153,6 +152,7 @@ class Error(Exception):
         telemetry_data: dict[str, Any],
     ) -> None:
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
+        from .aio._connection import SnowflakeConnection as AsyncSnowflakeConnection
 
         if (
             connection is not None
@@ -163,6 +163,9 @@ class Error(Exception):
             telemetry_data[TelemetryField.KEY_TYPE.value] = self.errtype.value
             telemetry_data[TelemetryField.KEY_SOURCE.value] = connection.application
             telemetry_data[TelemetryField.KEY_EXCEPTION.value] = self.__class__.__name__
+            telemetry_data[TelemetryField.KEY_USES_AIO.value] = str(
+                isinstance(connection, AsyncSnowflakeConnection)
+            )
             ts = get_time_millis()
             try:
                 result = connection._log_telemetry(
@@ -172,6 +175,8 @@ class Error(Exception):
                 )
                 if inspect.isawaitable(result):
                     try:
+                        import asyncio
+
                         asyncio.get_running_loop().create_task(result)
                     except Exception:
                         logger.debug(
