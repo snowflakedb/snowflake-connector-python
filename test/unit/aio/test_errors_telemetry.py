@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, Mock, patch
 
+from snowflake.connector.aio import SnowflakeConnection
 from snowflake.connector.errors import Error
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
 
@@ -14,7 +15,7 @@ def _extract_message_from_log_call(mock_conn: Mock) -> dict:
 
 
 async def test_error_telemetry_async_connection():
-    conn = Mock()
+    conn = Mock(SnowflakeConnection)
     conn.telemetry_enabled = True
     conn._telemetry = Mock()
     conn._telemetry.is_closed = False
