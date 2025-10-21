@@ -286,8 +286,7 @@ class CRLValidator:
         if self._cert_revocation_check_mode == CertRevocationCheckMode.DISABLED:
             return True
 
-        if chain is None:
-            chain = []
+        chain = chain if chain is not None else []
         result = self._validate_chain(peer_cert, chain)
 
         if result == CRLValidationResult.UNREVOKED:
