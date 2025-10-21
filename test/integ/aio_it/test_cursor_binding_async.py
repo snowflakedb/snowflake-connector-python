@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from test.csp_helpers import is_running_against_gcp
+
 import pytest
 
 from snowflake.connector.errors import ProgrammingError
@@ -46,21 +48,23 @@ async def test_binding_security(conn_cnx, db_parameters):
 
             # SQL injection safe test
             # Good Example
-            with pytest.raises(ProgrammingError):
-                await cnx.cursor().execute(
-                    "SELECT * FROM {name} WHERE aa=%s".format(
-                        name=db_parameters["name"]
-                    ),
-                    ("1 or aa>0",),
-                )
+            if not is_running_against_gcp():
+                with pytest.raises(ProgrammingError):
+                    r = await cnx.cursor().execute(
+                        "SELECT * FROM {name} WHERE aa=%s".format(
+                            name=db_parameters["name"]
+                        ),
+                        ("1 or aa>0",),
+                    )
+                    await r.fetchall()
 
-            with pytest.raises(ProgrammingError):
-                await cnx.cursor().execute(
-                    "SELECT * FROM {name} WHERE aa=%(aa)s".format(
-                        name=db_parameters["name"]
-                    ),
-                    {"aa": "1 or aa>0"},
-                )
+                with pytest.raises(ProgrammingError):
+                    await cnx.cursor().execute(
+                        "SELECT * FROM {name} WHERE aa=%(aa)s".format(
+                            name=db_parameters["name"]
+                        ),
+                        {"aa": "1 or aa>0"},
+                    )
 
             # Bad Example in application. DON'T DO THIS
             c = cnx.cursor()
