@@ -512,7 +512,6 @@ def test_should_allow_connection_when_crl_validation_disabled(
 ):
     """Test that connections are allowed when CRL validation is disabled"""
     chain = cert_gen.create_simple_chain()
-    chains = [[chain.leaf_cert, chain.intermediate_cert, chain.root_cert]]
 
     validator = CRLValidator(
         session_manager,
@@ -520,19 +519,22 @@ def test_should_allow_connection_when_crl_validation_disabled(
         trusted_certificates=[chain.root_cert],
     )
 
-    assert validator.validate_certificate_chains(chains)
+    assert validator.validate_certificate_chain(
+        chain.leaf_cert, [chain.intermediate_cert, chain.root_cert]
+    )
 
 
 def test_should_allow_connection_when_crl_validation_disabled_and_no_cert_chain(
-    session_manager,
+    cert_gen, session_manager
 ):
+    cert = cert_gen.create_short_lived_certificate(10, datetime.now(timezone.utc))
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.DISABLED,
         trusted_certificates=[],
     )
-    assert validator.validate_certificate_chains([])
-    assert validator.validate_certificate_chains(None)
+    assert validator.validate_certificate_chain(cert, [])
+    assert validator.validate_certificate_chain(cert, None)
 
 
 def test_should_fail_with_null_or_empty_certificate_chains(cert_gen, session_manager):
@@ -542,8 +544,10 @@ def test_should_fail_with_null_or_empty_certificate_chains(cert_gen, session_man
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
         trusted_certificates=[],
     )
-    assert not validator.validate_certificate_chains([])
-    assert not validator.validate_certificate_chains(None)
+    # Create a dummy certificate for testing
+    dummy_cert = cert_gen.create_short_lived_certificate(10, datetime.now(timezone.utc))
+    assert not validator.validate_certificate_chain(dummy_cert, [])
+    assert not validator.validate_certificate_chain(dummy_cert, None)
 
 
 def test_should_handle_certificates_without_crl_urls_in_enabled_mode(
@@ -551,14 +555,15 @@ def test_should_handle_certificates_without_crl_urls_in_enabled_mode(
 ):
     """Test handling of certificates without CRL URLs in enabled mode"""
     chain = cert_gen.create_simple_chain()
-    chains = [[chain.leaf_cert, chain.intermediate_cert, chain.root_cert]]
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
         allow_certificates_without_crl_url=False,
         trusted_certificates=[chain.root_cert],
     )
-    assert not validator.validate_certificate_chains(chains)
+    assert not validator.validate_certificate_chain(
+        chain.leaf_cert, [chain.intermediate_cert, chain.root_cert]
+    )
 
 
 def test_should_allow_certificates_without_crl_urls_when_configured(
@@ -566,7 +571,6 @@ def test_should_allow_certificates_without_crl_urls_when_configured(
 ):
     """Test that certificates without CRL URLs are allowed when configured"""
     chain = cert_gen.create_simple_chain()
-    chains = [[chain.leaf_cert, chain.intermediate_cert, chain.root_cert]]
 
     validator = CRLValidator(
         session_manager,
@@ -574,13 +578,14 @@ def test_should_allow_certificates_without_crl_urls_when_configured(
         allow_certificates_without_crl_url=True,
         trusted_certificates=[chain.root_cert],
     )
-    assert validator.validate_certificate_chains(chains)
+    assert validator.validate_certificate_chain(
+        chain.leaf_cert, [chain.intermediate_cert, chain.root_cert]
+    )
 
 
 def test_should_pass_in_advisory_mode_even_with_errors(cert_gen, session_manager):
     """Test that validation passes in advisory mode even with errors"""
     chain = cert_gen.create_simple_chain()
-    chains = [[chain.leaf_cert, chain.intermediate_cert, chain.root_cert]]
 
     validator = CRLValidator(
         session_manager,
@@ -588,35 +593,9 @@ def test_should_pass_in_advisory_mode_even_with_errors(cert_gen, session_manager
         trusted_certificates=[chain.root_cert],
     )
 
-    assert validator.validate_certificate_chains(chains)
-
-
-def test_should_validate_multiple_chains_and_return_first_valid_with_no_crl_urls(
-    cert_gen, session_manager
-):
-    """Test validation of multiple chains and return first valid"""
-    # Create a certificate that would be considered invalid (before March 2024)
-    before_march_2024 = datetime(2024, 2, 1, tzinfo=timezone.utc)
-    invalid_cert = cert_gen.create_short_lived_certificate(5, before_march_2024)
-
-    # Create a valid chain
-    valid_chain = cert_gen.create_simple_chain()
-
-    # Create list with invalid chain first, then valid chain
-    chains = [
-        [invalid_cert, valid_chain.intermediate_cert, valid_chain.root_cert],
-        [valid_chain.leaf_cert, valid_chain.intermediate_cert, valid_chain.root_cert],
-    ]
-
-    validator = CRLValidator(
-        session_manager,
-        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        allow_certificates_without_crl_url=True,
-        trusted_certificates=[valid_chain.root_cert],
+    assert validator.validate_certificate_chain(
+        chain.leaf_cert, [chain.intermediate_cert, chain.root_cert]
     )
-
-    result = validator.validate_certificate_chains(chains)
-    assert result, "Should return true when at least one valid chain is found"
 
 
 def test_cross_signed_certificate_chain(cert_gen, session_manager):
@@ -630,60 +609,56 @@ def test_cross_signed_certificate_chain(cert_gen, session_manager):
     )
 
     # provide full chain in arbitrary order
-    chains = [
+    assert validator.validate_certificate_chain(
+        chain.final_cert,
         [
-            chain.final_cert,
             chain.AsignB,
             chain.leafA,
             chain.leafB,
             chain.BsignA,
             chain.rootB,
             chain.rootA,
-        ]
-    ]
-    assert validator.validate_certificate_chains(chains)
+        ],
+    )
 
     # only A is signed by CA
-    chains = [
+    assert validator.validate_certificate_chain(
+        chain.final_cert,
         [
-            chain.final_cert,
             chain.leafA,
             chain.AsignB,
             chain.leafB,
             chain.BsignA,
             # chain.rootB,
             chain.rootA,
-        ]
-    ]
-    assert validator.validate_certificate_chains(chains)
+        ],
+    )
 
     # nor A nor B is signed by CA
-    chains = [
+    assert not validator.validate_certificate_chain(
+        chain.final_cert,
         [
-            chain.final_cert,
             chain.leafA,
             chain.AsignB,
             chain.leafB,
             chain.BsignA,
             # chain.rootB,
             # chain.rootA,
-        ]
-    ]
-    assert not validator.validate_certificate_chains(chains)
+        ],
+    )
 
     # mingled A and B paths passed in one chain - A has no connection to CA, B has
-    chains = [
+    assert validator.validate_certificate_chain(
+        chain.final_cert,
         [
-            chain.final_cert,
             chain.leafA,
             chain.AsignB,
             chain.leafB,
             # chain.BsignA,
             chain.rootB,
             # chain.rootA,
-        ]
-    ]
-    assert validator.validate_certificate_chains(chains)
+        ],
+    )
 
 
 def test_starfield_incident(cert_gen, session_manager):
@@ -703,7 +678,7 @@ def test_starfield_incident(cert_gen, session_manager):
     validator._validate_certificate_is_not_revoked = mock_validate
 
     assert (
-        validator._validate_single_chain([chain.leafA, chain.BsignA, chain.rootA])
+        validator._validate_chain(chain.leafA, [chain.BsignA, chain.rootA])
         == CRLValidationResult.UNREVOKED
     )
 
@@ -716,7 +691,7 @@ def test_validate_single_chain(cert_gen, session_manager):
         trusted_certificates=[cert_gen.ca_certificate],
     )
 
-    input_chain = [chain.final_cert, chain.leafA, chain.leafB, chain.rootA, chain.rootB]
+    input_chain = [chain.leafA, chain.leafB, chain.rootA, chain.rootB]
 
     # case 1: at least one valid path
     def mock_validate_with_special_cert(revoked_cert, error_result):
@@ -728,7 +703,7 @@ def test_validate_single_chain(cert_gen, session_manager):
         for revoked_cert in [chain.rootA, chain.rootB, chain.leafA, chain.leafB]:
             mock_validate_with_special_cert(revoked_cert, error_result)
             assert (
-                validator._validate_single_chain(input_chain)
+                validator._validate_chain(chain.final_cert, input_chain)
                 == CRLValidationResult.UNREVOKED
             )
 
@@ -739,16 +714,22 @@ def test_validate_single_chain(cert_gen, session_manager):
         return CRLValidationResult.UNREVOKED
 
     validator._validate_certificate_is_not_revoked_with_cache = mock_validate
-    assert validator._validate_single_chain(input_chain) == CRLValidationResult.REVOKED
+    assert (
+        validator._validate_chain(chain.final_cert, input_chain)
+        == CRLValidationResult.REVOKED
+    )
 
-    # case 3: revoked + error should result in revoked\
+    # case 3: revoked + error should result in revoked
     def mock_validate(cert, _):
         if cert in [chain.rootA, chain.leafB]:
             return CRLValidationResult.REVOKED
         return CRLValidationResult.ERROR
 
     validator._validate_certificate_is_not_revoked_with_cache = mock_validate
-    assert validator._validate_single_chain(input_chain) == CRLValidationResult.REVOKED
+    assert (
+        validator._validate_chain(chain.final_cert, input_chain)
+        == CRLValidationResult.REVOKED
+    )
 
     # case 4: no path to trusted certificate
     def mock_validate(cert, _):
@@ -756,8 +737,8 @@ def test_validate_single_chain(cert_gen, session_manager):
 
     validator._validate_certificate_is_not_revoked_with_cache = mock_validate
     assert (
-        validator._validate_single_chain(
-            [chain.final_cert, chain.leafA, chain.leafB, chain.AsignB, chain.BsignA]
+        validator._validate_chain(
+            chain.final_cert, [chain.leafA, chain.leafB, chain.AsignB, chain.BsignA]
         )
         == CRLValidationResult.ERROR
     )
@@ -772,15 +753,15 @@ def test_validate_single_chain(cert_gen, session_manager):
 
     validator._validate_certificate_is_not_revoked_with_cache = mock_validate
     assert (
-        validator._validate_single_chain(
+        validator._validate_chain(
+            chain.final_cert,
             [
-                chain.final_cert,
                 chain.leafA,
                 chain.rootA,
                 chain.leafB,
                 chain.rootB,
                 chain.BsignA,
-            ]
+            ],
         )
         == CRLValidationResult.ERROR
     )
@@ -805,7 +786,6 @@ def test_should_validate_non_revoked_certificate_successfully(
     cert = cert_gen.create_certificate_with_crl_distribution_points(
         "CN=Test Server", [crl_urls.test_ca]
     )
-    chain = [cert, cert_gen.ca_certificate]
 
     validator = CRLValidator(
         session_manager,
@@ -813,7 +793,7 @@ def test_should_validate_non_revoked_certificate_successfully(
         trusted_certificates=[cert_gen.ca_certificate],
     )
 
-    assert validator.validate_certificate_chains([chain])
+    assert validator.validate_certificate_chain(cert, [cert_gen.ca_certificate])
     assert resp.call_count
 
 
@@ -836,7 +816,6 @@ def test_should_validate_non_revoked_certificate_successfully_if_root_not_provid
     cert = cert_gen.create_certificate_with_crl_distribution_points(
         "CN=Test Server", [crl_urls.test_ca]
     )
-    chain = [cert]
 
     validator = CRLValidator(
         session_manager,
@@ -844,7 +823,7 @@ def test_should_validate_non_revoked_certificate_successfully_if_root_not_provid
         trusted_certificates=[cert_gen.ca_certificate],
     )
 
-    assert validator.validate_certificate_chains([chain])
+    assert validator.validate_certificate_chain(cert, [])
     assert resp.call_count
 
 
@@ -865,15 +844,13 @@ def test_should_fail_for_revoked_certificate(cert_gen, crl_urls, session_manager
         content_type="application/pkcs7-mime",
     )
 
-    chain = [cert, cert_gen.ca_certificate]
-
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
         trusted_certificates=[cert_gen.ca_certificate],
     )
 
-    assert not validator.validate_certificate_chains([chain])
+    assert not validator.validate_certificate_chain(cert, [cert_gen.ca_certificate])
     assert resp.call_count
 
 
@@ -895,15 +872,13 @@ def test_should_allow_revoked_certificate_when_crl_validation_disabled(
         content_type="application/pkcs7-mime",
     )
 
-    chain = [revoked_cert, cert_gen.ca_certificate]
-
     validator = CRLValidator(
         session_manager,
         cert_revocation_check_mode=CertRevocationCheckMode.DISABLED,
         trusted_certificates=[cert_gen.ca_certificate],
     )
 
-    assert validator.validate_certificate_chains([chain])
+    assert validator.validate_certificate_chain(revoked_cert, [cert_gen.ca_certificate])
     assert resp.call_count == 0
 
 
@@ -918,7 +893,6 @@ def test_should_pass_in_advisory_mode_with_crl_errors(
     cert = cert_gen.create_certificate_with_crl_distribution_points(
         "CN=Test Server", [crl_urls.test_ca]
     )
-    chain = [cert, cert_gen.ca_certificate]
 
     validator = CRLValidator(
         session_manager,
@@ -926,7 +900,7 @@ def test_should_pass_in_advisory_mode_with_crl_errors(
         trusted_certificates=[cert_gen.ca_certificate],
     )
 
-    assert validator.validate_certificate_chains([chain])
+    assert validator.validate_certificate_chain(cert, [cert_gen.ca_certificate])
     assert resp.call_count
 
 
@@ -941,7 +915,6 @@ def test_should_fail_in_enabled_mode_with_crl_errors(
     cert = cert_gen.create_certificate_with_crl_distribution_points(
         "CN=Test Server", [crl_urls.test_ca]
     )
-    chain = [cert, cert_gen.ca_certificate]
 
     validator = CRLValidator(
         session_manager,
@@ -949,48 +922,8 @@ def test_should_fail_in_enabled_mode_with_crl_errors(
         trusted_certificates=[cert_gen.ca_certificate],
     )
 
-    assert not validator.validate_certificate_chains([chain])
+    assert not validator.validate_certificate_chain(cert, [cert_gen.ca_certificate])
     assert resp.call_count
-
-
-@responses.activate
-def test_should_validate_multiple_chains_and_success_if_just_one_valid(
-    cert_gen, crl_urls, session_manager
-):
-    """Test validation of multiple chains and return first valid"""
-    # Create certificates
-    invalid_cert = cert_gen.create_certificate_with_crl_distribution_points(
-        "CN=Invalid Server", [crl_urls.invalid_ca]
-    )
-    invalid_chain = [invalid_cert, cert_gen.ca_certificate]
-
-    valid_cert = cert_gen.create_certificate_with_crl_distribution_points(
-        "CN=Valid Server", [crl_urls.valid_ca]
-    )
-    valid_chain = [valid_cert, cert_gen.ca_certificate]
-
-    valid_crl_content = cert_gen.generate_valid_crl()
-
-    resp_200 = responses.add(
-        responses.GET,
-        crl_urls.valid_ca,
-        body=valid_crl_content,
-        status=200,
-        content_type="application/pkcs7-mime",
-    )
-
-    # Setup 404 for invalid certificate CRL
-    resp_404 = responses.add(responses.GET, crl_urls.invalid_ca, status=404)
-
-    validator = CRLValidator(
-        session_manager,
-        cert_revocation_check_mode=CertRevocationCheckMode.ENABLED,
-        trusted_certificates=[cert_gen.ca_certificate],
-    )
-
-    assert validator.validate_certificate_chains([invalid_chain, valid_chain])
-    assert resp_200.call_count
-    assert resp_404.call_count
 
 
 @responses.activate
@@ -1008,7 +941,6 @@ def test_should_reject_expired_crl(cert_gen, crl_urls, session_manager):
     cert = cert_gen.create_certificate_with_crl_distribution_points(
         "CN=Test Server", [crl_urls.expired_ca]
     )
-    chain = [cert, cert_gen.ca_certificate]
 
     validator = CRLValidator(
         session_manager,
@@ -1016,7 +948,7 @@ def test_should_reject_expired_crl(cert_gen, crl_urls, session_manager):
         trusted_certificates=[cert_gen.ca_certificate],
     )
 
-    assert not validator.validate_certificate_chains([chain])
+    assert not validator.validate_certificate_chain(cert, [cert_gen.ca_certificate])
     assert resp.call_count
 
 
@@ -1026,7 +958,6 @@ def test_should_skip_short_lived_certificates(cert_gen, session_manager):
     short_lived_cert = cert_gen.create_short_lived_certificate(
         5, datetime.now(timezone.utc)
     )
-    chain = [short_lived_cert, cert_gen.ca_certificate]
 
     validator = CRLValidator(
         session_manager,
@@ -1035,7 +966,9 @@ def test_should_skip_short_lived_certificates(cert_gen, session_manager):
     )
 
     # Should pass without any HTTP calls (no responses setup)
-    assert validator.validate_certificate_chains([chain])
+    assert validator.validate_certificate_chain(
+        short_lived_cert, [cert_gen.ca_certificate]
+    )
 
 
 @responses.activate
@@ -1068,7 +1001,6 @@ def test_should_handle_multiple_crl_distribution_points(
     cert = cert_gen.create_certificate_with_crl_distribution_points(
         "CN=Multi-CRL Server", crl_urls_list
     )
-    chain = [cert, cert_gen.ca_certificate]
 
     validator = CRLValidator(
         session_manager,
@@ -1076,7 +1008,7 @@ def test_should_handle_multiple_crl_distribution_points(
         trusted_certificates=[cert_gen.ca_certificate],
     )
 
-    assert validator.validate_certificate_chains([chain])
+    assert validator.validate_certificate_chain(cert, [cert_gen.ca_certificate])
     assert resp_primary.call_count
     assert resp_backup.call_count
 
@@ -1149,20 +1081,20 @@ def test_crl_validator_validate_connection(session_manager):
     assert not validator.validate_connection(mock_connection)
 
 
-def test_crl_validator_extract_certificate_chains_from_connection(
+def test_crl_validator_extract_certificate_chain_from_connection(
     cert_gen, session_manager
 ):
-    """Test the _extract_certificate_chains_from_connection method"""
+    """Test the _extract_certificate_chain_from_connection method"""
     chain = cert_gen.create_simple_chain()
 
     validator = CRLValidator(session_manager, trusted_certificates=[chain.root_cert])
 
     # Test with no certificate chain
     mock_connection = Mock()
-    mock_connection.get_peer_cert_chain.return_value = []
+    mock_connection.get_peer_cert_chain.return_value = None
 
-    chains = validator._extract_certificate_chains_from_connection(mock_connection)
-    assert chains == []
+    chains = validator._extract_certificate_chain_from_connection(mock_connection)
+    assert chains is None
 
     # Test with mock certificate chain
     mock_certs = []
@@ -1187,10 +1119,9 @@ def test_crl_validator_extract_certificate_chains_from_connection(
     from unittest.mock import patch
 
     with patch("OpenSSL.crypto.dump_certificate", side_effect=mock_dump_certificate):
-        chains = validator._extract_certificate_chains_from_connection(mock_connection)
+        chain = validator._extract_certificate_chain_from_connection(mock_connection)
 
-    assert len(chains) == 1
-    assert len(chains[0]) == 3  # leaf, intermediate, root
+    assert len(chain) == 3  # leaf, intermediate, root
 
 
 # New comprehensive tests for CRLConfig.from_connection
@@ -2018,28 +1949,26 @@ def test_validate_certificate_signatures(cert_gen, session_manager):
 
     # wrong signature - no path found = ERROR
     assert (
-        validator._validate_single_chain(
-            [chain.leaf_cert, different_cert, chain.root_cert]
-        )
+        validator._validate_chain(chain.leaf_cert, [different_cert, chain.root_cert])
         == CRLValidationResult.ERROR
     )
     # wrong signature - short-lived - no path found = ERROR
     assert (
-        validator._validate_single_chain(
-            [chain.leaf_cert, short_lived_different_cert, chain.root_cert]
+        validator._validate_chain(
+            chain.leaf_cert, [short_lived_different_cert, chain.root_cert]
         )
         == CRLValidationResult.ERROR
     )
     # wrong signature does not stop from searching of new path
     assert (
-        validator._validate_single_chain(
+        validator._validate_chain(
+            chain.leaf_cert,
             [
-                chain.leaf_cert,
                 different_cert,
                 short_lived_different_cert,
                 chain.intermediate_cert,
                 chain.root_cert,
-            ]
+            ],
         )
         == CRLValidationResult.UNREVOKED
     )
@@ -2095,29 +2024,29 @@ def test_validate_certificate_signatures_in_chain(cert_gen, session_manager):
 
     # wrong signature - no path found = ERROR
     assert (
-        validator._validate_single_chain(
-            [chain.final_cert, chain.leafA, different_cert, chain.rootB]
+        validator._validate_chain(
+            chain.final_cert, [chain.leafA, different_cert, chain.rootB]
         )
         == CRLValidationResult.ERROR
     )
     # wrong signature - short-lived - no path found = ERROR
     assert (
-        validator._validate_single_chain(
-            [chain.final_cert, chain.leafA, short_lived_different_cert, chain.rootB]
+        validator._validate_chain(
+            chain.final_cert, [chain.leafA, short_lived_different_cert, chain.rootB]
         )
         == CRLValidationResult.ERROR
     )
     # wrong signature does not stop from searching of new path
     assert (
-        validator._validate_single_chain(
+        validator._validate_chain(
+            chain.final_cert,
             [
-                chain.final_cert,
                 chain.leafA,
                 different_cert,
                 short_lived_different_cert,
                 valid_cert,
                 chain.rootB,
-            ]
+            ],
         )
         == CRLValidationResult.UNREVOKED
     )
@@ -2169,28 +2098,26 @@ def test_validate_expired_certificates(cert_gen, session_manager):
 
     # expired cert - no path found = ERROR
     assert (
-        validator._validate_single_chain(
-            [chain.leaf_cert, expired_cert, chain.root_cert]
-        )
+        validator._validate_chain(chain.leaf_cert, [expired_cert, chain.root_cert])
         == CRLValidationResult.ERROR
     )
     # expired short-lived cert - no path found = ERROR
     assert (
-        validator._validate_single_chain(
-            [chain.leaf_cert, short_lived_expired_cert, chain.root_cert]
+        validator._validate_chain(
+            chain.leaf_cert, [short_lived_expired_cert, chain.root_cert]
         )
         == CRLValidationResult.ERROR
     )
     # expired cert does not stop from searching for a valid path
     assert (
-        validator._validate_single_chain(
+        validator._validate_chain(
+            chain.leaf_cert,
             [
-                chain.leaf_cert,
                 expired_cert,
                 short_lived_expired_cert,
                 chain.intermediate_cert,
                 chain.root_cert,
-            ]
+            ],
         )
         == CRLValidationResult.UNREVOKED
     )
@@ -2244,29 +2171,29 @@ def test_validate_expired_certificates_in_chain(cert_gen, session_manager):
 
     # expired cert - no path found = ERROR
     assert (
-        validator._validate_single_chain(
-            [chain.final_cert, chain.leafA, expired_cert, chain.rootB]
+        validator._validate_chain(
+            chain.final_cert, [chain.leafA, expired_cert, chain.rootB]
         )
         == CRLValidationResult.ERROR
     )
     # expired short-lived cert - no path found = ERROR
     assert (
-        validator._validate_single_chain(
-            [chain.final_cert, chain.leafA, short_lived_expired_cert, chain.rootB]
+        validator._validate_chain(
+            chain.final_cert, [chain.leafA, short_lived_expired_cert, chain.rootB]
         )
         == CRLValidationResult.ERROR
     )
     # expired cert does not stop from searching for a valid path
     assert (
-        validator._validate_single_chain(
+        validator._validate_chain(
+            chain.final_cert,
             [
-                chain.final_cert,
                 chain.leafA,
                 expired_cert,
                 short_lived_expired_cert,
                 valid_cert,
                 chain.rootB,
-            ]
+            ],
         )
         == CRLValidationResult.UNREVOKED
     )

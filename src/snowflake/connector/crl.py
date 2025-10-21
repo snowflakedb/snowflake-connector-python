@@ -270,55 +270,54 @@ class CRLValidator:
             cache_manager=cache_manager,
         )
 
-    def validate_certificate_chains(
-        self, certificate_chains: list[list[x509.Certificate]]
+    def validate_certificate_chain(
+        self, peer_cert: x509.Certificate, chain: list[x509.Certificate] | None
     ) -> bool:
         """
-        Validate certificate chains against CRLs with actual HTTP requests
+        Validate a certificate chain against CRLs with actual HTTP requests
 
         Args:
-            certificate_chains: List of certificate chains to validate
+            peer_cert: The peer certificate to validate (e.g., server certificate)
+            chain: Certificate chain to use for validation (can be None or empty)
 
         Returns:
             True if validation passes, False otherwise
-
-        Raises:
-            ValueError: If certificate_chains is None or empty
         """
         if self._cert_revocation_check_mode == CertRevocationCheckMode.DISABLED:
             return True
 
-        if certificate_chains is None or len(certificate_chains) == 0:
-            logger.warning("Certificate chains are empty")
-            return self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
+        if chain is None:
+            chain = []
+        result = self._validate_chain(peer_cert, chain)
 
-        results = []
-        for chain in certificate_chains:
-            result = self._validate_single_chain(chain)
-            # If any of the chains is valid, the whole check is considered positive
-            if result == CRLValidationResult.UNREVOKED:
-                return True
-            results.append(result)
-
-        # In non-advisory mode we require at least one chain get a clear UNREVOKED status
-        if self._cert_revocation_check_mode != CertRevocationCheckMode.ADVISORY:
+        if result == CRLValidationResult.UNREVOKED:
+            return True
+        elif result == CRLValidationResult.REVOKED:
             return False
+        # In advisory mode, errors are treated positively
+        return self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
 
-        # We're in advisory mode, so any error is treated positively
-        return any(result == CRLValidationResult.ERROR for result in results)
-
-    def _validate_single_chain(
-        self, chain: list[x509.Certificate]
+    def _validate_chain(
+        self, start_cert: x509.Certificate, chain: list[x509.Certificate]
     ) -> CRLValidationResult:
         """
+        Validate a certificate chain starting from start_cert.
+
+        Args:
+            start_cert: The certificate to start validation from
+            chain: List of certificates to use for building the trust path
+
         Returns:
           UNREVOKED: If there is a path to any trusted certificate where all certificates are unrevoked.
           REVOKED: If all paths to trusted certificates are revoked.
           ERROR: If there is a path to any trusted certificate on which none certificate is revoked,
              but some certificates can't be verified.
         """
-        # An empty chain is considered an error
-        if len(chain) == 0:
+        # Check if start certificate is expired
+        if not self._is_valid(start_cert):
+            logger.warning(
+                "Start certificate is expired or not yet valid: %s", start_cert.subject
+            )
             return CRLValidationResult.ERROR
 
         subject_certificates: dict[x509.Name, list[x509.Certificate]] = defaultdict(
@@ -390,7 +389,7 @@ class CRLValidator:
             # no ERROR result found, all paths are REVOKED
             return CRLValidationResult.REVOKED
 
-        return traverse_chain(chain[0])
+        return traverse_chain(start_cert)
 
     def _is_certificate_trusted_by_os(self, cert: x509.Certificate) -> bool:
         if cert.subject not in self._trusted_ca:
@@ -686,8 +685,8 @@ class CRLValidator:
         """
         Validate an OpenSSL connection against CRLs.
 
-        This method extracts certificate chains from the connection and validates them
-        against Certificate Revocation Lists (CRLs).
+        This method extracts the peer certificate and certificate chain from the
+        connection and validates them against Certificate Revocation Lists (CRLs).
 
         Args:
             connection: OpenSSL connection object
@@ -695,35 +694,47 @@ class CRLValidator:
         Returns:
             True if validation passes, False otherwise
         """
-        certificate_chains = self._extract_certificate_chains_from_connection(
-            connection
-        )
-        return self.validate_certificate_chains(certificate_chains)
+        try:
+            # Get the peer certificate (the start certificate)
+            peer_cert = connection.get_peer_certificate(as_cryptography=True)
+            if peer_cert is None:
+                logger.warning("No peer certificate found in connection")
+                return (
+                    self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
+                )
 
-    def _extract_certificate_chains_from_connection(
+            # Extract the certificate chain
+            cert_chain = self._extract_certificate_chain_from_connection(connection)
+
+            return self.validate_certificate_chain(peer_cert, cert_chain)
+        except Exception as e:
+            logger.warning("Failed to validate connection: %s", e)
+            return self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
+
+    def _extract_certificate_chain_from_connection(
         self, connection
-    ) -> list[list[x509.Certificate]]:
-        """Extract certificate chains from OpenSSL connection for CRL validation.
+    ) -> list[x509.Certificate] | None:
+        """Extract certificate chain from OpenSSL connection for CRL validation.
 
         Args:
             connection: OpenSSL connection object
 
         Returns:
-            List of certificate chains, where each chain is a list of x509.Certificate objects
+            Certificate chain as a list of x509.Certificate objects, or None on error
         """
         try:
             # Convert OpenSSL certificates to cryptography x509 certificates
             cert_chain = connection.get_peer_cert_chain(as_cryptography=True)
             if not cert_chain:
                 logger.debug("No certificate chain found in connection")
-                return []
+                return None
             logger.debug(
                 "Extracted %d certificates for CRL validation", len(cert_chain)
             )
-            return [cert_chain]  # Return as a single chain
+            return cert_chain
 
         except Exception as e:
             logger.warning(
                 "Failed to extract certificate chain for CRL validation: %s", e
             )
-            return []
+            return None
