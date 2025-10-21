@@ -489,3 +489,7 @@ class FakeAwsLambdaEnvironment(FakeAwsEnvironment):
     def __exit__(self, *args, **kwargs):
         self.os_environment_patch.__exit__(*args)
         super().__exit__(*args, **kwargs)
+
+
+def is_running_against_gcp():
+    return os.getenv("cloud_provider").lower() == "gcp"
