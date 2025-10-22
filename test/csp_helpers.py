@@ -5,17 +5,23 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from time import time
-from typing import TYPE_CHECKING
 from unittest import mock
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 import jwt
 
-from snowflake.connector.options import botocore, installed_boto
-
-if TYPE_CHECKING:
+# Old driver does not install boto
+try:
     from botocore.awsrequest import AWSRequest
+    from botocore.credentials import Credentials
+
+    installed_boto = True
+except ImportError:
+    AWSRequest = None
+    Credentials = None
+    installed_boto = False
+
 
 from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
 from snowflake.connector.vendored.requests.models import Response
@@ -380,9 +386,7 @@ class FakeAwsEnvironment:
 
         self.caller_identity = {"Arn": self.arn}
         self.region = "us-east-1"
-        self.credentials = botocore.credentials.Credentials(
-            access_key="ak", secret_key="sk"
-        )
+        self.credentials = Credentials(access_key="ak", secret_key="sk")
         self.instance_document = (
             b'{"region": "us-east-1", "instanceId": "i-1234567890abcdef0"}'
         )
