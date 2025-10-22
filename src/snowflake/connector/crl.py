@@ -313,7 +313,7 @@ class CRLValidator:
              but some certificates can't be verified.
         """
         # Check if start certificate is expired
-        if not self._is_valid(start_cert):
+        if not self._is_within_validity_dates(start_cert):
             logger.warning(
                 "Start certificate is expired or not yet valid: %s", start_cert.subject
             )
@@ -325,6 +325,11 @@ class CRLValidator:
         for cert in chain:
             if not self._is_ca_certificate(cert):
                 logger.warning("Ignoring non-CA certificate: %s", cert)
+                continue
+            if not self._is_within_validity_dates(cert):
+                logger.warning(
+                    "Ignoring certificate not within validity dates: %s", cert
+                )
                 continue
             subject_certificates[cert.subject].append(cert)
         currently_visited_subjects: set[x509.Name] = set()
@@ -451,9 +456,8 @@ class CRLValidator:
         return not_valid_before, not_valid_after
 
     @staticmethod
-    def _is_valid(cert: x509.Certificate) -> bool:
+    def _is_within_validity_dates(cert: x509.Certificate) -> bool:
         # Check if a certificate is currently valid (not expired and not before validity period).
-
         not_valid_before, not_valid_after = (
             CRLValidator._get_certificate_validity_dates(cert)
         )
@@ -509,12 +513,12 @@ class CRLValidator:
           validity period <= 7 days (604,800 seconds)
         """
         issue_date, expiry_date = CRLValidator._get_certificate_validity_dates(cert)
-        validity_period = expiry_date - issue_date
+        validity_period = expiry_date - issue_date + timedelta(days=1)
 
         march_15_2026 = datetime(2026, 3, 15, tzinfo=timezone.utc)
         if issue_date >= march_15_2026:
-            return validity_period.total_seconds() <= 604800  # 7 days in seconds
-        return validity_period.total_seconds() <= 864000  # 10 days in seconds
+            return validity_period.days <= 7
+        return validity_period.days <= 10
 
     @staticmethod
     def _extract_crl_distribution_points(cert: x509.Certificate) -> list[str]:
