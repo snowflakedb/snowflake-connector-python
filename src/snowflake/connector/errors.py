@@ -175,7 +175,7 @@ class Error(Exception):
                     try:
                         import asyncio
 
-                        asyncio.get_running_loop().create_task(result)
+                        asyncio.get_running_loop().run_until_complete(result)
                     except Exception:
                         logger.debug(
                             "Failed to schedule async telemetry logging.",

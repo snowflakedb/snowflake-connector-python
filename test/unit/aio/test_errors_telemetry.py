@@ -24,7 +24,7 @@ async def test_error_telemetry_async_connection():
 
     with patch("asyncio.get_running_loop") as loop_mock:
         Error(msg="kaboom", errno=654321, sqlstate="00000", connection=conn)
-        loop_mock.return_value.create_task.assert_called_once()
+        loop_mock.return_value.run_until_complete.assert_called_once()
 
     msg = _extract_message_from_log_call(conn)
     assert msg[TelemetryField.KEY_TYPE.value] == TelemetryField.SQL_EXCEPTION.value
