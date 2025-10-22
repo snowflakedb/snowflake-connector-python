@@ -142,7 +142,13 @@ from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPO
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
-from .util_text import construct_hostname, expand_tilde, parse_account, split_statements
+from .util_text import (
+    construct_hostname,
+    expand_tilde,
+    is_valid_account_identifier,
+    parse_account,
+    split_statements,
+)
 from .wif_util import AttestationProvider
 
 if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
@@ -1832,8 +1838,20 @@ class SnowflakeConnection:
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if self._account and "." in self._account:
-            self._account = parse_account(self._account)
+        if self._account:
+            # Allow legacy formats like "acc.region" to continue parsing into simple account id
+            if "." in self._account:
+                self._account = parse_account(self._account)
+            if not is_valid_account_identifier(self._account):
+                Error.errorhandler_wrapper(
+                    self,
+                    None,
+                    ProgrammingError,
+                    {
+                        "msg": "Invalid account identifier: only letters, digits, '_' and '-' allowed; no dots or slashes",
+                        "errno": ER_INVALID_VALUE,
+                    },
+                )
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(
             self._backoff_policy(), Iterator
