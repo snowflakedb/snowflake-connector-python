@@ -5,13 +5,17 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from time import time
+from typing import TYPE_CHECKING
 from unittest import mock
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 import jwt
-from botocore.awsrequest import AWSRequest
-from botocore.credentials import Credentials
+
+from snowflake.connector.options import botocore, installed_boto
+
+if TYPE_CHECKING:
+    from botocore.awsrequest import AWSRequest
 
 from snowflake.connector.vendored.requests.exceptions import ConnectTimeout, HTTPError
 from snowflake.connector.vendored.requests.models import Response
@@ -365,6 +369,8 @@ class FakeAwsEnvironment:
     """
 
     def __init__(self):
+        assert installed_boto, "Cannot run test: botocore is not installed"
+
         # Defaults used for generating a token. Can be overriden in individual tests.
         self.arn = "arn:aws:sts::123456789:assumed-role/My-Role/i-34afe100cad287fab"
         # Path of roles that can be assumed. Empty if no impersonation is allowed.
@@ -374,7 +380,9 @@ class FakeAwsEnvironment:
 
         self.caller_identity = {"Arn": self.arn}
         self.region = "us-east-1"
-        self.credentials = Credentials(access_key="ak", secret_key="sk")
+        self.credentials = botocore.credentials.Credentials(
+            access_key="ak", secret_key="sk"
+        )
         self.instance_document = (
             b'{"region": "us-east-1", "instanceId": "i-1234567890abcdef0"}'
         )
