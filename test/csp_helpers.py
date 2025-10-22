@@ -504,4 +504,4 @@ class FakeAwsLambdaEnvironment(FakeAwsEnvironment):
 
 
 def is_running_against_gcp():
-    return os.getenv("cloud_provider").lower() == "gcp"
+    return os.getenv("cloud_provider", "").lower() == "gcp"
