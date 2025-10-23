@@ -154,7 +154,7 @@ async def test_async_exec_multi(conn_cnx, cursor_class, skip_to_last_set: bool):
             assert con.is_still_running(await con.get_query_status(q_id))
         await _wait_while_query_running_async(con, q_id, sleep_time=1)
     async with conn_cnx() as con:
-        async with con.cursor() as cur:
+        async with con.cursor(cursor_class) as cur:
             await _wait_until_query_success_async(
                 con, q_id, num_checks=3, sleep_per_check=1
             )
@@ -162,7 +162,6 @@ async def test_async_exec_multi(conn_cnx, cursor_class, skip_to_last_set: bool):
                 await con.get_query_status_throw_if_error(q_id) == QueryStatus.SUCCESS
             )
 
-            await cur.get_results_from_sfqid(q_id)
             if cursor_class == SnowflakeCursor:
                 expected = [
                     [(1,)],
@@ -177,6 +176,9 @@ async def test_async_exec_multi(conn_cnx, cursor_class, skip_to_last_set: bool):
                     lambda x: len(x) == 1 and len(x[0]) == 1 and x[0]["COUNT(*)"] > 0,
                     [{"'B'": "b"}],
                 ]
+
+            await cur.get_results_from_sfqid(q_id)
+            assert isinstance(cur, cursor_class)
             await _check_multi_statement_results(
                 cur,
                 checks=expected,
