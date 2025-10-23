@@ -62,7 +62,6 @@ async def test_should_authenticate_using_oidc_async():
 
 @pytest.mark.wif
 @pytest.mark.aio
-@pytest.mark.skip("Impersonation is still being developed")
 async def test_should_authenticate_with_impersonation_async():
     if not isinstance(IMPERSONATION_PATH, str) or not IMPERSONATION_PATH:
         pytest.skip("Skipping test - IMPERSONATION_PATH is not set")
