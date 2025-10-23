@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-from test.csp_helpers import is_running_against_gcp
-
 import pytest
 
 from snowflake.connector.errors import ProgrammingError
@@ -48,23 +46,29 @@ async def test_binding_security(conn_cnx, db_parameters):
 
             # SQL injection safe test
             # Good Example
-            if not is_running_against_gcp():
-                with pytest.raises(ProgrammingError):
-                    r = await cnx.cursor().execute(
-                        "SELECT * FROM {name} WHERE aa=%s".format(
-                            name=db_parameters["name"]
-                        ),
-                        ("1 or aa>0",),
-                    )
-                    await r.fetchall()
-
-                with pytest.raises(ProgrammingError):
-                    await cnx.cursor().execute(
-                        "SELECT * FROM {name} WHERE aa=%(aa)s".format(
-                            name=db_parameters["name"]
-                        ),
-                        {"aa": "1 or aa>0"},
-                    )
+            # server behavior change: this no longer raises an error, but returns an empty result set
+            try:
+                results = await cnx.cursor().execute(
+                    "SELECT * FROM {name} WHERE aa=%s".format(
+                        name=db_parameters["name"]
+                    ),
+                    ("1 or aa>0",),
+                )
+                assert await results.fetchall() == []
+            except ProgrammingError:
+                # old server behavior: OK
+                pass
+            try:
+                results = await cnx.cursor().execute(
+                    "SELECT * FROM {name} WHERE aa=%(aa)s".format(
+                        name=db_parameters["name"]
+                    ),
+                    {"aa": "1 or aa>0"},
+                )
+                assert await results.fetchall() == []
+            except ProgrammingError:
+                # old server behavior: OK
+                pass
 
             # Bad Example in application. DON'T DO THIS
             c = cnx.cursor()
