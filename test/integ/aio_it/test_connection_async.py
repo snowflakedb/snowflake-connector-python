@@ -195,16 +195,20 @@ async def test_keep_alive_heartbeat_send(conn_cnx, db_parameters):
             "client_session_keep_alive_heartbeat_frequency": "1",
         }
     )
-    with mock.patch(
-        "snowflake.connector.aio._connection.SnowflakeConnection._validate_client_session_keep_alive_heartbeat_frequency",
-        return_value=900,
-    ), mock.patch(
-        "snowflake.connector.aio._connection.SnowflakeConnection.client_session_keep_alive_heartbeat_frequency",
-        new_callable=mock.PropertyMock,
-        return_value=1,
-    ), mock.patch(
-        "snowflake.connector.aio._connection.SnowflakeConnection._heartbeat_tick"
-    ) as mocked_heartbeat:
+    with (
+        mock.patch(
+            "snowflake.connector.aio._connection.SnowflakeConnection._validate_client_session_keep_alive_heartbeat_frequency",
+            return_value=900,
+        ),
+        mock.patch(
+            "snowflake.connector.aio._connection.SnowflakeConnection.client_session_keep_alive_heartbeat_frequency",
+            new_callable=mock.PropertyMock,
+            return_value=1,
+        ),
+        mock.patch(
+            "snowflake.connector.aio._connection.SnowflakeConnection._heartbeat_tick"
+        ) as mocked_heartbeat,
+    ):
         cnx = snowflake.connector.aio.SnowflakeConnection(**config)
         try:
             await cnx.connect()
@@ -1056,9 +1060,10 @@ async def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry_async)
         "math",
     ]
 
-    async with conn_cnx() as conn, capture_sf_telemetry_async.patch_connection(
-        conn, False
-    ) as telemetry_test:
+    async with (
+        conn_cnx() as conn,
+        capture_sf_telemetry_async.patch_connection(conn, False) as telemetry_test,
+    ):
         await conn._log_telemetry_imported_packages()
         assert len(telemetry_test.records) > 0
         assert any(
@@ -1073,11 +1078,10 @@ async def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry_async)
 
     # test different application
     new_application_name = "PythonSnowpark"
-    async with conn_cnx(
-        timezone="UTC", application=new_application_name
-    ) as conn, capture_sf_telemetry_async.patch_connection(
-        conn, False
-    ) as telemetry_test:
+    async with (
+        conn_cnx(timezone="UTC", application=new_application_name) as conn,
+        capture_sf_telemetry_async.patch_connection(conn, False) as telemetry_test,
+    ):
         await conn._log_telemetry_imported_packages()
         assert len(telemetry_test.records) > 0
         assert any(
@@ -1090,13 +1094,14 @@ async def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry_async)
         )
 
     # test opt out
-    async with conn_cnx(
-        timezone="UTC",
-        application=new_application_name,
-        log_imported_packages_in_telemetry=False,
-    ) as conn, capture_sf_telemetry_async.patch_connection(
-        conn, False
-    ) as telemetry_test:
+    async with (
+        conn_cnx(
+            timezone="UTC",
+            application=new_application_name,
+            log_imported_packages_in_telemetry=False,
+        ) as conn,
+        capture_sf_telemetry_async.patch_connection(conn, False) as telemetry_test,
+    ):
         await conn._log_telemetry_imported_packages()
         assert len(telemetry_test.records) == 0
 
@@ -1245,9 +1250,10 @@ async def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_match(
     conn_cnx, is_public_test, is_local_dev_setup, caplog
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.aio._ocsp_snowflake")
-    async with conn_cnx(
-        insecure_mode=True, disable_ocsp_checks=True
-    ) as conn, conn.cursor() as cur:
+    async with (
+        conn_cnx(insecure_mode=True, disable_ocsp_checks=True) as conn,
+        conn.cursor() as cur,
+    ):
         assert await (await cur.execute("select 1")).fetchall() == [(1,)]
         assert "snowflake.connector.aio._ocsp_snowflake" not in caplog.text
         if is_public_test or is_local_dev_setup:
@@ -1263,9 +1269,10 @@ async def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_dis
     conn_cnx, is_public_test, is_local_dev_setup, caplog
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.aio._ocsp_snowflake")
-    async with conn_cnx(
-        insecure_mode=False, disable_ocsp_checks=True
-    ) as conn, conn.cursor() as cur:
+    async with (
+        conn_cnx(insecure_mode=False, disable_ocsp_checks=True) as conn,
+        conn.cursor() as cur,
+    ):
         assert await (await cur.execute("select 1")).fetchall() == [(1,)]
         assert "snowflake.connector.aio._ocsp_snowflake" not in caplog.text
         if is_public_test or is_local_dev_setup:
@@ -1281,9 +1288,10 @@ async def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_ena
     conn_cnx, is_public_test, is_local_dev_setup, caplog
 ):
     caplog.set_level(logging.DEBUG, "snowflake.connector.aio._ocsp_snowflake")
-    async with conn_cnx(
-        insecure_mode=True, disable_ocsp_checks=False
-    ) as conn, conn.cursor() as cur:
+    async with (
+        conn_cnx(insecure_mode=True, disable_ocsp_checks=False) as conn,
+        conn.cursor() as cur,
+    ):
         assert await (await cur.execute("select 1")).fetchall() == [(1,)]
         if is_public_test or is_local_dev_setup:
             assert "snowflake.connector.aio._ocsp_snowflake" in caplog.text
@@ -1394,9 +1402,10 @@ async def test_disable_telemetry(conn_cnx, caplog):
 
     # set session parameters to false
     with caplog.at_level(logging.DEBUG):
-        async with conn_cnx(
-            session_parameters={"CLIENT_TELEMETRY_ENABLED": False}
-        ) as conn, conn.cursor() as cur:
+        async with (
+            conn_cnx(session_parameters={"CLIENT_TELEMETRY_ENABLED": False}) as conn,
+            conn.cursor() as cur,
+        ):
             await (await cur.execute("select 1")).fetchall()
             assert not conn.telemetry_enabled and not conn._telemetry._log_batch
             # this enable won't work as the session parameter is set to false
@@ -1416,6 +1425,48 @@ async def test_disable_telemetry(conn_cnx, caplog):
                 await (await cur.execute("select 1")).fetchall()
             assert not conn.telemetry_enabled
     assert "POST /telemetry/send" not in caplog.text
+
+
+@pytest.mark.skipolddriver
+async def test_platform_detection_timeout(conn_cnx):
+    """Tests platform detection timeout.
+
+    Creates a connection with platform_detection_timeout parameter.
+    """
+    async with conn_cnx(timezone="UTC", platform_detection_timeout_seconds=2.5) as cnx:
+        assert cnx.platform_detection_timeout_seconds == 2.5
+
+
+@pytest.mark.skipolddriver
+async def test_platform_detection_zero_timeout(conn_cnx):
+    with (
+        mock.patch(
+            "snowflake.connector.platform_detection.is_ec2_instance"
+        ) as is_ec2_instance,
+        mock.patch(
+            "snowflake.connector.platform_detection.has_aws_identity"
+        ) as has_aws_identity,
+        mock.patch("snowflake.connector.platform_detection.is_azure_vm") as is_azure_vm,
+        mock.patch(
+            "snowflake.connector.platform_detection.has_azure_managed_identity"
+        ) as has_azure_managed_identity,
+        mock.patch("snowflake.connector.platform_detection.is_gce_vm") as is_gce_vm,
+        mock.patch(
+            "snowflake.connector.platform_detection.has_gcp_identity"
+        ) as has_gcp_identity,
+    ):
+        for kwargs in [
+            {},  # should be default
+            {"platform_detection_timeout_seconds": 0},
+        ]:
+            async with conn_cnx(**kwargs) as conn:
+                assert conn.platform_detection_timeout_seconds == 0.0
+                assert not is_ec2_instance.called
+                assert not has_aws_identity.called
+                assert not is_azure_vm.called
+                assert not has_azure_managed_identity.called
+                assert not is_gce_vm.called
+                assert not has_gcp_identity.called
 
 
 @pytest.mark.skipolddriver

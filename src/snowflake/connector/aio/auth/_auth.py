@@ -102,7 +102,7 @@ class Auth(AuthSync):
             self._rest._connection._login_timeout,
             self._rest._connection._network_timeout,
             self._rest._connection._socket_timeout,
-            self._rest._connection._platform_detection_timeout_seconds,
+            self._rest._connection.platform_detection_timeout_seconds,
             http_config=self._rest.session_manager.config,  # AioHttpConfig extends BaseHttpConfig
         )
 

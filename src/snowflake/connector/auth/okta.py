@@ -167,7 +167,9 @@ class AuthByOkta(AuthByPlugin):
             conn._internal_application_version,
             conn._ocsp_mode(),
             conn.login_timeout,
-            conn._network_timeout,
+            conn.network_timeout,
+            conn.socket_timeout,
+            conn.platform_detection_timeout_seconds,
             session_manager=conn._session_manager.clone(use_pooling=False),
         )
 
