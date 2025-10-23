@@ -10,7 +10,6 @@ import uuid
 from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 import OpenSSL.SSL
-from urllib3.util.url import parse_url
 
 from ..compat import FORBIDDEN, OK, UNAUTHORIZED, urlencode, urlparse, urlsplit
 from ..constants import (
@@ -79,7 +78,11 @@ from ..sqlstate import (
 )
 from ..time_util import TimeoutBackoffCtx
 from ._description import CLIENT_NAME
-from ._session_manager import SessionManager, SnowflakeSSLConnectorFactory
+from ._session_manager import (
+    SessionManager,
+    SessionManagerFactory,
+    SnowflakeSSLConnectorFactory,
+)
 
 if TYPE_CHECKING:
     from snowflake.connector.aio import SnowflakeConnection
@@ -145,14 +148,11 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             session_manager = (
                 connection._session_manager
                 if (connection and connection._session_manager)
-                else SessionManager(connector_factory=SnowflakeSSLConnectorFactory())
+                else SessionManagerFactory.get_manager(
+                    connector_factory=SnowflakeSSLConnectorFactory()
+                )
             )
         self._session_manager = session_manager
-
-        if self._connection and self._connection.proxy_host:
-            self._get_proxy_headers = lambda url: {"Host": parse_url(url).hostname}
-        else:
-            self._get_proxy_headers = lambda _: None
 
     async def close(self) -> None:
         if hasattr(self, "_token"):
@@ -737,7 +737,6 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 headers=headers,
                 data=input_data,
                 timeout=aiohttp.ClientTimeout(socket_timeout),
-                proxy_headers=self._get_proxy_headers(full_url),
             )
             try:
                 if raw_ret.status == OK:

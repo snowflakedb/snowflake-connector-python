@@ -4,8 +4,10 @@ import sys
 from typing import TYPE_CHECKING
 
 from aiohttp import ClientRequest, ClientTimeout
+from aiohttp.client import _RequestOptions
 from aiohttp.client_proto import ResponseHandler
 from aiohttp.connector import Connection
+from aiohttp.typedefs import StrOrURL
 
 from .. import OperationalError
 from ..errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
@@ -14,6 +16,8 @@ from ._ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
 if TYPE_CHECKING:
     from aiohttp.tracing import Trace
+    from typing import Unpack
+    from aiohttp.client import _RequestContextManager
 
 import abc
 import collections
@@ -44,10 +48,10 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
     ):
         self._snowflake_ocsp_mode = snowflake_ocsp_mode
         if session_manager is None:
-            logger.debug(
-                "SessionManager instance was not passed to SSLConnector - OCSP will use default settings which may be distinct from the customer's specific one. Code should always pass such instance so please verify why it isn't true in the current context"
+            logger.warning(
+                "SessionManager instance was not passed to SSLConnector - OCSP will use default settings which may be distinct from the customer's specific one. Code should always pass such instance - verify why it isn't true in the current context"
             )
-            session_manager = SessionManager()
+            session_manager = SessionManagerFactory.get_manager()
         self._session_manager = session_manager
         if self._snowflake_ocsp_mode == OCSPMode.FAIL_OPEN and sys.version_info < (
             3,
@@ -345,13 +349,27 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
             lambda: SessionPool(self)
         )
 
+    @classmethod
+    def from_config(cls, cfg: AioHttpConfig, **overrides: Any) -> SessionManager:
+        """Build a new manager from *cfg*, optionally overriding fields.
+
+        Example::
+
+            no_pool_cfg = conn._http_config.copy_with(use_pooling=False)
+            manager = SessionManager.from_config(no_pool_cfg)
+        """
+
+        if overrides:
+            cfg = cfg.copy_with(**overrides)
+        return cls(config=cfg)
+
     @property
     def connector_factory(self) -> Callable[..., aiohttp.BaseConnector]:
         return self._cfg.connector_factory
 
     @connector_factory.setter
     def connector_factory(self, value: Callable[..., aiohttp.BaseConnector]) -> None:
-        self._cfg = self._cfg.copy_with(connector_factory=value)
+        self._cfg: AioHttpConfig = self._cfg.copy_with(connector_factory=value)
 
     def make_session(self) -> aiohttp.ClientSession:
         """Create a new aiohttp.ClientSession with configured connector."""
@@ -359,10 +377,10 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
             session_manager=self.clone(),
             snowflake_ocsp_mode=self._cfg.snowflake_ocsp_mode,
         )
-
         return aiohttp.ClientSession(
             connector=connector,
             trust_env=self._cfg.trust_env,
+            proxy=self.proxy_url,
         )
 
     @contextlib.asynccontextmanager
@@ -425,7 +443,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
         if connector_factory is not None:
             overrides["connector_factory"] = connector_factory
 
-        return SessionManager.from_config(self._cfg, **overrides)
+        return self.from_config(self._cfg, **overrides)
 
 
 async def request(
@@ -454,3 +472,82 @@ async def request(
         use_pooling=use_pooling,
         **kwargs,
     )
+
+
+class ProxySessionManager(SessionManager):
+    class SessionWithProxy(aiohttp.ClientSession):
+        if sys.version_info >= (3, 11) and TYPE_CHECKING:
+
+            def request(
+                self,
+                method: str,
+                url: StrOrURL,
+                **kwargs: Unpack[_RequestOptions],
+            ) -> _RequestContextManager: ...
+
+        else:
+
+            def request(
+                self, method: str, url: StrOrURL, **kwargs: Any
+            ) -> _RequestContextManager:
+                """Perform HTTP request."""
+                # Inject Host header when proxying
+                try:
+                    # respect caller-provided proxy and proxy_headers if any
+                    provided_proxy = kwargs.get("proxy") or self._default_proxy
+                    provided_proxy_headers = kwargs.get("proxy_headers")
+                    if provided_proxy is not None:
+                        authority = urlparse(str(url)).netloc
+                        if provided_proxy_headers is None:
+                            kwargs["proxy_headers"] = {"Host": authority}
+                        elif "Host" not in provided_proxy_headers:
+                            provided_proxy_headers["Host"] = authority
+                        else:
+                            logger.debug(
+                                "Host header was already set - not overriding with netloc at the ClientSession.request method level."
+                            )
+                except Exception:
+                    logger.warning(
+                        "Failed to compute proxy settings for %s",
+                        urlparse(url).hostname,
+                        exc_info=True,
+                    )
+                return super().request(method, url, **kwargs)
+
+    def make_session(self) -> aiohttp.ClientSession:
+        connector = self._cfg.get_connector(
+            session_manager=self.clone(),
+            snowflake_ocsp_mode=self._cfg.snowflake_ocsp_mode,
+        )
+        # Construct session with base proxy set, request() may override per-URL when bypassing
+        return self.SessionWithProxy(
+            connector=connector,
+            trust_env=self._cfg.trust_env,
+            proxy=self.proxy_url,
+        )
+
+
+class SessionManagerFactory:
+    @staticmethod
+    def get_manager(
+        config: AioHttpConfig | None = None, **http_config_kwargs
+    ) -> SessionManager:
+        """Return a proxy-aware or plain async SessionManager based on config.
+
+        If any explicit proxy parameters are provided (in config or kwargs),
+        return ProxySessionManager; otherwise return the base SessionManager.
+        """
+
+        def _has_proxy_params(cfg: AioHttpConfig | None, kwargs: dict) -> bool:
+            cfg_keys = (
+                "proxy_host",
+                "proxy_port",
+            )
+            in_cfg = any(getattr(cfg, k, None) for k in cfg_keys) if cfg else False
+            in_kwargs = "proxy" in kwargs
+            return in_cfg or in_kwargs
+
+        if _has_proxy_params(config, http_config_kwargs):
+            return ProxySessionManager(config, **http_config_kwargs)
+        else:
+            return SessionManager(config, **http_config_kwargs)

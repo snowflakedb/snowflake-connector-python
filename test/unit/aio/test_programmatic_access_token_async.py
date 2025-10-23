@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import pathlib
-from typing import Any, Generator
 
 import pytest
 
@@ -17,13 +16,7 @@ except ImportError:
 
 import snowflake.connector.errors
 
-from ...wiremock.wiremock_utils import WiremockClient
-
-
-@pytest.fixture(scope="session")
-def wiremock_client() -> Generator[WiremockClient | Any, Any, None]:
-    with WiremockClient() as client:
-        yield client
+from ...test_utils.wiremock.wiremock_utils import WiremockClient
 
 
 @pytest.mark.skipolddriver
