@@ -76,7 +76,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
         super().__init__(connection, use_dict_result)
         # the following fixes type hint
         self._connection = typing.cast("SnowflakeConnection", self._connection)
-        self._inner_cursor = typing.cast(SnowflakeCursor, self._inner_cursor)
+        self._inner_cursor: SnowflakeCursor | None = None
         self._lock_canceling = asyncio.Lock()
         self._timebomb: asyncio.Task | None = None
         self._prefetch_hook: typing.Callable[[], typing.Awaitable] | None = None
@@ -958,7 +958,7 @@ class SnowflakeCursor(SnowflakeCursorSync):
             await self._prefetch_hook()
         if self._result is None and self._result_set is not None:
             self._result: ResultSetIterator = await self._result_set._create_iter(
-                is_fetch_all=True
+                is_fetch_all=True,
             )
             self._result_state = ResultState.VALID
 
