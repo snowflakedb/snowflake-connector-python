@@ -41,6 +41,8 @@ class TelemetryField(Enum):
     IMPORTED_PACKAGES = "client_imported_packages"
     # multi-statement usage
     MULTI_STATEMENT = "client_multi_statement_query"
+    # aio usage
+    USES_AIO = "client_aio_use"
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
     KEY_TYPE = "type"
     KEY_SOURCE = "source"
@@ -51,7 +53,6 @@ class TelemetryField(Enum):
     KEY_REASON = "reason"
     KEY_VALUE = "value"
     KEY_EXCEPTION = "exception"
-    KEY_USES_AIO = "uses_aio"
     # Reserved UpperCamelName keys
     KEY_ERROR_NUMBER = "ErrorNumber"
     KEY_ERROR_MESSAGE = "ErrorMessage"

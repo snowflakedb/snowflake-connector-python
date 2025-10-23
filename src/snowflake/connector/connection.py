@@ -591,6 +591,7 @@ class SnowflakeConnection:
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
+        self._log_async_usage()
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
@@ -2294,6 +2295,18 @@ class SnowflakeConnection:
                     connection=self,
                 )
             )
+
+    def _log_async_usage(self):
+        self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict={
+                    TelemetryField.KEY_TYPE.value: TelemetryField.USES_AIO.value,
+                    TelemetryField.KEY_VALUE.value: str(False),
+                },
+                timestamp=get_time_millis(),
+                connection=self,
+            )
+        )
 
     def is_valid(self) -> bool:
         """This function tries to answer the question: Is this connection still good for sending queries?
