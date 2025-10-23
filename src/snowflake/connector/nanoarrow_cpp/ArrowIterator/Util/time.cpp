@@ -1,5 +1,7 @@
 #include "time.hpp"
 
+#include <cstdlib>
+
 namespace sf {
 
 namespace internal {

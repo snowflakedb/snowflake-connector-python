@@ -567,7 +567,7 @@ def test_warn_config_file_owner(tmp_path, monkeypatch):
         assert (
             str(c[0].message)
             == f"Bad owner or permissions on {str(c_file)}"
-            + f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n'
+            + f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n * To skip this warning, set environment variable SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE=true.\n'
         )
 
 
@@ -587,7 +587,7 @@ def test_warn_config_file_permissions(tmp_path):
     with warnings.catch_warnings(record=True) as c:
         assert c1["b"] is True
     assert len(c) == 1
-    chmod_message = f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n'
+    chmod_message = f'.\n * To change owner, run `chown $USER "{str(c_file)}"`.\n * To restrict permissions, run `chmod 0600 "{str(c_file)}"`.\n * To skip this warning, set environment variable SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE=true.\n'
     assert (
         str(c[0].message)
         == f"Bad owner or permissions on {str(c_file)}" + chmod_message
@@ -637,6 +637,30 @@ def test_log_debug_config_file_parent_dir_permissions(tmp_path, caplog):
 
     tmp_dir.chmod(stat.S_IMODE(mod.st_mode))
     shutil.rmtree(tmp_dir)
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
+def test_skip_warning_config_file_permissions(tmp_path, monkeypatch):
+    c_file = tmp_path / "config.toml"
+    c1 = ConfigManager(file_path=c_file, name="root_parser")
+    c1.add_option(name="b", parse_str=lambda e: e.lower() == "true")
+    c_file.write_text(
+        dedent(
+            """\
+            b = true
+            """
+        )
+    )
+    # Make file readable by others (would normally trigger warning)
+    c_file.chmod(stat.S_IMODE(c_file.stat().st_mode) | stat.S_IROTH)
+
+    with monkeypatch.context() as m:
+        # Set environment variable to skip warning
+        m.setenv("SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE", "true")
+        with warnings.catch_warnings(record=True) as c:
+            assert c1["b"] is True
+        # Should have no warnings when skip is enabled
+        assert len(c) == 0
 
 
 def test_configoption_missing_root_manager():
