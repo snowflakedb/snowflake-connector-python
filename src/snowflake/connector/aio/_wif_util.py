@@ -45,12 +45,37 @@ async def get_aws_region() -> str:
     return region
 
 
-async def create_aws_attestation() -> WorkloadIdentityAttestation:
+async def get_aws_session(impersonation_path: list[str] | None = None):
+    """Creates an aioboto3 session with the appropriate credentials.
+
+    If impersonation_path is provided, this uses the role at the end of the path. Otherwise, this uses the role attached to the current workload.
+    """
+    session = aioboto3.Session()
+
+    impersonation_path = impersonation_path or []
+    for arn in impersonation_path:
+        async with session.client("sts") as sts_client:
+            response = await sts_client.assume_role(
+                RoleArn=arn, RoleSessionName="identity-federation-session"
+            )
+        creds = response["Credentials"]
+        session = aioboto3.Session(
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"],
+        )
+    return session
+
+
+async def create_aws_attestation(
+    impersonation_path: list[str] | None = None,
+) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for AWS.
 
     If the application isn't running on AWS or no credentials were found, raises an error.
     """
-    session = aioboto3.Session()
+    session = await get_aws_session(impersonation_path)
+
     aws_creds = await session.get_credentials()
     if not aws_creds:
         raise ProgrammingError(
@@ -276,7 +301,7 @@ async def create_attestation(
     )
 
     if provider == AttestationProvider.AWS:
-        return await create_aws_attestation()
+        return await create_aws_attestation(impersonation_path)
     elif provider == AttestationProvider.AZURE:
         return await create_azure_attestation(entra_resource, session_manager)
     elif provider == AttestationProvider.GCP:
