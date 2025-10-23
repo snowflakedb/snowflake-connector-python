@@ -363,6 +363,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
         return aiohttp.ClientSession(
             connector=connector,
             trust_env=self._cfg.trust_env,
+            proxy=self.proxy_url,
         )
 
     @contextlib.asynccontextmanager

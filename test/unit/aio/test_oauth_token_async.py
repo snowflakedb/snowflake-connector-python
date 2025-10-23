@@ -4,7 +4,6 @@
 
 import logging
 import pathlib
-from typing import Any, Generator, Union
 from unittest import mock
 from unittest.mock import Mock, patch
 
@@ -23,12 +22,6 @@ from ...wiremock.wiremock_utils import WiremockClient
 from ..test_oauth_token import omit_oauth_urls_check  # noqa: F401
 
 logger = logging.getLogger(__name__)
-
-
-@pytest.fixture(scope="session")
-def wiremock_client() -> Generator[Union[WiremockClient, Any], Any, None]:
-    with WiremockClient() as client:
-        yield client
 
 
 @pytest.fixture(scope="session")
@@ -54,17 +47,6 @@ def wiremock_oauth_client_creds_dir() -> pathlib.Path:
         / "auth"
         / "oauth"
         / "client_credentials"
-    )
-
-
-@pytest.fixture(scope="session")
-def wiremock_generic_mappings_dir() -> pathlib.Path:
-    return (
-        pathlib.Path(__file__).parent.parent.parent
-        / "data"
-        / "wiremock"
-        / "mappings"
-        / "generic"
     )
 
 

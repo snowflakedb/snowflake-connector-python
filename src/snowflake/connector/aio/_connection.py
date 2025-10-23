@@ -21,7 +21,6 @@ from snowflake.connector import (
     Error,
     OperationalError,
     ProgrammingError,
-    proxy,
 )
 
 from .._query_context_cache import QueryContextCache
@@ -189,10 +188,6 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         """Opens a new network connection."""
         self.converter = self._converter_class(
             use_numpy=self._numpy, support_negative_year=self._support_negative_year
-        )
-
-        proxy.set_proxies(
-            self.proxy_host, self.proxy_port, self.proxy_user, self.proxy_password
         )
 
         self._rest = SnowflakeRestful(
@@ -1014,9 +1009,13 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         else:
             self.__config(**self._conn_parameters)
 
-        self._http_config = AioHttpConfig(
+        self._http_config: AioHttpConfig = AioHttpConfig(
             connector_factory=SnowflakeSSLConnectorFactory(),
             use_pooling=not self.disable_request_pooling,
+            proxy_host=self.proxy_host,
+            proxy_port=self.proxy_port,
+            proxy_user=self.proxy_user,
+            proxy_password=self.proxy_password,
             snowflake_ocsp_mode=self._ocsp_mode(),
             trust_env=True,  # Required for proxy support via environment variables
         )
