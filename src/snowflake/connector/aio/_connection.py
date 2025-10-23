@@ -737,6 +737,18 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 )
             )
 
+    async def _log_async_usage(self):
+        await self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict={
+                    TelemetryField.KEY_TYPE.value: TelemetryField.USES_AIO.value,
+                    TelemetryField.KEY_VALUE.value: str(True),
+                },
+                timestamp=get_time_millis(),
+                connection=self,
+            )
+        )
+
     async def _next_sequence_counter(self) -> int:
         """Gets next sequence counter. Used internally."""
         async with self._lock_sequence_counter:
@@ -1030,6 +1042,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             await self.__open_connection()
         self._telemetry = TelemetryClient(self._rest)
         await self._log_telemetry_imported_packages()
+        await self._log_async_usage()
 
     def cursor(
         self, cursor_class: type[SnowflakeCursor] = SnowflakeCursor
