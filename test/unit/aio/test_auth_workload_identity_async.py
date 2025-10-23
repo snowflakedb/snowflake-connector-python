@@ -252,6 +252,22 @@ async def test_explicit_aws_generates_unique_assertion_content(
     )
 
 
+async def test_aws_impersonation_calls_correct_apis_for_each_role_in_impersonation_path(
+    fake_aws_environment: FakeAwsEnvironmentAsync,
+):
+    impersonation_path = [
+        "arn:aws:iam::123456789:role/role2",
+        "arn:aws:iam::123456789:role/role3",
+    ]
+    fake_aws_environment.assumption_path = impersonation_path
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AWS, impersonation_path=impersonation_path
+    )
+    await auth_class.prepare(conn=None)
+
+    assert fake_aws_environment.assume_role_call_count == 2
+
+
 # -- GCP Tests --
 
 
