@@ -659,16 +659,14 @@ async def test_workload_identity_provider_is_required_for_wif_authenticator(
     "provider_param",
     [
         # Strongly-typed values.
-        AttestationProvider.AWS,
         AttestationProvider.AZURE,
         AttestationProvider.OIDC,
         # String values.
-        "AWS",
         "AZURE",
         "OIDC",
     ],
 )
-async def test_workload_identity_impersonation_path_unsupported_for_non_gcp_providers(
+async def test_workload_identity_impersonation_path_errors_for_unsupported_providers(
     monkeypatch, provider_param
 ):
     async def mock_authenticate(*_):
@@ -690,20 +688,22 @@ async def test_workload_identity_impersonation_path_unsupported_for_non_gcp_prov
                 ],
             )
         assert (
-            "workload_identity_impersonation_path is currently only supported for GCP."
+            "workload_identity_impersonation_path is currently only supported for GCP and AWS."
             in str(excinfo.value)
         )
 
 
 @pytest.mark.parametrize(
-    "provider_param",
+    "provider_param,impersonation_path",
     [
-        AttestationProvider.GCP,
-        "GCP",
+        (AttestationProvider.GCP, ["sa2@project.iam.gserviceaccount.com"]),
+        (AttestationProvider.AWS, ["arn:aws:iam::1234567890:role/role2"]),
+        ("GCP", ["sa2@project.iam.gserviceaccount.com"]),
+        ("AWS", ["arn:aws:iam::1234567890:role/role2"]),
     ],
 )
-async def test_workload_identity_impersonation_path_supported_for_gcp_provider(
-    monkeypatch, provider_param
+async def test_workload_identity_impersonation_path_populates_auth_class_for_supported_provider(
+    monkeypatch, provider_param, impersonation_path
 ):
     async def mock_authenticate(*_):
         pass
@@ -718,14 +718,9 @@ async def test_workload_identity_impersonation_path_supported_for_gcp_provider(
             account="account",
             authenticator="WORKLOAD_IDENTITY",
             workload_identity_provider=provider_param,
-            workload_identity_impersonation_path=[
-                "sa2@project.iam.gserviceaccount.com"
-            ],
+            workload_identity_impersonation_path=impersonation_path,
         )
-        assert conn.auth_class.provider == AttestationProvider.GCP
-        assert conn.auth_class.impersonation_path == [
-            "sa2@project.iam.gserviceaccount.com"
-        ]
+        assert conn.auth_class.impersonation_path == impersonation_path
 
 
 @pytest.mark.parametrize(

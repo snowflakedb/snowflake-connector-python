@@ -202,6 +202,8 @@ class FakeAwsEnvironmentAsync(FakeAwsEnvironment):
         )
 
         # Mock the async STS client for direct aioboto3 usage
+        fake_aws_self = self
+
         class MockStsClient:
             async def __aenter__(self):
                 return self
@@ -211,6 +213,9 @@ class FakeAwsEnvironmentAsync(FakeAwsEnvironment):
 
             async def get_caller_identity(self):
                 return await async_get_caller_identity()
+
+            async def assume_role(self, **kwargs):
+                return fake_aws_self.assume_role(**kwargs)
 
         def mock_session_client(service_name):
             if service_name == "sts":
