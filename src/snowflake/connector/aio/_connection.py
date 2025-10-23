@@ -418,10 +418,24 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
+                if (
+                    self._workload_identity_impersonation_path
+                    and self._workload_identity_provider != AttestationProvider.GCP
+                ):
+                    Error.errorhandler_wrapper(
+                        self,
+                        None,
+                        ProgrammingError,
+                        {
+                            "msg": "workload_identity_impersonation_path is currently only supported for GCP.",
+                            "errno": ER_INVALID_WIF_SETTINGS,
+                        },
+                    )
                 self.auth_class = AuthByWorkloadIdentity(
                     provider=self._workload_identity_provider,
                     token=self._token,
                     entra_resource=self._workload_identity_entra_resource,
+                    impersonation_path=self._workload_identity_impersonation_path,
                 )
             else:
                 # okta URL, e.g., https://<account>.okta.com/

@@ -8,6 +8,7 @@ import logging
 import os
 from base64 import b64decode
 from unittest import mock
+from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlparse
 
 import aiohttp
@@ -18,7 +19,7 @@ from snowflake.connector.aio._wif_util import AttestationProvider
 from snowflake.connector.aio.auth import AuthByWorkloadIdentity
 from snowflake.connector.errors import ProgrammingError
 
-from ...csp_helpers import gen_dummy_id_token
+from ...csp_helpers import gen_dummy_access_token, gen_dummy_id_token
 from .csp_helpers_async import FakeAwsEnvironmentAsync, FakeGceMetadataServiceAsync
 
 logger = logging.getLogger(__name__)
@@ -279,7 +280,7 @@ async def test_explicit_gcp_metadata_server_error_bubbles_up(exception):
         with pytest.raises(ProgrammingError) as excinfo:
             await auth_class.prepare(conn=None)
 
-    assert "Error fetching GCP metadata:" in str(excinfo.value)
+    assert "Error fetching GCP identity token:" in str(excinfo.value)
     assert "Ensure the application is running on GCP." in str(excinfo.value)
 
 
@@ -305,6 +306,51 @@ async def test_explicit_gcp_generates_unique_assertion_content(
     await auth_class.prepare(conn=None)
 
     assert auth_class.assertion_content == '{"_provider":"GCP","sub":"123456"}'
+
+
+@mock.patch("snowflake.connector.aio._session_manager.SessionManager.post")
+async def test_gcp_calls_correct_apis_and_populates_auth_data_for_final_sa(
+    mock_post_request, fake_gce_metadata_service: FakeGceMetadataServiceAsync
+):
+    fake_gce_metadata_service.sub = "sa1"
+    impersonation_path = ["sa2", "sa3"]
+    sa1_access_token = gen_dummy_access_token("sa1")
+    sa3_id_token = gen_dummy_id_token("sa3")
+
+    # Mock the POST request response
+    class AsyncResponse:
+        def __init__(self, content):
+            self._content = content
+            self.content = mock.Mock()
+            self.content.read = AsyncMock(return_value=content)
+
+    mock_post_request.return_value = AsyncResponse(
+        json.dumps({"token": sa3_id_token}).encode("utf-8")
+    )
+
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.GCP, impersonation_path=impersonation_path
+    )
+    await auth_class.prepare(conn=None)
+
+    mock_post_request.assert_called_once_with(
+        url="https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/sa3:generateIdToken",
+        headers={
+            "Authorization": f"Bearer {sa1_access_token}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "delegates": ["projects/-/serviceAccounts/sa2"],
+            "audience": "snowflakecomputing.com",
+        },
+    )
+
+    assert auth_class.assertion_content == '{"_provider":"GCP","sub":"sa3"}'
+    assert await extract_api_data(auth_class) == {
+        "AUTHENTICATOR": "WORKLOAD_IDENTITY",
+        "PROVIDER": "GCP",
+        "TOKEN": sa3_id_token,
+    }
 
 
 # -- Azure Tests --
