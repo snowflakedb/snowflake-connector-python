@@ -8,7 +8,11 @@ import pytest
 
 import snowflake.connector
 
-from ..wiremock.wiremock_utils import WiremockClient, get_clients_for_proxy_and_target
+from ..wiremock.wiremock_utils import (
+    WiremockClient,
+    get_clients_for_proxy_and_target,
+    get_clients_for_proxy_target_and_storage,
+)
 
 
 @pytest.fixture(scope="session")
@@ -71,6 +75,7 @@ def wiremock_target_proxy_pair(wiremock_generic_mappings_dir):
     """Starts a *target* Wiremock and a *proxy* Wiremock pre-configured to forward to it.
 
     The fixture yields a tuple ``(target_wm, proxy_wm)`` of  ``WiremockClient``
+    where the order is (backend, proxy).
     instances.  It is a thin wrapper around
     ``test.test_utils.wiremock.wiremock_utils.proxy_target_pair``.
     """
@@ -81,3 +86,36 @@ def wiremock_target_proxy_pair(wiremock_generic_mappings_dir):
         proxy_mapping_template=wiremock_proxy_mapping_path
     ) as pair:
         yield pair
+
+
+@pytest.fixture
+def wiremock_three_clients(wiremock_generic_mappings_dir):
+    """Starts target (DB), storage (S3), and proxy Wiremocks using shared helper.
+
+    Returns (target_wm, storage_wm, proxy_wm) in that order.
+
+    Deprecated: Prefer ``wiremock_backend_storage_proxy`` for clearer naming.
+    """
+    wiremock_proxy_mapping_path = (
+        wiremock_generic_mappings_dir / "proxy_forward_all.json"
+    )
+    with get_clients_for_proxy_target_and_storage(
+        proxy_mapping_template=wiremock_proxy_mapping_path
+    ) as triple:
+        yield triple
+
+
+@pytest.fixture
+def wiremock_backend_storage_proxy(wiremock_generic_mappings_dir):
+    """Starts backend (DB), storage (S3), and proxy Wiremocks.
+
+    Returns a tuple ``(backend_wm, storage_wm, proxy_wm)`` to make roles explicit.
+    Use when backend and storage must have distinct host:ports (e.g., selective proxy bypass).
+    """
+    wiremock_proxy_mapping_path = (
+        wiremock_generic_mappings_dir / "proxy_forward_all.json"
+    )
+    with get_clients_for_proxy_target_and_storage(
+        proxy_mapping_template=wiremock_proxy_mapping_path
+    ) as triple:
+        yield triple

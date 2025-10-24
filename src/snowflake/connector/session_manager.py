@@ -134,6 +134,7 @@ class BaseHttpConfig:
     proxy_port: str | None = None
     proxy_user: str | None = None
     proxy_password: str | None = None
+    no_proxy: str | None = None
 
     def copy_with(self, **overrides: Any) -> BaseHttpConfig:
         """Return a new config with overrides applied."""
@@ -477,7 +478,11 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
     def make_session(self) -> Session:
         session = requests.Session()
         self._mount_adapters(session)
-        session.proxies = {"http": self.proxy_url, "https": self.proxy_url}
+        session.proxies = {
+            "http": self.proxy_url,
+            "https": self.proxy_url,
+            "no_proxy": self._cfg.no_proxy,
+        }
         return session
 
     @contextlib.contextmanager
