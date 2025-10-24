@@ -199,6 +199,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "proxy_port": (None, (type(None), str)),  # snowflake
     "proxy_user": (None, (type(None), str)),  # snowflake
     "proxy_password": (None, (type(None), str)),  # snowflake
+    "no_proxy": (
+        None,
+        (type(None), str, Iterable),
+    ),  # hosts/ips to bypass proxy (str or iterable)
     "protocol": ("https", str),  # snowflake
     "warehouse": (None, (type(None), str)),  # snowflake
     "region": (None, (type(None), str)),  # snowflake
@@ -1076,6 +1080,15 @@ class SnowflakeConnection:
             proxy_port=self.proxy_port,
             proxy_user=self.proxy_user,
             proxy_password=self.proxy_password,
+            no_proxy=(
+                ",".join(str(x) for x in self.no_proxy)
+                if (
+                    self.no_proxy is not None
+                    and isinstance(self.no_proxy, Iterable)
+                    and not isinstance(self.no_proxy, (str, bytes))
+                )
+                else self.no_proxy
+            ),
         )
         self._session_manager = SessionManager(self._http_config)
 
