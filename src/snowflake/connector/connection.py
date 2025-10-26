@@ -813,6 +813,10 @@ class SnowflakeConnection:
         return self._proxy_password
 
     @property
+    def no_proxy(self) -> str | Iterable | None:
+        return self._no_proxy
+
+    @property
     def account(self) -> str:
         return self._account
 
