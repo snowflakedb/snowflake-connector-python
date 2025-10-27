@@ -5,6 +5,10 @@ set -o pipefail
 export SF_OCSP_TEST_MODE=true
 export RUN_WIF_TESTS=true
 
+ls /opt/python
+which python
+assert false
+
 #setup pytest
 /opt/python/cp39-cp39/bin/python -m pip install --break-system-packages pytest pytest-asyncio
 
