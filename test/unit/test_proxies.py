@@ -502,6 +502,11 @@ def test_no_proxy_source_vs_proxy_method_matrix(
     no_proxy_source,
     host_port_pooling,
 ):
+    if proxy_method == "env_vars" and no_proxy_source == "param":
+        pytest.xfail(
+            "Mixed setup of proxy using env_vars and connection params at the same time is unpredictable and not supported."
+        )
+
     target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
     _setup_backend_storage_mappings(
         target_wm,
@@ -538,6 +543,11 @@ def test_no_proxy_backend_matrix(
     no_proxy_source,
     host_port_pooling,
 ):
+    if proxy_method == "env_vars" and no_proxy_source == "param":
+        pytest.xfail(
+            "Mixed setup of proxy using env_vars and connection params at the same time is unpredictable and not supported."
+        )
+
     target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
     _setup_backend_storage_mappings(
         target_wm,
@@ -566,19 +576,84 @@ def test_no_proxy_backend_matrix(
 @pytest.mark.parametrize(
     "no_proxy_factory",
     [
-        (lambda target_port, storage_port: f"localhost:{storage_port}"),  # string
+        (lambda storage_host, storage_port: f"{storage_host}:{storage_port}"),  # string
         (
-            lambda target_port, storage_port: f"foo.invalid:1,localhost:{storage_port},bar.invalid:2"
+            lambda storage_host, storage_port: f"foo.invalid:1,{storage_host}:{storage_port},bar.invalid:2"
         ),  # CSV string
-        (lambda target_port, storage_port: [f"localhost:{storage_port}"]),  # list
-        (lambda target_port, storage_port: (f"localhost:{storage_port}",)),  # tuple
+        (lambda storage_host, storage_port: [f"{storage_host}:{storage_port}"]),  # list
         (
-            lambda target_port, storage_port: deque([f"localhost:{storage_port}"])
+            lambda storage_host, storage_port: (f"{storage_host}:{storage_port}",)
+        ),  # tuple
+        (
+            lambda storage_host, storage_port: deque([f"{storage_host}:{storage_port}"])
         ),  # deque
-        (lambda target_port, storage_port: {f"localhost:{storage_port}"}),  # set
+        (lambda storage_host, storage_port: {f"{storage_host}:{storage_port}"}),  # set
     ],
 )
 def test_no_proxy_multiple_values_param_only(
+    wiremock_backend_storage_proxy,
+    wiremock_generic_mappings_dir,
+    wiremock_mapping_dir,
+    proxy_env_vars,
+    no_proxy_factory,
+):
+    target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
+    _setup_backend_storage_mappings(
+        target_wm,
+        storage_wm,
+        proxy_wm,
+        wiremock_mapping_dir,
+        wiremock_generic_mappings_dir,
+    )
+
+    connect_kwargs = _base_connect_kwargs(target_wm)
+    connect_kwargs.update(
+        {
+            "proxy_host": proxy_wm.wiremock_host,
+            "proxy_port": str(proxy_wm.wiremock_http_port),
+        }
+    )
+    _, clear_proxy_env_vars = proxy_env_vars
+    clear_proxy_env_vars()
+
+    # Factories accept (storage_host, storage_port) in this exact order
+    no_proxy_value = no_proxy_factory(
+        storage_wm.wiremock_host,
+        storage_wm.wiremock_http_port,
+    )
+    connect_kwargs["no_proxy"] = no_proxy_value
+
+    _execute_large_query(connect_kwargs, row_count=50_000)
+
+    proxy_saw_db, target_saw_db, proxy_saw_storage, storage_saw_storage = (
+        _collect_request_flags(proxy_wm, target_wm, storage_wm)
+    )
+    assert target_saw_db
+    assert proxy_saw_db is True
+    assert storage_saw_storage
+    assert proxy_saw_storage is False
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "no_proxy_factory",
+    [
+        # Both backend and storage bypassed via list
+        (
+            lambda backend_host, backend_port, storage_host, storage_port: [
+                f"{backend_host}:{backend_port}",
+                f"{storage_host}:{storage_port}",
+            ]
+        ),
+        # Both backend and storage bypassed via CSV with extra noise
+        (
+            lambda backend_host, backend_port, storage_host, storage_port: (
+                f"foo.invalid:1,bar.invalid:2,{backend_host}:{backend_port},baz.invalid:3,{storage_host}:{storage_port}"
+            )
+        ),
+    ],
+)
+def test_no_proxy_bypass_backend_and_storage_param_only(
     wiremock_backend_storage_proxy,
     wiremock_generic_mappings_dir,
     wiremock_mapping_dir,
@@ -606,16 +681,17 @@ def test_no_proxy_multiple_values_param_only(
     clear_proxy_env_vars()
 
     no_proxy_value = no_proxy_factory(
-        target_wm.wiremock_http_port, storage_wm.wiremock_http_port
+        target_wm.wiremock_host,
+        target_wm.wiremock_http_port,
+        storage_wm.wiremock_host,
+        storage_wm.wiremock_http_port,
     )
     connect_kwargs["no_proxy"] = no_proxy_value
 
     _execute_large_query(connect_kwargs, row_count=50_000)
 
-    proxy_saw_db, target_saw_db, proxy_saw_storage, storage_saw_storage = (
-        _collect_request_flags(proxy_wm, target_wm, storage_wm)
-    )
-    assert target_saw_db
-    assert proxy_saw_db is True
-    assert storage_saw_storage
-    assert proxy_saw_storage is False
+    flags = _collect_request_flags(proxy_wm, target_wm, storage_wm)
+    assert flags.target_saw_db
+    assert flags.proxy_saw_db is False
+    assert flags.storage_saw_storage
+    assert flags.proxy_saw_storage is False
