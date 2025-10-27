@@ -199,7 +199,7 @@ async def create_attestation(
     session_manager = (
         session_manager.clone()
         if session_manager
-        else SessionManagerFactory.get_manager(use_pooling=True)
+        else SessionManager(use_pooling=True, max_retries=0)
     )
 
     if provider == AttestationProvider.AWS:
