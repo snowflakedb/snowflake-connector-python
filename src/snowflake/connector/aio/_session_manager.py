@@ -359,7 +359,10 @@ class SessionManager(
     """
 
     def __init__(
-        self, config: AioHttpConfig | None = None, **http_config_kwargs
+        self,
+        config: AioHttpConfig | None = None,
+        max_retries: int | None = None,  # TODO: remove this after rebase
+        **http_config_kwargs,
     ) -> None:
         """Create a new async SessionManager."""
         if config is None:
@@ -448,6 +451,7 @@ class SessionManager(
     def clone(
         self,
         **http_config_overrides,
+        **kwargs,  # TODO: remove this after rebase
     ) -> SessionManager:
         """Return a new *stateless* SessionManager sharing this instance’s config.
 
