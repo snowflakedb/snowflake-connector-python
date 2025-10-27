@@ -1743,8 +1743,8 @@ def test_disable_telemetry(conn_cnx, caplog):
             with conn.cursor() as cur:
                 cur.execute("select 1").fetchall()
             assert (
-                len(conn._telemetry._log_batch) == 3
-            )  # 3 events are import package, fetch first, fetch last
+                len(conn._telemetry._log_batch) == 4
+            )  # 4 events are import package, aio usage, fetch first, fetch last
     assert "POST /telemetry/send" in caplog.text
     caplog.clear()
 
