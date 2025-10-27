@@ -15,7 +15,7 @@ from ..constants import FileHeader, ResultStatus
 from ..encryption_util import SnowflakeEncryptionUtil
 from ..errors import RequestExceedMaxRetryError
 from ..storage_client import SnowflakeStorageClient as SnowflakeStorageClientSync
-from ._session_manager import SessionManager
+from ._session_manager import SessionManagerFactory
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -205,7 +205,9 @@ class SnowflakeStorageClient(SnowflakeStorageClientSync):
                     # SessionManager on the fly, if code ends up here, since we probably do not care about losing
                     # proxy or HTTP setup.
                     logger.debug("storage client request with new session")
-                    session_manager = SessionManager(use_pooling=False)
+                    session_manager = SessionManagerFactory.get_manager(
+                        use_pooling=False
+                    )
                     response = await session_manager.request(verb, url, **rest_kwargs)
 
                 if await self._has_expired_presigned_url(response):

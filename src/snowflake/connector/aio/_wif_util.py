@@ -21,7 +21,7 @@ from ..wif_util import (
     extract_iss_and_sub_without_signature_verification,
     get_aws_sts_hostname,
 )
-from ._session_manager import SessionManager
+from ._session_manager import SessionManager, SessionManagerFactory
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +187,9 @@ async def create_attestation(
     """
     entra_resource = entra_resource or DEFAULT_ENTRA_SNOWFLAKE_RESOURCE
     session_manager = (
-        session_manager.clone() if session_manager else SessionManager(use_pooling=True)
+        session_manager.clone()
+        if session_manager
+        else SessionManagerFactory.get_manager(use_pooling=True)
     )
 
     if provider == AttestationProvider.AWS:

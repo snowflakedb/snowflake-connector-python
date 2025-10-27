@@ -79,6 +79,7 @@ from ._network import SnowflakeRestful
 from ._session_manager import (
     AioHttpConfig,
     SessionManager,
+    SessionManagerFactory,
     SnowflakeSSLConnectorFactory,
 )
 from ._telemetry import TelemetryClient
@@ -1019,7 +1020,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             snowflake_ocsp_mode=self._ocsp_mode(),
             trust_env=True,  # Required for proxy support via environment variables
         )
-        self._session_manager = SessionManager(self._http_config)
+        self._session_manager = SessionManagerFactory.get_manager(self._http_config)
 
         if self.enable_connection_diag:
             raise NotImplementedError(
