@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import sys
+from test.helpers import apply_auth_class_update_body_async, create_mock_auth_body
 from test.unit.aio.mock_utils import mock_connection
 from unittest.mock import Mock, PropertyMock
 
@@ -339,4 +340,22 @@ def test_mro():
 
     assert AuthByDefault.mro().index(AuthByPluginAsync) < AuthByDefault.mro().index(
         AuthByPluginSync
+    )
+
+
+async def test_auth_by_default_prepare_body_does_not_overwrite_client_environment_fields():
+    password = "testpassword"
+    auth_class = AuthByDefault(password)
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = await apply_auth_class_update_body_async(
+        auth_class, req_body_before
+    )
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
     )

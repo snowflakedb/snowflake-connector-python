@@ -15,11 +15,15 @@ import aiohttp
 import jwt
 import pytest
 
-from snowflake.connector.aio._wif_util import AttestationProvider
+from snowflake.connector.aio._wif_util import (
+    AttestationProvider,
+    WorkloadIdentityAttestation,
+)
 from snowflake.connector.aio.auth import AuthByWorkloadIdentity
 from snowflake.connector.errors import ProgrammingError
 
 from ...csp_helpers import gen_dummy_access_token, gen_dummy_id_token
+from ...helpers import apply_auth_class_update_body_async, create_mock_auth_body
 from .csp_helpers_async import FakeAwsEnvironmentAsync, FakeGceMetadataServiceAsync
 
 logger = logging.getLogger(__name__)
@@ -138,6 +142,42 @@ async def test_wif_authenticator_is_case_insensitive(
     await connection.close()
 
 
+@pytest.mark.parametrize(
+    "provider,additional_args",
+    [
+        (AttestationProvider.AWS, {}),
+        (AttestationProvider.GCP, {}),
+        (AttestationProvider.AZURE, {}),
+        (
+            AttestationProvider.OIDC,
+            {"token": gen_dummy_id_token(sub="service-1", iss="issuer-1")},
+        ),
+    ],
+)
+async def test_auth_prepare_body_does_not_overwrite_client_environment_fields(
+    provider, additional_args
+):
+    auth_class = AuthByWorkloadIdentity(provider=provider, **additional_args)
+    auth_class.attestation = WorkloadIdentityAttestation(
+        provider=AttestationProvider.GCP,
+        credential=None,
+        user_identifier_components=None,
+    )
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = await apply_auth_class_update_body_async(
+        auth_class, req_body_before
+    )
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )
+
+
 # -- OIDC Tests --
 
 
@@ -152,6 +192,7 @@ async def test_explicit_oidc_valid_inline_token_plumbed_to_api():
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "OIDC",
         "TOKEN": dummy_token,
+        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 0},
     }
 
 
@@ -209,6 +250,9 @@ async def test_explicit_aws_encodes_audience_host_signature_to_api(
     data = await extract_api_data(auth_class)
     assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
     assert data["PROVIDER"] == "AWS"
+    assert (
+        data["CLIENT_ENVIRONMENT"]["WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH"] == 0
+    )
     verify_aws_token(data["TOKEN"], fake_aws_environment.region)
 
 
@@ -310,6 +354,7 @@ async def test_explicit_gcp_plumbs_token_to_api(
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "GCP",
         "TOKEN": fake_gce_metadata_service.token,
+        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 0},
     }
 
 
@@ -366,6 +411,7 @@ async def test_gcp_calls_correct_apis_and_populates_auth_data_for_final_sa(
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "GCP",
         "TOKEN": sa3_id_token,
+        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 2},
     }
 
 
@@ -420,6 +466,7 @@ async def test_explicit_azure_plumbs_token_to_api(fake_azure_metadata_service):
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "AZURE",
         "TOKEN": fake_azure_metadata_service.token,
+        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 0},
     }
 
 

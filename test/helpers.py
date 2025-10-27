@@ -340,3 +340,9 @@ def apply_auth_class_update_body(auth_class, req_body_before):
     req_body_after = copy.deepcopy(req_body_before)
     auth_class.update_body(req_body_after)
     return req_body_after
+
+
+async def apply_auth_class_update_body_async(auth_class, req_body_before):
+    req_body_after = copy.deepcopy(req_body_before)
+    await auth_class.update_body(req_body_after)
+    return req_body_after
