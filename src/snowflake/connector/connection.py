@@ -129,7 +129,12 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
-from .session_manager import HttpConfig, ProxySupportAdapterFactory, SessionManager
+from .session_manager import (
+    HttpConfig,
+    ProxySupportAdapterFactory,
+    SessionManager,
+    SessionManagerFactory,
+)
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
@@ -1094,7 +1099,7 @@ class SnowflakeConnection:
                 else self.no_proxy
             ),
         )
-        self._session_manager = SessionManager(self._http_config)
+        self._session_manager = SessionManagerFactory.get_manager(self._http_config)
 
         if self.enable_connection_diag:
             exceptions_dict = {}

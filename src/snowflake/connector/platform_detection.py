@@ -13,7 +13,7 @@ if installed_boto:
     Config = botocore.config.Config
     IMDSFetcher = botocore.utils.IMDSFetcher
 
-from .session_manager import SessionManager
+from .session_manager import SessionManager, SessionManagerFactory
 from .vendored.requests import RequestException, Timeout
 
 logger = logging.getLogger(__name__)
@@ -415,7 +415,9 @@ def detect_platforms(
             logger.debug(
                 "No session manager provided. HTTP settings may not be preserved. Using default."
             )
-            session_manager = SessionManager(use_pooling=False, max_retries=0)
+            session_manager = SessionManagerFactory.get_manager(
+                use_pooling=False, max_retries=0
+            )
 
         # Run environment-only checks synchronously (no network calls, no threading overhead)
         platforms = {

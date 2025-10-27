@@ -11,7 +11,9 @@ import pytest
 
 import snowflake.connector
 import snowflake.connector.vendored.requests as requests
+from snowflake.connector.compat import urlparse as compat_urlparse
 from snowflake.connector.errors import OperationalError
+from snowflake.connector.session_manager import SessionManager
 
 
 @pytest.mark.skipolddriver
@@ -325,6 +327,24 @@ def _execute_large_query(connect_kwargs, row_count: int):
     assert list(cursors[0])
 
 
+@pytest.fixture
+def host_port_pooling(monkeypatch):
+
+    def pooling_key_host_port(url: str) -> str:
+        """
+        Test-only override to derive pooling key as "host:port" if port is specified.
+        """
+        parsed = compat_urlparse(url)
+        host = parsed.hostname
+        port = parsed.port
+        return f"{host}:{port}" if port else host
+
+    monkeypatch.setattr(
+        SessionManager, "_get_pooling_key_from_url", staticmethod(pooling_key_host_port)
+    )
+    yield
+
+
 class RequestFlags(NamedTuple):
     proxy_saw_db: bool
     target_saw_db: bool
@@ -388,12 +408,13 @@ def _collect_db_request_flags_only(proxy_wm, target_wm) -> DbRequestFlags:
 
 @pytest.mark.skipolddriver
 @pytest.mark.parametrize("no_proxy_source", ["param", "env"])
-def test_no_proxy_basic_param_proxy_bypass_storage(
+def test_no_proxy_bypass_storage(
     wiremock_backend_storage_proxy,
     wiremock_generic_mappings_dir,
     wiremock_mapping_dir,
     proxy_env_vars,
     no_proxy_source,
+    host_port_pooling,
 ):
     target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
 
@@ -415,7 +436,7 @@ def test_no_proxy_basic_param_proxy_bypass_storage(
     _, clear_proxy_env_vars = proxy_env_vars
     clear_proxy_env_vars()
 
-    no_proxy_value = f"localhost:{storage_wm.wiremock_http_port}"
+    no_proxy_value = f"{storage_wm.wiremock_host}:{storage_wm.wiremock_http_port}"
     _apply_no_proxy(no_proxy_source, no_proxy_value, connect_kwargs)
 
     _execute_large_query(connect_kwargs, row_count=50_000)
@@ -435,6 +456,7 @@ def test_no_proxy_basic_param_proxy_bypass_backend(
     wiremock_mapping_dir,
     proxy_env_vars,
     no_proxy_source,
+    host_port_pooling,
 ):
     target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
 
@@ -456,7 +478,7 @@ def test_no_proxy_basic_param_proxy_bypass_backend(
     _, clear_proxy_env_vars = proxy_env_vars
     clear_proxy_env_vars()
 
-    no_proxy_value = f"localhost:{target_wm.wiremock_http_port}"
+    no_proxy_value = f"{target_wm.wiremock_host}:{target_wm.wiremock_http_port}"
     _apply_no_proxy(no_proxy_source, no_proxy_value, connect_kwargs)
 
     _execute_large_query(connect_kwargs, row_count=50_000)
@@ -478,6 +500,7 @@ def test_no_proxy_source_vs_proxy_method_matrix(
     proxy_env_vars,
     proxy_method,
     no_proxy_source,
+    host_port_pooling,
 ):
     target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
     _setup_backend_storage_mappings(
@@ -491,7 +514,7 @@ def test_no_proxy_source_vs_proxy_method_matrix(
     connect_kwargs = _base_connect_kwargs(target_wm)
     _configure_proxy(connect_kwargs, proxy_wm, proxy_env_vars, proxy_method)
 
-    no_proxy_value = f"localhost:{storage_wm.wiremock_http_port}"
+    no_proxy_value = f"{storage_wm.wiremock_host}:{storage_wm.wiremock_http_port}"
     _apply_no_proxy(no_proxy_source, no_proxy_value, connect_kwargs)
 
     _execute_large_query(connect_kwargs, row_count=50_000)
@@ -513,6 +536,7 @@ def test_no_proxy_backend_matrix(
     proxy_env_vars,
     proxy_method,
     no_proxy_source,
+    host_port_pooling,
 ):
     target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
     _setup_backend_storage_mappings(
@@ -526,7 +550,7 @@ def test_no_proxy_backend_matrix(
     connect_kwargs = _base_connect_kwargs(target_wm)
     _configure_proxy(connect_kwargs, proxy_wm, proxy_env_vars, proxy_method)
 
-    no_proxy_value = f"localhost:{target_wm.wiremock_http_port}"
+    no_proxy_value = f"{target_wm.wiremock_host}:{target_wm.wiremock_http_port}"
     _apply_no_proxy(no_proxy_source, no_proxy_value, connect_kwargs)
 
     _execute_large_query(connect_kwargs, row_count=50_000)
@@ -549,10 +573,8 @@ def test_no_proxy_backend_matrix(
         (lambda target_port, storage_port: [f"localhost:{storage_port}"]),  # list
         (lambda target_port, storage_port: (f"localhost:{storage_port}",)),  # tuple
         (
-            lambda target_port, storage_port: deque(
-                f"localhost:{storage_port}",
-            )
-        ),  # tuple
+            lambda target_port, storage_port: deque([f"localhost:{storage_port}"])
+        ),  # deque
         (lambda target_port, storage_port: {f"localhost:{storage_port}"}),  # set
     ],
 )
@@ -562,6 +584,7 @@ def test_no_proxy_multiple_values_param_only(
     wiremock_mapping_dir,
     proxy_env_vars,
     no_proxy_factory,
+    host_port_pooling,
 ):
     target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
     _setup_backend_storage_mappings(
