@@ -89,23 +89,6 @@ def wiremock_target_proxy_pair(wiremock_generic_mappings_dir):
 
 
 @pytest.fixture
-def wiremock_three_clients(wiremock_generic_mappings_dir):
-    """Starts target (DB), storage (S3), and proxy Wiremocks using shared helper.
-
-    Returns (target_wm, storage_wm, proxy_wm) in that order.
-
-    Deprecated: Prefer ``wiremock_backend_storage_proxy`` for clearer naming.
-    """
-    wiremock_proxy_mapping_path = (
-        wiremock_generic_mappings_dir / "proxy_forward_all.json"
-    )
-    with get_clients_for_proxy_target_and_storage(
-        proxy_mapping_template=wiremock_proxy_mapping_path
-    ) as triple:
-        yield triple
-
-
-@pytest.fixture
 def wiremock_backend_storage_proxy(wiremock_generic_mappings_dir):
     """Starts backend (DB), storage (S3), and proxy Wiremocks.
 

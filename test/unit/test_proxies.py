@@ -330,7 +330,7 @@ def _execute_large_query(connect_kwargs, row_count: int):
 @pytest.fixture
 def host_port_pooling(monkeypatch):
 
-    def pooling_key_host_port(url: str) -> str:
+    def get_pooling_key_as_host_with_port(url: str) -> str:
         """
         Test-only override to derive pooling key as "host:port" if port is specified.
         """
@@ -340,7 +340,9 @@ def host_port_pooling(monkeypatch):
         return f"{host}:{port}" if port else host
 
     monkeypatch.setattr(
-        SessionManager, "_get_pooling_key_from_url", staticmethod(pooling_key_host_port)
+        SessionManager,
+        "_get_pooling_key_from_url",
+        staticmethod(get_pooling_key_as_host_with_port),
     )
     yield
 
