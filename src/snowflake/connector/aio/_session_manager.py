@@ -332,7 +332,10 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
     """
 
     def __init__(
-        self, config: AioHttpConfig | None = None, **http_config_kwargs
+        self,
+        config: AioHttpConfig | None = None,
+        max_retries: int | None = None,  # TODO: remove this after rebase
+        **http_config_kwargs,
     ) -> None:
         """Create a new async SessionManager."""
         if config is None:
@@ -417,6 +420,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
         *,
         use_pooling: bool | None = None,
         connector_factory: ConnectorFactory | None = None,
+        **kwargs,  # TODO: remove this after rebase
     ) -> SessionManager:
         """Return a new async SessionManager sharing this instance's config."""
         overrides: dict[str, Any] = {}

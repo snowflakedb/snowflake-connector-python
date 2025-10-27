@@ -338,7 +338,12 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
     direct HTTP library calls.
     """
 
-    def __init__(self, config: HttpConfig | None = None, **http_config_kwargs) -> None:
+    def __init__(
+        self,
+        config: HttpConfig | None = None,
+        max_retries: int | None = None,  # TODO: remove this after rebase
+        **http_config_kwargs,
+    ) -> None:
         """
         Create a new SessionManager.
         """
@@ -483,6 +488,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin):
         *,
         use_pooling: bool | None = None,
         adapter_factory: AdapterFactory | None = None,
+        **kwargs,  # TODO: remove this after rebase
     ) -> SessionManager:
         """Return a new *stateless* SessionManager sharing this instance’s config.
 
