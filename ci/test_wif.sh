@@ -1,6 +1,7 @@
 #!/bin/bash -e
 
 set -o pipefail
+set -x
 
 export THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 export RSA_KEY_PATH_AWS_AZURE="$THIS_DIR/wif/parameters/rsa_wif_aws_azure"
