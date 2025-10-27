@@ -441,7 +441,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
         if connector_factory is not None:
             overrides["connector_factory"] = connector_factory
 
-        return SessionManager.from_config(self._cfg, **overrides)
+        return self.from_config(self._cfg, **overrides)
 
 
 async def request(
@@ -480,7 +480,7 @@ class ProxySessionManager(SessionManager):
             url: StrOrURL,
             **kwargs: Unpack[_RequestOptions],
         ):
-            # Apply proxy per request and inject Host header when proxying
+            # Inject Host header when proxying
             try:
                 # respect caller-provided proxy and proxy_headers if any
                 provided_proxy = kwargs.get("proxy") or self._default_proxy
@@ -514,21 +514,6 @@ class ProxySessionManager(SessionManager):
             trust_env=self._cfg.trust_env,
             proxy=self.proxy_url,
         )
-
-    def clone(
-        self,
-        *,
-        use_pooling: bool | None = None,
-        connector_factory: ConnectorFactory | None = None,
-    ) -> SessionManager:
-        """Return a new async SessionManager sharing this instance's config."""
-        overrides: dict[str, Any] = {}
-        if use_pooling is not None:
-            overrides["use_pooling"] = use_pooling
-        if connector_factory is not None:
-            overrides["connector_factory"] = connector_factory
-
-        return SessionManager.from_config(self._cfg, **overrides)
 
 
 class SessionManagerFactory:

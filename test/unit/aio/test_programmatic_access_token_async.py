@@ -16,7 +16,7 @@ except ImportError:
 
 import snowflake.connector.errors
 
-from ...wiremock.wiremock_utils import WiremockClient
+from ...test_utils.wiremock import WiremockClient
 
 
 @pytest.mark.skipolddriver

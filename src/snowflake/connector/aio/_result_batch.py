@@ -13,6 +13,7 @@ from snowflake.connector.aio._network import (
     raise_failed_request_error,
     raise_okta_unauthorized_error,
 )
+from snowflake.connector.aio._session_manager import SessionManagerFactory
 from snowflake.connector.aio._time_util import TimerContextManager
 from snowflake.connector.arrow_context import ArrowConverterContext
 from snowflake.connector.backoff_policies import exponential_backoff
@@ -33,7 +34,6 @@ from snowflake.connector.result_batch import RemoteChunkInfo
 from snowflake.connector.result_batch import ResultBatch as ResultBatchSync
 from snowflake.connector.result_batch import _create_nanoarrow_iterator
 from snowflake.connector.secret_detector import SecretDetector
-from src.snowflake.connector.aio._session_manager import SessionManagerFactory
 
 if TYPE_CHECKING:
     from pandas import DataFrame
