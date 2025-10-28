@@ -1472,7 +1472,7 @@ async def test_platform_detection_timeout(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-async def test_conn_cnx_changed(conn_cnx):
+async def test_conn_cnx_basic(conn_cnx):
     """Tests platform detection timeout.
 
     Creates a connection with platform_detection_timeout parameter.
@@ -1485,7 +1485,7 @@ async def test_conn_cnx_changed(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-async def test_conn_assigned(conn_cnx):
+async def test_conn_assigned_method(conn_cnx):
     conn = await snowflake.connector.aio.connect(
         **fill_conn_kwargs_for_tests("default")
     )
@@ -1496,8 +1496,31 @@ async def test_conn_assigned(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-async def test_conn_with(conn_cnx):
+async def test_conn_assigned_class(conn_cnx):
+    conn = snowflake.connector.aio.SnowflakeConnection(
+        **fill_conn_kwargs_for_tests("default")
+    )
+    await conn.connect()
+    async with conn.cursor() as cur:
+        result = await (await cur.execute("select 1")).fetchall()
+        assert len(result) == 1
+        assert result[0][0] == 1
+
+
+@pytest.mark.skipolddriver
+async def test_conn_with_method(conn_cnx):
     async with snowflake.connector.aio.connect(
+        **fill_conn_kwargs_for_tests("default")
+    ) as conn:
+        async with conn.cursor() as cur:
+            result = await (await cur.execute("select 1")).fetchall()
+            assert len(result) == 1
+            assert result[0][0] == 1
+
+
+@pytest.mark.skipolddriver
+async def test_conn_with_class(conn_cnx):
+    async with snowflake.connector.aio.SnowflakeConnection(
         **fill_conn_kwargs_for_tests("default")
     ) as conn:
         async with conn.cursor() as cur:
