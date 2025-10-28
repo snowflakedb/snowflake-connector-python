@@ -19,6 +19,8 @@ class _AsyncConnectContextManager:
     Allows both patterns:
     - conn = await connect(...)
     - async with connect(...) as conn:
+
+    Implements the full coroutine protocol for maximum compatibility.
     """
 
     __slots__ = ("_coro", "_conn")
@@ -27,9 +29,25 @@ class _AsyncConnectContextManager:
         self._coro = coro
         self._conn: SnowflakeConnection | None = None
 
+    def send(self, arg: Any) -> Any:
+        """Send a value into the wrapped coroutine."""
+        return self._coro.send(arg)
+
+    def throw(self, *args: Any, **kwargs: Any) -> Any:
+        """Throw an exception into the wrapped coroutine."""
+        return self._coro.throw(*args, **kwargs)
+
+    def close(self) -> None:
+        """Close the wrapped coroutine."""
+        return self._coro.close()
+
     def __await__(self) -> Generator[Any, None, SnowflakeConnection]:
         """Enable await connect(...)"""
         return self._coro.__await__()
+
+    def __iter__(self) -> Generator[Any, None, SnowflakeConnection]:
+        """Make the wrapper iterable like a coroutine."""
+        return self.__await__()
 
     async def __aenter__(self) -> SnowflakeConnection:
         """Enable async with connect(...) as conn:"""
