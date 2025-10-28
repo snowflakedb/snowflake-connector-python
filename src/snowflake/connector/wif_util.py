@@ -18,7 +18,7 @@ if installed_boto:
 
 from .errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import MissingDependencyError, ProgrammingError
-from .session_manager import SessionManager
+from .session_manager import SessionManager, SessionManagerFactory
 
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
@@ -416,7 +416,7 @@ def create_attestation(
     session_manager = (
         session_manager.clone()
         if session_manager
-        else SessionManager(use_pooling=True, max_retries=0)
+        else SessionManagerFactory.get_manager(use_pooling=True, max_retries=0)
     )
 
     if provider == AttestationProvider.AWS:
