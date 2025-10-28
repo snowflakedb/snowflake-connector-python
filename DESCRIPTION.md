@@ -13,6 +13,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fix compilation error when building from sources with libc++.
   - Pin lower versions of dependencies to oldest version without vulnerabilities.
   - Added no_proxy parameter for proxy configuration without using environmental variables.
+  - Fix string representation of INTERVAL YEAR and INTERVAL MONTH types.
 
 - v4.0.0(October 09,2025)
   - Added support for checking certificates revocation using revocation lists (CRLs)

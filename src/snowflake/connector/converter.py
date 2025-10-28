@@ -357,7 +357,8 @@ class SnowflakeConverter:
         return lambda value: value in ("1", "TRUE")
 
     def _INTERVAL_YEAR_MONTH_to_python(self, ctx: dict[str, Any]) -> Callable:
-        return lambda v: interval_year_month_to_string(int(v))
+        scale = ctx["scale"]
+        return lambda v: interval_year_month_to_string(int(v), scale)
 
     def _INTERVAL_YEAR_MONTH_numpy_to_python(self, ctx: dict[str, Any]) -> Callable:
         return lambda v: numpy.timedelta64(int(v), "M")
