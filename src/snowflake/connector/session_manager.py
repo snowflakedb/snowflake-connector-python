@@ -228,7 +228,7 @@ class SessionPool(Generic[SessionT]):
         self._idle_sessions.clear()
 
 
-class _ConfigDirectAccessMixin(abc.ABC):
+class _BaseConfigDirectAccessMixin(abc.ABC):
     @property
     @abc.abstractmethod
     def config(self) -> HttpConfig: ...
@@ -246,20 +246,22 @@ class _ConfigDirectAccessMixin(abc.ABC):
         self.config = self.config.copy_with(use_pooling=value)
 
     @property
-    def adapter_factory(self) -> Callable[..., HTTPAdapter]:
-        return self.config.adapter_factory
-
-    @adapter_factory.setter
-    def adapter_factory(self, value: Callable[..., HTTPAdapter]) -> None:
-        self.config = self.config.copy_with(adapter_factory=value)
-
-    @property
     def max_retries(self) -> Retry | int:
         return self.config.max_retries
 
     @max_retries.setter
     def max_retries(self, value: Retry | int) -> None:
         self.config = self.config.copy_with(max_retries=value)
+
+
+class _HttpConfigDirectAccessMixin(_BaseConfigDirectAccessMixin):
+    @property
+    def adapter_factory(self) -> Callable[..., HTTPAdapter]:
+        return self.config.adapter_factory
+
+    @adapter_factory.setter
+    def adapter_factory(self, value: Callable[..., HTTPAdapter]) -> None:
+        self.config = self.config.copy_with(adapter_factory=value)
 
 
 class _RequestVerbsUsingSessionMixin(abc.ABC):
@@ -372,7 +374,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
             return session.delete(url, headers=headers, timeout=timeout, **kwargs)
 
 
-class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
+class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixin):
     """
     Central HTTP session manager that handles all external requests from the Snowflake driver.
 
