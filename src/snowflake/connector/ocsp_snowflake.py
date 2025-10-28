@@ -59,6 +59,7 @@ from . import constants
 from .backoff_policies import exponential_backoff
 from .cache import CacheEntry, SFDictCache, SFDictFileCache
 from .constants import OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
+from .session_manager import SessionManagerFactory
 from .telemetry import TelemetryField, generate_telemetry_data_dict
 from .url_util import extract_top_level_domain_from_hostname, url_encode_str
 from .util_text import _base64_bytes_to_str
@@ -551,8 +552,8 @@ class OCSPServer:
             # Obtain SessionManager from ssl_wrap_socket context var if available
             session_manager = get_current_session_manager(
                 use_pooling=False
-            ) or SessionManager(use_pooling=False)
-            with session_manager.use_session() as session:
+            ) or SessionManagerFactory.get_manager(use_pooling=False)
+            with session_manager.use_session(url) as session:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
                 backoff = exponential_backoff()()
@@ -1646,9 +1647,9 @@ class SnowflakeOCSP:
         session_manager: SessionManager = (
             context_session_manager
             if context_session_manager is not None
-            else SessionManager(use_pooling=False)
+            else SessionManagerFactory.get_manager(use_pooling=False)
         )
-        with session_manager.use_session() as session:
+        with session_manager.use_session(target_url) as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = exponential_backoff()()

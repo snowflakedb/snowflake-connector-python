@@ -55,6 +55,7 @@ from ..network import (
 from ..platform_detection import detect_platforms
 from ..session_manager import BaseHttpConfig, HttpConfig
 from ..session_manager import SessionManager as SyncSessionManager
+from ..session_manager import SessionManagerFactory
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..version import VERSION
@@ -114,7 +115,7 @@ class Auth:
             # Extract base fields (automatically excludes subclass-specific fields)
             # Note: It won't be possible to pass adapter_factory from outer async-code to this part of code
             sync_config = HttpConfig(**http_config.to_base_dict())
-            session_manager = SyncSessionManager(config=sync_config)
+            session_manager = SessionManagerFactory.get_manager(config=sync_config)
 
         return {
             "data": {
