@@ -168,11 +168,11 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
     async def __aenter__(self) -> SnowflakeConnection:
         """Context manager."""
-        # Idempotent __Aenter__
-        # if self.is_closed():
-        #     await self.connect()
-        # return self
-        await self.connect()
+        # Idempotent __aenter__ - required to be able to use both:
+        #   - with snowflake.connector.aio.SnowflakeConnection(**k)
+        #   - with snowflake.connector.aio.connect(**k)
+        if self.is_closed():
+            await self.connect()
         return self
 
     async def __aexit__(
