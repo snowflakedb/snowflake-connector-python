@@ -1744,7 +1744,7 @@ def test_disable_telemetry(conn_cnx, caplog):
                 cur.execute("select 1").fetchall()
             assert (
                 len(conn._telemetry._log_batch) == 3
-            )  # 4 events are import package, fetch first, fetch last
+            )  # 3 events are import package, fetch first, fetch last
     assert "POST /telemetry/send" in caplog.text
     caplog.clear()
 
