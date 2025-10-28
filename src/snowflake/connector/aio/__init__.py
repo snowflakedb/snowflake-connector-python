@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from functools import wraps
+from typing import Any, Coroutine, Generator
 
 from ._connection import SnowflakeConnection
 from ._cursor import DictCursor, SnowflakeCursor
@@ -12,18 +13,44 @@ __all__ = [
 ]
 
 
-class _AsyncConnectWrapper:
-    """Wrapper that preserves metadata of SnowflakeConnection.__init__ while providing async connect behavior.
+class _AsyncConnectContextManager:
+    """Hybrid wrapper that enables both awaiting and async context manager usage.
 
-    This class makes the async connect function metadata-compatible with the synchronous Connect function,
-    allowing introspection tools to see the same signature as SnowflakeConnection.__init__.
+    Allows both patterns:
+    - conn = await connect(...)
+    - async with connect(...) as conn:
     """
 
-    def __init__(self):
-        # Copy metadata from SnowflakeConnection.__init__ to this instance
-        # This allows introspection tools to see the proper signature
+    __slots__ = ("_coro", "_conn")
+
+    def __init__(self, coro: Coroutine[Any, Any, SnowflakeConnection]) -> None:
+        self._coro = coro
+        self._conn: SnowflakeConnection | None = None
+
+    def __await__(self) -> Generator[Any, None, SnowflakeConnection]:
+        """Enable await connect(...)"""
+        return self._coro.__await__()
+
+    async def __aenter__(self) -> SnowflakeConnection:
+        """Enable async with connect(...) as conn:"""
+        self._conn = await self._coro
+        return await self._conn.__aenter__()
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        """Exit async context manager."""
+        if self._conn is not None:
+            return await self._conn.__aexit__(exc_type, exc, tb)
+
+
+class _AsyncConnectWrapper:
+    """Preserves SnowflakeConnection.__init__ metadata for async connect function.
+
+    This wrapper enables introspection tools and IDEs to see the same signature
+    as the synchronous snowflake.connector.connect function.
+    """
+
+    def __init__(self) -> None:
         self.__wrapped__ = SnowflakeConnection.__init__
-        # Standard functools.wraps attributes
         self.__name__ = "connect"
         self.__doc__ = SnowflakeConnection.__init__.__doc__
         self.__module__ = __name__
@@ -32,16 +59,22 @@ class _AsyncConnectWrapper:
             SnowflakeConnection.__init__, "__annotations__", {}
         )
 
-    async def __call__(self, **kwargs: Any) -> SnowflakeConnection:
+    @wraps(SnowflakeConnection.__init__)
+    def __call__(self, **kwargs: Any) -> _AsyncConnectContextManager:
         """Create and connect to a Snowflake connection asynchronously.
 
-        This async function creates a SnowflakeConnection instance and establishes
-        the connection, replicating the behavior of the synchronous snowflake.connector.connect.
+        Returns an awaitable that can also be used as an async context manager.
+        Supports both patterns:
+        - conn = await connect(...)
+        - async with connect(...) as conn:
         """
-        conn = SnowflakeConnection(**kwargs)
-        await conn.connect()
-        return conn
+
+        async def _connect_coro() -> SnowflakeConnection:
+            conn = SnowflakeConnection(**kwargs)
+            await conn.connect()
+            return conn
+
+        return _AsyncConnectContextManager(_connect_coro())
 
 
-# Create the async connect function with preserved metadata
 connect = _AsyncConnectWrapper()
