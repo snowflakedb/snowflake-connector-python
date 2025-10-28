@@ -46,7 +46,7 @@ except ImportError:
     CONNECTION_PARAMETERS_ADMIN = {}
 from snowflake.connector.aio.auth import AuthByOkta, AuthByPlugin
 
-from .conftest import create_connection
+from .conftest import create_connection, fill_conn_kwargs_for_tests
 
 try:
     from snowflake.connector.errorcode import ER_FAILED_PROCESSING_QMARK
@@ -1469,6 +1469,41 @@ async def test_platform_detection_timeout(conn_cnx):
     """
     async with conn_cnx(timezone="UTC", platform_detection_timeout_seconds=2.5) as cnx:
         assert cnx.platform_detection_timeout_seconds == 2.5
+
+
+@pytest.mark.skipolddriver
+async def test_conn_cnx_changed(conn_cnx):
+    """Tests platform detection timeout.
+
+    Creates a connection with platform_detection_timeout parameter.
+    """
+    async with conn_cnx() as conn:
+        async with conn.cursor() as cur:
+            result = await (await cur.execute("select 1")).fetchall()
+            assert len(result) == 1
+            assert result[0][0] == 1
+
+
+@pytest.mark.skipolddriver
+async def test_conn_assigned(conn_cnx):
+    conn = await snowflake.connector.aio.connect(
+        **fill_conn_kwargs_for_tests("default")
+    )
+    async with conn.cursor() as cur:
+        result = await (await cur.execute("select 1")).fetchall()
+        assert len(result) == 1
+        assert result[0][0] == 1
+
+
+@pytest.mark.skipolddriver
+async def test_conn_with(conn_cnx):
+    async with snowflake.connector.aio.connect(
+        **fill_conn_kwargs_for_tests("default")
+    ) as conn:
+        async with conn.cursor() as cur:
+            result = await (await cur.execute("select 1")).fetchall()
+            assert len(result) == 1
+            assert result[0][0] == 1
 
 
 @pytest.mark.skipolddriver
