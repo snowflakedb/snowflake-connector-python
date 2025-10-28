@@ -19,7 +19,7 @@ import OpenSSL
 
 from .compat import IS_WINDOWS, urlparse
 from .cursor import SnowflakeCursor
-from .session_manager import SessionManager
+from .session_manager import SessionManager, SessionManagerFactory
 from .url_util import extract_top_level_domain_from_hostname
 from .vendored import urllib3
 
@@ -197,7 +197,7 @@ class ConnectionDiagnostic:
         self._session_manager = (
             session_manager.clone(use_pooling=False)
             if session_manager
-            else SessionManager(use_pooling=False)
+            else SessionManagerFactory.get_manager(use_pooling=False)
         )
 
     def __parse_proxy(self, proxy_url: str) -> tuple[str, str, str, str]:

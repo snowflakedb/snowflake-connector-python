@@ -128,7 +128,12 @@ from .network import (
     ReauthenticationRequest,
     SnowflakeRestful,
 )
-from .session_manager import HttpConfig, ProxySupportAdapterFactory, SessionManager
+from .session_manager import (
+    HttpConfig,
+    ProxySupportAdapterFactory,
+    SessionManager,
+    SessionManagerFactory,
+)
 from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
@@ -198,6 +203,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "proxy_port": (None, (type(None), str)),  # snowflake
     "proxy_user": (None, (type(None), str)),  # snowflake
     "proxy_password": (None, (type(None), str)),  # snowflake
+    "no_proxy": (
+        None,
+        (type(None), str, Iterable),
+    ),  # hosts/ips to bypass proxy (str or iterable)
     "protocol": ("https", str),  # snowflake
     "warehouse": (None, (type(None), str)),  # snowflake
     "region": (None, (type(None), str)),  # snowflake
@@ -690,6 +699,10 @@ class SnowflakeConnection:
         return self._proxy_password
 
     @property
+    def no_proxy(self) -> str | Iterable | None:
+        return self._no_proxy
+
+    @property
     def account(self) -> str:
         return self._account
 
@@ -955,8 +968,17 @@ class SnowflakeConnection:
             proxy_port=self.proxy_port,
             proxy_user=self.proxy_user,
             proxy_password=self.proxy_password,
+            no_proxy=(
+                ",".join(str(x) for x in self.no_proxy)
+                if (
+                    self.no_proxy is not None
+                    and isinstance(self.no_proxy, Iterable)
+                    and not isinstance(self.no_proxy, (str, bytes))
+                )
+                else self.no_proxy
+            ),
         )
-        self._session_manager = SessionManager(self._http_config)
+        self._session_manager = SessionManagerFactory.get_manager(self._http_config)
 
         if self.enable_connection_diag:
             exceptions_dict = {}

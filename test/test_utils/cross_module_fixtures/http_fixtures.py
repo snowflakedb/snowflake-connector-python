@@ -8,6 +8,7 @@ def proxy_env_vars():
     """Manages HTTP_PROXY and HTTPS_PROXY environment variables for testing."""
     original_http_proxy = os.environ.get("HTTP_PROXY")
     original_https_proxy = os.environ.get("HTTPS_PROXY")
+    original_no_proxy = os.environ.get("NO_PROXY")
 
     def set_proxy_env_vars(proxy_url: str):
         """Set both HTTP_PROXY and HTTPS_PROXY to the given URL."""
@@ -20,6 +21,8 @@ def proxy_env_vars():
             del os.environ["HTTP_PROXY"]
         if "HTTPS_PROXY" in os.environ:
             del os.environ["HTTPS_PROXY"]
+        if "NO_PROXY" in os.environ:
+            del os.environ["NO_PROXY"]
 
     # Yield the helper functions
     yield set_proxy_env_vars, clear_proxy_env_vars
@@ -34,3 +37,8 @@ def proxy_env_vars():
         os.environ["HTTPS_PROXY"] = original_https_proxy
     elif "HTTPS_PROXY" in os.environ:
         del os.environ["HTTPS_PROXY"]
+
+    if original_no_proxy is not None:
+        os.environ["NO_PROXY"] = original_no_proxy
+    elif "NO_PROXY" in os.environ:
+        del os.environ["NO_PROXY"]
