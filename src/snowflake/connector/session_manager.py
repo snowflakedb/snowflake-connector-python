@@ -134,6 +134,7 @@ class BaseHttpConfig:
     proxy_port: str | None = None
     proxy_user: str | None = None
     proxy_password: str | None = None
+    no_proxy: str | None = None
 
     def copy_with(self, **overrides: Any) -> BaseHttpConfig:
         """Return a new config with overrides applied."""
@@ -191,12 +192,12 @@ class SessionPool(Generic[SessionT]):
         self._active_sessions: set[SessionT] = set()
         self._manager = manager
 
-    def get_session(self) -> SessionT:
+    def get_session(self, *, url: str | None = None) -> SessionT:
         """Returns a session from the session pool or creates a new one."""
         try:
             session = self._idle_sessions.pop()
         except IndexError:
-            session = self._manager.make_session()
+            session = self._manager.make_session(url=url)
         self._active_sessions.add(session)
         return session
 
@@ -403,6 +404,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
             logger.debug("Creating a config for the SessionManager")
             config = HttpConfig(**http_config_kwargs)
         self._cfg: HttpConfig = config
+        # Maps hostname to SessionPool instance for its connections
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
         )
@@ -474,32 +476,50 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
             )
             return
 
-    def make_session(self) -> Session:
+    def make_session(self, *, url: str | None = None) -> Session:
         session = requests.Session()
         self._mount_adapters(session)
-        session.proxies = {"http": self.proxy_url, "https": self.proxy_url}
         return session
 
     @contextlib.contextmanager
     @_propagate_session_manager_to_ocsp
     def use_session(
-        self, url: str | bytes | None = None, use_pooling: bool | None = None
+        self, url: str | bytes, use_pooling: bool | None = None
     ) -> Generator[Session, Any, None]:
+        """
+        'url' is an obligatory parameter due to the need for correct proxy handling (i.e. bypassing caused by no_proxy settings).
+        """
         use_pooling = use_pooling if use_pooling is not None else self.use_pooling
         if not use_pooling:
-            session = self.make_session()
+            session = self.make_session(url=url)
             try:
                 yield session
             finally:
                 session.close()
         else:
-            hostname = urlparse(url).hostname if url else None
-            pool = self._sessions_map[hostname]
-            session = pool.get_session()
-            try:
-                yield session
-            finally:
-                pool.return_session(session)
+            yield from self._yield_session_from_pool(url)
+
+    def _yield_session_from_pool(
+        self, url: str | bytes
+    ) -> Generator[SessionT, Any, None]:
+        hostname = self._get_pooling_key_from_url(url)
+        pool = self._sessions_map[hostname]
+        session = pool.get_session(url=url)
+        try:
+            yield session
+        finally:
+            pool.return_session(session)
+
+    @staticmethod
+    def _get_pooling_key_from_url(url: str) -> str | None:
+        """
+        Derive the session pooling key (hostname) from a URL.
+
+        :param url: Absolute URL the session will be used for.
+        :return: Hostname string or None if URL is missing/invalid.
+        """
+        hostname = urlparse(url).hostname if url else None
+        return hostname
 
     def request(
         self,
@@ -586,3 +606,42 @@ def request(
         use_pooling=use_pooling,
         **kwargs,
     )
+
+
+class ProxySessionManager(SessionManager):
+    def make_session(self, *, url: str | None = None) -> Session:
+        session = requests.Session()
+        self._mount_adapters(session)
+        proxies = (
+            {
+                "no_proxy": self._cfg.no_proxy,
+            }
+            if requests.utils.should_bypass_proxies(url, no_proxy=self.config.no_proxy)
+            else {
+                "http": self.proxy_url,
+                "https": self.proxy_url,
+                "no_proxy": self.config.no_proxy,
+            }
+        )
+        session.proxies = proxies
+        return session
+
+    def clone(
+        self,
+        **http_config_overrides,
+    ) -> SessionManager:
+        return ProxySessionManager.from_config(self._cfg, **http_config_overrides)
+
+
+class SessionManagerFactory:
+    @staticmethod
+    def get_manager(
+        config: HttpConfig | None = None, **http_config_kwargs
+    ) -> SessionManager:
+        has_param_proxies = (
+            hasattr(config, "proxy_host") or "proxies" in http_config_kwargs
+        )
+        if has_param_proxies:
+            return ProxySessionManager(config, **http_config_kwargs)
+        else:
+            return SessionManager(config, **http_config_kwargs)
