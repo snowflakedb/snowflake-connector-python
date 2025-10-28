@@ -17,7 +17,11 @@ import webbrowser
 from typing import TYPE_CHECKING, Any
 
 from ..compat import parse_qs, urlparse, urlsplit
-from ..constants import OAUTH_TYPE_AUTHORIZATION_CODE
+from ..constants import (
+    ENV_VAR_OAUTH_SOCKET_ADDRESS,
+    ENV_VAR_OAUTH_SOCKET_PORT,
+    OAUTH_TYPE_AUTHORIZATION_CODE,
+)
 from ..errorcode import (
     ER_INVALID_VALUE,
     ER_OAUTH_CALLBACK_ERROR,
@@ -119,13 +123,18 @@ class AuthByOauthCode(AuthByOAuthBase):
         """Web Browser based Authentication."""
         logger.debug("authenticating with OAuth authorization code flow")
         with AuthHttpServer(
-            uri=os.environ.get("SNOWFLAKE_OAUTH_SOCKET_ADDRESS", "http://localhost")
-            + ":"
-            + os.environ.get("SNOWFLAKE_OAUTH_SOCKET_PORT", "0"),
             redirect_uri=self._redirect_uri,
+            uri=self._read_uri_from_env(),
         ) as callback_server:
             code = self._do_authorization_request(callback_server, conn)
             return self._do_token_request(code, callback_server, conn)
+
+    def _read_uri_from_env(self) -> str:
+        oauth_socket_address = os.getenv(
+            ENV_VAR_OAUTH_SOCKET_ADDRESS, "http://localhost"
+        )
+        oauth_socket_port = os.getenv(ENV_VAR_OAUTH_SOCKET_PORT, "0")
+        return f"{oauth_socket_address}:{oauth_socket_port}"
 
     def _check_post_requested(
         self, data: list[str]

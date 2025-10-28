@@ -69,11 +69,11 @@ class AuthHttpServer:
     def __init__(
         self,
         uri: str,
-        redirect_uri: str,
         buf_size: int = 16384,
+        redirect_uri: str | None = None,
     ) -> None:
         parsed_uri = urllib.parse.urlparse(uri)
-        parsed_redirect = urllib.parse.urlparse(redirect_uri)
+        parsed_redirect = urllib.parse.urlparse(redirect_uri) if redirect_uri else None
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.buf_size = buf_size
         if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
@@ -84,10 +84,11 @@ class AuthHttpServer:
             else:
                 self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
-        if parsed_redirect.hostname in ("localhost", "127.0.0.1"):
+        if parsed_redirect and self._is_local_uri(parsed_redirect):
             port = parsed_redirect.port or 0
         else:
-            port = parsed_uri.port or 0
+            port = parsed_uri.port if parsed_uri and parsed_uri.port else 0
+
         for attempt in range(1, self.DEFAULT_MAX_ATTEMPTS + 1):
             try:
                 self._socket.bind(
@@ -128,27 +129,30 @@ class AuthHttpServer:
             query=parsed_uri.query,
             fragment=parsed_uri.fragment,
         )
-        if (
-            parsed_redirect.hostname in ("localhost", "127.0.0.1")
-            and port != parsed_redirect.port
-        ):
-            logger.debug(
-                f"Updating redirect port {parsed_redirect.port} to match the server port {port}."
-            )
-            self._redirect_uri = urllib.parse.ParseResult(
-                scheme=parsed_redirect.scheme,
-                netloc=parsed_redirect.hostname + ":" + str(port),
-                path=parsed_redirect.path,
-                params=parsed_redirect.params,
-                query=parsed_redirect.query,
-                fragment=parsed_redirect.fragment,
-            )
-        else:
-            self._redirect_uri = parsed_redirect
+        if parsed_redirect:
+            if self._is_local_uri(parsed_redirect) and port != parsed_redirect.port:
+                logger.debug(
+                    f"Updating redirect port {parsed_redirect.port} to match the server port {port}."
+                )
+                self._redirect_uri = urllib.parse.ParseResult(
+                    scheme=parsed_redirect.scheme,
+                    netloc=parsed_redirect.hostname + ":" + str(port),
+                    path=parsed_redirect.path,
+                    params=parsed_redirect.params,
+                    query=parsed_redirect.query,
+                    fragment=parsed_redirect.fragment,
+                )
+            else:
+                self._redirect_uri = parsed_redirect
+
+    def _is_local_uri(self, parsed_redirect):
+        return parsed_redirect.hostname in ("localhost", "127.0.0.1")
 
     @property
-    def redirect_uri(self) -> str:
-        return self._redirect_uri.geturl()
+    def redirect_uri(self) -> str | None:
+        if self._redirect_uri:
+            return self._redirect_uri.geturl()
+        return self.url
 
     @property
     def url(self) -> str:

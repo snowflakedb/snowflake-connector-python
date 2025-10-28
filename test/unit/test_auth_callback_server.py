@@ -25,8 +25,7 @@ def test_auth_callback_success(monkeypatch, dontwait, timeout, reuse_port) -> No
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", dontwait)
     test_response: requests.Response | None = None
     with AuthHttpServer(
-        uri="http://127.0.0.1/test_request",
-        redirect_uri="http://127.0.0.1/test_request",
+        "http://127.0.0.1/test_request",
     ) as callback_server:
 
         def request_callback():
@@ -61,8 +60,7 @@ def test_auth_callback_timeout(monkeypatch, dontwait, timeout, reuse_port) -> No
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", reuse_port)
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", dontwait)
     with AuthHttpServer(
-        uri="http://127.0.0.1/test_request",
-        redirect_uri="http://127.0.0.1/test_request",
+        "http://127.0.0.1/test_request",
     ) as callback_server:
         block, client_socket = callback_server.receive_block(timeout=timeout)
         assert block is None
