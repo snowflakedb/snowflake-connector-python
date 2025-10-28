@@ -8,6 +8,7 @@ import base64
 import hashlib
 import json
 import logging
+import os
 import secrets
 import socket
 import time
@@ -16,7 +17,11 @@ import webbrowser
 from typing import TYPE_CHECKING, Any
 
 from ..compat import parse_qs, urlparse, urlsplit
-from ..constants import OAUTH_TYPE_AUTHORIZATION_CODE
+from ..constants import (
+    ENV_VAR_OAUTH_SOCKET_ADDRESS,
+    ENV_VAR_OAUTH_SOCKET_PORT,
+    OAUTH_TYPE_AUTHORIZATION_CODE,
+)
 from ..errorcode import (
     ER_INVALID_VALUE,
     ER_OAUTH_CALLBACK_ERROR,
@@ -117,9 +122,19 @@ class AuthByOauthCode(AuthByOAuthBase):
     ) -> (str | None, str | None):
         """Web Browser based Authentication."""
         logger.debug("authenticating with OAuth authorization code flow")
-        with AuthHttpServer(self._redirect_uri) as callback_server:
+        with AuthHttpServer(
+            redirect_uri=self._redirect_uri,
+            uri=self._read_uri_from_env(),
+        ) as callback_server:
             code = self._do_authorization_request(callback_server, conn)
             return self._do_token_request(code, callback_server, conn)
+
+    def _read_uri_from_env(self) -> str:
+        oauth_socket_address = os.getenv(
+            ENV_VAR_OAUTH_SOCKET_ADDRESS, "http://localhost"
+        )
+        oauth_socket_port = os.getenv(ENV_VAR_OAUTH_SOCKET_PORT, "0")
+        return f"{oauth_socket_address}:{oauth_socket_port}"
 
     def _check_post_requested(
         self, data: list[str]
@@ -260,7 +275,7 @@ You can close this window now and go back where you started from.
         connection: SnowflakeConnection,
     ) -> str | None:
         authorization_request = self._construct_authorization_request(
-            callback_server.url
+            callback_server.redirect_uri
         )
         logger.debug("step 1: going to open authorization URL")
         print(
@@ -315,7 +330,7 @@ You can close this window now and go back where you started from.
         fields = {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": callback_server.url,
+            "redirect_uri": callback_server.redirect_uri,
         }
         if self._enable_single_use_refresh_tokens:
             fields["enable_single_use_refresh_tokens"] = "true"
