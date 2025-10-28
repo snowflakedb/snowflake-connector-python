@@ -124,7 +124,6 @@ def test_oauth_code_successful_flow(
     omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
-    monkeypatch.setenv("SNOWFLAKE_OAUTH_SOCKET_PORT", "8009")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir / "successful_flow.json"
@@ -167,7 +166,6 @@ def test_oauth_code_invalid_state(
     omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
-    monkeypatch.setenv("SNOWFLAKE_OAUTH_SOCKET_PORT", "8009")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir / "invalid_state_error.json"
@@ -203,7 +201,6 @@ def test_oauth_code_scope_error(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
-    monkeypatch.setenv("SNOWFLAKE_OAUTH_SOCKET_PORT", "8009")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir / "invalid_scope_error.json"
@@ -240,7 +237,6 @@ def test_oauth_code_token_request_error(
     omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
-    monkeypatch.setenv("SNOWFLAKE_OAUTH_SOCKET_PORT", "8009")
 
     with WiremockClient() as wiremock_client:
         wiremock_client.import_mapping(
@@ -279,7 +275,6 @@ def test_oauth_code_browser_timeout(
     omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
-    monkeypatch.setenv("SNOWFLAKE_OAUTH_SOCKET_PORT", "8009")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir
@@ -321,7 +316,6 @@ def test_oauth_code_custom_urls(
     omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
-    monkeypatch.setenv("SNOWFLAKE_OAUTH_SOCKET_PORT", "8009")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir / "external_idp_custom_urls.json"
@@ -365,7 +359,6 @@ def test_oauth_code_local_application_custom_urls_successful_flow(
     omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
-    monkeypatch.setenv("SNOWFLAKE_OAUTH_SOCKET_PORT", "8009")
 
     wiremock_client.import_mapping(
         wiremock_oauth_authorization_code_dir
@@ -410,7 +403,6 @@ def test_oauth_code_successful_refresh_token_flow(
     omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
-    monkeypatch.setenv("SNOWFLAKE_OAUTH_SOCKET_PORT", "8009")
 
     wiremock_client.import_mapping(
         wiremock_generic_mappings_dir / "snowflake_login_failed.json"
@@ -471,7 +463,6 @@ def test_oauth_code_expired_refresh_token_flow(
     omit_oauth_urls_check,
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "true")
-    monkeypatch.setenv("SNOWFLAKE_OAUTH_SOCKET_PORT", "8009")
 
     wiremock_client.import_mapping(
         wiremock_generic_mappings_dir / "snowflake_login_failed.json"
@@ -555,10 +546,6 @@ def test_client_creds_successful_flow(
     monkeypatch,
     temp_cache,
 ) -> None:
-    monkeypatch.setenv(
-        "SNOWFLAKE_OAUTH_SOCKET_PORT", wiremock_client.wiremock_http_port
-    )
-
     wiremock_client.import_mapping(
         wiremock_oauth_client_creds_dir / "successful_flow.json"
     )
@@ -609,10 +596,6 @@ def test_client_creds_token_request_error(
     wiremock_generic_mappings_dir,
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv(
-        "SNOWFLAKE_OAUTH_SOCKET_PORT", wiremock_client.wiremock_http_port
-    )
-
     wiremock_client.import_mapping(
         wiremock_oauth_client_creds_dir / "token_request_error.json"
     )
@@ -654,10 +637,6 @@ def test_client_creds_expired_refresh_token_flow(
     monkeypatch,
     temp_cache,
 ) -> None:
-    monkeypatch.setenv(
-        "SNOWFLAKE_OAUTH_SOCKET_PORT", wiremock_client.wiremock_http_port
-    )
-
     wiremock_client.import_mapping(
         wiremock_generic_mappings_dir / "snowflake_login_failed.json"
     )
