@@ -49,17 +49,11 @@ class _AsyncConnectContextManager:
         """Make the wrapper iterable like a coroutine."""
         return self.__await__()
 
-    # TODO: below is okay if we make idempotent __aenter__ of SnowflakeConnection class - so check if connected and do not repeat connecting
-    # async def __aenter__(self) -> SnowflakeConnection:
-    #     """Enable async with connect(...) as conn:"""
-    #     self._conn = await self._coro
-    #     return await self._conn.__aenter__()
-
+    # This approach requires idempotent __aenter__ of SnowflakeConnection class - so check if connected and do not repeat connecting
     async def __aenter__(self) -> SnowflakeConnection:
         """Enable async with connect(...) as conn:"""
         self._conn = await self._coro
-        # Connection is already connected by the coroutine
-        return self._conn
+        return await self._conn.__aenter__()
 
     async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         """Exit async context manager."""
