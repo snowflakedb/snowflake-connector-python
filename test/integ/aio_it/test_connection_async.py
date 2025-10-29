@@ -1010,16 +1010,6 @@ async def test_client_prefetch_threads_setting(conn_cnx):
         assert conn.client_prefetch_threads == new_thread_count
 
 
-@pytest.mark.skip(reason="Test stopped working after account setup change")
-@pytest.mark.external
-async def test_client_failover_connection_url(conn_cnx):
-    async with conn_cnx("client_failover") as conn:
-        async with conn.cursor() as cur:
-            assert await (await cur.execute("select 1;")).fetchall() == [
-                (1,),
-            ]
-
-
 async def test_connection_gc(conn_cnx):
     """This test makes sure that a heartbeat thread doesn't prevent garbage collection of SnowflakeConnection."""
     conn = await conn_cnx(client_session_keep_alive=True).__aenter__()
