@@ -24,6 +24,7 @@ from snowflake.connector import (
 )
 from snowflake.connector._sql_util import get_file_transfer_type
 from snowflake.connector.aio._bind_upload_agent import BindUploadAgent
+from snowflake.connector.aio._file_transfer_agent import SnowflakeFileTransferAgent
 from snowflake.connector.aio._result_batch import (
     ResultBatch,
     create_batches_from_response,
@@ -664,11 +665,8 @@ class SnowflakeCursor(SnowflakeCursorSync):
             )
             logger.debug("PUT OR GET: %s", self.is_file_transfer)
             if self.is_file_transfer:
-                from ._file_transfer_agent import SnowflakeFileTransferAgent
-
                 # Decide whether to use the old, or new code path
-                sf_file_transfer_agent = SnowflakeFileTransferAgent(
-                    self,
+                sf_file_transfer_agent = self._create_file_transfer_agent(
                     query,
                     ret,
                     put_callback=_put_callback,
@@ -684,9 +682,6 @@ class SnowflakeCursor(SnowflakeCursorSync):
                     skip_upload_on_content_match=_skip_upload_on_content_match,
                     source_from_stream=file_stream,
                     multipart_threshold=data.get("threshold"),
-                    use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
-                    unsafe_file_write=self._connection.unsafe_file_write,
-                    reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
                 )
                 await sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
@@ -1082,8 +1077,6 @@ class SnowflakeCursor(SnowflakeCursorSync):
             _do_reset (bool, optional): Whether to reset the cursor before
                 downloading, by default we will reset the cursor.
         """
-        from ._file_transfer_agent import SnowflakeFileTransferAgent
-
         if _do_reset:
             self.reset()
 
@@ -1097,11 +1090,9 @@ class SnowflakeCursor(SnowflakeCursorSync):
         )
 
         # Execute the file operation based on the interpretation above.
-        file_transfer_agent = SnowflakeFileTransferAgent(
-            self,
+        file_transfer_agent = self._create_file_transfer_agent(
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
-            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         await file_transfer_agent.execute()
         await self._init_result_and_meta(file_transfer_agent.result())
@@ -1122,8 +1113,6 @@ class SnowflakeCursor(SnowflakeCursorSync):
             _do_reset (bool, optional): Whether to reset the cursor before
                 uploading, by default we will reset the cursor.
         """
-        from ._file_transfer_agent import SnowflakeFileTransferAgent
-
         if _do_reset:
             self.reset()
 
@@ -1137,12 +1126,10 @@ class SnowflakeCursor(SnowflakeCursorSync):
         )
 
         # Execute the file operation based on the interpretation above.
-        file_transfer_agent = SnowflakeFileTransferAgent(
-            self,
+        file_transfer_agent = self._create_file_transfer_agent(
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
             force_put_overwrite=False,  # _upload should respect user decision on overwriting
-            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         await file_transfer_agent.execute()
         await self._init_result_and_meta(file_transfer_agent.result())
@@ -1191,8 +1178,6 @@ class SnowflakeCursor(SnowflakeCursorSync):
             _do_reset (bool, optional): Whether to reset the cursor before
                 uploading, by default we will reset the cursor.
         """
-        from ._file_transfer_agent import SnowflakeFileTransferAgent
-
         if _do_reset:
             self.reset()
 
@@ -1207,13 +1192,11 @@ class SnowflakeCursor(SnowflakeCursorSync):
         )
 
         # Execute the file operation based on the interpretation above.
-        file_transfer_agent = SnowflakeFileTransferAgent(
-            self,
+        file_transfer_agent = self._create_file_transfer_agent(
             "",  # empty command because it is triggered by directly calling this util not by a SQL query
             ret,
             source_from_stream=input_stream,
             force_put_overwrite=False,  # _upload should respect user decision on overwriting
-            reraise_error_in_file_transfer_work_function=self.connection._reraise_error_in_file_transfer_work_function,
         )
         await file_transfer_agent.execute()
         await self._init_result_and_meta(file_transfer_agent.result())
@@ -1319,6 +1302,24 @@ class SnowflakeCursor(SnowflakeCursorSync):
                 self.connection, self, ProgrammingError, errvalue
             )
         return self
+
+    def _create_file_transfer_agent(
+        self,
+        command: str,
+        ret: dict[str, Any],
+        /,
+        **kwargs,
+    ) -> SnowflakeFileTransferAgent:
+
+        return SnowflakeFileTransferAgent(
+            self,
+            command,
+            ret,
+            use_s3_regional_url=self._connection.enable_stage_s3_privatelink_for_us_east_1,
+            unsafe_file_write=self._connection.unsafe_file_write,
+            reraise_error_in_file_transfer_work_function=self._connection._reraise_error_in_file_transfer_work_function,
+            **kwargs,
+        )
 
 
 class DictCursor(DictCursorSync, SnowflakeCursor):
