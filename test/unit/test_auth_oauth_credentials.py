@@ -137,6 +137,53 @@ def test_oauth_client_credentials_parameters(
     conn.close()
 
 
+@pytest.mark.skipolddriver
+def test_oauth_client_credentials_allows_empty_user(monkeypatch):
+    """Test that OAUTH_CLIENT_CREDENTIALS authenticator allows connection without user parameter."""
+    import snowflake.connector
+
+    def mock_post_request(request, url, headers, json_body, **kwargs):
+        return {
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+                "idToken": None,
+                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
+            },
+        }
+
+    monkeypatch.setattr(
+        "snowflake.connector.network.SnowflakeRestful._post_request",
+        mock_post_request,
+    )
+
+    # Mock the OAuth client credentials token request to avoid making HTTP requests
+    def mock_get_request_token_response(self, connection, fields):
+        return ("mocked_token_response", None)
+
+    monkeypatch.setattr(
+        AuthByOauthCredentials,
+        "_get_request_token_response",
+        mock_get_request_token_response,
+    )
+
+    # Test connection without user parameter - should succeed
+    conn = snowflake.connector.connect(
+        account="testaccount",
+        authenticator="OAUTH_CLIENT_CREDENTIALS",
+        oauth_client_id="test_client_id",
+        oauth_client_secret="test_client_secret",
+    )
+
+    # Verify that the connection was successful
+    assert conn is not None
+    assert isinstance(conn.auth_class, AuthByOauthCredentials)
+
+    conn.close()
+
+
 def test_oauth_credentials_missing_client_id_raises_error():
     """Test that missing client_id raises a ProgrammingError."""
     with pytest.raises(ProgrammingError) as excinfo:
