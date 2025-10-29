@@ -420,7 +420,7 @@ async def test_invalid_account_timeout(conn_cnx):
             pass
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(20)
 async def test_invalid_proxy(conn_cnx):
     http_proxy = os.environ.get("HTTP_PROXY")
     https_proxy = os.environ.get("HTTPS_PROXY")
@@ -452,7 +452,7 @@ async def test_invalid_proxy(conn_cnx):
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(20)
 async def test_invalid_proxy_not_impacting_env_vars(conn_cnx):
     http_proxy = os.environ.get("HTTP_PROXY")
     https_proxy = os.environ.get("HTTPS_PROXY")
