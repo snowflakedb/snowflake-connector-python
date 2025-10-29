@@ -34,6 +34,7 @@ from ..constants import OCSPMode
 from ..session_manager import BaseHttpConfig
 from ..session_manager import SessionManager as SessionManagerSync
 from ..session_manager import SessionPool as SessionPoolSync
+from ..session_manager import _ConfigDirectAccessMixin
 
 logger = logging.getLogger(__name__)
 
@@ -328,7 +329,29 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
             )
 
 
-class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
+class _AsyncHttpConfigDirectAccessMixin(_ConfigDirectAccessMixin, abc.ABC):
+    @property
+    @abc.abstractmethod
+    def config(self) -> AioHttpConfig: ...
+
+    @config.setter
+    @abc.abstractmethod
+    def config(self, value) -> AioHttpConfig: ...
+
+    @property
+    def connector_factory(self) -> Callable[..., aiohttp.BaseConnector]:
+        return self.config.connector_factory
+
+    @connector_factory.setter
+    def connector_factory(self, value: Callable[..., aiohttp.BaseConnector]) -> None:
+        self.config: AioHttpConfig = self.config.copy_with(connector_factory=value)
+
+
+class SessionManager(
+    _RequestVerbsUsingSessionMixin,
+    SessionManagerSync,
+    _AsyncHttpConfigDirectAccessMixin,
+):
     """
     Async HTTP session manager for aiohttp.ClientSession instances.
 
@@ -362,14 +385,6 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
         if overrides:
             cfg = cfg.copy_with(**overrides)
         return cls(config=cfg)
-
-    @property
-    def connector_factory(self) -> Callable[..., aiohttp.BaseConnector]:
-        return self._cfg.connector_factory
-
-    @connector_factory.setter
-    def connector_factory(self, value: Callable[..., aiohttp.BaseConnector]) -> None:
-        self._cfg: AioHttpConfig = self._cfg.copy_with(connector_factory=value)
 
     def make_session(self) -> aiohttp.ClientSession:
         """Create a new aiohttp.ClientSession with configured connector."""
@@ -432,18 +447,18 @@ class SessionManager(_RequestVerbsUsingSessionMixin, SessionManagerSync):
 
     def clone(
         self,
-        *,
-        use_pooling: bool | None = None,
-        connector_factory: ConnectorFactory | None = None,
+        **http_config_overrides,
     ) -> SessionManager:
-        """Return a new async SessionManager sharing this instance's config."""
-        overrides: dict[str, Any] = {}
-        if use_pooling is not None:
-            overrides["use_pooling"] = use_pooling
-        if connector_factory is not None:
-            overrides["connector_factory"] = connector_factory
+        """Return a new *stateless* SessionManager sharing this instance’s config.
 
-        return self.from_config(self._cfg, **overrides)
+        "Shallow clone" - the configuration object (HttpConfig) is reused as-is,
+        while *stateful* aspects such as the per-host SessionPool mapping are
+        reset, so the two managers do not share live `requests.Session`
+        objects.
+        Optional kwargs (e.g. *use_pooling* / *adapter_factory* / max_retries etc.) - overrides to create a modified
+        copy of the HttpConfig before instantiation.
+        """
+        return self.from_config(self._cfg, **http_config_overrides)
 
 
 async def request(
