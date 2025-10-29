@@ -58,6 +58,13 @@ try:
 except ImportError:
     pass
 
+from test.integ.test_connection import (
+    _assert_log_bytes_within_tolerance,
+    _calculate_log_bytes,
+    _find_matching_patterns,
+    _log_pattern_analysis,
+)
+
 
 async def test_basic(conn_testaccount):
     """Basic Connection test."""
@@ -1604,3 +1611,85 @@ async def test_snowflake_version():
     assert re.match(
         version_pattern, await conn.snowflake_version
     ), f"snowflake_version should match pattern 'x.y.z', but got '{await conn.snowflake_version}'"
+
+
+@pytest.mark.skipolddriver
+async def test_logs_size_during_basic_query_stays_unchanged(conn_cnx, caplog):
+    """Test that the amount of bytes logged during normal select 1 flow is within acceptable range. Related to: SNOW-2268606"""
+    caplog.set_level(logging.INFO, "snowflake.connector")
+    caplog.clear()
+
+    # Test-specific constants
+    EXPECTED_BYTES = 145
+    ACCEPTABLE_DELTA = 0.6
+    EXPECTED_PATTERNS = [
+        "Snowflake Connector for Python Version: ",  # followed by version info
+        "Connecting to GLOBAL Snowflake domain",
+    ]
+
+    async with conn_cnx() as conn:
+        async with conn.cursor() as cur:
+            await (await cur.execute("select 1")).fetchall()
+
+            actual_messages = [record.getMessage() for record in caplog.records]
+            total_log_bytes = _calculate_log_bytes(actual_messages)
+
+            if total_log_bytes != EXPECTED_BYTES:
+                logging.warning(
+                    f"There was a change in a size of the logs produced by the basic Snowflake query. "
+                    f"Expected: {EXPECTED_BYTES}, got: {total_log_bytes}. "
+                    f"We may need to update the test_logs_size_during_basic_query_stays_unchanged - i.e. EXACT_EXPECTED_LOGS_BYTES constant."
+                )
+
+                # Check if patterns match to decide whether to show all messages
+                matched_patterns, missing_patterns, unmatched_messages = (
+                    _find_matching_patterns(actual_messages, EXPECTED_PATTERNS)
+                )
+                patterns_match_perfectly = (
+                    len(missing_patterns) == 0 and len(unmatched_messages) == 0
+                )
+
+                _log_pattern_analysis(
+                    actual_messages,
+                    EXPECTED_PATTERNS,
+                    matched_patterns,
+                    missing_patterns,
+                    unmatched_messages,
+                    show_all_messages=patterns_match_perfectly,
+                )
+
+            _assert_log_bytes_within_tolerance(
+                total_log_bytes, EXPECTED_BYTES, ACCEPTABLE_DELTA
+            )
+
+
+@pytest.mark.skipolddriver
+async def test_no_new_warnings_or_errors_on_successful_basic_select(conn_cnx, caplog):
+    """Test that the number of warning/error log entries stays the same during successful basic select operations. Related to: SNOW-2268606"""
+    caplog.set_level(logging.WARNING, "snowflake.connector")
+    baseline_warning_count = 0
+    baseline_error_count = 0
+
+    # Execute basic select operations and check counts remain the same
+    caplog.clear()
+    async with conn_cnx() as conn:
+        async with conn.cursor() as cur:
+            # Execute basic select operations
+            result1 = await (await cur.execute("select 1")).fetchall()
+            assert result1 == [(1,)]
+
+    # Count warning/error log entries after operations
+    test_warning_count = len(
+        [r for r in caplog.records if r.levelno >= logging.WARNING]
+    )
+    test_error_count = len([r for r in caplog.records if r.levelno >= logging.ERROR])
+
+    # Assert counts stay the same (no new warnings or errors)
+    assert test_warning_count == baseline_warning_count, (
+        f"Warning count increased from {baseline_warning_count} to {test_warning_count}. "
+        f"New warnings: {[r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]}"
+    )
+    assert test_error_count == baseline_error_count, (
+        f"Error count increased from {baseline_error_count} to {test_error_count}. "
+        f"New errors: {[r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]}"
+    )

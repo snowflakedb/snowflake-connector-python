@@ -3,11 +3,13 @@ from __future__ import annotations
 
 from unittest import mock
 
+import aiohttp
 import pytest
 
 from snowflake.connector.aio._session_manager import (
     AioHttpConfig,
     SessionManager,
+    SnowflakeSSLConnector,
     SnowflakeSSLConnectorFactory,
 )
 from snowflake.connector.constants import OCSPMode
@@ -348,3 +350,87 @@ async def test_pickle_session_manager():
 
     await manager.close()
     await unpickled.close()
+
+
+@pytest.fixture
+def mock_connector_with_factory():
+    """Fixture providing a mock connector factory and connector."""
+    mock_connector_factory = mock.MagicMock()
+    mock_connector = mock.MagicMock()
+    mock_connector_factory.return_value = mock_connector
+    return mock_connector, mock_connector_factory
+
+
+@pytest.mark.parametrize(
+    "ocsp_mode,extra_kwargs,expected_kwargs",
+    [
+        # Test with OCSPMode.FAIL_OPEN + extra kwargs (should all appear)
+        (
+            OCSPMode.FAIL_OPEN,
+            {"timeout": 30, "pool_connections": 10},
+            {
+                "timeout": 30,
+                "pool_connections": 10,
+                "snowflake_ocsp_mode": OCSPMode.FAIL_OPEN,
+            },
+        ),
+        # Test with OCSPMode.FAIL_CLOSED + no extra kwargs
+        (
+            OCSPMode.FAIL_CLOSED,
+            {},
+            {"snowflake_ocsp_mode": OCSPMode.FAIL_CLOSED},
+        ),
+        # Checks that None values also cause kwargs name to occur
+        (
+            None,
+            {},
+            {"snowflake_ocsp_mode": None},
+        ),
+        # Test override by extra kwargs: config has FAIL_OPEN but extra_kwargs override with FAIL_CLOSED
+        (
+            OCSPMode.FAIL_OPEN,
+            {"snowflake_ocsp_mode": OCSPMode.FAIL_CLOSED},
+            {"snowflake_ocsp_mode": OCSPMode.FAIL_CLOSED},
+        ),
+    ],
+)
+async def test_aio_http_config_get_connector_parametrized(
+    mock_connector_with_factory, ocsp_mode, extra_kwargs, expected_kwargs
+):
+    """Test that AioHttpConfig.get_connector properly passes kwargs and snowflake_ocsp_mode to connector factory.
+
+    This mirrors the sync test behavior where:
+    - Config attributes are passed to the factory
+    - Extra kwargs can override config attributes
+    - All resulting attributes appear in the factory call
+    """
+    mock_connector, mock_connector_factory = mock_connector_with_factory
+
+    config = AioHttpConfig(
+        connector_factory=mock_connector_factory, snowflake_ocsp_mode=ocsp_mode
+    )
+    result = config.get_connector(**extra_kwargs)
+
+    # Verify the connector factory was called with correct arguments
+    mock_connector_factory.assert_called_once_with(**expected_kwargs)
+    assert result is mock_connector
+
+
+async def test_aio_http_config_get_connector_with_real_connector_factory():
+    """Test get_connector with the actual SnowflakeSSLConnectorFactory.
+
+    Verifies that with a real factory, we get a real SnowflakeSSLConnector instance
+    with the snowflake_ocsp_mode properly set.
+    """
+    config = AioHttpConfig(
+        connector_factory=SnowflakeSSLConnectorFactory(),
+        snowflake_ocsp_mode=OCSPMode.FAIL_CLOSED,
+    )
+
+    connector = config.get_connector(session_manager=SessionManager())
+
+    # Verify we get a real SnowflakeSSLConnector instance
+    assert isinstance(connector, aiohttp.BaseConnector)
+    assert isinstance(connector, SnowflakeSSLConnector)
+    # Verify snowflake_ocsp_mode was set correctly
+    assert connector._snowflake_ocsp_mode == OCSPMode.FAIL_CLOSED
