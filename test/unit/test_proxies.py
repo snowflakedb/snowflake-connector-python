@@ -234,29 +234,9 @@ def _setup_backend_storage_mappings(
     wiremock_mapping_dir,
     wiremock_generic_mappings_dir,
 ):
-    password_mapping = wiremock_mapping_dir / "auth/password/successful_flow.json"
-    multi_chunk_request_mapping = (
-        wiremock_mapping_dir / "queries/select_large_request_successful.json"
-    )
-    chunk_1_mapping = wiremock_mapping_dir / "queries/chunk_1.json"
-    chunk_2_mapping = wiremock_mapping_dir / "queries/chunk_2.json"
-    disconnect_mapping = (
-        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
-    )
-    telemetry_mapping = wiremock_generic_mappings_dir / "telemetry.json"
-
-    target_wm.import_mapping_with_default_placeholders(password_mapping)
-    target_wm.add_mapping(disconnect_mapping)
-    target_wm.add_mapping(telemetry_mapping)
-    target_wm.add_mapping(
-        multi_chunk_request_mapping,
-        placeholders={
-            "{{STORAGE_WIREMOCK_HTTP_HOST_WITH_PORT}}": storage_wm.http_host_with_port
-        },
-    )
-
-    storage_wm.add_mapping_with_default_placeholders(chunk_1_mapping)
-    storage_wm.add_mapping_with_default_placeholders(chunk_2_mapping)
+    """Setup backend, storage, and proxy mappings for large queries."""
+    _set_mappings_for_common_backend(target_wm, wiremock_generic_mappings_dir)
+    _set_mappings_for_query_and_chunks(target_wm, storage_wm, wiremock_mapping_dir)
 
     proxy_wm.add_mapping(
         {
@@ -316,6 +296,53 @@ def _apply_no_proxy(no_proxy_source, no_proxy_value, connect_kwargs):
             if isinstance(no_proxy_value, str)
             else ",".join(no_proxy_value)
         )
+
+
+def _set_mappings_for_common_backend(target_wm, wiremock_generic_mappings_dir):
+    """Set common backend mappings: auth, disconnect, and telemetry."""
+    password_mapping = (
+        wiremock_generic_mappings_dir.parent / "auth/password/successful_flow.json"
+    )
+    disconnect_mapping = (
+        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+    )
+    telemetry_mapping = wiremock_generic_mappings_dir / "telemetry.json"
+
+    target_wm.import_mapping_with_default_placeholders(password_mapping)
+    target_wm.add_mapping(disconnect_mapping)
+    target_wm.add_mapping(telemetry_mapping)
+
+
+def _set_mappings_for_query_and_chunks(
+    target_wm,
+    wiremock_mapping_dir,
+    storage_or_target_wm=None,
+):
+    """Set multi-chunk query mapping and chunk mappings.
+
+    Args:
+        target_wm: The target/backend Wiremock client
+        wiremock_mapping_dir: Path to wiremock mappings directory
+        storage_or_target_wm: Optional storage Wiremock client. If not provided, chunks are added to target_wm.
+    """
+    if storage_or_target_wm is None:
+        storage_or_target_wm = target_wm
+
+    multi_chunk_request_mapping = (
+        wiremock_mapping_dir / "queries/select_large_request_successful.json"
+    )
+    chunk_1_mapping = wiremock_mapping_dir / "queries/chunk_1.json"
+    chunk_2_mapping = wiremock_mapping_dir / "queries/chunk_2.json"
+
+    target_wm.add_mapping(
+        multi_chunk_request_mapping,
+        placeholders={
+            "{{STORAGE_WIREMOCK_HTTP_HOST_WITH_PORT}}": storage_or_target_wm.http_host_with_port
+        },
+    )
+
+    storage_or_target_wm.add_mapping_with_default_placeholders(chunk_1_mapping)
+    storage_or_target_wm.add_mapping_with_default_placeholders(chunk_2_mapping)
 
 
 def _execute_large_query(connect_kwargs, row_count: int):
@@ -406,6 +433,46 @@ def _collect_db_request_flags_only(proxy_wm, target_wm) -> DbRequestFlags:
         for r in target_reqs["requests"]
     )
     return DbRequestFlags(proxy_saw_db=proxy_saw_db, target_saw_db=target_saw_db)
+
+
+class ProxyPrecedenceFlags(NamedTuple):
+    proxy1_saw_request: bool
+    proxy2_saw_request: bool
+    backend_saw_request: bool
+
+
+def _collect_proxy_precedence_flags(
+    proxy1_wm, proxy2_wm, target_wm
+) -> ProxyPrecedenceFlags:
+    """Collect flags for proxy precedence tests to see which proxy was used."""
+    proxy1_reqs = requests.get(
+        f"{proxy1_wm.http_host_with_port}/__admin/requests"
+    ).json()
+    proxy2_reqs = requests.get(
+        f"{proxy2_wm.http_host_with_port}/__admin/requests"
+    ).json()
+    target_reqs = requests.get(
+        f"{target_wm.http_host_with_port}/__admin/requests"
+    ).json()
+
+    proxy1_saw_request = any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in proxy1_reqs["requests"]
+    )
+    proxy2_saw_request = any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in proxy2_reqs["requests"]
+    )
+    backend_saw_request = any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in target_reqs["requests"]
+    )
+
+    return ProxyPrecedenceFlags(
+        proxy1_saw_request=proxy1_saw_request,
+        proxy2_saw_request=proxy2_saw_request,
+        backend_saw_request=backend_saw_request,
+    )
 
 
 @pytest.mark.skipolddriver
@@ -697,3 +764,57 @@ def test_no_proxy_bypass_backend_and_storage_param_only(
     assert flags.proxy_saw_db is False
     assert flags.storage_saw_storage
     assert flags.proxy_saw_storage is False
+
+
+# TODO: This test is failing since its actually other way around. We can fix this by also overriding Session class here and passing to .request always proxies in ProxySessionManager
+@pytest.mark.skipolddriver
+def test_connection_params_proxy_take_precedence_over_env_vars(
+    wiremock_two_proxies_backend,
+    wiremock_mapping_dir,
+    wiremock_generic_mappings_dir,
+    proxy_env_vars,
+):
+    """Verify that proxy_host/proxy_port connection parameters take precedence over env vars.
+
+    Setup:
+    - Set HTTP_PROXY env var to point to proxy2
+    - Set proxy_host param to point to proxy1
+
+    Expected outcome:
+    - proxy1 should see the request (params take precedence)
+    - proxy2 should NOT see the request
+    - backend should see the request
+    """
+    target_wm, proxy1_wm, proxy2_wm = wiremock_two_proxies_backend
+
+    # Setup backend mappings for large query with multiple chunks
+    _set_mappings_for_common_backend(target_wm, wiremock_generic_mappings_dir)
+    _set_mappings_for_query_and_chunks(target_wm, wiremock_mapping_dir)
+
+    # Set HTTP_PROXY env var to point to proxy2
+    set_proxy_env_vars, _ = proxy_env_vars
+    env_proxy_url = f"http://{proxy2_wm.wiremock_host}:{proxy2_wm.wiremock_http_port}"
+    set_proxy_env_vars(env_proxy_url)
+
+    # Set connection params to point to proxy1 (should take precedence)
+    connect_kwargs = _base_connect_kwargs(target_wm)
+    connect_kwargs.update(
+        {
+            "proxy_host": proxy1_wm.wiremock_host,
+            "proxy_port": str(proxy1_wm.wiremock_http_port),
+        }
+    )
+
+    # Execute query
+    _execute_large_query(connect_kwargs, row_count=50_000)
+
+    # Verify proxy selection using named tuple flags
+    flags = _collect_proxy_precedence_flags(proxy1_wm, proxy2_wm, target_wm)
+    assert (
+        flags.proxy1_saw_request
+    ), "proxy1 (connection param proxy) should have seen the query request"
+    assert not flags.proxy2_saw_request, (
+        "proxy2 (env var proxy) should NOT have seen the request "
+        "since connection params take precedence"
+    )
+    assert flags.backend_saw_request, "backend should have seen the query request"
