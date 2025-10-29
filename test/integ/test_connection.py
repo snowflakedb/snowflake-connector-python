@@ -1107,16 +1107,6 @@ def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
         assert rest_sm_1.sessions_map[host] is not rest_sm_2.sessions_map[host]
 
 
-@pytest.mark.xfail(reason="Test stopped working after account setup change")
-@pytest.mark.external
-def test_client_failover_connection_url(conn_cnx):
-    with conn_cnx("client_failover") as conn:
-        with conn.cursor() as cur:
-            assert cur.execute("select 1;").fetchall() == [
-                (1,),
-            ]
-
-
 def test_connection_gc(conn_cnx):
     """This test makes sure that a heartbeat thread doesn't prevent garbage collection of SnowflakeConnection."""
     conn = conn_cnx(client_session_keep_alive=True).__enter__()
