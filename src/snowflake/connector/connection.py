@@ -1695,6 +1695,8 @@ class SnowflakeConnection:
             WORKLOAD_IDENTITY_AUTHENTICATOR,
             PROGRAMMATIC_ACCESS_TOKEN,
             PAT_WITH_EXTERNAL_SESSION,
+            OAUTH_AUTHORIZATION_CODE,
+            OAUTH_CLIENT_CREDENTIALS,
         }
 
         if not (self._master_token and self._session_token):
