@@ -207,7 +207,7 @@ async def test_ocsp_wo_cache_file(session_manager):
         OCSPCache.reset_cache_dir()
 
 
-async def test_ocsp_fail_open_w_single_endpoint(session_manager):
+async def test_ocsp_fail_open_w_single_endpoint(session_manager, monkeypatch):
     SnowflakeOCSP.clear_cache()
 
     try:
@@ -216,33 +216,28 @@ async def test_ocsp_fail_open_w_single_endpoint(session_manager):
         # File doesn't exist, which is fine for this test
         pass
 
-    environ["SF_OCSP_TEST_MODE"] = "true"
-    environ["SF_TEST_OCSP_URL"] = "http://httpbin.org/delay/10"
-    environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"] = "5"
+    monkeypatch.setenv("SF_OCSP_TEST_MODE", "true")
+    monkeypatch.setenv("SF_TEST_OCSP_URL", "http://httpbin.org/delay/10")
+    monkeypatch.setenv("SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT", "5")
 
     ocsp = SFOCSP(use_ocsp_cache_server=False)
 
-    try:
-        async with _asyncio_connect("snowflake.okta.com") as connection:
-            assert await ocsp.validate(
-                "snowflake.okta.com", connection, session_manager=session_manager
-            ), "Failed to validate: {}".format("snowflake.okta.com")
-    finally:
-        del environ["SF_OCSP_TEST_MODE"]
-        del environ["SF_TEST_OCSP_URL"]
-        del environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"]
+    async with _asyncio_connect("snowflake.okta.com") as connection:
+        assert await ocsp.validate(
+            "snowflake.okta.com", connection, session_manager=session_manager
+        ), "Failed to validate: {}".format("snowflake.okta.com")
 
 
 @pytest.mark.skipif(
     ER_OCSP_RESPONSE_CERT_STATUS_REVOKED is None,
     reason="No ER_OCSP_RESPONSE_CERT_STATUS_REVOKED is available.",
 )
-async def test_ocsp_fail_close_w_single_endpoint(session_manager):
+async def test_ocsp_fail_close_w_single_endpoint(session_manager, monkeypatch):
     SnowflakeOCSP.clear_cache()
 
-    environ["SF_OCSP_TEST_MODE"] = "true"
-    environ["SF_TEST_OCSP_URL"] = "http://httpbin.org/delay/10"
-    environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"] = "5"
+    monkeypatch.setenv("SF_OCSP_TEST_MODE", "true")
+    monkeypatch.setenv("SF_TEST_OCSP_URL", "http://httpbin.org/delay/10")
+    monkeypatch.setenv("SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT", "5")
 
     OCSPCache.del_cache_file()
 
@@ -254,21 +249,16 @@ async def test_ocsp_fail_close_w_single_endpoint(session_manager):
                 "snowflake.okta.com", connection, session_manager=session_manager
             )
 
-    try:
-        assert (
-            ex.value.errno == ER_OCSP_RESPONSE_FETCH_FAILURE
-        ), "Connection should have failed"
-    finally:
-        del environ["SF_OCSP_TEST_MODE"]
-        del environ["SF_TEST_OCSP_URL"]
-        del environ["SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT"]
+    assert (
+        ex.value.errno == ER_OCSP_RESPONSE_FETCH_FAILURE
+    ), "Connection should have failed"
 
 
-async def test_ocsp_bad_validity(session_manager):
+async def test_ocsp_bad_validity(session_manager, monkeypatch):
     SnowflakeOCSP.clear_cache()
 
-    environ["SF_OCSP_TEST_MODE"] = "true"
-    environ["SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY"] = "true"
+    monkeypatch.setenv("SF_OCSP_TEST_MODE", "true")
+    monkeypatch.setenv("SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY", "true")
 
     try:
         OCSPCache.del_cache_file()
@@ -282,12 +272,10 @@ async def test_ocsp_bad_validity(session_manager):
         assert await ocsp.validate(
             "snowflake.okta.com", connection, session_manager=session_manager
         ), "Connection should have passed with fail open"
-    del environ["SF_OCSP_TEST_MODE"]
-    del environ["SF_TEST_OCSP_FORCE_BAD_RESPONSE_VALIDITY"]
 
 
-async def test_ocsp_single_endpoint(session_manager):
-    environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"] = "True"
+async def test_ocsp_single_endpoint(session_manager, monkeypatch):
+    monkeypatch.setenv("SF_OCSP_ACTIVATE_NEW_ENDPOINT", "True")
     SnowflakeOCSP.clear_cache()
     ocsp = SFOCSP()
     ocsp.OCSP_CACHE_SERVER.NEW_DEFAULT_CACHE_SERVER_BASE_URL = "https://snowflake.preprod3.us-west-2-dev.external-zone.snowflakecomputing.com:8085/ocsp/"
@@ -295,8 +283,6 @@ async def test_ocsp_single_endpoint(session_manager):
         assert await ocsp.validate(
             "snowflake.okta.com", connection, session_manager=session_manager
         ), "Failed to validate: {}".format("snowflake.okta.com")
-
-    del environ["SF_OCSP_ACTIVATE_NEW_ENDPOINT"]
 
 
 async def test_ocsp_by_post_method(session_manager):
@@ -327,7 +313,7 @@ async def test_ocsp_with_file_cache(tmpdir, session_manager):
 
 
 async def test_ocsp_with_bogus_cache_files(
-    tmpdir, random_ocsp_response_validation_cache, session_manager
+    tmpdir, random_ocsp_response_validation_cache, session_manager, monkeypatch
 ):
     with mock.patch(
         "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
@@ -337,7 +323,7 @@ async def test_ocsp_with_bogus_cache_files(
 
         """Attempts to use bogus OCSP response data."""
         cache_file_name, target_hosts = await _store_cache_in_file(
-            tmpdir, session_manager
+            tmpdir, session_manager, monkeypatch=monkeypatch
         )
 
         ocsp = SFOCSP()
@@ -369,7 +355,7 @@ async def test_ocsp_with_bogus_cache_files(
 
 
 async def test_ocsp_with_outdated_cache(
-    tmpdir, random_ocsp_response_validation_cache, session_manager
+    tmpdir, random_ocsp_response_validation_cache, session_manager, monkeypatch
 ):
     with mock.patch(
         "snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE",
@@ -379,7 +365,7 @@ async def test_ocsp_with_outdated_cache(
 
         """Attempts to use outdated OCSP response cache file."""
         cache_file_name, target_hosts = await _store_cache_in_file(
-            tmpdir, session_manager
+            tmpdir, session_manager, monkeypatch=monkeypatch
         )
 
         ocsp = SFOCSP()
@@ -410,10 +396,10 @@ async def test_ocsp_with_outdated_cache(
         ), "must be empty. outdated cache should not be loaded"
 
 
-async def _store_cache_in_file(tmpdir, session_manager, target_hosts=None):
+async def _store_cache_in_file(tmpdir, session_manager, monkeypatch, target_hosts=None):
     if target_hosts is None:
         target_hosts = TARGET_HOSTS
-    os.environ["SF_OCSP_RESPONSE_CACHE_DIR"] = str(tmpdir)
+    monkeypatch.setenv("SF_OCSP_RESPONSE_CACHE_DIR", str(tmpdir))
     OCSPCache.reset_cache_dir()
     filename = path.join(str(tmpdir), "ocsp_response_cache.json")
 
