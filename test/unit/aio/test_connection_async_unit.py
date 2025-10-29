@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import stat
 import sys
 from contextlib import asynccontextmanager
@@ -193,12 +192,12 @@ def test_is_still_running():
         )
 
 
-async def test_partner_env_var(mock_post_requests):
+async def test_partner_env_var(mock_post_requests, monkeypatch):
     PARTNER_NAME = "Amanda"
 
-    with patch.dict(os.environ, {ENV_VAR_PARTNER: PARTNER_NAME}):
-        async with fake_db_conn() as conn:
-            assert conn.application == PARTNER_NAME
+    monkeypatch.setenv(ENV_VAR_PARTNER, PARTNER_NAME)
+    async with fake_db_conn() as conn:
+        assert conn.application == PARTNER_NAME
 
     assert (
         mock_post_requests["data"]["CLIENT_ENVIRONMENT"]["APPLICATION"] == PARTNER_NAME

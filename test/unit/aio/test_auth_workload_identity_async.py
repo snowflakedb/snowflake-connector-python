@@ -5,7 +5,6 @@
 import asyncio
 import json
 import logging
-import os
 from base64 import b64decode
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
@@ -409,12 +408,10 @@ async def test_explicit_azure_omits_client_id_if_not_set(fake_azure_metadata_ser
 
 
 async def test_explicit_azure_uses_explicit_client_id_if_set(
-    fake_azure_metadata_service,
+    fake_azure_metadata_service, monkeypatch
 ):
-    with mock.patch.dict(
-        os.environ, {"MANAGED_IDENTITY_CLIENT_ID": "custom-client-id"}
-    ):
-        auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
-        await auth_class.prepare(conn=None)
+    monkeypatch.setenv("MANAGED_IDENTITY_CLIENT_ID", "custom-client-id")
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AZURE)
+    await auth_class.prepare(conn=None)
 
     assert fake_azure_metadata_service.requested_client_id == "custom-client-id"
