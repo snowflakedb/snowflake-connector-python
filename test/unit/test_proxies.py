@@ -236,7 +236,11 @@ def _setup_backend_storage_mappings(
 ):
     """Setup backend, storage, and proxy mappings for large queries."""
     _set_mappings_for_common_backend(target_wm, wiremock_generic_mappings_dir)
-    _set_mappings_for_query_and_chunks(target_wm, storage_wm, wiremock_mapping_dir)
+    _set_mappings_for_query_and_chunks(
+        target_wm,
+        wiremock_mapping_dir,
+        storage_or_target_wm=storage_wm,
+    )
 
     proxy_wm.add_mapping(
         {
@@ -789,7 +793,10 @@ def test_connection_params_proxy_take_precedence_over_env_vars(
 
     # Setup backend mappings for large query with multiple chunks
     _set_mappings_for_common_backend(target_wm, wiremock_generic_mappings_dir)
-    _set_mappings_for_query_and_chunks(target_wm, wiremock_mapping_dir)
+    _set_mappings_for_query_and_chunks(
+        target_wm,
+        wiremock_mapping_dir,
+    )
 
     # Set HTTP_PROXY env var to point to proxy2
     set_proxy_env_vars, _ = proxy_env_vars
