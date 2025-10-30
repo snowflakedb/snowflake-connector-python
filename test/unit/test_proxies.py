@@ -355,7 +355,8 @@ def _execute_large_query(connect_kwargs, row_count: int):
             f"select seq4() as n from table(generator(rowcount => {row_count}));"
         )
         assert len(cursors[0]._result_set.batches) > 1
-    assert list(cursors[0])
+    rs = list(cursors[0])
+    assert rs
 
 
 @pytest.fixture
@@ -770,26 +771,28 @@ def test_no_proxy_bypass_backend_and_storage_param_only(
     assert flags.proxy_saw_storage is False
 
 
-# TODO: This test is failing since its actually other way around. We can fix this by also overriding Session class here and passing to .request always proxies in ProxySessionManager
 @pytest.mark.skipolddriver
-def test_connection_params_proxy_take_precedence_over_env_vars(
+def test_proxy_env_vars_take_precedence_over_connection_params(
     wiremock_two_proxies_backend,
     wiremock_mapping_dir,
     wiremock_generic_mappings_dir,
     proxy_env_vars,
+    monkeypatch,
 ):
     """Verify that proxy_host/proxy_port connection parameters take precedence over env vars.
 
     Setup:
-    - Set HTTP_PROXY env var to point to proxy2
-    - Set proxy_host param to point to proxy1
+    - Set HTTP_PROXY env var to point to proxy_from_env_vars
+    - Set proxy_host param to point to proxy_from_conn_params
 
     Expected outcome:
-    - proxy1 should see the request (params take precedence)
-    - proxy2 should NOT see the request
+    - proxy_from_conn_params should see the request (params take precedence)
+    - proxy_from_env_vars should NOT see the request
     - backend should see the request
     """
-    target_wm, proxy1_wm, proxy2_wm = wiremock_two_proxies_backend
+    target_wm, proxy_from_conn_params, proxy_from_env_vars = (
+        wiremock_two_proxies_backend
+    )
 
     # Setup backend mappings for large query with multiple chunks
     _set_mappings_for_common_backend(target_wm, wiremock_generic_mappings_dir)
@@ -798,17 +801,21 @@ def test_connection_params_proxy_take_precedence_over_env_vars(
         wiremock_mapping_dir,
     )
 
-    # Set HTTP_PROXY env var to point to proxy2
-    set_proxy_env_vars, _ = proxy_env_vars
-    env_proxy_url = f"http://{proxy2_wm.wiremock_host}:{proxy2_wm.wiremock_http_port}"
-    set_proxy_env_vars(env_proxy_url)
+    # Set HTTP_PROXY env var AFTER Wiremock is running using monkeypatch
+    # This prevents Wiremock from inheriting it and forwarding through proxy2
+    set_proxy_env_vars, clear_proxy_env_vars = proxy_env_vars
+    clear_proxy_env_vars()  # Clear any existing ones first
+
+    env_proxy_url = f"http://{proxy_from_env_vars.wiremock_host}:{proxy_from_env_vars.wiremock_http_port}"
+    monkeypatch.setenv("HTTP_PROXY", env_proxy_url)
+    monkeypatch.setenv("HTTPS_PROXY", env_proxy_url)
 
     # Set connection params to point to proxy1 (should take precedence)
     connect_kwargs = _base_connect_kwargs(target_wm)
     connect_kwargs.update(
         {
-            "proxy_host": proxy1_wm.wiremock_host,
-            "proxy_port": str(proxy1_wm.wiremock_http_port),
+            "proxy_host": proxy_from_conn_params.wiremock_host,
+            "proxy_port": str(proxy_from_conn_params.wiremock_http_port),
         }
     )
 
@@ -816,12 +823,14 @@ def test_connection_params_proxy_take_precedence_over_env_vars(
     _execute_large_query(connect_kwargs, row_count=50_000)
 
     # Verify proxy selection using named tuple flags
-    flags = _collect_proxy_precedence_flags(proxy1_wm, proxy2_wm, target_wm)
-    assert (
+    flags = _collect_proxy_precedence_flags(
+        proxy_from_conn_params, proxy_from_env_vars, target_wm
+    )
+    assert not (
         flags.proxy1_saw_request
-    ), "proxy1 (connection param proxy) should have seen the query request"
-    assert not flags.proxy2_saw_request, (
-        "proxy2 (env var proxy) should NOT have seen the request "
+    ), "proxy_from_conn_params (connection param proxy) should NOT have seen the query request"
+    assert flags.proxy2_saw_request, (
+        "proxy_from_env_vars (env var proxy) should have seen the request "
         "since connection params take precedence"
     )
     assert flags.backend_saw_request, "backend should have seen the query request"
