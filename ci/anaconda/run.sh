@@ -65,10 +65,24 @@ else
   echo "[FAILURE] Please clone snowflake-connector-python repo at $WORKSPACE/snowflake-connector-python"
 fi
 
+# Extract connector version if not provided
+if [[ -z "$SNOWFLAKE_CONNECTOR_PYTHON_VERSION" ]]; then
+  VERSION_FILE="$WORKSPACE/snowflake-connector-python/src/snowflake/connector/version.py"
+  if [[ -f "$VERSION_FILE" ]]; then
+    SNOWFLAKE_CONNECTOR_PYTHON_VERSION=$( \
+      grep -Eo 'VERSION\s*=\s*\([^)]*\)' "$VERSION_FILE" \
+        | grep -Eo '[0-9]+' \
+        | paste -sd '.' - \
+    )
+    export SNOWFLAKE_CONNECTOR_PYTHON_VERSION
+  fi
+fi
+
 # Run packager in docker image
 docker run \
   -v $WORKSPACE/snowflake-connector-python/:/repo/snowflake-connector-python \
   -v $WORKSPACE/conda-bld:/repo/conda-bld \
+  -e SNOWFLAKE_CONNECTOR_PYTHON_VERSION=${SNOWFLAKE_CONNECTOR_PYTHON_VERSION} \
   -e SNOWFLAKE_CONNECTOR_PYTHON_BUILD_NUMBER=${build_number} \
   snowflake_connector_python_image \
   /repo/snowflake-connector-python/ci/anaconda/package_builder.sh

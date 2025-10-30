@@ -1,5 +1,5 @@
 {% set name = "snowflake-connector-python" %}
-{% set version = "3.17.1" %}
+{% set version = os.environ.get('SNOWFLAKE_CONNECTOR_PYTHON_VERSION', 0) %}
 {% set build_number = os.environ.get('SNOWFLAKE_CONNECTOR_PYTHON_BUILD_NUMBER', 0) %}
 
 package:
