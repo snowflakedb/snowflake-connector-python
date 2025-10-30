@@ -128,6 +128,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         if "platform_detection_timeout_seconds" not in kwargs:
             self._platform_detection_timeout_seconds = 0.0
 
+        # TODO: why we have it here if never changed
         self._connected = False
         self.expired = False
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
@@ -165,8 +166,20 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             "'SnowflakeConnection' object does not support the context manager protocol"
         )
 
+    def _prepare_aenter(self) -> None:
+        """
+        All connection changes done before entering connection context have to be done here, as we expose the same api through snowflake.connector.aio.connect() and call this function there at __aenter__ as well.
+        """
+        pass
+
     async def __aenter__(self) -> SnowflakeConnection:
-        """Context manager."""
+        """
+        Context manager.
+
+        All connection changes done before entering connection context have to be done in the _prepare_aenter() method only.
+        We expose the same api through snowflake.connector.aio.connect() and call that method there at its __aenter__ as well, so there cannot be any logic executed here, but not there. We cannot just call conn.__aenter__() there as it contains already connected connection.
+        """
+        self._prepare_aenter()
         await self.connect()
         return self
 
