@@ -62,6 +62,8 @@ class Auth(AuthSync):
         # max time waiting for MFA response, currently unused
         timeout: int | None = None,
     ) -> dict[str, str | int | bool]:
+        from . import AuthByOAuth
+
         if mfa_callback or password_callback:
             # TODO: SNOW-1707210 for mfa_callback and password_callback support
             raise NotImplementedError(
@@ -285,7 +287,11 @@ class Auth(AuthSync):
                         sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     )
                 )
-            elif errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE:
+            elif (errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE) and (
+                # SNOW-2329031: OAuth v1.0 does not support token renewal,
+                # for backward compatibility, we do not raise an exception here
+                not isinstance(auth_instance, AuthByOAuth)
+            ):
                 raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=ret["message"],
