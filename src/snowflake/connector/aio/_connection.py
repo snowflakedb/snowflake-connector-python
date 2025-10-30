@@ -128,6 +128,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         if "platform_detection_timeout_seconds" not in kwargs:
             self._platform_detection_timeout_seconds = 0.0
 
+        # TODO: why we have it here if never changed
         self._connected = False
         self.expired = False
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
@@ -167,7 +168,11 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
     async def __aenter__(self) -> SnowflakeConnection:
         """Context manager."""
-        await self.connect()
+        # Idempotent __aenter__ - required to be able to use both:
+        #   - with snowflake.connector.aio.SnowflakeConnection(**k)
+        #   - with snowflake.connector.aio.connect(**k)
+        if self.is_closed():
+            await self.connect()
         return self
 
     async def __aexit__(
