@@ -24,7 +24,6 @@ from snowflake.connector import (
 )
 from snowflake.connector._sql_util import get_file_transfer_type
 from snowflake.connector.aio._bind_upload_agent import BindUploadAgent
-from snowflake.connector.aio._file_transfer_agent import SnowflakeFileTransferAgent
 from snowflake.connector.aio._result_batch import (
     ResultBatch,
     create_batches_from_response,
@@ -1310,6 +1309,9 @@ class SnowflakeCursor(SnowflakeCursorSync):
         /,
         **kwargs,
     ) -> SnowflakeFileTransferAgent:
+        from snowflake.connector.aio._file_transfer_agent import (
+            SnowflakeFileTransferAgent,
+        )
 
         return SnowflakeFileTransferAgent(
             self,
