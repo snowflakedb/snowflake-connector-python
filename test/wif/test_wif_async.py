@@ -67,4 +67,5 @@ async def connect_and_execute_simple_query_async(connection_params) -> bool:
             return True
     except Exception as e:
         logger.error(e)
-        return False
+        # return False
+        raise e
