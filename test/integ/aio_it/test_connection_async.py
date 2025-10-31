@@ -1415,9 +1415,7 @@ async def test_mock_non_existing_server(conn_cnx, caplog):
         )
 
 
-@pytest.mark.xfail(
-    reason="TODO: SNOW-1759084 await anext(self._generator, None) does not execute code after yield"
-)
+@pytest.mark.skipolddriver
 async def test_disable_telemetry(conn_cnx, caplog):
     # default behavior, closing connection, it will send telemetry
     with caplog.at_level(logging.DEBUG):
@@ -1426,7 +1424,7 @@ async def test_disable_telemetry(conn_cnx, caplog):
                 await (await cur.execute("select 1")).fetchall()
             assert (
                 len(conn._telemetry._log_batch) == 3
-            )  # 3 events are `import package`, `fetch first`, it's missing `fetch last` because of SNOW-1759084
+            )  # 3 events are `import package`, `fetch first`, `fetch last`
 
     assert "POST /telemetry/send" in caplog.text
     caplog.clear()

@@ -178,6 +178,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         _include_retry_params: bool = False,
         _no_retry: bool = False,
     ):
+        # log to reflect vendored.urllib3.connectionpool:connectionpool.py:474
+        logger.debug("%s %s", method.upper(), url)
         if body is None:
             body = {}
         if self.master_token is None and self.token is None:

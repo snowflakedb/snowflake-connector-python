@@ -103,8 +103,7 @@ class ResultSetIterator:
                         item,
                     )
             rets.extend(batch)
-            # yield to avoid blocking the event loop for too long when processing large result sets
-            # await asyncio.sleep(0)
+        await self._final()
         return rets
 
     async def generator(self):
@@ -285,7 +284,6 @@ class ResultSet(ResultSetSync):
 
     async def _report_metrics(self) -> None:
         """Report metrics for the result set."""
-        # TODO: SNOW-1572217 async telemetry
         """Report all metrics totalled up.
 
         This includes TIME_CONSUME_LAST_RESULT, TIME_DOWNLOADING_CHUNKS and
