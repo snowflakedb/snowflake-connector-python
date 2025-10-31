@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+from test.helpers import apply_auth_class_update_body_async, create_mock_auth_body
 from test.unit.aio.mock_utils import mock_connection
 from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
@@ -16,6 +17,24 @@ from snowflake.connector.aio._network import SnowflakeRestful
 from snowflake.connector.aio.auth import AuthByOkta
 from snowflake.connector.constants import OCSPMode
 from snowflake.connector.description import CLIENT_NAME, CLIENT_VERSION
+
+
+async def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
+    application = "testapplication"
+    auth_class = AuthByOkta(application)
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = await apply_auth_class_update_body_async(
+        auth_class, req_body_before
+    )
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )
 
 
 async def test_auth_okta():

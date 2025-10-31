@@ -22,6 +22,7 @@ class AuthByWorkloadIdentity(AuthByPluginAsync, AuthByWorkloadIdentitySync):
         provider: AttestationProvider,
         token: str | None = None,
         entra_resource: str | None = None,
+        impersonation_path: list[str] | None = None,
         **kwargs,
     ) -> None:
         """Initializes an instance with workload identity authentication."""
@@ -30,6 +31,7 @@ class AuthByWorkloadIdentity(AuthByPluginAsync, AuthByWorkloadIdentitySync):
             provider=provider,
             token=token,
             entra_resource=entra_resource,
+            impersonation_path=impersonation_path,
             **kwargs,
         )
 
@@ -44,7 +46,10 @@ class AuthByWorkloadIdentity(AuthByPluginAsync, AuthByWorkloadIdentitySync):
             self.provider,
             self.entra_resource,
             self.token,
-            session_manager=conn._session_manager.clone() if conn else None,
+            self.impersonation_path,
+            session_manager=(
+                conn._session_manager.clone(max_retries=0) if conn else None
+            ),
         )
 
     async def reauthenticate(self, **kwargs: Any) -> dict[str, bool]:

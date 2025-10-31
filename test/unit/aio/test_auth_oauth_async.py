@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from test.helpers import apply_auth_class_update_body_async, create_mock_auth_body
+
 import pytest
 
 from snowflake.connector.aio.auth import AuthByOAuth
@@ -18,6 +20,24 @@ async def test_auth_oauth():
     await auth.update_body(body)
     assert body["data"]["TOKEN"] == token, body
     assert body["data"]["AUTHENTICATOR"] == "OAUTH", body
+
+
+async def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
+    token = "oAuthToken"
+    auth_class = AuthByOAuth(token)
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = await apply_auth_class_update_body_async(
+        auth_class, req_body_before
+    )
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )
 
 
 @pytest.mark.parametrize("authenticator", ["oauth", "OAUTH"])
