@@ -374,6 +374,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     ),
                     scope=self._oauth_scope,
                     connection=self,
+                    credentials_in_body=self._oauth_credentials_in_body,
                 )
             elif self._authenticator == PROGRAMMATIC_ACCESS_TOKEN:
                 self.auth_class = AuthByPAT(self._token)
