@@ -1,5 +1,8 @@
 """Validate conda run requirements match setup.cfg install_requires.
 
+Note that it assumes default requirements to be install_requires + boto. If that assumption is no longer true,
+this script needs to be updated accordingly.
+
 Exit behavior:
 - If there is no diff: exit 0 with no output.
 - If there is a diff: print the diff and exit 1.
@@ -151,6 +154,51 @@ def get_meta_run_requirements(meta_path: Path) -> list[str]:
     return deps
 
 
+def get_setup_extra_requires(cfg_path: Path, extra: str) -> list[str]:
+    """Extract normalized requirements for a given extra from setup.cfg.
+
+    Args:
+      cfg_path: Path to setup.cfg.
+      extra: The extras_require key to extract (e.g., "boto").
+
+    Returns:
+      List of strings in the form "<name> <spec>".
+    """
+    lines = cfg_path.read_text(encoding="utf-8").splitlines()
+    in_extras = False
+    in_target = False
+    deps: list[str] = []
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("[options.extras_require]"):
+            in_extras = True
+            in_target = False
+            continue
+        if in_extras and stripped.startswith("[") and "]" in stripped:
+            # Left extras_require section
+            break
+        if (
+            in_extras
+            and not in_target
+            and re.match(rf"^{re.escape(extra)}\s*=\s*$", stripped)
+        ):
+            in_target = True
+            continue
+        if in_extras and in_target:
+            # Stop when dedented (not an indented list item)
+            if not re.match(r"\s{4,}\S", line):
+                in_target = False
+                continue
+            item = stripped
+            if not item or item.startswith("#"):
+                continue
+            name, spec = split_requirement(item)
+            if name and name != "python":
+                deps.append(f"{name} {spec}".strip())
+    return deps
+
+
 def compare_deps(setup_deps: Iterable[str], meta_deps: Iterable[str]) -> str:
     """Compare two dependency lists and return a human-readable diff.
 
@@ -205,11 +253,14 @@ def compare_deps(setup_deps: Iterable[str], meta_deps: Iterable[str]) -> str:
 
 def main() -> int:
     root = repo_root()
-    setup_deps = get_setup_install_requires(root / "setup.cfg")
+    setup_cfg_path = root / "setup.cfg"
+    setup_deps = get_setup_install_requires(setup_cfg_path)
+    boto_deps = get_setup_extra_requires(setup_cfg_path, "boto")
+    expected_deps = setup_deps + boto_deps
     meta_deps = get_meta_run_requirements(
         root / "ci" / "anaconda" / "recipe" / "meta.yaml"
     )
-    diff = compare_deps(setup_deps, meta_deps)
+    diff = compare_deps(expected_deps, meta_deps)
     if not diff:
         return 0
     print(diff)
