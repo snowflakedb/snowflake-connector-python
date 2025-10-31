@@ -17,6 +17,13 @@ fi
 # ===== Build docker image =====
 cd $WORKSPACE
 
+# Validate dependency sync before building
+python3 $WORKSPACE/snowflake-connector-python/ci/anaconda/validate_deps_sync.py
+if [[ $? -ne 0 ]]; then
+  echo "[FAILURE] setup.cfg and meta.yaml dependencies are not in sync"
+  exit 1
+fi
+
 docker build \
   --build-arg ARCH=$(uname -m) \
   --build-arg AARCH64_BASE_IMAGE="${aarch64_base_image}" \
