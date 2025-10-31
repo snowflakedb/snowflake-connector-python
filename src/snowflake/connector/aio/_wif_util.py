@@ -21,7 +21,7 @@ from ..wif_util import (
     extract_iss_and_sub_without_signature_verification,
     get_aws_sts_hostname,
 )
-from ._session_manager import SessionManager, SessionManagerFactory
+from ._session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,8 @@ async def get_aws_region() -> str:
             msg="No AWS region was found. Ensure the application is running on AWS.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
+    print(f"DEBUG AWS region: {region}")
+    print(f"DEBUG AWS region type: {type(region)}")
     return region
 
 
