@@ -18,4 +18,4 @@ export RUN_WIF_TESTS=true
 # test WIF with asyncio installed
 /opt/python/cp312-cp312/bin/python -m pip install --break-system-packages -e '.[aio]'
 # run all tests to see whether installation does not break anything
-/opt/python/cp312-cp312/bin/python -m pytest test/wif/
+/opt/python/cp312-cp312/bin/python -m pytest -vv test/wif/
