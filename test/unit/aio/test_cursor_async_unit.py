@@ -111,7 +111,7 @@ async def test_cursor_execute_timeout(mockCancelQuery):
 class TestUploadDownloadMethods(IsolatedAsyncioTestCase):
     """Test the _upload/_download/_upload_stream/_download_stream methods."""
 
-    @patch("snowflake.connector.aio._cursor.SnowflakeFileTransferAgent")
+    @patch("snowflake.connector.aio._file_transfer_agent.SnowflakeFileTransferAgent")
     async def test_download(self, MockFileTransferAgent):
         cursor, fake_conn, mock_file_transfer_agent_instance = self._setup_mocks(
             MockFileTransferAgent
@@ -131,7 +131,7 @@ class TestUploadDownloadMethods(IsolatedAsyncioTestCase):
         assert MockFileTransferAgent.call_args.kwargs.get("use_s3_regional_url", False)
         mock_file_transfer_agent_instance.execute.assert_called_once()
 
-    @patch("snowflake.connector.aio._cursor.SnowflakeFileTransferAgent")
+    @patch("snowflake.connector.aio._file_transfer_agent.SnowflakeFileTransferAgent")
     async def test_upload(self, MockFileTransferAgent):
         cursor, fake_conn, mock_file_transfer_agent_instance = self._setup_mocks(
             MockFileTransferAgent
@@ -151,7 +151,7 @@ class TestUploadDownloadMethods(IsolatedAsyncioTestCase):
         assert MockFileTransferAgent.call_args.kwargs.get("use_s3_regional_url", False)
         mock_file_transfer_agent_instance.execute.assert_called_once()
 
-    @patch("snowflake.connector.aio._cursor.SnowflakeFileTransferAgent")
+    @patch("snowflake.connector.aio._file_transfer_agent.SnowflakeFileTransferAgent")
     async def test_download_stream(self, MockFileTransferAgent):
         cursor, fake_conn, mock_file_transfer_agent_instance = self._setup_mocks(
             MockFileTransferAgent
@@ -170,7 +170,7 @@ class TestUploadDownloadMethods(IsolatedAsyncioTestCase):
         MockFileTransferAgent.assert_not_called()
         mock_file_transfer_agent_instance.execute.assert_not_called()
 
-    @patch("snowflake.connector.aio._cursor.SnowflakeFileTransferAgent")
+    @patch("snowflake.connector.aio._file_transfer_agent.SnowflakeFileTransferAgent")
     async def test_upload_stream(self, MockFileTransferAgent):
         cursor, fake_conn, mock_file_transfer_agent_instance = self._setup_mocks(
             MockFileTransferAgent
