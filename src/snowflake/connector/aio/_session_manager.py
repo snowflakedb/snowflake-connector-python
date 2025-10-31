@@ -10,8 +10,13 @@ from aiohttp.connector import Connection
 from aiohttp.typedefs import StrOrURL
 
 from .. import OperationalError
+from ..crl import CertRevocationCheckMode, CRLValidator
 from ..errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
-from ..ssl_wrap_socket import FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
+from ..ssl_wrap_socket import (
+    FEATURE_CRL_CONFIG,
+    FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+    get_current_session_manager,
+)
 from ._ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
 if TYPE_CHECKING:
@@ -76,6 +81,33 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             and protocol is not None
             and not getattr(protocol, "_snowflake_ocsp_validated", False)
         ):
+
+            logger.debug(
+                "CRL Check Mode: %s",
+                FEATURE_CRL_CONFIG.cert_revocation_check_mode.name,
+            )
+            if (
+                FEATURE_CRL_CONFIG.cert_revocation_check_mode
+                != CertRevocationCheckMode.DISABLED
+            ):
+                crl_validator = CRLValidator.from_config(
+                    FEATURE_CRL_CONFIG, get_current_session_manager()
+                )
+                sll_object = protocol.transport.get_extra_info("ssl_object")
+                if not crl_validator.validate_connection(sll_object):
+                    raise OperationalError(
+                        msg=(
+                            "The certificate is revoked or "
+                            "could not be validated via CRL: hostname={}".format(
+                                req.url.host
+                            )
+                        ),
+                        errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+                    )
+                logger.debug(
+                    "The certificate revocation check was successful. No additional checks will be performed."
+                )
+
             if self._snowflake_ocsp_mode == OCSPMode.DISABLE_OCSP_CHECKS:
                 logger.debug(
                     "This connection does not perform OCSP checks. "
