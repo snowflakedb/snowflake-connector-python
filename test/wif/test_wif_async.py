@@ -33,7 +33,6 @@ async def test_wif_defined_provider_async():
         "authenticator": "WORKLOAD_IDENTITY",
         "workload_identity_provider": PROVIDER,
     }
-    assert connection_params == {}
     assert await connect_and_execute_simple_query_async(
         connection_params
     ), "Failed to connect with using WIF - automatic provider detection"
