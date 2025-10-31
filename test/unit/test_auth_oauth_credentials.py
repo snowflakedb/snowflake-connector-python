@@ -27,10 +27,15 @@ def test_auth_oauth_credentials_oauth_type():
 
 
 @pytest.mark.parametrize(
-    "authenticator", ["OAUTH_CLIENT_CREDENTIALS", "oauth_client_credentials"]
+    "authenticator, oauth_credentials_in_body",
+    [
+        ("OAUTH_CLIENT_CREDENTIALS", True),
+        ("oauth_client_credentials", False),
+        ("Oauth_Client_Credentials", None),
+    ],
 )
-def test_oauth_client_credentials_authenticator_is_case_insensitive(
-    monkeypatch, authenticator
+def test_oauth_client_credentials_parameters(
+    monkeypatch, authenticator, oauth_credentials_in_body
 ):
     """Test that OAuth client credentials authenticator is case insensitive."""
     import snowflake.connector
@@ -53,11 +58,11 @@ def test_oauth_client_credentials_authenticator_is_case_insensitive(
 
     # Mock the OAuth client credentials token request to avoid making HTTP requests
     def mock_get_request_token_response(self, connection, fields):
-        # Simulate successful token retrieval
+        # Return fields to verify they are set correctly in tests
         return (
-            "mock_access_token",
+            str(fields),
             None,
-        )  # Client credentials doesn't use refresh tokens
+        )
 
     monkeypatch.setattr(
         AuthByOauthCredentials,
@@ -65,6 +70,11 @@ def test_oauth_client_credentials_authenticator_is_case_insensitive(
         mock_get_request_token_response,
     )
 
+    oauth_credentials_in_body_arg = (
+        {"oauth_credentials_in_body": oauth_credentials_in_body}
+        if oauth_credentials_in_body is not None
+        else {}
+    )
     # Create connection with OAuth client credentials authenticator
     conn = snowflake.connector.connect(
         user="testuser",
@@ -72,10 +82,34 @@ def test_oauth_client_credentials_authenticator_is_case_insensitive(
         authenticator=authenticator,
         oauth_client_id="test_client_id",
         oauth_client_secret="test_client_secret",
+        **oauth_credentials_in_body_arg,
     )
 
     # Verify that the auth_class is an instance of AuthByOauthCredentials
     assert isinstance(conn.auth_class, AuthByOauthCredentials)
+
+    # Verify that the credentials_in_body attribute is set correctly
+    expected_credentials_in_body = (
+        oauth_credentials_in_body if oauth_credentials_in_body is not None else False
+    )
+    assert conn.auth_class._credentials_in_body is expected_credentials_in_body
+
+    str_fields, _ = conn.auth_class._request_tokens(
+        conn=conn,
+        authenticator=authenticator,
+        account="<unused-acount>",
+        user="<unused-user>",
+        service_name=None,
+    )
+    credential_fields = (
+        ", 'client_id': 'test_client_id', 'client_secret': 'test_client_secret'"
+        if expected_credentials_in_body
+        else ""
+    )
+    assert (
+        str_fields
+        == "{'grant_type': 'client_credentials', 'scope': ''" + credential_fields + "}"
+    )
 
     conn.close()
 
