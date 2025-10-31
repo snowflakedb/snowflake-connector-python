@@ -807,11 +807,13 @@ def test_proxy_env_vars_take_precedence_over_connection_params(
     clear_proxy_env_vars()  # Clear any existing ones first
 
     env_proxy_url = f"http://{proxy_from_env_vars.wiremock_host}:{proxy_from_env_vars.wiremock_http_port}"
+    # TODO: commenting out this makes conn_params behave normally and be used
     monkeypatch.setenv("HTTP_PROXY", env_proxy_url)
     monkeypatch.setenv("HTTPS_PROXY", env_proxy_url)
 
     # Set connection params to point to proxy1 (should take precedence)
     connect_kwargs = _base_connect_kwargs(target_wm)
+    # TODO: commenting out this: connect_kwargs.update(... doesn't seem to change a thing - both proxies and the target still see all requests
     connect_kwargs.update(
         {
             "proxy_host": proxy_from_conn_params.wiremock_host,
