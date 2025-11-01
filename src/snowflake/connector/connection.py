@@ -1082,6 +1082,15 @@ class SnowflakeConnection:
 
         self._crl_config: CRLConfig = CRLConfig.from_connection(self)
 
+        no_proxy_csv_str = (
+            ",".join(str(x) for x in self.no_proxy)
+            if (
+                self.no_proxy is not None
+                and isinstance(self.no_proxy, Iterable)
+                and not isinstance(self.no_proxy, (str, bytes))
+            )
+            else self.no_proxy
+        )
         self._http_config = HttpConfig(
             adapter_factory=ProxySupportAdapterFactory(),
             use_pooling=(not self.disable_request_pooling),
@@ -1089,15 +1098,7 @@ class SnowflakeConnection:
             proxy_port=self.proxy_port,
             proxy_user=self.proxy_user,
             proxy_password=self.proxy_password,
-            no_proxy=(
-                ",".join(str(x) for x in self.no_proxy)
-                if (
-                    self.no_proxy is not None
-                    and isinstance(self.no_proxy, Iterable)
-                    and not isinstance(self.no_proxy, (str, bytes))
-                )
-                else self.no_proxy
-            ),
+            no_proxy=no_proxy_csv_str,
         )
         self._session_manager = SessionManagerFactory.get_manager(self._http_config)
 
