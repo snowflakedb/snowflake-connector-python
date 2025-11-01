@@ -615,10 +615,6 @@ class ProxySessionManager(SessionManager):
     def make_session(self, *, url: str | None = None) -> Session:
         session = requests.Session()
         self._mount_adapters(session)
-
-        # TODO: adding this makes all proxies "not see the requests" - but they actually go since we can see MATCHED-stub id
-        # session.trust_env = False
-
         proxies = (
             {
                 "no_proxy": self._cfg.no_proxy,
