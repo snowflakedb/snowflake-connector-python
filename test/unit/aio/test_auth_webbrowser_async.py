@@ -312,9 +312,7 @@ async def test_auth_webbrowser_fail_webbrowser(
         )
     captured = capsys.readouterr()
     assert captured.out == (
-        "Initiating login request with your identity provider. A browser window "
-        "should have opened for you to complete the login. If you can't see it, "
-        "check existing browser windows, or your OS settings. Press CTRL+C to "
+        "Initiating login request with your identity provider. Press CTRL+C to "
         f"abort and try again...\nGoing to open: {REF_SSO_URL if disable_console_login else REF_CONSOLE_LOGIN_SSO_URL} to authenticate...\nWe were unable to open a browser window for "
         "you, please open the url above manually then paste the URL you "
         "are redirected to into the terminal.\n"
@@ -381,10 +379,10 @@ async def test_auth_webbrowser_fail_webserver(_, capsys, disable_console_login):
             )
         captured = capsys.readouterr()
         assert captured.out == (
-            "Initiating login request with your identity provider. A browser window "
+            "Initiating login request with your identity provider. Press CTRL+C to "
+            f"abort and try again...\nGoing to open: {REF_SSO_URL if disable_console_login else REF_CONSOLE_LOGIN_SSO_URL} to authenticate...\nA browser window "
             "should have opened for you to complete the login. If you can't see it, "
-            "check existing browser windows, or your OS settings. Press CTRL+C to "
-            f"abort and try again...\nGoing to open: {REF_SSO_URL if disable_console_login else REF_CONSOLE_LOGIN_SSO_URL} to authenticate...\n"
+            "check existing browser windows, or your OS settings.\n"
         )
         assert rest._connection.errorhandler.called  # an error
         assert auth.assertion_content is None
@@ -871,6 +869,98 @@ async def test_auth_webbrowser_socket_reuseport_option_not_set_with_no_flag(
 
         assert not rest._connection.errorhandler.called  # no error
         assert auth.assertion_content == ref_token
+
+
+@pytest.mark.parametrize("force_auth_server", [True, False])
+@patch("secrets.token_bytes", return_value=PROOF_KEY)
+async def test_auth_webbrowser_force_auth_server(_, monkeypatch, force_auth_server):
+    """Authentication by WebBrowser with SNOWFLAKE_AUTH_FORCE_SERVER environment variable."""
+    ref_token = "MOCK_TOKEN"
+    rest = _init_rest(REF_SSO_URL, REF_PROOF_KEY, disable_console_login=True)
+
+    # Set environment variable
+    if force_auth_server:
+        monkeypatch.setenv("SNOWFLAKE_AUTH_FORCE_SERVER", "true")
+    else:
+        monkeypatch.delenv("SNOWFLAKE_AUTH_FORCE_SERVER", raising=False)
+
+    # mock socket
+    recv_func = recv_setup([successful_web_callback(ref_token)])
+    mock_socket_pkg = _init_socket()
+
+    # mock webbrowser - simulate browser failing to open
+    mock_webbrowser = MagicMock()
+    mock_webbrowser.open_new.return_value = False
+
+    # Mock select.select to return socket client
+    with mock.patch(
+        "select.select", return_value=([mock_socket_pkg.return_value], [], [])
+    ):
+        auth = AuthByWebBrowser(
+            application=APPLICATION,
+            webbrowser_pkg=mock_webbrowser,
+            socket_pkg=mock_socket_pkg,
+        )
+
+        if force_auth_server:
+            # When SNOWFLAKE_AUTH_FORCE_SERVER is true, should continue with server flow even if browser fails
+            with mock.patch.object(
+                auth._event_loop,
+                "sock_accept",
+                side_effect=_mock_event_loop_sock_accept(),
+            ), mock.patch.object(
+                auth._event_loop, "sock_sendall", return_value=None
+            ), mock.patch.object(
+                auth._event_loop,
+                "sock_recv",
+                side_effect=_mock_event_loop_sock_recv(recv_func),
+            ):
+                await auth.prepare(
+                    conn=rest._connection,
+                    authenticator=AUTHENTICATOR,
+                    service_name=SERVICE_NAME,
+                    account=ACCOUNT,
+                    user=USER,
+                    password=PASSWORD,
+                )
+            assert not rest._connection.errorhandler.called  # no error
+            assert auth.assertion_content == ref_token
+            body = {"data": {}}
+            await auth.update_body(body)
+            assert body["data"]["TOKEN"] == ref_token
+            assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
+            assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
+        else:
+            # When SNOWFLAKE_AUTH_FORCE_SERVER is false/unset, should fall back to manual URL input
+            with patch(
+                "builtins.input",
+                return_value=f"http://example.com/sso?token={ref_token}",
+            ), mock.patch.object(
+                auth._event_loop,
+                "sock_accept",
+                side_effect=_mock_event_loop_sock_accept(),
+            ), mock.patch.object(
+                auth._event_loop, "sock_sendall", return_value=None
+            ), mock.patch.object(
+                auth._event_loop,
+                "sock_recv",
+                side_effect=_mock_event_loop_sock_recv(recv_func),
+            ):
+                await auth.prepare(
+                    conn=rest._connection,
+                    authenticator=AUTHENTICATOR,
+                    service_name=SERVICE_NAME,
+                    account=ACCOUNT,
+                    user=USER,
+                    password=PASSWORD,
+                )
+            assert not rest._connection.errorhandler.called  # no error
+            assert auth.assertion_content == ref_token
+            body = {"data": {}}
+            await auth.update_body(body)
+            assert body["data"]["TOKEN"] == ref_token
+            assert body["data"]["AUTHENTICATOR"] == EXTERNAL_BROWSER_AUTHENTICATOR
+            assert body["data"]["PROOF_KEY"] == REF_PROOF_KEY
 
 
 @pytest.mark.parametrize("authenticator", ["EXTERNALBROWSER", "externalbrowser"])
