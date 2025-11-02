@@ -1,4 +1,4 @@
-# Async Connect Wrapper Implementation
+# Async Connect Wrapper: Design & Implementation
 
 ## Overview
 
@@ -91,28 +91,6 @@ async def _connect_coro() -> SnowflakeConnection:
     return conn
 ```
 Defers connection creation and establishment until await time, not at `connect()` call time.
-
-## Verification
-
-```python
-# Metadata preservation
-assert connect.__name__ == "connect"
-assert hasattr(connect, "__wrapped__")
-assert callable(connect)
-
-# Return type is hybrid awaitable + context manager
-result = connect(account="test")
-assert hasattr(result, "__await__")    # Awaitable
-assert hasattr(result, "__aenter__")   # Async context manager
-assert hasattr(result, "send")         # Full coroutine protocol
-```
-
-## Backwards Compatibility
-
-- ✅ Existing code using `await aio.connect(...)` works unchanged
-- ✅ Metadata available for IDE tooltips and introspection
-- ✅ Full coroutine protocol support for advanced/external tooling
-- ✅ No breaking changes
 
 ## File Location
 
