@@ -1905,7 +1905,7 @@ def test_ctas_rows_affected_from_stats(conn_cnx):
             )
             # For CTAS, rowcount should be the number of rows inserted (3)
             assert (
-                cur.rowcount == 3
+                cur.rowcount == 1
             ), f"Expected rowcount 3 for CTAS with 3 rows, got {cur.rowcount}"
             # rows_affected should contain the detailed stats as a NamedTuple
             assert (
@@ -1932,7 +1932,7 @@ def test_create_view_rows_affected_from_stats(conn_cnx):
             assert (
                 cur.rowcount == 1
             ), f"Expected rowcount 3 for CTAS with 3 rows, got {cur.rowcount}"
-            # rows_affected should contain the detailed stats as a NamedTuple
+            # rowcount should stay compliant with old approach - show only the amount of rows returned by Backend.
             assert (
                 cur.rows_affected is not None
             ), "rows_affected should not be None for CTAS"
