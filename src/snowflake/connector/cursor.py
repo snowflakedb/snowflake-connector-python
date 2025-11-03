@@ -467,7 +467,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         - num_rows_deleted: Number of rows deleted
         - num_rows_updated: Number of rows updated
 
-        Returns None if no DML stats are available.
+        Returns None on each position if no DML stats are available.
         """
         if self._stats_data is None:
             return RowsAffected(None, None, None, None)

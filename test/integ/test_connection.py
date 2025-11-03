@@ -1063,7 +1063,7 @@ def test_client_fetch_threads_setting(conn_cnx):
 @pytest.mark.skipolddriver
 @pytest.mark.parametrize("disable_request_pooling", [True, False])
 def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
-    """Each connection’s SessionManager is isolated; OCSP picks the right one."""
+    """Each connection's SessionManager is isolated; OCSP picks the right one."""
     from snowflake.connector.ssl_wrap_socket import get_current_session_manager
 
     #
@@ -1896,17 +1896,15 @@ def test_snowflake_version():
 
 @pytest.mark.skipolddriver
 def test_ctas_rows_affected_from_stats(conn_cnx):
-    """Test that cursor.rowcount is correctly extracted from stats for CTAS operations."""
+    """Test that cursor.rowcount and cursor.rows_affected work for CTAS operations."""
     with conn_cnx() as conn:
         with conn.cursor() as cur:
-            # Create temp table with data - should have rowcount from stats.numRowsInserted
             cur.execute(
                 "create temp table test_ctas_stats (col1 int) as select col1 from values (1), (2), (3) as t(col1)"
             )
-            # For CTAS, rowcount should be the number of rows inserted (3)
             assert (
                 cur.rowcount == 1
-            ), f"Expected rowcount 3 for CTAS with 3 rows, got {cur.rowcount}"
+            ), f"Expected rowcount 1 for CTAS, got {cur.rowcount}"
             # rows_affected should contain the detailed stats as a NamedTuple
             assert (
                 cur.rows_affected is not None
@@ -1921,24 +1919,18 @@ def test_ctas_rows_affected_from_stats(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_create_view_rows_affected_from_stats(conn_cnx):
-    """Test that cursor.rowcount is correctly extracted from stats for CTAS operations."""
+    """Test that cursor.rows_affected returns None fields for VIEW operations."""
     with conn_cnx() as conn:
         with conn.cursor() as cur:
-            # Create temp table with data - should have rowcount from stats.numRowsInserted
             cur.execute(
-                "create temp view test_ctas_stats as select col1 from values (1), (2), (3) as t(col1)"
+                "create temp view test_view_stats as select col1 from values (1), (2), (3) as t(col1)"
             )
-            # For CTAS, rowcount should be the number of rows inserted (3)
             assert (
                 cur.rowcount == 1
-            ), f"Expected rowcount 3 for CTAS with 3 rows, got {cur.rowcount}"
-            # rowcount should stay compliant with old approach - show only the amount of rows returned by Backend.
-            assert (
-                cur.rows_affected is not None
-            ), "rows_affected should not be None for CTAS"
-            assert (
-                cur.rows_affected.num_rows_inserted is None
-            ), f"Expected num_rows_inserted=3, got {cur.rows_affected.num_rows_inserted}"
+            ), f"Expected rowcount 1 for VIEW, got {cur.rowcount}"
+            # VIEW operations don't return DML stats, all fields should be None
+            assert cur.rows_affected is not None
+            assert cur.rows_affected.num_rows_inserted is None
             assert cur.rows_affected.num_rows_deleted is None
             assert cur.rows_affected.num_rows_updated is None
             assert cur.rows_affected.num_dml_duplicates is None
@@ -1946,29 +1938,20 @@ def test_create_view_rows_affected_from_stats(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_cvas_separate_cursors_rows_affected_from_stats(conn_cnx):
-    """Test that cursor.rowcount is correctly extracted from stats for CTAS operations."""
+    """Test cursor.rows_affected with CVAS in separate cursor from the one used for CTAS of the table."""
     with conn_cnx() as conn:
         with conn.cursor() as cur:
-            # Create temp table with data - should have rowcount from stats.numRowsInserted
             cur.execute(
-                "create temp table test_ctas_stats (col1 int) as select col1 from values (1), (2), (3) as t(col1)"
+                "create temp table test_table (col1 int) as select col1 from values (1), (2), (3) as t(col1)"
             )
-
         with conn.cursor() as cur:
-            cur.execute(
-                "create temp view test_cvas_stats as select col1 from test_ctas_stats"
-            )
-            # For CTAS, rowcount should be the number of rows inserted (3)
+            cur.execute("create temp view test_view as select col1 from test_table")
             assert (
                 cur.rowcount == 1
-            ), f"Expected rowcount 3 for CTAS with 3 rows, got {cur.rowcount}"
-            # rows_affected should contain the detailed stats as a NamedTuple
-            assert (
-                cur.rows_affected is not None
-            ), "rows_affected should not be None for CTAS"
-            assert (
-                cur.rows_affected.num_rows_inserted is None
-            ), f"Expected num_rows_inserted=3, got {cur.rows_affected.num_rows_inserted}"
+            ), "Due to old behaviour we should keep rowcount equal to 1 - as the number of rows returned by the backend"
+            # VIEW operations don't return DML stats
+            assert cur.rows_affected is not None
+            assert cur.rows_affected.num_rows_inserted is None
             assert cur.rows_affected.num_rows_deleted is None
             assert cur.rows_affected.num_rows_updated is None
             assert cur.rows_affected.num_dml_duplicates is None
@@ -1976,28 +1959,21 @@ def test_cvas_separate_cursors_rows_affected_from_stats(conn_cnx):
 
 @pytest.mark.skipolddriver
 def test_cvas_one_cursor_rows_affected_from_stats(conn_cnx):
-    """Test that cursor.rowcount is correctly extracted from stats for CTAS operations."""
+    """Test cursor.rows_affected with CVAS in the same cursor - make sure it's cleaned up after usage."""
     with conn_cnx() as conn:
         with conn.cursor() as cur:
-            # Create temp table with data - should have rowcount from stats.numRowsInserted
             cur.execute(
                 "create temp table test_ctas_stats (col1 int) as select col1 from values (1), (2), (3) as t(col1)"
             )
-
             cur.execute(
-                "create temp view test_cvas_stats as select col1 from test_ctas_stats"
+                "create temp view test_view as select col1 from test_ctas_stats"
             )
-            # For CTAS, rowcount should be the number of rows inserted (3)
             assert (
                 cur.rowcount == 1
-            ), f"Expected rowcount 3 for CTAS with 3 rows, got {cur.rowcount}"
-            # rows_affected should contain the detailed stats as a NamedTuple
-            assert (
-                cur.rows_affected is not None
-            ), "rows_affected should not be None for CTAS"
-            assert (
-                cur.rows_affected.num_rows_inserted is None
-            ), f"Expected num_rows_inserted=3, got {cur.rows_affected.num_rows_inserted}"
+            ), "Due to old behaviour we should keep rowcount equal to 1 - as the number of rows returned by the backend"
+            # VIEW operations don't return DML stats
+            assert cur.rows_affected is not None
+            assert cur.rows_affected.num_rows_inserted is None
             assert cur.rows_affected.num_rows_deleted is None
             assert cur.rows_affected.num_rows_updated is None
             assert cur.rows_affected.num_dml_duplicates is None
