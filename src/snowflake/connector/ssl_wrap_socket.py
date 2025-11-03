@@ -47,7 +47,7 @@ log = logging.getLogger(__name__)
 
 
 # Helper utilities (private)
-def _resolve_cafile(kwargs: dict[str, Any]) -> str | None:
+def resolve_cafile(kwargs: dict[str, Any]) -> str | None:
     """Resolve CA bundle path from kwargs or standard environment variables.
 
     Precedence:
@@ -150,7 +150,7 @@ def inject_into_urllib3() -> None:
     connection_.ssl_wrap_socket = ssl_wrap_socket_with_cert_revocation_checks
 
 
-def _load_trusted_certificates(cafile: str | None) -> list[x509.Certificate]:
+def load_trusted_certificates(cafile: str | None) -> list[x509.Certificate]:
     # Use default SSL context to load the CA file and get the certificates
     ctx = ssl.create_default_context()
     ctx.load_verify_locations(cafile=cafile)
@@ -177,7 +177,7 @@ def ssl_wrap_socket_with_cert_revocation_checks(
 
     # Ensure PyOpenSSL context with partial-chain is used if none or wrong type provided
     provided_ctx = params.get("ssl_context")
-    cafile_for_ctx = _resolve_cafile(params)
+    cafile_for_ctx = resolve_cafile(params)
     if not isinstance(provided_ctx, PyOpenSSLContext):
         params["ssl_context"] = _build_context_with_partial_chain(cafile_for_ctx)
     else:
@@ -197,7 +197,7 @@ def ssl_wrap_socket_with_cert_revocation_checks(
         crl_validator = CRLValidator.from_config(
             FEATURE_CRL_CONFIG,
             get_current_session_manager(),
-            trusted_certificates=_load_trusted_certificates(cafile_for_ctx),
+            trusted_certificates=load_trusted_certificates(cafile_for_ctx),
         )
         if not crl_validator.validate_connection(ret.connection):
             raise OperationalError(

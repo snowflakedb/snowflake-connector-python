@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import ssl
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum, unique
 from logging import getLogger
 from pathlib import Path
+from ssl import SSLObject
 from typing import Any
 
 from cryptography import x509
@@ -750,7 +752,7 @@ class CRLValidator:
         """
         try:
             # Get the peer certificate (the start certificate)
-            peer_cert = connection.get_peer_certificate(as_cryptography=True)
+            peer_cert = self._get_peer_certificate(connection)
             if peer_cert is None:
                 logger.warning("No peer certificate found in connection")
                 return (
@@ -765,6 +767,14 @@ class CRLValidator:
             logger.warning("Failed to validate connection: %s", e)
             return self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
 
+    @staticmethod
+    def _get_peer_certificate(connection):
+        if isinstance(connection, SSLObject):
+            return x509.load_der_x509_certificate(
+                connection.getpeercert(binary_form=True), default_backend()
+            )
+        return connection.get_peer_certificate(as_cryptography=True)
+
     def _extract_certificate_chain_from_connection(
         self, connection
     ) -> list[x509.Certificate] | None:
@@ -777,8 +787,17 @@ class CRLValidator:
             Certificate chain as a list of x509.Certificate objects, or None on error
         """
         try:
-            # Convert OpenSSL certificates to cryptography x509 certificates
-            cert_chain = connection.get_peer_cert_chain(as_cryptography=True)
+            if isinstance(connection, SSLObject):
+                cert_chain = []
+                for cert in connection._sslobj.get_unverified_chain():
+                    cert_bytes = ssl.PEM_cert_to_DER_cert(cert.public_bytes())
+                    cert_chain.append(
+                        x509.load_der_x509_certificate(cert_bytes, default_backend())
+                    )
+            else:
+                # Convert OpenSSL certificates to cryptography x509 certificates
+                cert_chain = connection.get_peer_cert_chain(as_cryptography=True)
+
             if not cert_chain:
                 logger.debug("No certificate chain found in connection")
                 return None

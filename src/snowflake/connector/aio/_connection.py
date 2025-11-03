@@ -47,6 +47,7 @@ from ..constants import (
     PARAMETER_TIMEZONE,
     QueryStatus,
 )
+from ..crl import CRLConfig
 from ..description import PLATFORM, PYTHON_VERSION, SNOWFLAKE_CONNECTOR_VERSION
 from ..errorcode import (
     ER_CONNECTION_IS_CLOSED,
@@ -622,6 +623,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
         # Placeholder attributes; will be initialized in connect()
         self._http_config: AioHttpConfig | None = None
+        self._crl_config: CRLConfig | None = None
         self._session_manager: SessionManager | None = None
         self._rest = None
         for name, (value, _) in DEFAULT_CONFIGURATION.items():

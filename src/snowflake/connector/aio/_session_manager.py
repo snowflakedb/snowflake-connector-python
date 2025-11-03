@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING
 
+import certifi
 from aiohttp import ClientRequest, ClientTimeout
 from aiohttp.client import _RequestOptions
 from aiohttp.client_proto import ResponseHandler
@@ -10,8 +11,15 @@ from aiohttp.connector import Connection
 from aiohttp.typedefs import StrOrURL
 
 from .. import OperationalError
+from ..crl import CertRevocationCheckMode, CRLValidator
 from ..errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
-from ..ssl_wrap_socket import FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
+from ..ssl_wrap_socket import (
+    FEATURE_CRL_CONFIG,
+    FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+    get_current_session_manager,
+    load_trusted_certificates,
+    resolve_cafile,
+)
 from ._ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
 if TYPE_CHECKING:
@@ -71,6 +79,20 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
     ) -> Connection:
         connection = await super().connect(req, traces, timeout)
         protocol = connection.protocol
+
+        logger.debug(
+            "CRL Check Mode: %s",
+            FEATURE_CRL_CONFIG.cert_revocation_check_mode.name,
+        )
+        if (
+            FEATURE_CRL_CONFIG.cert_revocation_check_mode
+            != CertRevocationCheckMode.ENABLED
+        ):
+            self.validate_crl(protocol, req)
+            logger.debug(
+                "The certificate revocation check was successful. No additional checks will be performed."
+            )
+
         if (
             req.is_ssl()
             and protocol is not None
@@ -89,6 +111,24 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
                 )
                 protocol._snowflake_ocsp_validated = True
         return connection
+
+    def validate_crl(self, protocol: ResponseHandler, req: ClientRequest):
+        # Resolve CA file path from environment variables or use certifi default
+        cafile_for_ctx = resolve_cafile({"ca_certs": certifi.where()})
+        crl_validator = CRLValidator.from_config(
+            FEATURE_CRL_CONFIG,
+            get_current_session_manager(),
+            trusted_certificates=load_trusted_certificates(cafile_for_ctx),
+        )
+        sll_object = protocol.transport.get_extra_info("ssl_object")
+        if not crl_validator.validate_connection(sll_object):
+            raise OperationalError(
+                msg=(
+                    "The certificate is revoked or "
+                    "could not be validated via CRL: hostname={}".format(req.url.host)
+                ),
+                errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
+            )
 
     async def validate_ocsp(
         self,
