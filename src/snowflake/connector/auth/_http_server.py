@@ -84,10 +84,7 @@ class AuthHttpServer:
             else:
                 self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
-        if parsed_redirect and self._is_local_uri(parsed_redirect):
-            port = parsed_redirect.port or 0
-        else:
-            port = parsed_uri.port if parsed_uri and parsed_uri.port else 0
+        port = parsed_uri.port or 0
 
         for attempt in range(1, self.DEFAULT_MAX_ATTEMPTS + 1):
             try:
@@ -120,33 +117,21 @@ class AuthHttpServer:
             logger.error(f"Failed to start listening for auth callback: {ex}")
             self.close()
             raise
-        port = self._socket.getsockname()[1]
+
         self._uri = urllib.parse.ParseResult(
             scheme=parsed_uri.scheme,
-            netloc=parsed_uri.hostname + ":" + str(port),
+            netloc=parsed_uri.hostname + ":" + str(self._socket.getsockname()[1]),
             path=parsed_uri.path,
             params=parsed_uri.params,
             query=parsed_uri.query,
             fragment=parsed_uri.fragment,
         )
-        if parsed_redirect:
-            if self._is_local_uri(parsed_redirect) and port != parsed_redirect.port:
-                logger.debug(
-                    f"Updating redirect port {parsed_redirect.port} to match the server port {port}."
-                )
-                self._redirect_uri = urllib.parse.ParseResult(
-                    scheme=parsed_redirect.scheme,
-                    netloc=parsed_redirect.hostname + ":" + str(port),
-                    path=parsed_redirect.path,
-                    params=parsed_redirect.params,
-                    query=parsed_redirect.query,
-                    fragment=parsed_redirect.fragment,
-                )
-            else:
-                self._redirect_uri = parsed_redirect
 
-    def _is_local_uri(self, parsed_redirect):
-        return parsed_redirect.hostname in ("localhost", "127.0.0.1")
+        if parsed_redirect:
+            self._redirect_uri = parsed_redirect
+        else:
+            # For backwards compatibility
+            self._redirect_uri = self._uri
 
     @property
     def redirect_uri(self) -> str | None:

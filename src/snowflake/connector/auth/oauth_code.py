@@ -121,7 +121,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         logger.debug("authenticating with OAuth authorization code flow")
         with AuthHttpServer(
             redirect_uri=self._redirect_uri,
-            uri=self._uri or self._redirect_uri,  # To preserve backward compatibility
+            uri=self._uri,
         ) as callback_server:
             code = self._do_authorization_request(callback_server, conn)
             return self._do_token_request(code, callback_server, conn)
