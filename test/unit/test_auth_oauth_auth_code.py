@@ -394,3 +394,48 @@ def test_oauth_authorization_code_allows_empty_user(monkeypatch, omit_oauth_urls
     assert isinstance(conn.auth_class, AuthByOauthCode)
 
     conn.close()
+
+
+@pytest.mark.parametrize(
+    "uri,redirect_uri",
+    [
+        ("https://example.com/server", "http://localhost:8080"),
+        ("http://localhost:8080", "https://example.com/redirect"),
+        ("http://127.0.0.1:9090", "https://server.com/oauth/callback"),
+        (None, "https://redirect.example.com"),
+    ],
+)
+@mock.patch(
+    "snowflake.connector.auth.oauth_code.AuthByOauthCode._do_authorization_request"
+)
+@mock.patch("snowflake.connector.auth.oauth_code.AuthByOauthCode._do_token_request")
+def test_auth_oauth_auth_code_passes_uri_to_http_server(
+    _, __, uri, redirect_uri, omit_oauth_urls_check
+):
+    """Test that uri and redirect_uri parameters are passed correctly to AuthHttpServer."""
+    auth = AuthByOauthCode(
+        "app",
+        "clientId",
+        "clientSecret",
+        "https://auth_url",
+        "tokenRequestUrl",
+        redirect_uri,
+        "scope",
+        "host",
+        uri=uri,
+    )
+
+    with patch(
+        "snowflake.connector.auth.oauth_code.AuthHttpServer",
+        # return_value=None,
+    ) as mock_http_server_init:
+        auth._request_tokens(
+            conn=mock.MagicMock(),
+            authenticator="authenticator",
+            service_name="service_name",
+            account="account",
+            user="user",
+        )
+        mock_http_server_init.assert_called_once_with(
+            uri=uri, redirect_uri=redirect_uri
+        )
