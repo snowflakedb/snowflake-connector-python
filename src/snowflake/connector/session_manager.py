@@ -564,7 +564,6 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixi
         Optional kwargs (e.g. *use_pooling* / *adapter_factory* / max_retries etc.) - overrides to create a modified
         copy of the HttpConfig before instantiation.
         """
-        # return SessionManager.from_config(self._cfg, **http_config_overrides)
         return self.from_config(self._cfg, **http_config_overrides)
 
     def __getstate__(self):
