@@ -280,8 +280,13 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "support_negative_year": (True, bool),  # snowflake
     "log_max_query_length": (LOG_MAX_QUERY_LENGTH, int),  # snowflake
     "disable_request_pooling": (False, bool),  # snowflake
-    # enable temporary credential file for Linux, default false. Mac/Win will overlook this
+    # Cache SSO ID tokens to avoid repeated browser popups. Must be enabled on the server-side.
+    # Storage: keyring (macOS/Windows), file (Linux). Auto-enabled on macOS/Windows.
+    # Sets session PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL as well
     "client_store_temporary_credential": (False, bool),
+    # Cache MFA tokens to skip MFA prompts on reconnect. Must be enabled on the server-side.
+    # Storage: keyring (macOS/Windows), file (Linux). Auto-enabled on macOS/Windows.
+    # In driver, we extract this from session using PARAMETER_CLIENT_REQUEST_MFA_TOKEN.
     "client_request_mfa_token": (False, bool),
     "use_openssl_only": (
         True,
@@ -1397,9 +1402,11 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+                # Enable SSO credential caching
                 self._session_parameters[
                     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL
                 ] = (self._client_store_temporary_credential if IS_LINUX else True)
+                # Try to load cached ID token to avoid browser popup
                 auth.read_temporary_credentials(
                     self.host,
                     self.user,
@@ -1491,9 +1498,11 @@ class SnowflakeConnection:
                     connection=self,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+                # Enable MFA token caching
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                     self._client_request_mfa_token if IS_LINUX else True
                 )
+                # Try to load cached MFA token to skip MFA prompt
                 if self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN]:
                     auth.read_temporary_credentials(
                         self.host,
