@@ -877,9 +877,9 @@ async def test_connect_metadata_preservation():
     from snowflake.connector.aio import SnowflakeConnection, connect
 
     # Test 1: Check __name__ is correct
-    assert connect.__name__ == "__init__", (
-        f"connect.__name__ should be '__init__', but got '{connect.__name__}'"
-    )
+    assert (
+        connect.__name__ == "__init__"
+    ), f"connect.__name__ should be '__init__', but got '{connect.__name__}'"
     assert (
         connect.__qualname__ == "SnowflakeConnection.__init__"
     ), f"connect.__qualname__ should be 'connect', but got '{connect.__qualname__}'"
@@ -936,15 +936,15 @@ async def test_connect_metadata_preservation():
     assert callable(connect), "connect should be callable"
 
     # Test 9: Check type() and __class__ values (important for user introspection)
-    assert type(connect).__name__ == "function", (
-        f"type(connect).__name__ should be 'function', but got '{type(connect).__name__}'"
-    )
-    assert connect.__class__.__name__ == "function", (
-        f"connect.__class__.__name__ should be 'function', but got '{connect.__class__.__name__}'"
-    )
-    assert inspect.isfunction(connect), (
-        "connect should be recognized as a function by inspect.isfunction()"
-    )
+    assert (
+        type(connect).__name__ == "function"
+    ), f"type(connect).__name__ should be 'function', but got '{type(connect).__name__}'"
+    assert (
+        connect.__class__.__name__ == "function"
+    ), f"connect.__class__.__name__ should be 'function', but got '{connect.__class__.__name__}'"
+    assert inspect.isfunction(
+        connect
+    ), "connect should be recognized as a function by inspect.isfunction()"
 
     # Test 10: Verify the function has proper introspection capabilities
     # IDEs and type checkers should be able to resolve parameters

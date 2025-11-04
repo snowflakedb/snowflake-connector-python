@@ -1,14 +1,7 @@
 from __future__ import annotations
 
 from functools import wraps
-from typing import (
-    Any,
-    Coroutine,
-    Generator,
-    Protocol,
-    TypeVar,
-    runtime_checkable,
-)
+from typing import Any, Coroutine, Generator, Protocol, TypeVar, runtime_checkable
 
 from ._connection import SnowflakeConnection
 from ._cursor import DictCursor, SnowflakeCursor
@@ -98,8 +91,6 @@ class HybridCoroutineContextManager(Protocol[T]):
         ...
 
 
-
-
 class _AsyncConnectContextManager(HybridCoroutineContextManager[SnowflakeConnection]):
     """Hybrid wrapper that enables both awaiting and async context manager usage.
 
@@ -160,6 +151,7 @@ def Connect(**kwargs: Any) -> HybridCoroutineContextManager[SnowflakeConnection]
     - conn = await connect(...)
     - async with connect(...) as conn:
     """
+
     async def _connect_coro() -> SnowflakeConnection:
         conn = SnowflakeConnection(**kwargs)
         await conn.connect()
