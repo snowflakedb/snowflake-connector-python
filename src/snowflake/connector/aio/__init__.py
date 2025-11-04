@@ -15,6 +15,9 @@ __all__ = [
 # ============================================================================
 # DESIGN NOTES:
 #
+# Pattern similar to aiohttp.ClientSession.request() which similarly returns
+# an object that can be both awaited and used as an async context manager.
+#
 # The async connect function uses a wrapper to support both:
 #   1. Direct awaiting: conn = await connect(...)
 #   2. Async context manager: async with connect(...) as conn:
