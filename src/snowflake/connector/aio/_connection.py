@@ -149,7 +149,6 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         if "platform_detection_timeout_seconds" not in kwargs:
             self._platform_detection_timeout_seconds = 0.0
 
-        # TODO: why we have it here if never changed
         self._connected = False
         self.expired = False
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
