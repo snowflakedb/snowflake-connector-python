@@ -22,6 +22,14 @@ T = TypeVar("T")
 
 
 class TokenType(Enum):
+    """Types of credentials that can be cached to avoid repeated authentication.
+
+    - ID_TOKEN: SSO identity token from external browser/Okta authentication
+    - MFA_TOKEN: Multi-factor authentication token to skip MFA prompts
+    - OAUTH_ACCESS_TOKEN: Short-lived OAuth access token
+    - OAUTH_REFRESH_TOKEN: Long-lived OAuth token to obtain new access tokens
+    """
+
     ID_TOKEN = "ID_TOKEN"
     MFA_TOKEN = "MFA_TOKEN"
     OAUTH_ACCESS_TOKEN = "OAUTH_ACCESS_TOKEN"
@@ -57,6 +65,16 @@ def _warn(warning: str) -> None:
 
 
 class TokenCache(ABC):
+    """Secure storage for authentication credentials to avoid repeated login prompts.
+
+    Platform-specific implementations:
+    - macOS/Windows: Uses OS keyring (Keychain/Credential Manager) via 'keyring' library
+    - Linux: Uses encrypted JSON file in ~/.cache/snowflake/ with 0o600 permissions
+    - Fallback: NoopTokenCache (no caching) if secure storage unavailable
+
+    Tokens are keyed by (host, user, token_type) to support multiple accounts.
+    """
+
     @staticmethod
     def make(skip_file_permissions_check: bool = False) -> TokenCache:
         if IS_MACOS or IS_WINDOWS:
@@ -127,6 +145,17 @@ class _CacheFileWriteError(_FileTokenCacheError):
 
 
 class FileTokenCache(TokenCache):
+    """Linux implementation: stores tokens in JSON file with strict security.
+
+    Cache location (in priority order):
+    1. $SF_TEMPORARY_CREDENTIAL_CACHE_DIR/credential_cache_v1.json
+    2. $XDG_CACHE_HOME/snowflake/credential_cache_v1.json
+    3. $HOME/.cache/snowflake/credential_cache_v1.json
+
+    Security: File must have 0o600 permissions and be owned by current user.
+    Uses file locks to prevent concurrent access corruption.
+    """
+
     @staticmethod
     def make(skip_file_permissions_check: bool = False) -> FileTokenCache | None:
         cache_dir = FileTokenCache.find_cache_dir(skip_file_permissions_check)
@@ -364,6 +393,14 @@ class FileTokenCache(TokenCache):
 
 
 class KeyringTokenCache(TokenCache):
+    """macOS/Windows implementation: uses OS-native secure credential storage.
+
+    - macOS: Stores tokens in Keychain
+    - Windows: Stores tokens in Windows Credential Manager
+
+    Tokens are stored with service="{HOST}:{USER}:{TOKEN_TYPE}" and username="{USER}".
+    """
+
     def __init__(self) -> None:
         self.logger = logging.getLogger(__name__)
 
