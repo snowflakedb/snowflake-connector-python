@@ -219,7 +219,7 @@ class SessionPool(Generic[SessionT]):
         self._idle_sessions.clear()
 
 
-class _ConfigDirectAccessMixin(abc.ABC):
+class _BaseConfigDirectAccessMixin(abc.ABC):
     @property
     @abc.abstractmethod
     def config(self) -> HttpConfig: ...
@@ -237,20 +237,22 @@ class _ConfigDirectAccessMixin(abc.ABC):
         self.config = self.config.copy_with(use_pooling=value)
 
     @property
-    def adapter_factory(self) -> Callable[..., HTTPAdapter]:
-        return self.config.adapter_factory
-
-    @adapter_factory.setter
-    def adapter_factory(self, value: Callable[..., HTTPAdapter]) -> None:
-        self.config = self.config.copy_with(adapter_factory=value)
-
-    @property
     def max_retries(self) -> Retry | int:
         return self.config.max_retries
 
     @max_retries.setter
     def max_retries(self, value: Retry | int) -> None:
         self.config = self.config.copy_with(max_retries=value)
+
+
+class _HttpConfigDirectAccessMixin(_BaseConfigDirectAccessMixin):
+    @property
+    def adapter_factory(self) -> Callable[..., HTTPAdapter]:
+        return self.config.adapter_factory
+
+    @adapter_factory.setter
+    def adapter_factory(self, value: Callable[..., HTTPAdapter]) -> None:
+        self.config = self.config.copy_with(adapter_factory=value)
 
 
 class _RequestVerbsUsingSessionMixin(abc.ABC):
@@ -363,7 +365,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
             return session.delete(url, headers=headers, timeout=timeout, **kwargs)
 
 
-class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
+class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixin):
     """
     Central HTTP session manager that handles all external requests from the Snowflake driver.
 
@@ -557,7 +559,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
         Optional kwargs (e.g. *use_pooling* / *adapter_factory* / max_retries etc.) - overrides to create a modified
         copy of the HttpConfig before instantiation.
         """
-        return SessionManager.from_config(self._cfg, **http_config_overrides)
+        return self.from_config(self._cfg, **http_config_overrides)
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -620,12 +622,6 @@ class ProxySessionManager(SessionManager):
         )
         session.proxies = proxies
         return session
-
-    def clone(
-        self,
-        **http_config_overrides,
-    ) -> SessionManager:
-        return ProxySessionManager.from_config(self._cfg, **http_config_overrides)
 
 
 class SessionManagerFactory:
