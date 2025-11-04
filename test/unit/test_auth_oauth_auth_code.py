@@ -304,6 +304,7 @@ def test_auth_oauth_auth_code_uses_redirect_uri(
         "host",
         pkce_enabled=False,
         enable_single_use_refresh_tokens=rtr_enabled,
+        uri="http://localhost:0",
     )
 
     def fake_get_request_token_response(_, fields: dict[str, str]):
@@ -437,5 +438,5 @@ def test_auth_oauth_auth_code_passes_uri_to_http_server(
             user="user",
         )
         mock_http_server_init.assert_called_once_with(
-            uri=uri, redirect_uri=redirect_uri
+            uri=uri or redirect_uri, redirect_uri=redirect_uri
         )
