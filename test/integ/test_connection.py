@@ -17,12 +17,15 @@ from uuid import uuid4
 import pytest
 
 import snowflake.connector
-from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
-from snowflake.connector.compat import IS_WINDOWS
-from snowflake.connector.connection import (
-    DEFAULT_CLIENT_PREFETCH_THREADS,
+from snowflake.connector import (
+    DatabaseError,
+    OperationalError,
+    ProgrammingError,
     SnowflakeConnection,
+    connect,
 )
+from snowflake.connector.compat import IS_WINDOWS
+from snowflake.connector.connection import DEFAULT_CLIENT_PREFETCH_THREADS
 from snowflake.connector.description import CLIENT_NAME
 from snowflake.connector.errorcode import (
     ER_CONNECTION_IS_CLOSED,
@@ -1562,6 +1565,81 @@ def test_no_new_warnings_or_errors_on_successful_basic_select(conn_cnx, caplog):
         f"Error count increased from {baseline_error_count} to {test_error_count}. "
         f"New errors: {[r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]}"
     )
+
+
+@pytest.mark.skipolddriver
+def test_connect_metadata_preservation():
+    """Test that the sync connect function preserves metadata from SnowflakeConnection.__init__.
+
+    This test verifies that various inspection methods return consistent metadata,
+    ensuring IDE support, type checking, and documentation generation work correctly.
+    """
+    import inspect
+
+    # Test 1: Check __name__ is correct
+    assert (
+        connect.__name__ == "connect"
+    ), f"connect.__name__ should be 'connect', but got '{connect.__name__}'"
+
+    # Test 2: Check __wrapped__ points to SnowflakeConnection.__init__
+    assert hasattr(connect, "__wrapped__"), "connect should have __wrapped__ attribute"
+    assert (
+        connect.__wrapped__ is SnowflakeConnection.__init__
+    ), "connect.__wrapped__ should reference SnowflakeConnection.__init__"
+
+    # Test 3: Check __module__ is preserved
+    assert hasattr(connect, "__module__"), "connect should have __module__ attribute"
+    assert connect.__module__ == SnowflakeConnection.__init__.__module__, (
+        f"connect.__module__ should match SnowflakeConnection.__init__.__module__, "
+        f"but got '{connect.__module__}' vs '{SnowflakeConnection.__init__.__module__}'"
+    )
+
+    # Test 4: Check __doc__ is preserved
+    assert hasattr(connect, "__doc__"), "connect should have __doc__ attribute"
+    assert (
+        connect.__doc__ == SnowflakeConnection.__init__.__doc__
+    ), "connect.__doc__ should match SnowflakeConnection.__init__.__doc__"
+
+    # Test 5: Check __annotations__ are preserved (or at least available)
+    assert hasattr(
+        connect, "__annotations__"
+    ), "connect should have __annotations__ attribute"
+    src_annotations = getattr(SnowflakeConnection.__init__, "__annotations__", {})
+    connect_annotations = getattr(connect, "__annotations__", {})
+    assert connect_annotations == src_annotations, (
+        f"connect.__annotations__ should match SnowflakeConnection.__init__.__annotations__, "
+        f"but got {connect_annotations} vs {src_annotations}"
+    )
+
+    # Test 6: Check inspect.signature works correctly
+    try:
+        connect_sig = inspect.signature(connect)
+        source_sig = inspect.signature(SnowflakeConnection.__init__)
+        assert str(connect_sig) == str(source_sig), (
+            f"inspect.signature(connect) should match inspect.signature(SnowflakeConnection.__init__), "
+            f"but got '{connect_sig}' vs '{source_sig}'"
+        )
+    except Exception as e:
+        pytest.fail(f"inspect.signature(connect) failed: {e}")
+
+    # Test 7: Check inspect.getdoc works correctly
+    connect_doc = inspect.getdoc(connect)
+    source_doc = inspect.getdoc(SnowflakeConnection.__init__)
+    assert (
+        connect_doc == source_doc
+    ), "inspect.getdoc(connect) should match inspect.getdoc(SnowflakeConnection.__init__)"
+
+    # Test 8: Check that connect is callable
+    assert callable(connect), "connect should be callable"
+
+    # Test 9: Verify the function has proper introspection capabilities
+    # IDEs and type checkers should be able to resolve parameters
+    sig = inspect.signature(connect)
+    params = list(sig.parameters.keys())
+    assert (
+        len(params) > 0
+    ), "connect should have parameters from SnowflakeConnection.__init__"
+    # Should have parameters like account, user, password, etc.
 
 
 @pytest.mark.skipolddriver
