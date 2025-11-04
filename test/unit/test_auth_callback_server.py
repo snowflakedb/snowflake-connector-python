@@ -77,21 +77,24 @@ def test_auth_callback_timeout(monkeypatch, dontwait, timeout, reuse_port) -> No
 @pytest.mark.parametrize(
     "socket_port",
     [
-        None,
-        0,
-        12345,
+        "",
+        ":0",
+        ":12345",
     ],
 )
 @pytest.mark.parametrize(
     "redirect_host",
-    ["127.0.0.1", "localhost", "not_localhost"],
+    [
+        "127.0.0.1",
+        "localhost",
+    ],
 )
 @pytest.mark.parametrize(
     "redirect_port",
     [
-        None,
-        0,
-        12345,
+        "",
+        ":0",
+        ":12345",
     ],
 )
 @pytest.mark.parametrize(
@@ -110,25 +113,101 @@ def test_auth_callback_server_updates_localhost_redirect_uri_port_to_match_socke
 ) -> None:
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", reuse_port)
     monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", dontwait)
-
-    def _build_uri(host, port):
-        if port is not None:
-            return f"http://{host}:{port}/test_request"
-        return f"http://{host}/test_request"
-
     with AuthHttpServer(
-        uri=_build_uri(socket_host, socket_port),
-        redirect_uri=_build_uri(redirect_host, redirect_port),
+        uri=f"http://{socket_host}{socket_port}/test_request",
+        redirect_uri=f"http://{redirect_host}{redirect_port}/test_request",
     ) as callback_server:
+        assert callback_server._redirect_uri.port == callback_server.port
+
+
+@pytest.mark.parametrize(
+    "socket_host",
+    [
+        "127.0.0.1",
+        "localhost",
+    ],
+)
+@pytest.mark.parametrize(
+    "socket_port",
+    [
+        "",
+        ":0",
+        ":12345",
+    ],
+)
+@pytest.mark.parametrize(
+    "redirect_host",
+    [
+        "127.0.0.1",
+        "localhost",
+    ],
+)
+@pytest.mark.parametrize(
+    "redirect_port",
+    [
+        54321,
+        54320,
+    ],
+)
+@pytest.mark.parametrize(
+    "dontwait",
+    ["false", "true"],
+)
+@pytest.mark.parametrize("reuse_port", ["true", "false"])
+def test_auth_callback_server_uses_redirect_uri_port_when_specified(
+    monkeypatch,
+    socket_host,
+    socket_port,
+    redirect_host,
+    redirect_port,
+    dontwait,
+    reuse_port,
+) -> None:
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", reuse_port)
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", dontwait)
+    with AuthHttpServer(
+        uri=f"http://{socket_host}{socket_port}/test_request",
+        redirect_uri=f"http://{redirect_host}:{redirect_port}/test_request",
+    ) as callback_server:
+        assert callback_server.port == redirect_port
         assert callback_server._redirect_uri.port == redirect_port
-        assert callback_server._redirect_uri.hostname == redirect_host
-        if socket_port:
-            assert callback_server._uri.port == socket_port
-        assert callback_server._uri.hostname == socket_host
 
 
-def test_server_uris_backcompat():
-    with AuthHttpServer("http://localhost:7272/test_request") as callback_server:
-        assert callback_server.url == "http://localhost:7272/test_request"
-        assert callback_server.port == 7272
-        assert callback_server.hostname == "localhost"
+@pytest.mark.parametrize(
+    "socket_host",
+    [
+        "127.0.0.1",
+        "localhost",
+    ],
+)
+@pytest.mark.parametrize(
+    "socket_port",
+    [
+        "",
+        ":0",
+        ":12345",
+    ],
+)
+@pytest.mark.parametrize(
+    "redirect_port",
+    [
+        "",
+        ":0",
+        ":12345",
+    ],
+)
+@pytest.mark.parametrize(
+    "dontwait",
+    ["false", "true"],
+)
+@pytest.mark.parametrize("reuse_port", ["true", "false"])
+def test_auth_callback_server_does_not_updates_nonlocalhost_redirect_uri_port_to_match_socket_port(
+    monkeypatch, socket_host, socket_port, redirect_port, dontwait, reuse_port
+) -> None:
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", reuse_port)
+    monkeypatch.setenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", dontwait)
+    redirect_uri = f"http://not_localhost{redirect_port}/test_request"
+    with AuthHttpServer(
+        uri=f"http://{socket_host}{socket_port}/test_request", redirect_uri=redirect_uri
+    ) as callback_server:
+        assert callback_server.redirect_uri == redirect_uri

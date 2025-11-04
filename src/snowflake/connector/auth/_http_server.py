@@ -84,31 +84,34 @@ class AuthHttpServer:
             else:
                 self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
-        port = parsed_uri.port or 0
+        if parsed_redirect and self._is_local_uri(parsed_redirect):
+            server_port = parsed_redirect.port or 0
+        else:
+            server_port = parsed_uri.port or 0
 
         for attempt in range(1, self.DEFAULT_MAX_ATTEMPTS + 1):
             try:
                 self._socket.bind(
                     (
                         parsed_uri.hostname,
-                        port,
+                        server_port,
                     )
                 )
                 break
             except socket.gaierror as ex:
                 logger.error(
-                    f"Failed to bind authorization callback server to port {port}: {ex}"
+                    f"Failed to bind authorization callback server to port {server_port}: {ex}"
                 )
                 raise
             except OSError as ex:
                 if attempt == self.DEFAULT_MAX_ATTEMPTS:
                     logger.error(
-                        f"Failed to bind authorization callback server to port {port}: {ex}"
+                        f"Failed to bind authorization callback server to port {server_port}: {ex}"
                     )
                     raise
                 logger.warning(
                     f"Attempt {attempt}/{self.DEFAULT_MAX_ATTEMPTS}. "
-                    f"Failed to bind authorization callback server to port {port}: {ex}"
+                    f"Failed to bind authorization callback server to port {server_port}: {ex}"
                 )
                 time.sleep(self.PORT_BIND_TIMEOUT / self.PORT_BIND_MAX_ATTEMPTS)
         try:
@@ -118,9 +121,10 @@ class AuthHttpServer:
             self.close()
             raise
 
+        server_port = self._socket.getsockname()[1]
         self._uri = urllib.parse.ParseResult(
             scheme=parsed_uri.scheme,
-            netloc=parsed_uri.hostname + ":" + str(self._socket.getsockname()[1]),
+            netloc=parsed_uri.hostname + ":" + str(server_port),
             path=parsed_uri.path,
             params=parsed_uri.params,
             query=parsed_uri.query,
@@ -128,16 +132,34 @@ class AuthHttpServer:
         )
 
         if parsed_redirect:
-            self._redirect_uri = parsed_redirect
+            if (
+                self._is_local_uri(parsed_redirect)
+                and server_port != parsed_redirect.port
+            ):
+                logger.debug(
+                    f"Updating redirect port {parsed_redirect.port} to match the server port {server_port}."
+                )
+                self._redirect_uri = urllib.parse.ParseResult(
+                    scheme=parsed_redirect.scheme,
+                    netloc=parsed_redirect.hostname + ":" + str(server_port),
+                    path=parsed_redirect.path,
+                    params=parsed_redirect.params,
+                    query=parsed_redirect.query,
+                    fragment=parsed_redirect.fragment,
+                )
+            else:
+                self._redirect_uri = parsed_redirect
         else:
             # For backwards compatibility
             self._redirect_uri = self._uri
 
+    @staticmethod
+    def _is_local_uri(uri):
+        return uri.hostname in ("localhost", "127.0.0.1")
+
     @property
     def redirect_uri(self) -> str | None:
-        if self._redirect_uri:
-            return self._redirect_uri.geturl()
-        return self.url
+        return self._redirect_uri.geturl()
 
     @property
     def url(self) -> str:
