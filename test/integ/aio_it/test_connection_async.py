@@ -1813,9 +1813,9 @@ async def test_connect_metadata_preservation():
     # Test 7: Check __doc__ is preserved on the instance
     # Note: inspect.getdoc() doesn't work reliably on instances, so we check __doc__ directly
     assert hasattr(connect, "__doc__"), "connect instance should have __doc__ attribute"
-    assert connect.__doc__ == SnowflakeConnection.__init__.__doc__, (
-        "connect.__doc__ should match SnowflakeConnection.__init__.__doc__ on the instance"
-    )
+    assert (
+        connect.__doc__ == SnowflakeConnection.__init__.__doc__
+    ), "connect.__doc__ should match SnowflakeConnection.__init__.__doc__ on the instance"
 
     # Test 8: Check that connect is callable and returns expected type
     assert callable(connect), "connect should be callable"
