@@ -35,6 +35,14 @@ logger = logging.getLogger(__name__)
 
 
 class _OAuthTokensMixin:
+    """Manages OAuth token caching to avoid repeated browser authentication flows.
+
+    Access tokens: Short-lived (typically 10 minutes), cached to avoid immediate re-auth.
+    Refresh tokens: Long-lived (hours/days), used to obtain new access tokens silently.
+
+    Tokens are cached per (user, IDP host) to support multiple OAuth providers/accounts.
+    """
+
     def __init__(
         self,
         token_cache: TokenCache | None,
@@ -77,12 +85,18 @@ class _OAuthTokensMixin:
         return self._token_cache.retrieve(key)
 
     def _pop_cached_access_token(self) -> bool:
-        """Retrieves OAuth access token from the token cache if enabled"""
+        """Retrieves OAuth access token from the token cache if enabled, available and still valid.
+
+        Returns True if cached token found, allowing authentication to skip OAuth flow.
+        """
         self._access_token = self._pop_cached_token(self._get_access_token_cache_key())
         return self._access_token is not None
 
     def _pop_cached_refresh_token(self) -> bool:
-        """Retrieves OAuth refresh token from the token cache if enabled"""
+        """Retrieves OAuth refresh token from the token cache (if enabled) to silently obtain new access token.
+
+        Returns True if refresh token found, enabling automatic token renewal without user interaction.
+        """
         if self._refresh_token_enabled:
             self._refresh_token = self._pop_cached_token(
                 self._get_refresh_token_cache_key()
