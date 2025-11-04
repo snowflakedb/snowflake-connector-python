@@ -945,13 +945,12 @@ async def test_connect_metadata_preservation():
 
     from snowflake.connector.aio import SnowflakeConnection, connect
 
-    # Test 1: Check __name__ and __qualname__ are overridden correctly
-    # tODO: the only difference is that this is __init__ in synch connect
+    # Test 1: Check __name__ is correct
+    assert connect.__name__ == "__init__", (
+        f"connect.__name__ should be '__init__', but got '{connect.__name__}'"
+    )
     assert (
-        connect.__name__ == "connect"
-    ), f"connect.__name__ should be 'connect', but got '{connect.__name__}'"
-    assert (
-        connect.__qualname__ == "connect"
+        connect.__qualname__ == "SnowflakeConnection.__init__"
     ), f"connect.__qualname__ should be 'connect', but got '{connect.__qualname__}'"
 
     # Test 2: Check __wrapped__ points to SnowflakeConnection.__init__
@@ -1005,7 +1004,18 @@ async def test_connect_metadata_preservation():
     # Test 8: Check that connect is callable and returns expected type
     assert callable(connect), "connect should be callable"
 
-    # Test 9: Verify the instance has proper introspection capabilities
+    # Test 9: Check type() and __class__ values (important for user introspection)
+    assert type(connect).__name__ == "function", (
+        f"type(connect).__name__ should be 'function', but got '{type(connect).__name__}'"
+    )
+    assert connect.__class__.__name__ == "function", (
+        f"connect.__class__.__name__ should be 'function', but got '{connect.__class__.__name__}'"
+    )
+    assert inspect.isfunction(connect), (
+        "connect should be recognized as a function by inspect.isfunction()"
+    )
+
+    # Test 10: Verify the function has proper introspection capabilities
     # IDEs and type checkers should be able to resolve parameters
     sig = inspect.signature(connect)
     params = list(sig.parameters.keys())
