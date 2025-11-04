@@ -5,7 +5,6 @@ requires = [
     "setuptools>=40.6.0",
     "wheel",
     "cython",
-    "pip<25.3",
 ]
 
 [tool.cibuildwheel]
