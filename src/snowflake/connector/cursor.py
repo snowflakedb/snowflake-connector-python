@@ -459,7 +459,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         return self._total_rowcount if self._total_rowcount >= 0 else None
 
     @property
-    def stats(self) -> RowsAffected | None:
+    def stats(self) -> QueryResultStats | None:
         """Returns detailed rows affected statistics for DML operations.
 
         Returns a NamedTuple with fields:
@@ -470,8 +470,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         Returns None on each position if no DML stats are available.
         """
         if self._stats_data is None:
-            return RowsAffected(None, None, None, None)
-        return RowsAffected(
+            return QueryResultStats(None, None, None, None)
+        return QueryResultStats(
             num_rows_inserted=self._stats_data.get("numRowsInserted", None),
             num_rows_deleted=self._stats_data.get("numRowsDeleted", None),
             num_rows_updated=self._stats_data.get("numRowsUpdated", None),
@@ -2037,7 +2037,7 @@ def __getattr__(name):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-class RowsAffected(NamedTuple):
+class QueryResultStats(NamedTuple):
     """
     Statistics for rows affected by a DML operation.
     None value expresses particular statistic being unknown - not returned by the backend service.
