@@ -932,3 +932,83 @@ async def test_large_query_through_proxy_async(
             "/queries/v1/query-request" in r["request"]["url"]
             for r in target_reqs["requests"]
         )
+
+
+@pytest.mark.skipolddriver
+async def test_connect_metadata_preservation():
+    """Test that the async connect function preserves metadata from SnowflakeConnection.__init__.
+
+    This test verifies that various inspection methods return consistent metadata,
+    ensuring IDE support, type checking, and documentation generation work correctly.
+    """
+    import inspect
+
+    from snowflake.connector.aio import SnowflakeConnection, connect
+
+    # Test 1: Check __name__ and __qualname__ are overridden correctly
+    # tODO: the only difference is that this is __init__ in synch connect
+    assert (
+        connect.__name__ == "connect"
+    ), f"connect.__name__ should be 'connect', but got '{connect.__name__}'"
+    assert (
+        connect.__qualname__ == "connect"
+    ), f"connect.__qualname__ should be 'connect', but got '{connect.__qualname__}'"
+
+    # Test 2: Check __wrapped__ points to SnowflakeConnection.__init__
+    assert hasattr(connect, "__wrapped__"), "connect should have __wrapped__ attribute"
+    assert (
+        connect.__wrapped__ is SnowflakeConnection.__init__
+    ), "connect.__wrapped__ should reference SnowflakeConnection.__init__"
+
+    # Test 3: Check __module__ is preserved
+    assert hasattr(connect, "__module__"), "connect should have __module__ attribute"
+    assert connect.__module__ == SnowflakeConnection.__init__.__module__, (
+        f"connect.__module__ should match SnowflakeConnection.__init__.__module__, "
+        f"but got '{connect.__module__}' vs '{SnowflakeConnection.__init__.__module__}'"
+    )
+
+    # Test 4: Check __doc__ is preserved
+    assert hasattr(connect, "__doc__"), "connect should have __doc__ attribute"
+    assert (
+        connect.__doc__ == SnowflakeConnection.__init__.__doc__
+    ), "connect.__doc__ should match SnowflakeConnection.__init__.__doc__"
+
+    # Test 5: Check __annotations__ are preserved (or at least available)
+    assert hasattr(
+        connect, "__annotations__"
+    ), "connect should have __annotations__ attribute"
+    src_annotations = getattr(SnowflakeConnection.__init__, "__annotations__", {})
+    connect_annotations = getattr(connect, "__annotations__", {})
+    assert connect_annotations == src_annotations, (
+        f"connect.__annotations__ should match SnowflakeConnection.__init__.__annotations__, "
+        f"but got {connect_annotations} vs {src_annotations}"
+    )
+
+    # Test 6: Check inspect.signature works correctly
+    try:
+        connect_sig = inspect.signature(connect)
+        source_sig = inspect.signature(SnowflakeConnection.__init__)
+        assert str(connect_sig) == str(source_sig), (
+            f"inspect.signature(connect) should match inspect.signature(SnowflakeConnection.__init__), "
+            f"but got '{connect_sig}' vs '{source_sig}'"
+        )
+    except Exception as e:
+        pytest.fail(f"inspect.signature(connect) failed: {e}")
+
+    # Test 7: Check inspect.getdoc works correctly
+    connect_doc = inspect.getdoc(connect)
+    source_doc = inspect.getdoc(SnowflakeConnection.__init__)
+    assert (
+        connect_doc == source_doc
+    ), "inspect.getdoc(connect) should match inspect.getdoc(SnowflakeConnection.__init__)"
+
+    # Test 8: Check that connect is callable and returns expected type
+    assert callable(connect), "connect should be callable"
+
+    # Test 9: Verify the instance has proper introspection capabilities
+    # IDEs and type checkers should be able to resolve parameters
+    sig = inspect.signature(connect)
+    params = list(sig.parameters.keys())
+    assert (
+        len(params) > 0
+    ), "connect should have parameters from SnowflakeConnection.__init__"
