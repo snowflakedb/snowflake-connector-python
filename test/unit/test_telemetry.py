@@ -157,6 +157,30 @@ def test_telemetry_send_batch_disabled():
     assert rest_call.call_count == 0
 
 
+def test_telemetry_send_batch_with_retry_flag():
+    """Tests that send_batch respects the retry parameter."""
+    client, rest_call = get_client_and_mock()
+
+    client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
+
+    # Test with retry=True
+    client.send_batch(retry=True)
+
+    assert rest_call.call_count == 1
+    # Verify _no_retry parameter is False when retry=True
+    call_kwargs = rest_call.call_args[1]
+    assert call_kwargs["_no_retry"] is False
+
+    # Add another log and test with retry=False (default)
+    client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 3000))
+    client.send_batch(retry=False)
+
+    assert rest_call.call_count == 2
+    # Verify _no_retry parameter is True when retry=False
+    call_kwargs = rest_call.call_args[1]
+    assert call_kwargs["_no_retry"] is True
+
+
 def test_generate_telemetry_data_dict_with_basic_info():
     assert snowflake.connector.telemetry.generate_telemetry_data_dict() == {
         snowflake.connector.telemetry.TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
