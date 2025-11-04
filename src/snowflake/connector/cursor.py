@@ -459,7 +459,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         return self._total_rowcount if self._total_rowcount >= 0 else None
 
     @property
-    def rows_affected(self) -> RowsAffected | None:
+    def stats(self) -> RowsAffected | None:
         """Returns detailed rows affected statistics for DML operations.
 
         Returns a NamedTuple with fields:
@@ -1225,9 +1225,9 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._rownumber = -1
         self._result_state = ResultState.VALID
 
-        # Extract rows_affected from stats object if available (for DML operations like CTAS, INSERT, UPDATE, DELETE)
+        # Extract stats object if available (for DML operations like CTAS, INSERT, UPDATE, DELETE)
         self._stats_data = data.get("stats", None)
-        logger.debug(f"Execution stats: {self.rows_affected}")
+        logger.debug(f"Execution DML stats: {self.stats}")
 
         # don't update the row count when the result is returned from `describe` method
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:

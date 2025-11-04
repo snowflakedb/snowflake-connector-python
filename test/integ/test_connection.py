@@ -1895,8 +1895,8 @@ def test_snowflake_version():
 
 
 @pytest.mark.skipolddriver
-def test_ctas_rows_affected_from_stats(conn_cnx):
-    """Test that cursor.rowcount and cursor.rows_affected work for CTAS operations."""
+def test_ctas_stats(conn_cnx):
+    """Test that cursor.rowcount and cursor.stats work for CTAS operations."""
     with conn_cnx() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1905,21 +1905,19 @@ def test_ctas_rows_affected_from_stats(conn_cnx):
             assert (
                 cur.rowcount == 1
             ), f"Expected rowcount 1 for CTAS, got {cur.rowcount}"
-            # rows_affected should contain the detailed stats as a NamedTuple
+            # stats should contain the details as a NamedTuple
+            assert cur.stats is not None, "stats should not be None for CTAS"
             assert (
-                cur.rows_affected is not None
-            ), "rows_affected should not be None for CTAS"
-            assert (
-                cur.rows_affected.num_rows_inserted == 3
-            ), f"Expected num_rows_inserted=3, got {cur.rows_affected.num_rows_inserted}"
-            assert cur.rows_affected.num_rows_deleted == 0
-            assert cur.rows_affected.num_rows_updated == 0
-            assert cur.rows_affected.num_dml_duplicates == 0
+                cur.stats.num_rows_inserted == 3
+            ), f"Expected num_rows_inserted=3, got {cur.stats.num_rows_inserted}"
+            assert cur.stats.num_rows_deleted == 0
+            assert cur.stats.num_rows_updated == 0
+            assert cur.stats.num_dml_duplicates == 0
 
 
 @pytest.mark.skipolddriver
-def test_create_view_rows_affected_from_stats(conn_cnx):
-    """Test that cursor.rows_affected returns None fields for VIEW operations."""
+def test_create_view_stats(conn_cnx):
+    """Test that cursor.stats returns None fields for VIEW operations."""
     with conn_cnx() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1929,16 +1927,16 @@ def test_create_view_rows_affected_from_stats(conn_cnx):
                 cur.rowcount == 1
             ), f"Expected rowcount 1 for VIEW, got {cur.rowcount}"
             # VIEW operations don't return DML stats, all fields should be None
-            assert cur.rows_affected is not None
-            assert cur.rows_affected.num_rows_inserted is None
-            assert cur.rows_affected.num_rows_deleted is None
-            assert cur.rows_affected.num_rows_updated is None
-            assert cur.rows_affected.num_dml_duplicates is None
+            assert cur.stats is not None
+            assert cur.stats.num_rows_inserted is None
+            assert cur.stats.num_rows_deleted is None
+            assert cur.stats.num_rows_updated is None
+            assert cur.stats.num_dml_duplicates is None
 
 
 @pytest.mark.skipolddriver
-def test_cvas_separate_cursors_rows_affected_from_stats(conn_cnx):
-    """Test cursor.rows_affected with CVAS in separate cursor from the one used for CTAS of the table."""
+def test_cvas_separate_cursors_stats(conn_cnx):
+    """Test cursor.stats with CVAS in separate cursor from the one used for CTAS of the table."""
     with conn_cnx() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1950,16 +1948,16 @@ def test_cvas_separate_cursors_rows_affected_from_stats(conn_cnx):
                 cur.rowcount == 1
             ), "Due to old behaviour we should keep rowcount equal to 1 - as the number of rows returned by the backend"
             # VIEW operations don't return DML stats
-            assert cur.rows_affected is not None
-            assert cur.rows_affected.num_rows_inserted is None
-            assert cur.rows_affected.num_rows_deleted is None
-            assert cur.rows_affected.num_rows_updated is None
-            assert cur.rows_affected.num_dml_duplicates is None
+            assert cur.stats is not None
+            assert cur.stats.num_rows_inserted is None
+            assert cur.stats.num_rows_deleted is None
+            assert cur.stats.num_rows_updated is None
+            assert cur.stats.num_dml_duplicates is None
 
 
 @pytest.mark.skipolddriver
-def test_cvas_one_cursor_rows_affected_from_stats(conn_cnx):
-    """Test cursor.rows_affected with CVAS in the same cursor - make sure it's cleaned up after usage."""
+def test_cvas_one_cursor_stats(conn_cnx):
+    """Test cursor.stats with CVAS in the same cursor - make sure it's cleaned up after usage."""
     with conn_cnx() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1972,8 +1970,8 @@ def test_cvas_one_cursor_rows_affected_from_stats(conn_cnx):
                 cur.rowcount == 1
             ), "Due to old behaviour we should keep rowcount equal to 1 - as the number of rows returned by the backend"
             # VIEW operations don't return DML stats
-            assert cur.rows_affected is not None
-            assert cur.rows_affected.num_rows_inserted is None
-            assert cur.rows_affected.num_rows_deleted is None
-            assert cur.rows_affected.num_rows_updated is None
-            assert cur.rows_affected.num_dml_duplicates is None
+            assert cur.stats is not None
+            assert cur.stats.num_rows_inserted is None
+            assert cur.stats.num_rows_deleted is None
+            assert cur.stats.num_rows_updated is None
+            assert cur.stats.num_dml_duplicates is None
