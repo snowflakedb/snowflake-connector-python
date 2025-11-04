@@ -65,6 +65,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         external_browser_timeout: int | None = None,
         enable_single_use_refresh_tokens: bool = False,
         connection: SnowflakeConnection | None = None,
+        uri: str | None = None,
         **kwargs,
     ) -> None:
         authentication_url, redirect_uri = self._validate_oauth_code_uris(
@@ -92,6 +93,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         self._origin: str | None = None
         self._authentication_url = authentication_url
         self._redirect_uri = redirect_uri
+        self._uri = uri
         self._state = secrets.token_urlsafe(43)
         logger.debug("chose oauth state: %s", "".join("*" for _ in self._state))
         self._protocol = "http"
@@ -117,7 +119,10 @@ class AuthByOauthCode(AuthByOAuthBase):
     ) -> (str | None, str | None):
         """Web Browser based Authentication."""
         logger.debug("authenticating with OAuth authorization code flow")
-        with AuthHttpServer(self._redirect_uri) as callback_server:
+        with AuthHttpServer(
+            redirect_uri=self._redirect_uri,
+            uri=self._uri or self._redirect_uri,  # for backward compatibility
+        ) as callback_server:
             code = self._do_authorization_request(callback_server, conn)
             return self._do_token_request(code, callback_server, conn)
 
@@ -260,7 +265,7 @@ You can close this window now and go back where you started from.
         connection: SnowflakeConnection,
     ) -> str | None:
         authorization_request = self._construct_authorization_request(
-            callback_server.url
+            callback_server.redirect_uri
         )
         logger.debug("step 1: going to open authorization URL")
         print(
@@ -315,7 +320,7 @@ You can close this window now and go back where you started from.
         fields = {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": callback_server.url,
+            "redirect_uri": callback_server.redirect_uri,
         }
         if self._enable_single_use_refresh_tokens:
             fields["enable_single_use_refresh_tokens"] = "true"
