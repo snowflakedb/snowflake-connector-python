@@ -197,8 +197,6 @@ class SetDefaultInstallationExtras(egg_info):
 cmd_class["egg_info"] = SetDefaultInstallationExtras
 
 setup(
-    name="snowflake-connector-python",
-    description="Snowflake Connector for Python",
     version=version,
     ext_modules=extensions,
     cmdclass=cmd_class,
