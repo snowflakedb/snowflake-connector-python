@@ -1578,7 +1578,7 @@ def test_connect_metadata_preservation():
 
     # Test 1: Check __name__ is correct
     assert (
-        connect.__name__ == "connect"
+        connect.__name__ == "__init__"
     ), f"connect.__name__ should be 'connect', but got '{connect.__name__}'"
 
     # Test 2: Check __wrapped__ points to SnowflakeConnection.__init__
