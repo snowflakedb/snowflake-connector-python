@@ -1810,12 +1810,19 @@ async def test_connect_metadata_preservation():
     except Exception as e:
         pytest.fail(f"inspect.signature(connect) failed: {e}")
 
-    # Test 7: Check __doc__ is preserved on the instance
-    # Note: inspect.getdoc() doesn't work reliably on instances, so we check __doc__ directly
-    assert hasattr(connect, "__doc__"), "connect instance should have __doc__ attribute"
-    assert (
-        connect.__doc__ == SnowflakeConnection.__init__.__doc__
-    ), "connect.__doc__ should match SnowflakeConnection.__init__.__doc__ on the instance"
+    # Test 7: Check inspect.getdoc works correctly  
+    connect_doc = inspect.getdoc(connect)
+    source_doc = inspect.getdoc(SnowflakeConnection.__init__)
+    assert connect_doc == source_doc, (
+        "inspect.getdoc(connect) should match inspect.getdoc(SnowflakeConnection.__init__)"
+    )
 
     # Test 8: Check that connect is callable and returns expected type
     assert callable(connect), "connect should be callable"
+
+    # Test 9: Verify the instance has proper introspection capabilities
+    # IDEs and type checkers should be able to resolve parameters
+    sig = inspect.signature(connect)
+    params = list(sig.parameters.keys())
+    assert len(params) > 0, "connect should have parameters from SnowflakeConnection.__init__"
+

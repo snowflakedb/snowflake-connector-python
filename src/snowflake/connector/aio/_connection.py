@@ -123,6 +123,21 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         connections_file_path: pathlib.Path | None = None,
         **kwargs,
     ) -> None:
+        """Create a new SnowflakeConnection.
+
+        Connections can be loaded from the TOML file located at
+        snowflake.connector.constants.CONNECTIONS_FILE.
+
+        When connection_name is supplied we will first load that connection
+        and then override any other values supplied.
+
+        When no arguments are given (other than connection_file_path) the
+        default connection will be loaded first. Note that no overwriting is
+        supported in this case.
+
+        If overwriting values from the default connection is desirable, supply
+        the name explicitly.
+        """
         # note we don't call super here because asyncio can not/is not recommended
         # to perform async operation in the __init__ while in the sync connection we
         # perform connect
