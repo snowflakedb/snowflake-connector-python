@@ -280,8 +280,12 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "support_negative_year": (True, bool),  # snowflake
     "log_max_query_length": (LOG_MAX_QUERY_LENGTH, int),  # snowflake
     "disable_request_pooling": (False, bool),  # snowflake
-    # enable temporary credential file for Linux, default false. Mac/Win will overlook this
+    # enable temporary credential storing - in file for Linux, in keyring for Mac/Win;
+    # sets session PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL as well;
+    # default false
     "client_store_temporary_credential": (False, bool),
+    # Whether to allow clients to cache MFA credentials. Caching must be enabled on the server.
+    # In driver, we extract this from session using PARAMETER_CLIENT_REQUEST_MFA_TOKEN. Default is ``False``.
     "client_request_mfa_token": (False, bool),
     "use_openssl_only": (
         True,
