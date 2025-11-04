@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from functools import update_wrapper, wraps
+from functools import update_wrapper
 from typing import (
     Any,
     Callable,
@@ -185,9 +185,6 @@ class _AsyncConnectWrapper:
     as the synchronous snowflake.connector.connect function.
     """
 
-    def __init__(self) -> None: ...
-
-    @wraps(SnowflakeConnection.__init__)
     def __call__(
         self, **kwargs: Any
     ) -> HybridCoroutineContextManager[SnowflakeConnection]:
