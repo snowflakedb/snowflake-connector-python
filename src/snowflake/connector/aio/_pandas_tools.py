@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import os
 import warnings
-from functools import partial
 from logging import getLogger
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Literal, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Sequence
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
@@ -571,100 +570,4 @@ async def write_pandas(
         len(copy_results),
         sum(int(e[3]) for e in copy_results),
         copy_results,
-    )
-
-
-def make_pd_writer(
-    **kwargs,
-) -> Callable[
-    [
-        pandas.io.sql.SQLTable,
-        sqlalchemy.engine.Engine | sqlalchemy.engine.Connection,
-        Iterable,
-        Iterable,
-        Any,
-    ],
-    None,
-]:
-    """This returns a pd_writer with the desired arguments.
-
-        Example usage:
-            import pandas as pd
-            from snowflake.connector.aio.pandas_tools import make_pd_writer
-
-            sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
-            # Note: SQLAlchemy async support would be needed for this to work with async connections
-            sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=make_pd_writer())
-
-            # to use parallel=1, quote_identifiers=False,
-            from functools import partial
-            sf_connector_version_df.to_sql(
-                'driver_versions', engine, index=False, method=make_pd_writer(parallel=1, quote_identifiers=False)))
-
-    This function takes arguments used by 'pd_writer' (excluding 'table', 'conn', 'keys', and 'data_iter')
-    Please refer to 'pd_writer' for documentation.
-    """
-    if any(arg in kwargs for arg in ("table", "conn", "keys", "data_iter")):
-        raise ProgrammingError(
-            "Arguments 'table', 'conn', 'keys', and 'data_iter' are not supported parameters for make_pd_writer."
-        )
-
-    return partial(pd_writer, **kwargs)
-
-
-async def pd_writer(
-    table: pandas.io.sql.SQLTable,
-    conn: sqlalchemy.engine.Engine | sqlalchemy.engine.Connection,
-    keys: Iterable,
-    data_iter: Iterable,
-    **kwargs,
-) -> None:
-    """This is a wrapper on top of write_pandas to make it compatible with to_sql method in pandas.
-
-        Notes:
-            Please note that when column names in the pandas DataFrame are consist of strictly lower case letters, column names need to
-            be enquoted, otherwise `ProgrammingError` will be raised.
-
-            This is because `snowflake-sqlalchemy` does not enquote lower case column names when creating the table, but `pd_writer` enquotes the columns by default.
-            the copy into command looks for enquoted column names.
-
-            Future improvements will be made in the snowflake-sqlalchemy library.
-
-            Note: This async version requires async SQLAlchemy support.
-
-        Example usage:
-            import pandas as pd
-            from snowflake.connector.aio.pandas_tools import pd_writer
-
-            sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['NAME', 'NEWEST_VERSION'])
-            # Note: Requires async SQLAlchemy engine
-            await sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
-
-            # when the column names are consist of only lower case letters, enquote the column names
-            sf_connector_version_df = pd.DataFrame([('snowflake-connector-python', '1.0')], columns=['"name"', '"newest_version"'])
-            await sf_connector_version_df.to_sql('driver_versions', engine, index=False, method=pd_writer)
-
-    Args:
-        table: Pandas package's table object.
-        conn: SQLAlchemy engine object to talk to Snowflake.
-        keys: Column names that we are trying to insert.
-        data_iter: Iterator over the rows.
-
-        More parameters can be provided to be used by 'write_pandas' (excluding 'conn', 'df', 'table_name', and 'schema'),
-        Please refer to 'write_pandas' for documentation on other available parameters.
-    """
-    if any(arg in kwargs for arg in ("conn", "df", "table_name", "schema")):
-        raise ProgrammingError(
-            "Arguments 'conn', 'df', 'table_name', and 'schema' are not supported parameters for pd_writer."
-        )
-
-    sf_connection = conn.connection.connection
-    df = pandas.DataFrame(data_iter, columns=keys)
-    await write_pandas(
-        conn=sf_connection,
-        df=df,
-        # Note: Our sqlalchemy connector creates tables case insensitively
-        table_name=table.name.upper(),
-        schema=table.schema,
-        **kwargs,
     )
