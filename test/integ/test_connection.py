@@ -813,7 +813,9 @@ def test_invalid_connection_parameters_turned_off(conn_cnx):
             # TODO: SNOW-2114216 remove filtering once the root cause for deprecation warning is fixed
             # Filter out the deprecation warning
             filtered_w = [
-                warning for warning in w if warning.category != DeprecationWarning
+                warning
+                for warning in w
+                if str(warning.category).endswith("DeprecationWarning")
             ]
             assert (
                 len(filtered_w) == 0
