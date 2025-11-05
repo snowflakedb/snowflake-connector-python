@@ -86,7 +86,7 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
         )
         if (
             FEATURE_CRL_CONFIG.cert_revocation_check_mode
-            != CertRevocationCheckMode.ENABLED
+            != CertRevocationCheckMode.DISABLED
         ):
             self.validate_crl(protocol, req)
             logger.debug(

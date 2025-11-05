@@ -1037,6 +1037,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         else:
             self.__config(**self._conn_parameters)
 
+        self._crl_config: CRLConfig = CRLConfig.from_connection(self)
         self._http_config: AioHttpConfig = AioHttpConfig(
             connector_factory=SnowflakeSSLConnectorFactory(),
             use_pooling=not self.disable_request_pooling,
