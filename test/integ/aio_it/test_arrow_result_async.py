@@ -42,6 +42,13 @@ from test.integ.test_arrow_result import (
     serialize,
 )
 
+try:
+    from snowflake.connector.aio._pandas_tools import write_pandas
+    from snowflake.connector.options import pandas
+except ImportError:
+    pandas = None
+    write_pandas = None
+
 
 @pytest.fixture(scope="module")
 def structured_type_support(module_conn_cnx):
@@ -1150,6 +1157,43 @@ async def iterate_over_test_chunk(
                 for i in range(0, row_count):
                     arrow_res = await cursor_arrow.fetchone()
                     assert str(arrow_res[0]) == expected[i]
+
+
+@pytest.mark.skipif(not pandas_available, reason="test requires pandas")
+async def test_iceberg_write_pandas(conn_cnx, iceberg_support, structured_type_support):
+    if not structured_type_support:
+        pytest.skip("Test requires structured type support.")
+    if not iceberg_support:
+        pytest.skip("Test requires iceberg support.")
+    table_name = f"write_pandas_iceberg_test_table_{random_string(5)}"
+
+    data = (
+        1,
+        "A",
+        # Server side infer schema can only create VARIANTS for pandas structured data
+        # [1, 2, 3],
+        # {"a": 1},
+        # {"b": 1, "c": "d"},
+    )
+
+    pdf = pandas.DataFrame([data], columns=["A", "B"])
+    config = {
+        "CATALOG": "SNOWFLAKE",
+        "EXTERNAL_VOLUME": "python_connector_iceberg_exvol",
+        "BASE_LOCATION": "python_connector_merge_gate",
+    }
+
+    async with conn_cnx() as conn:
+        try:
+            await write_pandas(
+                conn, pdf, table_name, auto_create_table=True, iceberg_config=config
+            )
+            results = await (
+                await conn.cursor().execute(f'select * from "{table_name}"')
+            ).fetchall()
+            assert results == [data]
+        finally:
+            await conn.cursor().execute(f"drop table IF EXISTS {table_name};")
 
 
 @pytest.mark.parametrize("debug_arrow_chunk", [True, False])
