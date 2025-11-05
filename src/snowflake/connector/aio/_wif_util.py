@@ -23,7 +23,7 @@ from ..wif_util import (
     extract_iss_and_sub_without_signature_verification,
     get_aws_sts_hostname,
 )
-from ._session_manager import SessionManager, SessionManagerFactory
+from ._session_manager import SessionManager
 
 logger = logging.getLogger(__name__)
 

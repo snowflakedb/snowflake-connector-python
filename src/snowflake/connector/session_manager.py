@@ -527,7 +527,6 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
     def clone(
         self,
         **http_config_overrides,
-        **kwargs,  # TODO: remove this after rebase
     ) -> SessionManager:
         """Return a new *stateless* SessionManager sharing this instance’s config.
 
