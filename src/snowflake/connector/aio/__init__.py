@@ -146,7 +146,7 @@ class _AsyncConnectContextManager(HybridCoroutineContextManager[SnowflakeConnect
 
 
 @wraps(SnowflakeConnection.__init__)
-def Connect(**kwargs: Any) -> HybridCoroutineContextManager[SnowflakeConnection]:
+def connect(**kwargs: Any) -> HybridCoroutineContextManager[SnowflakeConnection]:
     """Create and connect to a Snowflake connection asynchronously.
 
     Returns an awaitable that can also be used as an async context manager.
@@ -161,6 +161,3 @@ def Connect(**kwargs: Any) -> HybridCoroutineContextManager[SnowflakeConnection]
         return conn
 
     return _AsyncConnectContextManager(_connect_coro())
-
-
-connect = Connect
