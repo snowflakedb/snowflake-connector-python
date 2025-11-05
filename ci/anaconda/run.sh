@@ -18,11 +18,18 @@ fi
 cd $WORKSPACE
 
 # Validate dependency sync before building
+python3 -m venv tmp_validate_env
+source tmp_validate_env/bin/activate
+pip install pyyaml
 python3 $WORKSPACE/snowflake-connector-python/ci/anaconda/validate_deps_sync.py
 if [[ $? -ne 0 ]]; then
   echo "[FAILURE] setup.cfg and meta.yaml dependencies are not in sync"
+  deactivate
+  rm -rf tmp_validate_env
   exit 1
 fi
+deactivate
+rm -rf tmp_validate_env
 
 docker build \
   --build-arg ARCH=$(uname -m) \

@@ -8,10 +8,13 @@ Exit behavior:
 - If there is a diff: print the diff and exit 1.
 """
 
+import configparser
 import re
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
+
+import yaml
 
 
 def repo_root() -> Path:
@@ -77,35 +80,21 @@ def get_setup_install_requires(cfg_path: Path) -> List[str]:
     Returns:
       List of strings in the form "<name> <spec>" where spec may be empty.
     """
-    lines = cfg_path.read_text(encoding="utf-8").splitlines()
-    in_options = False
-    in_install = False
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.read(cfg_path, encoding="utf-8")
+    if not parser.has_section("options"):
+        raise RuntimeError(f"Missing [options] section in {cfg_path}")
+    if not parser.has_option("options", "install_requires"):
+        raise RuntimeError(f"Missing install_requires under [options] in {cfg_path}")
+    raw_value = parser.get("options", "install_requires")
     deps: List[str] = []
-
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("[options]"):
-            in_options = True
-            in_install = False
+    for line in raw_value.splitlines():
+        item = line.strip()
+        if not item or item.startswith("#"):
             continue
-        if in_options and stripped.startswith("[") and "]" in stripped:
-            # Left [options]
-            in_options = False
-            in_install = False
-        if in_options and stripped.startswith("install_requires"):
-            in_install = True
-            continue
-        if in_install:
-            # Stop when dedented (not an indented list item)
-            if not re.match(r"\s{4,}\S", line):
-                in_install = False
-                continue
-            item = stripped
-            if not item or item.startswith("#"):
-                continue
-            name, spec = split_requirement(item)
-            if name and name != "python":
-                deps.append(f"{name} {spec}".strip())
+        name, spec = split_requirement(item)
+        if name and name != "python":
+            deps.append(f"{name} {spec}".strip())
     return deps
 
 
@@ -118,37 +107,34 @@ def get_meta_run_requirements(meta_path: Path) -> List[str]:
     Returns:
       List of strings in the form "<name> <spec>" where spec may be empty.
     """
-    lines = meta_path.read_text(encoding="utf-8").splitlines()
-    in_requirements = False
-    in_run = False
-    base_indent = None
-    run_indent = None
-    deps: List[str] = []
+    text = meta_path.read_text(encoding="utf-8")
+    cleaned_lines: List[str] = []
+    for line in text.splitlines():
+        if "{%" in line or "%}" in line:
+            continue
+        if "{{" in line and "}}" in line:
+            continue
+        cleaned_lines.append(line)
+    cleaned = "\n".join(cleaned_lines)
 
-    for line in lines:
-        indent = len(line) - len(line.lstrip(" "))
-        stripped = line.strip()
-        if stripped.startswith("requirements:"):
-            in_requirements = True
-            base_indent = indent
-            in_run = False
-            continue
-        if in_requirements and stripped and indent <= (base_indent or 0):
-            in_requirements = False
-            in_run = False
-        if in_requirements and stripped.startswith("run:"):
-            in_run = True
-            run_indent = indent
-            continue
-        if in_run:
-            if stripped and indent <= (run_indent or 0):
-                in_run = False
-                continue
-            if re.match(r"-\s+", stripped):
-                item = stripped[1:].strip()
-                name, spec = split_requirement(item)
-                if name and name != "python":
-                    deps.append(f"{name} {spec}".strip())
+    try:
+        data = yaml.safe_load(cleaned) or {}
+    except Exception as exc:
+        raise RuntimeError(f"Failed to parse YAML for {meta_path}") from exc
+
+    reqs = data.get("requirements", {}) or {}
+    run_items = reqs.get("run", []) or []
+
+    deps: List[str] = []
+    for idx, it in enumerate(run_items):
+        if not isinstance(it, str):
+            raise TypeError(
+                f"requirements.run entry at index {idx} in {meta_path} "
+                f"must be a string; got {type(it).__name__}: {it!r}"
+            )
+        name, spec = split_requirement(it)
+        if name and name != "python":
+            deps.append(f"{name} {spec}".strip())
     return deps
 
 
@@ -162,38 +148,25 @@ def get_setup_extra_requires(cfg_path: Path, extra: str) -> List[str]:
     Returns:
       List of strings in the form "<name> <spec>".
     """
-    lines = cfg_path.read_text(encoding="utf-8").splitlines()
-    in_extras = False
-    in_target = False
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.read(cfg_path, encoding="utf-8")
+    section = "options.extras_require"
+    if not parser.has_section(section):
+        raise RuntimeError(f"Missing [options.extras_require] section in {cfg_path}")
+    key = extra.strip().lower()
+    if not parser.has_option(section, key):
+        raise RuntimeError(
+            f"Missing extra '{key}' under [options.extras_require] in {cfg_path}"
+        )
+    raw_value = parser.get(section, key)
     deps: List[str] = []
-
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("[options.extras_require]"):
-            in_extras = True
-            in_target = False
+    for line in raw_value.splitlines():
+        item = line.strip()
+        if not item or item.startswith("#"):
             continue
-        if in_extras and stripped.startswith("[") and "]" in stripped:
-            # Left extras_require section
-            break
-        if (
-            in_extras
-            and not in_target
-            and re.match(rf"^{re.escape(extra)}\s*=\s*$", stripped)
-        ):
-            in_target = True
-            continue
-        if in_extras and in_target:
-            # Stop when dedented (not an indented list item)
-            if not re.match(r"\s{4,}\S", line):
-                in_target = False
-                continue
-            item = stripped
-            if not item or item.startswith("#"):
-                continue
-            name, spec = split_requirement(item)
-            if name and name != "python":
-                deps.append(f"{name} {spec}".strip())
+        name, spec = split_requirement(item)
+        if name and name != "python":
+            deps.append(f"{name} {spec}".strip())
     return deps
 
 
