@@ -514,6 +514,16 @@ class Auth:
         user: str,
         session_parameters: dict[str, Any],
     ) -> None:
+        """Attempt to load cached credentials to skip interactive authentication.
+
+        SSO (ID_TOKEN): If present, avoids opening browser for external authentication.
+            Controlled by client_store_temporary_credential parameter.
+
+        MFA (MFA_TOKEN): If present, skips MFA prompt on next connection.
+            Controlled by client_request_mfa_token parameter.
+
+        If cached tokens are expired/invalid, they're deleted and normal auth proceeds.
+        """
         if session_parameters.get(PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False):
             self._rest.id_token = self._read_temporary_credential(
                 host,
@@ -549,6 +559,13 @@ class Auth:
         session_parameters: dict[str, Any],
         response: dict[str, Any],
     ) -> None:
+        """Cache credentials received from successful authentication for future use.
+
+        Tokens are only cached if:
+        1. Server returned the token in response (server-side caching must be enabled)
+        2. Client has caching enabled via session parameters
+        3. User consented to caching (consent_cache_id_token for ID tokens)
+        """
         if (
             self._rest._connection.auth_class.consent_cache_id_token
             and session_parameters.get(

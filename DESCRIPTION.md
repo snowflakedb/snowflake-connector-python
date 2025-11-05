@@ -14,6 +14,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Pin lower versions of dependencies to oldest version without vulnerabilities.
   - Added no_proxy parameter for proxy configuration without using environmental variables.
   - Added OAUTH_AUTHORIZATION_CODE and OAUTH_CLIENT_CREDENTIALS to list of authenticators that don't require user to be set
+  - Added `oauth_socket_uri` connection parameter allowing to separate server and redirect URIs for local OAuth server.
 
 - v4.0.0(October 09,2025)
   - Added support for checking certificates revocation using revocation lists (CRLs)

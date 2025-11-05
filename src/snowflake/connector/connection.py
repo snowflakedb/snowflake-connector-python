@@ -280,8 +280,13 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "support_negative_year": (True, bool),  # snowflake
     "log_max_query_length": (LOG_MAX_QUERY_LENGTH, int),  # snowflake
     "disable_request_pooling": (False, bool),  # snowflake
-    # enable temporary credential file for Linux, default false. Mac/Win will overlook this
+    # Cache SSO ID tokens to avoid repeated browser popups. Must be enabled on the server-side.
+    # Storage: keyring (macOS/Windows), file (Linux). Auto-enabled on macOS/Windows.
+    # Sets session PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL as well
     "client_store_temporary_credential": (False, bool),
+    # Cache MFA tokens to skip MFA prompts on reconnect. Must be enabled on the server-side.
+    # Storage: keyring (macOS/Windows), file (Linux). Auto-enabled on macOS/Windows.
+    # In driver, we extract this from session using PARAMETER_CLIENT_REQUEST_MFA_TOKEN.
     "client_request_mfa_token": (False, bool),
     "use_openssl_only": (
         True,
@@ -384,6 +389,11 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         # SNOW-1825621: OAUTH implementation
     ),
     "oauth_redirect_uri": ("http://127.0.0.1", str),
+    "oauth_socket_uri": (
+        "http://127.0.0.1",
+        str,
+        # SNOW-2194055: Separate server and redirect URIs in AuthHttpServer
+    ),
     "oauth_scope": (
         "",
         str,
@@ -1082,6 +1092,15 @@ class SnowflakeConnection:
 
         self._crl_config: CRLConfig = CRLConfig.from_connection(self)
 
+        no_proxy_csv_str = (
+            ",".join(str(x) for x in self.no_proxy)
+            if (
+                self.no_proxy is not None
+                and isinstance(self.no_proxy, Iterable)
+                and not isinstance(self.no_proxy, (str, bytes))
+            )
+            else self.no_proxy
+        )
         self._http_config = HttpConfig(
             adapter_factory=ProxySupportAdapterFactory(),
             use_pooling=(not self.disable_request_pooling),
@@ -1089,15 +1108,7 @@ class SnowflakeConnection:
             proxy_port=self.proxy_port,
             proxy_user=self.proxy_user,
             proxy_password=self.proxy_password,
-            no_proxy=(
-                ",".join(str(x) for x in self.no_proxy)
-                if (
-                    self.no_proxy is not None
-                    and isinstance(self.no_proxy, Iterable)
-                    and not isinstance(self.no_proxy, (str, bytes))
-                )
-                else self.no_proxy
-            ),
+            no_proxy=no_proxy_csv_str,
         )
         self._session_manager = SessionManagerFactory.get_manager(self._http_config)
 
@@ -1157,7 +1168,8 @@ class SnowflakeConnection:
 
             # close telemetry first, since it needs rest to send remaining data
             logger.debug("closed")
-            self._telemetry.close(send_on_close=bool(retry and self.telemetry_enabled))
+            if self.telemetry_enabled:
+                self._telemetry.close(retry=retry)
             if (
                 self._all_async_queries_finished()
                 and not self._server_session_keep_alive
@@ -1390,9 +1402,11 @@ class SnowflakeConnection:
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
+                # Enable SSO credential caching
                 self._session_parameters[
                     PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL
                 ] = (self._client_store_temporary_credential if IS_LINUX else True)
+                # Try to load cached ID token to avoid browser popup
                 auth.read_temporary_credentials(
                     self.host,
                     self.user,
@@ -1456,6 +1470,7 @@ class SnowflakeConnection:
                         host=self.host, port=self.port
                     ),
                     redirect_uri=self._oauth_redirect_uri,
+                    uri=self._oauth_socket_uri,
                     scope=self._oauth_scope,
                     pkce_enabled=not self._oauth_disable_pkce,
                     token_cache=(
@@ -1483,9 +1498,11 @@ class SnowflakeConnection:
                     connection=self,
                 )
             elif self._authenticator == USR_PWD_MFA_AUTHENTICATOR:
+                # Enable MFA token caching
                 self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN] = (
                     self._client_request_mfa_token if IS_LINUX else True
                 )
+                # Try to load cached MFA token to skip MFA prompt
                 if self._session_parameters[PARAMETER_CLIENT_REQUEST_MFA_TOKEN]:
                     auth.read_temporary_credentials(
                         self.host,
