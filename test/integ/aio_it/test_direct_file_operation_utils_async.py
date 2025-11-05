@@ -9,14 +9,8 @@ import pytest
 
 try:
     from snowflake.connector.options import pandas
-    from snowflake.connector.pandas_tools import (
-        _iceberg_config_statement_helper,
-        write_pandas,
-    )
 except ImportError:
     pandas = None
-    write_pandas = None
-    _iceberg_config_statement_helper = None
 
 if TYPE_CHECKING:
     from snowflake.connector.aio import SnowflakeConnection, SnowflakeCursor
