@@ -815,7 +815,9 @@ def test_invalid_connection_parameters_turned_off(conn_cnx):
             filtered_w = [
                 warning for warning in w if warning.category != DeprecationWarning
             ]
-            assert len(filtered_w) == 0, f"Unexpected warnings {filtered_w}"
+            assert (
+                len(filtered_w) == 0
+            ), f"Unexpected warnings {[f.message for f in filtered_w]}"
 
 
 def test_invalid_connection_parameters_only_warns(conn_cnx):
