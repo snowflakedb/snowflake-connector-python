@@ -28,7 +28,7 @@ EXPECTED_USERNAME_IMPERSONATION = os.getenv("SNOWFLAKE_TEST_WIF_USERNAME_IMPERSO
 
 
 @pytest.mark.wif
-@pytest.mark.aio
+@pytest.mark.asyncio
 async def test_wif_defined_provider_async():
     connection_params = {
         "host": HOST,
@@ -42,7 +42,7 @@ async def test_wif_defined_provider_async():
 
 
 @pytest.mark.wif
-@pytest.mark.aio
+@pytest.mark.asyncio
 async def test_should_authenticate_using_oidc_async():
     if not is_provider_gcp():
         pytest.skip("Skipping test - not running on GCP")
@@ -61,7 +61,7 @@ async def test_should_authenticate_using_oidc_async():
 
 
 @pytest.mark.wif
-@pytest.mark.aio
+@pytest.mark.asyncio
 async def test_should_authenticate_with_impersonation_async():
     if not isinstance(IMPERSONATION_PATH, str) or not IMPERSONATION_PATH:
         pytest.skip("Skipping test - IMPERSONATION_PATH is not set")
