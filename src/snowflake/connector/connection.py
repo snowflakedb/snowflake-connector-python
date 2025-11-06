@@ -1154,7 +1154,7 @@ class SnowflakeConnection:
             self.__open_connection()
 
         # Register the connection in the pool after successful connection
-        _connections_pool.add_connection(self)
+        _connections_registry.add_connection(self)
 
     def close(self, retry: bool = True) -> None:
         """Closes the connection."""
@@ -1162,7 +1162,7 @@ class SnowflakeConnection:
         atexit.unregister(self._close_at_exit)
         try:
             # Remove connection from the pool
-            _connections_pool.remove_connection(self)
+            _connections_registry.remove_connection(self)
 
             if not self.rest:
                 logger.debug("Rest object has been destroyed, cannot close session")
@@ -2542,20 +2542,20 @@ class SnowflakeConnection:
             return "snowflake_notebook"
 
 
-class _ConnectionsPool:
-    """Thread-safe pool for tracking opened SnowflakeConnection instances.
+class _ConnectionsRegistry:
+    """Thread-safe registry for tracking opened SnowflakeConnection instances.
 
     This class maintains a registry of active connections using weak references
     to avoid preventing garbage collection.
     """
 
     def __init__(self):
-        """Initialize the connections pool with an empty registry and a lock."""
+        """Initialize the connections registry with an empty registry and a lock."""
         self._connections: weakref.WeakSet = weakref.WeakSet()
         self._lock = Lock()
 
     def add_connection(self, connection: SnowflakeConnection) -> None:
-        """Add a connection to the pool.
+        """Add a connection to the registry.
 
         Args:
             connection: The SnowflakeConnection instance to register.
@@ -2567,7 +2567,7 @@ class _ConnectionsPool:
             )
 
     def remove_connection(self, connection: SnowflakeConnection) -> None:
-        """Remove a connection from the pool.
+        """Remove a connection from the registry.
 
         Args:
             connection: The SnowflakeConnection instance to unregister.
@@ -2575,13 +2575,16 @@ class _ConnectionsPool:
         with self._lock:
             self._connections.discard(connection)
             logger.debug(
-                f"Connection {id(connection)} removed from pool. Total connections: {len(self._connections)}"
+                f"Connection {id(connection)} removed from registry. Total connections: {len(self._connections)}"
             )
 
             if len(self._connections) == 0:
-                # If no connections left then stop CRL background task
-                # to avoid script dangling
-                CRLCacheFactory.stop_periodic_cleanup()
+                self._last_connection_handler()
+
+    def _last_connection_handler(self):
+        # If no connections left then stop CRL background task
+        # to avoid script dangling
+        CRLCacheFactory.stop_periodic_cleanup()
 
     def get_connection_count(self) -> int:
         with self._lock:
@@ -2589,4 +2592,4 @@ class _ConnectionsPool:
 
 
 # Global instance of the connections pool
-_connections_pool = _ConnectionsPool()
+_connections_registry = _ConnectionsRegistry()
