@@ -361,7 +361,6 @@ class SessionManager(
     def __init__(
         self,
         config: AioHttpConfig | None = None,
-        max_retries: int | None = None,  # TODO: remove this after rebase
         **http_config_kwargs,
     ) -> None:
         """Create a new async SessionManager."""

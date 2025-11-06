@@ -387,7 +387,6 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
     def __init__(
         self,
         config: HttpConfig | None = None,
-        max_retries: int | None = None,  # TODO: remove this after rebase
         **http_config_kwargs,
     ) -> None:
         """
