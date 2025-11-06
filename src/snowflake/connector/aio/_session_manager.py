@@ -16,7 +16,6 @@ from ..errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from ..ssl_wrap_socket import (
     FEATURE_CRL_CONFIG,
     FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
-    get_current_session_manager,
     load_trusted_certificates,
     resolve_cafile,
 )
@@ -117,10 +116,11 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
         cafile_for_ctx = resolve_cafile({"ca_certs": certifi.where()})
         crl_validator = CRLValidator.from_config(
             FEATURE_CRL_CONFIG,
-            get_current_session_manager(),
+            self._session_manager,
             trusted_certificates=load_trusted_certificates(cafile_for_ctx),
         )
         sll_object = protocol.transport.get_extra_info("ssl_object")
+        # TODO(asyncio): SNOW-2681061 Add sync support for validate_connection
         if not crl_validator.validate_connection(sll_object):
             raise OperationalError(
                 msg=(
