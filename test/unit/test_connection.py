@@ -953,3 +953,52 @@ def test_connect_metadata_preservation():
         len(params) > 0
     ), "connect should have parameters from SnowflakeConnection.__init__"
     # Should have parameters like account, user, password, etc.
+
+
+def test_connections_pool(mock_post_requests):
+    """Test that connections are properly tracked in the _ConnectionsPool."""
+    from snowflake.connector.connection import _connections_pool
+
+    # Get initial connection count
+    initial_count = _connections_pool.get_connection_count()
+
+    # Create and connect first connection
+    conn1 = fake_connector()
+    assert (
+        _connections_pool.get_connection_count() == initial_count + 1
+    ), "Connection count should increase by 1 after creating a connection"
+
+    # Create and connect second connection
+    conn2 = fake_connector()
+    assert (
+        _connections_pool.get_connection_count() == initial_count + 2
+    ), "Connection count should increase by 2 after creating two connections"
+
+    # Close first connection
+    conn1.close()
+    assert (
+        _connections_pool.get_connection_count() == initial_count + 1
+    ), "Connection count should decrease by 1 after closing a connection"
+
+    # Close second connection
+    conn2.close()
+    assert (
+        _connections_pool.get_connection_count() == initial_count
+    ), "Connection count should return to initial count after closing all connections"
+
+
+@mock.patch("snowflake.connector.connection.CRLCacheFactory")
+def test_connections_pool_stops_crl_task_if_empty(crl_mock, mock_post_requests):
+    """Test the individual methods of _ConnectionsPool."""
+
+    # Create a connection
+    conn1 = fake_connector()
+    conn2 = fake_connector()
+
+    # Don't stop the task if pool is not empty
+    conn1.close()
+    crl_mock.stop_periodic_cleanup.assert_not_called()
+
+    # Stop the task if the pool is emptied
+    conn2.close()
+    crl_mock.stop_periodic_cleanup.assert_called_once()
