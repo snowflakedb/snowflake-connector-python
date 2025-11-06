@@ -88,6 +88,7 @@ from .constants import (
 )
 from .converter import SnowflakeConverter
 from .crl import CRLConfig
+from .crl_cache import CRLCacheFactory
 from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor, SnowflakeCursorBase
 from .description import (
     CLIENT_NAME,
@@ -1157,6 +1158,9 @@ class SnowflakeConnection:
         # unregister to dereference connection object as it's already closed after the execution
         atexit.unregister(self._close_at_exit)
         try:
+            # Stop CRL-related background process
+            CRLCacheFactory.stop_periodic_cleanup()
+
             if not self.rest:
                 logger.debug("Rest object has been destroyed, cannot close session")
                 return
