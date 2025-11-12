@@ -12,6 +12,7 @@ from ..wiremock.wiremock_utils import (
     WiremockClient,
     get_clients_for_proxy_and_target,
     get_clients_for_proxy_target_and_storage,
+    get_clients_for_two_proxies_and_target,
 )
 
 
@@ -99,6 +100,26 @@ def wiremock_backend_storage_proxy(wiremock_generic_mappings_dir):
         wiremock_generic_mappings_dir / "proxy_forward_all.json"
     )
     with get_clients_for_proxy_target_and_storage(
+        proxy_mapping_template=wiremock_proxy_mapping_path
+    ) as triple:
+        yield triple
+
+
+@pytest.fixture
+def wiremock_two_proxies_backend(wiremock_generic_mappings_dir):
+    """Starts backend (DB) and two proxy Wiremocks.
+
+    Returns a tuple ``(backend_wm, proxy1_wm, proxy2_wm)`` to make roles explicit.
+    - proxy1_wm: Configured to forward to backend
+    - proxy2_wm: Configured to forward to backend
+
+    Use when you need to test proxy selection logic with simple setup,
+    such as connection parameters taking precedence over environment variables.
+    """
+    wiremock_proxy_mapping_path = (
+        wiremock_generic_mappings_dir / "proxy_forward_all.json"
+    )
+    with get_clients_for_two_proxies_and_target(
         proxy_mapping_template=wiremock_proxy_mapping_path
     ) as triple:
         yield triple
