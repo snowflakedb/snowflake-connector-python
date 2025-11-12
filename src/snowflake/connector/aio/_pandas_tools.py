@@ -8,6 +8,13 @@ from typing import TYPE_CHECKING, Any, Literal, Sequence
 
 from snowflake.connector import ProgrammingError
 from snowflake.connector.options import pandas
+
+# Import utilities from sync version
+from snowflake.connector.pandas_tools import (
+    _iceberg_config_statement_helper,
+    build_location_helper,
+    chunk_helper,
+)
 from snowflake.connector.telemetry import TelemetryData, TelemetryField
 
 from .._utils import (
@@ -16,13 +23,6 @@ from .._utils import (
     random_name_for_temp_object,
 )
 from ..constants import _PARAM_USE_SCOPED_TEMP_FOR_PANDAS_TOOLS
-
-# Import utilities from sync version
-from ..pandas_tools import (
-    _iceberg_config_statement_helper,
-    build_location_helper,
-    chunk_helper,
-)
 from ._cursor import SnowflakeCursor
 
 if TYPE_CHECKING:  # pragma: no cover

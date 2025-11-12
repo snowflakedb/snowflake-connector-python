@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 import math
-import re
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, Generator
 from unittest import mock
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import numpy.random
 import pytest
@@ -24,11 +23,9 @@ from ...lazy_var import LazyVar
 try:
     from snowflake.connector.aio._pandas_tools import write_pandas
     from snowflake.connector.options import pandas
-    from snowflake.connector.pandas_tools import _iceberg_config_statement_helper
 except ImportError:
     pandas = None
     write_pandas = None
-    _iceberg_config_statement_helper = None
 
 if TYPE_CHECKING:
     from snowflake.connector.aio import SnowflakeConnection
@@ -520,7 +517,10 @@ async def test_table_location_building(
             if len(args) >= 1 and args[0].startswith("COPY INTO"):
                 assert kwargs["params"][0] == expected_location
             cur = SnowflakeCursor(cnx)
-            cur._result = iter([])
+            # Create a mock result iterator with fetch_all_data method
+            mock_result = MagicMock()
+            mock_result.fetch_all_data = AsyncMock(return_value=[])
+            cur._result = mock_result
             return cur
 
         with mock.patch(
@@ -572,7 +572,10 @@ async def test_stage_location_building(
                 db_schema = ".".join(args[0].split(" ")[-1].split(".")[:-1])
                 assert db_schema == expected_db_schema
             cur = SnowflakeCursor(cnx)
-            cur._result = iter([])
+            # Create a mock result iterator with fetch_all_data method
+            mock_result = MagicMock()
+            mock_result.fetch_all_data = AsyncMock(return_value=[])
+            cur._result = mock_result
             return cur
 
         with mock.patch(
@@ -626,7 +629,10 @@ async def test_use_scoped_object(
                 db_schema = ".".join(args[0].split(" ")[-1].split(".")[:-1])
                 assert db_schema == expected_db_schema
             cur = SnowflakeCursor(cnx)
-            cur._result = iter([])
+            # Create a mock result iterator with fetch_all_data method
+            mock_result = MagicMock()
+            mock_result.fetch_all_data = AsyncMock(return_value=[])
+            cur._result = mock_result
             return cur
 
         with mock.patch(
@@ -682,13 +688,18 @@ async def test_file_format_location_building(
                 db_schema = ".".join(args[0].split(" ")[3].split(".")[:-1])
                 assert db_schema == expected_db_schema
             cur = SnowflakeCursor(cnx)
+            mock_result = MagicMock()
             if args[0].startswith("SELECT"):
                 cur._rownumber = 0
-                cur._result = iter(
-                    [(col, "") for col in sf_connector_version_df.get().columns]
+                # Create a mock result iterator with fetch_all_data method
+                mock_result.fetch_all_data = AsyncMock(
+                    return_value=[
+                        (col, "") for col in sf_connector_version_df.get().columns
+                    ]
                 )
             else:
-                cur._result = iter([])
+                mock_result.fetch_all_data = AsyncMock(return_value=[])
+            cur._result = mock_result
             return cur
 
         with mock.patch(
@@ -1030,34 +1041,6 @@ async def test_no_create_internal_object_privilege_in_target_schema(
         finally:
             await cnx.execute_string(f"drop schema if exists {source_schema}")
             await cnx.execute_string(f"drop schema if exists {target_schema}")
-
-
-def test__iceberg_config_statement_helper():
-    config = {
-        "EXTERNAL_VOLUME": "vol",
-        "CATALOG": "'SNOWFLAKE'",
-        "BASE_LOCATION": "/root",
-        "CATALOG_SYNC": "foo",
-        "STORAGE_SERIALIZATION_POLICY": "bar",
-    }
-    assert (
-        _iceberg_config_statement_helper(config)
-        == "EXTERNAL_VOLUME='vol' CATALOG='SNOWFLAKE' BASE_LOCATION='/root' CATALOG_SYNC='foo' STORAGE_SERIALIZATION_POLICY='bar'"
-    )
-
-    config["STORAGE_SERIALIZATION_POLICY"] = None
-    assert (
-        _iceberg_config_statement_helper(config)
-        == "EXTERNAL_VOLUME='vol' CATALOG='SNOWFLAKE' BASE_LOCATION='/root' CATALOG_SYNC='foo'"
-    )
-
-    config["foo"] = True
-    config["bar"] = True
-    with pytest.raises(
-        ProgrammingError,
-        match=re.escape("Invalid iceberg configurations option(s) provided BAR, FOO"),
-    ):
-        _iceberg_config_statement_helper(config)
 
 
 async def test_write_pandas_with_on_error(
