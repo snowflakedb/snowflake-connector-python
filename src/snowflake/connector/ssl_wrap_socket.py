@@ -271,3 +271,7 @@ def _openssl_connect(
             time.sleep(sleeping_time)
     if err:
         raise err
+
+
+def get_feature_crl_config() -> CRLConfig:
+    return FEATURE_CRL_CONFIG

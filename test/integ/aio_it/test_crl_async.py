@@ -11,6 +11,8 @@ import tempfile
 
 import pytest
 
+from snowflake.connector.ssl_wrap_socket import get_feature_crl_config
+
 
 @pytest.mark.skipolddriver
 async def test_crl_validation_enabled_mode(conn_cnx):
@@ -25,6 +27,10 @@ async def test_crl_validation_enabled_mode(conn_cnx):
         disable_ocsp_checks=True,
     ) as cnx:
         assert cnx, "Connection should succeed with CRL validation in ENABLED mode"
+        assert (
+            get_feature_crl_config().cert_revocation_check_mode.value
+            == cnx.cert_revocation_check_mode
+        )
 
         # Verify we can execute a simple query
         cur = cnx.cursor()
@@ -51,6 +57,10 @@ async def test_crl_validation_advisory_mode(conn_cnx):
         crl_cache_validity_hours=1,  # Cache for 1 hour
     ) as cnx:
         assert cnx, "Connection should succeed with CRL validation in ADVISORY mode"
+        assert (
+            get_feature_crl_config().cert_revocation_check_mode.value
+            == cnx.cert_revocation_check_mode
+        )
 
         # Verify we can execute a simple query
         cur = cnx.cursor()
@@ -77,6 +87,10 @@ async def test_crl_validation_disabled_mode(conn_cnx):
         cert_revocation_check_mode="DISABLED",
     ) as cnx:
         assert cnx, "Connection should succeed with CRL validation in DISABLED mode"
+        assert (
+            get_feature_crl_config().cert_revocation_check_mode.value
+            == cnx.cert_revocation_check_mode
+        )
 
         # Verify we can execute a simple query
         cur = cnx.cursor()
@@ -112,6 +126,10 @@ async def test_crl_validation_modes_parametrized(
             crl_connection_timeout_ms=5000,
             crl_read_timeout_ms=5000,
         ) as cnx:
+            assert (
+                get_feature_crl_config().cert_revocation_check_mode.value
+                == cnx.cert_revocation_check_mode
+            )
             if should_succeed:
                 assert (
                     cnx
