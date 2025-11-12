@@ -247,14 +247,18 @@ class ResultBatch(ResultBatchSync):
                         and connection.rest.session_manager is not None
                     ):
                         # If connection was explicitly passed and not closed yet - we can reuse SessionManager with session pooling
-                        async with connection.rest.use_session() as session:
+                        async with connection.rest.use_session(
+                            request_data["url"]
+                        ) as session:
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
                             response, content, encoding = await download_chunk(session)
                     elif self._session_manager is not None:
                         # If connection is not accessible or was already closed, but cursors are now used to fetch the data - we will only reuse the http setup (through cloned SessionManager without session pooling)
-                        async with self._session_manager.use_session() as session:
+                        async with self._session_manager.use_session(
+                            request_data["url"]
+                        ) as session:
                             response, content, encoding = await download_chunk(session)
                     else:
                         # If there was no session manager cloned, then we are using a default Session Manager setup, since it is very unlikely to enter this part outside of testing
@@ -264,7 +268,9 @@ class ResultBatch(ResultBatchSync):
                         local_session_manager = SessionManagerFactory.get_manager(
                             use_pooling=False
                         )
-                        async with local_session_manager.use_session() as session:
+                        async with local_session_manager.use_session(
+                            request_data["url"]
+                        ) as session:
                             response, content, encoding = await download_chunk(session)
 
                     if response.status == OK:
