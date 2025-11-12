@@ -144,6 +144,56 @@ async def test_oauth_client_credentials_authenticator_is_case_insensitive(
     await conn.close()
 
 
+@pytest.mark.skipolddriver
+async def test_oauth_client_credentials_allows_empty_user(monkeypatch):
+    """Test that OAUTH_CLIENT_CREDENTIALS authenticator allows connection without user parameter."""
+    import snowflake.connector.aio
+
+    async def mock_post_request(self, url, headers, json_body, **kwargs):
+        return {
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+                "idToken": None,
+                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
+            },
+        }
+
+    monkeypatch.setattr(
+        snowflake.connector.aio._network.SnowflakeRestful,
+        "_post_request",
+        mock_post_request,
+    )
+
+    # Mock the OAuth client credentials token request to avoid making HTTP requests
+    def mock_get_request_token_response(self, connection, fields):
+        return ("mocked_token_response", None)
+
+    monkeypatch.setattr(
+        AuthByOauthCredentials,
+        "_get_request_token_response",
+        mock_get_request_token_response,
+    )
+
+    # Test connection without user parameter - should succeed
+    conn = snowflake.connector.aio.SnowflakeConnection(
+        account="testaccount",
+        authenticator="OAUTH_CLIENT_CREDENTIALS",
+        oauth_client_id="test_client_id",
+        oauth_client_secret="test_client_secret",
+    )
+
+    await conn.connect()
+
+    # Verify that the connection was successful
+    assert conn is not None
+    assert isinstance(conn.auth_class, AuthByOauthCredentials)
+
+    await conn.close()
+
+
 async def test_oauth_credentials_missing_client_id_raises_error():
     """Test that missing client_id raises a ProgrammingError."""
     with pytest.raises(ProgrammingError) as excinfo:
