@@ -953,3 +953,28 @@ def test_connect_metadata_preservation():
         len(params) > 0
     ), "connect should have parameters from SnowflakeConnection.__init__"
     # Should have parameters like account, user, password, etc.
+
+
+@mock.patch("snowflake.connector.connection.CRLCacheFactory")
+def test_connections_registry_lifecycle(crl_mock, mock_post_requests):
+    """Test the individual methods of _ConnectionsPool."""
+    from snowflake.connector.connection import _ConnectionsRegistry
+
+    # Mock the registry to avoid side effects from other tests due to _ConnectionsRegistry being a singleton
+    with mock.patch(
+        "snowflake.connector.connection._connections_registry", _ConnectionsRegistry()
+    ) as mock_registry:
+        # Create a connection
+        conn1 = fake_connector()
+        conn2 = fake_connector()
+        assert mock_registry.get_connection_count() == 2
+
+        # Don't stop the task if pool is not empty
+        conn1.close()
+        crl_mock.stop_periodic_cleanup.assert_not_called()
+        assert mock_registry.get_connection_count() == 1
+
+        # Stop the task if the pool is emptied
+        conn2.close()
+        assert mock_registry.get_connection_count() == 0
+        crl_mock.stop_periodic_cleanup.assert_called_once()

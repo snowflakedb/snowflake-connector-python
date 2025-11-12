@@ -88,6 +88,7 @@ from .constants import (
 )
 from .converter import SnowflakeConverter
 from .crl import CRLConfig
+from .crl_cache import CRLCacheFactory
 from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor, SnowflakeCursorBase
 from .description import (
     CLIENT_NAME,
@@ -1152,11 +1153,17 @@ class SnowflakeConnection:
         else:
             self.__open_connection()
 
+        # Register the connection in the pool after successful connection
+        _connections_registry.add_connection(self)
+
     def close(self, retry: bool = True) -> None:
         """Closes the connection."""
         # unregister to dereference connection object as it's already closed after the execution
         atexit.unregister(self._close_at_exit)
         try:
+            # Remove connection from the pool
+            _connections_registry.remove_connection(self)
+
             if not self.rest:
                 logger.debug("Rest object has been destroyed, cannot close session")
                 return
@@ -2533,3 +2540,56 @@ class SnowflakeConnection:
             return "jupyter_notebook"
         if "snowbooks" in sys.modules:
             return "snowflake_notebook"
+
+
+class _ConnectionsRegistry:
+    """Thread-safe registry for tracking opened SnowflakeConnection instances.
+
+    This class maintains a registry of active connections using weak references
+    to avoid preventing garbage collection.
+    """
+
+    def __init__(self):
+        """Initialize the connections registry with an empty registry and a lock."""
+        self._connections: weakref.WeakSet = weakref.WeakSet()
+        self._lock = Lock()
+
+    def add_connection(self, connection: SnowflakeConnection) -> None:
+        """Add a connection to the registry.
+
+        Args:
+            connection: The SnowflakeConnection instance to register.
+        """
+        with self._lock:
+            self._connections.add(connection)
+            logger.debug(
+                f"Connection {id(connection)} added to pool. Total connections: {len(self._connections)}"
+            )
+
+    def remove_connection(self, connection: SnowflakeConnection) -> None:
+        """Remove a connection from the registry.
+
+        Args:
+            connection: The SnowflakeConnection instance to unregister.
+        """
+        with self._lock:
+            self._connections.discard(connection)
+            logger.debug(
+                f"Connection {id(connection)} removed from registry. Total connections: {len(self._connections)}"
+            )
+
+            if len(self._connections) == 0:
+                self._last_connection_handler()
+
+    def _last_connection_handler(self):
+        # If no connections left then stop CRL background task
+        # to avoid script dangling
+        CRLCacheFactory.stop_periodic_cleanup()
+
+    def get_connection_count(self) -> int:
+        with self._lock:
+            return len(self._connections)
+
+
+# Global instance of the connections pool
+_connections_registry = _ConnectionsRegistry()
