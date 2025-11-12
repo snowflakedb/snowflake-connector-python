@@ -5,9 +5,8 @@ import urllib.parse
 from logging import getLogger
 from typing import Iterable
 
-import vendored.requests as requests
-
 from .constants import _TOP_LEVEL_DOMAIN_REGEX
+from .vendored import requests
 
 logger = getLogger(__name__)
 
