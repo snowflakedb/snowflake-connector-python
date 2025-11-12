@@ -101,10 +101,7 @@ async def create_connection(connection_name: str, **kwargs) -> SnowflakeConnecti
     from parameters.py.
     """
     ret = fill_conn_kwargs_for_tests(connection_name, **kwargs)
-    connection = SnowflakeConnection(**ret)
-    conn = await async_connect(**ret)
-    await connection.connect()
-    return conn
+    return await async_connect(**ret)
 
 
 @asynccontextmanager
