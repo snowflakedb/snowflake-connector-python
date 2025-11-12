@@ -1175,7 +1175,8 @@ class SnowflakeCursor:
         return self._description
 
     def _format_query_for_log(self, query: str) -> str:
-        return self._connection._format_query_for_log(query)
+        return query
+        # return self._connection._format_query_for_log(query)
 
     def _is_dml(self, data: dict[Any, Any]) -> bool:
         return (
