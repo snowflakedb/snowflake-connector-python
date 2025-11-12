@@ -423,7 +423,7 @@ class SessionManager(
             finally:
                 await session.close()
         else:
-            with self._yield_session_from_pool(url) as session_from_pool:
+            for session_from_pool in self._yield_session_from_pool(url):
                 yield session_from_pool
 
     async def request(
