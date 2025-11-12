@@ -12,6 +12,7 @@ from aiohttp.typedefs import StrOrURL
 from .. import OperationalError
 from ..errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from ..ssl_wrap_socket import FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
+from ..url_util import should_bypass_proxies
 from ._ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
 if TYPE_CHECKING:
@@ -221,7 +222,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout: int | None = 3,
+        timeout: int | tuple[int, int] | None = 3,
         use_pooling: bool | None = None,
         **kwargs,
     ) -> aiohttp.ClientResponse:
@@ -395,7 +396,7 @@ class SessionManager(
             cfg = cfg.copy_with(**overrides)
         return cls(config=cfg)
 
-    def make_session(self) -> aiohttp.ClientSession:
+    def make_session(self, *, url: str | None = None) -> aiohttp.ClientSession:
         """Create a new aiohttp.ClientSession with configured connector."""
         connector = self._cfg.get_connector(
             session_manager=self.clone(),
@@ -412,7 +413,6 @@ class SessionManager(
         self, url: str | bytes, use_pooling: bool | None = None
     ) -> AsyncGenerator[aiohttp.ClientSession]:
         """
-        Async version of use_session yielding aiohttp.ClientSession.
         'url' is an obligatory parameter due to the need for correct proxy handling (i.e. bypassing caused by no_proxy settings).
         """
         use_pooling = use_pooling if use_pooling is not None else self.use_pooling
@@ -423,13 +423,8 @@ class SessionManager(
             finally:
                 await session.close()
         else:
-            hostname = urlparse(url).hostname if url else None
-            pool = self._sessions_map[hostname]
-            session = pool.get_session()
-            try:
-                yield session
-            finally:
-                pool.return_session(session)
+            with self._yield_session_from_pool(url) as session_from_pool:
+                yield session_from_pool
 
     async def request(
         self,
@@ -541,16 +536,22 @@ class ProxySessionManager(SessionManager):
                     )
                 return super().request(method, url, **kwargs)
 
-    def make_session(self) -> aiohttp.ClientSession:
+    def make_session(self, *, url: str | None = None) -> aiohttp.ClientSession:
         connector = self._cfg.get_connector(
             session_manager=self.clone(),
             snowflake_ocsp_mode=self._cfg.snowflake_ocsp_mode,
+        )
+        # We use requests.utils here (in asynch code) to keep the behaviour uniform for synch and asynch code. If we wanted each version to depict its http library's behaviour, we could use here: aiohttp.helpers.proxy_bypass(url, proxies={...}) here
+        proxy = (
+            None
+            if should_bypass_proxies(url, no_proxy=self.config.no_proxy)
+            else self.proxy_url
         )
         # Construct session with base proxy set, request() may override per-URL when bypassing
         return self.SessionWithProxy(
             connector=connector,
             trust_env=self._cfg.trust_env,
-            proxy=self.proxy_url,
+            proxy=proxy,
         )
 
 
