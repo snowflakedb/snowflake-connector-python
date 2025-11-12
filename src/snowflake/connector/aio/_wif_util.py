@@ -34,9 +34,10 @@ GCP_METADATA_SERVICE_ACCOUNT_BASE_URL = (
 
 async def get_aws_region() -> str:
     """Get the current AWS workload's region."""
-    if "AWS_REGION" in os.environ:  # Lambda
-        region = os.environ["AWS_REGION"]
-    else:  # EC2
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+
+    if not region:
+        # Fallback for EC2 environments
         region = (
             await aiobotocore.utils.AioInstanceMetadataRegionFetcher().retrieve_region()
         )
