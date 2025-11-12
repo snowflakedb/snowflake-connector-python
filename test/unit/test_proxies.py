@@ -11,9 +11,7 @@ import pytest
 
 import snowflake.connector
 import snowflake.connector.vendored.requests as requests
-from snowflake.connector.compat import urlparse as compat_urlparse
 from snowflake.connector.errors import OperationalError
-from snowflake.connector.session_manager import SessionManager
 
 
 @pytest.mark.skipolddriver
@@ -322,26 +320,6 @@ def _execute_large_query(connect_kwargs, row_count: int):
         )
         assert len(cursors[0]._result_set.batches) > 1
     assert list(cursors[0])
-
-
-@pytest.fixture
-def host_port_pooling(monkeypatch):
-
-    def get_pooling_key_as_host_with_port(url: str) -> str:
-        """
-        Test-only override to derive pooling key as "host:port" if port is specified.
-        """
-        parsed = compat_urlparse(url)
-        host = parsed.hostname
-        port = parsed.port
-        return f"{host}:{port}" if port else host
-
-    monkeypatch.setattr(
-        SessionManager,
-        "_get_pooling_key_from_url",
-        staticmethod(get_pooling_key_as_host_with_port),
-    )
-    yield
 
 
 class RequestFlags(NamedTuple):
