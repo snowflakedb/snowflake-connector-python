@@ -1,7 +1,4 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
 
 
 async def test_reuse_cursor(conn_cnx, db_parameters):

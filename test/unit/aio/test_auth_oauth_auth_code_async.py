@@ -1,7 +1,5 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
+
 
 import unittest.mock as mock
 from test.helpers import apply_auth_class_update_body_async, create_mock_auth_body

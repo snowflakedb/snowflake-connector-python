@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 from test.helpers import (
     _wait_until_query_success_async,
     _wait_while_query_running_async,

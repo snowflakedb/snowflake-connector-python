@@ -1,7 +1,3 @@
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
-
 import os
 from contextlib import asynccontextmanager
 from test.integ.conftest import (

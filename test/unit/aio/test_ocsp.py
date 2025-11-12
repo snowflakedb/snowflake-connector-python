@@ -1,7 +1,5 @@
 #!/usr/bin/env python
-#
-# Copyright (c) 2012-2023 Snowflake Computing Inc. All rights reserved.
-#
+
 
 # Please note that not all the unit tests from test/unit/test_ocsp.py is ported to this file,
 # as those un-ported test cases are irrelevant to the asyncio implementation.
