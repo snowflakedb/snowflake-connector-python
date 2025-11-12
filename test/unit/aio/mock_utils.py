@@ -34,8 +34,8 @@ def get_mock_session_manager(allow_send: bool = False):
         raise NotImplementedError("Unit test tried to make real network connection")
 
     class MockSessionManager(SessionManager):
-        def make_session(self):
-            session = super().make_session()
+        def make_session(self, *, url: str | None = None):
+            session = super().make_session(url)
             if not allow_send:
                 # Block at connector._connect level (like sync blocks session.send)
                 # This allows patches on session.request to work

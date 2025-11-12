@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Mapping, Ty
 
 from .compat import urlparse
 from .proxy import get_proxy_url
+from .url_util import should_bypass_proxies
 from .vendored import requests
 from .vendored.requests import Response, Session
 from .vendored.requests.adapters import BaseAdapter, HTTPAdapter
@@ -610,7 +611,7 @@ class ProxySessionManager(SessionManager):
             {
                 "no_proxy": self._cfg.no_proxy,
             }
-            if requests.utils.should_bypass_proxies(url, no_proxy=self.config.no_proxy)
+            if should_bypass_proxies(url, no_proxy=self.config.no_proxy)
             else {
                 "http": self.proxy_url,
                 "https": self.proxy_url,
