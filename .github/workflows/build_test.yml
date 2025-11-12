@@ -528,7 +528,9 @@ jobs:
         run: python -m tox run -e coverage --skip-missing-interpreters false
         shell: bash
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
+          include-hidden-files: true
           name: coverage_aio_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
             .tox/.coverage
