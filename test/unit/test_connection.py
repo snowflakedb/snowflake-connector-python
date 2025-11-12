@@ -990,17 +990,22 @@ def test_connections_registry(mock_post_requests):
 @mock.patch("snowflake.connector.connection.CRLCacheFactory")
 def test_connections_registry_stops_crl_task_if_empty(crl_mock, mock_post_requests):
     """Test the individual methods of _ConnectionsPool."""
-    from snowflake.connector.connection import _connections_registry
+    from snowflake.connector.connection import _ConnectionsRegistry
 
-    # Create a connection
-    conn1 = fake_connector()
-    conn2 = fake_connector()
+    # Mock the registry to avoid side effects from other tests due to _ConnectionsRegistry being a singleton
+    with mock.patch(
+        "snowflake.connector.connection._connections_registry", _ConnectionsRegistry()
+    ) as mock_registry:
+        # Create a connection
+        conn1 = fake_connector()
+        conn2 = fake_connector()
+        assert mock_registry.get_connection_count() == 2
 
-    # Don't stop the task if pool is not empty
-    conn1.close()
-    crl_mock.stop_periodic_cleanup.assert_not_called()
+        # Don't stop the task if pool is not empty
+        conn1.close()
+        crl_mock.stop_periodic_cleanup.assert_not_called()
 
-    # Stop the task if the pool is emptied
-    conn2.close()
-    assert _connections_registry.get_connection_count() == 0
-    crl_mock.stop_periodic_cleanup.assert_called_once()
+        # Stop the task if the pool is emptied
+        conn2.close()
+        assert mock_registry.get_connection_count() == 0
+        crl_mock.stop_periodic_cleanup.assert_called_once()
