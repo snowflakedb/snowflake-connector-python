@@ -15,6 +15,7 @@ from ..crl import CertRevocationCheckMode
 from ..errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from ..ssl_wrap_socket import (
     FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+    FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT,
     get_feature_crl_config,
     load_trusted_certificates,
     resolve_cafile,
@@ -146,6 +147,7 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
             use_fail_open=self._snowflake_ocsp_mode == OCSPMode.FAIL_OPEN,
             hostname=hostname,
+            root_certs_dict_lock_timeout=FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT,
         ).validate(hostname, protocol, session_manager=session_manager)
         if not v:
             raise OperationalError(
