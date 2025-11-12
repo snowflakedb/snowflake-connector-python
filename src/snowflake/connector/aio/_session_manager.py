@@ -11,7 +11,7 @@ from aiohttp.typedefs import StrOrURL
 
 from .. import OperationalError
 from ..errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
-from ..ssl_wrap_socket import FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
+from ..ssl_wrap_socket import FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME, FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT
 from ._ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
 if TYPE_CHECKING:
@@ -102,6 +102,7 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
             use_fail_open=self._snowflake_ocsp_mode == OCSPMode.FAIL_OPEN,
             hostname=hostname,
+            root_certs_dict_lock_timeout=FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT,
         ).validate(hostname, protocol, session_manager=session_manager)
         if not v:
             raise OperationalError(
@@ -223,8 +224,13 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         use_pooling: bool | None = None,
         **kwargs,
     ) -> aiohttp.ClientResponse:
-        async with self.use_session(url, use_pooling) as session:
+        if isinstance(timeout, tuple):
+            connect, total = timeout
+            timeout_obj = aiohttp.ClientTimeout(total=total, connect=connect)
+        else:
             timeout_obj = aiohttp.ClientTimeout(total=timeout) if timeout else None
+
+        async with self.use_session(url, use_pooling) as session:
             return await session.get(
                 url, headers=headers, timeout=timeout_obj, **kwargs
             )
