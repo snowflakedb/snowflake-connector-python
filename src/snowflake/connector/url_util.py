@@ -3,6 +3,9 @@ from __future__ import annotations
 import re
 import urllib.parse
 from logging import getLogger
+from typing import Iterable
+
+import vendored.requests as requests
 
 from .constants import _TOP_LEVEL_DOMAIN_REGEX
 
@@ -47,3 +50,7 @@ def extract_top_level_domain_from_hostname(hostname: str | None = None) -> str:
     # RFC1034 for TLD spec, and https://data.iana.org/TLD/tlds-alpha-by-domain.txt for full TLD list
     match = re.search(_TOP_LEVEL_DOMAIN_REGEX, hostname)
     return (match.group(0)[1:] if match else "com").lower()
+
+
+def should_bypass_proxies(url: str | bytes, no_proxy: Iterable[str] | None) -> bool:
+    return requests.utils.should_bypass_proxies(url, no_proxy)
