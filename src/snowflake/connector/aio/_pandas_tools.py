@@ -179,7 +179,6 @@ async def write_pandas(
     quote_identifiers: bool = True,
     infer_schema: bool = False,
     auto_create_table: bool = False,
-    create_temp_table: bool = False,
     overwrite: bool = False,
     table_type: Literal["", "temp", "temporary", "transient"] = "",
     use_logical_type: bool | None = None,
@@ -246,7 +245,6 @@ async def write_pandas(
             when selecting columns from the DataFrame. (Default value = False)
         auto_create_table: When true, will automatically create a table with corresponding columns for each column in
             the passed in DataFrame. The table will not be created if it already exists
-        create_temp_table: (Deprecated) Will make the auto-created table as a temporary table
         overwrite: When true, and if auto_create_table is true, then it drops the table. Otherwise, it
         truncates the table. In both cases it will replace the existing contents of the table with that of the passed in
             Pandas DataFrame.
@@ -290,16 +288,6 @@ async def write_pandas(
         if conn._session_parameters
         else False
     )
-
-    if create_temp_table:
-        warnings.warn(
-            "create_temp_table is deprecated, we still respect this parameter when it is True but "
-            'please consider using `table_type="temp"` instead',
-            DeprecationWarning,
-            # warnings.warn -> write_pandas
-            stacklevel=2,
-        )
-        table_type = "temp"
 
     if table_type and table_type.lower() not in ["temp", "temporary", "transient"]:
         raise ValueError(
