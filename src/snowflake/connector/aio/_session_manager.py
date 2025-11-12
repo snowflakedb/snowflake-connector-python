@@ -213,7 +213,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
 
     @abc.abstractmethod
     async def use_session(
-        self, url: str, use_pooling: bool
+        self, url: str | bytes, use_pooling: bool
     ) -> AsyncGenerator[aiohttp.ClientSession]: ...
 
     async def get(
@@ -409,9 +409,12 @@ class SessionManager(
 
     @contextlib.asynccontextmanager
     async def use_session(
-        self, url: str | bytes | None = None, use_pooling: bool | None = None
+        self, url: str | bytes, use_pooling: bool | None = None
     ) -> AsyncGenerator[aiohttp.ClientSession]:
-        """Async version of use_session yielding aiohttp.ClientSession."""
+        """
+        Async version of use_session yielding aiohttp.ClientSession.
+        'url' is an obligatory parameter due to the need for correct proxy handling (i.e. bypassing caused by no_proxy settings).
+        """
         use_pooling = use_pooling if use_pooling is not None else self.use_pooling
         if not use_pooling:
             session = self.make_session()

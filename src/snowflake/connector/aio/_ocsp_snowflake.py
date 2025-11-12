@@ -98,7 +98,7 @@ class OCSPServer(OCSPServerSync):
                 if sf_cache_server_url is not None:
                     url = sf_cache_server_url
 
-            async with session_manager.use_session() as session:
+            async with session_manager.use_session(url) as session:
                 max_retry = SnowflakeOCSP.OCSP_CACHE_SERVER_MAX_RETRY if do_retry else 1
                 sleep_time = 1
                 backoff = exponential_backoff()()
@@ -544,7 +544,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         if not self.is_enabled_fail_open():
             sf_max_retry = SnowflakeOCSP.CA_OCSP_RESPONDER_MAX_RETRY_FC
 
-        async with session_manager.use_session() as session:
+        async with session_manager.use_session(target_url) as session:
             max_retry = sf_max_retry if do_retry else 1
             sleep_time = 1
             backoff = exponential_backoff()()

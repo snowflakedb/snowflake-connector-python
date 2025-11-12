@@ -1063,6 +1063,15 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             proxy_password=self.proxy_password,
             snowflake_ocsp_mode=self._ocsp_mode(),
             trust_env=True,  # Required for proxy support via environment variables
+            no_proxy=(
+                ",".join(str(x) for x in self.no_proxy)
+                if (
+                    self.no_proxy is not None
+                    and isinstance(self.no_proxy, Iterable)
+                    and not isinstance(self.no_proxy, (str, bytes))
+                )
+                else self.no_proxy
+            ),
         )
         self._session_manager = SessionManagerFactory.get_manager(self._http_config)
 
