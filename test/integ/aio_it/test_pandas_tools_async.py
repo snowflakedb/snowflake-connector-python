@@ -231,7 +231,7 @@ async def test_write_pandas_with_overwrite(
 )
 @pytest.mark.parametrize("quote_identifiers", [True, False])
 @pytest.mark.parametrize("auto_create_table", [True, False])
-@pytest.mark.parametrize("create_temp_table", [True, False])
+@pytest.mark.parametrize("table_type", ["temp", ""])
 @pytest.mark.parametrize("index", [False])
 async def test_write_pandas(
     conn_cnx: Callable[..., Generator[SnowflakeConnection]],
@@ -240,7 +240,7 @@ async def test_write_pandas(
     chunk_size: int,
     quote_identifiers: bool,
     auto_create_table: bool,
-    create_temp_table: bool,
+    table_type: str,
     index: bool,
 ):
     num_of_chunks = math.ceil(len(sf_connector_version_data) / chunk_size)
@@ -275,7 +275,7 @@ async def test_write_pandas(
                 chunk_size=chunk_size,
                 quote_identifiers=quote_identifiers,
                 auto_create_table=auto_create_table,
-                create_temp_table=create_temp_table,
+                table_type=table_type,
                 index=index,
             )
 
@@ -297,7 +297,9 @@ async def test_write_pandas(
                     )
                 ).fetchall()
                 assert table_info[0]["kind"] == (
-                    "TEMPORARY" if create_temp_table else "TABLE"
+                    "TEMPORARY"
+                    if table_type.lower() in ("temp", "temporary")
+                    else "TABLE"
                 )
         finally:
             await cnx.execute_string(drop_sql)
@@ -311,7 +313,7 @@ async def test_write_non_range_index_pandas(
     chunk_size = 3
     quote_identifiers: bool = False
     auto_create_table: bool = True
-    create_temp_table: bool = False
+    table_type: str = ""
     index: bool = False
 
     # use pandas dataframe with float index
@@ -356,7 +358,7 @@ async def test_write_non_range_index_pandas(
                 chunk_size=chunk_size,
                 quote_identifiers=quote_identifiers,
                 auto_create_table=auto_create_table,
-                create_temp_table=create_temp_table,
+                table_type=table_type,
                 index=index,
             )
 
@@ -376,7 +378,9 @@ async def test_write_non_range_index_pandas(
                     )
                 ).fetchall()
                 assert table_info[0]["kind"] == (
-                    "TEMPORARY" if create_temp_table else "TABLE"
+                    "TEMPORARY"
+                    if table_type.lower() in ("temp", "temporary")
+                    else "TABLE"
                 )
         finally:
             await cnx.execute_string(drop_sql)
@@ -409,31 +413,6 @@ async def test_write_pandas_table_type(
             else:
                 expected_table_kind = table_type.upper()
             assert table_info[0]["kind"] == expected_table_kind
-        finally:
-            await cnx.execute_string(drop_sql)
-
-
-async def test_write_pandas_create_temp_table_deprecation_warning(
-    conn_cnx: Callable[..., Generator[SnowflakeConnection]],
-):
-    async with conn_cnx() as cnx:
-        table_name = random_string(5, "driver_versions_")
-        drop_sql = f"DROP TABLE IF EXISTS {table_name}"
-        try:
-            with pytest.deprecated_call(match="create_temp_table is deprecated"):
-                success, _, _, _ = await write_pandas(
-                    cnx,
-                    sf_connector_version_df.get(),
-                    table_name,
-                    create_temp_table=True,
-                    auto_create_table=True,
-                )
-
-            assert success
-            table_info = await (
-                await cnx.cursor(DictCursor).execute(f"show tables like '{table_name}'")
-            ).fetchall()
-            assert table_info[0]["kind"] == "TEMPORARY"
         finally:
             await cnx.execute_string(drop_sql)
 
@@ -1228,7 +1207,7 @@ async def test_write_pandas_with_use_vectorized_scanner(
 
     drop_sql = f"DROP TABLE IF EXISTS {table_name}"
     async with conn_cnx() as cnx:  # type: SnowflakeConnection
-        original_cur = (await cnx.cursor()).execute
+        original_cur = cnx.cursor().execute
 
         async def fake_execute(query, params=None, *args, **kwargs):
             return await original_cur(query, params, *args, **kwargs)
