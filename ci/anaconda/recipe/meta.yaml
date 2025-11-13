@@ -26,8 +26,8 @@ requirements:
   build:
     - {{ compiler("c") }}
     - {{ compiler("cxx") }}
-    - libgcc-ng
-    - libstdcxx-ng
+    - libgcc-ng <15.0.0
+    - libstdcxx-ng <15.0.0
     - patch     # [not win]
   host:
     - setuptools >=40.6.0
