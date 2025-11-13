@@ -60,7 +60,8 @@ class ImportChecker(ast.NodeVisitor):
         if node.module:
             # Check if importing from a checked module directly
             for module in CHECKED_MODULES:
-                if node.module.startswith(module):
+                module_name = node.module.split(".")[0]
+                if module_name == module:
                     self.violations.append(
                         ImportViolation(
                             self.filename,
