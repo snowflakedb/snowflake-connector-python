@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 import certifi
 import OpenSSL.SSL
+from cryptography.utils import CryptographyDeprecationWarning
 
 from .constants import OCSPMode
 from .crl import CertRevocationCheckMode, CRLConfig, CRLValidator
@@ -158,7 +159,16 @@ def load_trusted_certificates(cafile: str | None) -> list[x509.Certificate]:
     from cryptography.hazmat.backends import default_backend
     from cryptography.x509 import load_der_x509_certificate
 
-    return [load_der_x509_certificate(cert, default_backend()) for cert in certs]
+    x509_certs = []
+    for cert in certs:
+        try:
+            x509_certs.append(load_der_x509_certificate(cert, default_backend()))
+        except CryptographyDeprecationWarning:
+            # Reason: Parsed a serial number which wasn't positive (i.e., it was negative or zero), which is
+            # disallowed by RFC 5280. Loading this certificate will cause an exception in a future
+            # release of cryptography.
+            continue
+    return x509_certs
 
 
 @wraps(ssl_.ssl_wrap_socket)
