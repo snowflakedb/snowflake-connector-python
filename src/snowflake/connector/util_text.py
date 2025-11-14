@@ -293,9 +293,11 @@ def _base64_bytes_to_str(x) -> str | None:
     return base64.b64encode(x).decode("utf-8") if x else None
 
 
-def get_md5(text: str | bytes) -> bytes:
+def get_md5_for_integrity(text: str | bytes) -> bytes:
+    # MD5 should not be used for security reasons - only integrity is safe and allowed
     if isinstance(text, str):
         text = text.encode("utf-8")
+    # Usedforsecurity=False added to support FIPS envs as well
     md5 = hashlib.md5(usedforsecurity=False)
     md5.update(text)
     return md5.digest()
