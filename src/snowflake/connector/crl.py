@@ -548,14 +548,10 @@ class CRLValidator:
     ) -> None:
         self._cache_manager.put(crl_url, crl, ts)
 
-    def _session_manager_get(self, *args, **kwargs):
-        """Dedicated method that is being overridden in aio._crl.CRLValidator"""
-        return self._session_manager.get(*args, **kwargs)
-
     def _fetch_crl_from_url(self, crl_url: str) -> bytes | None:
         try:
             logger.debug("Trying to download CRL from: %s", crl_url)
-            response = self._session_manager_get(
+            response = self._session_manager.get(
                 crl_url, timeout=(self._connection_timeout_ms, self._read_timeout_ms)
             )
             response.raise_for_status()

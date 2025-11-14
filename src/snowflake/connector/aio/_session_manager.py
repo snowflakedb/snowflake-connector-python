@@ -89,7 +89,7 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             feature_crl_config.cert_revocation_check_mode
             != CertRevocationCheckMode.DISABLED
         ):
-            self.validate_crl(feature_crl_config, protocol, req)
+            await self.validate_crl(feature_crl_config, protocol, req)
             logger.debug(
                 "The certificate revocation check was successful. No additional checks will be performed."
             )
@@ -113,7 +113,7 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
                 protocol._snowflake_ocsp_validated = True
         return connection
 
-    def validate_crl(
+    async def validate_crl(
         self, feature_crl_config, protocol: ResponseHandler, req: ClientRequest
     ):
         # Resolve CA file path from environment variables or use certifi default
@@ -124,8 +124,7 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             trusted_certificates=load_trusted_certificates(cafile_for_ctx),
         )
         ssl_object = protocol.transport.get_extra_info("ssl_object")
-        # TODO(asyncio): SNOW-2681061 Add sync support for validate_connection
-        if not crl_validator.validate_connection(ssl_object):
+        if not await crl_validator.validate_connection(ssl_object):
             raise OperationalError(
                 msg=(
                     "The certificate is revoked or "
