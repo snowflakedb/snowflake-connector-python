@@ -428,9 +428,11 @@ async def test_oauth_authorization_code_allows_empty_user(
     ],
 )
 @mock.patch(
-    "snowflake.connector.aio.auth.oauth_code.AuthByOauthCode._do_authorization_request"
+    "snowflake.connector.aio.auth._oauth_code.AuthByOauthCode._do_authorization_request"
 )
-@mock.patch("snowflake.connector.aio.auth.oauth_code.AuthByOauthCode._do_token_request")
+@mock.patch(
+    "snowflake.connector.aio.auth._oauth_code.AuthByOauthCode._do_token_request"
+)
 async def test_auth_oauth_auth_code_passes_uri_to_http_server(
     _, __, uri, redirect_uri, omit_oauth_urls_check
 ):
