@@ -245,7 +245,7 @@ class _BaseConfigDirectAccessMixin(abc.ABC):
         self.config = self.config.copy_with(max_retries=value)
 
 
-class _HttpConfigDirectAccessMixin(_BaseConfigDirectAccessMixin):
+class _HttpConfigDirectAccessMixin(_BaseConfigDirectAccessMixin, abc.ABC):
     @property
     def adapter_factory(self) -> Callable[..., HTTPAdapter]:
         return self.config.adapter_factory
