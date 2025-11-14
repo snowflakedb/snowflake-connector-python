@@ -14,6 +14,7 @@ from snowflake.connector.options import (
 
 from ..errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from ..errors import MissingDependencyError, ProgrammingError
+from ..session_manager import SessionManagerFactory
 from ..wif_util import (
     DEFAULT_ENTRA_SNOWFLAKE_RESOURCE,
     SNOWFLAKE_AUDIENCE,
@@ -307,7 +308,7 @@ async def create_attestation(
     session_manager = (
         session_manager.clone()
         if session_manager
-        else SessionManager(use_pooling=True, max_retries=0)
+        else SessionManagerFactory.get_manager(use_pooling=True, max_retries=0)
     )
 
     if provider == AttestationProvider.AWS:

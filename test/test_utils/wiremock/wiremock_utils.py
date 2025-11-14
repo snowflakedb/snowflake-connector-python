@@ -345,3 +345,46 @@ def get_clients_for_proxy_and_target(
 
             # Yield control back to the caller with both Wiremocks ready
             yield target_wm, proxy_wm
+
+
+@contextmanager
+def get_clients_for_proxy_target_and_storage(
+    proxy_mapping_template: Union[str, dict, pathlib.Path, None] = None,
+    additional_proxy_placeholders: Optional[dict[str, object]] = None,
+    additional_proxy_args: Optional[Iterable[str]] = None,
+):
+    """Context manager that starts three Wiremock instances – *target* (DB), *storage* (S3), and *proxy*.
+
+    The *proxy* is configured to forward all traffic to *target* using the same
+    mapping mechanism as ``get_clients_for_proxy_and_target``.
+
+    Yields a tuple ``(target_wm, storage_wm, proxy_wm)``. All processes are shut down
+    automatically on context exit.
+
+    Note:
+        In most tests a single Wiremock instance is sufficient to emulate both backend
+        and storage endpoints. Use this helper only when backend and storage must have
+        distinct addresses (host:port) — for example, to validate that NO_PROXY bypasses
+        the proxy for one service while proxying the other.
+    """
+    # Reuse existing helper to set up target+proxy
+    if proxy_mapping_template is None:
+        proxy_mapping_template = (
+            pathlib.Path(__file__).parent.parent.parent.parent
+            / "test"
+            / "data"
+            / "wiremock"
+            / "mappings"
+            / "generic"
+            / "proxy_forward_all.json"
+        )
+
+    with get_clients_for_proxy_and_target(
+        proxy_mapping_template=proxy_mapping_template,
+        additional_proxy_placeholders=additional_proxy_placeholders,
+        additional_proxy_args=additional_proxy_args,
+    ) as (target_wm, proxy_wm):
+        # Start storage with a port distinct from target and proxy
+        forbidden = [target_wm.wiremock_http_port, proxy_wm.wiremock_http_port]
+        with WiremockClient(forbidden_ports=forbidden) as storage_wm:
+            yield target_wm, storage_wm, proxy_wm

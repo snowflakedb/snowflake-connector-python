@@ -81,7 +81,12 @@ from .errors import (
     ServiceUnavailableError,
     TooManyRequests,
 )
-from .session_manager import ProxySupportAdapterFactory, SessionManager, SessionPool
+from .session_manager import (
+    ProxySupportAdapterFactory,
+    SessionManager,
+    SessionManagerFactory,
+    SessionPool,
+)
 from .sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
     SQLSTATE_CONNECTION_REJECTED,
@@ -324,7 +329,9 @@ class SnowflakeRestful:
             session_manager = (
                 connection._session_manager
                 if (connection and connection._session_manager)
-                else SessionManager(adapter_factory=ProxySupportAdapterFactory())
+                else SessionManagerFactory.get_manager(
+                    adapter_factory=ProxySupportAdapterFactory()
+                )
             )
         self._session_manager = session_manager
         self._lock_token = Lock()
@@ -1213,5 +1220,5 @@ class SnowflakeRestful:
         except Exception as err:
             raise err
 
-    def use_session(self, url=None) -> Generator[Session, Any, None]:
+    def use_session(self, url: str | bytes) -> Generator[Session, Any, None]:
         return self.session_manager.use_session(url)
