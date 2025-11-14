@@ -925,9 +925,8 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             # close telemetry first, since it needs rest to send remaining data
             logger.debug("closed")
 
-            await self._telemetry.close(
-                send_on_close=bool(retry and self.telemetry_enabled)
-            )
+            if self.telemetry_enabled:
+                await self._telemetry.close(retry=retry)
             if (
                 await self._all_async_queries_finished()
                 and not self._server_session_keep_alive
