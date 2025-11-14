@@ -357,6 +357,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                         host=self.host, port=self.port
                     ),
                     redirect_uri=self._oauth_redirect_uri,
+                    uri=self._oauth_socket_uri,
                     scope=self._oauth_scope,
                     pkce_enabled=not self._oauth_disable_pkce,
                     token_cache=(
@@ -908,9 +909,8 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             # close telemetry first, since it needs rest to send remaining data
             logger.debug("closed")
 
-            await self._telemetry.close(
-                send_on_close=bool(retry and self.telemetry_enabled)
-            )
+            if self.telemetry_enabled:
+                await self._telemetry.close(retry=retry)
             if (
                 await self._all_async_queries_finished()
                 and not self._server_session_keep_alive
@@ -1038,6 +1038,16 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             self.__config(**self._conn_parameters)
 
         self._crl_config: CRLConfig = CRLConfig.from_connection(self)
+
+        no_proxy_csv_str = (
+            ",".join(str(x) for x in self.no_proxy)
+            if (
+                self.no_proxy is not None
+                and isinstance(self.no_proxy, Iterable)
+                and not isinstance(self.no_proxy, (str, bytes))
+            )
+            else self.no_proxy
+        )
         self._http_config: AioHttpConfig = AioHttpConfig(
             connector_factory=SnowflakeSSLConnectorFactory(),
             use_pooling=not self.disable_request_pooling,
@@ -1047,15 +1057,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             proxy_password=self.proxy_password,
             snowflake_ocsp_mode=self._ocsp_mode(),
             trust_env=True,  # Required for proxy support via environment variables
-            no_proxy=(
-                ",".join(str(x) for x in self.no_proxy)
-                if (
-                    self.no_proxy is not None
-                    and isinstance(self.no_proxy, Iterable)
-                    and not isinstance(self.no_proxy, (str, bytes))
-                )
-                else self.no_proxy
-            ),
+            no_proxy=no_proxy_csv_str,
         )
         self._session_manager = SessionManagerFactory.get_manager(self._http_config)
 
