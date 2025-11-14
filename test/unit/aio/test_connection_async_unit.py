@@ -844,7 +844,7 @@ async def test_invalid_authenticator():
 
 
 @pytest.mark.skipolddriver
-async def test_connect_metadata_preservation():
+def test_connect_metadata_preservation():
     """Test that the async connect function preserves metadata from SnowflakeConnection.__init__.
 
     This test verifies that various inspection methods return consistent metadata,
@@ -852,7 +852,9 @@ async def test_connect_metadata_preservation():
     """
     import inspect
 
-    from snowflake.connector.aio import SnowflakeConnection, connect
+    # Use already imported snowflake.connector.aio
+    connect = snowflake.connector.aio.connect
+    SnowflakeConnection = snowflake.connector.aio.SnowflakeConnection
 
     # Test 1: Check __name__ is correct
     assert (
