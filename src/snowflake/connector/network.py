@@ -1222,3 +1222,6 @@ class SnowflakeRestful:
 
     def use_session(self, url: str | bytes) -> Generator[Session, Any, None]:
         return self.session_manager.use_session(url)
+
+    def use_requests_session(self, url: str | bytes) -> Generator[Session, Any, None]:
+        return self.use_session(url)

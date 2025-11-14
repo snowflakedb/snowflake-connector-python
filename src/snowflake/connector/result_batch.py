@@ -360,7 +360,7 @@ class ResultBatch(abc.ABC):
                         and connection.rest.session_manager is not None
                     ):
                         # If connection was explicitly passed and not closed yet - we can reuse SessionManager with session pooling
-                        with connection.rest.use_session(
+                        with connection.rest.use_requests_session(
                             request_data["url"]
                         ) as session:
                             logger.debug(
