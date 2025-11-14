@@ -36,6 +36,7 @@ class AuthByOauthCode(AuthByPluginAsync, AuthByOauthCodeSync):
         external_browser_timeout: int | None = None,
         enable_single_use_refresh_tokens: bool = False,
         connection: SnowflakeConnection | None = None,
+        uri: str | None = None,
         **kwargs,
     ) -> None:
         """Initializes an instance with OAuth authorization code parameters."""
@@ -58,6 +59,7 @@ class AuthByOauthCode(AuthByPluginAsync, AuthByOauthCodeSync):
             external_browser_timeout=external_browser_timeout,
             enable_single_use_refresh_tokens=enable_single_use_refresh_tokens,
             connection=connection,
+            uri=uri,
             **kwargs,
         )
 
