@@ -42,6 +42,7 @@ from .constants import (
     HTTP_HEADER_SERVICE_NAME,
     HTTP_HEADER_USER_AGENT,
 )
+from .crl import CRLConfig
 from .description import (
     CLIENT_NAME,
     CLIENT_VERSION,
@@ -336,6 +337,13 @@ class SnowflakeRestful:
         # cache file name (enabled by default)
         ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
             self._connection._ocsp_response_cache_filename if self._connection else None
+        )
+
+        # CRL mode (should be DISABLED by default)
+        ssl_wrap_socket.FEATURE_CRL_CONFIG = (
+            CRLConfig.from_connection(self._connection)
+            if self._connection
+            else ssl_wrap_socket.DEFAULT_CRL_CONFIG
         )
 
         # This is to address the issue where requests hangs

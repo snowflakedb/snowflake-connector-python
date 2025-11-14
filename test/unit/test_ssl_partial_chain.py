@@ -39,7 +39,7 @@ def test_wrapper_injects_pyopenssl_context(monkeypatch):
     monkeypatch.setattr(ssw.ssl_, "ssl_wrap_socket", fake_ssl_wrap_socket)
 
     # Call our wrapper without providing ssl_context; it should inject one
-    ssw.ssl_wrap_socket_with_ocsp(
+    ssw.ssl_wrap_socket_with_cert_revocation_checks(
         sock=None,
         keyfile=None,
         certfile=None,

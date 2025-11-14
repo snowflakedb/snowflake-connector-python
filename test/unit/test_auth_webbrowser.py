@@ -364,6 +364,7 @@ def _init_rest(
     connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
+    connection.cert_revocation_check_mode = "TEST_CRL_MODE"
     connection._disable_console_login = disable_console_login
     type(connection).application = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_name = PropertyMock(return_value=CLIENT_NAME)

@@ -266,7 +266,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout: int | None = 3,
+        timeout: int | tuple[int, int] | None = 3,
         use_pooling: bool | None = None,
         **kwargs,
     ):
