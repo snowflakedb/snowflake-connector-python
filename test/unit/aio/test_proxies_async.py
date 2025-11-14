@@ -4,10 +4,13 @@ import urllib.request
 from collections import deque
 from test.unit.test_proxies import (
     DbRequestFlags,
+    ProxyPrecedenceFlags,
     RequestFlags,
     _apply_no_proxy,
     _base_connect_kwargs,
     _configure_proxy,
+    _set_mappings_for_common_backend,
+    _set_mappings_for_query_and_chunks,
     _setup_backend_storage_mappings,
 )
 
@@ -232,6 +235,44 @@ async def _collect_db_request_flags_only(proxy_wm, target_wm) -> DbRequestFlags:
         for r in target_reqs["requests"]
     )
     return DbRequestFlags(proxy_saw_db=proxy_saw_db, target_saw_db=target_saw_db)
+
+
+async def _collect_proxy_precedence_flags(
+    proxy1_wm, proxy2_wm, target_wm
+) -> ProxyPrecedenceFlags:
+    """Async version of proxy precedence flags collection using aiohttp."""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            f"{proxy1_wm.http_host_with_port}/__admin/requests"
+        ) as resp:
+            proxy1_reqs = await resp.json()
+        async with session.get(
+            f"{proxy2_wm.http_host_with_port}/__admin/requests"
+        ) as resp:
+            proxy2_reqs = await resp.json()
+        async with session.get(
+            f"{target_wm.http_host_with_port}/__admin/requests"
+        ) as resp:
+            target_reqs = await resp.json()
+
+    proxy1_saw_request = any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in proxy1_reqs["requests"]
+    )
+    proxy2_saw_request = any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in proxy2_reqs["requests"]
+    )
+    backend_saw_request = any(
+        "/queries/v1/query-request" in r["request"]["url"]
+        for r in target_reqs["requests"]
+    )
+
+    return ProxyPrecedenceFlags(
+        proxy1_saw_request=proxy1_saw_request,
+        proxy2_saw_request=proxy2_saw_request,
+        backend_saw_request=backend_saw_request,
+    )
 
 
 @pytest.mark.skipolddriver
@@ -577,3 +618,70 @@ async def test_no_proxy_bypass_backend_and_storage_param_only(
     assert flags.proxy_saw_db is False
     assert flags.storage_saw_storage
     assert flags.proxy_saw_storage is False
+
+
+@pytest.mark.skipolddriver
+async def test_proxy_env_vars_take_precedence_over_connection_params(
+    wiremock_two_proxies_backend,
+    wiremock_mapping_dir,
+    wiremock_generic_mappings_dir,
+    proxy_env_vars,
+    monkeypatch,
+):
+    """Verify that proxy_host/proxy_port connection parameters take precedence over env vars.
+
+    Setup:
+    - Set HTTP_PROXY env var to point to proxy_from_env_vars
+    - Set proxy_host param to point to proxy_from_conn_params
+
+    Expected outcome:
+    - proxy_from_conn_params should see the request (params take precedence)
+    - proxy_from_env_vars should NOT see the request
+    - backend should see the request
+    """
+    target_wm, proxy_from_conn_params, proxy_from_env_vars = (
+        wiremock_two_proxies_backend
+    )
+
+    # Setup backend mappings for large query with multiple chunks
+    _set_mappings_for_common_backend(target_wm, wiremock_generic_mappings_dir)
+    _set_mappings_for_query_and_chunks(
+        target_wm,
+        wiremock_mapping_dir,
+    )
+
+    # Set HTTP_PROXY env var AFTER Wiremock is running using monkeypatch
+    # This prevents Wiremock from inheriting it and forwarding through proxy2
+    set_proxy_env_vars, clear_proxy_env_vars = proxy_env_vars
+    clear_proxy_env_vars()  # Clear any existing ones first
+
+    env_proxy_url = f"http://{proxy_from_env_vars.wiremock_host}:{proxy_from_env_vars.wiremock_http_port}"
+
+    # Set connection params to point to proxy1 (should take precedence)
+    connect_kwargs = _base_connect_kwargs(target_wm)
+    connect_kwargs.update(
+        {
+            "proxy_host": proxy_from_conn_params.wiremock_host,
+            "proxy_port": str(proxy_from_conn_params.wiremock_http_port),
+        }
+    )
+
+    with monkeypatch.context() as m_context:
+        m_context.setenv("HTTP_PROXY", env_proxy_url)
+        m_context.setenv("HTTPS_PROXY", env_proxy_url)
+
+        # Execute query - now async
+        await _execute_large_query(connect_kwargs, row_count=50_000)
+
+    # Verify proxy selection using named tuple flags - now async
+    flags = await _collect_proxy_precedence_flags(
+        proxy_from_conn_params, proxy_from_env_vars, target_wm
+    )
+    assert not (
+        flags.proxy1_saw_request
+    ), "proxy_from_conn_params (connection param proxy) should NOT have seen the query request"
+    assert flags.proxy2_saw_request, (
+        "proxy_from_env_vars (env var proxy) should have seen the request "
+        "since connection params take precedence"
+    )
+    assert flags.backend_saw_request, "backend should have seen the query request"
