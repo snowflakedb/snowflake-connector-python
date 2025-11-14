@@ -296,6 +296,6 @@ def _base64_bytes_to_str(x) -> str | None:
 def get_md5(text: str | bytes) -> bytes:
     if isinstance(text, str):
         text = text.encode("utf-8")
-    md5 = hashlib.md5()
+    md5 = hashlib.md5(usedforsecurity=False)
     md5.update(text)
     return md5.digest()
