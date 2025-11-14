@@ -375,6 +375,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                         host=self.host, port=self.port
                     ),
                     redirect_uri=self._oauth_redirect_uri,
+                    uri=self._oauth_socket_uri,
                     scope=self._oauth_scope,
                     pkce_enabled=not self._oauth_disable_pkce,
                     token_cache=(
