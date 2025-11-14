@@ -38,7 +38,7 @@ class TelemetryClient(TelemetryClientSync):
         if len(self._log_batch) >= self._flush_size:
             await self.send_batch()
 
-    async def send_batch(self) -> None:
+    async def send_batch(self, retry: bool = False) -> None:
         if self.is_closed:
             raise Exception("Attempted to send batch when TelemetryClient is closed")
         elif not self._enabled:
@@ -69,6 +69,7 @@ class TelemetryClient(TelemetryClientSync):
                 method="post",
                 client=None,
                 timeout=5,
+                _no_retry=not retry,
             )
             if not ret["success"]:
                 logger.info(
@@ -89,9 +90,8 @@ class TelemetryClient(TelemetryClientSync):
         except Exception:
             logger.warning("Failed to add log to telemetry.", exc_info=True)
 
-    async def close(self, send_on_close: bool = True) -> None:
+    async def close(self, retry: bool = False) -> None:
         if not self.is_closed:
             logger.debug("Closing telemetry client.")
-            if send_on_close:
-                await self.send_batch()
+            await self.send_batch(retry=retry)
             self._rest = None
