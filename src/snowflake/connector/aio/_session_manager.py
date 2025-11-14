@@ -11,7 +11,7 @@ from aiohttp.connector import Connection
 from aiohttp.typedefs import StrOrURL
 
 from .. import OperationalError
-from ..crl import CertRevocationCheckMode, CRLValidator
+from ..crl import CertRevocationCheckMode
 from ..errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
 from ..ssl_wrap_socket import (
     FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
@@ -19,6 +19,7 @@ from ..ssl_wrap_socket import (
     load_trusted_certificates,
     resolve_cafile,
 )
+from ._crl import CRLValidator
 from ._ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
 if TYPE_CHECKING:
@@ -122,9 +123,9 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             self._session_manager,
             trusted_certificates=load_trusted_certificates(cafile_for_ctx),
         )
-        sll_object = protocol.transport.get_extra_info("ssl_object")
+        ssl_object = protocol.transport.get_extra_info("ssl_object")
         # TODO(asyncio): SNOW-2681061 Add sync support for validate_connection
-        if not crl_validator.validate_connection(sll_object):
+        if not crl_validator.validate_connection(ssl_object):
             raise OperationalError(
                 msg=(
                     "The certificate is revoked or "
