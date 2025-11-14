@@ -32,6 +32,7 @@ def test_crl_validation_enabled_mode(conn_cnx):
         allow_certificates_without_crl_url=True,  # Allow certs without CRL URLs
         crl_connection_timeout_ms=5000,  # 5 second timeout
         crl_read_timeout_ms=5000,  # 5 second timeout
+        enable_crl_file_cache=False,  # To avoid local side effects
         disable_ocsp_checks=True,
     ) as cnx:
         assert cnx, "Connection should succeed with CRL validation in ENABLED mode"
