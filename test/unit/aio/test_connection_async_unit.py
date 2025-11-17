@@ -912,7 +912,7 @@ def test_connect_metadata_preservation():
         connect_doc == source_doc
     ), "inspect.getdoc(connect) should match inspect.getdoc(SnowflakeConnection.__init__)"
 
-    # Test 8: Check that connect is callable and returns expected type
+    # Test 8: Check that connect is callable
     assert callable(connect), "connect should be callable"
 
     # Test 9: Check type() and __class__ values (important for user introspection)
@@ -933,3 +933,4 @@ def test_connect_metadata_preservation():
     assert (
         len(params) > 0
     ), "connect should have parameters from SnowflakeConnection.__init__"
+    # Should have parameters like account, user, password, etc.
