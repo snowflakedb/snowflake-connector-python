@@ -155,7 +155,7 @@ class TestDetectPlatforms:
         assert "is_gce_cloud_run_service" in result
 
     def test_timeout_handling(self, unavailable_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=1)
+        result = detect_platforms(platform_detection_timeout_seconds=None)
         assert "is_azure_vm_timeout" in result
         assert "is_gce_vm_timeout" in result
         assert "has_gcp_identity_timeout" in result
@@ -371,7 +371,7 @@ class TestDetectPlatforms:
     ):
         """Test that ENV_VAR_DISABLE_PLATFORM_DETECTION only disables when set to 'true' (case-insensitive)"""
         with patch.dict(os.environ, {ENV_VAR_DISABLE_PLATFORM_DETECTION: env_value}):
-            result = detect_platforms(platform_detection_timeout_seconds=None)
+            result = detect_platforms(platform_detection_timeout_seconds=1)
             assert result == expected_result
 
     def test_platform_detection_disabled_overrides_all_other_detection(
