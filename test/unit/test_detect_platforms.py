@@ -67,14 +67,14 @@ class TestDetectPlatforms:
         self, unavailable_metadata_service_with_request_exception
     ):
         result = detect_platforms(
-            platform_detection_timeout_seconds=0.3
+            platform_detection_timeout_seconds=1
         )  # increase timeout to make sure no Thread-based timeout messes the results
         assert result == []
 
     def test_ec2_instance_detection(
         self, unavailable_metadata_service_with_request_exception, fake_aws_environment
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_ec2_instance" in result
 
     def test_aws_lambda_detection(
@@ -82,7 +82,7 @@ class TestDetectPlatforms:
         unavailable_metadata_service_with_request_exception,
         fake_aws_lambda_environment,
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_aws_lambda" in result
 
     @pytest.mark.parametrize(
@@ -102,44 +102,44 @@ class TestDetectPlatforms:
         fake_aws_environment,
         arn,
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "has_aws_identity" in result
 
     def test_azure_vm_detection(self, fake_azure_vm_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_azure_vm" in result
 
     def test_azure_function_detection(self, fake_azure_function_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_azure_function" in result
 
     def test_azure_function_with_managed_identity(
         self, fake_azure_function_metadata_service
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_azure_function" in result
         assert "has_azure_managed_identity" in result
 
     def test_gce_vm_detection(self, fake_gce_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_gce_vm" in result
 
     def test_gce_cloud_run_service_detection(
         self, fake_gce_cloud_run_service_metadata_service
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_gce_cloud_run_service" in result
 
     def test_gce_cloud_run_job_detection(self, fake_gce_cloud_run_job_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_gce_cloud_run_job" in result
 
     def test_gcp_identity_detection(self, fake_gce_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "has_gcp_identity" in result
 
     def test_github_actions_detection(self, fake_github_actions_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_github_action" in result
 
     def test_multiple_platforms_detection(
@@ -148,14 +148,14 @@ class TestDetectPlatforms:
         fake_github_actions_metadata_service,
         fake_gce_cloud_run_service_metadata_service,
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_aws_lambda" in result
         assert "has_aws_identity" in result
         assert "is_github_action" in result
         assert "is_gce_cloud_run_service" in result
 
     def test_timeout_handling(self, unavailable_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_azure_vm_timeout" in result
         assert "is_gce_vm_timeout" in result
         assert "has_gcp_identity_timeout" in result
@@ -265,14 +265,14 @@ class TestDetectPlatforms:
         arn,
     ):
         fake_aws_environment.caller_identity = {"Arn": arn}
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "has_aws_identity" not in result
 
     def test_missing_arn_handling(
         self, unavailable_metadata_service_with_request_exception, fake_aws_environment
     ):
         fake_aws_environment.caller_identity = {"UserId": "test-user"}
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "has_aws_identity" not in result
 
     def test_azure_managed_identity_no_token_endpoint(
@@ -292,7 +292,7 @@ class TestDetectPlatforms:
         self, unavailable_metadata_service_with_request_exception, fake_aws_environment
     ):
         fake_aws_environment.instance_document = b""
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_ec2_instance" not in result
 
     def test_aws_lambda_empty_task_root(
@@ -382,7 +382,7 @@ class TestDetectPlatforms:
     ):
         """Test that ENV_VAR_DISABLE_PLATFORM_DETECTION takes precedence over all detections"""
         with patch.dict(os.environ, {ENV_VAR_DISABLE_PLATFORM_DETECTION: "true"}):
-            result = detect_platforms(platform_detection_timeout_seconds=None)
+            result = detect_platforms(platform_detection_timeout_seconds=1)
             assert result == _PLATFORM_DETECTION_DISABLED_RESULT
             assert "is_aws_lambda" not in result
             assert "is_github_action" not in result
