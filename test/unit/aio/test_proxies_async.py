@@ -627,6 +627,8 @@ async def test_proxy_env_vars_take_precedence_over_connection_params(
     wiremock_generic_mappings_dir,
     proxy_env_vars,
     monkeypatch,
+    host_port_pooling,
+    fix_aiohttp_proxy_bypass,
 ):
     """Verify that proxy_host/proxy_port connection parameters take precedence over env vars.
 

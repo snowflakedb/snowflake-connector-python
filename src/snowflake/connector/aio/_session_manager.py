@@ -541,17 +541,24 @@ class ProxySessionManager(SessionManager):
             session_manager=self.clone(),
             snowflake_ocsp_mode=self._cfg.snowflake_ocsp_mode,
         )
-        # We use requests.utils here (in asynch code) to keep the behaviour uniform for synch and asynch code. If we wanted each version to depict its http library's behaviour, we could use here: aiohttp.helpers.proxy_bypass(url, proxies={...}) here
-        proxy = (
-            None
-            if should_bypass_proxies(url, no_proxy=self.config.no_proxy)
-            else self.proxy_url
-        )
+
+        proxy_from_conn_params: str | None = None
+        if not aiohttp.helpers.proxies_from_env():
+            # TODO: This is only needed because we want to keep compatibility with the synch driver version.
+            #   Otherwise, we could remove that condition and always pass proxy from conn params to the Session constructor.
+            #   But in such case precedence will be reverted and it will overwrite the env vars settings.
+
+            # We use requests.utils here (in asynch code) to keep the behaviour uniform for synch and asynch code. If we wanted each version to depict its http library's behaviour, we could use here: aiohttp.helpers.proxy_bypass(url, proxies={...}) here
+            proxy_from_conn_params = (
+                None
+                if should_bypass_proxies(url, no_proxy=self.config.no_proxy)
+                else self.proxy_url
+            )
         # Construct session with base proxy set, request() may override per-URL when bypassing
         return self.SessionWithProxy(
             connector=connector,
             trust_env=self._cfg.trust_env,
-            proxy=proxy,
+            proxy=proxy_from_conn_params,
         )
 
 
