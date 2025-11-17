@@ -7,13 +7,8 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v4.1.0(TBD)
+- v4.1.0(November 18,2025)
   - Added the `SNOWFLAKE_AUTH_FORCE_SERVER` environment variable to force the use of the local-listening server when using the `externalbrowser` auth method.
-
-- v4.1.0(November 20,2025)
-
-   -N/A
-
     - This allows headless environments (like Docker or Airflow) running locally to auth via a browser URL.
   - Fix compilation error when building from sources with libc++.
   - Pin lower versions of dependencies to oldest version without vulnerabilities.
