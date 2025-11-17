@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 import os
 import re
+from concurrent.futures import CancelledError as FutureCancelledError
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from concurrent.futures.thread import ThreadPoolExecutor
 from enum import Enum
 from functools import cache
@@ -29,6 +31,10 @@ class _DetectionState(Enum):
     DETECTED = "detected"
     NOT_DETECTED = "not_detected"
     TIMEOUT = "timeout"
+
+
+# Result returned when platform detection is disabled via environment variable
+_PLATFORM_DETECTION_DISABLED_RESULT = ["disabled"]
 
 
 def is_ec2_instance(platform_detection_timeout_seconds: float):
@@ -407,8 +413,8 @@ def detect_platforms(
 
     Returns:
         list[str]: List of detected platform names. Platforms that timed out will have
-                  "_timeout" suffix appended to their name. Returns ["disabled"] if the
-                  ENV_VAR_DISABLE_PLATFORM_DETECTION environment variable is set to a value
+                  "_timeout" suffix appended to their name. Returns _PLATFORM_DETECTION_DISABLED_RESULT
+                  if the ENV_VAR_DISABLE_PLATFORM_DETECTION environment variable is set to a value
                   in ENV_VAR_BOOL_POSITIVE_VALUES_LOWERCASED (case-insensitive).
                   Returns empty list if any exception occurs during detection.
     """
@@ -422,7 +428,7 @@ def detect_platforms(
                 "Platform detection disabled via %s environment variable",
                 ENV_VAR_DISABLE_PLATFORM_DETECTION,
             )
-            return ["disabled"]
+            return _PLATFORM_DETECTION_DISABLED_RESULT
 
         if platform_detection_timeout_seconds is None:
             platform_detection_timeout_seconds = 0.2
@@ -477,9 +483,17 @@ def detect_platforms(
                     ),
                 }
 
-                platforms.update(
-                    {key: future.result() for key, future in futures.items()}
-                )
+                # Enforce timeout at executor level - all parallel detections must complete
+                # within platform_detection_timeout_seconds
+                for key, future in futures.items():
+                    try:
+                        platforms[key] = future.result(
+                            timeout=platform_detection_timeout_seconds
+                        )
+                    except (FutureTimeoutError, FutureCancelledError):
+                        platforms[key] = _DetectionState.TIMEOUT
+                    except Exception:
+                        platforms[key] = _DetectionState.NOT_DETECTED
 
         detected_platforms = []
         for platform_name, detection_state in platforms.items():
@@ -488,6 +502,9 @@ def detect_platforms(
             elif detection_state == _DetectionState.TIMEOUT:
                 detected_platforms.append(f"{platform_name}_timeout")
 
+        logger.debug(
+            "Platform detection completed. Detected platforms: %s", detected_platforms
+        )
         return detected_platforms
     except Exception:
         return []

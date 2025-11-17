@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from snowflake.connector.platform_detection import (
+    _PLATFORM_DETECTION_DISABLED_RESULT,
     ENV_VAR_DISABLE_PLATFORM_DETECTION,
     detect_platforms,
     is_azure_vm,
@@ -339,10 +340,10 @@ class TestDetectPlatforms:
     @pytest.mark.parametrize(
         "env_value,expected_result",
         [
-            ("true", ["disabled"]),
-            ("TRUE", ["disabled"]),
-            ("True", ["disabled"]),
-            ("TrUe", ["disabled"]),
+            ("true", _PLATFORM_DETECTION_DISABLED_RESULT),
+            ("TRUE", _PLATFORM_DETECTION_DISABLED_RESULT),
+            ("True", _PLATFORM_DETECTION_DISABLED_RESULT),
+            ("TrUe", _PLATFORM_DETECTION_DISABLED_RESULT),
             ("1", []),
             ("yes", []),
             ("false", []),
@@ -379,7 +380,7 @@ class TestDetectPlatforms:
         """Test that ENV_VAR_DISABLE_PLATFORM_DETECTION takes precedence over all detections"""
         with patch.dict(os.environ, {ENV_VAR_DISABLE_PLATFORM_DETECTION: "true"}):
             result = detect_platforms(platform_detection_timeout_seconds=None)
-            assert result == ["disabled"]
+            assert result == _PLATFORM_DETECTION_DISABLED_RESULT
             assert "is_aws_lambda" not in result
             assert "is_github_action" not in result
             assert "is_gce_cloud_run_service" not in result
@@ -406,7 +407,7 @@ class TestDetectPlatforms:
             "snowflake.connector.platform_detection.is_azure_vm",
             side_effect=capture_timeout_azure,
         ):
-            detect_platforms(platform_detection_timeout_seconds=None)
+            detect_platforms()
 
             # Verify that functions were called with timeout <= 200ms
             assert len(timeout_captured) > 0, "No timeout was captured"
