@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v3.18.1(July 15,2026)
   - Improved verification of TLS connections (SNOW-3675579).
+  - Fixed FIPS environments md5 hash issues with multipart upload on Azure.
 
 - v3.18.0(October 03,2025)
   - Added support for pandas conversion for Day-time and Year-Month Interval types
