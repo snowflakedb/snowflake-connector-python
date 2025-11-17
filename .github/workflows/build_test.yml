@@ -335,7 +335,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cloud-provider: [aws]
+        cloud-provider: [aws, azure, gcp]
     steps:
       - uses: actions/checkout@v4
       - name: Setup parameters file
