@@ -7,6 +7,10 @@ from concurrent.futures.thread import ThreadPoolExecutor
 from enum import Enum
 from functools import cache
 
+from .constants import (
+    ENV_VAR_BOOL_POSITIVE_VALUES_LOWERCASED,
+    ENV_VAR_DISABLE_PLATFORM_DETECTION,
+)
 from .options import boto3, botocore, installed_boto
 
 if installed_boto:
@@ -403,10 +407,23 @@ def detect_platforms(
 
     Returns:
         list[str]: List of detected platform names. Platforms that timed out will have
-                  "_timeout" suffix appended to their name. Returns empty list if any
-                  exception occurs during detection.
+                  "_timeout" suffix appended to their name. Returns ["disabled"] if the
+                  ENV_VAR_DISABLE_PLATFORM_DETECTION environment variable is set to a value
+                  in ENV_VAR_BOOL_POSITIVE_VALUES_LOWERCASED (case-insensitive).
+                  Returns empty list if any exception occurs during detection.
     """
     try:
+        # Check if platform detection is disabled via environment variable
+        if (
+            os.environ.get(ENV_VAR_DISABLE_PLATFORM_DETECTION, "").lower()
+            in ENV_VAR_BOOL_POSITIVE_VALUES_LOWERCASED
+        ):
+            logger.debug(
+                "Platform detection disabled via %s environment variable",
+                ENV_VAR_DISABLE_PLATFORM_DETECTION,
+            )
+            return ["disabled"]
+
         if platform_detection_timeout_seconds is None:
             platform_detection_timeout_seconds = 0.2
 
@@ -439,7 +456,9 @@ def detect_platforms(
                         has_aws_identity, platform_detection_timeout_seconds
                     ),
                     "is_azure_vm": executor.submit(
-                        is_azure_vm, platform_detection_timeout_seconds, session_manager
+                        is_azure_vm,
+                        platform_detection_timeout_seconds,
+                        session_manager,
                     ),
                     "has_azure_managed_identity": executor.submit(
                         has_azure_managed_identity,
@@ -447,7 +466,9 @@ def detect_platforms(
                         session_manager,
                     ),
                     "is_gce_vm": executor.submit(
-                        is_gce_vm, platform_detection_timeout_seconds, session_manager
+                        is_gce_vm,
+                        platform_detection_timeout_seconds,
+                        session_manager,
                     ),
                     "has_gcp_identity": executor.submit(
                         has_gcp_identity,

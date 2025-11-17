@@ -6,9 +6,17 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from snowflake.connector.platform_detection import detect_platforms
+from snowflake.connector.platform_detection import (
+    ENV_VAR_DISABLE_PLATFORM_DETECTION,
+    detect_platforms,
+    is_azure_vm,
+    is_ec2_instance,
+)
 from snowflake.connector.vendored.requests.exceptions import RequestException
 from src.snowflake.connector.vendored.requests import Response
+
+# Expected maximum timeout for platform detection in seconds (SNOW-2204396)
+EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION = 0.2
 
 
 def build_response(content: bytes = b"", status_code: int = 200, headers=None):
@@ -327,3 +335,114 @@ class TestDetectPlatforms:
     ):
         result = detect_platforms(platform_detection_timeout_seconds=0)
         assert not labels_detected_by_endpoints.intersection(result)
+
+    @pytest.mark.parametrize(
+        "env_value,expected_result",
+        [
+            ("true", ["disabled"]),
+            ("TRUE", ["disabled"]),
+            ("True", ["disabled"]),
+            ("TrUe", ["disabled"]),
+            ("1", []),
+            ("yes", []),
+            ("false", []),
+            ("", []),
+        ],
+        ids=[
+            "lowercase_true",
+            "uppercase_true",
+            "capitalized_true",
+            "mixed_case_true",
+            "numeric_1",
+            "yes",
+            "false",
+            "empty_string",
+        ],
+    )
+    def test_platform_detection_disable_env_var_values(
+        self,
+        unavailable_metadata_service_with_request_exception,
+        env_value,
+        expected_result,
+    ):
+        """Test that ENV_VAR_DISABLE_PLATFORM_DETECTION only disables when set to 'true' (case-insensitive)"""
+        with patch.dict(os.environ, {ENV_VAR_DISABLE_PLATFORM_DETECTION: env_value}):
+            result = detect_platforms(platform_detection_timeout_seconds=None)
+            assert result == expected_result
+
+    def test_platform_detection_disabled_overrides_all_other_detection(
+        self,
+        fake_aws_lambda_environment,
+        fake_github_actions_metadata_service,
+        fake_gce_cloud_run_service_metadata_service,
+    ):
+        """Test that ENV_VAR_DISABLE_PLATFORM_DETECTION takes precedence over all detections"""
+        with patch.dict(os.environ, {ENV_VAR_DISABLE_PLATFORM_DETECTION: "true"}):
+            result = detect_platforms(platform_detection_timeout_seconds=None)
+            assert result == ["disabled"]
+            assert "is_aws_lambda" not in result
+            assert "is_github_action" not in result
+            assert "is_gce_cloud_run_service" not in result
+
+    def test_platform_detection_default_timeout_is_200ms(
+        self, unavailable_metadata_service_with_request_exception
+    ):
+        """Test that platform detection defaults to 0.2s (200ms) timeout when None is provided"""
+        # Mock the internal detection functions to capture the timeout they receive
+        timeout_captured = []
+
+        def capture_timeout_ec2(timeout):
+            timeout_captured.append(timeout)
+            return is_ec2_instance(timeout)
+
+        def capture_timeout_azure(timeout, session_manager):
+            timeout_captured.append(timeout)
+            return is_azure_vm(timeout, session_manager)
+
+        with patch(
+            "snowflake.connector.platform_detection.is_ec2_instance",
+            side_effect=capture_timeout_ec2,
+        ), patch(
+            "snowflake.connector.platform_detection.is_azure_vm",
+            side_effect=capture_timeout_azure,
+        ):
+            detect_platforms(platform_detection_timeout_seconds=None)
+
+            # Verify that functions were called with timeout <= 200ms
+            assert len(timeout_captured) > 0, "No timeout was captured"
+            assert all(
+                t <= EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION
+                for t in timeout_captured
+            ), (
+                f"Expected all timeouts to be <= {EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION}, "
+                f"but got {timeout_captured}"
+            )
+
+    def test_platform_detection_completes_within_timeout(
+        self, unavailable_metadata_service_with_request_exception
+    ):
+        """Test that platform detection completes within the specified timeout (200ms + overhead)"""
+        start_time = time.time()
+        detect_platforms(
+            platform_detection_timeout_seconds=EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION
+        )
+        end_time = time.time()
+
+        execution_time = end_time - start_time
+
+        # Allow ~30% overhead for thread management, environment variable checks, etc.
+        # The timeout is 200ms per network call, but they run in parallel
+        # So total time should be ~200ms + overhead, not 200ms * number_of_calls
+        epsilon_for_overhead = 1.3
+        max_allowed_time = (
+            EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION * epsilon_for_overhead
+        )
+        assert execution_time < max_allowed_time, (
+            f"Platform detection took {execution_time:.3f}s, "
+            f"which exceeds the maximum allowed time of {max_allowed_time}s"
+        )
+        # Ensure it's not suspiciously fast (< 10ms would indicate something's wrong)
+        assert execution_time > 0.01, (
+            f"Platform detection completed too quickly ({execution_time:.3f}s), "
+            "which may indicate detection was skipped"
+        )
