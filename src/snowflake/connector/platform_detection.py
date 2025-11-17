@@ -6,6 +6,7 @@ import re
 from concurrent.futures import CancelledError as FutureCancelledError
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from concurrent.futures.thread import ThreadPoolExecutor
+from contextlib import contextmanager
 from enum import Enum
 from functools import cache
 
@@ -23,6 +24,36 @@ from .session_manager import SessionManager, SessionManagerFactory
 from .vendored.requests import RequestException, Timeout
 
 logger = logging.getLogger(__name__)
+
+# Loggers to suppress during platform detection to avoid noise in customer logs
+_LOGGERS_TO_SUPPRESS = [
+    "snowflake.connector.vendored.urllib3.connectionpool",
+    "botocore.utils",
+    "botocore.httpsession",
+    "urllib3.connectionpool",
+]
+
+
+@contextmanager
+def _suppress_platform_detection_logs():
+    """
+    Context manager to completely suppress all logs from underlying HTTP libraries during platform detection.
+
+    This prevents any logs (including errors/warnings) from urllib3 and botocore when detecting
+    cloud platforms, which can confuse customers (SNOW-2204396). Our own debug logs are not affected.
+    """
+    original_levels = {}
+    try:
+        # Completely suppress all logs from noisy libraries
+        for logger_name in _LOGGERS_TO_SUPPRESS:
+            lib_logger = logging.getLogger(logger_name)
+            original_levels[logger_name] = lib_logger.level
+            lib_logger.setLevel(logging.CRITICAL + 1)  # Above CRITICAL = no logs at all
+        yield
+    finally:
+        # Restore original log levels
+        for logger_name, level in original_levels.items():
+            logging.getLogger(logger_name).setLevel(level)
 
 
 class _DetectionState(Enum):
@@ -443,74 +474,82 @@ def detect_platforms(
                 use_pooling=False, max_retries=0
             )
 
-        # Run environment-only checks synchronously (no network calls, no threading overhead)
-        platforms = {
-            "is_aws_lambda": is_aws_lambda(),
-            "is_azure_function": is_azure_function(),
-            "is_gce_cloud_run_service": is_gcp_cloud_run_service(),
-            "is_gce_cloud_run_job": is_gcp_cloud_run_job(),
-            "is_github_action": is_github_action(),
-        }
+        # HTTP timeout should be slightly shorter than thread timeout to allow HTTP-level
+        # timeouts to occur before thread executor times out. This helps distinguish between
+        # HTTP_TIMEOUT (network issue) and WORKER_TIMEOUT (thread stuck/hung).
+        http_timeout_epsilon = 0.05  # 5% shorter
+        http_timeout = platform_detection_timeout_seconds * (1 - http_timeout_epsilon)
+        threads_timeout = platform_detection_timeout_seconds
 
-        # Run network-calling functions in parallel
-        if platform_detection_timeout_seconds != 0.0:
-            with ThreadPoolExecutor(max_workers=6) as executor:
-                futures = {
-                    "is_ec2_instance": executor.submit(
-                        is_ec2_instance, platform_detection_timeout_seconds
-                    ),
-                    "has_aws_identity": executor.submit(
-                        has_aws_identity, platform_detection_timeout_seconds
-                    ),
-                    "is_azure_vm": executor.submit(
-                        is_azure_vm,
-                        platform_detection_timeout_seconds,
-                        session_manager,
-                    ),
-                    "has_azure_managed_identity": executor.submit(
-                        has_azure_managed_identity,
-                        platform_detection_timeout_seconds,
-                        session_manager,
-                    ),
-                    "is_gce_vm": executor.submit(
-                        is_gce_vm,
-                        platform_detection_timeout_seconds,
-                        session_manager,
-                    ),
-                    "has_gcp_identity": executor.submit(
-                        has_gcp_identity,
-                        platform_detection_timeout_seconds,
-                        session_manager,
-                    ),
-                }
+        # Suppress noisy logs from underlying HTTP libraries during platform detection
+        with _suppress_platform_detection_logs():
+            # Run environment-only checks synchronously (no network calls, no threading overhead)
+            platforms = {
+                "is_aws_lambda": is_aws_lambda(),
+                "is_azure_function": is_azure_function(),
+                "is_gce_cloud_run_service": is_gcp_cloud_run_service(),
+                "is_gce_cloud_run_job": is_gcp_cloud_run_job(),
+                "is_github_action": is_github_action(),
+            }
 
-                # Enforce timeout at executor level - all parallel detections must complete
-                # within platform_detection_timeout_seconds
-                for key, future in futures.items():
-                    try:
-                        platforms[key] = future.result(
-                            timeout=platform_detection_timeout_seconds
-                        )
-                    except (FutureTimeoutError, FutureCancelledError):
-                        # Thread/future timed out at executor level
-                        platforms[key] = _DetectionState.WORKER_TIMEOUT
-                    except Exception:
-                        # Any other error from the thread
-                        platforms[key] = _DetectionState.NOT_DETECTED
+            # Run network-calling functions in parallel
+            if platform_detection_timeout_seconds != 0.0:
+                with ThreadPoolExecutor(max_workers=6) as executor:
+                    futures = {
+                        "is_ec2_instance": executor.submit(
+                            is_ec2_instance, http_timeout
+                        ),
+                        "has_aws_identity": executor.submit(
+                            has_aws_identity, http_timeout
+                        ),
+                        "is_azure_vm": executor.submit(
+                            is_azure_vm,
+                            http_timeout,
+                            session_manager,
+                        ),
+                        "has_azure_managed_identity": executor.submit(
+                            has_azure_managed_identity,
+                            http_timeout,
+                            session_manager,
+                        ),
+                        "is_gce_vm": executor.submit(
+                            is_gce_vm,
+                            http_timeout,
+                            session_manager,
+                        ),
+                        "has_gcp_identity": executor.submit(
+                            has_gcp_identity,
+                            http_timeout,
+                            session_manager,
+                        ),
+                    }
 
-        detected_platforms = []
-        for platform_name, detection_state in platforms.items():
-            if detection_state == _DetectionState.DETECTED:
-                detected_platforms.append(platform_name)
-            elif detection_state in (
-                _DetectionState.HTTP_TIMEOUT,
-                _DetectionState.WORKER_TIMEOUT,
-            ):
-                detected_platforms.append(f"{platform_name}_timeout")
+                    # Enforce timeout at executor level - all parallel detections must complete
+                    # within threads_timeout
+                    for key, future in futures.items():
+                        try:
+                            platforms[key] = future.result(timeout=threads_timeout)
+                        except (FutureTimeoutError, FutureCancelledError):
+                            # Thread/future timed out at executor level
+                            platforms[key] = _DetectionState.WORKER_TIMEOUT
+                        except Exception:
+                            # Any other error from the thread
+                            platforms[key] = _DetectionState.NOT_DETECTED
 
-        logger.debug(
-            "Platform detection completed. Detected platforms: %s", detected_platforms
-        )
-        return detected_platforms
+            detected_platforms = []
+            for platform_name, detection_state in platforms.items():
+                if detection_state == _DetectionState.DETECTED:
+                    detected_platforms.append(platform_name)
+                elif detection_state in (
+                    _DetectionState.HTTP_TIMEOUT,
+                    _DetectionState.WORKER_TIMEOUT,
+                ):
+                    detected_platforms.append(f"{platform_name}_timeout")
+
+            logger.debug(
+                "Platform detection completed. Detected platforms: %s",
+                detected_platforms,
+            )
+            return detected_platforms
     except Exception:
         return []
