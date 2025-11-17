@@ -65,7 +65,9 @@ class TestDetectPlatforms:
     def test_no_platforms_detected(
         self, unavailable_metadata_service_with_request_exception
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(
+            platform_detection_timeout_seconds=0.3
+        )  # increase timeout to make sure no Thread-based timeout messes the results
         assert result == []
 
     def test_ec2_instance_detection(
@@ -407,7 +409,7 @@ class TestDetectPlatforms:
             "snowflake.connector.platform_detection.is_azure_vm",
             side_effect=capture_timeout_azure,
         ):
-            detect_platforms()
+            detect_platforms(platform_detection_timeout_seconds=None)
 
             # Verify that functions were called with timeout <= 200ms
             assert len(timeout_captured) > 0, "No timeout was captured"
@@ -434,9 +436,9 @@ class TestDetectPlatforms:
         # Allow ~30% overhead for thread management, environment variable checks, etc.
         # The timeout is 200ms per network call, but they run in parallel
         # So total time should be ~200ms + overhead, not 200ms * number_of_calls
-        epsilon_for_overhead = 1.3
-        max_allowed_time = (
-            EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION * epsilon_for_overhead
+        epsilon_for_overhead = 0.3
+        max_allowed_time = EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION * (
+            1 + epsilon_for_overhead
         )
         assert execution_time < max_allowed_time, (
             f"Platform detection took {execution_time:.3f}s, "
@@ -445,5 +447,5 @@ class TestDetectPlatforms:
         # Ensure it's not suspiciously fast (< 10ms would indicate something's wrong)
         assert execution_time > 0.01, (
             f"Platform detection completed too quickly ({execution_time:.3f}s), "
-            "which may indicate detection was skipped"
+            "which may indicate detection was skipped or some other issues happened"
         )
