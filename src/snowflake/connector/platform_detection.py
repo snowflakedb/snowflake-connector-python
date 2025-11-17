@@ -37,9 +37,9 @@ _LOGGERS_TO_SUPPRESS = [
 @contextmanager
 def _suppress_platform_detection_logs():
     """
-    Context manager to completely suppress all logs from underlying HTTP libraries during platform detection.
+    Context manager to temporarily suppress all logs from underlying HTTP libraries during platform detection.
 
-    This prevents any logs (including errors/warnings) from urllib3 and botocore when detecting
+    This prevents noisy DEBUG logs and stack traces from urllib3 and botocore when detecting
     cloud platforms, which can confuse customers (SNOW-2204396). Our own debug logs are not affected.
     """
     original_levels = {}
