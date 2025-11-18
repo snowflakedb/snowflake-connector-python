@@ -354,6 +354,9 @@ HTTP_HEADER_SERVICE_NAME = "X-Snowflake-Service"
 
 HTTP_HEADER_VALUE_OCTET_STREAM = "application/octet-stream"
 
+# OCSP
+OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT: int = -1
+
 
 @unique
 class OCSPMode(Enum):
@@ -438,7 +441,10 @@ DAY_IN_SECONDS = 60 * 60 * 24
 # TODO: all env variables definitions should be here
 ENV_VAR_PARTNER = "SF_PARTNER"
 ENV_VAR_TEST_MODE = "SNOWFLAKE_TEST_MODE"
+ENV_VAR_DISABLE_PLATFORM_DETECTION = "SNOWFLAKE_DISABLE_PLATFORM_DETECTION"
 
+# Boolean positive values (lowercased) for environment variable checks
+ENV_VAR_BOOL_POSITIVE_VALUES_LOWERCASED = ["true"]
 
 _DOMAIN_NAME_MAP = {_DEFAULT_HOSTNAME_TLD: "GLOBAL", _CHINA_HOSTNAME_TLD: "CHINA"}
 

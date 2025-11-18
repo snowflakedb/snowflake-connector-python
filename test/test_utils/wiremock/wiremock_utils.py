@@ -345,3 +345,98 @@ def get_clients_for_proxy_and_target(
 
             # Yield control back to the caller with both Wiremocks ready
             yield target_wm, proxy_wm
+
+
+@contextmanager
+def get_clients_for_proxy_target_and_storage(
+    proxy_mapping_template: Union[str, dict, pathlib.Path, None] = None,
+    additional_proxy_placeholders: Optional[dict[str, object]] = None,
+    additional_proxy_args: Optional[Iterable[str]] = None,
+):
+    """Context manager that starts three Wiremock instances – *target* (DB), *storage* (S3), and *proxy*.
+
+    The *proxy* is configured to forward all traffic to *target* using the same
+    mapping mechanism as ``get_clients_for_proxy_and_target``.
+
+    Yields a tuple ``(target_wm, storage_wm, proxy_wm)``. All processes are shut down
+    automatically on context exit.
+
+    Note:
+        In most tests a single Wiremock instance is sufficient to emulate both backend
+        and storage endpoints. Use this helper only when backend and storage must have
+        distinct addresses (host:port) — for example, to validate that NO_PROXY bypasses
+        the proxy for one service while proxying the other.
+    """
+    # Reuse existing helper to set up target+proxy
+    if proxy_mapping_template is None:
+        proxy_mapping_template = (
+            pathlib.Path(__file__).parent.parent.parent.parent
+            / "test"
+            / "data"
+            / "wiremock"
+            / "mappings"
+            / "generic"
+            / "proxy_forward_all.json"
+        )
+
+    with get_clients_for_proxy_and_target(
+        proxy_mapping_template=proxy_mapping_template,
+        additional_proxy_placeholders=additional_proxy_placeholders,
+        additional_proxy_args=additional_proxy_args,
+    ) as (target_wm, proxy_wm):
+        # Start storage with a port distinct from target and proxy
+        forbidden = [target_wm.wiremock_http_port, proxy_wm.wiremock_http_port]
+        with WiremockClient(forbidden_ports=forbidden) as storage_wm:
+            yield target_wm, storage_wm, proxy_wm
+
+
+@contextmanager
+def get_clients_for_two_proxies_and_target(
+    proxy_mapping_template: Union[str, dict, pathlib.Path, None] = None,
+    additional_proxy_placeholders: Optional[dict[str, object]] = None,
+    additional_proxy_args: Optional[Iterable[str]] = None,
+):
+    """Context manager that starts three Wiremock instances – one *target* (DB) and two *proxies*.
+
+    Both proxies are configured to forward all traffic to *target* using the same
+    mapping mechanism. This allows the test to verify which proxy was actually used
+    by checking the request history.
+
+    Yields a tuple ``(target_wm, proxy1_wm, proxy2_wm)`` where:
+    - target_wm: The backend/DB Wiremock
+    - proxy1_wm: First proxy configured to forward to target
+    - proxy2_wm: Second proxy configured to forward to target
+
+    All processes are shut down automatically on context exit.
+
+    Note:
+        Use this helper for tests that need to verify proxy selection logic,
+        such as connection parameters taking precedence over environment variables.
+    """
+    # Reuse existing helper to set up target+proxy1
+    with get_clients_for_proxy_and_target(
+        proxy_mapping_template=proxy_mapping_template,
+        additional_proxy_placeholders=additional_proxy_placeholders,
+        additional_proxy_args=additional_proxy_args,
+    ) as (target_wm, proxy1_wm):
+        # Start second proxy and configure it to forward to target as well
+        forbidden = [target_wm.wiremock_http_port, proxy1_wm.wiremock_http_port]
+        with WiremockClient(forbidden_ports=forbidden) as proxy2_wm:
+            # Configure proxy2 to forward to target with the same mapping
+            if proxy_mapping_template is None:
+                proxy_mapping_template = (
+                    pathlib.Path(__file__).parent.parent.parent.parent
+                    / "test"
+                    / "data"
+                    / "wiremock"
+                    / "mappings"
+                    / "generic"
+                    / "proxy_forward_all.json"
+                )
+            placeholders: dict[str, object] = {
+                "{{TARGET_HTTP_HOST_WITH_PORT}}": target_wm.http_host_with_port
+            }
+            if additional_proxy_placeholders:
+                placeholders.update(additional_proxy_placeholders)
+            proxy2_wm.add_mapping(proxy_mapping_template, placeholders=placeholders)
+            yield target_wm, proxy1_wm, proxy2_wm

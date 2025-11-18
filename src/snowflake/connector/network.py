@@ -41,7 +41,9 @@ from .constants import (
     HTTP_HEADER_CONTENT_TYPE,
     HTTP_HEADER_SERVICE_NAME,
     HTTP_HEADER_USER_AGENT,
+    OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
 )
+from .crl import CRLConfig
 from .description import (
     CLIENT_NAME,
     CLIENT_VERSION,
@@ -79,7 +81,12 @@ from .errors import (
     ServiceUnavailableError,
     TooManyRequests,
 )
-from .session_manager import ProxySupportAdapterFactory, SessionManager, SessionPool
+from .session_manager import (
+    ProxySupportAdapterFactory,
+    SessionManager,
+    SessionManagerFactory,
+    SessionPool,
+)
 from .sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
     SQLSTATE_CONNECTION_REJECTED,
@@ -238,6 +245,10 @@ def is_login_request(url: str) -> bool:
     return "login-request" in parse_url(url).path
 
 
+def is_econnreset_exception(e: Exception) -> bool:
+    return "ECONNRESET" in repr(e)
+
+
 class RetryRequest(Exception):
     """Signal to retry request."""
 
@@ -318,7 +329,9 @@ class SnowflakeRestful:
             session_manager = (
                 connection._session_manager
                 if (connection and connection._session_manager)
-                else SessionManager(adapter_factory=ProxySupportAdapterFactory())
+                else SessionManagerFactory.get_manager(
+                    adapter_factory=ProxySupportAdapterFactory()
+                )
             )
         self._session_manager = session_manager
         self._lock_token = Lock()
@@ -332,6 +345,19 @@ class SnowflakeRestful:
         # cache file name (enabled by default)
         ssl_wrap_socket.FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME = (
             self._connection._ocsp_response_cache_filename if self._connection else None
+        )
+        # OCSP root timeout
+        ssl_wrap_socket.FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT = (
+            self._connection._ocsp_root_certs_dict_lock_timeout
+            if self._connection
+            else OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
+        )
+
+        # CRL mode (should be DISABLED by default)
+        ssl_wrap_socket.FEATURE_CRL_CONFIG = (
+            CRLConfig.from_connection(self._connection)
+            if self._connection
+            else ssl_wrap_socket.DEFAULT_CRL_CONFIG
         )
 
         # This is to address the issue where requests hangs
@@ -832,7 +858,7 @@ class SnowflakeRestful:
         include_retry_reason = self._connection._enable_retry_reason_in_query_response
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
-        with self.use_requests_session(full_url) as session:
+        with self.use_session(full_url) as session:
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,
                 _include_retry_reason=include_retry_reason,
@@ -965,7 +991,7 @@ class SnowflakeRestful:
                 )
             retry_ctx.retry_reason = reason
 
-            if "Connection aborted" in repr(e) and "ECONNRESET" in repr(e):
+            if is_econnreset_exception(e):
                 # connection is reset by the server, the underlying connection is broken and can not be reused
                 # we need a new urllib3 http(s) connection in this case.
                 # We need to first close the old one so that urllib3 pool manager can create a new connection
@@ -1146,6 +1172,8 @@ class SnowflakeRestful:
             finally:
                 raw_ret.close()  # ensure response is closed
         except SSLError as se:
+            if is_econnreset_exception(se):
+                raise RetryRequest(se)
             msg = f"Hit non-retryable SSL error, {str(se)}.\n{_CONNECTIVITY_ERR_MSG}"
             logger.debug(msg)
             # the following code is for backward compatibility with old versions of python connector which calls
@@ -1192,5 +1220,5 @@ class SnowflakeRestful:
         except Exception as err:
             raise err
 
-    def use_requests_session(self, url=None) -> Generator[Session, Any, None]:
-        return self.session_manager.use_requests_session(url)
+    def use_session(self, url: str | bytes) -> Generator[Session, Any, None]:
+        return self.session_manager.use_session(url)

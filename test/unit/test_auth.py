@@ -4,6 +4,7 @@ from __future__ import annotations
 import inspect
 import sys
 import time
+from test.helpers import apply_auth_class_update_body, create_mock_auth_body
 from unittest.mock import Mock, PropertyMock
 
 import pytest
@@ -17,17 +18,31 @@ from snowflake.connector.network import SnowflakeRestful
 from .mock_utils import mock_connection
 
 try:  # pragma: no cover
-    from snowflake.connector.auth import Auth, AuthByDefault, AuthByPlugin
+    from snowflake.connector.auth import (
+        Auth,
+        AuthByDefault,
+        AuthByOAuth,
+        AuthByOauthCode,
+        AuthByOauthCredentials,
+        AuthByPlugin,
+    )
 except ImportError:
     from snowflake.connector.auth import Auth
     from snowflake.connector.auth_by_plugin import AuthByPlugin
     from snowflake.connector.auth_default import AuthByDefault
+    from snowflake.connector.auth_oauth import AuthByOAuth
+    from snowflake.connector.auth_oauth_code import AuthByOauthCode
+    from snowflake.connector.auth_oauth_credentials import AuthByOauthCredentials
+
+from snowflake.connector.errors import DatabaseError
+from snowflake.connector.network import ReauthenticationRequest
 
 
 def _init_rest(application, post_requset):
     connection = mock_connection()
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
+    connection.cert_revocation_check_mode = "TEST_CRL_MODE"
     type(connection).application = PropertyMock(return_value=application)
     type(connection)._internal_application_name = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_version = PropertyMock(
@@ -337,3 +352,81 @@ def test_authbyplugin_abc_api():
 'password': <Parameter "password: 'str'">, \
 'kwargs': <Parameter "**kwargs: 'Any'">})"""
         )
+
+
+def test_auth_by_default_prepare_body_does_not_overwrite_client_environment_fields():
+    password = "testpassword"
+    auth_class = AuthByDefault(password)
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = apply_auth_class_update_body(auth_class, req_body_before)
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )
+
+
+def _mock_oauth_token_expired_rest_response(url, headers, body, **kwargs):
+    """Mock rest response for OAuth access token expired error."""
+    from snowflake.connector.network import OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE
+
+    return {
+        "success": False,
+        "message": "OAuth access token expired",
+        "code": OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE,
+        "data": {},
+    }
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "auth_instance, expected_exc_type",
+    [
+        (AuthByOAuth("test_oauth_token"), DatabaseError),
+        (
+            AuthByOauthCode(
+                application="testapp",
+                client_id="test_client_id",
+                client_secret="test_client_secret",
+                authentication_url="https://auth.example.com",
+                token_request_url="https://token.example.com",
+                redirect_uri="http://localhost:8080",
+                scope="session:role-any",
+                host="testaccount.snowflakecomputing.com",
+            ),
+            ReauthenticationRequest,
+        ),
+        (
+            AuthByOauthCredentials(
+                application="testapp",
+                client_id="test_client_id",
+                client_secret="test_client_secret",
+                token_request_url="https://token.example.com",
+                scope="session:role-any",
+            ),
+            ReauthenticationRequest,
+        ),
+    ],
+)
+def test_oauth_token_expired_error_handling(auth_instance, expected_exc_type):
+    """Test that OAuth authenticators handle token expiry errors differently.
+
+    - AuthByOAuth should raise DatabaseError (falls through to general error handling)
+    - AuthByOauthCode and AuthByOauthCredentials should raise ProgrammingError (via ReauthenticationRequest)
+    """
+
+    def mock_errorhandler_always_raise(connection, cursor, error_class, error_value):
+        raise error_class(**error_value)
+
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    rest = _init_rest(application, _mock_oauth_token_expired_rest_response)
+    rest._connection.errorhandler = mock_errorhandler_always_raise
+    auth = Auth(rest)
+    with pytest.raises(expected_exc_type):
+        auth.authenticate(auth_instance, account, user)

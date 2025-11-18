@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 from unittest.mock import MagicMock
 
@@ -70,8 +72,8 @@ def get_mock_session_manager(allow_send: bool = False):
         raise NotImplementedError("Unit test tried to send data using Session.send")
 
     class MockSessionManager(SessionManager):
-        def make_session(self):
-            session = super().make_session()
+        def make_session(self, *, url: str | None = None):
+            session = super().make_session(url=url)
             if not allow_send:
                 session.send = forbidden_send
             return session
