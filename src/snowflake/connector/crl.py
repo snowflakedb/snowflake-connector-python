@@ -63,7 +63,7 @@ class CRLConfig:
     crl_cache_dir: Path | str | None = None
     crl_cache_removal_delay_days: int = 7
     crl_cache_cleanup_interval_hours: int = 1
-    crl_cache_start_cleanup: bool = True
+    crl_cache_start_cleanup: bool = False
 
     @classmethod
     def from_connection(cls, sf_connection) -> CRLConfig:
