@@ -436,7 +436,7 @@ def test_cleanup_loop_double_stop_is_safe(cache_factory):
 def test_cleanup_loop_double_start_is_safe_and_restarts(
     cache_factory, mem_cache_mock, disk_cache_mock
 ):
-    """Test that calling start_periodic_cleanup multiple times creates new executors"""
+    """Test that calling start_periodic_cleanup multiple times creates new threads"""
     # Set up singleton instances to be cleaned
     cache_factory._memory_cache_instance = mem_cache_mock
     cache_factory._file_cache_instance = disk_cache_mock

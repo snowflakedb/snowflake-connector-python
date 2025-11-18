@@ -8,7 +8,6 @@ import os
 import platform
 import threading
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -426,7 +425,7 @@ class CRLCacheFactory:
     _instance_lock = threading.RLock()
 
     # Cleanup management
-    _cleanup_executor: ThreadPoolExecutor | None = None
+    _cleanup_thread: threading.Thread | None = None
     _cleanup_shutdown: threading.Event = threading.Event()
     _cleanup_interval: timedelta | None = None
     _atexit_registered: bool = False
@@ -504,8 +503,10 @@ class CRLCacheFactory:
                 cls.stop_periodic_cleanup()
 
             cls._cleanup_interval = cleanup_interval
-            cls._cleanup_executor = ThreadPoolExecutor(
-                max_workers=1, thread_name_prefix="crl-cache-cleanup"
+            cls._cleanup_thread = threading.Thread(
+                target=cls._cleanup_loop,
+                name="crl-cache-cleanup",
+                daemon=True,  # Make it a daemon thread so it doesn't block program exit
             )
 
             # Register atexit handler for graceful shutdown (only once)
@@ -513,8 +514,8 @@ class CRLCacheFactory:
                 atexit.register(cls._atexit_cleanup_handler)
                 cls._atexit_registered = True
 
-            # Submit the cleanup task
-            cls._cleanup_executor.submit(cls._cleanup_loop)
+            # Start the cleanup thread
+            cls._cleanup_thread.start()
 
             logger.debug(
                 f"Scheduled CRL cache cleanup task to run every {cleanup_interval.total_seconds()} seconds."
@@ -523,29 +524,29 @@ class CRLCacheFactory:
     @classmethod
     def stop_periodic_cleanup(cls) -> None:
         """Stop the periodic cleanup task."""
-        executor_to_shutdown = None
+        thread_to_join = None
 
         with cls._instance_lock:
-            if cls._cleanup_executor is None or cls._cleanup_shutdown.is_set():
+            if cls._cleanup_thread is None or cls._cleanup_shutdown.is_set():
                 return
 
             cls._cleanup_shutdown.set()
-            executor_to_shutdown = cls._cleanup_executor
+            thread_to_join = cls._cleanup_thread
 
-        # Shutdown outside of lock to avoid deadlock
-        if executor_to_shutdown is not None:
-            executor_to_shutdown.shutdown(wait=True)
+        # Join thread outside of lock to avoid deadlock
+        if thread_to_join is not None and thread_to_join.is_alive():
+            thread_to_join.join(timeout=5.0)
 
         with cls._instance_lock:
             cls._cleanup_shutdown.clear()
-            cls._cleanup_executor = None
+            cls._cleanup_thread = None
             cls._cleanup_interval = None
 
     @classmethod
     def is_periodic_cleanup_running(cls) -> bool:
         """Check if periodic cleanup task is running."""
         with cls._instance_lock:
-            return cls._cleanup_executor is not None
+            return cls._cleanup_thread is not None and cls._cleanup_thread.is_alive()
 
     @classmethod
     def _cleanup_loop(cls) -> None:
