@@ -257,6 +257,29 @@ class WiremockClient:
         if response.status_code != requests.codes.created:
             raise RuntimeError("Failed to add mapping")
 
+    def get_requests(self) -> dict:
+        """Get all requests seen by this wiremock instance.
+
+        Returns:
+            dict: JSON response from wiremock's /__admin/requests endpoint
+        """
+        return requests.get(f"{self.http_host_with_port}/__admin/requests").json()
+
+    def saw_urls_matching(self, patterns: list[str]) -> bool:
+        """Check if this wiremock instance saw any requests matching the given URL patterns.
+
+        Args:
+            patterns: List of string patterns to search for in request URLs
+
+        Returns:
+            bool: True if any request URL contains any of the patterns
+        """
+        reqs = self.get_requests()
+        return any(
+            any(pattern in r["request"]["url"] for pattern in patterns)
+            for r in reqs["requests"]
+        )
+
     def _find_free_port(self, forbidden_ports: Union[List[int], None] = None) -> int:
         max_retries = 1 if forbidden_ports is None else 3
         if forbidden_ports is None:
@@ -288,6 +311,66 @@ class WiremockClient:
 
 
 @contextmanager
+def get_configured_proxy_client(
+    target_host_with_port: str,
+    proxy_mapping_template: Union[str, dict, pathlib.Path, None] = None,
+    additional_proxy_placeholders: Optional[dict[str, object]] = None,
+    forbidden_ports: Optional[List[int]] = None,
+    additional_proxy_args: Optional[Iterable[str]] = None,
+):
+    """Context manager that starts and configures a proxy wiremock to forward to a target.
+
+    Parameters
+    ----------
+    target_host_with_port
+        The target URL (e.g., 'http://localhost:8080') that the proxy should forward to.
+    proxy_mapping_template
+        Mapping JSON (str / dict / pathlib.Path) to be used for configuring the proxy.
+        If *None*, the default forward_all.json template is used.
+    additional_proxy_placeholders
+        Optional placeholders to be replaced in the proxy mapping *in addition* to
+        ``{{TARGET_HTTP_HOST_WITH_PORT}}``.
+    forbidden_ports
+        List of ports that the proxy should avoid binding to.
+    additional_proxy_args
+        Extra command-line arguments passed to the proxy Wiremock instance.
+
+    Yields
+    ------
+    WiremockClient
+        A configured proxy wiremock instance.
+    """
+    # Resolve default mapping template if none provided
+    if proxy_mapping_template is None:
+        proxy_mapping_template = (
+            pathlib.Path(__file__).parent.parent.parent.parent
+            / "test"
+            / "data"
+            / "wiremock"
+            / "mappings"
+            / "generic"
+            / "proxy_forward_all.json"
+        )
+
+    # Start the *proxy* Wiremock
+    with WiremockClient(
+        forbidden_ports=forbidden_ports or [],
+        additional_wiremock_process_args=additional_proxy_args,
+    ) as proxy_wm:
+        # Prepare placeholders so that proxy forwards to the target
+        placeholders: dict[str, object] = {
+            "{{TARGET_HTTP_HOST_WITH_PORT}}": target_host_with_port
+        }
+        if additional_proxy_placeholders:
+            placeholders.update(additional_proxy_placeholders)
+
+        # Configure proxy Wiremock to forward everything to target
+        proxy_wm.add_mapping(proxy_mapping_template, placeholders=placeholders)
+
+        yield proxy_wm
+
+
+@contextmanager
 def get_clients_for_proxy_and_target(
     proxy_mapping_template: Union[str, dict, pathlib.Path, None] = None,
     additional_proxy_placeholders: Optional[dict[str, object]] = None,
@@ -313,36 +396,16 @@ def get_clients_for_proxy_and_target(
         Extra command-line arguments passed to the proxy Wiremock instance when it is
         launched.  Useful for tweaking Wiremock behaviour in specific tests.
     """
-
-    # Resolve default mapping template if none provided
-    if proxy_mapping_template is None:
-        proxy_mapping_template = (
-            pathlib.Path(__file__).parent.parent.parent.parent
-            / "test"
-            / "data"
-            / "wiremock"
-            / "mappings"
-            / "generic"
-            / "proxy_forward_all.json"
-        )
-
     # Start the *target* Wiremock first – this will emulate Snowflake / IdP backend
     with WiremockClient() as target_wm:
-        # Then start the *proxy* Wiremock and ensure it doesn't try to bind the same port
-        with WiremockClient(
+        # Start and configure proxy using extracted helper
+        with get_configured_proxy_client(
+            target_host_with_port=target_wm.http_host_with_port,
+            proxy_mapping_template=proxy_mapping_template,
+            additional_proxy_placeholders=additional_proxy_placeholders,
             forbidden_ports=[target_wm.wiremock_http_port],
-            additional_wiremock_process_args=additional_proxy_args,
+            additional_proxy_args=additional_proxy_args,
         ) as proxy_wm:
-            # Prepare placeholders so that proxy forwards to the *target*
-            placeholders: dict[str, object] = {
-                "{{TARGET_HTTP_HOST_WITH_PORT}}": target_wm.http_host_with_port
-            }
-            if additional_proxy_placeholders:
-                placeholders.update(additional_proxy_placeholders)
-
-            # Configure proxy Wiremock to forward everything to target
-            proxy_wm.add_mapping(proxy_mapping_template, placeholders=placeholders)
-
             # Yield control back to the caller with both Wiremocks ready
             yield target_wm, proxy_wm
 
