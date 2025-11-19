@@ -223,8 +223,13 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         use_pooling: bool | None = None,
         **kwargs,
     ) -> aiohttp.ClientResponse:
-        async with self.use_session(url, use_pooling) as session:
+        if isinstance(timeout, tuple):
+            connect, total = timeout
+            timeout_obj = aiohttp.ClientTimeout(total=total, connect=connect)
+        else:
             timeout_obj = aiohttp.ClientTimeout(total=timeout) if timeout else None
+
+        async with self.use_session(url, use_pooling) as session:
             return await session.get(
                 url, headers=headers, timeout=timeout_obj, **kwargs
             )
