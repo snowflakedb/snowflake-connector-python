@@ -35,7 +35,7 @@ def get_mock_session_manager(allow_send: bool = False):
 
     class MockSessionManager(SessionManager):
         def make_session(self, *, url: str | None = None):
-            session = super().make_session(url)
+            session = super().make_session(url=url)
             if not allow_send:
                 # Block at connector._connect level (like sync blocks session.send)
                 # This allows patches on session.request to work
