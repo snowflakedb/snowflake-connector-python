@@ -14,7 +14,6 @@ from snowflake.connector.options import (
 
 from ..errorcode import ER_WIF_CREDENTIALS_NOT_FOUND
 from ..errors import MissingDependencyError, ProgrammingError
-from ..session_manager import SessionManagerFactory
 from ..wif_util import (
     DEFAULT_ENTRA_SNOWFLAKE_RESOURCE,
     SNOWFLAKE_AUDIENCE,
@@ -24,7 +23,7 @@ from ..wif_util import (
     extract_iss_and_sub_without_signature_verification,
     get_aws_sts_hostname,
 )
-from ._session_manager import SessionManager
+from ._session_manager import SessionManager, SessionManagerFactory
 
 logger = logging.getLogger(__name__)
 

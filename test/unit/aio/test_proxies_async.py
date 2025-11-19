@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import urllib.request
 from collections import deque
 from test.unit.test_proxies import (
     DbRequestFlags,
@@ -12,6 +13,9 @@ from test.unit.test_proxies import (
 
 import aiohttp
 import pytest
+from aiohttp import BasicAuth
+from aiohttp.helpers import proxies_from_env
+from yarl import URL
 
 from snowflake.connector.aio import connect as async_connect
 
@@ -314,6 +318,57 @@ async def test_no_proxy_basic_param_proxy_bypass_backend(
     assert flags.proxy_saw_storage is True
 
 
+@pytest.fixture
+def fix_aiohttp_proxy_bypass(monkeypatch):
+    """Fix aiohttp's proxy bypass to check host:port instead of just host.
+
+    This fixture implements a two-step fix:
+    1. Override get_env_proxy_for_url to use host_port_subcomponent for proxy_bypass
+    2. Override urllib.request._splitport to return (host:port, port) for proper matching
+    """
+
+    # Step 1: Override get_env_proxy_for_url to pass host:port to proxy_bypass
+    def get_env_proxy_for_url_with_port(url: URL) -> tuple[URL, BasicAuth | None]:
+        """Get a permitted proxy for the given URL from the env, checking host:port."""
+        from urllib.request import proxy_bypass
+
+        # Check proxy bypass using host:port combination
+        if url.host is not None:
+            # Use host_port_subcomponent which includes port
+            host_port = f"{url.host}:{url.port}" if url.port else url.host
+            if proxy_bypass(host_port):
+                raise LookupError(f"Proxying is disallowed for `{host_port!r}`")
+
+        proxies_in_env = proxies_from_env()
+        try:
+            proxy_info = proxies_in_env[url.scheme]
+        except KeyError:
+            raise LookupError(f"No proxies found for `{url!s}` in the env")
+        else:
+            return proxy_info.proxy, proxy_info.proxy_auth
+
+    # Step 2: Override _splitport to return host:port as first element
+    original_splitport = urllib.request._splitport
+
+    def _splitport_with_port(host):
+        """Override to return (host:port, port) instead of (host, port)."""
+        result = original_splitport(host)
+        if result is None:
+            return (host, None)
+        host_only, port = result
+        # If port was found, return the original host (with port) as first element
+        if port is not None:
+            return (host, port)  # Return original host:port string
+        return (host_only, port)
+
+    monkeypatch.setattr(
+        aiohttp.client, "get_env_proxy_for_url", get_env_proxy_for_url_with_port
+    )
+    monkeypatch.setattr(urllib.request, "_splitport", _splitport_with_port)
+
+    yield
+
+
 @pytest.mark.skipolddriver
 @pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
 @pytest.mark.parametrize("no_proxy_source", ["param", "env"])
@@ -325,6 +380,7 @@ async def test_no_proxy_source_vs_proxy_method_matrix(
     proxy_method,
     no_proxy_source,
     host_port_pooling,
+    fix_aiohttp_proxy_bypass,
 ):
     if proxy_method == "env_vars" and no_proxy_source == "param":
         pytest.xfail(
@@ -366,6 +422,7 @@ async def test_no_proxy_backend_matrix(
     proxy_method,
     no_proxy_source,
     host_port_pooling,
+    fix_aiohttp_proxy_bypass,
 ):
     if proxy_method == "env_vars" and no_proxy_source == "param":
         pytest.xfail(
@@ -420,7 +477,7 @@ async def test_no_proxy_multiple_values_param_only(
     wiremock_mapping_dir,
     proxy_env_vars,
     no_proxy_factory,
-    host_port_pooling,
+    host_port_pooling,  # Unlike in synch code - Session stores no_proxy setup so it would be reused for proxy and backend since they are both on localhost
 ):
     target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
     _setup_backend_storage_mappings(
