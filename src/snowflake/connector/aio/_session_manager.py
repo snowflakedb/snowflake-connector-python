@@ -417,7 +417,7 @@ class SessionManager(
         """
         use_pooling = use_pooling if use_pooling is not None else self.use_pooling
         if not use_pooling:
-            session = self.make_session()
+            session = self.make_session(url=url)
             try:
                 yield session
             finally:
