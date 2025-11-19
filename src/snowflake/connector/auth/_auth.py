@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 
-from .._utils import get_application_path
+from .._utils import core_loader, get_application_path
 from ..compat import urlencode
 from ..constants import (
     DAY_IN_SECONDS,
@@ -144,6 +144,8 @@ class Auth:
                         platform_detection_timeout_seconds=platform_detection_timeout_seconds,
                         session_manager=session_manager.clone(max_retries=0),
                     ),
+                    "CORE_LOAD_ERROR": core_loader.get_load_error(),
+                    "CORE_VERSION": core_loader.get_core_version(),
                 },
             },
         }
