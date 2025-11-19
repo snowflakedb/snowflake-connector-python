@@ -9,11 +9,12 @@ from test.integ.conftest import (
     get_db_parameters,
     is_public_testaccount,
 )
-from typing import AsyncContextManager, AsyncGenerator, Callable
+from typing import Any, AsyncContextManager, AsyncGenerator, Callable
 
 import pytest
 
 from snowflake.connector.aio import SnowflakeConnection
+from snowflake.connector.aio import connect as async_connect
 from snowflake.connector.aio._telemetry import TelemetryClient
 from snowflake.connector.connection import DefaultConverterClass
 from snowflake.connector.telemetry import TelemetryData
@@ -70,13 +71,7 @@ def capture_sf_telemetry_async() -> TelemetryCaptureFixtureAsync:
     return TelemetryCaptureFixtureAsync()
 
 
-async def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
-    """Creates a connection using the parameters defined in parameters.py.
-
-    You can select from the different connections by supplying the appropiate
-    connection_name parameter and then anything else supplied will overwrite the values
-    from parameters.py.
-    """
+def fill_conn_kwargs_for_tests(connection_name: str, **kwargs) -> dict[str, Any]:
     ret = get_db_parameters(connection_name)
     ret.update(kwargs)
 
@@ -95,9 +90,18 @@ async def create_connection(connection_name: str, **kwargs) -> SnowflakeConnecti
         ret.pop("private_key", None)
         ret.pop("private_key_file", None)
 
-    connection = SnowflakeConnection(**ret)
-    await connection.connect()
-    return connection
+    return ret
+
+
+async def create_connection(connection_name: str, **kwargs) -> SnowflakeConnection:
+    """Creates a connection using the parameters defined in parameters.py.
+
+    You can select from the different connections by supplying the appropiate
+    connection_name parameter and then anything else supplied will overwrite the values
+    from parameters.py.
+    """
+    ret = fill_conn_kwargs_for_tests(connection_name, **kwargs)
+    return await async_connect(**ret)
 
 
 @asynccontextmanager
