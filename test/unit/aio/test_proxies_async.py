@@ -420,6 +420,7 @@ async def test_no_proxy_multiple_values_param_only(
     wiremock_mapping_dir,
     proxy_env_vars,
     no_proxy_factory,
+    host_port_pooling,
 ):
     target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
     _setup_backend_storage_mappings(
