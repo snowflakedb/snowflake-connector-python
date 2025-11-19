@@ -11,7 +11,10 @@ from aiohttp.typedefs import StrOrURL
 
 from .. import OperationalError
 from ..errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
-from ..ssl_wrap_socket import FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME, FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT
+from ..ssl_wrap_socket import (
+    FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+    FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT,
+)
 from ._ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
 if TYPE_CHECKING:
