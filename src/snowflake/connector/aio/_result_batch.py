@@ -240,6 +240,7 @@ class ResultBatch(ResultBatchSync):
                         request_data["timeout"] = aiohttp.ClientTimeout(
                             total=DOWNLOAD_TIMEOUT
                         )
+                    request_url = request_data["url"]
                     # Use SessionManager with same fallback pattern as sync version
                     if (
                         connection
@@ -247,9 +248,7 @@ class ResultBatch(ResultBatchSync):
                         and connection.rest.session_manager is not None
                     ):
                         # If connection was explicitly passed and not closed yet - we can reuse SessionManager with session pooling
-                        async with connection.rest.use_session(
-                            request_data["url"]
-                        ) as session:
+                        async with connection.rest.use_session(request_url) as session:
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
@@ -257,7 +256,7 @@ class ResultBatch(ResultBatchSync):
                     elif self._session_manager is not None:
                         # If connection is not accessible or was already closed, but cursors are now used to fetch the data - we will only reuse the http setup (through cloned SessionManager without session pooling)
                         async with self._session_manager.use_session(
-                            request_data["url"]
+                            request_url
                         ) as session:
                             response, content, encoding = await download_chunk(session)
                     else:
@@ -269,7 +268,7 @@ class ResultBatch(ResultBatchSync):
                             use_pooling=False
                         )
                         async with local_session_manager.use_session(
-                            request_data["url"]
+                            request_url
                         ) as session:
                             response, content, encoding = await download_chunk(session)
 
