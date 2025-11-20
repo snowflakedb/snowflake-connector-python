@@ -49,7 +49,7 @@ curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wire
 set JUNIT_REPORT_DIR=%workspace%
 set COV_REPORT_DIR=%workspace%
 
-set TEST_ENVLIST=fix_lint,py%pv%-unit-ci,py%pv%-integ-ci,py%pv%-pandas-ci,py%pv%-sso-ci,py%pv%-coverage
+set TEST_ENVLIST=fix_lint,py%pv%-unit-ci,py%pv%-integ-ci,py%pv%-pandas-ci,py%pv%-sso-ci,py%pv%-aio-ci,py%pv%-coverage
 tox -e %TEST_ENVLIST% --installpkg %connector_whl%
 if %errorlevel% neq 0 goto :error
 

@@ -3,6 +3,7 @@
 # Test Snowflake Connector (FIPS)
 # Note this is the script that test_fips_docker.sh runs inside of the docker container
 #
+set -x
 
 # Export USE_PASSWORD only on Jenkins (not on GitHub Actions)
 # Jenkins FIPS tests run against mocked Snowflake with password auth
@@ -41,6 +42,14 @@ pip freeze
 cd $CONNECTOR_DIR
 
 # Run tests in parallel using pytest-xdist
-pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test --ignore=test/integ/aio_it --ignore=test/unit/aio --ignore=test/wif/test_wif_async.py
+pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test \
+  --ignore=test/integ/aio_it \
+  --ignore=test/unit/aio \
+  --ignore=test/auth/aio \
+  --ignore=test/wif/test_wif_async.py
 
+pip install "${CONNECTOR_WHL}[aio,aioboto]"
+# Run aio tests separately
+pytest -n auto -vvv --cov=snowflake.connector --cov-append --cov-report=xml:coverage.xml -m "aio and unit" test
+pytest -n auto -vvv --cov=snowflake.connector --cov-append --cov-report=xml:coverage.xml -m "aio and integ" test
 deactivate
