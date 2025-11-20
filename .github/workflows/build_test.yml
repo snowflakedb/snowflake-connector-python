@@ -232,7 +232,8 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          SNOWFLAKE_PYTEST_OPTS: ${{ inputs.logLevel == 'debug' && '--log-file=pytest-debug.log --log-file-level=DEBUG' || '' }}
           TOX_PARALLEL_NO_SPINNER: 1
          # To specify the test name (in single test mode) pass this env variable:
 #          SINGLE_TEST_NAME: test/path/filename.py::test_name
@@ -240,6 +241,13 @@ jobs:
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
         shell: bash
+      - name: Upload debug log
+        if: ${{ inputs.logLevel == 'debug' && (success() || failure()) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug_log_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          path: pytest-debug.log
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v4
         with:
           include-hidden-files: true
@@ -299,7 +307,8 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          SNOWFLAKE_PYTEST_OPTS: ${{ inputs.logLevel == 'debug' && '--log-file=pytest-debug.log --log-file-level=DEBUG' || '' }}
         shell: bash
 
   test-noarrowextension:
@@ -331,7 +340,8 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          SNOWFLAKE_PYTEST_OPTS: ${{ inputs.logLevel == 'debug' && '--log-file=pytest-debug.log --log-file-level=DEBUG' || '' }}
         shell: bash
 
   test-fips:
@@ -371,7 +381,8 @@ jobs:
         env:
           PYTHON_VERSION: 3.9
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          SNOWFLAKE_PYTEST_OPTS: ${{ inputs.logLevel == 'debug' && '--log-file=pytest-debug.log --log-file-level=DEBUG' || '' }}
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v4
@@ -433,7 +444,8 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          SNOWFLAKE_PYTEST_OPTS: ${{ inputs.logLevel == 'debug' && '--log-file=pytest-debug.log --log-file-level=DEBUG' || '' }}
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v4
@@ -516,7 +528,8 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          SNOWFLAKE_PYTEST_OPTS: ${{ inputs.logLevel == 'debug' && '--log-file=pytest-debug.log --log-file-level=DEBUG' || '' }}
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - name: Combine coverages
@@ -555,7 +568,8 @@ jobs:
         run: python -m tox run -e aio-unsupported-python
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
-          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          SNOWFLAKE_PYTEST_OPTS: ${{ inputs.logLevel == 'debug' && '--log-file=pytest-debug.log --log-file-level=DEBUG' || '' }}
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
 
