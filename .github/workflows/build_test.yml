@@ -17,6 +17,11 @@ on:
             default: warning
             description: "Log level"
             required: true
+            type: choice
+            options:
+              - warning
+              - info
+              - debug
           tags:
             description: "Test scenario tags"
 
@@ -227,7 +232,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short
+          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
           TOX_PARALLEL_NO_SPINNER: 1
          # To specify the test name (in single test mode) pass this env variable:
 #          SINGLE_TEST_NAME: test/path/filename.py::test_name
@@ -294,7 +299,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short
+          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
         shell: bash
 
   test-noarrowextension:
@@ -326,7 +331,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short
+          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
         shell: bash
 
   test-fips:
@@ -366,7 +371,7 @@ jobs:
         env:
           PYTHON_VERSION: 3.9
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short
+          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v4
@@ -428,7 +433,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short
+          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - uses: actions/upload-artifact@v4
@@ -511,7 +516,7 @@ jobs:
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
           cloud_provider: ${{ matrix.cloud-provider }}
-          PYTEST_ADDOPTS: --color=yes --tb=short
+          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
       - name: Combine coverages
@@ -550,7 +555,7 @@ jobs:
         run: python -m tox run -e aio-unsupported-python
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
-          PYTEST_ADDOPTS: --color=yes --tb=short
+          PYTEST_ADDOPTS: --color=yes --tb=short ${{ inputs.logLevel == 'debug' && '--log-cli-level=DEBUG -v' || '' }}
           TOX_PARALLEL_NO_SPINNER: 1
         shell: bash
 
