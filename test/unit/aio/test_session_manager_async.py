@@ -373,6 +373,7 @@ def mock_connector_with_factory():
                 "pool_connections": 10,
                 "snowflake_ocsp_mode": OCSPMode.FAIL_OPEN,
                 "ocsp_root_certs_dict_lock_timeout": -1,
+                "ocsp_response_cache_file_name": None,
             },
         ),
         # Test with OCSPMode.FAIL_CLOSED + no extra kwargs
@@ -382,6 +383,7 @@ def mock_connector_with_factory():
             {
                 "snowflake_ocsp_mode": OCSPMode.FAIL_CLOSED,
                 "ocsp_root_certs_dict_lock_timeout": -1,
+                "ocsp_response_cache_file_name": None,
             },
         ),
         # Checks that None values also cause kwargs name to occur
@@ -391,6 +393,7 @@ def mock_connector_with_factory():
             {
                 "snowflake_ocsp_mode": None,
                 "ocsp_root_certs_dict_lock_timeout": -1,
+                "ocsp_response_cache_file_name": None,
             },
         ),
         # Test override by extra kwargs: config has FAIL_OPEN but extra_kwargs override with FAIL_CLOSED
@@ -400,6 +403,7 @@ def mock_connector_with_factory():
             {
                 "snowflake_ocsp_mode": OCSPMode.FAIL_CLOSED,
                 "ocsp_root_certs_dict_lock_timeout": -1,
+                "ocsp_response_cache_file_name": None,
             },
         ),
     ],

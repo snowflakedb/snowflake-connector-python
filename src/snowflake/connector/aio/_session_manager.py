@@ -12,7 +12,6 @@ from aiohttp.typedefs import StrOrURL
 from .. import OperationalError
 from ..constants import OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
 from ..errorcode import ER_OCSP_RESPONSE_CERT_STATUS_REVOKED
-from ..ssl_wrap_socket import FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
 from ._ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
 if TYPE_CHECKING:
@@ -47,10 +46,12 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
         snowflake_ocsp_mode: OCSPMode = OCSPMode.FAIL_OPEN,
         session_manager: SessionManager | None = None,
         ocsp_root_certs_dict_lock_timeout: int = OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
+        ocsp_response_cache_file_name: str | None = None,
         **kwargs,
     ):
         self._snowflake_ocsp_mode = snowflake_ocsp_mode
         self._ocsp_root_certs_dict_lock_timeout = ocsp_root_certs_dict_lock_timeout
+        self._ocsp_response_cache_file_name = ocsp_response_cache_file_name
         if session_manager is None:
             logger.warning(
                 "SessionManager instance was not passed to SSLConnector - OCSP will use default settings which may be distinct from the customer's specific one. Code should always pass such instance - verify why it isn't true in the current context"
@@ -102,12 +103,14 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
     ):
 
         v = await SnowflakeOCSPAsn1Crypto(
-            ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
+            ocsp_response_cache_uri=self._ocsp_response_cache_file_name,
             use_fail_open=self._snowflake_ocsp_mode == OCSPMode.FAIL_OPEN,
             hostname=hostname,
             root_certs_dict_lock_timeout=self._ocsp_root_certs_dict_lock_timeout,
         ).validate(hostname, protocol, session_manager=session_manager)
-        if not v:
+        # In fail_open mode, if validation returns None (certificate extraction failed),
+        # allow the connection to proceed. Otherwise, raise an error.
+        if not v and self._snowflake_ocsp_mode != OCSPMode.FAIL_OPEN:
             raise OperationalError(
                 msg=(
                     "The certificate is revoked or "
@@ -147,6 +150,7 @@ class AioHttpConfig(BaseHttpConfig):
     ocsp_root_certs_dict_lock_timeout: int = (
         OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
     )
+    ocsp_response_cache_file_name: str | None = None
 
     trust_env: bool = True
     """Trust environment variables for proxy configuration (HTTP_PROXY, HTTPS_PROXY, NO_PROXY).
@@ -161,7 +165,11 @@ class AioHttpConfig(BaseHttpConfig):
         # We pass here only chosen attributes as kwargs to make the arguments received by the factory as compliant with the BaseConnector constructor interface as possible.
         # We could consider passing the whole HttpConfig as kwarg to the factory if necessary in the future.
         attributes_for_connector_factory = frozenset(
-            {"snowflake_ocsp_mode", "ocsp_root_certs_dict_lock_timeout"}
+            {
+                "snowflake_ocsp_mode",
+                "ocsp_root_certs_dict_lock_timeout",
+                "ocsp_response_cache_file_name",
+            }
         )
 
         self_kwargs_for_connector_factory = {
