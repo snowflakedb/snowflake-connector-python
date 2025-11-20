@@ -228,3 +228,7 @@ def _openssl_connect(
             time.sleep(sleeping_time)
     if err:
         raise err
+
+
+def get_feature_root_certs_dict_lock_timeout():
+    return FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT
