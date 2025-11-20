@@ -285,3 +285,46 @@ def test_oauth_authorization_code_authenticator_is_case_insensitive(
     assert isinstance(conn.auth_class, AuthByOauthCode)
 
     conn.close()
+
+
+@pytest.mark.skipolddriver
+def test_oauth_authorization_code_allows_empty_user(monkeypatch, omit_oauth_urls_check):
+    """Test that OAUTH_AUTHORIZATION_CODE authenticator allows connection without user parameter."""
+    import snowflake.connector
+
+    def mock_post_request(self, url, headers, json_body, **kwargs):
+        return {
+            "success": True,
+            "message": None,
+            "data": {
+                "token": "TOKEN",
+                "masterToken": "MASTER_TOKEN",
+                "idToken": None,
+                "parameters": [{"name": "SERVICE_NAME", "value": "FAKE_SERVICE_NAME"}],
+            },
+        }
+
+    monkeypatch.setattr(
+        snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
+    )
+
+    # Mock the OAuth authorization flow to avoid opening browser and starting HTTP server
+    def mock_request_tokens(self, **kwargs):
+        # Simulate successful token retrieval
+        return ("mock_access_token", "mock_refresh_token")
+
+    monkeypatch.setattr(AuthByOauthCode, "_request_tokens", mock_request_tokens)
+
+    # Test connection without user parameter - should succeed
+    conn = snowflake.connector.connect(
+        account="testaccount",
+        authenticator="OAUTH_AUTHORIZATION_CODE",
+        oauth_client_id="test_client_id",
+        oauth_client_secret="test_client_secret",
+    )
+
+    # Verify that the connection was successful
+    assert conn is not None
+    assert isinstance(conn.auth_class, AuthByOauthCode)
+
+    conn.close()
