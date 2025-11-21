@@ -35,6 +35,8 @@ requirements:
     - setuptools >=40.6.0
     - wheel
     - cython
+    # The way nano arrow builds relies on no-use-pep517, but that flag is fully dropped starting pip 25.3
+    - pip <25.3
     - python {{ python }}
   run:
     {% if py == 39 %}
