@@ -108,8 +108,6 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             hostname=hostname,
             root_certs_dict_lock_timeout=self._ocsp_root_certs_dict_lock_timeout,
         ).validate(hostname, protocol, session_manager=session_manager)
-        # In fail_open mode, if validation returns None (certificate extraction failed),
-        # allow the connection to proceed. Otherwise, raise an error.
         if not v:
             raise OperationalError(
                 msg=(
