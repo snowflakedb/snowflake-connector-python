@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import ctypes
+import importlib
 import string
+import sys
+import threading
 from enum import Enum
 from inspect import stack
 from random import choice
@@ -96,3 +100,67 @@ def get_application_path() -> str:
         return outermost_frame.filename
     except Exception:
         return "unknown"
+
+
+class _CoreLoader:
+    def __init__(self):
+        self._version: bytes | None = None
+        self._error: Exception | None = None
+
+    @staticmethod
+    def _get_core_path():
+        # Define the file name for each platform
+        if sys.platform.startswith("win"):
+            lib_name = "libsf_mini_core.dll"
+        elif sys.platform.startswith("darwin"):
+            lib_name = "libsf_mini_core.dylib"
+        else:
+            lib_name = "libsf_mini_core.so"
+
+        files = importlib.resources.files("snowflake.connector.minicore")
+        return files.joinpath(lib_name)
+
+    @staticmethod
+    def _register_functions(core: ctypes.CDLL):
+        core.sf_core_full_version.argtypes = []
+        core.sf_core_full_version.restype = ctypes.c_char_p
+
+    @staticmethod
+    def _load_minicore(path: str) -> ctypes.CDLL:
+        # This context manager is the safe way to get a
+        # file path from importlib.resources. It handles cases
+        # where the file is inside a zip and needs to be extracted
+        # to a temporary location.
+        with importlib.resources.as_file(path) as lib_path:
+            core = ctypes.CDLL(str(lib_path))
+        return core
+
+    def _load(self) -> None:
+        try:
+            path = self._get_core_path()
+            core = self._load_minicore(path)
+            self._register_functions(core)
+            self._version = core.sf_core_full_version()
+            self._error = None
+        except Exception as err:
+            self._error = err
+
+    def load(self):
+        """Spawn a separate thread to load the minicore library (non-blocking)."""
+        self._error = "still-loading"
+        thread = threading.Thread(target=self._load, daemon=True)
+        thread.start()
+
+    def get_load_error(self) -> str:
+        return str(self._error)
+
+    def get_core_version(self) -> str | None:
+        if self._version:
+            try:
+                return self._version.decode("utf-8")
+            except Exception:
+                pass
+        return None
+
+
+_core_loader = _CoreLoader()
