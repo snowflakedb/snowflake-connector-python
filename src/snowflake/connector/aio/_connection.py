@@ -1062,6 +1062,8 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             proxy_user=self.proxy_user,
             proxy_password=self.proxy_password,
             snowflake_ocsp_mode=self._ocsp_mode(),
+            ocsp_root_certs_dict_lock_timeout=self._ocsp_root_certs_dict_lock_timeout,
+            ocsp_response_cache_file_name=self._ocsp_response_cache_filename,
             trust_env=True,  # Required for proxy support via environment variables
         )
         self._session_manager = SessionManagerFactory.get_manager(self._http_config)

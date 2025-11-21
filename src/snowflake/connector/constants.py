@@ -354,6 +354,9 @@ HTTP_HEADER_SERVICE_NAME = "X-Snowflake-Service"
 
 HTTP_HEADER_VALUE_OCTET_STREAM = "application/octet-stream"
 
+# OCSP
+OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT: int = -1
+
 
 @unique
 class OCSPMode(Enum):
