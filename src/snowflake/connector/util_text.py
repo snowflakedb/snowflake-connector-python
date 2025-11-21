@@ -265,9 +265,11 @@ def is_valid_account_identifier(account: str) -> bool:
     """
     if not isinstance(account, str) or not account:
         return False
-    if "." in account or "/" in account or "\\" in account:
+
+    if "/" in account or "\\" in account:
         return False
-    return bool(ACCOUNT_ID_VALIDATOR_RE.fullmatch(account))
+
+    return all(bool(ACCOUNT_ID_VALIDATOR_RE.fullmatch(p)) for p in account.split("."))
 
 
 def parse_account(account):
