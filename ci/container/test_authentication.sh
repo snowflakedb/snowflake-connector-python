@@ -19,4 +19,5 @@ export PYTHONPATH=$SOURCE_ROOT
 
 python3 -m pip install --break-system-packages -e .
 
-python3 -m pytest test/auth/*
+python3 -m pytest test/auth/* -m "not aio"
+python3 -m pytest test/auth/* -m "aio"

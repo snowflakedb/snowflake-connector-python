@@ -18,7 +18,7 @@ pip install -U setuptools pip
 # Install pytest-xdist for parallel execution
 pip install pytest-xdist
 
-pip install "${CONNECTOR_WHL}[pandas,secure-local-storage,development]"
+pip install "${CONNECTOR_WHL}[pandas,secure-local-storage,development,aio,aioboto]"
 
 echo "!!! Environment description !!!"
 echo "Default installed OpenSSL version"
@@ -29,7 +29,10 @@ pip freeze
 
 cd $CONNECTOR_DIR
 
-# Run tests in parallel using pytest-xdist
-pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test --ignore=test/integ/aio_it --ignore=test/unit/aio --ignore=test/wif/test_wif_async.py
+# Run tests in parallel using pytest-xdist (including aio tests)
+pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml -m "not aio" test --ignore=test/integ/aio_it --ignore=test/unit/aio --ignore=test/wif/test_wif_async.py
+# Run aio tests separately
+pytest -n auto -vvv --cov=snowflake.connector --cov-append --cov-report=xml:coverage.xml -m "aio and unit" test
+pytest -n auto -vvv --cov=snowflake.connector --cov-append --cov-report=xml:coverage.xml -m "aio and integ" test
 
 deactivate
