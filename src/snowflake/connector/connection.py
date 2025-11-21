@@ -140,7 +140,12 @@ from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPO
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
-from .util_text import construct_hostname, parse_account, split_statements
+from .util_text import (
+    construct_hostname,
+    is_valid_account_identifier,
+    parse_account,
+    split_statements,
+)
 from .wif_util import AttestationProvider
 
 if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
@@ -683,6 +688,13 @@ class SnowflakeConnection:
         # Set up the file operation parser and stream downloader.
         self._file_operation_parser = FileOperationParser(self)
         self._stream_downloader = StreamDownloader(self)
+
+    @staticmethod
+    def _validate_account(account_str):
+        if not is_valid_account_identifier(account_str):
+            raise ValueError(
+                "Invalid account identifier: only letters, digits, '_' and '-' allowed; no dots or slashes"
+            )
 
     # Deprecated
     @property
@@ -1669,6 +1681,7 @@ class SnowflakeConnection:
             raise TypeError("auth_class must subclass AuthByPlugin")
 
         if "account" in kwargs:
+            self._validate_account(kwargs["account"])
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
 
