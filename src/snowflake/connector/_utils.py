@@ -4,6 +4,7 @@ import ctypes
 import importlib
 import string
 import sys
+import threading
 from enum import Enum
 from inspect import stack
 from random import choice
@@ -112,7 +113,7 @@ class _CoreLoader:
         if sys.platform.startswith("win"):
             lib_name = "libsf_mini_core.dll"
         elif sys.platform.startswith("darwin"):
-            lib_name = "libsf_mini_core.dyldib"
+            lib_name = "libsf_mini_core.dylib"
         else:
             lib_name = "libsf_mini_core.so"
 
@@ -134,20 +135,32 @@ class _CoreLoader:
             core = ctypes.CDLL(str(lib_path))
         return core
 
-    def load(self) -> None:
+    def _load(self) -> None:
         try:
             path = self._get_core_path()
             core = self._load_minicore(path)
             self._register_functions(core)
             self._version = core.sf_core_full_version()
+            self._error = None
         except Exception as err:
             self._error = err
+
+    def load(self):
+        """Spawn a separate thread to load the minicore library (non-blocking)."""
+        self._error = "still-loading"
+        thread = threading.Thread(target=self._load, daemon=True)
+        thread.start()
 
     def get_load_error(self) -> str:
         return str(self._error)
 
-    def get_core_version(self) -> str:
-        return self._version.decode("utf-8") if self._version else self._version
+    def get_core_version(self) -> str | None:
+        if self._version:
+            try:
+                return self._version.decode("utf-8")
+            except Exception:
+                pass
+        return None
 
 
-core_loader = _CoreLoader()
+_core_loader = _CoreLoader()
