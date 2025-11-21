@@ -38,4 +38,8 @@ pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test
   --ignore=test/auth/aio \
   --ignore=test/wif/test_wif_async.py
 
+pip install "${CONNECTOR_WHL}[aio,aioboto]"
+# Run aio tests separately
+pytest -n auto -vvv --cov=snowflake.connector --cov-append --cov-report=xml:coverage.xml -m "aio and unit" test
+pytest -n auto -vvv --cov=snowflake.connector --cov-append --cov-report=xml:coverage.xml -m "aio and integ" test
 deactivate
