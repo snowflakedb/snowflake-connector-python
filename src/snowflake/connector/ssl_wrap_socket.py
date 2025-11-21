@@ -186,7 +186,7 @@ def ssl_wrap_socket_with_ocsp(*args: Any, **kwargs: Any) -> WrappedSocket:
         ).validate(server_hostname, ret.connection)
         # In fail_open mode, if validation returns None (certificate extraction failed),
         # allow the connection to proceed. Otherwise, raise an error.
-        if not v and FEATURE_OCSP_MODE != OCSPMode.FAIL_OPEN:
+        if not v:
             raise OperationalError(
                 msg=f"The certificate is revoked or could not be validated: hostname={server_hostname}",
                 errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,

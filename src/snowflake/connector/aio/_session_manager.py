@@ -110,7 +110,7 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
         ).validate(hostname, protocol, session_manager=session_manager)
         # In fail_open mode, if validation returns None (certificate extraction failed),
         # allow the connection to proceed. Otherwise, raise an error.
-        if not v and self._snowflake_ocsp_mode != OCSPMode.FAIL_OPEN:
+        if not v:
             raise OperationalError(
                 msg=(
                     "The certificate is revoked or "
