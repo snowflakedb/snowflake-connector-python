@@ -53,7 +53,7 @@ def test_telemetry_data_to_dict():
 
 
 def get_client_and_mock():
-    rest_call = Mock()
+    rest_call = AsyncMock()
     rest_call.return_value = {"success": True}
     rest = Mock()
     rest.attach_mock(rest_call, "request")
@@ -315,3 +315,27 @@ def get_mocked_telemetry_connection(telemetry_enabled: bool = True) -> AsyncMock
     mock_connection._telemetry = mock_telemetry
 
     return mock_connection
+
+
+async def test_telemetry_send_batch_with_retry_flag():
+    """Tests that send_batch respects the retry parameter."""
+    client, rest_call = get_client_and_mock()
+
+    await client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 2000))
+
+    # Test with retry=True
+    await client.send_batch(retry=True)
+
+    assert rest_call.call_count == 1
+    # Verify _no_retry parameter is False when retry=True
+    call_kwargs = rest_call.call_args[1]
+    assert call_kwargs["_no_retry"] is False
+
+    # Add another log and test with retry=False (default)
+    await client.add_log_to_batch(snowflake.connector.telemetry.TelemetryData({}, 3000))
+    await client.send_batch(retry=False)
+
+    assert rest_call.call_count == 2
+    # Verify _no_retry parameter is True when retry=False
+    call_kwargs = rest_call.call_args[1]
+    assert call_kwargs["_no_retry"] is True
