@@ -616,6 +616,51 @@ class CRLValidator:
             logger.exception("Failed to download CRL from %s", crl_url)
             return None
 
+    def _get_crl_last_update(
+        self, crl: x509.CertificateRevocationList
+    ) -> datetime | None:
+        """
+        Get the last_update timestamp from a CRL.
+
+        Args:
+            crl: The CRL to extract the timestamp from
+
+        Returns:
+            The last_update timestamp, or None if not available
+        """
+        try:
+            return crl.last_update_utc
+        except AttributeError:
+            return getattr(crl, "last_update", None)
+
+    def _is_crl_more_recent(
+        self,
+        new_crl: x509.CertificateRevocationList,
+        cached_crl: x509.CertificateRevocationList,
+    ) -> bool:
+        """
+        Check if a newly downloaded CRL is more recent than a cached CRL.
+
+        Args:
+            new_crl: The newly downloaded CRL
+            cached_crl: The cached CRL
+
+        Returns:
+            True if new_crl is more recent (has a later last_update), False otherwise
+        """
+        new_last_update = self._get_crl_last_update(new_crl)
+        cached_last_update = self._get_crl_last_update(cached_crl)
+
+        if new_last_update is None:
+            logger.warning("New CRL has no last_update timestamp")
+            return False
+
+        if cached_last_update is None:
+            logger.warning("Cached CRL has no last_update timestamp")
+            return True
+
+        return new_last_update > cached_last_update
+
     def _download_crl(
         self, crl_url: str
     ) -> tuple[x509.CertificateRevocationList | None, datetime | None]:
@@ -652,9 +697,27 @@ class CRLValidator:
             or cached_crl.is_crl_expired_by(now)
             or cached_crl.is_evicted_by(now, self._cache_validity_time)
         ):
+            logger.debug("Cached CRL is None/expired/evicted, downloading new CRL")
             crl, ts = self._download_crl(crl_url)
-            if crl and ts:
-                self._put_crl_to_cache(crl_url, crl, ts)
+            if crl is not None and ts is not None:
+                # Only cache the downloaded CRL if it's more recent than the cached one
+                is_more_recent = cached_crl is None or self._is_crl_more_recent(
+                    crl, cached_crl.crl
+                )
+                logger.debug(
+                    "Is downloaded CRL more recent? cached_crl is None=%s, is_more_recent=%s",
+                    cached_crl is None,
+                    is_more_recent,
+                )
+                if is_more_recent:
+                    self._put_crl_to_cache(crl_url, crl, ts)
+                    logger.debug("Cached newly downloaded CRL for %s", crl_url)
+                else:
+                    logger.info(
+                        "Downloaded CRL for %s is not more recent than cached version, keeping cached CRL",
+                        crl_url,
+                    )
+                    crl = cached_crl.crl
         else:
             crl = cached_crl.crl
 
