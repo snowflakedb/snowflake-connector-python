@@ -64,6 +64,7 @@ class CRLConfig:
     crl_cache_removal_delay_days: int = 7
     crl_cache_cleanup_interval_hours: int = 1
     crl_cache_start_cleanup: bool = False
+    crl_download_max_size: int = 200 * 1024 * 1024  # 200 MB
 
     @classmethod
     def from_connection(cls, sf_connection) -> CRLConfig:
@@ -158,6 +159,11 @@ class CRLConfig:
             if sf_connection.crl_cache_start_cleanup is None
             else bool(sf_connection.crl_cache_start_cleanup)
         )
+        crl_download_max_size = (
+            cls.crl_download_max_size
+            if sf_connection.crl_download_max_size is None
+            else int(sf_connection.crl_download_max_size)
+        )
 
         return cls(
             cert_revocation_check_mode=cert_revocation_check_mode,
@@ -171,6 +177,7 @@ class CRLConfig:
             crl_cache_removal_delay_days=crl_cache_removal_delay_days,
             crl_cache_cleanup_interval_hours=crl_cache_cleanup_interval_hours,
             crl_cache_start_cleanup=crl_cache_start_cleanup,
+            crl_download_max_size=crl_download_max_size,
         )
 
 
@@ -185,6 +192,7 @@ class CRLValidator:
         read_timeout_ms: int = CRLConfig.read_timeout_ms,
         cache_validity_time: timedelta = CRLConfig.cache_validity_time,
         cache_manager: CRLCacheManager | None = None,
+        crl_download_max_size: int = CRLConfig.crl_download_max_size,
     ):
         self._session_manager = session_manager
         self._cert_revocation_check_mode = cert_revocation_check_mode
@@ -193,6 +201,7 @@ class CRLValidator:
         self._read_timeout_ms = read_timeout_ms
         self._cache_validity_time = cache_validity_time
         self._cache_manager = cache_manager or CRLCacheManager.noop()
+        self._crl_download_max_size = crl_download_max_size
 
         # list of trusted CA and their certificates
         self._trusted_ca: dict[x509.Name, list[x509.Certificate]] = defaultdict(list)
@@ -268,6 +277,7 @@ class CRLValidator:
             read_timeout_ms=config.read_timeout_ms,
             cache_validity_time=config.cache_validity_time,
             cache_manager=cache_manager,
+            crl_download_max_size=config.crl_download_max_size,
         )
 
     def validate_certificate_chain(
@@ -550,10 +560,49 @@ class CRLValidator:
         try:
             logger.debug("Trying to download CRL from: %s", crl_url)
             response = self._session_manager.get(
-                crl_url, timeout=(self._connection_timeout_ms, self._read_timeout_ms)
+                crl_url,
+                timeout=(self._connection_timeout_ms, self._read_timeout_ms),
+                stream=True,
             )
             response.raise_for_status()
-            return response.content
+
+            # Check Content-Length header first if available
+            content_length = response.headers.get("Content-Length")
+            if content_length:
+                try:
+                    size = int(content_length)
+                    if size > self._crl_download_max_size:
+                        logger.warning(
+                            "CRL from %s exceeds maximum size limit (%d bytes > %d bytes)",
+                            crl_url,
+                            size,
+                            self._crl_download_max_size,
+                        )
+                        return None
+                except ValueError:
+                    logger.debug(
+                        "Invalid Content-Length header for %s: %s",
+                        crl_url,
+                        content_length,
+                    )
+
+            # Stream the content and check size as we download
+            chunks = []
+            total_size = 0
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    total_size += len(chunk)
+                    if total_size > self._crl_download_max_size:
+                        logger.warning(
+                            "CRL from %s exceeded maximum size limit during download (%d bytes > %d bytes)",
+                            crl_url,
+                            total_size,
+                            self._crl_download_max_size,
+                        )
+                        return None
+                    chunks.append(chunk)
+
+            return b"".join(chunks)
         except Exception:
             # CRL fetch or parsing failed
             logger.exception("Failed to download CRL from %s", crl_url)

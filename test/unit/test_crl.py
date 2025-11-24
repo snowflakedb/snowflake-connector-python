@@ -1141,6 +1141,7 @@ def test_crl_config_from_connection_disabled_mode():
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
+    mock_connection.crl_download_max_size = None
 
     config = CRLConfig.from_connection(mock_connection)
 
@@ -1164,6 +1165,7 @@ def test_crl_config_from_connection_enabled_mode():
     mock_connection.crl_cache_removal_delay_days = 14
     mock_connection.crl_cache_cleanup_interval_hours = 2
     mock_connection.crl_cache_start_cleanup = True
+    mock_connection.crl_download_max_size = 150 * 1024 * 1024  # 150MB
 
     config = CRLConfig.from_connection(mock_connection)
 
@@ -1178,6 +1180,7 @@ def test_crl_config_from_connection_enabled_mode():
     assert config.crl_cache_removal_delay_days == 14
     assert config.crl_cache_cleanup_interval_hours == 2
     assert config.crl_cache_start_cleanup
+    assert config.crl_download_max_size == 150 * 1024 * 1024
 
 
 def test_crl_config_from_connection_none_values():
@@ -1194,6 +1197,7 @@ def test_crl_config_from_connection_none_values():
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
+    mock_connection.crl_download_max_size = None
 
     config = CRLConfig.from_connection(mock_connection)
 
@@ -1215,6 +1219,7 @@ def test_crl_config_from_connection_none_values():
         == CRLConfig.crl_cache_cleanup_interval_hours
     )
     assert config.crl_cache_start_cleanup == CRLConfig.crl_cache_start_cleanup
+    assert config.crl_download_max_size == CRLConfig.crl_download_max_size
 
 
 def test_crl_config_from_connection_invalid_mode_string():
@@ -1231,6 +1236,7 @@ def test_crl_config_from_connection_invalid_mode_string():
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
+    mock_connection.crl_download_max_size = None
 
     # Should default to class default and log warning
     config = CRLConfig.from_connection(mock_connection)
@@ -1251,6 +1257,7 @@ def test_crl_config_from_connection_enum_mode():
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
+    mock_connection.crl_download_max_size = None
 
     config = CRLConfig.from_connection(mock_connection)
     assert config.cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
@@ -1270,6 +1277,7 @@ def test_crl_config_from_connection_unsupported_mode_type():
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
+    mock_connection.crl_download_max_size = None
 
     # Should default to class default and log warning
     config = CRLConfig.from_connection(mock_connection)
@@ -1287,6 +1295,7 @@ def test_crl_config_from_connection_none_mode():
     mock_connection.enable_crl_cache = None
     mock_connection.enable_crl_file_cache = None
     mock_connection.crl_cache_dir = None
+    mock_connection.crl_download_max_size = None
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
@@ -1378,6 +1387,116 @@ def test_crl_validator_download_crl_network_error(session_manager):
         crl, timestamp = validator._download_crl(crl_url)
         assert crl is None
         assert timestamp is None
+
+
+@responses.activate
+def test_crl_validator_download_crl_exceeds_size_via_content_length(session_manager):
+    """Test CRL download aborts when Content-Length exceeds the configured limit"""
+    crl_url = "http://example.com/huge.crl"
+    test_max_size = 1 * 1024 * 1024  # 1 MB for testing
+
+    # Mock response with Content-Length header exceeding limit
+    responses.add(
+        responses.GET,
+        crl_url,
+        headers={"Content-Length": str(test_max_size + 1)},
+        body=b"dummy",
+        status=200,
+        content_type="application/pkix-crl",
+    )
+
+    validator = CRLValidator(
+        session_manager, trusted_certificates=[], crl_download_max_size=test_max_size
+    )
+
+    # Should return (None, None) when size limit exceeded
+    crl, timestamp = validator._download_crl(crl_url)
+    assert crl is None
+    assert timestamp is None
+
+
+@responses.activate
+def test_crl_validator_download_crl_exceeds_size_during_streaming(
+    cert_gen, session_manager
+):
+    """Test CRL download aborts when actual downloaded content exceeds the configured limit"""
+    crl_url = "http://example.com/streaming-huge.crl"
+    test_max_size = 1 * 1024 * 1024  # 1 MB for testing
+
+    # Create a large payload that exceeds the limit
+    # We'll use a callback to stream large chunks
+    def request_callback(request):
+        # Return data larger than the test max size
+        large_data = b"X" * (test_max_size + 1000)
+        return (200, {}, large_data)
+
+    responses.add_callback(
+        responses.GET,
+        crl_url,
+        callback=request_callback,
+        content_type="application/pkix-crl",
+    )
+
+    validator = CRLValidator(
+        session_manager, trusted_certificates=[], crl_download_max_size=test_max_size
+    )
+
+    # Should return (None, None) when size limit exceeded during streaming
+    crl, timestamp = validator._download_crl(crl_url)
+    assert crl is None
+    assert timestamp is None
+
+
+@responses.activate
+def test_crl_validator_download_crl_within_size_limit(cert_gen, session_manager):
+    """Test CRL download succeeds when size is within the configured limit"""
+    crl_url = "http://example.com/valid-size.crl"
+    crl_data = cert_gen.generate_valid_crl()
+
+    # Mock response that's within size limit
+    responses.add(
+        responses.GET,
+        crl_url,
+        body=crl_data,
+        status=200,
+        content_type="application/pkix-crl",
+    )
+
+    validator = CRLValidator(
+        session_manager, trusted_certificates=[cert_gen.ca_certificate]
+    )
+
+    # Should successfully download and parse CRL
+    crl, timestamp = validator._download_crl(crl_url)
+    assert crl is not None
+    assert timestamp is not None
+
+
+@responses.activate
+def test_crl_validator_download_crl_custom_size_limit(session_manager):
+    """Test CRL download respects custom size limit"""
+    crl_url = "http://example.com/custom-limit.crl"
+    custom_limit = 1024  # 1KB
+
+    # Mock response with Content-Length just over the custom limit
+    responses.add(
+        responses.GET,
+        crl_url,
+        headers={"Content-Length": str(custom_limit + 1)},
+        body=b"dummy",
+        status=200,
+        content_type="application/pkix-crl",
+    )
+
+    # Create validator with custom size limit
+    validator = CRLValidator(
+        session_manager, trusted_certificates=[], crl_download_max_size=custom_limit
+    )
+
+    # Should return (None, None) when custom size limit exceeded
+    crl, timestamp = validator._download_crl(crl_url)
+    assert crl is None
+    assert timestamp is None
 
 
 def test_crl_validator_extract_crl_distribution_points_success(
