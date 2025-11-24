@@ -669,11 +669,16 @@ class SnowflakeConnection:
         self._file_operation_parser = FileOperationParser(self)
         self._stream_downloader = StreamDownloader(self)
 
-    @staticmethod
-    def _validate_account(account_str):
+    def _validate_account(self, account_str):
         if not is_valid_account_identifier(account_str):
-            raise ValueError(
-                "Invalid account identifier: only letters, digits, '_' and '-' allowed; no dots or slashes"
+            Error.errorhandler_wrapper(
+                self,
+                None,
+                ProgrammingError,
+                {
+                    "msg": "Invalid account identifier: only letters, digits, '_' and '-' allowed; no dots or slashes",
+                    "errno": ER_NO_ACCOUNT_NAME,
+                },
             )
 
     # Deprecated
@@ -1635,7 +1640,6 @@ class SnowflakeConnection:
             raise TypeError("auth_class must subclass AuthByPlugin")
 
         if "account" in kwargs:
-            self._validate_account(kwargs["account"])
             if "host" not in kwargs:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
 
@@ -1756,8 +1760,11 @@ class SnowflakeConnection:
                 ProgrammingError,
                 {"msg": "Account must be specified", "errno": ER_NO_ACCOUNT_NAME},
             )
-        if self._account and "." in self._account:
-            self._account = parse_account(self._account)
+
+        if self._account:
+            self._validate_account(self._account)
+            if "." in self._account:
+                self._account = parse_account(self._account)
 
         if not isinstance(self._backoff_policy, Callable) or not isinstance(
             self._backoff_policy(), Iterator

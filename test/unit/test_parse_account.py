@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from snowflake.connector import connect
+from snowflake.connector import ProgrammingError, connect
 from snowflake.connector.util_text import is_valid_account_identifier, parse_account
 
 
@@ -40,7 +40,6 @@ def test_is_valid_account_identifier(value):
     [
         "a/b",
         "a\\b",
-        "",
         "aa.bb.ccc/dddd",
         "account@domain",
         "account name",
@@ -54,7 +53,7 @@ def test_is_valid_account_identifier(value):
 )
 def test_is_invalid_account_identifier(value):
     assert is_valid_account_identifier(value) is False
-    with pytest.raises(ValueError) as err:
+    with pytest.raises(ProgrammingError) as err:
         connect(account=value, user="jdoe", password="***")
 
     assert "Invalid account identifier" in str(err)
