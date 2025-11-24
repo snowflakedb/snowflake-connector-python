@@ -6,6 +6,7 @@ import hashlib
 import logging
 import os
 import platform
+import stat
 import threading
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -16,6 +17,8 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from filelock import BaseFileLock, FileLock
+
+from .compat import IS_WINDOWS
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +203,10 @@ class CRLFileCache(CRLCache):
     """
 
     def __init__(
-        self, cache_dir: Path | None = None, removal_delay: timedelta | None = None
+        self,
+        cache_dir: Path | None = None,
+        removal_delay: timedelta | None = None,
+        unsafe_skip_file_permissions_check: bool = False,
     ):
         """
         Initialize the file cache.
@@ -208,6 +214,7 @@ class CRLFileCache(CRLCache):
         Args:
             cache_dir: Directory to store cached CRLs
             removal_delay: How long to wait before removing expired files
+            unsafe_skip_file_permissions_check: Skip file permission validation for security
 
         Raises:
             OSError: If cache directory cannot be created
@@ -215,6 +222,7 @@ class CRLFileCache(CRLCache):
         self._cache_file_lock_timeout = 5.0
         self._cache_dir = cache_dir or _get_default_crl_cache_path()
         self._removal_delay = removal_delay or timedelta(days=7)
+        self._unsafe_skip_file_permissions_check = unsafe_skip_file_permissions_check
 
         self._ensure_cache_directory_exists()
 
@@ -248,6 +256,40 @@ class CRLFileCache(CRLCache):
             timeout=self._cache_file_lock_timeout,
         )
 
+    def _check_file_permissions(self, file_path: Path) -> None:
+        """
+        Check that the CRL cache file has secure permissions (owner-only access).
+
+        Note: This check is only performed on Unix-like systems. Windows file
+        permissions work differently and are not checked.
+
+        Args:
+            file_path: Path to the file to check
+
+        Raises:
+            PermissionError: If file permissions are too wide or file has wrong owner
+        """
+        # Skip permission checks on Windows as they work differently
+        if IS_WINDOWS:
+            return
+
+        try:
+            stat_info = file_path.stat()
+            actual_permissions = stat.S_IMODE(stat_info.st_mode)
+
+            # Check that file is readable/writable only by owner (0o600 or more restrictive)
+            if (
+                actual_permissions & 0o077 != 0
+            ):  # Check if group or others have any permission
+                raise PermissionError(
+                    f"CRL cache file {file_path} has insecure permissions: {oct(actual_permissions)}. "
+                    f"File must be accessible only by the owner (e.g., 0o600 or 0o400)."
+                )
+
+        except FileNotFoundError:
+            # File doesn't exist yet, this is fine
+            pass
+
     def get(self, crl_url: str) -> CRLCacheEntry | None:
         """
         Get a CRL cache entry from disk.
@@ -264,6 +306,14 @@ class CRLFileCache(CRLCache):
                 if crl_file_path.exists():
                     logger.debug(f"Found CRL on disk for {crl_file_path}")
 
+                    # Check file permissions before reading
+                    if not self._unsafe_skip_file_permissions_check:
+                        self._check_file_permissions(crl_file_path)
+                    else:
+                        logger.warning(
+                            f"Skipping file permissions check for {crl_file_path}"
+                        )
+
                     # Get file modification time as download time
                     stat_info = crl_file_path.stat()
                     download_time = datetime.fromtimestamp(
@@ -277,6 +327,11 @@ class CRLFileCache(CRLCache):
                     crl = x509.load_der_x509_crl(crl_data, backend=default_backend())
                     return CRLCacheEntry(crl, download_time)
 
+            except PermissionError as e:
+                logger.error(
+                    f"Permission error reading CRL from disk cache for {crl_url}: {e}"
+                )
+                return None
             except Exception as e:
                 logger.warning(f"Failed to read CRL from disk cache for {crl_url}: {e}")
 
@@ -296,9 +351,15 @@ class CRLFileCache(CRLCache):
                 # Serialize the CRL to DER format
                 crl_data = entry.crl.public_bytes(serialization.Encoding.DER)
 
-                # Write to file
-                with open(crl_file_path, "wb") as f:
-                    f.write(crl_data)
+                # Write to file with secure permissions (owner read/write only)
+                # Using os.open with 0o600 ensures the file is created with secure permissions
+                fd = os.open(
+                    crl_file_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
+                )
+                try:
+                    os.write(fd, crl_data)
+                finally:
+                    os.close(fd)
 
                 # Set file modification time to download time
                 download_timestamp = entry.download_time.timestamp()
@@ -453,7 +514,10 @@ class CRLCacheFactory:
 
     @classmethod
     def get_file_cache(
-        cls, cache_dir: Path | None = None, removal_delay: timedelta | None = None
+        cls,
+        cache_dir: Path | None = None,
+        removal_delay: timedelta | None = None,
+        unsafe_skip_file_permissions_check: bool = False,
     ) -> CRLFileCache:
         """
         Get or create a singleton CRLFileCache instance.
@@ -461,17 +525,23 @@ class CRLCacheFactory:
         Args:
             cache_dir: Directory to store cached CRLs
             removal_delay: How long to wait before removing expired files
+            unsafe_skip_file_permissions_check: Skip file permission validation for security
 
         Returns:
             The singleton CRLFileCache instance
         """
         with cls._instance_lock:
             if cls._file_cache_instance is None:
-                cls._file_cache_instance = CRLFileCache(cache_dir, removal_delay)
+                cls._file_cache_instance = CRLFileCache(
+                    cache_dir, removal_delay, unsafe_skip_file_permissions_check
+                )
             else:
                 # Check if parameters differ from existing instance
                 existing_cache_dir = cls._file_cache_instance._cache_dir
                 existing_removal_delay = cls._file_cache_instance._removal_delay
+                existing_skip_check = (
+                    cls._file_cache_instance._unsafe_skip_file_permissions_check
+                )
                 requested_cache_dir = cache_dir or _get_default_crl_cache_path()
                 requested_removal_delay = removal_delay or timedelta(days=7)
 
@@ -484,6 +554,11 @@ class CRLCacheFactory:
                     logger.warning(
                         f"CRLs file cache has already been initialized with removal delay of {existing_removal_delay}, "
                         f"ignoring new removal delay of {requested_removal_delay}"
+                    )
+                if existing_skip_check != unsafe_skip_file_permissions_check:
+                    logger.warning(
+                        f"CRLs file cache has already been initialized with unsafe_skip_file_permissions_check={existing_skip_check}, "
+                        f"ignoring new value {unsafe_skip_file_permissions_check}"
                     )
             return cls._file_cache_instance
 

@@ -65,6 +65,7 @@ class CRLConfig:
     crl_cache_cleanup_interval_hours: int = 1
     crl_cache_start_cleanup: bool = False
     crl_download_max_size: int = 200 * 1024 * 1024  # 200 MB
+    unsafe_skip_file_permissions_check: bool = False
 
     @classmethod
     def from_connection(cls, sf_connection) -> CRLConfig:
@@ -164,6 +165,10 @@ class CRLConfig:
             if sf_connection.crl_download_max_size is None
             else int(sf_connection.crl_download_max_size)
         )
+        # Use the existing unsafe_skip_file_permissions_check flag from connection
+        unsafe_skip_file_permissions_check = bool(
+            sf_connection._unsafe_skip_file_permissions_check
+        )
 
         return cls(
             cert_revocation_check_mode=cert_revocation_check_mode,
@@ -178,6 +183,7 @@ class CRLConfig:
             crl_cache_cleanup_interval_hours=crl_cache_cleanup_interval_hours,
             crl_cache_start_cleanup=crl_cache_start_cleanup,
             crl_download_max_size=crl_download_max_size,
+            unsafe_skip_file_permissions_check=unsafe_skip_file_permissions_check,
         )
 
 
@@ -246,7 +252,9 @@ class CRLValidator:
             if config.enable_crl_file_cache:
                 removal_delay = timedelta(days=config.crl_cache_removal_delay_days)
                 file_cache = CRLCacheFactory.get_file_cache(
-                    cache_dir=config.crl_cache_dir, removal_delay=removal_delay
+                    cache_dir=config.crl_cache_dir,
+                    removal_delay=removal_delay,
+                    unsafe_skip_file_permissions_check=config.unsafe_skip_file_permissions_check,
                 )
             else:
                 from snowflake.connector.crl_cache import NoopCRLCache

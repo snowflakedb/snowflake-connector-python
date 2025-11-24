@@ -798,6 +798,13 @@ class SnowflakeConnection:
         return self._crl_config.crl_download_max_size
 
     @property
+    def skip_file_permissions_check(self) -> bool | None:
+        """Whether to skip file permission checks for CRL cache files."""
+        if not self._crl_config:
+            return self._skip_file_permissions_check
+        return self._crl_config.skip_file_permissions_check
+
+    @property
     def session_id(self) -> int:
         return self._session_id
 

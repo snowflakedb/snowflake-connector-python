@@ -618,3 +618,92 @@ def test_atexit_handler_error_handling(cache_factory):
             cache_factory._atexit_cleanup_handler()
         except Exception as e:
             pytest.fail(f"Atexit handler should not raise exceptions: {e}")
+
+
+# File permission tests
+import os
+import stat
+
+from snowflake.connector.compat import IS_WINDOWS
+
+
+@pytest.mark.skipif(
+    IS_WINDOWS, reason="File permission checks not applicable on Windows"
+)
+def test_file_cache_creates_files_with_secure_permissions(crl, download_time):
+    """Test that CRL cache files are created with owner-only permissions (0o600)"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cache = CRLFileCache(Path(temp_dir), timedelta(hours=1))
+        crl_url = "http://test.com/secure_crl"
+        entry = CRLCacheEntry(crl, download_time)
+
+        cache.put(crl_url, entry)
+
+        # Get the file path and check its permissions
+        file_path = cache._get_crl_file_path(crl_url)
+        file_stat = file_path.stat()
+        permissions = stat.S_IMODE(file_stat.st_mode)
+
+        # Should be 0o600 (read/write for owner only)
+        assert permissions == 0o600, f"Expected 0o600, got {oct(permissions)}"
+
+
+@pytest.mark.skipif(
+    IS_WINDOWS, reason="File permission checks not applicable on Windows"
+)
+@pytest.mark.parametrize(
+    "chmod_permissions,skip_check,result_should_be_none",
+    [
+        (
+            0o644,
+            False,
+            True,
+        ),  # rw-r--r-- (world-readable) with checks - should be rejected
+        (
+            0o640,
+            False,
+            True,
+        ),  # rw-r----- (group-readable) with checks - should be rejected
+        (
+            0o400,
+            False,
+            False,
+        ),  # r-------- (owner read-only) with checks - should be accepted
+        (
+            0o644,
+            True,
+            False,
+        ),  # rw-r--r-- (world-readable) without checks - should be accepted
+    ],
+    ids=["world-readable", "group-readable", "owner-read-only", "skip-check-flag"],
+)
+def test_file_cache_permission_validation(
+    crl, download_time, chmod_permissions, skip_check, result_should_be_none
+):
+    """Test that file cache validates file permissions correctly and respects skip flag"""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        cache = CRLFileCache(
+            Path(temp_dir),
+            timedelta(hours=1),
+            unsafe_skip_file_permissions_check=skip_check,
+        )
+        crl_url = "http://test.com/test_crl"
+        entry = CRLCacheEntry(crl, download_time)
+
+        # Write the file first
+        cache.put(crl_url, entry)
+
+        # Change file permissions
+        file_path = cache._get_crl_file_path(crl_url)
+        os.chmod(file_path, chmod_permissions)
+
+        # Try to read the file
+        result = cache.get(crl_url)
+
+        if result_should_be_none:
+            # Insecure permissions - should return None
+            assert result is None
+        else:
+            # Secure permissions or checks disabled - should read successfully
+            assert result is not None
+            assert result.crl is not None
