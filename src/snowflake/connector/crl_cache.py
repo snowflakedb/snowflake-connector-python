@@ -227,10 +227,19 @@ class CRLFileCache(CRLCache):
         self._ensure_cache_directory_exists()
 
     def _ensure_cache_directory_exists(self) -> None:
-        """Create the cache directory if it doesn't exist."""
+        """Create the cache directory if it doesn't exist with secure permissions."""
         try:
-            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            # Create directory with secure permissions (owner read/write/execute only)
+            self._cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+            # Verify directory permissions (if it already existed)
+            if not self._unsafe_skip_file_permissions_check:
+                self._check_permissions(self._cache_dir, "directory", "0o700")
+
             logger.debug(f"Cache directory created/verified: {self._cache_dir}")
+        except PermissionError:
+            # Re-raise permission errors as-is
+            raise
         except OSError as e:
             raise OSError(f"Failed to create cache directory {self._cache_dir}: {e}")
 
@@ -256,38 +265,42 @@ class CRLFileCache(CRLCache):
             timeout=self._cache_file_lock_timeout,
         )
 
-    def _check_file_permissions(self, file_path: Path) -> None:
+    def _check_permissions(
+        self, path: Path, resource_type: str, expected_perms: str
+    ) -> None:
         """
-        Check that the CRL cache file has secure permissions (owner-only access).
+        Check that a CRL cache resource has secure permissions (owner-only access).
 
         Note: This check is only performed on Unix-like systems. Windows file
         permissions work differently and are not checked.
 
         Args:
-            file_path: Path to the file to check
+            path: Path to the resource (file or directory) to check
+            resource_type: Description of the resource type (e.g., "file", "directory")
+            expected_perms: Description of expected permissions (e.g., "0o600 or 0o400", "0o700")
 
         Raises:
-            PermissionError: If file permissions are too wide or file has wrong owner
+            PermissionError: If resource permissions are too wide
         """
         # Skip permission checks on Windows as they work differently
         if IS_WINDOWS:
             return
 
         try:
-            stat_info = file_path.stat()
+            stat_info = path.stat()
             actual_permissions = stat.S_IMODE(stat_info.st_mode)
 
-            # Check that file is readable/writable only by owner (0o600 or more restrictive)
+            # Check that resource is accessible only by owner (no group/other permissions)
             if (
                 actual_permissions & 0o077 != 0
             ):  # Check if group or others have any permission
                 raise PermissionError(
-                    f"CRL cache file {file_path} has insecure permissions: {oct(actual_permissions)}. "
-                    f"File must be accessible only by the owner (e.g., 0o600 or 0o400)."
+                    f"CRL cache {resource_type} {path} has insecure permissions: {oct(actual_permissions)}. "
+                    f"{resource_type.capitalize()} must be accessible only by the owner ({expected_perms})."
                 )
 
         except FileNotFoundError:
-            # File doesn't exist yet, this is fine
+            # Resource doesn't exist yet, this is fine
             pass
 
     def get(self, crl_url: str) -> CRLCacheEntry | None:
@@ -308,7 +321,7 @@ class CRLFileCache(CRLCache):
 
                     # Check file permissions before reading
                     if not self._unsafe_skip_file_permissions_check:
-                        self._check_file_permissions(crl_file_path)
+                        self._check_permissions(crl_file_path, "file", "0o600 or 0o400")
                     else:
                         logger.warning(
                             f"Skipping file permissions check for {crl_file_path}"
