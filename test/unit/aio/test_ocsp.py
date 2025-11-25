@@ -86,8 +86,10 @@ async def _asyncio_connect(url, timeout=5):
         ssl=ssl.create_default_context(),
         ssl_handshake_timeout=timeout,
     )
-    yield protocol
-    transport.close()
+    try:
+        yield protocol
+    finally:
+        transport.close()
 
 
 @pytest.fixture(autouse=True)
