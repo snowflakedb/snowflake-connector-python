@@ -598,17 +598,17 @@ class CRLValidator:
             chunks = []
             total_size = 0
             for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    total_size += len(chunk)
-                    if total_size > self._crl_download_max_size:
-                        logger.warning(
-                            "CRL from %s exceeded maximum size limit during download (%d bytes > %d bytes)",
-                            crl_url,
-                            total_size,
-                            self._crl_download_max_size,
-                        )
-                        return None
-                    chunks.append(chunk)
+                if not chunk:
+                    continue
+                total_size += len(chunk)
+                if total_size > self._crl_download_max_size:
+                    logger.warning(
+                        "CRL from %s exceeded maximum size limit during download (%d bytes)",
+                        crl_url,
+                        self._crl_download_max_size,
+                    )
+                    return None
+                chunks.append(chunk)
 
             return b"".join(chunks)
         except Exception:
@@ -674,7 +674,12 @@ class CRLValidator:
             except AttributeError:
                 next_update = crl.next_update
 
-            if next_update and now > next_update:
+            if not next_update:
+                # reject CRL as lack of next_update timestamp is a violation of both the RFC and the governing policy documents.
+                logger.warning("CRL from %s has no next_update timestamp", crl_url)
+                return None, None
+
+            if now > next_update:
                 logger.warning(
                     "The CRL from %s was expired on %s", crl_url, next_update
                 )
