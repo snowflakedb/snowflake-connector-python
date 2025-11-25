@@ -366,9 +366,11 @@ class CRLFileCache(CRLCache):
 
                 # Write to file with secure permissions (owner read/write only)
                 # Using os.open with 0o600 ensures the file is created with secure permissions
-                fd = os.open(
-                    crl_file_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
-                )
+                flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+                if IS_WINDOWS:
+                    # flag necessary for writing binary data to file on Windows OS
+                    flags |= os.O_BINARY
+                fd = os.open(crl_file_path, flags, 0o600)
                 try:
                     os.write(fd, crl_data)
                 finally:
