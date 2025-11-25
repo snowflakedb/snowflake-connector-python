@@ -13,6 +13,7 @@ import functools
 import os
 import platform
 import ssl
+import sys
 import time
 from contextlib import asynccontextmanager
 from os import environ, path
@@ -90,6 +91,13 @@ async def _asyncio_connect(url, timeout=5):
         yield protocol
     finally:
         transport.close()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def windows_event_loop_policy():
+    """Set Windows to use SelectorEventLoop for better network stability."""
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
 @pytest.fixture(autouse=True)

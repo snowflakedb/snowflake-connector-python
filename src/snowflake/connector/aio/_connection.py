@@ -717,6 +717,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
     def _close_at_exit(self):
         with suppress(Exception):
+            # TODO: should this be asyncio.run - not event loop.smth? I mean we will create a new loop and close the loop because of this
             asyncio.run(self.close(retry=False))
 
     async def _get_query_status(
