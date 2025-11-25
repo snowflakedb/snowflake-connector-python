@@ -13,6 +13,7 @@ import functools
 import os
 import platform
 import ssl
+import sys
 import time
 from contextlib import asynccontextmanager
 from os import environ, path
@@ -86,8 +87,22 @@ async def _asyncio_connect(url, timeout=5):
         ssl=ssl.create_default_context(),
         ssl_handshake_timeout=timeout,
     )
-    yield protocol
-    transport.close()
+    try:
+        yield protocol
+    finally:
+        transport.close()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def windows_event_loop_policy():
+    """Set Windows to use SelectorEventLoop for better network stability."""
+    if sys.platform == "win32":
+        policy = asyncio.WindowsSelectorEventLoopPolicy()
+        asyncio.set_event_loop_policy(policy)
+        yield
+        asyncio.set_event_loop_policy(None)  # Reset
+    else:
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -479,7 +494,10 @@ async def test_concurrent_ocsp_requests(tmpdir, session_manager):
     SnowflakeOCSP.clear_cache()  # reset the memory cache
     SFOCSP(ocsp_response_cache_uri="file://" + cache_file_name)
 
-    target_hosts = TARGET_HOSTS * 5
+    # Windows has lower concurrent connection limits than Linux/Mac
+    # Use smaller multiplier to avoid WinError 64: network name is no longer available caused by RuntimeError('Event loop is closed')
+    multiplier = 2 if sys.platform == "win32" else 5
+    target_hosts = TARGET_HOSTS * multiplier
     await asyncio.gather(
         *[
             _validate_certs_using_ocsp(hostname, cache_file_name, session_manager)
