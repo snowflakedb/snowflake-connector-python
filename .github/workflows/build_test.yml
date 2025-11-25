@@ -84,18 +84,18 @@ jobs:
     strategy:
       matrix:
         os:
-#          - image: ubuntu-latest
-#            id: manylinux_x86_64
-#          - image: ubuntu-latest
-#            id: manylinux_aarch64
+          - image: ubuntu-latest
+            id: manylinux_x86_64
+          - image: ubuntu-latest
+            id: manylinux_aarch64
           - image: windows-latest
             id: win_amd64
           - image: windows-11-arm
             id: win_arm64
-#          - image: macos-latest
-#            id: macosx_x86_64
-#          - image: macos-latest
-#            id: macosx_arm64
+          - image: macos-latest
+            id: macosx_x86_64
+          - image: macos-latest
+            id: macosx_arm64
         # TODO: temporarily reduce number of jobs: SNOW-2311643
         # python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         python-version: ["3.9", "3.13"]
