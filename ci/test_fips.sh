@@ -35,6 +35,7 @@ cd $CONNECTOR_DIR
 pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test \
   --ignore=test/integ/aio_it \
   --ignore=test/unit/aio \
+  --ignore=test/auth/aio \
   --ignore=test/wif/test_wif_async.py
 
 deactivate
