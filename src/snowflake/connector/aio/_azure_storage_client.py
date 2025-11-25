@@ -17,7 +17,7 @@ from ..azure_storage_client import (
 from ..compat import quote
 from ..constants import FileHeader, ResultStatus
 from ..encryption_util import EncryptionMetadata
-from ..util_text import get_md5
+from ..util_text import get_md5_for_integrity
 from ._storage_client import SnowflakeStorageClient as SnowflakeStorageClientAsync
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -190,9 +190,9 @@ class SnowflakeAzureRestClient(
                 fd.close()
         headers = {
             "x-ms-blob-content-encoding": "utf-8",
-            "x-ms-blob-content-md5": base64.b64encode(get_md5(file_content)).decode(
-                "utf-8"
-            ),
+            "x-ms-blob-content-md5": base64.b64encode(
+                get_md5_for_integrity(file_content)
+            ).decode("utf-8"),
         }
         azure_metadata = self._prepare_file_metadata()
         headers.update(azure_metadata)
