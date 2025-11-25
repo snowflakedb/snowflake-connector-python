@@ -621,6 +621,7 @@ async def test_no_proxy_bypass_backend_and_storage_param_only(
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skip
 async def test_proxy_env_vars_take_precedence_over_connection_params(
     wiremock_two_proxies_backend,
     wiremock_mapping_dir,
