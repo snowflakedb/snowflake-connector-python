@@ -35,7 +35,7 @@ from ..constants import OCSPMode
 from ..session_manager import BaseHttpConfig
 from ..session_manager import SessionManager as SessionManagerSync
 from ..session_manager import SessionPool as SessionPoolSync
-from ..session_manager import _ConfigDirectAccessMixin
+from ..session_manager import _BaseConfigDirectAccessMixin
 
 logger = logging.getLogger(__name__)
 
@@ -337,7 +337,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
             )
 
 
-class _AsyncHttpConfigDirectAccessMixin(_ConfigDirectAccessMixin, abc.ABC):
+class _AsyncHttpConfigDirectAccessMixin(_BaseConfigDirectAccessMixin, abc.ABC):
     @property
     @abc.abstractmethod
     def config(self) -> AioHttpConfig: ...
