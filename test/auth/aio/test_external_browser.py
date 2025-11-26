@@ -34,6 +34,14 @@ async def test_external_browser_successful():
     await test_helper.connect_and_provide_credentials(
         Scenario.SUCCESS, browser_login, browser_password
     )
+
+    # Clear any error from browser automation before final assertion
+    test_helper.error_msg = ""
+
+    # Verify connection succeeded by attempting a simple query
+    assert (
+        await test_helper.connect_and_execute_simple_query() is True
+    ), "Connection should be established"
     assert test_helper.error_msg == "", "Error message should be empty"
 
 

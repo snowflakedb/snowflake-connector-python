@@ -75,27 +75,24 @@ class AuthorizationTestHelper:
     async def connect_and_provide_credentials(
         self, scenario: Scenario, login: str, password: str
     ):
+        import asyncio
+
         try:
-            connect = threading.Thread(target=self._connect_sync_wrapper)
-            connect.start()
+            # Use asyncio task for connection instead of thread
+            connect_task = asyncio.create_task(self.connect_and_execute_simple_query())
+
             if self.auth_test_env == "docker":
+                # Browser credentials still needs to run in thread since it's sync
                 browser = threading.Thread(
                     target=self._provide_credentials, args=(scenario, login, password)
                 )
                 browser.start()
-                browser.join()
-            connect.join()
+                # Wait for browser thread to complete
+                await asyncio.get_event_loop().run_in_executor(None, browser.join)
 
-        except Exception as e:
-            self.error_msg = e
-            logger.error(e)
+            # Wait for connection task to complete
+            await connect_task
 
-    def _connect_sync_wrapper(self):
-        """Wrapper to run async connect in a sync context for threading."""
-        import asyncio
-
-        try:
-            asyncio.run(self.connect_and_execute_simple_query())
         except Exception as e:
             self.error_msg = e
             logger.error(e)
