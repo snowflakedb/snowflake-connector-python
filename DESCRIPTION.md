@@ -7,7 +7,7 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v4.1.0(TBD)
+- v4.1.1(TBD)
   - Relaxed pandas dependency requirements for Python below 3.12.
   - Changed CRL cache cleanup background task to daemon to avoid blocking main thread.
 - v4.1.0(November 18,2025)
