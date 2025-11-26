@@ -94,6 +94,9 @@ async def test_okta_authorization_code_with_token_cache():
 
     clean_browser_processes()
 
+    # Clear any error from first connection before testing cache
+    test_helper.error_msg = ""
+
     assert (
         await test_helper.connect_and_execute_simple_query() is True
     ), "Connection should be established"

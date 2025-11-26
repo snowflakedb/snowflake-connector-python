@@ -24,11 +24,23 @@ async def test_pat_with_external_session_authN_success() -> None:
         connection_parameters["external_session_id"] = EXTERNAL_SESSION_ID
         connection_parameters["authenticator"] = "PAT_WITH_EXTERNAL_SESSION"
         test_helper = AuthorizationTestHelper(connection_parameters)
-        await test_helper.connect_and_execute_set_session_state(
+
+        # Verify the SET operation succeeded
+        set_result = await test_helper.connect_and_execute_set_session_state(
             SESSION_VAR_KEY, SESSION_VAR_VALUE
         )
+        assert (
+            set_result is True
+        ), f"Failed to set session variable: {test_helper.get_error_msg()}"
+
+        # Clear error message before the next operation
+        test_helper.error_msg = ""
+
+        # Verify the GET operation succeeded
         ret = await test_helper.connect_and_execute_check_session_state(SESSION_VAR_KEY)
-        assert ret == SESSION_VAR_VALUE
+        assert (
+            ret == SESSION_VAR_VALUE
+        ), f"Failed to get session variable. Got {ret}, error: {test_helper.get_error_msg()}"
     finally:
         await remove_pat_token(pat_command_variables)
     assert test_helper.get_error_msg() == "", "Error message should be empty"
@@ -47,12 +59,18 @@ async def test_pat_with_external_session_authN_fail() -> None:
         connection_parameters["external_session_id"] = EXTERNAL_SESSION_ID
         connection_parameters["authenticator"] = "PAT_WITH_EXTERNAL_SESSION"
         test_helper = AuthorizationTestHelper(connection_parameters)
-        await test_helper.connect_and_execute_set_session_state(
+
+        # Verify the SET operation succeeded
+        set_result = await test_helper.connect_and_execute_set_session_state(
             SESSION_VAR_KEY, SESSION_VAR_VALUE
         )
+        assert (
+            set_result is True
+        ), f"Failed to set session variable: {test_helper.get_error_msg()}"
+
         connection_parameters["external_session_id"] = str(
             uuid.uuid4()
-        )  # User different external session
+        )  # Use different external session
         test_helper = AuthorizationTestHelper(connection_parameters)
         ret = await test_helper.connect_and_execute_check_session_state(SESSION_VAR_KEY)
         assert ret != SESSION_VAR_VALUE
