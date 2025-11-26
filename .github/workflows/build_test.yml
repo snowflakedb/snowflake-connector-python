@@ -156,6 +156,7 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
         cloud-provider: [aws, azure, gcp]
         exclude:
+          # Exclude Python 3.9 and 3.10 on Windows ARM64 (no builds available)
           - os:
               image_name: windows-11-arm
               download_name: win_arm64
@@ -164,18 +165,15 @@ jobs:
               image_name: windows-11-arm
               download_name: win_arm64
             python-version: "3.10"
+          # Minimize resources: only test Windows ARM64 on AWS (not Azure/GCP)
           - os:
               image_name: windows-11-arm
               download_name: win_arm64
-            python-version: "3.11"
+            cloud-provider: azure
           - os:
               image_name: windows-11-arm
               download_name: win_arm64
-            python-version: "3.12"
-          - os:
-              image_name: windows-11-arm
-              download_name: win_arm64
-            python-version: "3.13"
+            cloud-provider: gcp
 
     steps:
       - uses: actions/checkout@v4
