@@ -16,8 +16,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 
 jobs:
-  test-installation:
-    name: Test Boto Dependency
+  test-installation-boto:
+    name: Test boto dependency
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -55,6 +55,17 @@ jobs:
           deactivate
           rm -rf test_no_boto_env
 
+  test-installation-aioboto:
+    name: Test aioboto dependency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12
+
       - name: Test installation with [aio] (should include aioboto)
         shell: bash
         run: |
@@ -64,12 +75,11 @@ jobs:
           python -m pip install '.[aio]'
 
           # Check that aioboto3 and aiobotocore are installed
-          pip freeze | grep aioboto && exit 1  # aioboto3 and aiobotocore should be installed
+          pip freeze | grep aioboto || exit 1  # aioboto3 and aiobotocore should be installed
 
           # Deactivate and clean up
           deactivate
           rm -rf test_no_boto_env
-
 
       - name: Test [aio] installation with SNOWFLAKE_NO_BOTO=1 (should exclude aioboto)
         shell: bash
