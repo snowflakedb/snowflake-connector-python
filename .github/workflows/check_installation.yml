@@ -54,3 +54,34 @@ jobs:
           # Deactivate and clean up
           deactivate
           rm -rf test_no_boto_env
+
+      - name: Test installation with [aio] (should include aioboto)
+        shell: bash
+        run: |
+          python -m venv test_no_boto_env
+          source test_no_boto_env/bin/activate
+
+          python -m pip install '.[aio]'
+
+          # Check that aioboto3 and aiobotocore are installed
+          pip freeze | grep aioboto && exit 1  # aioboto3 and aiobotocore should be installed
+
+          # Deactivate and clean up
+          deactivate
+          rm -rf test_no_boto_env
+
+
+      - name: Test [aio] installation with SNOWFLAKE_NO_BOTO=1 (should exclude aioboto)
+        shell: bash
+        run: |
+          python -m venv test_no_boto_env
+          source test_no_boto_env/bin/activate
+
+          SNOWFLAKE_NO_BOTO=1 python -m pip install .
+
+          # Check that boto3, botocore, aioboto, aiobotocore are NOT installed
+          pip freeze | grep boto && exit 1
+
+          # Deactivate and clean up
+          deactivate
+          rm -rf test_no_boto_env
