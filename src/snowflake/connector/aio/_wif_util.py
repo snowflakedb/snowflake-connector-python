@@ -102,7 +102,9 @@ async def create_aws_attestation(
         },
     )
 
-    botocore.auth.SigV4Auth(aws_creds, "sts", region).add_auth(request)
+    # Freeze aiobotocore credentials for use with synchronous botocore signing
+    frozen_creds = await aws_creds.get_frozen_credentials()
+    botocore.auth.SigV4Auth(frozen_creds, "sts", region).add_auth(request)
 
     assertion_dict = {
         "url": request.url,
