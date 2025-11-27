@@ -21,5 +21,5 @@ python3 -m pip install --break-system-packages -e ".[develompent]"
 
 python3 -m pytest test/auth/ --ignore=test/auth/aio
 
-python3 -m pip install --break-system-packages -e ".[aio, aioboto]"
+python3 -m pip install --break-system-packages -e ".[develompent,aio,aioboto]"
 python3 -m pytest test/auth/aio/
