@@ -17,9 +17,9 @@ export RUN_AUTH_TESTS=true
 export AUTHENTICATION_TESTS_ENV="docker"
 export PYTHONPATH=$SOURCE_ROOT
 
-python3 -m pip install --break-system-packages -e ".[develompent]"
+python3 -m pip install --break-system-packages -e ".[development]"
 
 python3 -m pytest test/auth/ --ignore=test/auth/aio
 
-python3 -m pip install --break-system-packages -e ".[develompent,aio,aioboto]"
+python3 -m pip install --break-system-packages -e ".[development,aio,aioboto]"
 python3 -m pytest test/auth/aio/
