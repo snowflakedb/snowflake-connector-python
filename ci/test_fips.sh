@@ -3,6 +3,8 @@
 # Test Snowflake Connector
 # Note this is the script that test_docker.sh runs inside of the docker container
 #
+set -x
+
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck disable=SC1090
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
@@ -30,6 +32,14 @@ pip freeze
 cd $CONNECTOR_DIR
 
 # Run tests in parallel using pytest-xdist
-pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test --ignore=test/integ/aio_it --ignore=test/unit/aio --ignore=test/wif/test_wif_async.py
+pytest -n auto -vvv --cov=snowflake.connector --cov-report=xml:coverage.xml test \
+  --ignore=test/integ/aio_it \
+  --ignore=test/unit/aio \
+  --ignore=test/auth/aio \
+  --ignore=test/wif/test_wif_async.py
 
+pip install "${CONNECTOR_WHL}[aio,aioboto]"
+# Run aio tests separately
+pytest -n auto -vvv --cov=snowflake.connector --cov-append --cov-report=xml:coverage.xml -m "aio and unit" test
+pytest -n auto -vvv --cov=snowflake.connector --cov-append --cov-report=xml:coverage.xml -m "aio and integ" test
 deactivate
