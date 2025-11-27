@@ -98,3 +98,32 @@ def fake_github_actions_metadata_service():
     """Emulates the GitHub Actions metadata service."""
     with FakeGitHubActionsService() as server:
         yield server
+
+
+@pytest.fixture(autouse=True)
+def crl_cache_tmpdir(request, tmp_path, monkeypatch):
+    """
+    Fixture that patches the CRL cache directory to use a temporary directory.
+
+    This prevents tests from creating the cache folder in the real system location
+    (e.g., ~/Library/Caches/Snowflake/crls on macOS) and ensures test isolation.
+    """
+    # Exclude test checking default cache path
+    if "test_platform_specific_cache_path" in request.node.name:
+        return None
+
+    from snowflake.connector import crl_cache
+
+    # Create a temporary cache directory for this test
+    temp_crl_cache = tmp_path / "crl_cache"
+    temp_crl_cache.mkdir(mode=0o700)
+
+    # Patch the function that returns the default cache path
+    monkeypatch.setattr(
+        crl_cache, "_get_default_crl_cache_path", lambda: temp_crl_cache
+    )
+
+    # Also reset the file cache singleton to ensure each test gets a fresh cache
+    monkeypatch.setattr(crl_cache.CRLCacheFactory, "_file_cache_instance", None)
+
+    return temp_crl_cache

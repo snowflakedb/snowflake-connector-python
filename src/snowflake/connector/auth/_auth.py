@@ -60,6 +60,7 @@ from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..version import VERSION
 from .no_auth import AuthNoAuth
+from .oauth import AuthByOAuth
 
 if TYPE_CHECKING:
     from . import AuthByPlugin
@@ -102,6 +103,7 @@ class Auth:
         internal_application_name,
         internal_application_version,
         ocsp_mode,
+        cert_revocation_check_mode,
         login_timeout: int | None = None,
         network_timeout: int | None = None,
         socket_timeout: int | None = None,
@@ -133,6 +135,7 @@ class Auth:
                     "PYTHON_RUNTIME": IMPLEMENTATION,
                     "PYTHON_COMPILER": COMPILER,
                     "OCSP_MODE": ocsp_mode.name,
+                    "CERT_REVOCATION_CHECK_MODE": cert_revocation_check_mode,
                     "TRACING": logger.getEffectiveLevel(),
                     "LOGIN_TIMEOUT": login_timeout,
                     "NETWORK_TIMEOUT": network_timeout,
@@ -193,6 +196,7 @@ class Auth:
             self._rest._connection._internal_application_name,
             self._rest._connection._internal_application_version,
             self._rest._connection._ocsp_mode(),
+            self._rest._connection.cert_revocation_check_mode,
             self._rest._connection.login_timeout,
             self._rest._connection._network_timeout,
             self._rest._connection._socket_timeout,
@@ -384,7 +388,11 @@ class Auth:
                         sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                     )
                 )
-            elif errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE:
+            elif (errno == OAUTH_ACCESS_TOKEN_EXPIRED_GS_CODE) and (
+                # SNOW-2329031: OAuth v1.0 does not support token renewal,
+                # for backward compatibility, we do not raise an exception here
+                not isinstance(auth_instance, AuthByOAuth)
+            ):
                 raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=ret["message"],

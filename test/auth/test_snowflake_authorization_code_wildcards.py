@@ -23,9 +23,6 @@ def setup_and_teardown():
     clean_browser_processes()
 
 
-@pytest.mark.skip(
-    "temporarily disabled, update redirect uri for the security integration will break other drivers tests"
-)
 @pytest.mark.auth
 def test_snowflake_authorization_code_wildcards_successful():
     connection_parameters = (
@@ -41,9 +38,6 @@ def test_snowflake_authorization_code_wildcards_successful():
     assert test_helper.error_msg == "", "Error message should be empty"
 
 
-@pytest.mark.skip(
-    "temporarily disabled, update redirect uri for the security integration will break other drivers tests"
-)
 @pytest.mark.auth
 def test_snowflake_authorization_code_wildcards_mismatched_user():
     connection_parameters = (

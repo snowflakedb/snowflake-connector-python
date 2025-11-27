@@ -432,6 +432,14 @@ def test_get_file_header_none_with_presigned_url(tmp_path):
             True,
             "https://overriddenurl.com/filename",
         ),
+        (
+            "US-CENTRAL1",
+            "https://overriddenurl.com",
+            False,
+            "overriddenurl.com",
+            True,
+            "https://overriddenurl.com/filename",
+        ),
     ],
 )
 def test_url(

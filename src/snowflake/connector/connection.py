@@ -87,6 +87,8 @@ from .constants import (
     QueryStatus,
 )
 from .converter import SnowflakeConverter
+from .crl import CRLConfig
+from .crl_cache import CRLCacheFactory
 from .cursor import LOG_MAX_QUERY_LENGTH, SnowflakeCursor, SnowflakeCursorBase
 from .description import (
     CLIENT_NAME,
@@ -437,6 +439,43 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         False,
         bool,
     ),
+    # CRL (Certificate Revocation List) configuration parameters
+    # The default setup is specified in CRLConfig class
+    "cert_revocation_check_mode": (
+        None,
+        (type(None), str),
+    ),  # CRL revocation check mode: DISABLED, ENABLED, ADVISORY
+    "allow_certificates_without_crl_url": (
+        None,
+        (type(None), bool),
+    ),  # Allow certificates without CRL distribution points
+    "crl_connection_timeout_ms": (
+        None,
+        (type(None), int),
+    ),  # Connection timeout for CRL downloads in milliseconds
+    "crl_read_timeout_ms": (
+        None,
+        (type(None), int),
+    ),  # Read timeout for CRL downloads in milliseconds
+    "crl_cache_validity_hours": (
+        None,
+        (type(None), float),
+    ),  # CRL cache validity time in hours
+    "enable_crl_cache": (None, (type(None), bool)),  # Enable CRL caching
+    "enable_crl_file_cache": (None, (type(None), bool)),  # Enable file-based CRL cache
+    "crl_cache_dir": (None, (type(None), str)),  # Directory for CRL file cache
+    "crl_cache_removal_delay_days": (
+        None,
+        (type(None), int),
+    ),  # Days to keep expired CRL files before removal
+    "crl_cache_cleanup_interval_hours": (
+        None,
+        (type(None), int),
+    ),  # CRL cache cleanup interval in hours
+    "crl_cache_start_cleanup": (
+        None,
+        (type(None), bool),
+    ),  # Run CRL cache cleanup in the background
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -574,6 +613,7 @@ class SnowflakeConnection:
 
         # Placeholder attributes; will be initialized in connect()
         self._http_config: HttpConfig | None = None
+        self._crl_config: CRLConfig | None = None
         self._session_manager: SessionManager | None = None
         self._rest: SnowflakeRestful | None = None
 
@@ -665,6 +705,86 @@ class SnowflakeConnection:
             return OCSPMode.FAIL_OPEN
         else:
             return OCSPMode.FAIL_CLOSED
+
+    # CRL (Certificate Revocation List) configuration properties
+    @property
+    def cert_revocation_check_mode(self) -> str | None:
+        """Certificate revocation check mode: DISABLED, ENABLED, or ADVISORY."""
+        if not self._crl_config:
+            return self._cert_revocation_check_mode
+        return self._crl_config.cert_revocation_check_mode.value
+
+    @property
+    def allow_certificates_without_crl_url(self) -> bool | None:
+        """Whether to allow certificates without CRL distribution points."""
+        if not self._crl_config:
+            return self._allow_certificates_without_crl_url
+        return self._crl_config.allow_certificates_without_crl_url
+
+    @property
+    def crl_connection_timeout_ms(self) -> int | None:
+        """Connection timeout for CRL downloads in milliseconds."""
+        if not self._crl_config:
+            return self._crl_connection_timeout_ms
+        return self._crl_config.connection_timeout_ms
+
+    @property
+    def crl_read_timeout_ms(self) -> int | None:
+        """Read timeout for CRL downloads in milliseconds."""
+        if not self._crl_config:
+            return self._crl_read_timeout_ms
+        return self._crl_config.read_timeout_ms
+
+    @property
+    def crl_cache_validity_hours(self) -> float | None:
+        """CRL cache validity time in hours."""
+        if not self._crl_config:
+            return self._crl_cache_validity_hours
+        return self._crl_config.cache_validity_time.total_seconds() / 3600
+
+    @property
+    def enable_crl_cache(self) -> bool | None:
+        """Whether CRL caching is enabled."""
+        if not self._crl_config:
+            return self._enable_crl_cache
+        return self._crl_config.enable_crl_cache
+
+    @property
+    def enable_crl_file_cache(self) -> bool | None:
+        """Whether file-based CRL cache is enabled."""
+        if not self._crl_config:
+            return self._enable_crl_file_cache
+        return self._crl_config.enable_crl_file_cache
+
+    @property
+    def crl_cache_dir(self) -> str | None:
+        """Directory for CRL file cache."""
+        if not self._crl_config:
+            return self._crl_cache_dir
+        if not self._crl_config.crl_cache_dir:
+            return None
+        return str(self._crl_config.crl_cache_dir)
+
+    @property
+    def crl_cache_removal_delay_days(self) -> int | None:
+        """Days to keep expired CRL files before removal."""
+        if not self._crl_config:
+            return self._crl_cache_removal_delay_days
+        return self._crl_config.crl_cache_removal_delay_days
+
+    @property
+    def crl_cache_cleanup_interval_hours(self) -> int | None:
+        """CRL cache cleanup interval in hours."""
+        if not self._crl_config:
+            return self._crl_cache_cleanup_interval_hours
+        return self._crl_config.crl_cache_cleanup_interval_hours
+
+    @property
+    def crl_cache_start_cleanup(self) -> bool | None:
+        """Whether to start CRL cache cleanup immediately."""
+        if not self._crl_config:
+            return self._crl_cache_start_cleanup
+        return self._crl_config.crl_cache_start_cleanup
 
     @property
     def session_id(self) -> int:
@@ -971,6 +1091,8 @@ class SnowflakeConnection:
         if len(kwargs) > 0:
             self.__config(**kwargs)
 
+        self._crl_config: CRLConfig = CRLConfig.from_connection(self)
+
         no_proxy_csv_str = (
             ",".join(str(x) for x in self.no_proxy)
             if (
@@ -1031,11 +1153,17 @@ class SnowflakeConnection:
         else:
             self.__open_connection()
 
+        # Register the connection in the pool after successful connection
+        _connections_registry.add_connection(self)
+
     def close(self, retry: bool = True) -> None:
         """Closes the connection."""
         # unregister to dereference connection object as it's already closed after the execution
         atexit.unregister(self._close_at_exit)
         try:
+            # Remove connection from the pool
+            _connections_registry.remove_connection(self)
+
             if not self.rest:
                 logger.debug("Rest object has been destroyed, cannot close session")
                 return
@@ -2412,3 +2540,56 @@ class SnowflakeConnection:
             return "jupyter_notebook"
         if "snowbooks" in sys.modules:
             return "snowflake_notebook"
+
+
+class _ConnectionsRegistry:
+    """Thread-safe registry for tracking opened SnowflakeConnection instances.
+
+    This class maintains a registry of active connections using weak references
+    to avoid preventing garbage collection.
+    """
+
+    def __init__(self):
+        """Initialize the connections registry with an empty registry and a lock."""
+        self._connections: weakref.WeakSet = weakref.WeakSet()
+        self._lock = Lock()
+
+    def add_connection(self, connection: SnowflakeConnection) -> None:
+        """Add a connection to the registry.
+
+        Args:
+            connection: The SnowflakeConnection instance to register.
+        """
+        with self._lock:
+            self._connections.add(connection)
+            logger.debug(
+                f"Connection {id(connection)} added to pool. Total connections: {len(self._connections)}"
+            )
+
+    def remove_connection(self, connection: SnowflakeConnection) -> None:
+        """Remove a connection from the registry.
+
+        Args:
+            connection: The SnowflakeConnection instance to unregister.
+        """
+        with self._lock:
+            self._connections.discard(connection)
+            logger.debug(
+                f"Connection {id(connection)} removed from registry. Total connections: {len(self._connections)}"
+            )
+
+            if len(self._connections) == 0:
+                self._last_connection_handler()
+
+    def _last_connection_handler(self):
+        # If no connections left then stop CRL background task
+        # to avoid script dangling
+        CRLCacheFactory.stop_periodic_cleanup()
+
+    def get_connection_count(self) -> int:
+        with self._lock:
+            return len(self._connections)
+
+
+# Global instance of the connections pool
+_connections_registry = _ConnectionsRegistry()

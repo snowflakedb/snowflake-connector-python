@@ -1,16 +1,16 @@
-# Generated on: Python 3.11.13
+# Generated on: Python 3.11.14
 asn1crypto==1.5.1
-boto3==1.40.42
-botocore==1.40.42
-certifi==2025.8.3
+boto3==1.40.74
+botocore==1.40.74
+certifi==2025.11.12
 cffi==2.0.0
-charset-normalizer==3.4.3
-cryptography==46.0.2
-filelock==3.19.1
-idna==3.10
+charset-normalizer==3.4.4
+cryptography==46.0.3
+filelock==3.20.0
+idna==3.11
 jmespath==1.0.1
 packaging==25.0
-platformdirs==4.4.0
+platformdirs==4.5.0
 pycparser==2.23
 PyJWT==2.10.1
 pyOpenSSL==25.3.0
@@ -23,4 +23,4 @@ sortedcontainers==2.4.0
 tomlkit==0.13.3
 typing_extensions==4.15.0
 urllib3==2.5.0
-snowflake-connector-python==4.0.0
+snowflake-connector-python==4.1.0
