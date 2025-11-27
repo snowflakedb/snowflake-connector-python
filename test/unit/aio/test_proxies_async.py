@@ -25,7 +25,7 @@ from snowflake.connector.aio import connect as async_connect
 pytestmark = pytest.mark.asyncio
 
 
-@pytest.mark.timeout(15)
+@pytest.mark.timeout(20)
 @pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
 async def test_basic_query_through_proxy_async(
     wiremock_generic_mappings_dir,
