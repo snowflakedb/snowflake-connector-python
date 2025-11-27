@@ -757,16 +757,20 @@ def test_get_file_permission(tmp_path, conn_cnx, caplog, auto_compress):
             cur.execute(
                 f"PUT 'file://{filename_in_put}' @{stage_name} AUTO_COMPRESS={auto_compress}",
             )
+            test_file.unlink()
 
             with caplog.at_level(logging.ERROR):
                 cur.execute(f"GET @{stage_name}/data.csv file://{tmp_path}")
             assert "FileNotFoundError" not in caplog.text
+            assert len(list(tmp_path.iterdir())) == 1
+            downloaded_file = next(tmp_path.iterdir())
 
             default_mask = os.umask(0)
             os.umask(default_mask)
 
             assert (
-                oct(os.stat(test_file).st_mode)[-3:] == oct(0o600 & ~default_mask)[-3:]
+                oct(os.stat(downloaded_file).st_mode)[-3:]
+                == oct(0o600 & ~default_mask)[-3:]
             )
 
 
