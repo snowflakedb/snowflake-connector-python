@@ -41,6 +41,7 @@ is at <https://requests.readthedocs.io>.
 import warnings
 
 from .. import urllib3
+
 from .exceptions import RequestsDependencyWarning
 
 try:
