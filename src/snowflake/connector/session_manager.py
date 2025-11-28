@@ -24,7 +24,6 @@ from .vendored.urllib3.util.url import parse_url
 if TYPE_CHECKING:
     from .vendored.urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
-
 logger = logging.getLogger(__name__)
 REQUESTS_RETRY = 1  # requests library builtin retry
 
@@ -64,19 +63,25 @@ def _propagate_session_manager_to_ocsp(generator_func):
 class ProxySupportAdapter(HTTPAdapter):
     """This Adapter creates proper headers for Proxy CONNECT messages."""
 
-    def get_connection(
-        self, url: str, proxies: dict | None = None
+    def get_connection_with_tls_context(
+        self, request, verify, proxies=None, cert=None
     ) -> HTTPConnectionPool | HTTPSConnectionPool:
-        proxy = select_proxy(url, proxies)
-        parsed_url = urlparse(url)
-
+        proxy = select_proxy(request.url, proxies)
+        try:
+            host_params, pool_kwargs = self.build_connection_pool_key_attributes(
+                request,
+                verify,
+                cert,
+            )
+        except ValueError as e:
+            raise InvalidURL(e, request=request)
         if proxy:
             proxy = prepend_scheme_if_needed(proxy, "http")
             proxy_url = parse_url(proxy)
             if not proxy_url.host:
                 raise InvalidProxyURL(
-                    "Please check proxy URL. It is malformed"
-                    " and could be missing the host."
+                    "Please check proxy URL. It is malformed "
+                    "and could be missing the host."
                 )
             proxy_manager = self.proxy_manager_for(proxy)
 
@@ -89,17 +94,22 @@ class ProxySupportAdapter(HTTPAdapter):
                 # Note: netloc also keeps user-info (user:pass@host) if present in URL. The driver never sends
                 # URLs with embedded credentials, so we leave them unhandled — for full support
                 # we’d need to manually concatenate hostname with optional port and IPv6 brackets.
+                parsed_url = urlparse(request.url)
                 proxy_manager.proxy_headers["Host"] = parsed_url.netloc
             else:
                 logger.debug(
                     f"Unable to set 'Host' to proxy manager of type {type(proxy_manager)} as"
                     f" it does not have attribute 'proxy_headers'."
                 )
-            conn = proxy_manager.connection_from_url(url)
+
+            conn = proxy_manager.connection_from_host(
+                **host_params, pool_kwargs=pool_kwargs
+            )
         else:
             # Only scheme should be lower case
-            url = parsed_url.geturl()
-            conn = self.poolmanager.connection_from_url(url)
+            conn = self.poolmanager.connection_from_host(
+                **host_params, pool_kwargs=pool_kwargs
+            )
 
         return conn
 
@@ -270,7 +280,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout: int | None = 3,
+        timeout: int | tuple[int, int] | None = 3,
         use_pooling: bool | None = None,
         **kwargs,
     ):
@@ -388,11 +398,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixi
     direct HTTP library calls.
     """
 
-    def __init__(
-        self,
-        config: HttpConfig | None = None,
-        **http_config_kwargs,
-    ) -> None:
+    def __init__(self, config: HttpConfig | None = None, **http_config_kwargs) -> None:
         """
         Create a new SessionManager.
         """

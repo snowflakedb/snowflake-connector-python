@@ -6,19 +6,21 @@
         "method": "POST",
         "bodyPatterns": [
           {
-            "equalToJson" : {
+            "equalToJson": {
               "data": {
                 "LOGIN_NAME": "testUser",
                 "PASSWORD": "testPassword"
               }
             },
-            "ignoreExtraElements" : true
+            "ignoreExtraElements": true
           }
         ]
       },
       "response": {
         "status": 200,
-        "headers": { "Content-Type": "application/json" },
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "jsonBody": {
           "data": {
             "masterToken": "master token",

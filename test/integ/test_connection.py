@@ -203,7 +203,8 @@ def test_platform_detection_timeout(conn_cnx):
 
     Creates a connection with platform_detection_timeout parameter.
     """
-    with conn_cnx(timezone="UTC", platform_detection_timeout_seconds=2.5) as cnx:
+
+    with conn_cnx(platform_detection_timeout_seconds=2.5) as cnx:
         assert cnx.platform_detection_timeout_seconds == 2.5
 
 
@@ -784,7 +785,6 @@ def test_invalid_connection_parameter(conn_cnx, name, value, exc_warn):
             if name != "no_such_parameter":  # Skip check for fake parameters
                 assert getattr(conn, "_" + name) == value
 
-            # TODO: SNOW-2114216 remove filtering once the root cause for deprecation warning is fixed
             # Filter out deprecation warnings and focus on parameter validation warnings
             filtered_w = [
                 warning
@@ -1788,6 +1788,7 @@ def test_is_valid(conn_cnx):
     assert conn.is_valid() is False
 
 
+@pytest.mark.skipolddriver
 def test_no_auth_connection_negative_case():
     # AuthNoAuth does not exist in old drivers, so we import at test level to
     # skip importing it for old driver tests.

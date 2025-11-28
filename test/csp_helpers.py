@@ -406,9 +406,7 @@ class FakeAwsEnvironment:
         return self.credentials
 
     def sign_request(self, request: AWSRequest):
-        request.headers.add_header(
-            "X-Amz-Date", datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-        )
+        request.headers.add_header("X-Amz-Date", datetime.time().isoformat())
         request.headers.add_header("X-Amz-Security-Token", "<TOKEN>")
         request.headers.add_header(
             "Authorization",
