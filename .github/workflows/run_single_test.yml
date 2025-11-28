@@ -68,5 +68,10 @@ jobs:
           python -m uv pip install ".[development,aio,secure-local-storage,pandas]"
 
       - name: Run pytest
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          TOX_PARALLEL_NO_SPINNER: 1
         run: |
           pytest test/integ/aio_it/test_put_get_with_aws_token_async.py test/integ/aio_it/test_large_put_async.py::test_put_copy_large_files -vv -n auto
