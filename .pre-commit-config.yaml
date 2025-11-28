@@ -61,6 +61,7 @@ repos:
         exclude: |
             (?x)^(
                 src/snowflake/connector/session_manager\.py|
+                src/snowflake/connector/aio/_session_manager\.py|
                 src/snowflake/connector/vendored/.*
             )$
         args: [--show-fixes]

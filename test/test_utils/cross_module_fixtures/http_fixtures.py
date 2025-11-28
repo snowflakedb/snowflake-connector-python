@@ -2,6 +2,9 @@ import os
 
 import pytest
 
+from snowflake.connector.compat import urlparse as compat_urlparse
+from snowflake.connector.session_manager import SessionManager
+
 
 @pytest.fixture
 def proxy_env_vars():
@@ -42,3 +45,23 @@ def proxy_env_vars():
         os.environ["NO_PROXY"] = original_no_proxy
     elif "NO_PROXY" in os.environ:
         del os.environ["NO_PROXY"]
+
+
+@pytest.fixture
+def host_port_pooling(monkeypatch):
+
+    def get_pooling_key_as_host_with_port(url: str) -> str:
+        """
+        Test-only override to derive pooling key as "host:port" if port is specified.
+        """
+        parsed = compat_urlparse(url)
+        host = parsed.hostname
+        port = parsed.port
+        return f"{host}:{port}" if port else host
+
+    monkeypatch.setattr(
+        SessionManager,
+        "_get_pooling_key_from_url",
+        staticmethod(get_pooling_key_as_host_with_port),
+    )
+    yield
