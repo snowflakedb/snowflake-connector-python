@@ -80,10 +80,7 @@ async def create_aws_attestation(
     If the application isn't running on AWS or no credentials were found, raises an error.
     """
     if not installed_aioboto:
-        raise MissingDependencyError(
-            msg="AWS Workload Identity Federation can't be used because aioboto3 or aiobotocore optional dependency is not installed. Try installing missing dependencies.",
-            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
-        )
+        raise MissingDependencyError("aioboto3 or aiobotocore")
 
     session = await get_aws_session(impersonation_path)
     aws_creds = await session.get_credentials()
@@ -105,7 +102,9 @@ async def create_aws_attestation(
         },
     )
 
-    botocore.auth.SigV4Auth(aws_creds, "sts", region).add_auth(request)
+    # Freeze aiobotocore credentials for use with synchronous botocore signing
+    frozen_creds = await aws_creds.get_frozen_credentials()
+    botocore.auth.SigV4Auth(frozen_creds, "sts", region).add_auth(request)
 
     assertion_dict = {
         "url": request.url,

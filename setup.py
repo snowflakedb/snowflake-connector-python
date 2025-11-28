@@ -186,11 +186,14 @@ class SetDefaultInstallationExtras(egg_info):
 
     def finalize_options(self):
         super().finalize_options()
-
         # if not explicitly excluded, add boto dependencies to install_requires
         if not SNOWFLAKE_NO_BOTO:
             boto_extras = self.distribution.extras_require.get("boto", [])
             self.distribution.install_requires += boto_extras
+
+            if "aio" in self.distribution.extras_require:
+                aioboto_extras = self.distribution.extras_require.get("aioboto", [])
+                self.distribution.extras_require["aio"] += aioboto_extras
 
 
 # Update command classes
