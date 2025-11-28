@@ -510,6 +510,11 @@ jobs:
         run: python -m pip install tox>=4
       - name: Run tests
         run: python -m tox run -e aio
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          cloud_provider: ${{ matrix.cloud-provider }}
+          PYTEST_ADDOPTS: --color=yes --tb=short
+          TOX_PARALLEL_NO_SPINNER: 1
       - name: Combine coverages
         run: python -m tox run -e coverage --skip-missing-interpreters false
         shell: bash
