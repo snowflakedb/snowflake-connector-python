@@ -491,6 +491,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixi
         """
         'url' is an obligatory parameter due to the need for correct proxy handling (i.e. bypassing caused by no_proxy settings).
         """
+        url = url.decode('utf-8') if isinstance(url, bytes) else url
         use_pooling = use_pooling if use_pooling is not None else self.use_pooling
         if not use_pooling:
             session = self.make_session(url=url)

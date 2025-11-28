@@ -286,7 +286,6 @@ class SnowflakeStorageClient(ABC):
             logger.debug(f"retry #{self.retry_count[retry_id]}")
             cur_timestamp = self.credentials.timestamp
             url, rest_kwargs = get_request_args()
-            url = url.decode('utf-8') if isinstance(url, bytes) else url
             rest_kwargs["timeout"] = (REQUEST_CONNECTION_TIMEOUT, REQUEST_READ_TIMEOUT)
             try:
                 if conn:
