@@ -14,7 +14,7 @@ export JUNIT_REPORT_DIR=${SF_REGRESS_LOGS:-$CONNECTOR_DIR}
 export COV_REPORT_DIR=${CONNECTOR_DIR}
 
 # Decrypt parameters file
-PARAMS_FILE="${PARAMETERS_DIR}/jenkins_test_parameters.py.gpg"
+PARAMS_FILE="${PARAMETERS_DIR}/parameters_aws.py.gpg"
 [ ${cloud_provider} == azure ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_azure.py.gpg"
 [ ${cloud_provider} == gcp ] && PARAMS_FILE="${PARAMETERS_DIR}/parameters_gcp.py.gpg"
 gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS_FILE} > test/parameters.py
