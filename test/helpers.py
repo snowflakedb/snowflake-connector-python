@@ -328,6 +328,7 @@ def create_mock_auth_body():
         "internal_application_name",
         "internal_application_version",
         ocsp_mode,
+        "CRL_MODE",
         login_timeout=60 * 60,
         network_timeout=60 * 60,
         socket_timeout=60 * 60,

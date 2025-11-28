@@ -159,6 +159,9 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         self._stream_downloader = StreamDownloader(self)
         self._snowflake_version: str | None = None
 
+        # CRL is disabled for async connection
+        self._crl_config = None  # default value = disabled
+
     @property
     async def snowflake_version(self) -> str:
         # The result from SELECT CURRENT_VERSION() is `<version> <internal hash>`,

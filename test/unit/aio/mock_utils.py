@@ -52,6 +52,8 @@ def mock_connection(
     backoff_policy=DEFAULT_BACKOFF_POLICY,
     disable_saml_url_check=False,
     session_manager=None,
+    cert_revocation_check_mode="DISABLED",
+    platform_detection_timeout_seconds=0.0,
 ):
     return AsyncMock(
         _login_timeout=login_timeout,
@@ -66,4 +68,6 @@ def mock_connection(
         _disable_saml_url_check=disable_saml_url_check,
         _session_manager=session_manager or get_mock_session_manager(),
         _update_parameters=AsyncMock(return_value=None),
+        cert_revocation_check_mode=cert_revocation_check_mode,
+        platform_detection_timeout_seconds=platform_detection_timeout_seconds,
     )

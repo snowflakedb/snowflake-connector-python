@@ -377,6 +377,7 @@ You can close this window now and go back where you started from.
             conn._internal_application_name,
             conn._internal_application_version,
             conn._ocsp_mode(),
+            conn.cert_revocation_check_mode,
             conn.login_timeout,
             conn.network_timeout,
             conn.socket_timeout,
