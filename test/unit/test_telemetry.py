@@ -440,6 +440,7 @@ def get_mocked_telemetry_connection(telemetry_enabled: bool = True) -> Mock:
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
+    mock_connection.crl_download_max_size = None
     mock_connection.enable_crl_cache = None
     mock_connection.enable_crl_file_cache = None
     mock_connection.allow_certificates_without_crl_url = None

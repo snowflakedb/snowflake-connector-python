@@ -24,7 +24,12 @@ from snowflake.connector.crl import (
     CRLValidationResult,
     CRLValidator,
 )
-from snowflake.connector.crl_cache import CRLCacheEntry, CRLCacheManager
+from snowflake.connector.crl_cache import (
+    CRLCacheEntry,
+    CRLCacheManager,
+    CRLInMemoryCache,
+    NoopCRLCache,
+)
 from snowflake.connector.session_manager import SessionManager
 
 
@@ -165,6 +170,39 @@ def cert_gen():
                 self.ca_private_key, hashes.SHA256(), backend=default_backend()
             )
             return crl.public_bytes(serialization.Encoding.DER)
+
+        def create_crl_with_timestamp(
+            self, last_update: datetime
+        ) -> x509.CertificateRevocationList:
+            """
+            Create a CRL with a specific last_update timestamp.
+
+            Args:
+                last_update: The last_update timestamp for the CRL
+
+            Returns:
+                A CRL object with the specified timestamp
+            """
+            builder = x509.CertificateRevocationListBuilder()
+            builder = builder.issuer_name(self.ca_certificate.subject)
+            builder = builder.last_update(last_update)
+            builder = builder.next_update(
+                datetime.now(timezone.utc) + timedelta(days=1)
+            )
+
+            # Add any revoked certificates
+            for serial_number in self.revoked_serial_numbers:
+                revoked_cert = (
+                    x509.RevokedCertificateBuilder()
+                    .serial_number(serial_number)
+                    .revocation_date(datetime.now(timezone.utc))
+                    .build()
+                )
+                builder = builder.add_revoked_certificate(revoked_cert)
+
+            return builder.sign(
+                self.ca_private_key, hashes.SHA256(), backend=default_backend()
+            )
 
         def generate_expired_crl(self) -> bytes:
             """Generate an expired CRL"""
@@ -1141,6 +1179,7 @@ def test_crl_config_from_connection_disabled_mode():
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
+    mock_connection.crl_download_max_size = None
 
     config = CRLConfig.from_connection(mock_connection)
 
@@ -1164,6 +1203,7 @@ def test_crl_config_from_connection_enabled_mode():
     mock_connection.crl_cache_removal_delay_days = 14
     mock_connection.crl_cache_cleanup_interval_hours = 2
     mock_connection.crl_cache_start_cleanup = True
+    mock_connection.crl_download_max_size = 150 * 1024 * 1024  # 150MB
 
     config = CRLConfig.from_connection(mock_connection)
 
@@ -1178,6 +1218,7 @@ def test_crl_config_from_connection_enabled_mode():
     assert config.crl_cache_removal_delay_days == 14
     assert config.crl_cache_cleanup_interval_hours == 2
     assert config.crl_cache_start_cleanup
+    assert config.crl_download_max_size == 150 * 1024 * 1024
 
 
 def test_crl_config_from_connection_none_values():
@@ -1194,6 +1235,7 @@ def test_crl_config_from_connection_none_values():
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
+    mock_connection.crl_download_max_size = None
 
     config = CRLConfig.from_connection(mock_connection)
 
@@ -1215,6 +1257,7 @@ def test_crl_config_from_connection_none_values():
         == CRLConfig.crl_cache_cleanup_interval_hours
     )
     assert config.crl_cache_start_cleanup == CRLConfig.crl_cache_start_cleanup
+    assert config.crl_download_max_size == CRLConfig.crl_download_max_size
 
 
 def test_crl_config_from_connection_invalid_mode_string():
@@ -1231,6 +1274,7 @@ def test_crl_config_from_connection_invalid_mode_string():
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
+    mock_connection.crl_download_max_size = None
 
     # Should default to class default and log warning
     config = CRLConfig.from_connection(mock_connection)
@@ -1251,6 +1295,7 @@ def test_crl_config_from_connection_enum_mode():
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
+    mock_connection.crl_download_max_size = None
 
     config = CRLConfig.from_connection(mock_connection)
     assert config.cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
@@ -1270,6 +1315,7 @@ def test_crl_config_from_connection_unsupported_mode_type():
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
+    mock_connection.crl_download_max_size = None
 
     # Should default to class default and log warning
     config = CRLConfig.from_connection(mock_connection)
@@ -1287,6 +1333,7 @@ def test_crl_config_from_connection_none_mode():
     mock_connection.enable_crl_cache = None
     mock_connection.enable_crl_file_cache = None
     mock_connection.crl_cache_dir = None
+    mock_connection.crl_download_max_size = None
     mock_connection.crl_cache_removal_delay_days = None
     mock_connection.crl_cache_cleanup_interval_hours = None
     mock_connection.crl_cache_start_cleanup = None
@@ -1380,6 +1427,116 @@ def test_crl_validator_download_crl_network_error(session_manager):
         assert timestamp is None
 
 
+@responses.activate
+def test_crl_validator_download_crl_exceeds_size_via_content_length(session_manager):
+    """Test CRL download aborts when Content-Length exceeds the configured limit"""
+    crl_url = "http://example.com/huge.crl"
+    test_max_size = 1 * 1024 * 1024  # 1 MB for testing
+
+    # Mock response with Content-Length header exceeding limit
+    responses.add(
+        responses.GET,
+        crl_url,
+        headers={"Content-Length": str(test_max_size + 1)},
+        body=b"dummy",
+        status=200,
+        content_type="application/pkix-crl",
+    )
+
+    validator = CRLValidator(
+        session_manager, trusted_certificates=[], crl_download_max_size=test_max_size
+    )
+
+    # Should return (None, None) when size limit exceeded
+    crl, timestamp = validator._download_crl(crl_url)
+    assert crl is None
+    assert timestamp is None
+
+
+@responses.activate
+def test_crl_validator_download_crl_exceeds_size_during_streaming(
+    cert_gen, session_manager
+):
+    """Test CRL download aborts when actual downloaded content exceeds the configured limit"""
+    crl_url = "http://example.com/streaming-huge.crl"
+    test_max_size = 1 * 1024 * 1024  # 1 MB for testing
+
+    # Create a large payload that exceeds the limit
+    # We'll use a callback to stream large chunks
+    def request_callback(request):
+        # Return data larger than the test max size
+        large_data = b"X" * (test_max_size + 1000)
+        return (200, {}, large_data)
+
+    responses.add_callback(
+        responses.GET,
+        crl_url,
+        callback=request_callback,
+        content_type="application/pkix-crl",
+    )
+
+    validator = CRLValidator(
+        session_manager, trusted_certificates=[], crl_download_max_size=test_max_size
+    )
+
+    # Should return (None, None) when size limit exceeded during streaming
+    crl, timestamp = validator._download_crl(crl_url)
+    assert crl is None
+    assert timestamp is None
+
+
+@responses.activate
+def test_crl_validator_download_crl_within_size_limit(cert_gen, session_manager):
+    """Test CRL download succeeds when size is within the configured limit"""
+    crl_url = "http://example.com/valid-size.crl"
+    crl_data = cert_gen.generate_valid_crl()
+
+    # Mock response that's within size limit
+    responses.add(
+        responses.GET,
+        crl_url,
+        body=crl_data,
+        status=200,
+        content_type="application/pkix-crl",
+    )
+
+    validator = CRLValidator(
+        session_manager, trusted_certificates=[cert_gen.ca_certificate]
+    )
+
+    # Should successfully download and parse CRL
+    crl, timestamp = validator._download_crl(crl_url)
+    assert crl is not None
+    assert timestamp is not None
+
+
+@responses.activate
+def test_crl_validator_download_crl_custom_size_limit(session_manager):
+    """Test CRL download respects custom size limit"""
+    crl_url = "http://example.com/custom-limit.crl"
+    custom_limit = 1024  # 1KB
+
+    # Mock response with Content-Length just over the custom limit
+    responses.add(
+        responses.GET,
+        crl_url,
+        headers={"Content-Length": str(custom_limit + 1)},
+        body=b"dummy",
+        status=200,
+        content_type="application/pkix-crl",
+    )
+
+    # Create validator with custom size limit
+    validator = CRLValidator(
+        session_manager, trusted_certificates=[], crl_download_max_size=custom_limit
+    )
+
+    # Should return (None, None) when custom size limit exceeded
+    crl, timestamp = validator._download_crl(crl_url)
+    assert crl is None
+    assert timestamp is None
+
+
 def test_crl_validator_extract_crl_distribution_points_success(
     cert_gen, session_manager
 ):
@@ -1466,6 +1623,7 @@ def test_crl_validator_check_certificate_against_crl_expired(
     # Mock expired CRL
     mock_crl = Mock(spec=x509.CertificateRevocationList)
     mock_crl.next_update_utc = datetime.now(timezone.utc) - timedelta(days=1)  # Expired
+    mock_crl.last_update_utc = datetime.now(timezone.utc) - timedelta(days=2)
     mock_crl.get_revoked_certificate_by_serial_number.return_value = None
     mock_crl.issuer = parent.subject
     # Mock extensions to raise ExtensionNotFound for IDP extension
@@ -2357,3 +2515,122 @@ def test_check_certificate_against_crl_url_with_idp_mismatch(
     )
 
     assert result == CRLValidationResult.ERROR
+
+
+@pytest.mark.parametrize("downloaded_crl_is_newer", [True, False])
+def test_crl_validator_freshness_validation(
+    cert_gen, session_manager, downloaded_crl_is_newer
+):
+    """Test that validator uses the most recent CRL based on last_update timestamp"""
+    chain = cert_gen.create_simple_chain()
+
+    # Create CRLs with different timestamps
+    older_last_update = datetime.now(timezone.utc) - timedelta(days=2)
+    newer_last_update = datetime.now(timezone.utc)
+    older_crl = cert_gen.create_crl_with_timestamp(older_last_update)
+    newer_crl = cert_gen.create_crl_with_timestamp(newer_last_update)
+
+    # Determine which CRL to cache and which to download
+    cached_crl = older_crl if downloaded_crl_is_newer else newer_crl
+    downloaded_crl = newer_crl if downloaded_crl_is_newer else older_crl
+
+    # Create cache manager and pre-populate with the cached CRL
+    memory_cache = CRLInMemoryCache(cache_validity_time=timedelta(hours=24))
+    memory_cache.put(
+        "http://test.com/crl",
+        CRLCacheEntry(
+            crl=cached_crl, download_time=older_last_update
+        ),  # use old date to enforce "download" logic
+    )
+    cache_manager = CRLCacheManager(memory_cache, NoopCRLCache())
+
+    validator = CRLValidator(
+        session_manager=session_manager,
+        trusted_certificates=[cert_gen.ca_certificate],
+        cache_manager=cache_manager,
+    )
+
+    # Mock _download_crl to return the downloaded CRL
+    download_timestamp = datetime.now(timezone.utc)
+    with mock_patch.object(
+        validator, "_download_crl", return_value=(downloaded_crl, download_timestamp)
+    ) as mock_download, mock_patch.object(
+        validator, "_verify_crl_signature", return_value=True
+    ):
+        validator._check_certificate_against_crl_url(
+            chain.leaf_cert, cert_gen.ca_certificate, "http://test.com/crl"
+        )
+        # self-check for debug - ensure download was called
+        mock_download.assert_called_once_with("http://test.com/crl")
+
+    # Verify the cached CRL is the newer one
+    cached_entry = memory_cache.get("http://test.com/crl")
+    assert cached_entry is not None
+    final_cached_last_update = validator._get_crl_last_update(cached_entry.crl)
+    # Compare with tolerance for microseconds (CRL might lose precision)
+    assert abs((final_cached_last_update - newer_last_update).total_seconds()) < 1
+
+
+def test_get_crl_last_update(cert_gen):
+    """Test helper method to extract last_update from CRL"""
+    # Create a CRL with a known last_update
+    builder = x509.CertificateRevocationListBuilder()
+    builder = builder.issuer_name(cert_gen.ca_certificate.subject)
+    expected_last_update = datetime.now(timezone.utc)
+    builder = builder.last_update(expected_last_update)
+    builder = builder.next_update(datetime.now(timezone.utc) + timedelta(days=1))
+    crl = builder.sign(
+        cert_gen.ca_private_key, hashes.SHA256(), backend=default_backend()
+    )
+
+    validator = CRLValidator(
+        session_manager=Mock(),
+        trusted_certificates=[cert_gen.ca_certificate],
+    )
+
+    # Extract last_update
+    last_update = validator._get_crl_last_update(crl)
+    assert last_update is not None
+    # Compare with some tolerance for microseconds
+    assert abs((last_update - expected_last_update).total_seconds()) < 1
+
+
+def test_is_crl_more_recent(cert_gen):
+    """Test comparison of CRL freshness by last_update timestamp"""
+    # Create two CRLs with different last_update times
+    older_last_update = datetime.now(timezone.utc) - timedelta(hours=2)
+    newer_last_update = datetime.now(timezone.utc)
+
+    # Build older CRL
+    older_builder = x509.CertificateRevocationListBuilder()
+    older_builder = older_builder.issuer_name(cert_gen.ca_certificate.subject)
+    older_builder = older_builder.last_update(older_last_update)
+    older_builder = older_builder.next_update(
+        datetime.now(timezone.utc) + timedelta(days=1)
+    )
+    older_crl = older_builder.sign(
+        cert_gen.ca_private_key, hashes.SHA256(), backend=default_backend()
+    )
+
+    # Build newer CRL
+    newer_builder = x509.CertificateRevocationListBuilder()
+    newer_builder = newer_builder.issuer_name(cert_gen.ca_certificate.subject)
+    newer_builder = newer_builder.last_update(newer_last_update)
+    newer_builder = newer_builder.next_update(
+        datetime.now(timezone.utc) + timedelta(days=1)
+    )
+    newer_crl = newer_builder.sign(
+        cert_gen.ca_private_key, hashes.SHA256(), backend=default_backend()
+    )
+
+    validator = CRLValidator(
+        session_manager=Mock(),
+        trusted_certificates=[cert_gen.ca_certificate],
+    )
+
+    # Test that newer is more recent than older
+    assert validator._is_crl_more_recent(newer_crl, older_crl) is True
+    # Test that older is not more recent than newer
+    assert validator._is_crl_more_recent(older_crl, newer_crl) is False
+    # Test that a CRL is not more recent than itself
+    assert validator._is_crl_more_recent(newer_crl, newer_crl) is False
