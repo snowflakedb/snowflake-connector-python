@@ -137,7 +137,7 @@ jobs:
 
   test:
     name: Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
-    needs: build
+    needs: [build, define-matrix]
     runs-on: ${{ matrix.os.image_name }}
     strategy:
       fail-fast: false
