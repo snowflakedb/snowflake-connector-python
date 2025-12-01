@@ -101,8 +101,8 @@ jobs:
     strategy:
       matrix:
         include: ${{ fromJSON(needs.define-matrix.outputs.test_matrix) }}
-    name: Build ${{ matrix.os.download_name }}-py${{ matrix.python-version }}
-    runs-on: ${{ matrix.os.image }}
+    name: Build ${{ matrix.download_name }}-py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Set shortver
         run: echo "shortver=${longver//./}" >> $GITHUB_ENV
@@ -110,7 +110,7 @@ jobs:
           longver: ${{ matrix.python-version }}
         shell: bash
       - name: Set up QEMU
-        if: ${{ matrix.os.download_name == 'manylinux_aarch64' }}
+        if: ${{ matrix.download_name == 'manylinux_aarch64' }}
         uses: docker/setup-qemu-action@v2
         with:
           # xref https://github.com/docker/setup-qemu-action/issues/188
@@ -121,8 +121,8 @@ jobs:
       - name: Building wheel
         uses: pypa/cibuildwheel@v2.21.3
         env:
-          CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os.download_name }}
-          CIBW_ARCHS_WINDOWS: ${{ matrix.os.download_name == 'win_arm64' && 'ARM64' || 'auto' }}
+          CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.download_name }}
+          CIBW_ARCHS_WINDOWS: ${{ matrix.download_name == 'win_arm64' && 'ARM64' || 'auto' }}
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
         with:
           output-dir: dist
@@ -132,13 +132,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           include-hidden-files: true
-          name: ${{ matrix.os.download_name }}_py${{ matrix.python-version }}
+          name: ${{ matrix.download_name }}_py${{ matrix.python-version }}
           path: dist/
 
   test:
-    name: Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    name: Test ${{ matrix.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
     needs: [build, define-matrix]
-    runs-on: ${{ matrix.os.image_name }}
+    runs-on: ${{ matrix.image_name }}
     strategy:
       fail-fast: false
       matrix:
@@ -154,7 +154,7 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v4 # for wiremock
         with:
-          java-version: ${{ matrix.os.download_name == 'win_arm64' && '21.0.5+11.0.LTS' || '11' }}
+          java-version: ${{ matrix.download_name == 'win_arm64' && '21.0.5+11.0.LTS' || '11' }}
           distribution: 'temurin'
           java-package: 'jre'
       - name: Fetch Wiremock
@@ -177,7 +177,7 @@ jobs:
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.os.download_name }}_py${{ matrix.python-version }}
+          name: ${{ matrix.download_name }}_py${{ matrix.python-version }}
           path: dist
       - name: Show wheels downloaded
         run: ls -lh dist
@@ -202,7 +202,7 @@ jobs:
         if: always()
         with:
           include-hidden-files: true
-          name: coverage_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          name: coverage_${{ matrix.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
             .tox/.coverage
             .tox/coverage.xml
@@ -210,7 +210,7 @@ jobs:
         if: always()
         with:
           include-hidden-files: true
-          name: junit_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          name: junit_${{ matrix.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
             .tox/junit.*.xml
 
