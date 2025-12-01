@@ -28,7 +28,7 @@ class PythonVersion:
 
 
 @dataclass
-class OS:
+class OperatingSystemInfo:
     """Operating system configuration."""
 
     name: str  # GitHub Actions runner image (e.g., "ubuntu-latest")
@@ -38,19 +38,19 @@ class OS:
 class OperatingSystem(Enum):
     """Available operating systems with their build configurations."""
 
-    UBUNTU = OS(
+    UBUNTU = OperatingSystemInfo(
         name="ubuntu-latest",
         download_name="manylinux_x86_64",
     )
-    MACOS = OS(
+    MACOS = OperatingSystemInfo(
         name="macos-latest",
         download_name="macosx_x86_64",
     )
-    WINDOWS = OS(
+    WINDOWS = OperatingSystemInfo(
         name="windows-latest",
         download_name="win_amd64",
     )
-    WINDOWS_ARM = OS(
+    WINDOWS_ARM = OperatingSystemInfo(
         name="windows-11-arm",
         download_name="win_arm64",
     )
@@ -99,7 +99,9 @@ INDENT = 2
 # ============================================================================
 
 
-def _add_to_matrix(matrix: list[dict], os: OS, csp_name: str, py_config: PythonVersion):
+def _add_to_matrix(
+    matrix: list[dict], os: OperatingSystemInfo, csp_name: str, py_config: PythonVersion
+):
     if (os.name, py_config.version) in EXCLUSIONS:
         return
 
