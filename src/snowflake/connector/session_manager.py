@@ -641,8 +641,8 @@ class SessionManagerFactory:
         config: HttpConfig | None = None, **http_config_kwargs
     ) -> SessionManager:
         has_param_proxies = (
-            hasattr(config, "proxy_host") or "proxies" in http_config_kwargs
-        )
+            config and config.proxy_host is not None
+        ) or "proxies" in http_config_kwargs
         if has_param_proxies:
             return ProxySessionManager(config, **http_config_kwargs)
         else:
