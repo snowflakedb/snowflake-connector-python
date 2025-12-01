@@ -47,10 +47,10 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "Using full matrix"
-            echo "test_matrix=$(jq -c . < ./.github/workflows/full_matrix.json)" >> "$GITHUB_OUTPUT"
+            echo "test_matrix=$(jq -c . < ./.github/workflows/generated_full_matrix.json)" >> "$GITHUB_OUTPUT"
           else
             echo "Using PR matrix"
-            echo "test_matrix=$(jq -c . < ./.github/workflows/pr_matrix.json)" >> "$GITHUB_OUTPUT"
+            echo "test_matrix=$(jq -c . < ./.github/workflows/generated_pr_matrix.json)" >> "$GITHUB_OUTPUT"
           fi
   lint:
     name: Check linting
