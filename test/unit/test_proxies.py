@@ -13,7 +13,11 @@ import snowflake.connector
 import snowflake.connector.vendored.requests as requests
 from snowflake.connector.compat import urlparse as compat_urlparse
 from snowflake.connector.errors import OperationalError
-from snowflake.connector.session_manager import SessionManager
+from snowflake.connector.session_manager import (
+    HttpConfig,
+    ProxySessionManager,
+    SessionManager,
+)
 
 
 @pytest.mark.skipolddriver
@@ -32,56 +36,23 @@ def test_get_proxy_url():
 
 
 @pytest.mark.skipolddriver
-def test_proxy_with_https_proxy_env_var_baseline(
-    wiremock_backend_storage_proxy,
-    wiremock_generic_mappings_dir,
-    wiremock_mapping_dir,
-    monkeypatch,
-):
-    """Baseline test: HTTPS_PROXY works correctly without NO_PROXY.
+def test_no_proxy_bytes_url_regression_unit(monkeypatch):
+    """SNOW-2865839: TypeError with NO_PROXY and bytes URL during PUT/GET.
 
-    From bug report reproduction:
-    "run the repro with only HTTPS_PROXY populated, e.g.
-     HTTPS_PROXY=http://localhost:8080 python test.py.
-     It will work perfectly. Big query, PUT as well works well"
-
-    This establishes that proxy setup works correctly before testing NO_PROXY regression.
+    storage_client passes bytes URLs to use_session() during file transfers,
+    causing TypeError in should_bypass_proxies() when NO_PROXY is set.
     """
-    target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
+    monkeypatch.setenv("HTTPS_PROXY", "http://localhost:8080")
+    monkeypatch.setenv("NO_PROXY", "google.com")
 
-    # Setup wiremock mappings
-    _setup_backend_storage_mappings(
-        target_wm,
-        storage_wm,
-        proxy_wm,
-        wiremock_mapping_dir,
-        wiremock_generic_mappings_dir,
-    )
+    config = HttpConfig(proxy_host="localhost", proxy_port="8080")
+    manager = ProxySessionManager(config=config)
 
-    # Set ONLY HTTPS_PROXY (no NO_PROXY yet) - proxy_wm will forward to target_wm
-    proxy_url = f"http://{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}"
-    monkeypatch.setenv("HTTPS_PROXY", proxy_url)
+    # storage_client passes bytes URL
+    bytes_url = b"https://s3-us-west-2.amazonaws.com/bucket/file?token=xyz"
 
-    # Connect to target_wm, requests will go through proxy_wm due to HTTPS_PROXY
-    with snowflake.connector.connect(
-        user="testUser",
-        password="testPassword",
-        account="testAccount",
-        host=target_wm.wiremock_host,
-        port=target_wm.wiremock_http_port,
-        protocol="http",
-        warehouse="TEST_WH",
-        platform_detection_timeout_seconds=0,
-    ) as conn:
-        # Execute large query that requires fetching from storage
-        cursors = conn.execute_string(
-            "select seq4() as n from table(generator(rowcount => 50000));"
-        )
-
-        # Should work perfectly without NO_PROXY
-        assert len(cursors) > 0
-        result = list(cursors[0])
-        assert len(result) > 0
+    with manager.use_session(bytes_url) as session:
+        assert session is not None
 
 
 @pytest.mark.skipolddriver
