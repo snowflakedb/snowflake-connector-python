@@ -28,6 +28,12 @@ def test_timer():
 class TestCoreLoader:
     """Tests for the _CoreLoader class."""
 
+    def test_e2e(self):
+        loader = _CoreLoader()
+        loader.load()
+        assert loader.get_load_error() == str(None)
+        assert loader.get_core_version() == "0.0.1"
+
     def test_core_loader_initialization(self):
         """Test that _CoreLoader initializes with None values."""
         loader = _CoreLoader()
