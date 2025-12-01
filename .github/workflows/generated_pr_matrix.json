@@ -2,7 +2,7 @@
   {
     "os": "ubuntu-latest",
     "download_name": "manylinux_x86_64",
-    "python-version": "3.10",
+    "python-version": "3.9",
     "cloud-provider": "aws"
   },
   {
@@ -14,7 +14,7 @@
   {
     "os": "macos-latest",
     "download_name": "macosx_x86_64",
-    "python-version": "3.10",
+    "python-version": "3.9",
     "cloud-provider": "azure"
   },
   {
@@ -26,7 +26,7 @@
   {
     "os": "windows-latest",
     "download_name": "win_amd64",
-    "python-version": "3.10",
+    "python-version": "3.9",
     "cloud-provider": "gcp"
   },
   {

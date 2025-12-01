@@ -357,8 +357,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        cloud-provider: [aws]
+        include: ${{ fromJSON(needs.define-matrix.outputs.test_matrix) }}
+        exclude:
+          - cloud-provider: gcp
+          - cloud-provider: azure
     steps:
       - name: Set shortver
         run: echo "shortver=${longver//./}" >> $GITHUB_ENV
