@@ -39,6 +39,7 @@ def test_put_with_https_proxy(conn_cnx, tmp_path, mitm_proxy, monkeypatch):
     with conn_cnx(
         disable_ocsp_checks=True,
         login_timeout=60,  # Increase timeout for Windows proxy connection
+        network_timeout=60,  # Increase socket read timeout for proxy connections
     ) as conn:
         with conn.cursor() as cur:
             stage_name = random_string(5, "test_proxy_")
@@ -91,6 +92,7 @@ def test_put_with_https_proxy_and_no_proxy_regression(
     with conn_cnx(
         disable_ocsp_checks=True,
         login_timeout=60,  # Increase timeout for Windows proxy connection
+        network_timeout=60,  # Increase socket read timeout for proxy connections for Windows
     ) as conn:
         with conn.cursor() as cur:
             stage_name = random_string(5, "test_no_proxy_")
