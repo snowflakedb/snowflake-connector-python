@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import importlib
+import os
 import string
 import sys
 import threading
@@ -135,6 +136,10 @@ class _CoreLoader:
             core = ctypes.CDLL(str(lib_path))
         return core
 
+    def _is_core_disabled(self) -> bool:
+        value = str(os.getenv("SNOWFLAKE_DISABLE_MINICORE", None)).lower()
+        return value in ["1", "true"]
+
     def _load(self) -> None:
         try:
             path = self._get_core_path()
@@ -147,6 +152,9 @@ class _CoreLoader:
 
     def load(self):
         """Spawn a separate thread to load the minicore library (non-blocking)."""
+        if self._is_core_disabled():
+            self._error = "mini-core-disabled"
+            return
         self._error = "still-loading"
         thread = threading.Thread(target=self._load, daemon=True)
         thread.start()

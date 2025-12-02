@@ -1,4 +1,5 @@
 import ctypes
+import os
 import sys
 from importlib import reload
 from unittest import mock
@@ -62,9 +63,7 @@ class TestCoreLoader:
                 _CoreLoader._get_core_path()
 
                 mock_files.assert_called_once_with("snowflake.connector.minicore")
-                mock_files_obj.joinpath.assert_called_once_with(
-                    "libsf_mini_core.dyldib"
-                )
+                mock_files_obj.joinpath.assert_called_once_with("libsf_mini_core.dylib")
 
     def test_get_core_path_linux(self):
         """Test _get_core_path returns correct path for Linux."""
@@ -111,6 +110,42 @@ class TestCoreLoader:
                 mock_cdll.assert_called_once_with(str(mock_lib_path))
                 assert result == mock_core
 
+    @pytest.mark.parametrize("env_value", ["1", "true", "True", "TRUE"])
+    def test_is_core_disabled_returns_true(self, env_value):
+        """Test that _is_core_disabled returns True when env var is '1' or 'true' (case-insensitive)."""
+        loader = _CoreLoader()
+        with mock.patch.dict(os.environ, {"SNOWFLAKE_DISABLE_MINICORE": env_value}):
+            assert loader._is_core_disabled() is True
+
+    @pytest.mark.parametrize("env_value", ["0", "false", "False", "no", "other", ""])
+    def test_is_core_disabled_returns_false(self, env_value):
+        """Test that _is_core_disabled returns False for other values."""
+        loader = _CoreLoader()
+        with mock.patch.dict(os.environ, {"SNOWFLAKE_DISABLE_MINICORE": env_value}):
+            assert loader._is_core_disabled() is False
+
+    def test_is_core_disabled_returns_false_when_not_set(self):
+        """Test that _is_core_disabled returns False when env var is not set."""
+        loader = _CoreLoader()
+        with mock.patch.dict(os.environ, {}, clear=True):
+            # Ensure the env var is not set
+            os.environ.pop("SNOWFLAKE_DISABLE_CORE", None)
+            assert loader._is_core_disabled() is False
+
+    def test_load_skips_loading_when_core_disabled(self):
+        """Test that load() returns early when core is disabled."""
+        loader = _CoreLoader()
+
+        with mock.patch.dict(os.environ, {"SNOWFLAKE_DISABLE_MINICORE": "1"}):
+            with mock.patch.object(loader, "_get_core_path") as mock_get_path:
+                loader.load()
+
+                # Verify that _get_core_path was never called (loading was skipped)
+                mock_get_path.assert_not_called()
+                # Verify the error message is set correctly
+                assert loader._error == "mini-core-disabled"
+                assert loader._version is None
+
     def test_load_success(self):
         """Test successful load of the core library."""
         loader = _CoreLoader()
@@ -119,34 +154,38 @@ class TestCoreLoader:
         mock_version = b"1.2.3"
         mock_core.sf_core_full_version = mock.MagicMock(return_value=mock_version)
 
-        with mock.patch.object(
-            loader, "_get_core_path", return_value=mock_path
-        ) as mock_get_path:
+        with mock.patch.object(loader, "_is_core_disabled", return_value=False):
             with mock.patch.object(
-                loader, "_load_minicore", return_value=mock_core
-            ) as mock_load:
-                with mock.patch.object(loader, "_register_functions") as mock_register:
-                    loader.load()
+                loader, "_get_core_path", return_value=mock_path
+            ) as mock_get_path:
+                with mock.patch.object(
+                    loader, "_load_minicore", return_value=mock_core
+                ) as mock_load:
+                    with mock.patch.object(
+                        loader, "_register_functions"
+                    ) as mock_register:
+                        loader.load()
 
-                    mock_get_path.assert_called_once()
-                    mock_load.assert_called_once_with(mock_path)
-                    mock_register.assert_called_once_with(mock_core)
-                    assert loader._version == mock_version
-                    assert loader._error is None
+                        mock_get_path.assert_called_once()
+                        mock_load.assert_called_once_with(mock_path)
+                        mock_register.assert_called_once_with(mock_core)
+                        assert loader._version == mock_version
+                        assert loader._error is None
 
     def test_load_failure(self):
         """Test that load captures exceptions."""
         loader = _CoreLoader()
         test_error = Exception("Test error loading core")
 
-        with mock.patch.object(
-            loader, "_get_core_path", side_effect=test_error
-        ) as mock_get_path:
-            loader.load()
+        with mock.patch.object(loader, "_is_core_disabled", return_value=False):
+            with mock.patch.object(
+                loader, "_get_core_path", side_effect=test_error
+            ) as mock_get_path:
+                loader.load()
 
-            mock_get_path.assert_called_once()
-            assert loader._version is None
-            assert loader._error == test_error
+                mock_get_path.assert_called_once()
+                assert loader._version is None
+                assert loader._error == test_error
 
     def test_get_load_error_with_error(self):
         """Test get_load_error returns error message when error exists."""
@@ -190,7 +229,7 @@ def test_importing_snowflake_connector_triggers_core_loader_load():
     # core_loader.load() is called. Since snowflake.connector is already imported,
     # we need to reload it and mock the load method.
 
-    with mock.patch("snowflake.connector._utils.core_loader.load") as mock_load:
+    with mock.patch("snowflake.connector._utils._core_loader.load") as mock_load:
         # Reload the connector module to trigger the __init__.py code again
         import snowflake.connector
 
@@ -204,7 +243,7 @@ def test_snowflake_connector_loads_when_core_loader_fails():
     """Test that snowflake.connector loads successfully even if core_loader.load() fails."""
     # Mock core_loader.load() to raise an exception
     with mock.patch(
-        "snowflake.connector._utils.core_loader.load",
+        "snowflake.connector._utils._core_loader.load",
         side_effect=Exception("Simulated core loading failure"),
     ):
         import snowflake.connector
@@ -229,7 +268,7 @@ def test_snowflake_connector_usable_when_core_loader_fails():
     """Test that snowflake.connector remains usable even if core_loader.load() fails."""
     # Mock core_loader.load() to raise an exception
     with mock.patch(
-        "snowflake.connector._utils.core_loader.load",
+        "snowflake.connector._utils._core_loader.load",
         side_effect=RuntimeError("Core library not found"),
     ):
         import snowflake.connector
@@ -259,15 +298,16 @@ def test_core_loader_error_captured_when_load_fails():
     test_exception = FileNotFoundError("Library file not found")
 
     # Mock _get_core_path to raise an exception
-    with mock.patch.object(loader, "_get_core_path", side_effect=test_exception):
-        # Call load - it should NOT raise an exception
-        loader.load()
+    with mock.patch.object(loader, "_is_core_disabled", return_value=False):
+        with mock.patch.object(loader, "_get_core_path", side_effect=test_exception):
+            # Call load - it should NOT raise an exception
+            loader.load()
 
-        # Verify the error was captured
-        assert loader._error is test_exception
-        assert loader._version is None
-        assert loader.get_load_error() == "Library file not found"
-        assert loader.get_core_version() is None
+            # Verify the error was captured
+            assert loader._error is test_exception
+            assert loader._version is None
+            assert loader.get_load_error() == "Library file not found"
+            assert loader.get_core_version() is None
 
 
 def test_core_loader_fails_gracefully_on_missing_library():
@@ -275,16 +315,17 @@ def test_core_loader_fails_gracefully_on_missing_library():
     loader = _CoreLoader()
 
     # Mock importlib.resources.files to simulate missing library
-    with mock.patch("importlib.resources.files") as mock_files:
-        mock_files.side_effect = FileNotFoundError("minicore module not found")
+    with mock.patch.object(loader, "_is_core_disabled", return_value=False):
+        with mock.patch("importlib.resources.files") as mock_files:
+            mock_files.side_effect = FileNotFoundError("minicore module not found")
 
-        # Call load - it should NOT raise an exception
-        loader.load()
+            # Call load - it should NOT raise an exception
+            loader.load()
 
-        # Verify the error was captured
-        assert loader._error is not None
-        assert loader._version is None
-        assert "minicore module not found" in loader.get_load_error()
+            # Verify the error was captured
+            assert loader._error is not None
+            assert loader._version is None
+            assert "minicore module not found" in loader.get_load_error()
 
 
 def test_core_loader_fails_gracefully_on_incompatible_library():
@@ -293,16 +334,17 @@ def test_core_loader_fails_gracefully_on_incompatible_library():
     mock_path = mock.MagicMock()
 
     # Mock the loading to simulate incompatible library (OSError is common for this)
-    with mock.patch.object(loader, "_get_core_path", return_value=mock_path):
-        with mock.patch.object(
-            loader,
-            "_load_minicore",
-            side_effect=OSError("incompatible library version"),
-        ):
-            # Call load - it should NOT raise an exception
-            loader.load()
+    with mock.patch.object(loader, "_is_core_disabled", return_value=False):
+        with mock.patch.object(loader, "_get_core_path", return_value=mock_path):
+            with mock.patch.object(
+                loader,
+                "_load_minicore",
+                side_effect=OSError("incompatible library version"),
+            ):
+                # Call load - it should NOT raise an exception
+                loader.load()
 
-            # Verify the error was captured
-            assert loader._error is not None
-            assert loader._version is None
-            assert "incompatible library version" in loader.get_load_error()
+                # Verify the error was captured
+                assert loader._error is not None
+                assert loader._version is None
+                assert "incompatible library version" in loader.get_load_error()
