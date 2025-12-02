@@ -12,6 +12,11 @@ The mitm_proxy fixture (session-scoped):
     - Tests control proxy usage via:
       1. mitm_proxy.set_env_vars(monkeypatch) - for environment variables
       2. conn_cnx(proxy_host=..., proxy_port=...) - for connection params
+
+Important:
+    When connecting through mitmproxy, you MUST set disable_ocsp_checks=True
+    because mitmproxy performs MITM with self-signed certificates that cannot
+    be validated via OCSP.
 """
 from __future__ import annotations
 
@@ -39,7 +44,8 @@ def test_put_with_https_proxy_baseline(conn_cnx, tmp_path, mitm_proxy, monkeypat
     mitm_proxy.set_env_vars(monkeypatch)
 
     # Connect to REAL Snowflake through mitmproxy
-    with conn_cnx() as conn:
+    # Must disable OCSP checks since mitmproxy presents self-signed certs for MITM
+    with conn_cnx(disable_ocsp_checks=True) as conn:
         with conn.cursor() as cur:
             stage_name = random_string(5, "test_proxy_baseline_")
             cur.execute(f"CREATE TEMPORARY STAGE {stage_name}")
