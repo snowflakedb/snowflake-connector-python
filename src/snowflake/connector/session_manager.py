@@ -483,26 +483,32 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixi
         self._mount_adapters(session)
         return session
 
+    @staticmethod
+    def _normalize_url(url: str | bytes | None) -> str:
+        """Normalize URL to string format (handles bytes from storage client)."""
+        return url.decode("utf-8") if isinstance(url, bytes) else url
+
     @contextlib.contextmanager
     @_propagate_session_manager_to_ocsp
     def use_session(
-        self, url: str | bytes, use_pooling: bool | None = None
+        self, url: str | bytes | None, use_pooling: bool | None = None
     ) -> Generator[Session, Any, None]:
+        """Yield a session for the given URL (used for proxy handling and pooling).
+        The 'url' is an obligatory parameter due to the need for correct proxy handling (i.e. bypassing caused by no_proxy settings).
         """
-        'url' is an obligatory parameter due to the need for correct proxy handling (i.e. bypassing caused by no_proxy settings).
-        """
+        url_str = self._normalize_url(url)
         use_pooling = use_pooling if use_pooling is not None else self.use_pooling
         if not use_pooling:
-            session = self.make_session(url=url)
+            session = self.make_session(url=url_str)
             try:
                 yield session
             finally:
                 session.close()
         else:
-            yield from self._yield_session_from_pool(url)
+            yield from self._yield_session_from_pool(url_str)
 
     def _yield_session_from_pool(
-        self, url: str | bytes
+        self, url: str | None
     ) -> Generator[SessionT, Any, None]:
         hostname = self._get_pooling_key_from_url(url)
         pool = self._sessions_map[hostname]
@@ -635,8 +641,8 @@ class SessionManagerFactory:
         config: HttpConfig | None = None, **http_config_kwargs
     ) -> SessionManager:
         has_param_proxies = (
-            hasattr(config, "proxy_host") or "proxies" in http_config_kwargs
-        )
+            config and config.proxy_host is not None
+        ) or "proxies" in http_config_kwargs
         if has_param_proxies:
             return ProxySessionManager(config, **http_config_kwargs)
         else:
