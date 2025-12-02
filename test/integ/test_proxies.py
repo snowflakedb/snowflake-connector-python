@@ -16,6 +16,8 @@ import sys
 
 import pytest
 
+from snowflake.connector.compat import IS_WINDOWS
+
 try:
     from snowflake.connector.util_text import random_string
 except ImportError:
@@ -60,7 +62,7 @@ def test_put_with_https_proxy(conn_cnx, tmp_path, mitm_proxy, monkeypatch):
 
 @pytest.mark.skipolddriver
 @pytest.mark.skipif(
-    sys.version_info < (3, 10),
+    sys.version_info < (3, 10) or IS_WINDOWS,
     reason="mitmproxy not installed for Python 3.9 due to dependency conflicts",
 )
 def test_put_with_https_proxy_and_no_proxy_regression(
