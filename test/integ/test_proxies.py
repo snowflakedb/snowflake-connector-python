@@ -3,6 +3,7 @@
 
 Requirements:
     mitmproxy is installed automatically via the [development] extras in setup.cfg
+    (Python 3.10+ only - mitmproxy has dependency conflicts on Python 3.9)
 
 Important:
     When connecting through mitmproxy, you MUST set disable_ocsp_checks=True
@@ -10,6 +11,8 @@ Important:
     be validated via OCSP.
 """
 from __future__ import annotations
+
+import sys
 
 import pytest
 
@@ -20,6 +23,10 @@ except ImportError:
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="mitmproxy not installed for Python 3.9 due to dependency conflicts",
+)
 def test_put_with_https_proxy(conn_cnx, tmp_path, mitm_proxy, monkeypatch):
     test_file = tmp_path / "test_data.csv"
     test_file.write_text("col1,col2\n1,2\n3,4\n")
@@ -51,6 +58,10 @@ def test_put_with_https_proxy(conn_cnx, tmp_path, mitm_proxy, monkeypatch):
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="mitmproxy not installed for Python 3.9 due to dependency conflicts",
+)
 def test_put_with_https_proxy_and_no_proxy_regression(
     conn_cnx, tmp_path, mitm_proxy, monkeypatch
 ):
