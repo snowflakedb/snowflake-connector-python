@@ -29,7 +29,10 @@ def test_put_with_https_proxy(conn_cnx, tmp_path, mitm_proxy, monkeypatch):
 
     # Connect to REAL Snowflake through mitmproxy
     # Must disable OCSP checks since mitmproxy presents self-signed certs for MITM
-    with conn_cnx(disable_ocsp_checks=True) as conn:
+    with conn_cnx(
+        disable_ocsp_checks=True,
+        login_timeout=60,  # Increase timeout for Windows proxy connection
+    ) as conn:
         with conn.cursor() as cur:
             stage_name = random_string(5, "test_proxy_")
             cur.execute(f"CREATE TEMPORARY STAGE {stage_name}")
