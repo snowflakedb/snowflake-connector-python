@@ -19,17 +19,20 @@ jobs:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
         run: |
           # Escape special characters in title and body
-          TITLE=$(echo '${{ github.event.issue.title }}' | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
-          BODY=$(echo '${{ github.event.issue.body }}' | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
+          TITLE=$(echo "$ISSUE_TITLE" | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
+          BODY=$(echo "$ISSUE_BODY"  | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
           PAYLOAD=$(cat <<EOF
           {
             "fields": {
               "project": { "key": "SNOW" },
               "issuetype": { "name": "Bug" },
               "summary": "$TITLE",
-              "description": "$BODY\n\n_Created from GitHub Action_ for ${{ github.event.issue.html_url }}",
+              "description": "$BODY\n\n_Created from GitHub Action_ for $ISSUE_URL",
               "customfield_11401": {"id": "14723"},
               "assignee": {"id": "712020:e527ae71-55cc-4e02-9217-1ca4ca8028a2"},
               "components": [{"id": "16413"}],
