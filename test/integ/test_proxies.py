@@ -34,8 +34,10 @@ def test_put_with_https_proxy(conn_cnx, tmp_path, mitm_proxy, monkeypatch):
             stage_name = random_string(5, "test_proxy_")
             cur.execute(f"CREATE TEMPORARY STAGE {stage_name}")
 
+            # Use str().replace() for cross-platform file URI compatibility (like other tests)
+            filename = str(test_file).replace("\\", "/")
             put_result = cur.execute(
-                f"PUT 'file://{test_file}' @{stage_name}"
+                f"PUT 'file://{filename}' @{stage_name}"
             ).fetchall()
 
             assert len(put_result) > 0
@@ -72,14 +74,19 @@ def test_put_with_https_proxy_and_no_proxy_regression(
     # Set NO_PROXY with arbitrary value (from bug report)
     monkeypatch.setenv("NO_PROXY", "google.com")
 
-    with conn_cnx(disable_ocsp_checks=True) as conn:
+    with conn_cnx(
+        disable_ocsp_checks=True,
+        login_timeout=60,  # Increase timeout for Windows proxy connection
+    ) as conn:
         with conn.cursor() as cur:
             stage_name = random_string(5, "test_no_proxy_")
             cur.execute(f"CREATE TEMPORARY STAGE {stage_name}")
 
             # This is where the bug occurs - storage_client passes bytes URL
+            # Use str().replace() for cross-platform file URI compatibility (like other tests)
+            filename = str(test_file).replace("\\", "/")
             put_result = cur.execute(
-                f"PUT 'file://{test_file}' @{stage_name}"
+                f"PUT 'file://{filename}' @{stage_name}"
             ).fetchall()
 
             assert len(put_result) > 0
