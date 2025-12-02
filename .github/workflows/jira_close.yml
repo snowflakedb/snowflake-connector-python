@@ -18,8 +18,9 @@ jobs:
 
       - name: Close Jira Issue
         if: startsWith(steps.extract.outputs.jira, 'SNOW-')
+        env:
+          ISSUE_KEY: ${{ steps.extract.outputs.jira }}
         run: |
-          ISSUE_KEY="${{ steps.extract.outputs.jira }}"
           JIRA_API_URL="${{ secrets.JIRA_BASE_URL }}/rest/api/2/issue/${ISSUE_KEY}/transitions"
 
           curl -X POST \
