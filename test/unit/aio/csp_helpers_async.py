@@ -154,6 +154,21 @@ class FakeGceMetadataServiceAsync(FakeMetadataServiceAsync, FakeGceMetadataServi
     pass
 
 
+class AsyncCredentialsWrapper:
+    """Wrapper around boto credentials to make get_frozen_credentials async for testing."""
+
+    def __init__(self, credentials):
+        self._credentials = credentials
+
+    async def get_frozen_credentials(self):
+        """Async version of get_frozen_credentials that returns the wrapped credentials."""
+        return self._credentials
+
+    def __getattr__(self, name):
+        """Delegate all other attributes to the wrapped credentials."""
+        return getattr(self._credentials, name)
+
+
 class FakeAwsEnvironmentAsync(FakeAwsEnvironment):
     """Emulates the AWS environment-specific functions used in async wif_util.py.
 
@@ -166,7 +181,9 @@ class FakeAwsEnvironmentAsync(FakeAwsEnvironment):
         return self.region
 
     async def get_credentials(self):
-        return self.credentials
+        if self.credentials is None:
+            return None
+        return AsyncCredentialsWrapper(self.credentials)
 
     def __enter__(self):
         # First call the parent's __enter__ to get base functionality
@@ -174,7 +191,9 @@ class FakeAwsEnvironmentAsync(FakeAwsEnvironment):
 
         # Then add async-specific patches
         async def async_get_credentials():
-            return self.credentials
+            if self.credentials is None:
+                return None
+            return AsyncCredentialsWrapper(self.credentials)
 
         async def async_get_caller_identity():
             return {"Arn": self.arn}
