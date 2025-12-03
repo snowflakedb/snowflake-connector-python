@@ -19,28 +19,28 @@ jobs:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          ISSUE_TITLE: ${{ github.event.issue.title }}
-          ISSUE_BODY: ${{ github.event.issue.body }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
         run: |
           # Escape special characters in title and body
-          TITLE=$(echo "$ISSUE_TITLE" | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
-          BODY=$(echo "$ISSUE_BODY"  | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
-          PAYLOAD=$(cat <<EOF
-          {
-            "fields": {
-              "project": { "key": "SNOW" },
-              "issuetype": { "name": "Bug" },
-              "summary": "$TITLE",
-              "description": "$BODY\n\n_Created from GitHub Action_ for $ISSUE_URL",
-              "customfield_11401": {"id": "14723"},
-              "assignee": {"id": "712020:e527ae71-55cc-4e02-9217-1ca4ca8028a2"},
-              "components": [{"id": "16413"}],
-              "labels": ["oss"],
-              "priority": {"id": "10001"}
+          TITLE=$(echo '${{ github.event.issue.title }}' | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
+          BODY=$(echo '${{ github.event.issue.body }}' | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
+          PAYLOAD=$(jq -n \
+          --arg issuetitle "$TITLE" \
+          --arg issuebody "$BODY" \
+          --arg issueurl "$ISSUE_URL" \
+          '{
+            fields: {
+              project: { key: "SNOW" },
+              issuetype: { name: "Bug" },
+              summary: $issuetitle,
+              description: ($issuebody + "\n\n_Created from GitHub Action_ for " + $issueurl),
+              customfield_11401: { id: "14723" },
+              assignee: { id: "712020:e527ae71-55cc-4e02-9217-1ca4ca8028a2" },
+              components: [{ id: "16413" }],
+              labels: ["oss"],
+              priority: { id: "10001" }
             }
-          }
-          )
+          }')
 
           # Create JIRA issue using REST API
           RESPONSE=$(curl -s -X POST \
@@ -56,6 +56,7 @@ jobs:
           if [ "$JIRA_KEY" = "null" ] || [ -z "$JIRA_KEY" ]; then
             echo "Failed to create JIRA issue"
             echo "Response: $RESPONSE"
+            echo "Request payload: $PAYLOAD"
             exit 1
           fi
 
@@ -71,10 +72,10 @@ jobs:
           ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
           # Update Github issue title with jira id
-          curl -s \
+          GH_UPD_RESPONSE=$(curl -s \
             -X PATCH \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/$REPOSITORY/issues/$ISSUE_NUMBER" \
-            -d "{\"title\":\"$JIRA_KEY: $ISSUE_TITLE\"}"
+            -d "{\"title\":\"$JIRA_KEY: $ISSUE_TITLE\"}")
