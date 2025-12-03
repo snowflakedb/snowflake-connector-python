@@ -112,7 +112,13 @@ from .errorcode import (
     ER_NO_USER,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from .errors import DatabaseError, Error, OperationalError, ProgrammingError
+from .errors import (
+    DatabaseError,
+    Error,
+    ErrorHandler,
+    OperationalError,
+    ProgrammingError,
+)
 from .log_configuration import EasyLoggingConfigPython
 from .network import (
     DEFAULT_AUTHENTICATOR,
@@ -568,6 +574,12 @@ class SnowflakeConnection:
 
     OCSP_ENV_LOCK = Lock()
 
+    # Tell mypy these fields exist.
+    # TODO: Replace the dynamic setattr() with static methods
+    _interpolate_empty_sequences: bool
+    _reraise_error_in_file_transfer_work_function: bool
+    _reuse_results: bool
+
     def __init__(
         self,
         connection_name: str | None = None,
@@ -947,12 +959,12 @@ class SnowflakeConnection:
         return self._application
 
     @property
-    def errorhandler(self) -> Callable:  # TODO: callable args
+    def errorhandler(self) -> ErrorHandler:
         return self._errorhandler
 
     @errorhandler.setter
-    # Note: Callable doesn't implement operator|
-    def errorhandler(self, value: Callable | None) -> None:
+    def errorhandler(self, value: ErrorHandler | None) -> None:
+        # TODO: Why is value `ErrorHandler | None` if it always errors on None?
         if value is None:
             raise ProgrammingError("None errorhandler is specified")
         self._errorhandler = value
@@ -1282,9 +1294,9 @@ class SnowflakeConnection:
         sql_text: str,
         remove_comments: bool = False,
         return_cursors: bool = True,
-        cursor_class: SnowflakeCursor = SnowflakeCursor,
+        cursor_class: SnowflakeCursorBase = SnowflakeCursor,
         **kwargs,
-    ) -> Iterable[SnowflakeCursor]:
+    ) -> Iterable[SnowflakeCursorBase]:
         """Executes a SQL text including multiple statements. This is a non-standard convenience method."""
         stream = StringIO(sql_text)
         stream_generator = self.execute_stream(
@@ -1297,9 +1309,9 @@ class SnowflakeConnection:
         self,
         stream: StringIO,
         remove_comments: bool = False,
-        cursor_class: SnowflakeCursor = SnowflakeCursor,
+        cursor_class: SnowflakeCursorBase = SnowflakeCursor,
         **kwargs,
-    ) -> Generator[SnowflakeCursor]:
+    ) -> Generator[SnowflakeCursorBase]:
         """Executes a stream of SQL statements. This is a non-standard convenient method."""
         split_statements_list = split_statements(
             stream, remove_comments=remove_comments
@@ -2023,7 +2035,6 @@ class SnowflakeConnection:
 
         Args:
             params: Binding parameters to bulk array insertion query with qmark/numeric format.
-            cursor: SnowflakeCursor.
 
         Returns:
             List of bytes string corresponding to rows
@@ -2040,7 +2051,7 @@ class SnowflakeConnection:
 
     def _get_snowflake_type_and_binding(
         self,
-        cursor: SnowflakeCursor | None,
+        cursor: SnowflakeCursorBase | None,
         v: tuple[str, Any] | Any,
     ) -> TypeAndBinding:
         if isinstance(v, tuple):
@@ -2081,7 +2092,7 @@ class SnowflakeConnection:
     def _process_params_qmarks(
         self,
         params: Sequence | None,
-        cursor: SnowflakeCursor | None = None,
+        cursor: SnowflakeCursorBase | None = None,
     ) -> dict[str, dict[str, str]] | None:
         if not params:
             return None
@@ -2115,14 +2126,14 @@ class SnowflakeConnection:
     def _process_params_pyformat(
         self,
         params: Any | Sequence[Any] | dict[Any, Any] | None,
-        cursor: SnowflakeCursor | None = None,
+        cursor: SnowflakeCursorBase | None = None,
     ) -> tuple[Any] | dict[str, Any] | None:
         """Process parameters for client-side parameter binding.
 
         Args:
             params: Either a sequence, or a dictionary of parameters, if anything else
                 is given then it will be put into a list and processed that way.
-            cursor: The SnowflakeCursor used to report errors if necessary.
+            cursor: The SnowflakeCursorBase used to report errors if necessary.
         """
         if params is None:
             if self._interpolate_empty_sequences:
@@ -2154,7 +2165,7 @@ class SnowflakeConnection:
             )
 
     def _process_params_dict(
-        self, params: dict[Any, Any], cursor: SnowflakeCursor | None = None
+        self, params: dict[Any, Any], cursor: SnowflakeCursorBase | None = None
     ) -> dict:
         try:
             res = {k: self._process_single_param(v) for k, v in params.items()}

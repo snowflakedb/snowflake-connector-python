@@ -59,7 +59,7 @@ from .storage_client import SnowflakeFileEncryptionMaterial, SnowflakeStorageCli
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
-    from .cursor import SnowflakeCursor
+    from .cursor import SnowflakeCursorBase
     from .file_compression_type import CompressionType
 
 VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS]
@@ -338,7 +338,7 @@ class SnowflakeFileTransferAgent:
 
     def __init__(
         self,
-        cursor: SnowflakeCursor,
+        cursor: SnowflakeCursorBase,
         command: str,
         ret: dict[str, Any],
         put_callback: type[SnowflakeProgressPercentage] | None = None,

@@ -6,7 +6,7 @@ import os
 import re
 import traceback
 from logging import getLogger
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .errorcode import ER_HTTP_GENERAL_ERROR
 from .secret_detector import SecretDetector
@@ -15,7 +15,7 @@ from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
-    from .cursor import SnowflakeCursor
+    from .cursor import SnowflakeCursorBase
 
 logger = getLogger(__name__)
 connector_base_path = os.path.join("snowflake", "connector")
@@ -36,7 +36,7 @@ class Error(Exception):
         query: str | None = None,
         done_format_msg: bool | None = None,
         connection: SnowflakeConnection | None = None,
-        cursor: SnowflakeCursor | None = None,
+        cursor: SnowflakeCursorBase | None = None,
         errtype: TelemetryField = TelemetryField.SQL_EXCEPTION,
         send_telemetry: bool = True,
     ) -> None:
@@ -172,7 +172,7 @@ class Error(Exception):
     def exception_telemetry(
         self,
         msg: str,
-        cursor: SnowflakeCursor | None,
+        cursor: SnowflakeCursorBase | None,
         connection: SnowflakeConnection | None,
     ) -> None:
         """Main method to generate and send telemetry data for exceptions."""
@@ -197,7 +197,7 @@ class Error(Exception):
     @staticmethod
     def default_errorhandler(
         connection: SnowflakeConnection,
-        cursor: SnowflakeCursor,
+        cursor: SnowflakeCursorBase,
         error_class: type[Error],
         error_value: dict[str, str],
     ) -> None:
@@ -231,7 +231,7 @@ class Error(Exception):
     def errorhandler_wrapper_from_cause(
         connection: SnowflakeConnection,
         cause: Error | Exception,
-        cursor: SnowflakeCursor | None = None,
+        cursor: SnowflakeCursorBase | None = None,
     ) -> None:
         """Wrapper for errorhandler_wrapper, it is called with a cause instead of a dictionary.
 
@@ -263,7 +263,7 @@ class Error(Exception):
     @staticmethod
     def errorhandler_wrapper(
         connection: SnowflakeConnection | None,
-        cursor: SnowflakeCursor | None,
+        cursor: SnowflakeCursorBase | None,
         error_class: type[Error] | type[Exception],
         error_value: dict[str, Any],
     ) -> None:
@@ -298,7 +298,7 @@ class Error(Exception):
     @staticmethod
     def errorhandler_wrapper_from_ready_exception(
         connection: SnowflakeConnection | None,
-        cursor: SnowflakeCursor | None,
+        cursor: SnowflakeCursorBase | None,
         error_exc: Error | Exception,
     ) -> None:
         """Like errorhandler_wrapper, but it takes a ready to go Exception."""
@@ -324,7 +324,7 @@ class Error(Exception):
     @staticmethod
     def hand_to_other_handler(
         connection: SnowflakeConnection | None,
-        cursor: SnowflakeCursor | None,
+        cursor: SnowflakeCursorBase | None,
         error_class: type[Error] | type[Exception],
         error_value: dict[str, str | bool],
     ) -> bool:
@@ -361,6 +361,19 @@ class Error(Exception):
                 sfqid=error_value.get("sfqid"),
             )
         return error_class(error_value)
+
+
+# Defining as Protocol instead of alias to Callable because mypy
+# doesn't seem to like Callable as a type alias in files with
+# circular imports.
+class ErrorHandler(Protocol):
+    def __call__(
+        self,
+        connection: SnowflakeConnection,
+        cursor: SnowflakeCursorBase,
+        error_class: type[Error],
+        error_value: dict[str, str],
+    ) -> None: ...
 
 
 class _Warning(Exception):
