@@ -69,6 +69,7 @@ def test_pat_authenticator_creates_auth_by_pat(
     """
     import snowflake.connector
 
+    # Mock the network request - this prevents actual network calls and connection errors
     def mock_post_request(request, url, headers, json_body, **kwargs):
         return {
             "success": True,
@@ -81,6 +82,7 @@ def test_pat_authenticator_creates_auth_by_pat(
             },
         }
 
+    # Apply the mock using monkeypatch
     monkeypatch.setattr(
         snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
     )

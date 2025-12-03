@@ -428,6 +428,8 @@ class FakeAwsEnvironment:
     def __enter__(self):
         # Patch the relevant functions to do what we want.
         self.patchers = []
+
+        # Patch sync boto3 calls
         self.patchers.append(
             mock.patch(
                 "boto3.session.Session.get_credentials",
