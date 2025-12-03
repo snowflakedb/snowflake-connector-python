@@ -8,7 +8,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v4.2.0(TBD)
-  - Added support for async I/O. Asynchronous version of connector is available via `snowflake.connector.aio` module.
+    - Added PREVIEW support for async I/O. Asynchronous version of connector is available via `snowflake.connector.aio` module.
+      This is preview feature and should not be used in production code. To use this feature contact your Snowflake Sales
+      Representative ( Snowflake Support cannot help with this feature in the current stage, while its in preview).
 - v4.1.1(TBD)
   - Relaxed pandas dependency requirements for Python below 3.12.
   - Changed CRL cache cleanup background task to daemon to avoid blocking main thread.
