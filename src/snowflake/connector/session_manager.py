@@ -11,10 +11,11 @@ from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Mapping, Ty
 
 from .compat import urlparse
 from .proxy import get_proxy_url
+from .url_util import should_bypass_proxies
 from .vendored import requests
 from .vendored.requests import Response, Session
 from .vendored.requests.adapters import BaseAdapter, HTTPAdapter
-from .vendored.requests.exceptions import InvalidProxyURL, InvalidURL
+from .vendored.requests.exceptions import InvalidProxyURL
 from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
 from .vendored.urllib3 import PoolManager, Retry
 from .vendored.urllib3.poolmanager import ProxyManager
@@ -254,7 +255,7 @@ class _BaseConfigDirectAccessMixin(abc.ABC):
         self.config = self.config.copy_with(max_retries=value)
 
 
-class _HttpConfigDirectAccessMixin(_BaseConfigDirectAccessMixin):
+class _HttpConfigDirectAccessMixin(_BaseConfigDirectAccessMixin, abc.ABC):
     @property
     def adapter_factory(self) -> Callable[..., HTTPAdapter]:
         return self.config.adapter_factory
@@ -624,7 +625,7 @@ class ProxySessionManager(SessionManager):
             {
                 "no_proxy": self._cfg.no_proxy,
             }
-            if requests.utils.should_bypass_proxies(url, no_proxy=self.config.no_proxy)
+            if should_bypass_proxies(url, no_proxy=self.config.no_proxy)
             else {
                 "http": self.proxy_url,
                 "https": self.proxy_url,
