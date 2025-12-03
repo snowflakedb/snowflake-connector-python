@@ -40,7 +40,6 @@ jobs:
               "priority": {"id": "10001"}
             }
           }
-          EOF
           )
 
           # Create JIRA issue using REST API
