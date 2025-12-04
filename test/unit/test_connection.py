@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
+from snowflake.connector import SnowflakeConnection, connect
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
 from snowflake.connector.errors import (
     Error,
@@ -669,12 +670,14 @@ def test_workload_identity_provider_is_required_for_wif_authenticator(
             snowflake.connector.connect(
                 account="account",
                 authenticator="WORKLOAD_IDENTITY",
-                provider=provider_param,
+                workload_identity_provider=provider_param,
             )
-        assert (
+        expected_error_msg = (
             "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY"
-            in str(excinfo.value)
+            if provider_param is None
+            else f"Unknown workload_identity_provider: '{provider_param}'. Expected one of: AWS, AZURE, GCP, OIDC"
         )
+        assert expected_error_msg in str(excinfo.value)
 
 
 @pytest.mark.parametrize(
@@ -866,3 +869,114 @@ def test_reraise_error_in_file_transfer_work_function_config(
         expected_value = bool(reraise_enabled)
         actual_value = conn._reraise_error_in_file_transfer_work_function
         assert actual_value == expected_value
+
+
+@pytest.mark.skipolddriver
+def test_connect_metadata_preservation():
+    """Test that the sync connect function preserves metadata from SnowflakeConnection.__init__.
+
+    This test verifies that various inspection methods return consistent metadata,
+    ensuring IDE support, type checking, and documentation generation work correctly.
+    """
+    import inspect
+
+    # Test 1: Check __name__ is correct
+    assert (
+        connect.__name__ == "__init__"
+    ), f"connect.__name__ should be 'connect', but got '{connect.__name__}'"
+
+    # Test 2: Check __wrapped__ points to SnowflakeConnection.__init__
+    assert hasattr(connect, "__wrapped__"), "connect should have __wrapped__ attribute"
+    assert (
+        connect.__wrapped__ is SnowflakeConnection.__init__
+    ), "connect.__wrapped__ should reference SnowflakeConnection.__init__"
+
+    # Test 3: Check __module__ is preserved
+    assert hasattr(connect, "__module__"), "connect should have __module__ attribute"
+    assert connect.__module__ == SnowflakeConnection.__init__.__module__, (
+        f"connect.__module__ should match SnowflakeConnection.__init__.__module__, "
+        f"but got '{connect.__module__}' vs '{SnowflakeConnection.__init__.__module__}'"
+    )
+
+    # Test 4: Check __doc__ is preserved
+    assert hasattr(connect, "__doc__"), "connect should have __doc__ attribute"
+    assert (
+        connect.__doc__ == SnowflakeConnection.__init__.__doc__
+    ), "connect.__doc__ should match SnowflakeConnection.__init__.__doc__"
+
+    # Test 5: Check __annotations__ are preserved (or at least available)
+    assert hasattr(
+        connect, "__annotations__"
+    ), "connect should have __annotations__ attribute"
+    src_annotations = getattr(SnowflakeConnection.__init__, "__annotations__", {})
+    connect_annotations = getattr(connect, "__annotations__", {})
+    assert connect_annotations == src_annotations, (
+        f"connect.__annotations__ should match SnowflakeConnection.__init__.__annotations__, "
+        f"but got {connect_annotations} vs {src_annotations}"
+    )
+
+    # Test 6: Check inspect.signature works correctly
+    try:
+        connect_sig = inspect.signature(connect)
+        source_sig = inspect.signature(SnowflakeConnection.__init__)
+        assert str(connect_sig) == str(source_sig), (
+            f"inspect.signature(connect) should match inspect.signature(SnowflakeConnection.__init__), "
+            f"but got '{connect_sig}' vs '{source_sig}'"
+        )
+    except Exception as e:
+        pytest.fail(f"inspect.signature(connect) failed: {e}")
+
+    # Test 7: Check inspect.getdoc works correctly
+    connect_doc = inspect.getdoc(connect)
+    source_doc = inspect.getdoc(SnowflakeConnection.__init__)
+    assert (
+        connect_doc == source_doc
+    ), "inspect.getdoc(connect) should match inspect.getdoc(SnowflakeConnection.__init__)"
+
+    # Test 8: Check that connect is callable
+    assert callable(connect), "connect should be callable"
+
+    # Test 9: Check type() and __class__ values (important for user introspection)
+    assert (
+        type(connect).__name__ == "function"
+    ), f"type(connect).__name__ should be 'function', but got '{type(connect).__name__}'"
+    assert (
+        connect.__class__.__name__ == "function"
+    ), f"connect.__class__.__name__ should be 'function', but got '{connect.__class__.__name__}'"
+    assert inspect.isfunction(
+        connect
+    ), "connect should be recognized as a function by inspect.isfunction()"
+
+    # Test 10: Verify the function has proper introspection capabilities
+    # IDEs and type checkers should be able to resolve parameters
+    sig = inspect.signature(connect)
+    params = list(sig.parameters.keys())
+    assert (
+        len(params) > 0
+    ), "connect should have parameters from SnowflakeConnection.__init__"
+    # Should have parameters like account, user, password, etc.
+
+
+@mock.patch("snowflake.connector.connection.CRLCacheFactory")
+def test_connections_registry_lifecycle(crl_mock, mock_post_requests):
+    """Test the individual methods of _ConnectionsPool."""
+    from snowflake.connector.connection import _ConnectionsRegistry
+
+    # Mock the registry to avoid side effects from other tests due to _ConnectionsRegistry being a singleton
+    with mock.patch(
+        "snowflake.connector.connection._connections_registry", _ConnectionsRegistry()
+    ) as mock_registry:
+        # Create a connection
+        conn1 = fake_connector()
+        conn2 = fake_connector()
+        assert mock_registry.get_connection_count() == 2
+
+        # Don't stop the task if pool is not empty
+        conn1.close()
+        crl_mock.stop_periodic_cleanup.assert_not_called()
+        assert mock_registry.get_connection_count() == 1
+
+        # Stop the task if the pool is emptied
+        conn2.close()
+        assert mock_registry.get_connection_count() == 0
+        crl_mock.stop_periodic_cleanup.assert_called_once()

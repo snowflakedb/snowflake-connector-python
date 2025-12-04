@@ -261,7 +261,7 @@ class ResultBatch(abc.ABC):
             [s._to_result_metadata_v1() for s in schema] if schema is not None else None
         )
         self._use_dict_result = use_dict_result
-        # Passed to contain the configured Http behavior in case the connectio is no longer active for the download
+        # Passed to contain the configured Http behavior in case the connection is no longer active for the download
         # Can be overridden with setters if needed.
         self._session_manager = session_manager
         self._metrics: dict[str, int] = {}
@@ -360,7 +360,7 @@ class ResultBatch(abc.ABC):
                         and connection.rest.session_manager is not None
                     ):
                         # If connection was explicitly passed and not closed yet - we can reuse SessionManager with session pooling
-                        with connection.rest.use_session(
+                        with connection.rest.use_requests_session(
                             request_data["url"]
                         ) as session:
                             logger.debug(

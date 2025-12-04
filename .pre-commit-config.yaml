@@ -20,7 +20,11 @@ repos:
                 src/snowflake/connector/nanoarrow_cpp/ArrowIterator/flatcc/.*\.h|
             )$
     -   id: check-yaml
-        exclude: .github/repo_meta.yaml
+        exclude: >
+            (?x)^(
+                .github/repo_meta.yaml|
+                ci/anaconda/recipe/meta.yaml|
+            )$
     -   id: debug-statements
     -   id: check-ast
 -   repo: https://github.com/asottile/yesqa
@@ -57,6 +61,7 @@ repos:
         exclude: |
             (?x)^(
                 src/snowflake/connector/session_manager\.py|
+                src/snowflake/connector/aio/_session_manager\.py|
                 src/snowflake/connector/vendored/.*
             )$
         args: [--show-fixes]
