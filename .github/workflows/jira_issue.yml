@@ -22,17 +22,15 @@ jobs:
         run: |
           # debug
           set -x
+          TMP_BODY=$(mktemp)
+          trap "rm -f $TMP_BODY" EXIT
+
           # Escape special characters in title and body
           TITLE=$(echo '${{ github.event.issue.title }}' | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
 
-          read -r -d '' TMP_BODY <<'EOF'
-          ${{ github.event.issue.body }}
-
-
-          _Created from GitHub Action_ for ${{ github.event.issue.html_url }}
-          EOF
-
-          BODY=$(echo "$TMP_BODY" | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
+          echo "${{ github.event.issue.body }}" > $TMP_BODY
+          echo -e "\n\n_Created from GitHub Action_ for ${{ github.event.issue.html_url }}" >> $TMP_BODY
+          BODY=$(cat "$TMP_BODY" | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
 
           PAYLOAD=$(jq -n \
           --arg issuetitle "$TITLE" \
