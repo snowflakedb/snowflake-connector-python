@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import inspect
 import logging
 import os
 import re
@@ -14,6 +15,8 @@ from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .aio._connection import SnowflakeConnection as AsyncSnowflakeConnection
+    from .aio._cursor import SnowflakeCursor as AsyncSnowflakeCursor
     from .connection import SnowflakeConnection
     from .cursor import SnowflakeCursor
 
@@ -35,8 +38,8 @@ class Error(Exception):
         sfqid: str | None = None,
         query: str | None = None,
         done_format_msg: bool | None = None,
-        connection: SnowflakeConnection | None = None,
-        cursor: SnowflakeCursor | None = None,
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None = None,
+        cursor: SnowflakeCursor | AsyncSnowflakeCursor | None = None,
         errtype: TelemetryField = TelemetryField.SQL_EXCEPTION,
         send_telemetry: bool = True,
     ) -> None:
@@ -145,11 +148,10 @@ class Error(Exception):
 
     def send_exception_telemetry(
         self,
-        connection: SnowflakeConnection | None,
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None,
         telemetry_data: dict[str, Any],
     ) -> None:
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
-
         if (
             connection is not None
             and connection.telemetry_enabled
@@ -161,19 +163,29 @@ class Error(Exception):
             telemetry_data[TelemetryField.KEY_EXCEPTION.value] = self.__class__.__name__
             ts = get_time_millis()
             try:
-                connection._log_telemetry(
+                result = connection._log_telemetry(
                     TelemetryData.from_telemetry_data_dict(
                         from_dict=telemetry_data, timestamp=ts, connection=connection
                     )
                 )
+                if inspect.isawaitable(result):
+                    try:
+                        import asyncio
+
+                        asyncio.get_running_loop().run_until_complete(result)
+                    except Exception:
+                        logger.debug(
+                            "Failed to schedule async telemetry logging.",
+                            exc_info=True,
+                        )
             except AttributeError:
                 logger.debug("Cursor failed to log to telemetry.", exc_info=True)
 
     def exception_telemetry(
         self,
         msg: str,
-        cursor: SnowflakeCursor | None,
-        connection: SnowflakeConnection | None,
+        cursor: SnowflakeCursor | AsyncSnowflakeCursor | None,
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None,
     ) -> None:
         """Main method to generate and send telemetry data for exceptions."""
         try:
@@ -338,10 +350,18 @@ class Error(Exception):
             connection.messages.append((error_class, error_value))
         if cursor is not None:
             cursor.messages.append((error_class, error_value))
-            cursor.errorhandler(connection, cursor, error_class, error_value)
+            try:
+                cursor.errorhandler(connection, cursor, error_class, error_value)
+            except NotImplementedError:
+                # for async compatibility, check SNOW-1763096 and SNOW-1763103
+                cursor._errorhandler(connection, cursor, error_class, error_value)
             return True
         elif connection is not None:
-            connection.errorhandler(connection, cursor, error_class, error_value)
+            try:
+                connection.errorhandler(connection, cursor, error_class, error_value)
+            except NotImplementedError:
+                # for async compatibility, check SNOW-1763096 and SNOW-1763103
+                connection._errorhandler(connection, cursor, error_class, error_value)
             return True
         return False
 

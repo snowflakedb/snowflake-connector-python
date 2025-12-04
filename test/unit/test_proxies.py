@@ -12,7 +12,11 @@ import pytest
 import snowflake.connector
 from snowflake.connector.compat import urlparse as compat_urlparse
 from snowflake.connector.errors import OperationalError
-from snowflake.connector.session_manager import SessionManager
+from snowflake.connector.session_manager import (
+    HttpConfig,
+    ProxySessionManager,
+    SessionManager,
+)
 
 
 @pytest.mark.skipolddriver
@@ -28,6 +32,26 @@ def test_get_proxy_url():
     assert get_proxy_url("https://host", "port", "user", "password") == (
         "http://user:password@host:port"
     )
+
+
+@pytest.mark.skipolddriver
+def test_no_proxy_bytes_url_regression_unit(monkeypatch):
+    """SNOW-2865839: TypeError with NO_PROXY and bytes URL during PUT/GET.
+
+    storage_client passes bytes URLs to use_session() during file transfers,
+    causing TypeError in should_bypass_proxies() when NO_PROXY is set.
+    """
+    monkeypatch.setenv("HTTPS_PROXY", "http://localhost:8080")
+    monkeypatch.setenv("NO_PROXY", "google.com")
+
+    config = HttpConfig(proxy_host="localhost", proxy_port="8080")
+    manager = ProxySessionManager(config=config)
+
+    # storage_client passes bytes URL
+    bytes_url = b"https://s3-us-west-2.amazonaws.com/bucket/file?token=xyz"
+
+    with manager.use_session(bytes_url) as session:
+        assert session is not None
 
 
 @pytest.mark.skipolddriver

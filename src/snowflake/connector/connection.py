@@ -476,6 +476,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), bool),
     ),  # Run CRL cache cleanup in the background
+    "crl_download_max_size": (
+        None,
+        (type(None), int),
+    ),  # Maximum CRL file size in bytes
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -785,6 +789,20 @@ class SnowflakeConnection:
         if not self._crl_config:
             return self._crl_cache_start_cleanup
         return self._crl_config.crl_cache_start_cleanup
+
+    @property
+    def crl_download_max_size(self) -> int | None:
+        """Maximum CRL file size in bytes."""
+        if not self._crl_config:
+            return self._crl_download_max_size
+        return self._crl_config.crl_download_max_size
+
+    @property
+    def skip_file_permissions_check(self) -> bool | None:
+        """Whether to skip file permission checks for CRL cache files."""
+        if not self._crl_config:
+            return self._skip_file_permissions_check
+        return self._crl_config.skip_file_permissions_check
 
     @property
     def session_id(self) -> int:

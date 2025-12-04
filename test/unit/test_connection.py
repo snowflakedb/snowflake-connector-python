@@ -670,12 +670,14 @@ def test_workload_identity_provider_is_required_for_wif_authenticator(
             snowflake.connector.connect(
                 account="account",
                 authenticator="WORKLOAD_IDENTITY",
-                provider=provider_param,
+                workload_identity_provider=provider_param,
             )
-        assert (
+        expected_error_msg = (
             "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY"
-            in str(excinfo.value)
+            if provider_param is None
+            else f"Unknown workload_identity_provider: '{provider_param}'. Expected one of: AWS, AZURE, GCP, OIDC"
         )
+        assert expected_error_msg in str(excinfo.value)
 
 
 @pytest.mark.parametrize(

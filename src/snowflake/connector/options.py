@@ -60,6 +60,18 @@ class MissingBoto3(MissingOptionalDependency):
     _dep_name = "boto3"
 
 
+class MissingAioBotocore(MissingOptionalDependency):
+    """The class is specifically for boto optional dependency."""
+
+    _dep_name = "aiobotocore"
+
+
+class MissingAioBoto3(MissingOptionalDependency):
+    """The class is specifically for boto3 optional dependency."""
+
+    _dep_name = "aioboto3"
+
+
 ModuleLikeObject = Union[ModuleType, MissingOptionalDependency]
 
 
@@ -148,7 +160,20 @@ def _import_or_missing_boto_option() -> tuple[ModuleLikeObject, ModuleLikeObject
         return MissingBotocore(), MissingBoto3(), False
 
 
+def _import_or_missing_aioboto_option() -> (
+    tuple[ModuleLikeObject, ModuleLikeObject, bool]
+):
+    """This function tries importing the following packages: botocore and boto3."""
+    try:
+        aiobotocore = importlib.import_module("aiobotocore")
+        aioboto3 = importlib.import_module("aioboto3")
+        return aiobotocore, aioboto3, True
+    except ImportError:
+        return MissingAioBotocore(), MissingAioBoto3(), False
+
+
 # Create actual constants to be imported from this file
 pandas, pyarrow, installed_pandas = _import_or_missing_pandas_option()
 keyring, installed_keyring = _import_or_missing_keyring_option()
 botocore, boto3, installed_boto = _import_or_missing_boto_option()
+aiobotocore, aioboto3, installed_aioboto = _import_or_missing_aioboto_option()

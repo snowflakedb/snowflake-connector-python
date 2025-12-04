@@ -13,38 +13,76 @@ jobs:
       issues: write
     if: ((github.event_name == 'issue_comment' && github.event.comment.body == 'recreate jira' && github.event.comment.user.login == 'sfc-gh-mkeller') || (github.event_name == 'issues' && github.event.pull_request.user.login != 'whitesource-for-github-com[bot]'))
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          repository: snowflakedb/gh-actions
-          ref: jira_v1
-          token: ${{ secrets.SNOWFLAKE_GITHUB_TOKEN }} # stored in GitHub secrets
-          path: .
-
-      - name: Login
-        uses: atlassian/gajira-login@v2.0.0
+      - name: Create JIRA Ticket
+        id: create
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+        run: |
+          # debug
+          set -x
+          TMP_BODY=$(mktemp)
+          trap "rm -f $TMP_BODY" EXIT
 
-      - name: Create JIRA Ticket
-        id: create
-        uses: atlassian/gajira-create@v3.0.1
-        with:
-          project: SNOW
-          issuetype: Bug
-          summary: '${{ github.event.issue.title }}'
-          description: |
-            ${{ github.event.issue.body }} \\ \\ _Created from GitHub Action_ for ${{ github.event.issue.html_url }}
-          fields: '{"customfield_11401":{"id":"14723"},"assignee":{"id":"712020:e527ae71-55cc-4e02-9217-1ca4ca8028a2"},"components":[{"id":"16413"}], "labels": ["oss"], "priority": {"id": "10001"} }'
+          # Escape special characters in title and body
+          TITLE=$(echo '${{ github.event.issue.title }}' | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
+
+          echo "${{ github.event.issue.body }}" > $TMP_BODY
+          echo -e "\n\n_Created from GitHub Action_ for ${{ github.event.issue.html_url }}" >> $TMP_BODY
+          BODY=$(cat "$TMP_BODY" | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
+
+          PAYLOAD=$(jq -n \
+          --arg issuetitle "$TITLE" \
+          --arg issuebody "$BODY" \
+          '{
+            fields: {
+              project: { key: "SNOW" },
+              issuetype: { name: "Bug" },
+              summary: $issuetitle,
+              description: $issuebody,
+              customfield_11401: { id: "14723" },
+              assignee: { id: "712020:e527ae71-55cc-4e02-9217-1ca4ca8028a2" },
+              components: [{ id: "16413" }],
+              labels: ["oss"],
+              priority: { id: "10001" }
+            }
+          }')
+
+          # Create JIRA issue using REST API
+          RESPONSE=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN" \
+            "$JIRA_BASE_URL/rest/api/2/issue" \
+            -d "$PAYLOAD")
+
+          # Extract JIRA issue key from response
+          JIRA_KEY=$(echo "$RESPONSE" | jq -r '.key')
+
+          if [ "$JIRA_KEY" = "null" ] || [ -z "$JIRA_KEY" ]; then
+            echo "Failed to create JIRA issue"
+            echo "Response: $RESPONSE"
+            echo "Request payload: $PAYLOAD"
+            exit 1
+          fi
+
+          echo "Created JIRA issue: $JIRA_KEY"
+          echo "jira_key=$JIRA_KEY" >> $GITHUB_OUTPUT
 
       - name: Update GitHub Issue
-        uses: ./jira/gajira-issue-update
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          issue_number: "{{ event.issue.id }}"
-          owner: "{{ event.repository.owner.login }}"
-          name: "{{ event.repository.name }}"
-          jira: "${{ steps.create.outputs.issue }}"
+          REPOSITORY: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          JIRA_KEY: ${{ steps.create.outputs.jira_key }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          # Update Github issue title with jira id
+          GH_UPD_RESPONSE=$(curl -s \
+            -X PATCH \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$REPOSITORY/issues/$ISSUE_NUMBER" \
+            -d "{\"title\":\"$JIRA_KEY: $ISSUE_TITLE\"}")
