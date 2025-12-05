@@ -1067,7 +1067,7 @@ def test_client_fetch_threads_setting(conn_cnx):
 @pytest.mark.skipolddriver
 @pytest.mark.parametrize("disable_request_pooling", [True, False])
 def test_ocsp_and_rest_pool_isolation(conn_cnx, disable_request_pooling):
-    """Each connection’s SessionManager is isolated; OCSP picks the right one."""
+    """Each connection's SessionManager is isolated; OCSP picks the right one."""
     from snowflake.connector.ssl_wrap_socket import get_current_session_manager
 
     #
@@ -1896,3 +1896,86 @@ def test_snowflake_version():
     assert re.match(
         version_pattern, conn.snowflake_version
     ), f"snowflake_version should match pattern 'x.y.z', but got '{conn.snowflake_version}'"
+
+
+@pytest.mark.skipolddriver
+def test_ctas_stats(conn_cnx):
+    """Test that cursor.rowcount and cursor.stats work for CTAS operations."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "create temp table test_ctas_stats (col1 int) as select col1 from values (1), (2), (3) as t(col1)"
+            )
+            assert (
+                cur.rowcount == 1
+            ), f"Expected rowcount 1 for CTAS, got {cur.rowcount}"
+            # stats should contain the details as a NamedTuple
+            assert cur.stats is not None, "stats should not be None for CTAS"
+            assert (
+                cur.stats.num_rows_inserted == 3
+            ), f"Expected num_rows_inserted=3, got {cur.stats.num_rows_inserted}"
+            assert cur.stats.num_rows_deleted == 0
+            assert cur.stats.num_rows_updated == 0
+            assert cur.stats.num_dml_duplicates == 0
+
+
+@pytest.mark.skipolddriver
+def test_create_view_stats(conn_cnx):
+    """Test that cursor.stats returns None fields for VIEW operations."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "create temp view test_view_stats as select col1 from values (1), (2), (3) as t(col1)"
+            )
+            assert (
+                cur.rowcount == 1
+            ), f"Expected rowcount 1 for VIEW, got {cur.rowcount}"
+            # VIEW operations don't return DML stats, all fields should be None
+            assert cur.stats is not None
+            assert cur.stats.num_rows_inserted is None
+            assert cur.stats.num_rows_deleted is None
+            assert cur.stats.num_rows_updated is None
+            assert cur.stats.num_dml_duplicates is None
+
+
+@pytest.mark.skipolddriver
+def test_cvas_separate_cursors_stats(conn_cnx):
+    """Test cursor.stats with CVAS in separate cursor from the one used for CTAS of the table."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "create temp table test_table (col1 int) as select col1 from values (1), (2), (3) as t(col1)"
+            )
+        with conn.cursor() as cur:
+            cur.execute("create temp view test_view as select col1 from test_table")
+            assert (
+                cur.rowcount == 1
+            ), "Due to old behaviour we should keep rowcount equal to 1 - as the number of rows returned by the backend"
+            # VIEW operations don't return DML stats
+            assert cur.stats is not None
+            assert cur.stats.num_rows_inserted is None
+            assert cur.stats.num_rows_deleted is None
+            assert cur.stats.num_rows_updated is None
+            assert cur.stats.num_dml_duplicates is None
+
+
+@pytest.mark.skipolddriver
+def test_cvas_one_cursor_stats(conn_cnx):
+    """Test cursor.stats with CVAS in the same cursor - make sure it's cleaned up after usage."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "create temp table test_ctas_stats (col1 int) as select col1 from values (1), (2), (3) as t(col1)"
+            )
+            cur.execute(
+                "create temp view test_view as select col1 from test_ctas_stats"
+            )
+            assert (
+                cur.rowcount == 1
+            ), "Due to old behaviour we should keep rowcount equal to 1 - as the number of rows returned by the backend"
+            # VIEW operations don't return DML stats
+            assert cur.stats is not None
+            assert cur.stats.num_rows_inserted is None
+            assert cur.stats.num_rows_deleted is None
+            assert cur.stats.num_rows_updated is None
+            assert cur.stats.num_dml_duplicates is None
