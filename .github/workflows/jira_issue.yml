@@ -80,11 +80,25 @@ jobs:
           JIRA_KEY: ${{ steps.create.outputs.jira_key }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
         run: |
+          TITLE=$(echo "${ISSUE_TITLE//`/\\`}" | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
+          PAYLOAD=$(jq -n \
+          --arg issuetitle "$TITLE" \
+          --arg jirakey "$JIRA_KEY" \
+          '{
+            title: ($jirakey + ": " + $issuetitle)
+          }')
+
           # Update Github issue title with jira id
-          GH_UPD_RESPONSE=$(curl -s \
+          curl -s \
             -X PATCH \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/$REPOSITORY/issues/$ISSUE_NUMBER" \
-            -d "{\"title\":\"$JIRA_KEY: $ISSUE_TITLE\"}")
+            -d "$PAYLOAD"
+
+          if [ "$?" != 0 ]; then
+            echo "Failed to update GH issue. Payload was:"
+            echo "$PAYLOAD"
+            exit 1
+          fi
