@@ -1231,6 +1231,36 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry):
 
 
 @pytest.mark.skipolddriver
+def test_minicore_import_telemetry(conn_cnx, capture_sf_telemetry):
+    """Test that minicore import telemetry (CORE_LOAD_ERROR and CORE_VERSION) is logged."""
+    with (
+        conn_cnx() as conn,
+        capture_sf_telemetry.patch_connection(conn, False) as telemetry_test,
+    ):
+        conn._log_minicore_import()
+        assert len(telemetry_test.records) > 0
+        # Check that the telemetry record contains the proper structure
+        found_minicore_telemetry = False
+        for t in telemetry_test.records:
+            if (
+                t.message.get(TelemetryField.KEY_TYPE.value)
+                == TelemetryField.CORE_IMPORT.value
+                and TelemetryField.KEY_VALUE.value in t.message
+            ):
+                found_minicore_telemetry = True
+                # Verify that the value contains CORE_LOAD_ERROR and CORE_VERSION
+                value = t.message[TelemetryField.KEY_VALUE.value]
+                assert (
+                    "CORE_LOAD_ERROR" in value
+                ), "CORE_LOAD_ERROR not in telemetry value"
+                assert "CORE_VERSION" in value, "CORE_VERSION not in telemetry value"
+                break
+        assert (
+            found_minicore_telemetry
+        ), "Minicore telemetry not found in telemetry records"
+
+
+@pytest.mark.skipolddriver
 def test_disable_query_context_cache(conn_cnx) -> None:
     with conn_cnx(disable_query_context_cache=True) as conn:
         # check that connector function correctly when query context

@@ -23,3 +23,6 @@ repair-wheel-command = ""
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
+
+[tool.check-manifest]
+ignore = ["src/snowflake/connector/minicore/*"]
