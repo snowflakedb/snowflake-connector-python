@@ -19,6 +19,9 @@ jobs:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
         run: |
           # debug
           set -x
@@ -26,11 +29,10 @@ jobs:
           trap "rm -f $TMP_BODY" EXIT
 
           # Escape special characters in title and body
-          TITLE=$(echo '${{ github.event.issue.title }}' | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
-
-          echo "${{ github.event.issue.body }}" > $TMP_BODY
-          echo -e "\n\n_Created from GitHub Action_ for ${{ github.event.issue.html_url }}" >> $TMP_BODY
-          BODY=$(cat "$TMP_BODY" | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
+          TITLE=$(echo "${ISSUE_TITLE//`/\\`}" | sed 's/"/\\"/g' | sed "s/'/\\\'/g")
+          echo "${ISSUE_BODY//`/\\`}" | sed 's/"/\\"/g' | sed "s/'/\\\'/g" > $TMP_BODY
+          echo -e "\n\n_Created from GitHub Action_ for $ISSUE_URL" >> $TMP_BODY
+          BODY=$(cat "$TMP_BODY")
 
           PAYLOAD=$(jq -n \
           --arg issuetitle "$TITLE" \
