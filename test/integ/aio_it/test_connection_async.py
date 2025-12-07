@@ -1335,7 +1335,7 @@ async def test_ocsp_mode_insecure_mode_and_disable_ocsp_checks_mismatch_ocsp_ena
             assert "snowflake.connector.aio._ocsp_snowflake" not in caplog.text
 
 
-# TODO: uncomment when issues with ocsp revoked certs in tests are fixed (reapply #2559)
+# TODO (SNOW-2871292): uncomment when issues with ocsp revoked certs in tests are fixed (reapply #2559)
 # @pytest.mark.skipolddriver
 # async def test_root_certs_dict_lock_timeout_fail_open(conn_cnx):
 #     """Test OCSP root certificates lock timeout with fail-open mode and side effect mock."""
