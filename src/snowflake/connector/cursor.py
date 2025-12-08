@@ -466,6 +466,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         - num_rows_inserted: Number of rows inserted
         - num_rows_deleted: Number of rows deleted
         - num_rows_updated: Number of rows updated
+        - num_dml_duplicates: Number of duplicates in DML statement
 
         Returns None on each position if no DML stats are available.
         """
