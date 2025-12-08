@@ -1228,7 +1228,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
         # Extract stats object if available (for DML operations like CTAS, INSERT, UPDATE, DELETE)
         self._stats_data = data.get("stats", None)
-        logger.debug(f"Execution DML stats: {self.stats}")
+        logger.debug(f"Execution DML stats: %s", self.stats)
 
         # don't update the row count when the result is returned from `describe` method
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
