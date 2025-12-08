@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+
 # network
 ER_FAILED_TO_CONNECT_TO_DB = 250001
 ER_CONNECTION_IS_CLOSED = 250002

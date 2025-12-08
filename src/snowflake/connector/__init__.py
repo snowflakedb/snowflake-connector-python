@@ -5,11 +5,13 @@ from __future__ import annotations
 
 from functools import wraps
 
+
 apilevel = "2.0"
 threadsafety = 2
 paramstyle = "pyformat"
 
 import logging
+
 from logging import NullHandler
 
 from snowflake.connector.externals_utils.externals_setup import setup_external_libraries
@@ -44,6 +46,7 @@ from .errors import (
 )
 from .log_configuration import EasyLoggingConfigPython
 from .version import VERSION
+
 
 logging.getLogger(__name__).addHandler(NullHandler())
 setup_external_libraries()

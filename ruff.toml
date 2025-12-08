@@ -1,0 +1,39 @@
+line-length = 120
+extend-exclude = [
+    'test/*',
+]
+
+[lint]
+select = [
+    'B',                        # flake8-bugbear
+    'D',                        # pydocstyle
+    'E',                        # pycodestyle
+    'G',                        # flake8-logging-format
+    'F',                        # pyflakes
+    'I',                        # isort
+    'RUF100',                   # check for valid noqa directives
+    'UP',                       # pyupgrade
+    'W',                        # pycodestyle
+]
+ignore = [
+    'D',
+    'E501',                     # Line too long
+    'B904',                     # Within an `except` clause, raise exceptions with `raise ... from err` or `raise ... from None` to distinguish them from errors in exception handling
+    'B905',                     # `zip()` without an explicit `strict=` parameter
+    'UP007',                    # Use `X | Y` for type annotation'
+    'E402',                     # Module level import not at top of file'
+]
+
+[lint.pydocstyle]
+convention = 'pep257'
+
+[lint.isort]
+known-first-party = ['snowflake']
+lines-after-imports = 2
+lines-between-types = 1
+order-by-type = true
+
+[format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-line-length = 100

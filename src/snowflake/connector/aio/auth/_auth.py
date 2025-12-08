@@ -5,8 +5,10 @@ import copy
 import json
 import logging
 import uuid
+
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from ...auth import Auth as AuthSync
 from ...auth._auth import AUTHENTICATION_REQUEST_KEY_WHITELIST
@@ -37,6 +39,7 @@ from ...network import (
 from ...sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ...token_cache import TokenType
 from ._no_auth import AuthNoAuth
+
 
 if TYPE_CHECKING:
     from ._by_plugin import AuthByPlugin
@@ -87,9 +90,7 @@ class Auth(AuthSync):
             HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
         if HTTP_HEADER_SERVICE_NAME in session_parameters:
-            headers[HTTP_HEADER_SERVICE_NAME] = session_parameters[
-                HTTP_HEADER_SERVICE_NAME
-            ]
+            headers[HTTP_HEADER_SERVICE_NAME] = session_parameters[HTTP_HEADER_SERVICE_NAME]
         url = "/session/v1/login-request"
 
         body_template = Auth.base_auth_data(
@@ -112,8 +113,7 @@ class Auth(AuthSync):
         await auth_instance.update_body(body)
 
         logger.debug(
-            "account=%s, user=%s, database=%s, schema=%s, "
-            "warehouse=%s, role=%s, request_id=%s",
+            "account=%s, user=%s, database=%s, schema=%s, warehouse=%s, role=%s, request_id=%s",
             account,
             user,
             database,
@@ -146,10 +146,7 @@ class Auth(AuthSync):
 
         logger.debug(
             "body['data']: %s",
-            {
-                k: v if k in AUTHENTICATION_REQUEST_KEY_WHITELIST else "******"
-                for (k, v) in body["data"].items()
-            },
+            {k: v if k in AUTHENTICATION_REQUEST_KEY_WHITELIST else "******" for (k, v) in body["data"].items()},
         )
 
         try:
@@ -164,10 +161,8 @@ class Auth(AuthSync):
             raise err.__class__(
                 msg=(
                     "Failed to connect to DB. "
-                    "Verify the account name is correct: {host}:{port}. "
-                    "{message}"
-                ).format(
-                    host=self._rest._host, port=self._rest._port, message=str(err)
+                    f"Verify the account name is correct: {self._rest._host}:{self._rest._port}. "
+                    f"{str(err)}"
                 ),
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
                 sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
@@ -177,10 +172,8 @@ class Auth(AuthSync):
             raise err.__class__(
                 msg=(
                     "Failed to connect to DB. "
-                    "Service is unavailable: {host}:{port}. "
-                    "{message}"
-                ).format(
-                    host=self._rest._host, port=self._rest._port, message=str(err)
+                    f"Service is unavailable: {self._rest._host}:{self._rest._port}. "
+                    f"{str(err)}"
                 ),
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
                 sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
@@ -214,11 +207,7 @@ class Auth(AuthSync):
                 logger.debug("get the MFA response timed out")
 
             ret = self.ret
-            if (
-                ret
-                and ret["data"]
-                and ret["data"].get("nextAction") == "EXT_AUTHN_SUCCESS"
-            ):
+            if ret and ret["data"] and ret["data"].get("nextAction") == "EXT_AUTHN_SUCCESS":
                 body = copy.deepcopy(body_template)
                 body["inFlightCtx"] = ret["data"].get("inFlightCtx")
                 # final request to get tokens
@@ -235,11 +224,7 @@ class Auth(AuthSync):
                     None,
                     DatabaseError,
                     {
-                        "msg": (
-                            "Failed to connect to DB. MFA "
-                            "authentication failed: {"
-                            "host}:{port}. {message}"
-                        ).format(
+                        "msg": ("Failed to connect to DB. MFA authentication failed: {host}:{port}. {message}").format(
                             host=self._rest._host,
                             port=self._rest._port,
                             message=ret["message"],
@@ -255,11 +240,7 @@ class Auth(AuthSync):
                 body = copy.deepcopy(body_template)
                 body["inFlightCtx"] = ret["data"].get("inFlightCtx")
                 body["data"]["LOGIN_NAME"] = user
-                body["data"]["PASSWORD"] = (
-                    auth_instance.password
-                    if hasattr(auth_instance, "password")
-                    else None
-                )
+                body["data"]["PASSWORD"] = auth_instance.password if hasattr(auth_instance, "password") else None
                 body["data"]["CHOSEN_NEW_PASSWORD"] = password_callback()
                 # New Password input
                 ret = await self._rest._post_request(
@@ -276,9 +257,7 @@ class Auth(AuthSync):
                 # clear stored id_token if failed to connect because of id_token
                 # raise an exception for reauth without id_token
                 self._rest.id_token = None
-                self._delete_temporary_credential(
-                    self._rest._host, user, TokenType.ID_TOKEN
-                )
+                self._delete_temporary_credential(self._rest._host, user, TokenType.ID_TOKEN)
                 raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=ret["message"],
@@ -299,26 +278,20 @@ class Auth(AuthSync):
 
             if isinstance(auth_instance, AuthByKeyPair):
                 logger.debug(
-                    "JWT Token authentication failed. "
-                    "Token expires at: %s. "
-                    "Current Time: %s",
+                    "JWT Token authentication failed. Token expires at: %s. Current Time: %s",
                     str(auth_instance._jwt_token_exp),
                     str(datetime.now(timezone.utc).replace(tzinfo=None)),
                 )
             from . import AuthByUsrPwdMfa
 
             if isinstance(auth_instance, AuthByUsrPwdMfa):
-                self._delete_temporary_credential(
-                    self._rest._host, user, TokenType.MFA_TOKEN
-                )
+                self._delete_temporary_credential(self._rest._host, user, TokenType.MFA_TOKEN)
             Error.errorhandler_wrapper(
                 self._rest._connection,
                 None,
                 DatabaseError,
                 {
-                    "msg": (
-                        "Failed to connect to DB: {host}:{port}. " "{message}"
-                    ).format(
+                    "msg": ("Failed to connect to DB: {host}:{port}. {message}").format(
                         host=self._rest._host,
                         port=self._rest._port,
                         message=ret["message"],
@@ -330,44 +303,26 @@ class Auth(AuthSync):
         else:
             logger.debug(
                 "token = %s",
-                (
-                    "******"
-                    if ret["data"] and ret["data"].get("token") is not None
-                    else "NULL"
-                ),
+                ("******" if ret["data"] and ret["data"].get("token") is not None else "NULL"),
             )
             logger.debug(
                 "master_token = %s",
-                (
-                    "******"
-                    if ret["data"] and ret["data"].get("masterToken") is not None
-                    else "NULL"
-                ),
+                ("******" if ret["data"] and ret["data"].get("masterToken") is not None else "NULL"),
             )
             logger.debug(
                 "id_token = %s",
-                (
-                    "******"
-                    if ret["data"] and ret["data"].get("idToken") is not None
-                    else "NULL"
-                ),
+                ("******" if ret["data"] and ret["data"].get("idToken") is not None else "NULL"),
             )
             logger.debug(
                 "mfa_token = %s",
-                (
-                    "******"
-                    if ret["data"] and ret["data"].get("mfaToken") is not None
-                    else "NULL"
-                ),
+                ("******" if ret["data"] and ret["data"].get("mfaToken") is not None else "NULL"),
             )
             if not ret["data"]:
                 Error.errorhandler_wrapper(
                     None,
                     None,
                     Error,
-                    {
-                        "msg": "There is no data in the returning response, please retry the operation."
-                    },
+                    {"msg": "There is no data in the returning response, please retry the operation."},
                 )
             await self._rest.update_tokens(
                 ret["data"].get("token"),
@@ -376,9 +331,7 @@ class Auth(AuthSync):
                 id_token=ret["data"].get("idToken"),
                 mfa_token=ret["data"].get("mfaToken"),
             )
-            self.write_temporary_credentials(
-                self._rest._host, user, session_parameters, ret
-            )
+            self.write_temporary_credentials(self._rest._host, user, session_parameters, ret)
             if ret["data"] and "sessionId" in ret["data"]:
                 self._rest._connection._session_id = ret["data"].get("sessionId")
             if ret["data"] and "sessionInfo" in ret["data"]:
@@ -388,8 +341,6 @@ class Auth(AuthSync):
                 self._rest._connection._warehouse = session_info.get("warehouseName")
                 self._rest._connection._role = session_info.get("roleName")
             if ret["data"] and "parameters" in ret["data"]:
-                session_parameters.update(
-                    {p["name"]: p["value"] for p in ret["data"].get("parameters")}
-                )
+                session_parameters.update({p["name"]: p["value"] for p in ret["data"].get("parameters")})
             await self._rest._connection._update_parameters(session_parameters)
             return session_parameters

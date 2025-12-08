@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import string
+
 from enum import Enum
 from inspect import stack
 from random import choice
@@ -27,9 +28,7 @@ TEMP_OBJECT_NAME_PREFIX = "SNOWPARK_TEMP_"
 ALPHANUMERIC = string.digits + string.ascii_lowercase
 TEMPORARY_STRING = "TEMP"
 SCOPED_TEMPORARY_STRING = "SCOPED TEMPORARY"
-_PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING = (
-    "PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS"
-)
+_PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING = "PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS"
 
 REQUEST_ID_STATEMENT_PARAM_NAME = "requestId"
 
@@ -38,9 +37,7 @@ REQUEST_ID_STATEMENT_PARAM_NAME = "requestId"
 # throttle regular sessions.
 _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER = 1 << 30
 # Variable name of server DoP cap for file transfer
-_VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER = (
-    "snowflake_server_dop_cap_for_file_transfer"
-)
+_VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER = "snowflake_server_dop_cap_for_file_transfer"
 
 
 def generate_random_alphanumeric(length: int = 10) -> str:

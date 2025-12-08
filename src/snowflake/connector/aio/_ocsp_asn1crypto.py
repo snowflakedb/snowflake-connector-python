@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ssl
+
 from collections import OrderedDict
 from logging import getLogger
 
@@ -10,11 +11,11 @@ from asn1crypto.x509 import Certificate
 from ..ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SnowflakeOCSPAsn1CryptoSync
 from ._ocsp_snowflake import SnowflakeOCSP
 
+
 logger = getLogger(__name__)
 
 
 class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP, SnowflakeOCSPAsn1CryptoSync):
-
     def extract_certificate_chain(self, connection: ResponseHandler):
         ssl_object = connection.transport.get_extra_info("ssl_object")
         if not ssl_object:
@@ -37,9 +38,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP, SnowflakeOCSPAsn1CryptoSync):
         self._lazy_read_ca_bundle()
         for cert in unverified_chain:
             cert = Certificate.load(ssl.PEM_cert_to_DER_cert(cert.public_bytes()))
-            logger.debug(
-                "subject: %s, issuer: %s", cert.subject.native, cert.issuer.native
-            )
+            logger.debug("subject: %s, issuer: %s", cert.subject.native, cert.issuer.native)
             cert_map[cert.subject.sha256] = cert
             if cert.issuer.sha256 in SnowflakeOCSP.ROOT_CERTIFICATES_DICT:
                 logger.debug(

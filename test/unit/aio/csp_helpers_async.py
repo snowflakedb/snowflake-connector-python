@@ -43,7 +43,7 @@ def build_response(content: bytes, status_code: int = 200):
 class FakeMetadataServiceAsync(FakeMetadataService):
     async def _async_request(self, method, url, headers=None, timeout=None, **kwargs):
         """Entry point for the aiohttp mock."""
-        logger.debug(f"Received async request: {method} {url} {str(headers)}")
+        logger.debug("Received async request: %s %s %s", method, url, str(headers))
         parsed_url = urlparse(url)
 
         # Create aiohttp-compatible response mock

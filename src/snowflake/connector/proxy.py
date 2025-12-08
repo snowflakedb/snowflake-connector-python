@@ -18,11 +18,7 @@ def get_proxy_url(
             host = proxy_host[len(https_prefix) :]
         else:
             host = proxy_host
-        auth = (
-            f"{proxy_user or ''}:{proxy_password or ''}@"
-            if proxy_user or proxy_password
-            else ""
-        )
+        auth = f"{proxy_user or ''}:{proxy_password or ''}@" if proxy_user or proxy_password else ""
         return f"{http_prefix}{auth}{host}:{proxy_port}"
 
     return None

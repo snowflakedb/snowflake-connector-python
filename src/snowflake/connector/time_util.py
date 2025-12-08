@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import time
+
+from collections.abc import Callable, Iterator
 from logging import getLogger
 from types import TracebackType
-from typing import Callable, Iterator
+
 
 logger = getLogger(__name__)
 
@@ -19,9 +21,7 @@ DEFAULT_MASTER_VALIDITY_IN_SECONDS = 4 * 60 * 60  # seconds
 class HeartBeatTimer(Timer):
     """A thread which executes a function every client_session_keep_alive_heartbeat_frequency seconds."""
 
-    def __init__(
-        self, client_session_keep_alive_heartbeat_frequency: int, f: Callable
-    ) -> None:
+    def __init__(self, client_session_keep_alive_heartbeat_frequency: int, f: Callable) -> None:
         interval = client_session_keep_alive_heartbeat_frequency
         super().__init__(interval, f)
         # Mark this as a daemon thread, so that it won't prevent Python from exiting.
@@ -74,9 +74,7 @@ class TimerContextManager:
     def get_timing_millis(self) -> int:
         """Get measured timing in milliseconds."""
         if self._start is None or self._end is None:
-            raise Exception(
-                "Trying to get timing before TimerContextManager has finished"
-            )
+            raise Exception("Trying to get timing before TimerContextManager has finished")
         return self._end - self._start
 
 
@@ -114,9 +112,7 @@ class TimeoutBackoffCtx:
     @property
     def remaining_time_millis(self) -> int:
         if self._start_time_millis is None:
-            raise TypeError(
-                "Start time not recorded in remaining_time_millis, call set_start_time first"
-            )
+            raise TypeError("Start time not recorded in remaining_time_millis, call set_start_time first")
 
         if self._timeout is None:
             raise TypeError("Timeout is None in remaining_time_millis")
@@ -129,24 +125,16 @@ class TimeoutBackoffCtx:
     def should_retry(self) -> bool:
         """Decides whether to retry connection."""
         if self._timeout is not None and self._start_time_millis is None:
-            logger.warning(
-                "Timeout set in TimeoutBackoffCtx, but start time not recorded"
-            )
+            logger.warning("Timeout set in TimeoutBackoffCtx, but start time not recorded")
 
-        timed_out = (
-            self.remaining_time_millis < 0 if self._timeout is not None else False
-        )
+        timed_out = self.remaining_time_millis < 0 if self._timeout is not None else False
         retry_attempts_exceeded = (
-            self._current_retry_count >= self._max_retry_attempts
-            if self._max_retry_attempts is not None
-            else False
+            self._current_retry_count >= self._max_retry_attempts if self._max_retry_attempts is not None else False
         )
         return not timed_out and not retry_attempts_exceeded
 
     def _advance_backoff(self) -> int:
-        return (
-            next(self._backoff_generator) if self._backoff_generator is not None else 0
-        )
+        return next(self._backoff_generator) if self._backoff_generator is not None else 0
 
     def set_start_time(self) -> None:
         self._start_time_millis = get_time_millis()
@@ -155,5 +143,5 @@ class TimeoutBackoffCtx:
         """Updates retry count and sleep time for another retry"""
         self._current_retry_count += 1
         self._current_sleep_time = self._advance_backoff()
-        logger.debug(f"Update retry count to {self._current_retry_count}")
-        logger.debug(f"Update sleep time to {self._current_sleep_time} seconds")
+        logger.debug("Update retry count to %s", self._current_retry_count)
+        logger.debug("Update sleep time to %s seconds", self._current_sleep_time)

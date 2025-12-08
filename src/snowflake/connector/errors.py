@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import traceback
+
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
@@ -13,6 +14,7 @@ from .errorcode import ER_HTTP_GENERAL_ERROR
 from .secret_detector import SecretDetector
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
+
 
 if TYPE_CHECKING:  # pragma: no cover
     from .aio._connection import SnowflakeConnection as AsyncSnowflakeConnection
@@ -128,9 +130,7 @@ class Error(Exception):
     ) -> dict[str, tuple[bool, str, str] | str]:
         """Generate the data to send through telemetry."""
         telemetry_data_dict: dict[str, tuple[bool, str, str] | str] = {
-            TelemetryField.KEY_STACKTRACE.value: SecretDetector.mask_secrets(
-                self.telemetry_traceback
-            )
+            TelemetryField.KEY_STACKTRACE.value: SecretDetector.mask_secrets(self.telemetry_traceback)
         }
         telemetry_msg = self.telemetry_msg()
         if self.sfqid:
@@ -152,11 +152,7 @@ class Error(Exception):
         telemetry_data: dict[str, Any],
     ) -> None:
         """Send telemetry data by in-band telemetry if it is enabled, otherwise send through out-of-band telemetry."""
-        if (
-            connection is not None
-            and connection.telemetry_enabled
-            and not connection._telemetry.is_closed
-        ):
+        if connection is not None and connection.telemetry_enabled and not connection._telemetry.is_closed:
             # Send with in-band telemetry
             telemetry_data[TelemetryField.KEY_TYPE.value] = self.errtype.value
             telemetry_data[TelemetryField.KEY_SOURCE.value] = connection.application
@@ -232,9 +228,7 @@ class Error(Exception):
             sqlstate=error_value.get("sqlstate"),
             sfqid=error_value.get("sfqid"),
             query=error_value.get("query"),
-            done_format_msg=(
-                None if done_format_msg is None else bool(done_format_msg)
-            ),
+            done_format_msg=(None if done_format_msg is None else bool(done_format_msg)),
             connection=connection,
             cursor=cursor,
         )

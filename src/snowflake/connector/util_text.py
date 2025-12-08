@@ -7,8 +7,10 @@ import logging
 import random
 import re
 import string
+
+from collections.abc import Sequence
 from io import StringIO
-from typing import Sequence
+
 
 COMMENT_PATTERN_RE = re.compile(r"^\s*\-\-")
 EMPTY_LINE_RE = re.compile(r"^\s*$")
@@ -108,18 +110,10 @@ def split_statements(
                 else:
                     col += 1
             elif in_quote:
-                if (
-                    line[col] == "\\"
-                    and col < len_line - 1
-                    and line[col + 1] in (ch_quote, "\\")
-                ):
+                if line[col] == "\\" and col < len_line - 1 and line[col + 1] in (ch_quote, "\\"):
                     col += 2
                 elif line[col] == ch_quote:
-                    if (
-                        col < len_line - 1
-                        and line[col + 1] != ch_quote
-                        or col == len_line - 1
-                    ):
+                    if col < len_line - 1 and line[col + 1] != ch_quote or col == len_line - 1:
                         # exits quote
                         in_quote = False
                         statement.append((line[col0 : col + 1], True))
@@ -148,9 +142,7 @@ def split_statements(
                         statement.append(("\n", True))
                     col = len_line + 1
                     col0 = col
-                elif line[col:].startswith("/*") and not line[col0:].startswith(
-                    "file://"
-                ):
+                elif line[col:].startswith("/*") and not line[col0:].startswith("file://"):
                     if not remove_comments:
                         statement.append((line[col0 : col + 2], False))
                     else:
@@ -176,9 +168,7 @@ def split_statements(
                             statement[-1] = (statement[-1][0] + ">", statement[-1][1])
                     except IndexError:
                         pass
-                    if COMMENT_PATTERN_RE.match(line[col:]) or EMPTY_LINE_RE.match(
-                        line[col:]
-                    ):
+                    if COMMENT_PATTERN_RE.match(line[col:]) or EMPTY_LINE_RE.match(line[col:]):
                         if not remove_comments:
                             # keep the comment
                             statement.append((line[col:], False))
@@ -193,10 +183,13 @@ def split_statements(
                         yield _concatenate_statements(statement)
                         statement = []
                     yield (
-                        line.strip()[: -len(sql_delimiter)]
-                        if line.strip().endswith(sql_delimiter)
-                        else line.strip()
-                    ).strip(), False
+                        (
+                            line.strip()[: -len(sql_delimiter)]
+                            if line.strip().endswith(sql_delimiter)
+                            else line.strip()
+                        ).strip(),
+                        False,
+                    )
                     break
                 else:
                     col += 1
@@ -206,9 +199,7 @@ def split_statements(
         yield _concatenate_statements(statement)
 
 
-def _concatenate_statements(
-    statement_list: list[tuple[str, bool]]
-) -> tuple[str, bool | None]:
+def _concatenate_statements(statement_list: list[tuple[str, bool]]) -> tuple[str, bool | None]:
     """Concatenate statements.
 
     Each statement should be a tuple of statement and is_put_or_get.

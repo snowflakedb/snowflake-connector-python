@@ -3,13 +3,14 @@
 Pre-commit hook to prevent direct usage of requests, urllib3, and aiohttp calls.
 Ensures all HTTP requests go through SessionManager.
 """
+
 import argparse
 import ast
 import sys
+
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import PurePath
-from typing import Dict, List, Optional, Set, Tuple
 
 
 class ViolationType(Enum):
@@ -48,7 +49,7 @@ class ImportInfo:
     """Information about an import statement."""
 
     module: str
-    imported_name: Optional[str]  # None for module imports
+    imported_name: str | None  # None for module imports
     alias_name: str
     line: int
     col: int
@@ -165,21 +166,21 @@ class ImportContext:
 
     def __init__(self):
         # Map alias_name -> ImportInfo
-        self.imports: Dict[str, ImportInfo] = {}
+        self.imports: dict[str, ImportInfo] = {}
 
         # Track what's used where
-        self.type_hint_usage: Set[str] = set()
-        self.runtime_usage: Set[str] = set()
+        self.type_hint_usage: set[str] = set()
+        self.runtime_usage: set[str] = set()
 
         # Track variable assignments (basic aliasing)
-        self.variable_aliases: Dict[str, str] = {}  # var_name -> original_name
+        self.variable_aliases: dict[str, str] = {}  # var_name -> original_name
 
         # Track star imports
-        self.star_imports: Set[str] = set()  # modules with star imports
+        self.star_imports: set[str] = set()  # modules with star imports
 
         # Track TYPE_CHECKING context
         self.in_type_checking: bool = False
-        self.type_checking_imports: Set[str] = set()
+        self.type_checking_imports: set[str] = set()
 
     def add_import(self, import_info: ImportInfo):
         """Add an import."""
@@ -211,9 +212,7 @@ class ImportContext:
         current = name
         max_depth = 10  # Prevent infinite loops
 
-        while (
-            current in self.variable_aliases and current not in seen and max_depth > 0
-        ):
+        while current in self.variable_aliases and current not in seen and max_depth > 0:
             seen.add(current)
             current = self.variable_aliases[current]
             max_depth -= 1
@@ -232,8 +231,7 @@ class ImportContext:
         if resolved_name in self.imports:
             import_info = self.imports[resolved_name]
             return ModulePattern.is_requests_module(import_info.module) or (
-                import_info.imported_name
-                and ModulePattern.is_requests_module(import_info.imported_name)
+                import_info.imported_name and ModulePattern.is_requests_module(import_info.imported_name)
             )
 
         # Check star imports
@@ -255,8 +253,7 @@ class ImportContext:
         if resolved_name in self.imports:
             import_info = self.imports[resolved_name]
             return ModulePattern.is_urllib3_module(import_info.module) or (
-                import_info.imported_name
-                and ModulePattern.is_urllib3_module(import_info.imported_name)
+                import_info.imported_name and ModulePattern.is_urllib3_module(import_info.imported_name)
             )
 
         # Check star imports
@@ -278,8 +275,7 @@ class ImportContext:
         if resolved_name in self.imports:
             import_info = self.imports[resolved_name]
             return ModulePattern.is_aiohttp_module(import_info.module) or (
-                import_info.imported_name
-                and ModulePattern.is_aiohttp_module(import_info.imported_name)
+                import_info.imported_name and ModulePattern.is_aiohttp_module(import_info.imported_name)
             )
 
         # Check star imports
@@ -292,12 +288,10 @@ class ImportContext:
     def is_runtime(self, name: str) -> bool:
         """Check if name is used at runtime (has actual runtime usage)."""
         return (
-            name in self.runtime_usage
-            and name not in self.type_checking_imports
-            and name not in self.type_hint_usage
+            name in self.runtime_usage and name not in self.type_checking_imports and name not in self.type_hint_usage
         )
 
-    def get_import_location(self, name: str) -> Tuple[int, int]:
+    def get_import_location(self, name: str) -> tuple[int, int]:
         """Get line/col for an import."""
         if name in self.imports:
             import_info = self.imports[name]
@@ -309,7 +303,7 @@ class ASTHelper:
     """Helper functions for AST analysis."""
 
     @staticmethod
-    def get_attribute_chain(node: ast.AST) -> Optional[List[str]]:
+    def get_attribute_chain(node: ast.AST) -> list[str] | None:
         """Extract attribute chain from AST node (e.g., requests.sessions.Session -> ['requests', 'sessions', 'Session'])."""
         parts = []
         current = node
@@ -428,9 +422,7 @@ class ContextBuilder(ast.NodeVisitor):
                             and dotted_chain[1] in self.context.variable_aliases
                         ):
                             # level1 gets the same alias as req_lib
-                            aliased_module = self.context.variable_aliases[
-                                dotted_chain[1]
-                            ]
+                            aliased_module = self.context.variable_aliases[dotted_chain[1]]
                             self.context.add_variable_alias(var_name, aliased_module)
                         else:
                             # Handle v = snowflake.connector.vendored.requests
@@ -451,7 +443,6 @@ class ContextBuilder(ast.NodeVisitor):
                     and target.value.id == "self"
                     and isinstance(node.value, ast.Name)
                 ):
-
                     attr_name = target.attr  # req_lib
                     original_name = node.value.id  # requests
                     self.context.add_variable_alias(attr_name, original_name)
@@ -464,11 +455,7 @@ class ContextBuilder(ast.NodeVisitor):
             self._extract_type_names(node.annotation)
 
         # Handle assignment part for aliasing
-        if (
-            isinstance(node.target, ast.Name)
-            and node.value
-            and isinstance(node.value, ast.Name)
-        ):
+        if isinstance(node.target, ast.Name) and node.value and isinstance(node.value, ast.Name):
             var_name = node.target.id
             original_name = node.value.id
             self.context.add_variable_alias(var_name, original_name)
@@ -510,9 +497,7 @@ class ContextBuilder(ast.NodeVisitor):
                 self.context.add_type_hint_usage(annotation_node.value.id)
         elif isinstance(annotation_node, ast.Subscript):
             self._extract_from_subscript(annotation_node)
-        elif isinstance(annotation_node, ast.BinOp) and isinstance(
-            annotation_node.op, ast.BitOr
-        ):
+        elif isinstance(annotation_node, ast.BinOp) and isinstance(annotation_node.op, ast.BitOr):
             # PEP 604 unions: Session | None
             self._extract_type_names(annotation_node.left)
             self._extract_type_names(annotation_node.right)
@@ -520,9 +505,7 @@ class ContextBuilder(ast.NodeVisitor):
             # Tuple types
             for elt in annotation_node.elts:
                 self._extract_type_names(elt)
-        elif isinstance(annotation_node, ast.Constant) and isinstance(
-            annotation_node.value, str
-        ):
+        elif isinstance(annotation_node, ast.Constant) and isinstance(annotation_node.value, str):
             # String annotations (PEP 563): "Session", "List[Session]", etc.
             self._extract_from_string_annotation(annotation_node.value)
 
@@ -576,7 +559,7 @@ class ViolationAnalyzer:
     def __init__(self, filename: str, context: ImportContext):
         self.filename = filename
         self.context = context
-        self.violations: List[HTTPViolation] = []
+        self.violations: list[HTTPViolation] = []
 
     def analyze_imports(self):
         """Analyze import violations."""
@@ -607,7 +590,7 @@ class ViolationAnalyzer:
                     )
                 )
 
-    def _check_import_violation(self, import_info: ImportInfo) -> List[HTTPViolation]:
+    def _check_import_violation(self, import_info: ImportInfo) -> list[HTTPViolation]:
         """Check a single import for violations."""
         violations = []
 
@@ -628,14 +611,8 @@ class ViolationAnalyzer:
             )
 
         # Flag Session/PoolManager/ClientSession imports only if used at runtime
-        if import_info.imported_name and self.context.is_runtime(
-            import_info.alias_name
-        ):
-
-            if (
-                ModulePattern.is_requests_module(import_info.module)
-                and import_info.imported_name == "Session"
-            ):
+        if import_info.imported_name and self.context.is_runtime(import_info.alias_name):
+            if ModulePattern.is_requests_module(import_info.module) and import_info.imported_name == "Session":
                 violations.append(
                     HTTPViolation(
                         self.filename,
@@ -646,9 +623,9 @@ class ViolationAnalyzer:
                     )
                 )
 
-            elif ModulePattern.is_urllib3_module(
-                import_info.module
-            ) and ModulePattern.is_pool_manager(import_info.imported_name):
+            elif ModulePattern.is_urllib3_module(import_info.module) and ModulePattern.is_pool_manager(
+                import_info.imported_name
+            ):
                 violations.append(
                     HTTPViolation(
                         self.filename,
@@ -659,9 +636,9 @@ class ViolationAnalyzer:
                     )
                 )
 
-            elif ModulePattern.is_aiohttp_module(
-                import_info.module
-            ) and ModulePattern.is_aiohttp_session(import_info.imported_name):
+            elif ModulePattern.is_aiohttp_module(import_info.module) and ModulePattern.is_aiohttp_session(
+                import_info.imported_name
+            ):
                 violations.append(
                     HTTPViolation(
                         self.filename,
@@ -678,9 +655,7 @@ class ViolationAnalyzer:
 class CallAnalyzer(ast.NodeVisitor):
     """Analyzes function calls for violations."""
 
-    def __init__(
-        self, filename: str, context: ImportContext, violations: List[HTTPViolation]
-    ):
+    def __init__(self, filename: str, context: ImportContext, violations: list[HTTPViolation]):
         self.filename = filename
         self.context = context
         self.violations = violations
@@ -697,7 +672,7 @@ class CallAnalyzer(ast.NodeVisitor):
 
         self.generic_visit(node)
 
-    def _check_call_violation(self, node: ast.Call) -> Optional[HTTPViolation]:
+    def _check_call_violation(self, node: ast.Call) -> HTTPViolation | None:
         """Check a single call for violations."""
         # First check for chained calls like Session().get() or PoolManager().request()
         chained_violation = self._check_chained_calls(node)
@@ -717,7 +692,7 @@ class CallAnalyzer(ast.NodeVisitor):
         else:
             return self._check_multi_part_call(node, chain)
 
-    def _check_direct_call(self, node: ast.Call) -> Optional[HTTPViolation]:
+    def _check_direct_call(self, node: ast.Call) -> HTTPViolation | None:
         """Check direct function calls."""
         if not isinstance(node.func, ast.Name):
             return None
@@ -744,10 +719,7 @@ class CallAnalyzer(ast.NodeVisitor):
                 )
 
             # Session/PoolManager/ClientSession instantiation
-            if (
-                import_info.imported_name == "Session"
-                and ModulePattern.is_requests_module(import_info.module)
-            ):
+            if import_info.imported_name == "Session" and ModulePattern.is_requests_module(import_info.module):
                 return HTTPViolation(
                     self.filename,
                     node.lineno,
@@ -784,9 +756,7 @@ class CallAnalyzer(ast.NodeVisitor):
 
         # Check star imports
         for module in self.context.star_imports:
-            if ModulePattern.is_requests_module(
-                module
-            ) and ModulePattern.is_http_method(func_name):
+            if ModulePattern.is_requests_module(module) and ModulePattern.is_http_method(func_name):
                 return HTTPViolation(
                     self.filename,
                     node.lineno,
@@ -799,15 +769,11 @@ class CallAnalyzer(ast.NodeVisitor):
 
     def _is_chained_call(self, node: ast.Call) -> bool:
         """Check if this is a chained call that we detected."""
-        return isinstance(node.func, ast.Attribute) and isinstance(
-            node.func.value, ast.Call
-        )
+        return isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Call)
 
-    def _check_chained_calls(self, node: ast.Call) -> Optional[HTTPViolation]:
+    def _check_chained_calls(self, node: ast.Call) -> HTTPViolation | None:
         """Check for chained calls like requests.Session().get(), urllib3.PoolManager().request(), or aiohttp.ClientSession().get()."""
-        if isinstance(node.func, ast.Attribute) and isinstance(
-            node.func.value, ast.Call
-        ):
+        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Call):
             inner_chain = ASTHelper.get_attribute_chain(node.func.value.func)
             if inner_chain and len(inner_chain) >= 2:
                 inner_module, inner_func = inner_chain[0], inner_chain[-1]
@@ -815,10 +781,7 @@ class CallAnalyzer(ast.NodeVisitor):
 
                 # Check for requests.Session().method()
                 if (
-                    (
-                        inner_module == "requests"
-                        or self.context.is_requests_related(inner_module)
-                    )
+                    (inner_module == "requests" or self.context.is_requests_related(inner_module))
                     and inner_func == "Session"
                     and ModulePattern.is_http_method(outer_method)
                 ):
@@ -832,10 +795,7 @@ class CallAnalyzer(ast.NodeVisitor):
 
                 # Check for urllib3.PoolManager().method()
                 if (
-                    (
-                        inner_module == "urllib3"
-                        or self.context.is_urllib3_related(inner_module)
-                    )
+                    (inner_module == "urllib3" or self.context.is_urllib3_related(inner_module))
                     and ModulePattern.is_pool_manager(inner_func)
                     and outer_method in {"request", "urlopen", "request_encode_body"}
                 ):
@@ -849,10 +809,7 @@ class CallAnalyzer(ast.NodeVisitor):
 
                 # Check for aiohttp.ClientSession().method()
                 if (
-                    (
-                        inner_module == "aiohttp"
-                        or self.context.is_aiohttp_related(inner_module)
-                    )
+                    (inner_module == "aiohttp" or self.context.is_aiohttp_related(inner_module))
                     and ModulePattern.is_aiohttp_session(inner_func)
                     and ModulePattern.is_http_method(outer_method)
                 ):
@@ -866,25 +823,17 @@ class CallAnalyzer(ast.NodeVisitor):
 
         return None
 
-    def _check_two_part_call(
-        self, node: ast.Call, chain: List[str]
-    ) -> Optional[HTTPViolation]:
+    def _check_two_part_call(self, node: ast.Call, chain: list[str]) -> HTTPViolation | None:
         """Check two-part calls like module.function or instance.method."""
         module_name, func_name = chain
         resolved_module = self.context.resolve_name(module_name)
 
         # Direct module calls
-        if module_name == "requests" or self.context.is_requests_related(
-            resolved_module
-        ):
+        if module_name == "requests" or self.context.is_requests_related(resolved_module):
             return self._check_requests_call(node, func_name)
-        elif module_name == "urllib3" or self.context.is_urllib3_related(
-            resolved_module
-        ):
+        elif module_name == "urllib3" or self.context.is_urllib3_related(resolved_module):
             return self._check_urllib3_call(node, func_name)
-        elif module_name == "aiohttp" or self.context.is_aiohttp_related(
-            resolved_module
-        ):
+        elif module_name == "aiohttp" or self.context.is_aiohttp_related(resolved_module):
             return self._check_aiohttp_call(node, func_name)
 
         # Check for aliased module calls (e.g., v = vendored.requests; v.get())
@@ -899,16 +848,12 @@ class CallAnalyzer(ast.NodeVisitor):
 
         return None
 
-    def _check_multi_part_call(
-        self, node: ast.Call, chain: List[str]
-    ) -> Optional[HTTPViolation]:
+    def _check_multi_part_call(self, node: ast.Call, chain: list[str]) -> HTTPViolation | None:
         """Check multi-part calls like requests.sessions.Session, aiohttp.client.ClientSession or self.req_lib.get."""
         if len(chain) >= 3:
             module_name = chain[0]
 
-            if module_name == "requests" or self.context.is_requests_related(
-                module_name
-            ):
+            if module_name == "requests" or self.context.is_requests_related(module_name):
                 # requests.sessions.Session, requests.api.request, etc.
                 func_name = chain[-1]
                 if func_name == "Session":
@@ -928,9 +873,7 @@ class CallAnalyzer(ast.NodeVisitor):
                         f"Direct use of {'.'.join(chain)}() is forbidden, use SessionManager instead",
                     )
 
-            elif module_name == "aiohttp" or self.context.is_aiohttp_related(
-                module_name
-            ):
+            elif module_name == "aiohttp" or self.context.is_aiohttp_related(module_name):
                 # aiohttp.client.ClientSession, etc.
                 func_name = chain[-1]
                 if ModulePattern.is_aiohttp_session(func_name):
@@ -950,9 +893,7 @@ class CallAnalyzer(ast.NodeVisitor):
 
                 if potential_alias in self.context.variable_aliases:
                     aliased_module = self.context.variable_aliases[potential_alias]
-                    if ModulePattern.is_requests_module(
-                        aliased_module
-                    ) and ModulePattern.is_http_method(func_name):
+                    if ModulePattern.is_requests_module(aliased_module) and ModulePattern.is_http_method(func_name):
                         return HTTPViolation(
                             self.filename,
                             node.lineno,
@@ -960,9 +901,7 @@ class CallAnalyzer(ast.NodeVisitor):
                             ViolationType.REQUESTS_HTTP_METHOD,
                             f"Direct use of aliased {chain[0]}.{potential_alias}.{func_name}() is forbidden, use SessionManager instead",
                         )
-                    elif ModulePattern.is_urllib3_module(
-                        aliased_module
-                    ) and ModulePattern.is_pool_manager(func_name):
+                    elif ModulePattern.is_urllib3_module(aliased_module) and ModulePattern.is_pool_manager(func_name):
                         return HTTPViolation(
                             self.filename,
                             node.lineno,
@@ -970,9 +909,9 @@ class CallAnalyzer(ast.NodeVisitor):
                             ViolationType.URLLIB3_POOLMANAGER,
                             f"Direct use of aliased {chain[0]}.{potential_alias}.{func_name}() is forbidden, use SessionManager instead",
                         )
-                    elif ModulePattern.is_aiohttp_module(
-                        aliased_module
-                    ) and ModulePattern.is_aiohttp_session(func_name):
+                    elif ModulePattern.is_aiohttp_module(aliased_module) and ModulePattern.is_aiohttp_session(
+                        func_name
+                    ):
                         return HTTPViolation(
                             self.filename,
                             node.lineno,
@@ -983,9 +922,7 @@ class CallAnalyzer(ast.NodeVisitor):
 
         return None
 
-    def _check_requests_call(
-        self, node: ast.Call, func_name: str
-    ) -> Optional[HTTPViolation]:
+    def _check_requests_call(self, node: ast.Call, func_name: str) -> HTTPViolation | None:
         """Check requests module calls."""
         if func_name == "request":
             return HTTPViolation(
@@ -1013,9 +950,7 @@ class CallAnalyzer(ast.NodeVisitor):
             )
         return None
 
-    def _check_urllib3_call(
-        self, node: ast.Call, func_name: str
-    ) -> Optional[HTTPViolation]:
+    def _check_urllib3_call(self, node: ast.Call, func_name: str) -> HTTPViolation | None:
         """Check urllib3 module calls."""
         if ModulePattern.is_pool_manager(func_name):
             return HTTPViolation(
@@ -1035,9 +970,7 @@ class CallAnalyzer(ast.NodeVisitor):
             )
         return None
 
-    def _check_aiohttp_call(
-        self, node: ast.Call, func_name: str
-    ) -> Optional[HTTPViolation]:
+    def _check_aiohttp_call(self, node: ast.Call, func_name: str) -> HTTPViolation | None:
         """Check aiohttp module calls."""
         if ModulePattern.is_aiohttp_session(func_name):
             return HTTPViolation(
@@ -1098,7 +1031,7 @@ class FileChecker:
 
         return False
 
-    def get_temporary_exemption(self) -> Optional[str]:
+    def get_temporary_exemption(self) -> str | None:
         """Get JIRA ticket for temporary exemption, if any."""
         temp_patterns = [pattern for pattern, _ in self.TEMPORARY_EXEMPT_PATTERNS]
         for i, pattern in enumerate(temp_patterns):
@@ -1106,7 +1039,7 @@ class FileChecker:
                 return self.TEMPORARY_EXEMPT_PATTERNS[i][1]
         return None
 
-    def check_file(self) -> Tuple[List[HTTPViolation], List[str]]:
+    def check_file(self) -> tuple[list[HTTPViolation], list[str]]:
         """Check a file for HTTP violations."""
         if self.is_exempt():
             return [], []
@@ -1144,9 +1077,7 @@ def main():
     """Main function for pre-commit hook."""
     parser = argparse.ArgumentParser(description="Check for native HTTP calls")
     parser.add_argument("filenames", nargs="*", help="Filenames to check")
-    parser.add_argument(
-        "--show-fixes", action="store_true", help="Show suggested fixes"
-    )
+    parser.add_argument("--show-fixes", action="store_true", help="Show suggested fixes")
     args = parser.parse_args()
 
     all_violations = []
@@ -1195,12 +1126,8 @@ def main():
             print("How to fix:")
             print("  - Replace requests.request() with SessionManager.request()")
             print("  - Replace requests.Session() with SessionManager.use_session()")
-            print(
-                "  - Replace urllib3.PoolManager/ProxyManager() with session from session_manager.use_session()"
-            )
-            print(
-                "  - Replace aiohttp.ClientSession() with async SessionManager.use_session()"
-            )
+            print("  - Replace urllib3.PoolManager/ProxyManager() with session from session_manager.use_session()")
+            print("  - Replace aiohttp.ClientSession() with async SessionManager.use_session()")
             print("  - Replace direct HTTP method imports with SessionManager usage")
             print("  - Use SessionManager for all HTTP operations (sync and async)")
 

@@ -5,10 +5,12 @@
 from __future__ import annotations
 
 import logging
+
 from typing import TYPE_CHECKING, Any
 
 from ..constants import OAUTH_TYPE_CLIENT_CREDENTIALS
 from ._oauth_base import AuthByOAuthBase
+
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection

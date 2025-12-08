@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import os
 import sys
+
 from os import path
 from typing import TYPE_CHECKING
 
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
+
 
 if TYPE_CHECKING:
     from asn1crypto.x509 import Certificate
@@ -22,11 +24,9 @@ def main() -> None:
             "file format should be PEM."
         )
         print(
-            """
-Usage: {}  <input file/dir>
-""".format(
-                path.basename(sys.argv[0])
-            )
+            f"""
+Usage: {path.basename(sys.argv[0])}  <input file/dir>
+"""
         )
         sys.exit(2)
 

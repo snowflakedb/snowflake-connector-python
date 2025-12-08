@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import uuid
+
 from io import BytesIO
 from logging import getLogger
 from typing import TYPE_CHECKING
@@ -13,6 +14,7 @@ from ._utils import (
 )
 from .errors import BindUploadError, Error
 
+
 if TYPE_CHECKING:  # pragma: no cover
     from .cursor import SnowflakeCursor
 
@@ -20,7 +22,6 @@ logger = getLogger(__name__)
 
 
 class BindUploadAgent:
-
     def __init__(
         self,
         cursor: SnowflakeCursor,
@@ -35,15 +36,11 @@ class BindUploadAgent:
             stream_buffer_size: Size of each file, default to 10MB.
         """
         self._use_scoped_temp_object = (
-            cursor.connection._session_parameters.get(
-                _PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, False
-            )
+            cursor.connection._session_parameters.get(_PYTHON_SNOWPARK_USE_SCOPED_TEMP_OBJECTS_STRING, False)
             if cursor.connection._session_parameters
             else False
         )
-        self._STAGE_NAME = (
-            "SNOWPARK_TEMP_STAGE_BIND" if self._use_scoped_temp_object else "SYSTEMBIND"
-        )
+        self._STAGE_NAME = "SNOWPARK_TEMP_STAGE_BIND" if self._use_scoped_temp_object else "SYSTEMBIND"
         self.cursor = cursor
         self.rows = rows
         self._stream_buffer_size = stream_buffer_size
@@ -60,9 +57,7 @@ class BindUploadAgent:
         try:
             self._create_stage()
         except Error as err:
-            self.cursor.connection._session_parameters[
-                "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
-            ] = 0
+            self.cursor.connection._session_parameters["CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"] = 0
             logger.debug("Failed to create stage for binding.")
             raise BindUploadError from err
 

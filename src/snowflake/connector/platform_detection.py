@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+
 from concurrent.futures import CancelledError as FutureCancelledError
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from concurrent.futures.thread import ThreadPoolExecutor
@@ -16,12 +17,14 @@ from .constants import (
 )
 from .options import boto3, botocore, installed_boto
 
+
 if installed_boto:
     Config = botocore.config.Config
     IMDSFetcher = botocore.utils.IMDSFetcher
 
 from .session_manager import SessionManager, SessionManagerFactory
 from .vendored.requests import RequestException, Timeout
+
 
 logger = logging.getLogger(__name__)
 
@@ -89,19 +92,13 @@ def is_ec2_instance(platform_detection_timeout_seconds: float):
         return _DetectionState.NOT_DETECTED
 
     try:
-        fetcher = IMDSFetcher(
-            timeout=platform_detection_timeout_seconds, num_attempts=1
-        )
+        fetcher = IMDSFetcher(timeout=platform_detection_timeout_seconds, num_attempts=1)
         document = fetcher._get_request(
             "/latest/dynamic/instance-identity/document",
             None,
             fetcher._fetch_metadata_token(),
         )
-        return (
-            _DetectionState.DETECTED
-            if document.content
-            else _DetectionState.NOT_DETECTED
-        )
+        return _DetectionState.DETECTED if document.content else _DetectionState.NOT_DETECTED
     except Exception:
         return _DetectionState.NOT_DETECTED
 
@@ -116,11 +113,7 @@ def is_aws_lambda():
     Returns:
         _DetectionState: DETECTED if LAMBDA_TASK_ROOT env var exists, NOT_DETECTED otherwise.
     """
-    return (
-        _DetectionState.DETECTED
-        if "LAMBDA_TASK_ROOT" in os.environ
-        else _DetectionState.NOT_DETECTED
-    )
+    return _DetectionState.DETECTED if "LAMBDA_TASK_ROOT" in os.environ else _DetectionState.NOT_DETECTED
 
 
 def is_valid_arn_for_wif(arn: str) -> bool:
@@ -167,17 +160,13 @@ def has_aws_identity(platform_detection_timeout_seconds: float):
         if not caller_identity or "Arn" not in caller_identity:
             return _DetectionState.NOT_DETECTED
         return (
-            _DetectionState.DETECTED
-            if is_valid_arn_for_wif(caller_identity["Arn"])
-            else _DetectionState.NOT_DETECTED
+            _DetectionState.DETECTED if is_valid_arn_for_wif(caller_identity["Arn"]) else _DetectionState.NOT_DETECTED
         )
     except Exception:
         return _DetectionState.NOT_DETECTED
 
 
-def is_azure_vm(
-    platform_detection_timeout_seconds: float, session_manager: SessionManager
-):
+def is_azure_vm(platform_detection_timeout_seconds: float, session_manager: SessionManager):
     """
     Check if the current environment is running on an Azure Virtual Machine.
 
@@ -198,11 +187,7 @@ def is_azure_vm(
             headers={"Metadata": "True"},
             timeout=platform_detection_timeout_seconds,
         )
-        return (
-            _DetectionState.DETECTED
-            if token_resp.status_code == 200
-            else _DetectionState.NOT_DETECTED
-        )
+        return _DetectionState.DETECTED if token_resp.status_code == 200 else _DetectionState.NOT_DETECTED
     except Timeout:
         return _DetectionState.HTTP_TIMEOUT
     except RequestException:
@@ -226,11 +211,7 @@ def is_azure_function():
         "FUNCTIONS_EXTENSION_VERSION",
         "AzureWebJobsStorage",
     ]
-    return (
-        _DetectionState.DETECTED
-        if all(var in os.environ for var in service_vars)
-        else _DetectionState.NOT_DETECTED
-    )
+    return _DetectionState.DETECTED if all(var in os.environ for var in service_vars) else _DetectionState.NOT_DETECTED
 
 
 def is_managed_identity_available_on_azure_vm(
@@ -257,14 +238,8 @@ def is_managed_identity_available_on_azure_vm(
     endpoint = f"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource={resource}"
     headers = {"Metadata": "true"}
     try:
-        response = session_manager.get(
-            endpoint, headers=headers, timeout=platform_detection_timeout_seconds
-        )
-        return (
-            _DetectionState.DETECTED
-            if response.status_code == 200
-            else _DetectionState.NOT_DETECTED
-        )
+        response = session_manager.get(endpoint, headers=headers, timeout=platform_detection_timeout_seconds)
+        return _DetectionState.DETECTED if response.status_code == 200 else _DetectionState.NOT_DETECTED
     except Timeout:
         return _DetectionState.HTTP_TIMEOUT
     except RequestException:
@@ -275,9 +250,7 @@ def is_managed_identity_available_on_azure_function():
     return bool(os.environ.get("IDENTITY_HEADER"))
 
 
-def has_azure_managed_identity(
-    platform_detection_timeout_seconds: float, session_manager: SessionManager
-):
+def has_azure_managed_identity(platform_detection_timeout_seconds: float, session_manager: SessionManager):
     """
     Determine if Azure Managed Identity is available in the current environment.
 
@@ -303,14 +276,10 @@ def has_azure_managed_identity(
             if is_managed_identity_available_on_azure_function()
             else _DetectionState.NOT_DETECTED
         )
-    return is_managed_identity_available_on_azure_vm(
-        platform_detection_timeout_seconds, session_manager
-    )
+    return is_managed_identity_available_on_azure_vm(platform_detection_timeout_seconds, session_manager)
 
 
-def is_gce_vm(
-    platform_detection_timeout_seconds: float, session_manager: SessionManager
-):
+def is_gce_vm(platform_detection_timeout_seconds: float, session_manager: SessionManager):
     """
     Check if the current environment is running on Google Compute Engine (GCE).
 
@@ -353,11 +322,7 @@ def is_gcp_cloud_run_service():
                         NOT_DETECTED otherwise.
     """
     service_vars = ["K_SERVICE", "K_REVISION", "K_CONFIGURATION"]
-    return (
-        _DetectionState.DETECTED
-        if all(var in os.environ for var in service_vars)
-        else _DetectionState.NOT_DETECTED
-    )
+    return _DetectionState.DETECTED if all(var in os.environ for var in service_vars) else _DetectionState.NOT_DETECTED
 
 
 def is_gcp_cloud_run_job():
@@ -372,16 +337,10 @@ def is_gcp_cloud_run_job():
                         NOT_DETECTED otherwise.
     """
     job_vars = ["CLOUD_RUN_JOB", "CLOUD_RUN_EXECUTION"]
-    return (
-        _DetectionState.DETECTED
-        if all(var in os.environ for var in job_vars)
-        else _DetectionState.NOT_DETECTED
-    )
+    return _DetectionState.DETECTED if all(var in os.environ for var in job_vars) else _DetectionState.NOT_DETECTED
 
 
-def has_gcp_identity(
-    platform_detection_timeout_seconds: float, session_manager: SessionManager
-):
+def has_gcp_identity(platform_detection_timeout_seconds: float, session_manager: SessionManager):
     """
     Check if the current environment has a valid Google Cloud Platform identity.
 
@@ -401,11 +360,7 @@ def has_gcp_identity(
             headers={"Metadata-Flavor": "Google"},
             timeout=platform_detection_timeout_seconds,
         )
-        return (
-            _DetectionState.DETECTED
-            if response.status_code == 200
-            else _DetectionState.NOT_DETECTED
-        )
+        return _DetectionState.DETECTED if response.status_code == 200 else _DetectionState.NOT_DETECTED
     except Timeout:
         return _DetectionState.HTTP_TIMEOUT
     except RequestException:
@@ -422,11 +377,7 @@ def is_github_action():
     Returns:
         _DetectionState: DETECTED if GITHUB_ACTIONS env var exists, NOT_DETECTED otherwise.
     """
-    return (
-        _DetectionState.DETECTED
-        if "GITHUB_ACTIONS" in os.environ
-        else _DetectionState.NOT_DETECTED
-    )
+    return _DetectionState.DETECTED if "GITHUB_ACTIONS" in os.environ else _DetectionState.NOT_DETECTED
 
 
 @cache
@@ -452,10 +403,7 @@ def detect_platforms(
     """
     try:
         # Check if platform detection is disabled via environment variable
-        if (
-            os.environ.get(ENV_VAR_DISABLE_PLATFORM_DETECTION, "").lower()
-            in ENV_VAR_BOOL_POSITIVE_VALUES_LOWERCASED
-        ):
+        if os.environ.get(ENV_VAR_DISABLE_PLATFORM_DETECTION, "").lower() in ENV_VAR_BOOL_POSITIVE_VALUES_LOWERCASED:
             logger.debug(
                 "Platform detection disabled via %s environment variable",
                 ENV_VAR_DISABLE_PLATFORM_DETECTION,
@@ -467,12 +415,8 @@ def detect_platforms(
 
         if session_manager is None:
             # This should never happen - we expect session manager to be passed from the outer scope
-            logger.debug(
-                "No session manager provided. HTTP settings may not be preserved. Using default."
-            )
-            session_manager = SessionManagerFactory.get_manager(
-                use_pooling=False, max_retries=0
-            )
+            logger.debug("No session manager provided. HTTP settings may not be preserved. Using default.")
+            session_manager = SessionManagerFactory.get_manager(use_pooling=False, max_retries=0)
 
         # HTTP timeout should be slightly shorter than thread timeout to allow HTTP-level
         # timeouts to occur before thread executor times out. This helps distinguish between
@@ -496,12 +440,8 @@ def detect_platforms(
             if platform_detection_timeout_seconds != 0.0:
                 with ThreadPoolExecutor(max_workers=6) as executor:
                     futures = {
-                        "is_ec2_instance": executor.submit(
-                            is_ec2_instance, http_timeout
-                        ),
-                        "has_aws_identity": executor.submit(
-                            has_aws_identity, http_timeout
-                        ),
+                        "is_ec2_instance": executor.submit(is_ec2_instance, http_timeout),
+                        "has_aws_identity": executor.submit(has_aws_identity, http_timeout),
                         "is_azure_vm": executor.submit(
                             is_azure_vm,
                             http_timeout,

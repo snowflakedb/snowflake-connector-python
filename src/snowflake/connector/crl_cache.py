@@ -8,6 +8,7 @@ import os
 import platform
 import stat
 import threading
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -19,6 +20,7 @@ from cryptography.hazmat.primitives import serialization
 from filelock import BaseFileLock, FileLock
 
 from .compat import IS_WINDOWS
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +34,7 @@ class CRLCacheEntry:
 
     def _next_update(self) -> datetime | None:
         """A compatibility wrapper around crl.next_update."""
-        return getattr(self.crl, "next_update_utc", None) or getattr(
-            self.crl, "next_update", None
-        )
+        return getattr(self.crl, "next_update_utc", None) or getattr(self.crl, "next_update", None)
 
     def is_crl_expired_by(self, ts: datetime) -> bool:
         """
@@ -154,7 +154,7 @@ class CRLInMemoryCache(CRLCache):
         with self._lock:
             entry = self._cache.get(crl_url)
             if entry is not None:
-                logger.debug(f"Found CRL in memory cache for {crl_url}")
+                logger.debug("Found CRL in memory cache for %s", crl_url)
             return entry
 
     def put(self, crl_url: str, entry: CRLCacheEntry) -> None:
@@ -171,7 +171,7 @@ class CRLInMemoryCache(CRLCache):
     def cleanup(self) -> None:
         """Remove expired and evicted entries from memory cache."""
         now = datetime.now(timezone.utc)
-        logger.debug(f"Cleaning up in-memory CRL cache at {now}")
+        logger.debug("Cleaning up in-memory CRL cache at %s", now)
 
         with self._lock:
             urls_to_remove = []
@@ -182,8 +182,7 @@ class CRLInMemoryCache(CRLCache):
 
                 if expired or evicted:
                     logger.debug(
-                        f"Removing in-memory CRL cache entry for {url}: "
-                        f"expired={expired}, evicted={evicted}"
+                        "Removing in-memory CRL cache entry for %s: expired=%s, evicted=%s", url, expired, evicted
                     )
                     urls_to_remove.append(url)
 
@@ -192,9 +191,7 @@ class CRLInMemoryCache(CRLCache):
 
             removed_count = len(urls_to_remove)
             if removed_count > 0:
-                logger.debug(
-                    f"Removed {removed_count} expired/evicted entries from in-memory CRL cache"
-                )
+                logger.debug("Removed %s expired/evicted entries from in-memory CRL cache", removed_count)
 
 
 class CRLFileCache(CRLCache):
@@ -236,7 +233,7 @@ class CRLFileCache(CRLCache):
             if not self._unsafe_skip_file_permissions_check:
                 self._check_permissions(self._cache_dir, "directory", "0o700")
 
-            logger.debug(f"Cache directory created/verified: {self._cache_dir}")
+            logger.debug("Cache directory created/verified: %s", self._cache_dir)
         except PermissionError:
             # Re-raise permission errors as-is
             raise
@@ -265,9 +262,7 @@ class CRLFileCache(CRLCache):
             timeout=self._cache_file_lock_timeout,
         )
 
-    def _check_permissions(
-        self, path: Path, resource_type: str, expected_perms: str
-    ) -> None:
+    def _check_permissions(self, path: Path, resource_type: str, expected_perms: str) -> None:
         """
         Check that a CRL cache resource has secure permissions (owner-only access).
 
@@ -291,9 +286,7 @@ class CRLFileCache(CRLCache):
             actual_permissions = stat.S_IMODE(stat_info.st_mode)
 
             # Check that resource is accessible only by owner (no group/other permissions)
-            if (
-                actual_permissions & 0o077 != 0
-            ):  # Check if group or others have any permission
+            if actual_permissions & 0o077 != 0:  # Check if group or others have any permission
                 raise PermissionError(
                     f"CRL cache {resource_type} {path} has insecure permissions: {oct(actual_permissions)}. "
                     f"{resource_type.capitalize()} must be accessible only by the owner ({expected_perms})."
@@ -317,21 +310,17 @@ class CRLFileCache(CRLCache):
         with self._get_crl_file_lock(crl_file_path):
             try:
                 if crl_file_path.exists():
-                    logger.debug(f"Found CRL on disk for {crl_file_path}")
+                    logger.debug("Found CRL on disk for %s", crl_file_path)
 
                     # Check file permissions before reading
                     if not self._unsafe_skip_file_permissions_check:
                         self._check_permissions(crl_file_path, "file", "0o600 or 0o400")
                     else:
-                        logger.warning(
-                            f"Skipping file permissions check for {crl_file_path}"
-                        )
+                        logger.warning("Skipping file permissions check for %s", crl_file_path)
 
                     # Get file modification time as download time
                     stat_info = crl_file_path.stat()
-                    download_time = datetime.fromtimestamp(
-                        stat_info.st_mtime, tz=timezone.utc
-                    )
+                    download_time = datetime.fromtimestamp(stat_info.st_mtime, tz=timezone.utc)
 
                     # Read and parse the CRL
                     with open(crl_file_path, "rb") as f:
@@ -341,12 +330,10 @@ class CRLFileCache(CRLCache):
                     return CRLCacheEntry(crl, download_time)
 
             except PermissionError as e:
-                logger.error(
-                    f"Permission error reading CRL from disk cache for {crl_url}: {e}"
-                )
+                logger.error("Permission error reading CRL from disk cache for %s: %s", crl_url, e)
                 return None
             except Exception as e:
-                logger.warning(f"Failed to read CRL from disk cache for {crl_url}: {e}")
+                logger.warning("Failed to read CRL from disk cache for %s: %s", crl_url, e)
 
         return None
 
@@ -380,14 +367,12 @@ class CRLFileCache(CRLCache):
                 download_timestamp = entry.download_time.timestamp()
                 os.utime(crl_file_path, (download_timestamp, download_timestamp))
 
-                logger.debug(f"Stored CRL to disk cache: {crl_file_path}")
+                logger.debug("Stored CRL to disk cache: %s", crl_file_path)
 
             except Exception as e:
-                logger.warning(f"Failed to write CRL to disk cache for {crl_url}: {e}")
+                logger.warning("Failed to write CRL to disk cache for %s: %s", crl_url, e)
 
-    def _is_cached_crl_file_for_removal(
-        self, crl_cache_file: Path, ts: datetime
-    ) -> bool:
+    def _is_cached_crl_file_for_removal(self, crl_cache_file: Path, ts: datetime) -> bool:
         """Check if the given CRL cache file is by its lifetime."""
         try:
             # Get file modification time
@@ -398,13 +383,13 @@ class CRLFileCache(CRLCache):
             removal_time = download_time + self._removal_delay
             return ts > removal_time
         except Exception as e:
-            logger.warning(f"Error processing cache file {crl_cache_file}: {e}")
+            logger.warning("Error processing cache file %s: %s", crl_cache_file, e)
             return False
 
     def cleanup(self) -> None:
         """Remove expired files from disk cache."""
         now = datetime.now(timezone.utc)
-        logger.debug(f"Cleaning up file-based CRL cache at {now}")
+        logger.debug("Cleaning up file-based CRL cache at %s", now)
 
         removed_count = 0
         try:
@@ -415,9 +400,9 @@ class CRLFileCache(CRLCache):
                         if self._is_cached_crl_file_for_removal(crl_file, now):
                             crl_file.unlink(missing_ok=True)
                             removed_count += 1
-                            logger.debug(f"Removed expired file: {crl_file}")
+                            logger.debug("Removed expired file: %s", crl_file)
         except Exception as e:
-            logger.error(f"Error during file cache cleanup: {e}")
+            logger.error("Error during file cache cleanup: %s", e)
 
 
 class CRLCacheManager:
@@ -467,12 +452,10 @@ class CRLCacheManager:
             self._memory_cache.put(crl_url, entry)
             return entry
 
-        logger.debug(f"CRL not found in cache for {crl_url}")
+        logger.debug("CRL not found in cache for %s", crl_url)
         return None
 
-    def put(
-        self, crl_url: str, crl: x509.CertificateRevocationList, download_time: datetime
-    ) -> None:
+    def put(self, crl_url: str, crl: x509.CertificateRevocationList, download_time: datetime) -> None:
         """
         Store a CRL in both memory and file caches.
 
@@ -522,8 +505,10 @@ class CRLCacheFactory:
                 cls._memory_cache_instance = CRLInMemoryCache(cache_validity_time)
             elif cls._memory_cache_instance._cache_validity_time != cache_validity_time:
                 logger.warning(
-                    f"CRLs in-memory cache has already been initialized with cache validity time of {cls._memory_cache_instance._cache_validity_time}, "
-                    f"ignoring new cache validity time of {cache_validity_time}"
+                    "CRLs in-memory cache has already been initialized with cache validity time of %s, "
+                    "ignoring new cache validity time of %s",
+                    cls._memory_cache_instance._cache_validity_time,
+                    cache_validity_time,
                 )
             return cls._memory_cache_instance
 
@@ -547,33 +532,35 @@ class CRLCacheFactory:
         """
         with cls._instance_lock:
             if cls._file_cache_instance is None:
-                cls._file_cache_instance = CRLFileCache(
-                    cache_dir, removal_delay, unsafe_skip_file_permissions_check
-                )
+                cls._file_cache_instance = CRLFileCache(cache_dir, removal_delay, unsafe_skip_file_permissions_check)
             else:
                 # Check if parameters differ from existing instance
                 existing_cache_dir = cls._file_cache_instance._cache_dir
                 existing_removal_delay = cls._file_cache_instance._removal_delay
-                existing_skip_check = (
-                    cls._file_cache_instance._unsafe_skip_file_permissions_check
-                )
+                existing_skip_check = cls._file_cache_instance._unsafe_skip_file_permissions_check
                 requested_cache_dir = cache_dir or _get_default_crl_cache_path()
                 requested_removal_delay = removal_delay or timedelta(days=7)
 
                 if existing_cache_dir != requested_cache_dir:
                     logger.warning(
-                        f"CRLs file cache has already been initialized with cache directory '{existing_cache_dir}', "
-                        f"ignoring new cache directory '{requested_cache_dir}'"
+                        "CRLs file cache has already been initialized with cache directory '%s', "
+                        "ignoring new cache directory '%s'",
+                        existing_cache_dir,
+                        requested_cache_dir,
                     )
                 if existing_removal_delay != requested_removal_delay:
                     logger.warning(
-                        f"CRLs file cache has already been initialized with removal delay of {existing_removal_delay}, "
-                        f"ignoring new removal delay of {requested_removal_delay}"
+                        "CRLs file cache has already been initialized with removal delay of %s, "
+                        "ignoring new removal delay of %s",
+                        existing_removal_delay,
+                        requested_removal_delay,
                     )
                 if existing_skip_check != unsafe_skip_file_permissions_check:
                     logger.warning(
-                        f"CRLs file cache has already been initialized with unsafe_skip_file_permissions_check={existing_skip_check}, "
-                        f"ignoring new value {unsafe_skip_file_permissions_check}"
+                        "CRLs file cache has already been initialized with unsafe_skip_file_permissions_check=%s, "
+                        "ignoring new value %s",
+                        existing_skip_check,
+                        unsafe_skip_file_permissions_check,
                     )
             return cls._file_cache_instance
 
@@ -587,9 +574,7 @@ class CRLCacheFactory:
         """
         with cls._instance_lock:
             if cls.is_periodic_cleanup_running():
-                logger.debug(
-                    "Periodic cleanup already running, so it will first be stopped before restarting."
-                )
+                logger.debug("Periodic cleanup already running, so it will first be stopped before restarting.")
                 cls.stop_periodic_cleanup()
 
             cls._cleanup_interval = cleanup_interval
@@ -607,9 +592,7 @@ class CRLCacheFactory:
             # Start the cleanup thread
             cls._cleanup_thread.start()
 
-            logger.debug(
-                f"Scheduled CRL cache cleanup task to run every {cleanup_interval.total_seconds()} seconds."
-            )
+            logger.debug("Scheduled CRL cache cleanup task to run every %s seconds.", cleanup_interval.total_seconds())
 
     @classmethod
     def stop_periodic_cleanup(cls) -> None:
@@ -646,7 +629,8 @@ class CRLCacheFactory:
                 break
 
             logger.debug(
-                f"Running periodic CRL cache cleanup with interval {cls._cleanup_interval.total_seconds()} seconds"
+                "Running periodic CRL cache cleanup with interval %s seconds",
+                cls._cleanup_interval.total_seconds(),
             )
 
             # Clean memory cache only if it exists
@@ -654,26 +638,18 @@ class CRLCacheFactory:
                 try:
                     cls._memory_cache_instance.cleanup()
                 except Exception as e:
-                    logger.error(
-                        f"An error occurred during scheduled CRL memory cache cleanup: {e}"
-                    )
+                    logger.error("An error occurred during scheduled CRL memory cache cleanup: %s", e)
 
             # Clean file cache only if it exists
             if cls._file_cache_instance is not None:
                 try:
                     cls._file_cache_instance.cleanup()
                 except Exception as e:
-                    logger.error(
-                        f"An error occurred during scheduled CRL disk cache cleanup: {e}"
-                    )
+                    logger.error("An error occurred during scheduled CRL disk cache cleanup: %s", e)
 
-            shutdown = cls._cleanup_shutdown.wait(
-                timeout=cls._cleanup_interval.total_seconds()
-            )
+            shutdown = cls._cleanup_shutdown.wait(timeout=cls._cleanup_interval.total_seconds())
             if shutdown:
-                logger.debug(
-                    "CRL cache cleanup stopped gracefully by a shutdown event."
-                )
+                logger.debug("CRL cache cleanup stopped gracefully by a shutdown event.")
                 break
 
     @classmethod
@@ -686,7 +662,7 @@ class CRLCacheFactory:
             logger.debug("CRL cache cleanup stopped gracefully on program exit.")
         except Exception as e:
             # Don't raise exceptions in atexit handlers
-            logger.error(f"Error stopping CRL cache cleanup on program exit: {e}")
+            logger.error("Error stopping CRL cache cleanup on program exit: %s", e)
 
     @classmethod
     def reset(cls) -> None:
@@ -720,14 +696,7 @@ def _get_windows_home_path() -> Path:
 def _get_default_crl_cache_path() -> Path:
     """Return the default path to persist cached CRLs."""
     if platform.system() == "Windows":
-        return (
-            _get_windows_home_path()
-            / "AppData"
-            / "Local"
-            / "Snowflake"
-            / "Caches"
-            / "crls"
-        )
+        return _get_windows_home_path() / "AppData" / "Local" / "Snowflake" / "Caches" / "crls"
     elif platform.system() == "Darwin":
         return Path.home() / "Library" / "Caches" / "Snowflake" / "crls"
     else:

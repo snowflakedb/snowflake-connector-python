@@ -3,12 +3,14 @@
 Pre-commit hook to ensure optional dependencies are always imported from .options module.
 This ensures that the connector can operate in environments where these optional libraries are not available.
 """
+
 import argparse
 import ast
 import sys
+
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+
 
 CHECKED_MODULES = [
     "boto3",
@@ -39,7 +41,7 @@ class ImportChecker(ast.NodeVisitor):
 
     def __init__(self, filename: str):
         self.filename = filename
-        self.violations: List[ImportViolation] = []
+        self.violations: list[ImportViolation] = []
 
     def visit_If(self, node: ast.If):
         # Always visit the condition, but ignore imports inside "if TYPE_CHECKING:" blocks
@@ -91,7 +93,7 @@ class ImportChecker(ast.NodeVisitor):
                 break
 
 
-def check_file(filename: str) -> List[ImportViolation]:
+def check_file(filename: str) -> list[ImportViolation]:
     """Check a file for optional import violations."""
     try:
         tree = ast.parse(Path(filename).read_text())
@@ -105,13 +107,9 @@ def check_file(filename: str) -> List[ImportViolation]:
 
 def main():
     """Main function for pre-commit hook."""
-    parser = argparse.ArgumentParser(
-        description="Check that optional imports are only imported from .options module"
-    )
+    parser = argparse.ArgumentParser(description="Check that optional imports are only imported from .options module")
     parser.add_argument("filenames", nargs="*", help="Filenames to check")
-    parser.add_argument(
-        "--show-fixes", action="store_true", help="Show suggested fixes"
-    )
+    parser.add_argument("--show-fixes", action="store_true", help="Show suggested fixes")
     args = parser.parse_args()
 
     all_violations = []
@@ -142,9 +140,7 @@ def main():
             print("    import boto3")
             print("    from botocore.auth import SigV4Auth")
             print()
-            print(
-                "  - This ensures the connector works in environments where optional libraries are not installed"
-            )
+            print("  - This ensures the connector works in environments where optional libraries are not installed")
 
         print()
         print(f"Found {len(all_violations)} violation(s)")

@@ -12,6 +12,7 @@ import os
 import ssl
 import time
 import weakref
+
 from contextvars import ContextVar
 from functools import wraps
 from inspect import signature as _sig
@@ -30,14 +31,13 @@ from .vendored.urllib3 import connection as connection_
 from .vendored.urllib3.contrib.pyopenssl import PyOpenSSLContext, WrappedSocket
 from .vendored.urllib3.util import ssl_ as ssl_
 
+
 if TYPE_CHECKING:
     from cryptography import x509
 
 DEFAULT_OCSP_MODE: OCSPMode = OCSPMode.FAIL_OPEN
 FEATURE_OCSP_MODE: OCSPMode = DEFAULT_OCSP_MODE
-FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT: int = (
-    OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
-)
+FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT: int = OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT
 DEFAULT_CRL_CONFIG: CRLConfig = CRLConfig()
 FEATURE_CRL_CONFIG: CRLConfig = DEFAULT_CRL_CONFIG
 
@@ -76,9 +76,7 @@ def _ensure_partial_chain_on_context(ctx: PyOpenSSLContext, cafile: str | None) 
         store = ctx._ctx.get_cert_store()
         from OpenSSL import crypto as _crypto
 
-        if hasattr(_crypto, "X509StoreFlags") and hasattr(
-            _crypto.X509StoreFlags, "PARTIAL_CHAIN"
-        ):
+        if hasattr(_crypto, "X509StoreFlags") and hasattr(_crypto.X509StoreFlags, "PARTIAL_CHAIN"):
             store.set_flags(_crypto.X509StoreFlags.PARTIAL_CHAIN)
     except (AttributeError, ImportError, OpenSSL.SSL.Error, OSError, ValueError):
         # Best-effort; if not available, default chain building applies
@@ -106,24 +104,18 @@ _CURRENT_SESSION_MANAGER: ContextVar[weakref.ref[SessionManager] | None] = Conte
 )
 
 
-def get_current_session_manager(
-    create_default_if_missing: bool = True, **clone_kwargs
-) -> SessionManager | None:
+def get_current_session_manager(create_default_if_missing: bool = True, **clone_kwargs) -> SessionManager | None:
     """Return the SessionManager associated with the current handshake, if any.
 
     If the weak reference is dead or no manager was set, returns ``None``.
     """
     sm_weak_ref = _CURRENT_SESSION_MANAGER.get()
     if sm_weak_ref is None:
-        return (
-            SessionManagerFactory.get_manager() if create_default_if_missing else None
-        )
+        return SessionManagerFactory.get_manager() if create_default_if_missing else None
     context_session_manager = sm_weak_ref()
 
     if context_session_manager is None:
-        return (
-            SessionManagerFactory.get_manager() if create_default_if_missing else None
-        )
+        return SessionManagerFactory.get_manager() if create_default_if_missing else None
 
     return context_session_manager.clone(**clone_kwargs)
 
@@ -169,9 +161,7 @@ def _load_trusted_certificates(cafile: str | None) -> list[x509.Certificate]:
 
 
 @wraps(ssl_.ssl_wrap_socket)
-def ssl_wrap_socket_with_cert_revocation_checks(
-    *args: Any, **kwargs: Any
-) -> WrappedSocket:
+def ssl_wrap_socket_with_cert_revocation_checks(*args: Any, **kwargs: Any) -> WrappedSocket:
     # Bind passed args/kwargs to the underlying signature to support both positional and keyword calls
     bound = _sig(ssl_.ssl_wrap_socket).bind_partial(*args, **kwargs)
     params = bound.arguments
@@ -197,10 +187,7 @@ def ssl_wrap_socket_with_cert_revocation_checks(
         "CRL Check Mode: %s",
         FEATURE_CRL_CONFIG.cert_revocation_check_mode.name,
     )
-    if (
-        FEATURE_CRL_CONFIG.cert_revocation_check_mode
-        != CertRevocationCheckMode.DISABLED
-    ):
+    if FEATURE_CRL_CONFIG.cert_revocation_check_mode != CertRevocationCheckMode.DISABLED:
         crl_validator = CRLValidator.from_config(
             FEATURE_CRL_CONFIG,
             get_current_session_manager(),
@@ -208,17 +195,10 @@ def ssl_wrap_socket_with_cert_revocation_checks(
         )
         if not crl_validator.validate_connection(ret.connection):
             raise OperationalError(
-                msg=(
-                    "The certificate is revoked or "
-                    "could not be validated via CRL: hostname={}".format(
-                        server_hostname
-                    )
-                ),
+                msg=(f"The certificate is revoked or could not be validated via CRL: hostname={server_hostname}"),
                 errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
             )
-        log.debug(
-            "The certificate revocation check was successful. No additional checks will be performed."
-        )
+        log.debug("The certificate revocation check was successful. No additional checks will be performed.")
         return ret
 
     log.debug(

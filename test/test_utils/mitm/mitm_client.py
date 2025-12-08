@@ -94,7 +94,7 @@ class MitmClient:
             FileNotFoundError,
             subprocess.TimeoutExpired,
         ) as e:
-            logger.error(f"mitmdump check failed: {e}")
+            logger.error("mitmdump check failed: %s", e)
             raise RuntimeError(
                 "mitmproxy (mitmdump) is not installed. Install with: pip install mitmproxy"
             ) from e
@@ -103,7 +103,7 @@ class MitmClient:
         """Start the mitmproxy process."""
         self._check_mitmdump_available()
 
-        logger.debug(f"Port will be written to: {self.port_file_path}")
+        logger.debug("Port will be written to: %s", self.port_file_path)
         logger.debug(
             f"Starting mitmdump process on {self.mitm_host}:0 (auto-assign port)..."
         )
@@ -131,7 +131,7 @@ class MitmClient:
             text=True,
             env=env,
         )
-        logger.debug(f"mitmdump process started with PID {self.mitm_process.pid}")
+        logger.debug("mitmdump process started with PID %s", self.mitm_process.pid)
 
         # Wait for CA certificate generation
         self._wait_for_ca_cert()
@@ -142,11 +142,11 @@ class MitmClient:
         # Verify proxy is accepting connections
         self._verify_proxy_listening()
 
-        logger.info(f"mitmproxy ready at {self.proxy_url}")
+        logger.info("mitmproxy ready at %s", self.proxy_url)
 
     def _wait_for_ca_cert(self):
         """Wait for mitmproxy to generate its CA certificate."""
-        logger.debug(f"Waiting for CA certificate at: {self.ca_cert_path}")
+        logger.debug("Waiting for CA certificate at: %s", self.ca_cert_path)
         start_time = time.time()
 
         while not self.ca_cert_path.exists():
@@ -171,7 +171,7 @@ class MitmClient:
 
             time.sleep(0.5)
 
-        logger.debug(f"CA certificate found at {self.ca_cert_path}")
+        logger.debug("CA certificate found at %s", self.ca_cert_path)
 
     def _wait_for_port(self):
         """Wait for the addon to write the port to the file."""
@@ -185,8 +185,8 @@ class MitmClient:
                 logger.error(
                     f"Timeout waiting for port file after {MITM_PORT_DETECTION_MAX_WAIT_SECONDS}s"
                 )
-                logger.error(f"Port file path: {self.port_file_path}")
-                logger.error(f"Port file exists: {Path(self.port_file_path).exists()}")
+                logger.error("Port file path: %s", self.port_file_path)
+                logger.error("Port file exists: %s", Path(self.port_file_path).exists())
                 self._cleanup_on_error()
                 raise TimeoutError("Could not determine mitmproxy port from addon")
 
@@ -205,14 +205,14 @@ class MitmClient:
                         port_str = f.read().strip()
                         if port_str:
                             self.mitm_port = int(port_str)
-                            logger.debug(f"Port detected from file: {self.mitm_port}")
+                            logger.debug("Port detected from file: %s", self.mitm_port)
                             break
                 except (ValueError, OSError) as e:
-                    logger.warning(f"Error reading port file: {e}")
+                    logger.warning("Error reading port file: %s", e)
 
             time.sleep(0.1)
 
-        logger.debug(f"Successfully detected port {self.mitm_port}")
+        logger.debug("Successfully detected port %s", self.mitm_port)
 
     def _verify_proxy_listening(self):
         """Verify that the proxy is accepting connections."""
@@ -224,7 +224,7 @@ class MitmClient:
                 pass
             logger.debug("Proxy is accepting connections!")
         except (socket.timeout, ConnectionRefusedError) as e:
-            logger.error(f"Proxy not accepting connections: {e}")
+            logger.error("Proxy not accepting connections: %s", e)
             self._cleanup_on_error()
             raise RuntimeError(f"mitmproxy not accepting connections: {e}") from e
 

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Coroutine, Generator
 from functools import wraps
-from typing import Any, Coroutine, Generator, Protocol, TypeVar, runtime_checkable
+from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from ._connection import SnowflakeConnection
 from ._cursor import DictCursor, SnowflakeCursor
+
 
 __all__ = [
     SnowflakeConnection,

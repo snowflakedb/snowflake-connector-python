@@ -5,16 +5,13 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+
 from collections import deque
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from logging import getLogger
 from typing import (
     TYPE_CHECKING,
     Any,
-    AsyncIterator,
-    Awaitable,
-    Callable,
-    Deque,
-    Iterator,
     Literal,
     Union,
     cast,
@@ -37,6 +34,7 @@ from ..result_batch import DownloadMetrics
 from ..telemetry import TelemetryField
 from ..time_util import get_time_millis
 
+
 if TYPE_CHECKING:
     from pandas import DataFrame
     from pyarrow import Table
@@ -50,7 +48,7 @@ class ResultSetIterator:
     def __init__(
         self,
         first_batch_iter: Iterator[tuple],
-        unfetched_batches: Deque[ResultBatch],
+        unfetched_batches: deque[ResultBatch],
         final: Callable[[], Awaitable[None]],
         prefetch_thread_num: int,
         **kw: Any,
@@ -88,10 +86,7 @@ class ResultSetIterator:
                     item,
                 )
 
-        tasks = [
-            self._download_batch_and_convert_to_list(result_batch)
-            for result_batch in self._unfetched_batches
-        ]
+        tasks = [self._download_batch_and_convert_to_list(result_batch) for result_batch in self._unfetched_batches]
         batches = await asyncio.gather(*tasks)
         for batch in batches:
             # Check for exceptions in each batch before extending
@@ -108,7 +103,6 @@ class ResultSetIterator:
 
     async def generator(self):
         if self._is_fetch_all:
-
             tasks = await self._download_all_batches()
             for value in self._first_batch_iter:
                 yield value
@@ -121,44 +115,32 @@ class ResultSetIterator:
             await self._final()
         else:
             download_tasks = deque()
-            for _ in range(
-                min(self._prefetch_thread_num, len(self._unfetched_batches))
-            ):
-                logger.debug(
-                    f"queuing download of result batch id: {self._unfetched_batches[0].id}"
-                )
-                download_tasks.append(
-                    asyncio.create_task(
-                        self._unfetched_batches.popleft().create_iter(**self._kw)
-                    )
-                )
+            for _ in range(min(self._prefetch_thread_num, len(self._unfetched_batches))):
+                logger.debug("queuing download of result batch id: %s", self._unfetched_batches[0].id)
+                download_tasks.append(asyncio.create_task(self._unfetched_batches.popleft().create_iter(**self._kw)))
 
             for value in self._first_batch_iter:
                 yield value
 
             i = 1
             while download_tasks:
-                logger.debug(f"user requesting to consume result batch {i}")
+                logger.debug("user requesting to consume result batch %s", i)
 
                 # Submit the next un-fetched batch to the pool
                 if self._unfetched_batches:
-                    logger.debug(
-                        f"queuing download of result batch id: {self._unfetched_batches[0].id}"
-                    )
+                    logger.debug("queuing download of result batch id: %s", self._unfetched_batches[0].id)
                     download_tasks.append(
-                        asyncio.create_task(
-                            self._unfetched_batches.popleft().create_iter(**self._kw)
-                        )
+                        asyncio.create_task(self._unfetched_batches.popleft().create_iter(**self._kw))
                     )
 
                 task = download_tasks.popleft()
                 # this will raise an exception if one has occurred
                 batch_iterator = await task
 
-                logger.debug(f"user began consuming result batch {i}")
+                logger.debug("user began consuming result batch %s", i)
                 for value in batch_iterator:
                     yield value
-                logger.debug(f"user finished consuming result batch {i}")
+                logger.debug("user finished consuming result batch %s", i)
                 i += 1
             await self._final()
 
@@ -179,19 +161,14 @@ class ResultSet(ResultSetSync):
             prefetch_thread_num,
             use_mp=False,  # async code depends on aio rather than multiprocessing
         )
-        self.batches = cast(
-            Union[list[JSONResultBatch], list[ArrowResultBatch]], self.batches
-        )
+        self.batches = cast(Union[list[JSONResultBatch], list[ArrowResultBatch]], self.batches)
 
     def _can_create_arrow_iter(self) -> None:
         # For now we don't support mixed ResultSets, so assume first partition's type
         #  represents them all
         head_type = type(self.batches[0])
         if head_type != ArrowResultBatch:
-            raise NotSupportedError(
-                f"Trying to use arrow fetching on {head_type} which "
-                f"is not ArrowResultChunk"
-            )
+            raise NotSupportedError(f"Trying to use arrow fetching on {head_type} which is not ArrowResultChunk")
 
     async def _create_iter(
         self,
@@ -213,7 +190,7 @@ class ResultSet(ResultSetSync):
         # batches that have not been fetched
         unfetched_batches = deque(self.batches[1:])
         for num, batch in enumerate(unfetched_batches):
-            logger.debug(f"result batch {num + 1} has id: {batch.id}")
+            logger.debug("result batch %s has id: %s", num + 1, batch.id)
 
         return ResultSetIterator(
             first_batch_iter,
@@ -230,15 +207,11 @@ class ResultSet(ResultSetSync):
     ) -> AsyncIterator[Table]:
         """Fetches all the results as Arrow Tables, chunked by Snowflake back-end."""
         self._can_create_arrow_iter()
-        result_set_iterator = await self._create_iter(
-            iter_unit=IterUnit.TABLE_UNIT, structure="arrow"
-        )
+        result_set_iterator = await self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow")
         return result_set_iterator.generator()
 
     @overload
-    async def _fetch_arrow_all(
-        self, force_return_table: Literal[False]
-    ) -> Table | None: ...
+    async def _fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None: ...
 
     @overload
     async def _fetch_arrow_all(self, force_return_table: Literal[True]) -> Table: ...
@@ -246,9 +219,7 @@ class ResultSet(ResultSetSync):
     async def _fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
         """Fetches a single Arrow Table from all of the ``ResultBatch``."""
         self._can_create_arrow_iter()
-        result_set_iterator = await self._create_iter(
-            iter_unit=IterUnit.TABLE_UNIT, structure="arrow"
-        )
+        result_set_iterator = await self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow")
         tables = list(await result_set_iterator.fetch_all_data())
         if tables:
             return pa.concat_tables(tables)
@@ -257,16 +228,12 @@ class ResultSet(ResultSetSync):
 
     async def _fetch_pandas_batches(self, **kwargs) -> AsyncIterator[DataFrame]:
         self._can_create_arrow_iter()
-        result_set_iterator = await self._create_iter(
-            iter_unit=IterUnit.TABLE_UNIT, structure="pandas", **kwargs
-        )
+        result_set_iterator = await self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="pandas", **kwargs)
         return result_set_iterator.generator()
 
     async def _fetch_pandas_all(self, **kwargs) -> DataFrame:
         """Fetches a single Pandas dataframe."""
-        result_set_iterator = await self._create_iter(
-            iter_unit=IterUnit.TABLE_UNIT, structure="pandas", **kwargs
-        )
+        result_set_iterator = await self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="pandas", **kwargs)
         concat_args = list(inspect.signature(pandas.concat).parameters)
         concat_kwargs = {k: kwargs.pop(k) for k in dict(kwargs) if k in concat_args}
         dataframes = await result_set_iterator.fetch_all_data()
@@ -290,9 +257,7 @@ class ResultSet(ResultSetSync):
         TIME_PARSING_CHUNKS in that order.
         """
         if self._cursor._first_chunk_time is not None:
-            time_consume_last_result = (
-                get_time_millis() - self._cursor._first_chunk_time
-            )
+            time_consume_last_result = get_time_millis() - self._cursor._first_chunk_time
             await self._cursor._log_telemetry_job_data(
                 TelemetryField.TIME_CONSUME_LAST_RESULT, time_consume_last_result
             )

@@ -7,14 +7,13 @@ import warnings
 from setuptools import Extension, setup
 from setuptools.command.egg_info import egg_info
 
+
 CONNECTOR_SRC_DIR = os.path.join("src", "snowflake", "connector")
 NANOARROW_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp", "ArrowIterator")
 
 VERSION = (1, 1, 1, None)  # Default
 try:
-    with open(
-        os.path.join(CONNECTOR_SRC_DIR, "generated_version.py"), encoding="utf-8"
-    ) as f:
+    with open(os.path.join(CONNECTOR_SRC_DIR, "generated_version.py"), encoding="utf-8") as f:
         exec(f.read())
 except Exception:
     with open(os.path.join(CONNECTOR_SRC_DIR, "version.py"), encoding="utf-8") as f:
@@ -41,12 +40,9 @@ cmd_class = {}
 
 _POSITIVE_VALUES = ("y", "yes", "t", "true", "1", "on")
 SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS = (
-    os.environ.get("SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS", "false").lower()
-    in _POSITIVE_VALUES
+    os.environ.get("SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSIONS", "false").lower() in _POSITIVE_VALUES
 )
-SNOWFLAKE_NO_BOTO = (
-    os.environ.get("SNOWFLAKE_NO_BOTO", "false").lower() in _POSITIVE_VALUES
-)
+SNOWFLAKE_NO_BOTO = os.environ.get("SNOWFLAKE_NO_BOTO", "false").lower() in _POSITIVE_VALUES
 
 try:
     from Cython.Build import cythonize
@@ -65,9 +61,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
         [
             Extension(
                 name="snowflake.connector.nanoarrow_arrow_iterator",
-                sources=[
-                    os.path.join(NANOARROW_SRC_DIR, "nanoarrow_arrow_iterator.pyx")
-                ],
+                sources=[os.path.join(NANOARROW_SRC_DIR, "nanoarrow_arrow_iterator.pyx")],
                 language="c++",
             ),
         ],
@@ -84,12 +78,8 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
 
             if ext.name == "snowflake.connector.nanoarrow_arrow_iterator":
                 NANOARROW_CPP_SRC_DIR = os.path.join(CONNECTOR_SRC_DIR, "nanoarrow_cpp")
-                NANOARROW_ARROW_ITERATOR_SRC_DIR = os.path.join(
-                    NANOARROW_CPP_SRC_DIR, "ArrowIterator"
-                )
-                NANOARROW_LOGGING_SRC_DIR = os.path.join(
-                    NANOARROW_CPP_SRC_DIR, "Logging"
-                )
+                NANOARROW_ARROW_ITERATOR_SRC_DIR = os.path.join(NANOARROW_CPP_SRC_DIR, "ArrowIterator")
+                NANOARROW_LOGGING_SRC_DIR = os.path.join(NANOARROW_CPP_SRC_DIR, "Logging")
 
                 ext.sources += [
                     os.path.join(
@@ -124,9 +114,7 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                         ("Util", "time.cpp"),
                     }
                 ]
-                ext.sources.append(
-                    os.path.join(NANOARROW_LOGGING_SRC_DIR, "logging.cpp")
-                )
+                ext.sources.append(os.path.join(NANOARROW_LOGGING_SRC_DIR, "logging.cpp"))
                 ext.include_dirs.append(NANOARROW_ARROW_ITERATOR_SRC_DIR)
                 ext.include_dirs.append(NANOARROW_LOGGING_SRC_DIR)
 
@@ -137,15 +125,10 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
                     if "std=" not in os.environ.get("CXXFLAGS", ""):
                         ext.extra_compile_args.append("-std=c++17")
                         ext.extra_compile_args.append("-D_GLIBCXX_USE_CXX11_ABI=0")
-                    if (
-                        sys.platform == "darwin"
-                        and "macosx-version-min" not in os.environ.get("CXXFLAGS", "")
-                    ):
+                    if sys.platform == "darwin" and "macosx-version-min" not in os.environ.get("CXXFLAGS", ""):
                         ext.extra_compile_args.append("-mmacosx-version-min=10.13")
 
-                ext.library_dirs.append(
-                    os.path.join(current_dir, self.build_lib, "snowflake", "connector")
-                )
+                ext.library_dirs.append(os.path.join(current_dir, self.build_lib, "snowflake", "connector"))
 
                 # sys.platform for linux used to return with version suffix, (i.e. linux2, linux3)
                 # After version 3.3, it will always be just 'linux'
@@ -161,15 +144,9 @@ if _ABLE_TO_COMPILE_EXTENSIONS and not SNOWFLAKE_DISABLE_COMPILE_ARROW_EXTENSION
 
             # the following is required by nanoarrow to compile c files
             def new__compile(obj, src: str, ext, cc_args, extra_postargs, pp_opts):
-                if (
-                    src.endswith("nanoarrow.c")
-                    or src.endswith("nanoarrow_ipc.c")
-                    or src.endswith("flatcc.c")
-                ):
+                if src.endswith("nanoarrow.c") or src.endswith("nanoarrow_ipc.c") or src.endswith("flatcc.c"):
                     extra_postargs = [s for s in extra_postargs if s != "-std=c++17"]
-                return original__compile(
-                    obj, src, ext, cc_args, extra_postargs, pp_opts
-                )
+                return original__compile(obj, src, ext, cc_args, extra_postargs, pp_opts)
 
             self.compiler._compile = new__compile
 

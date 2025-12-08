@@ -40,7 +40,7 @@ def running():
     try:
         with open(port_file, "w") as f:
             f.write(str(port))
-        logger.info(f"Proxy listening on port {port}, written to {port_file}")
+        logger.info("Proxy listening on port %s, written to %s", port, port_file)
     except OSError as e:
-        logger.error(f"Failed to write port to {port_file}: {e}")
+        logger.error("Failed to write port to %s: %s", port_file, e)
         sys.exit(1)

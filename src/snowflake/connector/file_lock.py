@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import logging
 import time
+
 from os import stat_result
 from pathlib import Path
 from time import sleep
+
 
 MAX_RETRIES = 5
 INITIAL_BACKOFF_SECONDS = 0.025
@@ -37,14 +39,14 @@ class FileLock:
             except FileNotFoundError:
                 pass
             except OSError as e:
-                raise FileLockError(
-                    f"Failed to remove stale lock file {self.path} due to {e=}"
-                )
+                raise FileLockError(f"Failed to remove stale lock file {self.path} due to {e=}")
 
         backoff_seconds = INITIAL_BACKOFF_SECONDS
         for attempt in range(MAX_RETRIES):
             self.logger.debug(
-                f"Trying to acquire file lock after {backoff_seconds} seconds in attempt number {attempt}.",
+                "Trying to acquire file lock after %s seconds in attempt number %s.",
+                backoff_seconds,
+                attempt,
             )
             backoff_seconds = backoff_seconds * 2
             try:
@@ -55,14 +57,10 @@ class FileLock:
                 sleep(backoff_seconds)
                 continue
             except OSError as e:
-                raise FileLockError(
-                    f"Failed to acquire lock file {self.path} due to {e=}"
-                )
+                raise FileLockError(f"Failed to acquire lock file {self.path} due to {e=}")
 
         if not self.locked:
-            raise FileLockError(
-                f"Failed to acquire file lock, after {MAX_RETRIES} attempts."
-            )
+            raise FileLockError(f"Failed to acquire file lock, after {MAX_RETRIES} attempts.")
 
     def __exit__(self, exc_type, exc_val, exc_tbc):
         try:

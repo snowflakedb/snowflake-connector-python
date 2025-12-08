@@ -11,7 +11,7 @@ def test_mfa_successful():
     connection_parameters["client_request_mfa_token"] = True
     test_helper = AuthorizationTestHelper(connection_parameters)
     totp_codes = test_helper.get_totp()
-    logging.info(f"Got {len(totp_codes)} TOTP codes to try")
+    logging.info("Got %s TOTP codes to try", len(totp_codes))
 
     connection_success = test_helper.connect_and_execute_simple_query_with_mfa_token(
         totp_codes

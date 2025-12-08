@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+
 from functools import cached_property
 from typing import Protocol
 
