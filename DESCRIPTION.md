@@ -9,6 +9,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - v4.2.0(TBD)
   - Added support for async I/O. Asynchronous version of connector is available via `snowflake.connector.aio` module.
+  - Added `SnowflakeCursor.stats` property - to expose DML queries data when `SnowflakeCursor.rowcount` is not sufficient.
+
 - v4.1.1(TBD)
   - Relaxed pandas dependency requirements for Python below 3.12.
   - Changed CRL cache cleanup background task to daemon to avoid blocking main thread.
