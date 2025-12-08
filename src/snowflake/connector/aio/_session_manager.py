@@ -103,7 +103,7 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
             ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
             use_fail_open=self._snowflake_ocsp_mode == OCSPMode.FAIL_OPEN,
             hostname=hostname,
-            # TODO: uncomment when issues with ocsp revoked certs in tests are fixed (reapply #2559)
+            # TODO (SNOW-2871292): uncomment when issues with ocsp revoked certs in tests are fixed (reapply #2559)
             # root_certs_dict_lock_timeout=FEATURE_ROOT_CERTS_DICT_LOCK_TIMEOUT,
         ).validate(hostname, protocol, session_manager=session_manager)
         if not v:
