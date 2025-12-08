@@ -22,4 +22,4 @@ python3 -m pip install --break-system-packages -e ".[development]"
 python3 -m pytest test/auth/ --ignore=test/auth/aio
 
 python3 -m pip install --break-system-packages -e ".[development,aio,aioboto]"
-python3 -m pytest test/auth/aio/
+python3 -m pytest -vvv test/auth/aio/

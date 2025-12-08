@@ -69,7 +69,7 @@ else
             continue
         fi
 
-        TEST_LIST=`echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,aio}-ci | sed 's/ /,/g'`
+        TEST_LIST=`echo py${PYTHON_VERSION/\./}-{extras,unit-parallel,integ-parallel,pandas-parallel,aio-parallel}-ci | sed 's/ /,/g'`
         TEST_ENVLIST=fix_lint,$TEST_LIST,py${PYTHON_VERSION/\./}-coverage
         echo "[Info] Running tox for ${TEST_ENVLIST}"
 
