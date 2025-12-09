@@ -472,12 +472,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         """
         if self._stats_data is None:
             return QueryResultStats(None, None, None, None)
-        return QueryResultStats(
-            num_rows_inserted=self._stats_data.get("numRowsInserted", None),
-            num_rows_deleted=self._stats_data.get("numRowsDeleted", None),
-            num_rows_updated=self._stats_data.get("numRowsUpdated", None),
-            num_dml_duplicates=self._stats_data.get("numDmlDuplicates", None),
-        )
+        return QueryResultStats.from_dict(self._stats_data)
 
     @property
     def rownumber(self) -> int | None:
@@ -1228,7 +1223,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
         # Extract stats object if available (for DML operations like CTAS, INSERT, UPDATE, DELETE)
         self._stats_data = data.get("stats", None)
-        logger.debug(f"Execution DML stats: %s", self.stats)
+        logger.debug("Execution DML stats: %s", self.stats)
 
         # don't update the row count when the result is returned from `describe` method
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
@@ -2050,3 +2045,12 @@ class QueryResultStats(NamedTuple):
     num_rows_deleted: int | None = None
     num_rows_updated: int | None = None
     num_dml_duplicates: int | None = None
+
+    @classmethod
+    def from_dict(cls, stats_dict: dict[str, int]) -> QueryResultStats:
+        return cls(
+            num_rows_inserted=stats_dict.get("numRowsInserted", None),
+            num_rows_deleted=stats_dict.get("numRowsDeleted", None),
+            num_rows_updated=stats_dict.get("numRowsUpdated", None),
+            num_dml_duplicates=stats_dict.get("numDmlDuplicates", None),
+        )
