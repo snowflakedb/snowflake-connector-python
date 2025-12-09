@@ -57,7 +57,7 @@ def clean_browser_processes():
     if os.getenv("AUTHENTICATION_TESTS_ENV") == "docker":
         try:
             clean_browser_processes_path = "/externalbrowser/cleanBrowserProcesses.js"
-            process = subprocess.run(["node", clean_browser_processes_path], timeout=15)
+            process = subprocess.run(["node", clean_browser_processes_path], timeout=30)
             logger.debug(f"OUTPUT:  {process.stdout}, ERRORS: {process.stderr}")
         except Exception as e:
             raise RuntimeError(e)
@@ -167,7 +167,7 @@ class AuthorizationTestHelper:
                     login,
                     password,
                 ],
-                timeout=15,
+                timeout=30,
             )
             logger.debug(f"OUTPUT:  {process.stdout}, ERRORS: {process.stderr}")
         except Exception as e:
