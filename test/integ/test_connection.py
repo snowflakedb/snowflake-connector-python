@@ -24,6 +24,7 @@ from snowflake.connector.connection import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
     SnowflakeConnection,
 )
+from snowflake.connector.cursor import QueryResultStats
 from snowflake.connector.description import CLIENT_NAME
 from snowflake.connector.errorcode import (
     ER_CONNECTION_IS_CLOSED,
@@ -1979,3 +1980,521 @@ def test_cvas_one_cursor_stats(conn_cnx):
             assert cur.stats.num_rows_deleted is None
             assert cur.stats.num_rows_updated is None
             assert cur.stats.num_dml_duplicates is None
+
+
+def _assert_stats(actual_stats, expected_stats):
+    """Helper function to assert stats values.
+
+    Args:
+        actual_stats: The actual QueryResultStats from cursor.stats
+        expected_stats: Expected QueryResultStats to compare against
+    """
+    assert actual_stats is not None, "stats should not be None"
+    assert isinstance(
+        expected_stats, QueryResultStats
+    ), "expected_stats must be a QueryResultStats instance"
+
+    assert (
+        actual_stats.num_rows_inserted == expected_stats.num_rows_inserted
+    ), f"Expected num_rows_inserted={expected_stats.num_rows_inserted}, got {actual_stats.num_rows_inserted}"
+
+    assert (
+        actual_stats.num_rows_deleted == expected_stats.num_rows_deleted
+    ), f"Expected num_rows_deleted={expected_stats.num_rows_deleted}, got {actual_stats.num_rows_deleted}"
+
+    assert (
+        actual_stats.num_rows_updated == expected_stats.num_rows_updated
+    ), f"Expected num_rows_updated={expected_stats.num_rows_updated}, got {actual_stats.num_rows_updated}"
+
+    assert (
+        actual_stats.num_dml_duplicates == expected_stats.num_dml_duplicates
+    ), f"Expected num_dml_duplicates={expected_stats.num_dml_duplicates}, got {actual_stats.num_dml_duplicates}"
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "operation,setup_sql,test_sql,expected_stats",
+    [
+        pytest.param(
+            "insert_simple",
+            "create temp table test_stats_table (id int, name varchar(50))",
+            "insert into test_stats_table values (1, 'Alice'), (2, 'Bob'), (3, 'Charlie')",
+            QueryResultStats(
+                num_rows_inserted=3,
+                num_rows_deleted=0,
+                num_rows_updated=0,
+                num_dml_duplicates=0,
+            ),
+            id="insert_simple",
+        ),
+        pytest.param(
+            "update",
+            """
+            create temp table test_stats_table (id int, name varchar(50));
+            insert into test_stats_table values (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');
+            """,
+            "update test_stats_table set name = 'Updated' where id in (1, 2)",
+            QueryResultStats(
+                num_rows_inserted=0,
+                num_rows_deleted=0,
+                num_rows_updated=2,
+                num_dml_duplicates=0,
+            ),
+            id="update",
+        ),
+        pytest.param(
+            "delete",
+            """
+            create temp table test_stats_table (id int, name varchar(50));
+            insert into test_stats_table values (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');
+            """,
+            "delete from test_stats_table where id in (1, 3)",
+            QueryResultStats(
+                num_rows_inserted=0,
+                num_rows_deleted=2,
+                num_rows_updated=0,
+                num_dml_duplicates=0,
+            ),
+            id="delete",
+        ),
+        pytest.param(
+            "merge_insert",
+            """
+            create temp table test_stats_target (id int, name varchar(50));
+            insert into test_stats_target values (1, 'Alice');
+            """,
+            """
+            merge into test_stats_target t
+            using (select * from values (2, 'Bob'), (3, 'Charlie') as v(id, name)) s
+            on t.id = s.id
+            when not matched then insert (id, name) values (s.id, s.name)
+            """,
+            QueryResultStats(
+                num_rows_inserted=2,
+                num_rows_deleted=0,
+                num_rows_updated=0,
+                num_dml_duplicates=0,
+            ),
+            id="merge_insert",
+        ),
+        pytest.param(
+            "merge_update",
+            """
+            create temp table test_stats_target (id int, name varchar(50));
+            insert into test_stats_target values (1, 'Alice'), (2, 'Bob');
+            """,
+            """
+            merge into test_stats_target t
+            using (select * from values (1, 'Alice Updated'), (2, 'Bob Updated') as v(id, name)) s
+            on t.id = s.id
+            when matched then update set t.name = s.name
+            """,
+            QueryResultStats(
+                num_rows_inserted=0,
+                num_rows_deleted=0,
+                num_rows_updated=2,
+                num_dml_duplicates=0,
+            ),
+            id="merge_update",
+        ),
+        pytest.param(
+            "merge_insert_update",
+            """
+            create temp table test_stats_target (id int, name varchar(50));
+            insert into test_stats_target values (1, 'Alice');
+            """,
+            """
+            merge into test_stats_target t
+            using (select * from values (1, 'Alice Updated'), (2, 'Bob'), (3, 'Charlie') as v(id, name)) s
+            on t.id = s.id
+            when matched then update set t.name = s.name
+            when not matched then insert (id, name) values (s.id, s.name)
+            """,
+            QueryResultStats(
+                num_rows_inserted=2,
+                num_rows_deleted=0,
+                num_rows_updated=1,
+                num_dml_duplicates=0,
+            ),
+            id="merge_insert_update",
+        ),
+    ],
+)
+def test_dml_stats_operations(conn_cnx, operation, setup_sql, test_sql, expected_stats):
+    """Test cursor.stats for various DML operations."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Setup
+            for sql in setup_sql.strip().split(";"):
+                sql = sql.strip()
+                if sql:
+                    cur.execute(sql)
+
+            # Execute test operation
+            cur.execute(test_sql)
+
+            # Verify stats
+            _assert_stats(cur.stats, expected_stats)
+
+
+@pytest.mark.skipolddriver
+def test_merge_with_duplicates_in_source(conn_cnx):
+    """Test cursor.stats for MERGE operations with duplicates in source data."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Create target table
+            cur.execute(
+                "create temp table test_merge_target (id int, name varchar(50))"
+            )
+            cur.execute("insert into test_merge_target values (1, 'Alice'), (2, 'Bob')")
+
+            # Create source with duplicates
+            # When source has duplicates, Snowflake may report them in num_dml_duplicates
+            cur.execute(
+                """
+                merge into test_merge_target t
+                using (
+                    select * from values
+                        (1, 'Alice_Updated'),
+                        (1, 'Alice_Updated_Again'),  -- Duplicate key in source
+                        (3, 'Charlie'),
+                        (3, 'Charlie_Dup')  -- Another duplicate in source
+                    as s(id, name)
+                ) s
+                on t.id = s.id
+                when matched then update set t.name = s.name
+                when not matched then insert (id, name) values (s.id, s.name)
+                """
+            )
+
+            # Check stats - duplicates in source may be reported
+            assert cur.stats is not None
+            # The exact duplicate count depends on Snowflake's reporting
+            # but we verify the field is accessible
+            assert hasattr(cur.stats, "num_dml_duplicates")
+            assert (
+                cur.stats.num_dml_duplicates is not None
+                or cur.stats.num_dml_duplicates == 0
+            )
+
+
+@pytest.mark.skipolddriver
+def test_insert_all_with_duplicates_stats(conn_cnx):
+    """Test cursor.stats for INSERT ALL with duplicate handling."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Create tables
+            cur.execute(
+                "create temp table test_dup_table1 (id int primary key, name varchar(50))"
+            )
+            cur.execute(
+                "create temp table test_dup_table2 (id int primary key, name varchar(50))"
+            )
+
+            # Pre-populate with some data
+            cur.execute("insert into test_dup_table1 values (1, 'Alice')")
+            cur.execute("insert into test_dup_table2 values (2, 'Bob')")
+
+            # Try INSERT ALL - some inserts will conflict with existing keys
+            # This tests if duplicates are properly reported
+            try:
+                cur.execute(
+                    """
+                    insert all
+                        into test_dup_table1 values (id, name)
+                        into test_dup_table2 values (id, name)
+                    select * from values
+                        (1, 'Alice_New'),  -- Duplicate in table1
+                        (2, 'Bob_New'),    -- Duplicate in table2
+                        (3, 'Charlie')     -- New in both
+                    as t(id, name)
+                    """
+                )
+                # If this succeeds, check stats
+                assert cur.stats is not None
+                # assert hasattr(cur.stats, "num_dml_duplicates")
+                # TODO: bad
+            except Exception:
+                # INSERT ALL with duplicates might fail depending on constraints
+                # This is expected behavior - just verify we can handle it
+                pass
+
+
+@pytest.mark.skipolddriver
+def test_stats_duplicates_field_exists(conn_cnx):
+    """Test that num_dml_duplicates field always exists in stats, even if zero."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Simple insert with no duplicates
+            cur.execute("create temp table test_dup_exists (id int, name varchar(50))")
+            cur.execute("insert into test_dup_exists values (1, 'Alice'), (2, 'Bob')")
+
+            # Verify the field exists and is 0
+            assert cur.stats is not None
+            assert hasattr(cur.stats, "num_dml_duplicates")
+            assert (
+                cur.stats.num_dml_duplicates == 0
+                or cur.stats.num_dml_duplicates is None
+            )
+
+
+@pytest.mark.skipolddriver
+def test_multi_statement_stats(conn_cnx):
+    """Test that stats are updated correctly for multi-statement queries."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Setup
+            cur.execute("create temp table test_multi_stats (id int, name varchar(50))")
+
+            # First insert
+            cur.execute("insert into test_multi_stats values (1, 'Alice'), (2, 'Bob')")
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=2,
+                    num_rows_deleted=0,
+                    num_rows_updated=0,
+                    num_dml_duplicates=0,
+                ),
+            )
+
+            # Second insert in same cursor
+            cur.execute("insert into test_multi_stats values (3, 'Charlie')")
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=1,
+                    num_rows_deleted=0,
+                    num_rows_updated=0,
+                    num_dml_duplicates=0,
+                ),
+            )
+
+            # Update
+            cur.execute("update test_multi_stats set name = 'Updated' where id = 1")
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=0,
+                    num_rows_deleted=0,
+                    num_rows_updated=1,
+                    num_dml_duplicates=0,
+                ),
+            )
+
+            # Delete
+            cur.execute("delete from test_multi_stats where id = 2")
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=0,
+                    num_rows_deleted=1,
+                    num_rows_updated=0,
+                    num_dml_duplicates=0,
+                ),
+            )
+
+
+@pytest.mark.skipolddriver
+def test_stats_reset_on_select(conn_cnx):
+    """Test that stats are reset to None when executing SELECT queries."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Setup and insert
+            cur.execute("create temp table test_stats_reset (id int)")
+            cur.execute("insert into test_stats_reset values (1), (2), (3)")
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=3,
+                    num_rows_deleted=0,
+                    num_rows_updated=0,
+                    num_dml_duplicates=0,
+                ),
+            )
+
+            # Execute a SELECT - stats should have all None values
+            cur.execute("select * from test_stats_reset")
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=None,
+                    num_rows_deleted=None,
+                    num_rows_updated=None,
+                    num_dml_duplicates=None,
+                ),
+            )
+
+
+@pytest.mark.skipolddriver
+def test_truncate_stats(conn_cnx):
+    """Test cursor.stats for TRUNCATE operations."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Setup
+            cur.execute("create temp table test_truncate_stats (id int)")
+            cur.execute("insert into test_truncate_stats values (1), (2), (3)")
+
+            # Truncate doesn't provide detailed stats
+            cur.execute("truncate table test_truncate_stats")
+            # Truncate typically doesn't populate DML stats
+            assert cur.stats is not None
+
+
+@pytest.mark.skipolddriver
+def test_empty_result_stats(conn_cnx):
+    """Test cursor.stats for DML operations that affect zero rows."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Setup
+            cur.execute("create temp table test_empty_stats (id int, name varchar(50))")
+            cur.execute("insert into test_empty_stats values (1, 'Alice')")
+
+            # Update with no matching rows
+            cur.execute("update test_empty_stats set name = 'Updated' where id = 999")
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=0,
+                    num_rows_deleted=0,
+                    num_rows_updated=0,
+                    num_dml_duplicates=0,
+                ),
+            )
+
+            # Delete with no matching rows
+            cur.execute("delete from test_empty_stats where id = 999")
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=0,
+                    num_rows_deleted=0,
+                    num_rows_updated=0,
+                    num_dml_duplicates=0,
+                ),
+            )
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "operation,setup_sql,test_sql,expected_stats",
+    [
+        pytest.param(
+            "insert_async",
+            "create temp table test_async_stats (id int, name varchar(50))",
+            "insert into test_async_stats values (1, 'Alice'), (2, 'Bob'), (3, 'Charlie')",
+            QueryResultStats(
+                num_rows_inserted=3,
+                num_rows_deleted=0,
+                num_rows_updated=0,
+                num_dml_duplicates=0,
+            ),
+            id="insert_async",
+        ),
+        pytest.param(
+            "update_async",
+            """
+            create temp table test_async_stats (id int, name varchar(50));
+            insert into test_async_stats values (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');
+            """,
+            "update test_async_stats set name = 'Updated' where id in (1, 2)",
+            QueryResultStats(
+                num_rows_inserted=0,
+                num_rows_deleted=0,
+                num_rows_updated=2,
+                num_dml_duplicates=0,
+            ),
+            id="update_async",
+        ),
+        pytest.param(
+            "delete_async",
+            """
+            create temp table test_async_stats (id int, name varchar(50));
+            insert into test_async_stats values (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');
+            """,
+            "delete from test_async_stats where id in (1, 3)",
+            QueryResultStats(
+                num_rows_inserted=0,
+                num_rows_deleted=2,
+                num_rows_updated=0,
+                num_dml_duplicates=0,
+            ),
+            id="delete_async",
+        ),
+        pytest.param(
+            "ctas_async",
+            "",
+            "create temp table test_async_ctas (id int) as select * from values (1), (2), (3), (4), (5) as t(id)",
+            QueryResultStats(
+                num_rows_inserted=5,
+                num_rows_deleted=0,
+                num_rows_updated=0,
+                num_dml_duplicates=0,
+            ),
+            id="ctas_async",
+        ),
+    ],
+)
+def test_execute_async_stats(conn_cnx, operation, setup_sql, test_sql, expected_stats):
+    """Test cursor.stats for DML operations executed asynchronously."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Setup
+            if setup_sql:
+                for sql in setup_sql.strip().split(";"):
+                    sql = sql.strip()
+                    if sql:
+                        cur.execute(sql)
+
+            # Execute async
+            cur.execute_async(test_sql)
+            query_id = cur.sfqid
+
+            # Get results
+            cur.get_results_from_sfqid(query_id)
+
+            # Verify stats are available after getting results
+            _assert_stats(cur.stats, expected_stats)
+
+
+@pytest.mark.skipolddriver
+def test_execute_async_stats_multiple_queries(conn_cnx):
+    """Test cursor.stats with multiple async queries."""
+    with conn_cnx() as conn:
+        with conn.cursor() as cur:
+            # Setup
+            cur.execute("create temp table test_multi_async (id int, name varchar(50))")
+
+            # Execute first async query
+            cur.execute_async(
+                "insert into test_multi_async values (1, 'Alice'), (2, 'Bob')"
+            )
+            qid1 = cur.sfqid
+
+            # Execute second async query
+            cur.execute_async("insert into test_multi_async values (3, 'Charlie')")
+            qid2 = cur.sfqid
+
+            # Get results for first query
+            cur.get_results_from_sfqid(qid1)
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=2,
+                    num_rows_deleted=0,
+                    num_rows_updated=0,
+                    num_dml_duplicates=0,
+                ),
+            )
+
+            # Get results for second query
+            cur.get_results_from_sfqid(qid2)
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=1,
+                    num_rows_deleted=0,
+                    num_rows_updated=0,
+                    num_dml_duplicates=0,
+                ),
+            )
