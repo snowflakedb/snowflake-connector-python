@@ -28,6 +28,7 @@ from snowflake.connector.aio import SnowflakeConnection
 from snowflake.connector.aio._description import CLIENT_NAME
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.connection import DEFAULT_CLIENT_PREFETCH_THREADS
+from snowflake.connector.constants import PARAMETER_MULTI_STATEMENT_COUNT
 from snowflake.connector.cursor import QueryResultStats
 from snowflake.connector.errorcode import (
     ER_CONNECTION_IS_CLOSED,
@@ -2062,6 +2063,52 @@ def _assert_stats(actual_stats, expected_stats):
             ),
             id="merge_insert_update",
         ),
+        pytest.param(
+            "merge_delete",
+            """
+            create temp table test_stats_target (id int, name varchar(50));
+            insert into test_stats_target values (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');
+            """,
+            """
+            merge into test_stats_target t
+            using (select * from values (1, 'Delete Me'), (2, 'Delete Me Too') as v(id, name)) s
+            on t.id = s.id
+            when matched then delete
+            """,
+            QueryResultStats(
+                num_rows_inserted=0,
+                num_rows_deleted=2,
+                num_rows_updated=0,
+                num_dml_duplicates=0,
+            ),
+            id="merge_delete",
+        ),
+        pytest.param(
+            "merge_insert_update_delete",
+            """
+            create temp table test_stats_target (id int, name varchar(50), status varchar(20));
+            insert into test_stats_target values (1, 'Alice', 'active'), (2, 'Bob', 'inactive'), (3, 'Charlie', 'active');
+            """,
+            """
+            merge into test_stats_target t
+            using (select * from values
+                (1, 'Alice Updated', 'active'),
+                (2, 'Bob', 'inactive'),
+                (4, 'David', 'active')
+                as v(id, name, status)) s
+            on t.id = s.id
+            when matched and s.status = 'active' then update set t.name = s.name
+            when matched and s.status = 'inactive' then delete
+            when not matched then insert (id, name, status) values (s.id, s.name, s.status)
+            """,
+            QueryResultStats(
+                num_rows_inserted=1,
+                num_rows_deleted=1,
+                num_rows_updated=1,
+                num_dml_duplicates=0,
+            ),
+            id="merge_insert_update_delete",
+        ),
     ],
 )
 async def test_dml_stats_operations(
@@ -2084,164 +2131,157 @@ async def test_dml_stats_operations(
 
 
 @pytest.mark.skipolddriver
-async def test_merge_with_duplicates_in_source(conn_cnx):
-    """Test cursor.stats for MERGE operations with duplicates in source data."""
+async def test_copy_into_stats_with_stage(conn_cnx, tmp_path):
+    """Test cursor.stats for COPY INTO operations with actual stage files."""
+    import csv
+
+    # Create a CSV file
+    csv_file = tmp_path / "test_data.csv"
+    with open(csv_file, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow([1, "Alice"])
+        writer.writerow([2, "Bob"])
+        writer.writerow([3, "Charlie"])
+
     async with conn_cnx() as conn:
         async with conn.cursor() as cur:
-            # Create target table
+            # Create table and stage
             await cur.execute(
-                "create temp table test_merge_target (id int, name varchar(50))"
+                "create temp table test_copy_stats (id int, name varchar(50))"
             )
-            await cur.execute(
-                "insert into test_merge_target values (1, 'Alice'), (2, 'Bob')"
-            )
+            await cur.execute("create temp stage test_copy_stage")
 
-            # Create source with duplicates
-            # When source has duplicates, Snowflake may report them in num_dml_duplicates
+            # PUT file to stage
+            await cur.execute(f"put file://{csv_file} @test_copy_stage")
+
+            # COPY INTO from stage
             await cur.execute(
                 """
-                merge into test_merge_target t
-                using (
-                    select * from values
-                        (1, 'Alice_Updated'),
-                        (1, 'Alice_Updated_Again'),  -- Duplicate key in source
-                        (3, 'Charlie'),
-                        (3, 'Charlie_Dup')  -- Another duplicate in source
-                    as s(id, name)
-                ) s
-                on t.id = s.id
-                when matched then update set t.name = s.name
-                when not matched then insert (id, name) values (s.id, s.name)
+                copy into test_copy_stats
+                from @test_copy_stage/test_data.csv.gz
+                file_format = (type = csv)
                 """
             )
 
-            # Check stats - duplicates in source may be reported
+            # Verify stats
             assert cur.stats is not None
-            # The exact duplicate count depends on Snowflake's reporting
-            # but we verify the field is accessible
-            assert hasattr(cur.stats, "num_dml_duplicates")
-            assert (
-                cur.stats.num_dml_duplicates is not None
-                or cur.stats.num_dml_duplicates == 0
-            )
+            assert cur.stats.num_rows_inserted == 3
+            assert cur.stats.num_rows_deleted == 0
+            assert cur.stats.num_rows_updated == 0
+            assert cur.stats.num_dml_duplicates == 0
 
 
 @pytest.mark.skipolddriver
-async def test_insert_all_with_duplicates_stats(conn_cnx):
-    """Test cursor.stats for INSERT ALL with duplicate handling."""
+async def test_update_with_dml_duplicates(conn_cnx):
+    """Test cursor.stats for UPDATE operations that generate numDmlDuplicates.
+
+    When a row in the updated table is matched by multiple rows in the FROM clause,
+    Snowflake reports the extra matches as duplicates in numDmlDuplicates.
+    """
     async with conn_cnx() as conn:
         async with conn.cursor() as cur:
-            # Create tables
+            # test_src has 15 rows: five 0's, five 1's, five 2's
+            await cur.execute("create temp table test_src (c1 int, c2 int)")
             await cur.execute(
-                "create temp table test_dup_table1 (id int primary key, name varchar(50))"
+                "insert into test_src values (0, 100), (1, 100), (2, 100), (0, 100), (1, 100), "
+                "(2, 100), (0, 100), (1, 100), (2, 100), (0, 100), (1, 100), (2, 100), "
+                "(0, 100), (1, 100), (2, 100)"
             )
+
+            # test_target has 4 rows: two 0's, one 1, one 2
+            await cur.execute("create temp table test_target (c int)")
+            await cur.execute("insert into test_target values (0), (1), (2), (0)")
+
+            # UPDATE with FROM clause:
+            # - Each of 5 rows with c1=0 matches 2 rows in test_target (duplicate count: 5 × 1 = 5)
+            # - Each of 5 rows with c1=1 matches 1 row in test_target (duplicate count: 0)
+            # - Each of 5 rows with c1=2 matches 1 row in test_target (duplicate count: 0)
+            # Total duplicates: 5
             await cur.execute(
-                "create temp table test_dup_table2 (id int primary key, name varchar(50))"
+                """
+                update test_src set c2 = test_target.c
+                from test_target
+                where test_src.c1 = test_target.c
+                """
             )
 
-            # Pre-populate with some data
-            await cur.execute("insert into test_dup_table1 values (1, 'Alice')")
-            await cur.execute("insert into test_dup_table2 values (2, 'Bob')")
-
-            # Try INSERT ALL - some inserts will conflict with existing keys
-            # This tests if duplicates are properly reported
-            try:
-                await cur.execute(
-                    """
-                    insert all
-                        into test_dup_table1 values (id, name)
-                        into test_dup_table2 values (id, name)
-                    select * from values
-                        (1, 'Alice_New'),  -- Duplicate in table1
-                        (2, 'Bob_New'),    -- Duplicate in table2
-                        (3, 'Charlie')     -- New in both
-                    as t(id, name)
-                    """
-                )
-                # If this succeeds, check stats
-                assert cur.stats is not None
-                assert hasattr(cur.stats, "num_dml_duplicates")
-                # TODO: bad
-            except Exception:
-                # INSERT ALL with duplicates might fail depending on constraints
-                # This is expected behavior - just verify we can handle it
-                pass
-
-
-@pytest.mark.skipolddriver
-async def test_stats_duplicates_field_exists(conn_cnx):
-    """Test that num_dml_duplicates field always exists in stats, even if zero."""
-    async with conn_cnx() as conn:
-        async with conn.cursor() as cur:
-            # Simple insert with no duplicates
-            await cur.execute(
-                "create temp table test_dup_exists (id int, name varchar(50))"
-            )
-            await cur.execute(
-                "insert into test_dup_exists values (1, 'Alice'), (2, 'Bob')"
-            )
-
-            # Verify the field exists and is 0
-            assert cur.stats is not None
-            assert hasattr(cur.stats, "num_dml_duplicates")
-            assert (
-                cur.stats.num_dml_duplicates == 0
-                or cur.stats.num_dml_duplicates is None
-            )
-
-
-@pytest.mark.skipolddriver
-async def test_multi_statement_stats(conn_cnx):
-    """Test that stats are updated correctly for multi-statement queries."""
-    async with conn_cnx() as conn:
-        async with conn.cursor() as cur:
-            # Setup
-            await cur.execute(
-                "create temp table test_multi_stats (id int, name varchar(50))"
-            )
-
-            # First insert
-            await cur.execute(
-                "insert into test_multi_stats values (1, 'Alice'), (2, 'Bob')"
-            )
-            _assert_stats(
-                cur.stats,
-                QueryResultStats(
-                    num_rows_inserted=2,
-                    num_rows_deleted=0,
-                    num_rows_updated=0,
-                    num_dml_duplicates=0,
-                ),
-            )
-
-            # Second insert in same cursor
-            await cur.execute("insert into test_multi_stats values (3, 'Charlie')")
-            _assert_stats(
-                cur.stats,
-                QueryResultStats(
-                    num_rows_inserted=1,
-                    num_rows_deleted=0,
-                    num_rows_updated=0,
-                    num_dml_duplicates=0,
-                ),
-            )
-
-            # Update
-            await cur.execute(
-                "update test_multi_stats set name = 'Updated' where id = 1"
-            )
             _assert_stats(
                 cur.stats,
                 QueryResultStats(
                     num_rows_inserted=0,
                     num_rows_deleted=0,
-                    num_rows_updated=1,
+                    num_rows_updated=15,
+                    num_dml_duplicates=5,
+                ),
+            )
+
+
+@pytest.mark.skipolddriver
+async def test_multi_table_insert_overwrite_stats(conn_cnx):
+    """Test cursor.stats for multi-table INSERT OVERWRITE operations."""
+    async with conn_cnx() as conn:
+        async with conn.cursor() as cur:
+            # Source has 3 values: 5, 15, 25
+            await cur.execute("create temp table test_src_multi (c1 int)")
+            await cur.execute("insert into test_src_multi values (5), (15), (25)")
+
+            # Target tables with existing data
+            await cur.execute("create temp table test_tgt1 (c int)")
+            await cur.execute("create temp table test_tgt2 (c int)")
+            await cur.execute("insert into test_tgt1 values (100), (101)")
+            await cur.execute("insert into test_tgt2 values (200), (201), (202)")
+
+            # INSERT OVERWRITE ALL evaluates ALL matching WHEN clauses per row:
+            # - c1=5: no WHENs match → else clause → 1 insert (5 to tgt2)
+            # - c1=15: second WHEN matches → 2 inserts (15 to tgt1, 15 to tgt2)
+            # - c1=25: both WHENs match → 3 inserts (25 to tgt1, then 25 to tgt1 and 25 to tgt2)
+            # Result: tgt1=[25,15,25], tgt2=[15,25,5]
+            # Total: 6 inserts, 5 deletes (2+3 existing rows cleared by OVERWRITE)
+            await cur.execute(
+                """
+                insert overwrite all
+                  when c1 > 20 then
+                    into test_tgt1 values (c1)
+                  when c1 > 10 then
+                    into test_tgt1 values (c1)
+                    into test_tgt2 values (c1)
+                  else
+                    into test_tgt2 values (c1)
+                select c1 from test_src_multi
+                """
+            )
+
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=6,
+                    num_rows_deleted=5,
+                    num_rows_updated=0,
                     num_dml_duplicates=0,
                 ),
             )
 
-            # Delete
-            await cur.execute("delete from test_multi_stats where id = 2")
+
+@pytest.mark.xfail(reason="Multi-statements does not return stats field")
+@pytest.mark.skipolddriver
+async def test_multi_statement_in_one_execute(conn_cnx):
+    """Test that stats reflect the last statement when multiple statements are in one execute."""
+    async with conn_cnx(
+        session_parameters={PARAMETER_MULTI_STATEMENT_COUNT: 0}
+    ) as conn:
+        async with conn.cursor() as cur:
+            # Execute multiple statements separated by semicolons in one execute call
+            # Stats should reflect ONLY the last statement
+            await cur.execute(
+                """
+                create temp table test_multiexec (id int, name varchar(50));
+                insert into test_multiexec values (1, 'Alice'), (2, 'Bob'), (3, 'Charlie');
+                update test_multiexec set name = 'Updated' where id = 1;
+                delete from test_multiexec where id = 2;
+                """
+            )
+
+            # Stats reflect only the last statement (DELETE of 1 row)
             _assert_stats(
                 cur.stats,
                 QueryResultStats(
@@ -2295,8 +2335,15 @@ async def test_truncate_stats(conn_cnx):
 
             # Truncate doesn't provide detailed stats
             await cur.execute("truncate table test_truncate_stats")
-            # Truncate typically doesn't populate DML stats
-            assert cur.stats is not None
+            _assert_stats(
+                cur.stats,
+                QueryResultStats(
+                    num_rows_inserted=0,
+                    num_rows_deleted=3,
+                    num_rows_updated=0,
+                    num_dml_duplicates=0,
+                ),
+            )
 
 
 @pytest.mark.skipolddriver
@@ -2317,10 +2364,10 @@ async def test_empty_result_stats(conn_cnx):
             _assert_stats(
                 cur.stats,
                 QueryResultStats(
-                    num_rows_inserted=0,
-                    num_rows_deleted=0,
-                    num_rows_updated=0,
-                    num_dml_duplicates=0,
+                    num_rows_inserted=None,
+                    num_rows_deleted=None,
+                    num_rows_updated=None,
+                    num_dml_duplicates=None,
                 ),
             )
 
@@ -2329,15 +2376,18 @@ async def test_empty_result_stats(conn_cnx):
             _assert_stats(
                 cur.stats,
                 QueryResultStats(
-                    num_rows_inserted=0,
-                    num_rows_deleted=0,
-                    num_rows_updated=0,
-                    num_dml_duplicates=0,
+                    num_rows_inserted=None,
+                    num_rows_deleted=None,
+                    num_rows_updated=None,
+                    num_dml_duplicates=None,
                 ),
             )
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.xfail(
+    reason="execute_async stats are not returned from monitoring endpoint yet"
+)
 @pytest.mark.parametrize(
     "operation,setup_sql,test_sql,expected_stats",
     [
@@ -2422,6 +2472,9 @@ async def test_execute_async_stats(
 
 
 @pytest.mark.skipolddriver
+@pytest.mark.xfail(
+    reason="execute_async stats are not returned from monitoring endpoint yet"
+)
 async def test_execute_async_stats_multiple_queries(conn_cnx):
     """Test cursor.stats with multiple async queries."""
     async with conn_cnx() as conn:
