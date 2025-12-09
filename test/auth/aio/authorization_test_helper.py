@@ -78,17 +78,24 @@ class AuthorizationTestHelper:
         import asyncio
 
         try:
-            # Use asyncio task for connection instead of thread
+            # Start connection task
             connect_task = asyncio.create_task(self.connect_and_execute_simple_query())
 
             if self.auth_test_env == "docker":
+                # Give the connection task a chance to start and open the browser
+                # before starting browser automation. This is critical because
+                # create_task() only schedules the task - it doesn't run until we yield.
+                await asyncio.sleep(0)  # Yield to let connect_task start
+                await asyncio.sleep(2)  # Give connection time to open browser
+
                 # Browser credentials still needs to run in thread since it's sync
                 browser = threading.Thread(
                     target=self._provide_credentials, args=(scenario, login, password)
                 )
                 browser.start()
                 # Wait for browser thread to complete
-                await asyncio.get_event_loop().run_in_executor(None, browser.join)
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, browser.join)
 
             # Wait for connection task to complete
             await connect_task

@@ -19,6 +19,6 @@ DEFAULT_AUTH_TEST_TIMEOUT = 60  # seper test
 def pytest_collection_modifyitems(items) -> None:
     """Apply default timeout to all tests in this directory."""
     for item in items:
-        # Only add timeout if not already set
+        # Apply timeout if not already set
         if not any(mark.name == "timeout" for mark in item.iter_markers()):
             item.add_marker(pytest.mark.timeout(DEFAULT_AUTH_TEST_TIMEOUT))
