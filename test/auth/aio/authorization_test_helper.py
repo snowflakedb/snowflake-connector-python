@@ -78,27 +78,35 @@ class AuthorizationTestHelper:
         import asyncio
 
         try:
-            # Start connection task
-            connect_task = asyncio.create_task(self.connect_and_execute_simple_query())
+            # Run connection in a separate thread with its own event loop
+            # This prevents blocking I/O operations in the OAuth flow from blocking the main event loop
+            def _run_connection_in_thread():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(
+                        self.connect_and_execute_simple_query()
+                    )
+                finally:
+                    loop.close()
+
+            loop = asyncio.get_running_loop()
+            connect_future = loop.run_in_executor(None, _run_connection_in_thread)
 
             if self.auth_test_env == "docker":
-                # Give the connection task a chance to start and open the browser
-                # before starting browser automation. This is critical because
-                # create_task() only schedules the task - it doesn't run until we yield.
-                await asyncio.sleep(0)  # Yield to let connect_task start
-                await asyncio.sleep(2)  # Give connection time to open browser
+                # Give the connection thread a chance to start and open the browser
+                await asyncio.sleep(2)
 
-                # Browser credentials still needs to run in thread since it's sync
+                # Start browser automation in a separate thread
                 browser = threading.Thread(
                     target=self._provide_credentials, args=(scenario, login, password)
                 )
                 browser.start()
                 # Wait for browser thread to complete
-                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(None, browser.join)
 
-            # Wait for connection task to complete
-            await connect_task
+            # Wait for connection to complete
+            await connect_future
 
         except Exception as e:
             self.error_msg = e
