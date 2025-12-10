@@ -95,7 +95,8 @@ class AuthorizationTestHelper:
 
             if self.auth_test_env == "docker":
                 # Give the connection thread a chance to start and open the browser
-                await asyncio.sleep(2)
+                # Increased delay to ensure OAuth server is ready before browser automation starts
+                await asyncio.sleep(5)
 
                 # Start browser automation in a separate thread
                 browser = threading.Thread(
