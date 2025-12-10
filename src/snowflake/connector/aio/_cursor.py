@@ -3,12 +3,14 @@ from __future__ import annotations
 import abc
 import asyncio
 import collections
+import contextvars
 import logging
 import re
 import signal
 import sys
 import typing
 import uuid
+from dataclasses import dataclass, field
 from logging import getLogger
 from types import TracebackType
 from typing import IO, TYPE_CHECKING, Any, AsyncIterator, Literal, Sequence, overload
@@ -68,6 +70,35 @@ if TYPE_CHECKING:
 
 logger = getLogger(__name__)
 
+
+@dataclass
+class _CursorExecutionState:
+    """Task-local state for cursor execution results.
+
+    This dataclass holds all execution-specific state that needs to be isolated
+    per asyncio task to prevent race conditions when multiple coroutines use
+    the same cursor concurrently.
+    """
+
+    total_rowcount: int = -1
+    description: list[ResultMetadataV2] | None = None
+    sfqid: str | None = None
+    sqlstate: str | None = None
+    result: ResultSetIterator | None = None
+    result_set: ResultSet | None = None
+    result_state: ResultState = field(default=ResultState.DEFAULT)
+    query_result_format: str | None = None
+    rownumber: int | None = None
+    first_chunk_time: int | None = None
+    query: str | None = None
+    multi_statement_resultIds: collections.deque = field(
+        default_factory=collections.deque
+    )
+    multi_statement_savedIds: list[str] = field(default_factory=list)
+    # Track which task owns this state to detect task boundary crossing
+    owner_task_id: int | None = None
+
+
 FetchRow = typing.TypeVar(
     "FetchRow", bound=typing.Union[typing.Tuple[Any, ...], typing.Dict[str, Any]]
 )
@@ -78,6 +109,15 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
         self,
         connection: SnowflakeConnection,
     ):
+        # Task-local storage for execution state to ensure coroutine-safety.
+        # Each asyncio task gets its own execution state, preventing race conditions
+        # when multiple coroutines use the same cursor concurrently.
+        # IMPORTANT: This must be initialized BEFORE super().__init__() because
+        # the parent class may trigger property setters that access _execution_state.
+        self._execution_state_var: contextvars.ContextVar[
+            _CursorExecutionState | None
+        ] = contextvars.ContextVar("cursor_execution_state", default=None)
+
         super().__init__(connection)
         # the following fixes type hint
         self._connection = typing.cast("SnowflakeConnection", self._connection)
@@ -85,6 +125,107 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
         self._lock_canceling = asyncio.Lock()
         self._timebomb: asyncio.Task | None = None
         self._prefetch_hook: typing.Callable[[], typing.Awaitable] | None = None
+
+    @property
+    def _execution_state(self) -> _CursorExecutionState:
+        """Get or create task-local execution state.
+
+        This property ensures each asyncio task has isolated cursor state,
+        similar to how Snowpark uses threading.local() for thread-safety.
+
+        The key insight is that asyncio tasks inherit ContextVar values from
+        their parent task at creation time. So if a state was created in the
+        parent task, child tasks will see that same state. To handle this,
+        we track which task owns each state and create a new state when we
+        detect that we're in a different task.
+        """
+        state = self._execution_state_var.get()
+        current_task = asyncio.current_task()
+        current_task_id = id(current_task) if current_task else None
+
+        # Check if we need to create a new state for this task
+        # This happens when:
+        # 1. No state exists yet (state is None)
+        # 2. The state was created by a different task (inherited from parent)
+        if state is None or (
+            state.owner_task_id is not None
+            and current_task_id is not None
+            and state.owner_task_id != current_task_id
+        ):
+            state = _CursorExecutionState(owner_task_id=current_task_id)
+            self._execution_state_var.set(state)
+
+        return state
+
+    # Override properties to read from task-local state
+
+    @property
+    def description(self) -> list[ResultMetadata] | None:
+        desc = self._execution_state.description
+        if desc is None:
+            return None
+        return [meta._to_result_metadata_v1() for meta in desc]
+
+    @property
+    def _description_internal(self) -> list[ResultMetadataV2] | None:
+        """Return the new format of result metadata for a query.
+
+        This method is for internal use only.
+        """
+        return self._execution_state.description
+
+    @property
+    def rowcount(self) -> int | None:
+        total = self._execution_state.total_rowcount
+        return total if total >= 0 else None
+
+    @property
+    def rownumber(self) -> int | None:
+        rn = self._execution_state.rownumber
+        return rn if rn is not None and rn >= 0 else None
+
+    @property
+    def sfqid(self) -> str | None:
+        return self._execution_state.sfqid
+
+    @property
+    def sqlstate(self) -> str | None:
+        return self._execution_state.sqlstate
+
+    @property
+    def query(self) -> str | None:
+        return self._execution_state.query
+
+    @query.setter
+    def query(self, value: str | None) -> None:
+        self._execution_state.query = value
+
+    @property
+    def multi_statement_savedIds(self) -> list[str]:
+        return self._execution_state.multi_statement_savedIds
+
+    @multi_statement_savedIds.setter
+    def multi_statement_savedIds(self, value: list[str]) -> None:
+        self._execution_state.multi_statement_savedIds = value
+
+    def reset(self, closing: bool = False) -> None:
+        """Resets the task-local result set state."""
+        state = self._execution_state
+        # SNOW-647539: Do not erase the rowcount
+        # information when closing the cursor
+        if not closing:
+            state.total_rowcount = -1
+        if state.result_state != ResultState.DEFAULT:
+            state.result_state = ResultState.RESET
+        if state.result is not None:
+            state.result = None
+        if self._inner_cursor is not None:
+            self._inner_cursor.reset(closing=closing)
+            state.result = None
+            self._inner_cursor = None
+        self._prefetch_hook = None
+        if not self.connection._reuse_results:
+            state.result_set = None
 
     def __aiter__(self):
         return self
@@ -160,7 +301,7 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
         """
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
         await self.execute(*args, **kwargs)
-        return self._description
+        return self._execution_state.description
 
     async def _execute_helper(
         self,
@@ -345,24 +486,25 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
                 {p["name"]: p["value"] for p in parameters}
             )
 
-        self.query = query
+        self._execution_state.query = query
         self._sequence_counter = -1
         return ret
 
     async def _init_result_and_meta(self, data: dict[Any, Any]) -> None:
+        state = self._execution_state
         is_dml = self._is_dml(data)
-        self._query_result_format = data.get("queryResultFormat", "json")
-        logger.debug("Query result format: %s", self._query_result_format)
+        state.query_result_format = data.get("queryResultFormat", "json")
+        logger.debug("Query result format: %s", state.query_result_format)
 
-        if self._total_rowcount == -1 and not is_dml and data.get("total") is not None:
-            self._total_rowcount = data["total"]
+        if state.total_rowcount == -1 and not is_dml and data.get("total") is not None:
+            state.total_rowcount = data["total"]
 
-        self._description: list[ResultMetadataV2] = [
+        state.description = [
             ResultMetadataV2.from_column(col) for col in data["rowtype"]
         ]
 
         result_chunks = create_batches_from_response(
-            self, self._query_result_format, data, self._description
+            self, state.query_result_format, data, state.description
         )
 
         if not (is_dml or self.is_file_transfer):
@@ -370,36 +512,37 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
                 "Number of results in first chunk: %s", result_chunks[0].rowcount
             )
 
-        self._result_set = ResultSet(
+        state.result_set = ResultSet(
             self,
             result_chunks,
             self._connection.client_prefetch_threads,
         )
-        self._rownumber = -1
-        self._result_state = ResultState.VALID
+        state.rownumber = -1
+        state.result_state = ResultState.VALID
 
         # don't update the row count when the result is returned from `describe` method
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
             updated_rows = 0
-            for idx, desc in enumerate(self._description):
+            for idx, desc in enumerate(state.description):
                 if desc.name in (
                     "number of rows updated",
                     "number of multi-joined rows updated",
                     "number of rows deleted",
                 ) or desc.name.startswith("number of rows inserted"):
                     updated_rows += int(data["rowset"][0][idx])
-            if self._total_rowcount == -1:
-                self._total_rowcount = updated_rows
+            if state.total_rowcount == -1:
+                state.total_rowcount = updated_rows
             else:
-                self._total_rowcount += updated_rows
+                state.total_rowcount += updated_rows
 
     async def _init_multi_statement_results(self, data: dict) -> None:
+        state = self._execution_state
         await self._log_telemetry_job_data(
             TelemetryField.MULTI_STATEMENT, TelemetryData.TRUE
         )
-        self.multi_statement_savedIds = data["resultIds"].split(",")
-        self._multi_statement_resultIds = collections.deque(
-            self.multi_statement_savedIds
+        state.multi_statement_savedIds = data["resultIds"].split(",")
+        state.multi_statement_resultIds = collections.deque(
+            state.multi_statement_savedIds
         )
         if self._is_file_transfer:
             Error.errorhandler_wrapper(
@@ -422,7 +565,7 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
                 TelemetryData.from_telemetry_data_dict(
                     from_dict={
                         TelemetryField.KEY_TYPE.value: telemetry_field.value,
-                        TelemetryField.KEY_SFQID.value: self._sfqid,
+                        TelemetryField.KEY_SFQID.value: self._execution_state.sfqid,
                         TelemetryField.KEY_VALUE.value: value,
                     },
                     timestamp=ts,
@@ -622,26 +765,27 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
             )
             query = query1
 
+        state = self._execution_state
         ret = await self._execute_helper(query, **kwargs)
-        self._sfqid = (
+        state.sfqid = (
             ret["data"]["queryId"]
             if "data" in ret and "queryId" in ret["data"]
             else None
         )
         logger.debug(f"sfqid: {self.sfqid}")
-        self._sqlstate = (
+        state.sqlstate = (
             ret["data"]["sqlState"]
             if "data" in ret and "sqlState" in ret["data"]
             else None
         )
         logger.debug("query execution done")
 
-        self._first_chunk_time = get_time_millis()
+        state.first_chunk_time = get_time_millis()
 
         # if server gives a send time, log the time it took to arrive
         if "data" in ret and "sendResultTime" in ret["data"]:
             time_consume_first_result = (
-                self._first_chunk_time - ret["data"]["sendResultTime"]
+                state.first_chunk_time - ret["data"]["sendResultTime"]
             )
             await self._log_telemetry_job_data(
                 TelemetryField.TIME_CONSUME_FIRST_RESULT, time_consume_first_result
@@ -661,7 +805,7 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
                 await self._init_multi_statement_results(data)
                 return self
             else:
-                self.multi_statement_savedIds = []
+                state.multi_statement_savedIds = []
 
             self._is_file_transfer = "command" in data and data["command"] in (
                 "UPLOAD",
@@ -689,12 +833,12 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
                 )
                 await sf_file_transfer_agent.execute()
                 data = sf_file_transfer_agent.result()
-                self._total_rowcount = len(data["rowset"]) if "rowset" in data else -1
+                state.total_rowcount = len(data["rowset"]) if "rowset" in data else -1
 
             if _exec_async:
-                self.connection._async_sfqids[self._sfqid] = None
+                self.connection._async_sfqids[state.sfqid] = None
             if _no_results:
-                self._total_rowcount = (
+                state.total_rowcount = (
                     ret["data"]["total"]
                     if "data" in ret and "total" in ret["data"]
                     else -1
@@ -702,7 +846,7 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
                 return data
             await self._init_result_and_meta(data)
         else:
-            self._total_rowcount = (
+            state.total_rowcount = (
                 ret["data"]["total"] if "data" in ret and "total" in ret["data"] else -1
             )
             logger.debug(ret)
@@ -726,8 +870,8 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
             errvalue = {
                 "msg": err,
                 "errno": int(code),
-                "sqlstate": self._sqlstate,
-                "sfqid": self._sfqid,
+                "sqlstate": state.sqlstate,
+                "sfqid": state.sfqid,
                 "query": query,
             }
             is_integrity_error = (
@@ -895,9 +1039,10 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
         kwargs["_describe_only"] = kwargs["_is_internal"] = True
         await self.execute(*args, **kwargs)
 
-        if self._description is None:
+        desc = self._execution_state.description
+        if desc is None:
             return None
-        return [meta._to_result_metadata_v1() for meta in self._description]
+        return [meta._to_result_metadata_v1() for meta in desc]
 
     @abc.abstractmethod
     async def fetchone(self) -> FetchRow:
@@ -910,15 +1055,16 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
         Returns a dict if self._use_dict_result is True, otherwise
         returns tuple.
         """
+        state = self._execution_state
         if self._prefetch_hook is not None:
             await self._prefetch_hook()
-        if self._result is None and self._result_set is not None:
-            self._result: ResultSetIterator = await self._result_set._create_iter()
-            self._result_state = ResultState.VALID
+        if state.result is None and state.result_set is not None:
+            state.result = await state.result_set._create_iter()
+            state.result_state = ResultState.VALID
         try:
-            if self._result is None:
+            if state.result is None:
                 raise TypeError("'NoneType' object is not an iterator")
-            _next = await self._result.get_next()
+            _next = await state.result.get_next()
             if isinstance(_next, Exception):
                 Error.errorhandler_wrapper_from_ready_exception(
                     self._connection,
@@ -926,10 +1072,10 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
                     _next,
                 )
             if _next is not None:
-                self._rownumber += 1
+                state.rownumber = (state.rownumber or 0) + 1
             return _next
         except TypeError as err:
-            if self._result_state == ResultState.DEFAULT:
+            if state.result_state == ResultState.DEFAULT:
                 raise err
             else:
                 return None
@@ -962,32 +1108,34 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
 
     async def fetchall(self) -> list[tuple] | list[dict]:
         """Fetches all of the results."""
+        state = self._execution_state
         if self._prefetch_hook is not None:
             await self._prefetch_hook()
-        if self._result is None and self._result_set is not None:
-            self._result: ResultSetIterator = await self._result_set._create_iter(
+        if state.result is None and state.result_set is not None:
+            state.result = await state.result_set._create_iter(
                 is_fetch_all=True,
             )
-            self._result_state = ResultState.VALID
+            state.result_state = ResultState.VALID
 
-        if self._result is None:
-            if self._result_state == ResultState.DEFAULT:
+        if state.result is None:
+            if state.result_state == ResultState.DEFAULT:
                 raise TypeError("'NoneType' object is not an iterator")
             else:
                 return []
 
-        return await self._result.fetch_all_data()
+        return await state.result.fetch_all_data()
 
     async def fetch_arrow_batches(self) -> AsyncIterator[Table]:
+        state = self._execution_state
         self.check_can_use_arrow_resultset()
         if self._prefetch_hook is not None:
             await self._prefetch_hook()
-        if self._query_result_format != "arrow":
+        if state.query_result_format != "arrow":
             raise NotSupportedError
         await self._log_telemetry_job_data(
             TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
         )
-        return await self._result_set._fetch_arrow_batches()
+        return await state.result_set._fetch_arrow_batches()
 
     @overload
     async def fetch_arrow_all(
@@ -1004,41 +1152,44 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
                 an empty pyarrow table will be returned with schema using the highest bit length for each column.
                 Default value is False in which case None is returned in case of zero rows.
         """
+        state = self._execution_state
         self.check_can_use_arrow_resultset()
 
         if self._prefetch_hook is not None:
             await self._prefetch_hook()
-        if self._query_result_format != "arrow":
+        if state.query_result_format != "arrow":
             raise NotSupportedError
         await self._log_telemetry_job_data(
             TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE
         )
-        return await self._result_set._fetch_arrow_all(
+        return await state.result_set._fetch_arrow_all(
             force_return_table=force_return_table
         )
 
     async def fetch_pandas_batches(self, **kwargs: Any) -> AsyncIterator[DataFrame]:
         """Fetches a single Arrow Table."""
+        state = self._execution_state
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
             await self._prefetch_hook()
-        if self._query_result_format != "arrow":
+        if state.query_result_format != "arrow":
             raise NotSupportedError
         await self._log_telemetry_job_data(
             TelemetryField.PANDAS_FETCH_BATCHES, TelemetryData.TRUE
         )
-        return await self._result_set._fetch_pandas_batches(**kwargs)
+        return await state.result_set._fetch_pandas_batches(**kwargs)
 
     async def fetch_pandas_all(self, **kwargs: Any) -> DataFrame:
+        state = self._execution_state
         self.check_can_use_pandas()
         if self._prefetch_hook is not None:
             await self._prefetch_hook()
-        if self._query_result_format != "arrow":
+        if state.query_result_format != "arrow":
             raise NotSupportedError
         await self._log_telemetry_job_data(
             TelemetryField.PANDAS_FETCH_ALL, TelemetryData.TRUE
         )
-        return await self._result_set._fetch_pandas_all(**kwargs)
+        return await state.result_set._fetch_pandas_all(**kwargs)
 
     async def nextset(self) -> SnowflakeCursor | None:
         """
@@ -1046,13 +1197,14 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
         to any of the fetch*() methods will return rows from the next query's set of results. Returns None if no more
         query results are available.
         """
+        state = self._execution_state
         if self._prefetch_hook is not None:
             await self._prefetch_hook()
         self.reset()
-        if self._multi_statement_resultIds:
-            await self.query_result(self._multi_statement_resultIds[0])
+        if state.multi_statement_resultIds:
+            await self.query_result(state.multi_statement_resultIds[0])
             logger.info(
-                f"Retrieved results for query ID: {self._multi_statement_resultIds.popleft()}"
+                f"Retrieved results for query ID: {state.multi_statement_resultIds.popleft()}"
             )
             return self
 
@@ -1067,12 +1219,13 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
         For a detailed description of ``ResultBatch`` s please see the docstring of:
         ``snowflake.connector.result_batches.ResultBatch``
         """
-        if self._result_set is None:
+        state = self._execution_state
+        if state.result_set is None:
             return None
         await self._log_telemetry_job_data(
             TelemetryField.GET_PARTITIONS_USED, TelemetryData.TRUE
         )
-        return self._result_set.batches
+        return state.result_set.batches
 
     async def _download(
         self,
@@ -1218,6 +1371,7 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
         """Gets the results from previously ran query. This methods differs from ``SnowflakeCursor.query_result``
         in that it monitors the ``sfqid`` until it is no longer running, and then retrieves the results.
         """
+        state = self._execution_state
 
         async def wait_until_ready() -> None:
             """Makes sure query has finished executing and once it has retrieves results."""
@@ -1252,17 +1406,18 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
             await self._inner_cursor.execute(
                 f"select * from table(result_scan('{sfqid}'))"
             )
-            self._result = self._inner_cursor._result
-            self._query_result_format = self._inner_cursor._query_result_format
-            self._total_rowcount = self._inner_cursor._total_rowcount
-            self._description = self._inner_cursor._description
-            self._result_set = self._inner_cursor._result_set
-            self._result_state = ResultState.VALID
-            self._rownumber = 0
+            inner_state = self._inner_cursor._execution_state
+            state.result = inner_state.result
+            state.query_result_format = inner_state.query_result_format
+            state.total_rowcount = inner_state.total_rowcount
+            state.description = inner_state.description
+            state.result_set = inner_state.result_set
+            state.result_state = ResultState.VALID
+            state.rownumber = 0
             # Unset this function, so that we don't block anymore
             self._prefetch_hook = None
 
-            if self._inner_cursor._total_rowcount == 1 and _is_successful_multi_stmt(
+            if inner_state.total_rowcount == 1 and _is_successful_multi_stmt(
                 await self._inner_cursor.fetchall()
             ):
                 url = f"/queries/{sfqid}/result"
@@ -1287,24 +1442,25 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
             sfqid
         )  # Trigger an exception if query failed
         self._inner_cursor = self.__class__(self.connection)
-        self._sfqid = sfqid
+        state.sfqid = sfqid
         self._prefetch_hook = wait_until_ready
 
     async def query_result(self, qid: str) -> SnowflakeCursor:
         """Query the result of a previously executed query."""
+        state = self._execution_state
         url = f"/queries/{qid}/result"
         ret = await self._connection.rest.request(url=url, method="get")
-        self._sfqid = (
+        state.sfqid = (
             ret["data"]["queryId"]
             if "data" in ret and "queryId" in ret["data"]
             else None
         )
-        self._sqlstate = (
+        state.sqlstate = (
             ret["data"]["sqlState"]
             if "data" in ret and "sqlState" in ret["data"]
             else None
         )
-        logger.debug("sfqid=%s", self._sfqid)
+        logger.debug("sfqid=%s", state.sfqid)
 
         if ret.get("success"):
             data = ret.get("data")
@@ -1319,8 +1475,8 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
             errvalue = {
                 "msg": err,
                 "errno": int(code),
-                "sqlstate": self._sqlstate,
-                "sfqid": self._sfqid,
+                "sqlstate": state.sqlstate,
+                "sfqid": state.sfqid,
             }
             Error.errorhandler_wrapper(
                 self.connection, self, ProgrammingError, errvalue
