@@ -468,7 +468,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         - num_rows_updated: Number of rows updated
         - num_dml_duplicates: Number of duplicates in DML statement
 
-        Returns None on each position if no DML stats are available.
+        Returns None on each position if no DML stats are available - this includes DML operations where no rows were
+            affected as well as other type of SQL statements (e.g. DDL, DQL).
         """
         if self._stats_data is None:
             return QueryResultStats(None, None, None, None)
