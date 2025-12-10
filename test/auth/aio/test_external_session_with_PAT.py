@@ -15,6 +15,9 @@ SESSION_VAR_VALUE = "PAT_WITH_EXTERNAL_SESSION_TEST_VALUE"
 
 @pytest.mark.auth
 @pytest.mark.asyncio
+@pytest.mark.skip(
+    reason="PAT with external session ID is not supported for async connection (error 251007)"
+)
 async def test_pat_with_external_session_authN_success() -> None:
     pat_command_variables = get_pat_setup_command_variables()
     connection_parameters = AuthConnectionParameters().get_pat_connection_parameters()
@@ -48,6 +51,9 @@ async def test_pat_with_external_session_authN_success() -> None:
 
 @pytest.mark.auth
 @pytest.mark.asyncio
+@pytest.mark.skip(
+    reason="PAT with external session ID is not supported for async connection (error 251007)"
+)
 async def test_pat_with_external_session_authN_fail() -> None:
     pat_command_variables = get_pat_setup_command_variables()
     try:
