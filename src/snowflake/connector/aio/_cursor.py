@@ -378,6 +378,10 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
         self._rownumber = -1
         self._result_state = ResultState.VALID
 
+        # Extract stats object if available (for DML operations like CTAS, INSERT, UPDATE, DELETE)
+        self._stats_data = data.get("stats", None)
+        logger.debug("Execution DML stats: %s", self.stats)
+
         # don't update the row count when the result is returned from `describe` method
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
             updated_rows = 0
