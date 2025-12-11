@@ -157,7 +157,7 @@ class AuthorizationTestHelper:
             provide_browser_credentials_path = (
                 "/externalbrowser/provideBrowserCredentials.js"
             )
-            process = subprocess.run(
+            _ = subprocess.run(
                 [
                     "node",
                     provide_browser_credentials_path,
@@ -167,7 +167,7 @@ class AuthorizationTestHelper:
                 ],
                 timeout=30,
             )
-            logger.debug(f"OUTPUT:  {process.stdout}, ERRORS: {process.stderr}")
+            # logger.debug(f"OUTPUT:  {process.stdout}, ERRORS: {process.stderr}")
         except Exception as e:
             self.error_msg = e
             raise RuntimeError(e)
