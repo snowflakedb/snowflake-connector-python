@@ -171,7 +171,7 @@ async def _execute_large_query(connect_kwargs, row_count: int):
         await cur.execute(
             f"select seq4() as n from table(generator(rowcount => {row_count}));"
         )
-        assert len(cur._result_set.batches) > 1
+        assert len(cur._execution_state.result_set.batches) > 1
         _ = [r async for r in cur]
     finally:
         await conn.close()
