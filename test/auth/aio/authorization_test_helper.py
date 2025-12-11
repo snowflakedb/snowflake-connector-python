@@ -1,7 +1,6 @@
 import logging.config
 import os
 import subprocess
-import threading
 import webbrowser
 from enum import Enum
 from typing import Union
@@ -78,36 +77,26 @@ class AuthorizationTestHelper:
         import asyncio
 
         try:
-            # Run connection in a separate thread with its own event loop
-            # This prevents blocking I/O operations in the OAuth flow from blocking the main event loop
-            def _run_connection_in_thread():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    return loop.run_until_complete(
-                        self.connect_and_execute_simple_query()
-                    )
-                finally:
-                    loop.close()
-
-            loop = asyncio.get_running_loop()
-            connect_future = loop.run_in_executor(None, _run_connection_in_thread)
+            # Start connection as an async task in the main event loop
+            # This allows the browser to be opened from the main thread context
+            connect_task = asyncio.create_task(self.connect_and_execute_simple_query())
 
             if self.auth_test_env == "docker":
-                # Give the connection thread a chance to start and open the browser
-                # Increased delay to ensure OAuth server is ready before browser automation starts
+                # Give connection time to start and open the browser
                 await asyncio.sleep(5)
 
-                # Start browser automation in a separate thread
-                browser = threading.Thread(
-                    target=self._provide_credentials, args=(scenario, login, password)
+                # Run browser automation in a thread
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    None,
+                    self._provide_credentials,
+                    scenario,
+                    login,
+                    password,
                 )
-                browser.start()
-                # Wait for browser thread to complete
-                await loop.run_in_executor(None, browser.join)
 
             # Wait for connection to complete
-            await connect_future
+            await connect_task
 
         except Exception as e:
             self.error_msg = e
