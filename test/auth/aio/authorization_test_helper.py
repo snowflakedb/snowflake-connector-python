@@ -111,6 +111,7 @@ class AuthorizationTestHelper:
             async with snowflake.connector.aio.SnowflakeConnection(
                 **self.configuration
             ) as con:
+                logger.info("Connected to Snowflake, executing query")
                 result = await con.cursor().execute("select 1;")
                 logger.debug(await result.fetchall())
                 logger.info("Successfully connected to Snowflake")

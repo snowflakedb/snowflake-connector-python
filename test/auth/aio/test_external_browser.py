@@ -26,6 +26,7 @@ def setup_and_teardown():
 @pytest.mark.auth
 @pytest.mark.asyncio
 async def test_external_browser_successful():
+    logging.getLogger("snowflake.connector").setLevel(logging.DEBUG)
     connection_parameters = (
         AuthConnectionParameters().get_external_browser_connection_parameters()
     )
