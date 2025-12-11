@@ -25,13 +25,17 @@ def setup_and_teardown():
 
 @pytest.mark.auth
 @pytest.mark.asyncio
+@pytest.mark.skip(
+    reason="SNOW-2895170: Script providing credentials cannot connect to browser"
+)
 async def test_external_browser_successful():
     logging.getLogger("snowflake.connector").setLevel(logging.DEBUG)
     connection_parameters = (
         AuthConnectionParameters().get_external_browser_connection_parameters()
     )
-    test_helper = AuthorizationTestHelper(connection_parameters)
     browser_login, browser_password = get_okta_login_credentials().values()
+
+    test_helper = AuthorizationTestHelper(connection_parameters)
     await test_helper.connect_and_provide_credentials(
         Scenario.SUCCESS, browser_login, browser_password
     )
