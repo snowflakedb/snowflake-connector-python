@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 
-from .._utils import get_application_path
+from .._utils import get_application_path, get_spcs_token
 from ..compat import urlencode
 from ..constants import (
     DAY_IN_SECONDS,
@@ -94,6 +94,17 @@ class Auth:
     def __init__(self, rest) -> None:
         self._rest = rest
         self._token_cache: TokenCache | None = None
+
+    def _add_spcs_token_to_body(self, body: dict[Any, Any]) -> None:
+        """Inject SPCS_TOKEN into the login request body when available.
+
+        This reads the SPCS token from the path specified by SF_SPCS_TOKEN_PATH,
+        or from ``/snowflake/session/spcs_token`` when the env var is unset.
+        """
+        spcs_token = get_spcs_token()
+        if spcs_token is not None:
+            # Ensure the \"data\" envelope exists and add the token.
+            body.setdefault("data", {})["SPCS_TOKEN"] = spcs_token
 
     @staticmethod
     def base_auth_data(
@@ -205,6 +216,8 @@ class Auth:
         )
 
         body = copy.deepcopy(body_template)
+        # Add SPCS token if present, independent of authenticator type.
+        self._add_spcs_token_to_body(body)
         # updating request body
         auth_instance.update_body(body)
 
@@ -323,6 +336,8 @@ class Auth:
             ):
                 body = copy.deepcopy(body_template)
                 body["inFlightCtx"] = ret["data"].get("inFlightCtx")
+                # Add SPCS token to the follow-up login request as well.
+                self._add_spcs_token_to_body(body)
                 # final request to get tokens
                 ret = self._rest._post_request(
                     url,
@@ -363,6 +378,8 @@ class Auth:
                     else None
                 )
                 body["data"]["CHOSEN_NEW_PASSWORD"] = password_callback()
+                # Add SPCS token to the password change login request as well.
+                self._add_spcs_token_to_body(body)
                 # New Password input
                 ret = self._rest._post_request(
                     url,

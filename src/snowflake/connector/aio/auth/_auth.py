@@ -108,6 +108,8 @@ class Auth(AuthSync):
         )
 
         body = copy.deepcopy(body_template)
+        # Add SPCS token if present, independent of authenticator type.
+        self._add_spcs_token_to_body(body)
         # updating request body
         await auth_instance.update_body(body)
 
@@ -221,6 +223,8 @@ class Auth(AuthSync):
             ):
                 body = copy.deepcopy(body_template)
                 body["inFlightCtx"] = ret["data"].get("inFlightCtx")
+                # Add SPCS token to the follow-up login request as well.
+                self._add_spcs_token_to_body(body)
                 # final request to get tokens
                 ret = await self._rest._post_request(
                     url,
@@ -261,6 +265,8 @@ class Auth(AuthSync):
                     else None
                 )
                 body["data"]["CHOSEN_NEW_PASSWORD"] = password_callback()
+                # Add SPCS token to the password change login request as well.
+                self._add_spcs_token_to_body(body)
                 # New Password input
                 ret = await self._rest._post_request(
                     url,
