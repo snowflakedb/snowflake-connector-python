@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-set -o pipefail
+set -ox pipefail
 
 
 export WORKSPACE=${WORKSPACE:-/mnt/workspace}
@@ -17,6 +17,9 @@ export RUN_AUTH_TESTS=true
 export AUTHENTICATION_TESTS_ENV="docker"
 export PYTHONPATH=$SOURCE_ROOT
 
-python3 -m pip install --break-system-packages -e .
+python3 -m pip install --break-system-packages -e ".[development]"
 
-python3 -m pytest test/auth/*
+python3 -m pytest test/auth/ --ignore=test/auth/aio
+
+python3 -m pip install --break-system-packages -e ".[development,aio,aioboto]"
+python3 -m pytest -vvv test/auth/aio/

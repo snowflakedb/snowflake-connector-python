@@ -206,11 +206,14 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
                 #   an immediate successive call to socket_client.recv gets the actual data
                 while len(raw_data) == 0 and attempts < max_attempts:
                     attempts += 1
-                    read_sockets, _write_sockets, _exception_sockets = select.select(
-                        [socket_connection], [], []
+                    # Run blocking select in executor to avoid blocking the event loop
+                    read_sockets, _write_sockets, _exception_sockets = (
+                        await self._event_loop.run_in_executor(
+                            None, select.select, [socket_connection], [], [], None
+                        )
                     )
 
-                    if read_sockets[0] is not None:
+                    if read_sockets and read_sockets[0] is not None:
                         # Receive the data in small chunks and retransmit it
                         socket_client, _ = await self._event_loop.sock_accept(
                             socket_connection

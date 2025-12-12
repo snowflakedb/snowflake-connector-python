@@ -67,7 +67,15 @@ class AuthByOauthCode(AuthByPluginAsync, AuthByOauthCodeSync):
         AuthByOauthCodeSync.reset_secrets(self)
 
     async def prepare(self, **kwargs: Any) -> None:
-        AuthByOauthCodeSync.prepare(self, **kwargs)
+        """Prepare OAuth authentication by running blocking operations in executor."""
+        import asyncio
+        from functools import partial
+
+        loop = asyncio.get_event_loop()
+        # Run the blocking prepare call in a thread executor to avoid blocking the event loop
+        # Use partial to bind keyword arguments since run_in_executor doesn't accept kwargs
+        prepare_func = partial(AuthByOauthCodeSync.prepare, self, **kwargs)
+        await loop.run_in_executor(None, prepare_func)
 
     async def reauthenticate(
         self, conn: SnowflakeConnection, **kwargs: Any
