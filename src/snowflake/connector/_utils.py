@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
+import os
 import string
 from enum import Enum
 from inspect import stack
 from random import choice
 from threading import Timer
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 
 class TempObjectType(Enum):
@@ -96,3 +100,30 @@ def get_application_path() -> str:
         return outermost_frame.filename
     except Exception:
         return "unknown"
+
+
+_SPCS_TOKEN_ENV_VAR_NAME = "SF_SPCS_TOKEN_PATH"
+_SPCS_TOKEN_DEFAULT_PATH = "/snowflake/session/spcs_token"
+
+
+def get_spcs_token() -> str | None:
+    """Return the SPCS token read from the configured path, or None.
+
+    The path is determined by the SF_SPCS_TOKEN_PATH environment variable,
+    falling back to ``/snowflake/session/spcs_token`` when unset.
+
+    Any I/O errors or missing/empty files are treated as \"no token\" and
+    will not cause authentication to fail.
+    """
+    path = os.getenv(_SPCS_TOKEN_ENV_VAR_NAME) or _SPCS_TOKEN_DEFAULT_PATH
+    try:
+        if not os.path.isfile(path):
+            return None
+        with open(path, encoding="utf-8") as f:
+            token = f.read().strip()
+        if not token:
+            return None
+        return token
+    except Exception as exc:  # pragma: no cover - best-effort logging only
+        logger.debug("Failed to read SPCS token from %s: %s", path, exc)
+        return None
