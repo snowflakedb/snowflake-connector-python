@@ -12,6 +12,8 @@ import typing
 import uuid
 import warnings
 import weakref
+
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from concurrent.futures import as_completed
 from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import suppress
@@ -23,12 +25,7 @@ from threading import Lock
 from types import TracebackType
 from typing import (
     Any,
-    Callable,
-    Generator,
-    Iterable,
-    Iterator,
     NamedTuple,
-    Sequence,
     TypeVar,
 )
 from uuid import UUID
@@ -142,6 +139,7 @@ from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
 from .util_text import construct_hostname, parse_account, split_statements
 from .wif_util import AttestationProvider
+
 
 if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
     CursorCls = TypeVar("CursorCls", bound=SnowflakeCursorBase, default=SnowflakeCursor)
@@ -589,9 +587,7 @@ class SnowflakeConnection:
         If overwriting values from the default connection is desirable, supply
         the name explicitly.
         """
-        self._unsafe_skip_file_permissions_check = kwargs.get(
-            "unsafe_skip_file_permissions_check", False
-        )
+        self._unsafe_skip_file_permissions_check = kwargs.get("unsafe_skip_file_permissions_check", False)
         # initiate easy logging during every connection
         easy_logging = EasyLoggingConfigPython(
             skip_config_file_permissions_check=self._unsafe_skip_file_permissions_check
@@ -608,8 +604,7 @@ class SnowflakeConnection:
         self._server_param_telemetry_enabled = False
         self._session_parameters: dict[str, str | int | bool] = {}
         logger.info(
-            "Snowflake Connector for Python Version: %s, "
-            "Python Version: %s, Platform: %s",
+            "Snowflake Connector for Python Version: %s, Python Version: %s, Platform: %s",
             SNOWFLAKE_CONNECTOR_VERSION,
             PYTHON_VERSION,
             PLATFORM,
@@ -633,17 +628,16 @@ class SnowflakeConnection:
                 kwargs["application"] = app
 
         if "insecure_mode" in kwargs:
-            warn_message = "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
+            warn_message = (
+                "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
+            )
             warnings.warn(
                 warn_message,
                 DeprecationWarning,
                 stacklevel=2,
             )
 
-            if (
-                "disable_ocsp_checks" in kwargs
-                and kwargs["disable_ocsp_checks"] != kwargs["insecure_mode"]
-            ):
+            if "disable_ocsp_checks" in kwargs and kwargs["disable_ocsp_checks"] != kwargs["insecure_mode"]:
                 logger.warning(
                     "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
                     "Using the value of 'disable_ocsp_checks."
@@ -659,17 +653,12 @@ class SnowflakeConnection:
             for i, s in enumerate(CONFIG_MANAGER._slices):
                 if s.section == "connections":
                     CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
-                    CONFIG_MANAGER.read_config(
-                        skip_file_permissions_check=self._unsafe_skip_file_permissions_check
-                    )
+                    CONFIG_MANAGER.read_config(skip_file_permissions_check=self._unsafe_skip_file_permissions_check)
                     break
         if connection_name is not None:
             connections = CONFIG_MANAGER["connections"]
             if connection_name not in connections:
-                raise Error(
-                    f"Invalid connection_name '{connection_name}',"
-                    f" known ones are {list(connections.keys())}"
-                )
+                raise Error(f"Invalid connection_name '{connection_name}', known ones are {list(connections.keys())}")
             kwargs = {**connections[connection_name], **kwargs}
         elif is_kwargs_empty:
             # connection_name is None and kwargs was empty when called
@@ -913,11 +902,7 @@ class SnowflakeConnection:
 
     @property
     def client_prefetch_threads(self) -> int:
-        return (
-            self._client_prefetch_threads
-            if self._client_prefetch_threads
-            else DEFAULT_CLIENT_PREFETCH_THREADS
-        )
+        return self._client_prefetch_threads if self._client_prefetch_threads else DEFAULT_CLIENT_PREFETCH_THREADS
 
     @client_prefetch_threads.setter
     def client_prefetch_threads(self, value) -> None:
@@ -975,18 +960,12 @@ class SnowflakeConnection:
 
     @property
     def telemetry_enabled(self) -> bool:
-        return bool(
-            self._client_param_telemetry_enabled
-            and self._server_param_telemetry_enabled
-        )
+        return bool(self._client_param_telemetry_enabled and self._server_param_telemetry_enabled)
 
     @telemetry_enabled.setter
     def telemetry_enabled(self, value) -> None:
         self._client_param_telemetry_enabled = True if value else False
-        if (
-            self._client_param_telemetry_enabled
-            and not self._server_param_telemetry_enabled
-        ):
+        if self._client_param_telemetry_enabled and not self._server_param_telemetry_enabled:
             logger.info(
                 "Telemetry has been disabled by the session parameter CLIENT_TELEMETRY_ENABLED."
                 " Set session parameter CLIENT_TELEMETRY_ENABLED to true to enable telemetry."
@@ -1095,9 +1074,7 @@ class SnowflakeConnection:
     def snowflake_version(self) -> str:
         # The result from SELECT CURRENT_VERSION() is `<version> <internal hash>`,
         # and we only need the first part
-        return str(
-            self.cursor().execute("SELECT CURRENT_VERSION()").fetchall()[0][0]
-        ).split(" ")[0]
+        return str(self.cursor().execute("SELECT CURRENT_VERSION()").fetchall()[0][0]).split(" ")[0]
 
     @check_arrow_conversion_error_on_every_column.setter
     def check_arrow_conversion_error_on_every_column(self, value: bool) -> bool:
@@ -1154,16 +1131,12 @@ class SnowflakeConnection:
                 connection_diag.cursor = self.cursor()
             except Exception:
                 exceptions_dict["connection_test"] = traceback.format_exc()
-                logger.warning(
-                    f"""Exception during connection test:\n{exceptions_dict["connection_test"]} """
-                )
+                logger.warning("Exception during connection test:\n%s ", exceptions_dict["connection_test"])
             try:
                 connection_diag.run_post_test()
             except Exception:
                 exceptions_dict["post_test"] = traceback.format_exc()
-                logger.warning(
-                    f"""Exception during post connection test:\n{exceptions_dict["post_test"]} """
-                )
+                logger.warning("Exception during post connection test:\n%s ", exceptions_dict["post_test"])
             finally:
                 connection_diag.generate_report()
                 if exceptions_dict:
@@ -1195,18 +1168,11 @@ class SnowflakeConnection:
             logger.debug("closed")
             if self.telemetry_enabled:
                 self._telemetry.close(retry=retry)
-            if (
-                self._all_async_queries_finished()
-                and not self._server_session_keep_alive
-            ):
+            if self._all_async_queries_finished() and not self._server_session_keep_alive:
                 logger.debug("No async queries seem to be running, deleting session")
                 self.rest.delete_session(retry=retry)
             else:
-                logger.debug(
-                    "There are {} async queries still running, not deleting session".format(
-                        len(self._async_sfqids)
-                    )
-                )
+                logger.debug("There are %s async queries still running, not deleting session", len(self._async_sfqids))
             self.rest.close()
             self._rest = None
             if self.query_context_cache:
@@ -1214,9 +1180,7 @@ class SnowflakeConnection:
             del self.messages[:]
             logger.debug("Session is closed")
         except Exception as e:
-            logger.debug(
-                "Exception encountered in closing connection. ignoring...: %s", e
-            )
+            logger.debug("Exception encountered in closing connection. ignoring...: %s", e)
 
     def is_closed(self) -> bool:
         """Checks whether the connection has been closed."""
@@ -1249,9 +1213,7 @@ class SnowflakeConnection:
             self.cursor().execute(f"ALTER SESSION SET autocommit={mode}")
         except Error as e:
             if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
-                logger.debug(
-                    "Autocommit feature is not enabled for this " "connection. Ignored"
-                )
+                logger.debug("Autocommit feature is not enabled for this connection. Ignored")
 
     def commit(self) -> None:
         """Commits the current transaction."""
@@ -1301,9 +1263,7 @@ class SnowflakeConnection:
         **kwargs,
     ) -> Generator[SnowflakeCursor]:
         """Executes a stream of SQL statements. This is a non-standard convenient method."""
-        split_statements_list = split_statements(
-            stream, remove_comments=remove_comments
-        )
+        split_statements_list = split_statements(stream, remove_comments=remove_comments)
         # Note: split_statements_list is a list of tuples of sql statements and whether they are put/get
         non_empty_statements = [e for e in split_statements_list if e[0]]
         for sql, is_put_or_get in non_empty_statements:
@@ -1312,9 +1272,7 @@ class SnowflakeConnection:
             yield cur
 
     def __set_error_attributes(self) -> None:
-        for m in [
-            method for method in dir(errors) if callable(getattr(errors, method))
-        ]:
+        for m in [method for method in dir(errors) if callable(getattr(errors, method))]:
             # If name starts with _ then ignore that
             name = m if not m.startswith("_") else m[1:]
             setattr(self, name, getattr(errors, m))
@@ -1330,9 +1288,7 @@ class SnowflakeConnection:
 
     def __open_connection(self):
         """Opens a new network connection."""
-        self.converter = self._converter_class(
-            use_numpy=self._numpy, support_negative_year=self._support_negative_year
-        )
+        self.converter = self._converter_class(use_numpy=self._numpy, support_negative_year=self._support_negative_year)
 
         self._rest = SnowflakeRestful(
             host=self.host,
@@ -1366,24 +1322,18 @@ class SnowflakeConnection:
 
         if self._validate_default_parameters:
             # Snowflake will validate the requested database, schema, and warehouse
-            self._session_parameters[PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS] = (
-                True
-            )
+            self._session_parameters[PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS] = True
 
         if self.client_session_keep_alive is not None:
-            self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE] = (
-                self._client_session_keep_alive
-            )
+            self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE] = self._client_session_keep_alive
 
         if self.client_session_keep_alive_heartbeat_frequency is not None:
-            self._session_parameters[
-                PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY
-            ] = self._validate_client_session_keep_alive_heartbeat_frequency()
+            self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY] = (
+                self._validate_client_session_keep_alive_heartbeat_frequency()
+            )
 
         if self.client_prefetch_threads:
-            self._session_parameters[PARAMETER_CLIENT_PREFETCH_THREADS] = (
-                self._validate_client_prefetch_threads()
-            )
+            self._session_parameters[PARAMETER_CLIENT_PREFETCH_THREADS] = self._validate_client_prefetch_threads()
 
         # Setup authenticator
         auth = Auth(self.rest)
@@ -1411,9 +1361,7 @@ class SnowflakeConnection:
 
         else:
             if self.auth_class is not None:
-                if type(
-                    self.auth_class
-                ) not in FIRST_PARTY_AUTHENTICATORS and not issubclass(
+                if type(self.auth_class) not in FIRST_PARTY_AUTHENTICATORS and not issubclass(
                     type(self.auth_class), AuthByKeyPair
                 ):
                     raise TypeError("auth_class must be a child class of AuthByKeyPair")
@@ -1428,9 +1376,9 @@ class SnowflakeConnection:
                 )
             elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
                 # Enable SSO credential caching
-                self._session_parameters[
-                    PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL
-                ] = (self._client_store_temporary_credential if IS_LINUX else True)
+                self._session_parameters[PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = (
+                    self._client_store_temporary_credential if IS_LINUX else True
+                )
                 # Try to load cached ID token to avoid browser popup
                 auth.read_temporary_credentials(
                     self.host,
@@ -1488,21 +1436,13 @@ class SnowflakeConnection:
                     client_id=self._oauth_client_id,
                     client_secret=self._oauth_client_secret,
                     host=self.host,
-                    authentication_url=self._oauth_authorization_url.format(
-                        host=self.host, port=self.port
-                    ),
-                    token_request_url=self._oauth_token_request_url.format(
-                        host=self.host, port=self.port
-                    ),
+                    authentication_url=self._oauth_authorization_url.format(host=self.host, port=self.port),
+                    token_request_url=self._oauth_token_request_url.format(host=self.host, port=self.port),
                     redirect_uri=self._oauth_redirect_uri,
                     uri=self._oauth_socket_uri,
                     scope=self._oauth_scope,
                     pkce_enabled=not self._oauth_disable_pkce,
-                    token_cache=(
-                        auth.get_token_cache()
-                        if self._client_store_temporary_credential
-                        else None
-                    ),
+                    token_cache=(auth.get_token_cache() if self._client_store_temporary_credential else None),
                     refresh_token_enabled=self._oauth_enable_refresh_tokens,
                     external_browser_timeout=self._external_browser_timeout,
                     enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
@@ -1515,9 +1455,7 @@ class SnowflakeConnection:
                     application=self.application,
                     client_id=self._oauth_client_id,
                     client_secret=self._oauth_client_secret,
-                    token_request_url=self._oauth_token_request_url.format(
-                        host=self.host, port=self.port
-                    ),
+                    token_request_url=self._oauth_token_request_url.format(host=self.host, port=self.port),
                     scope=self._oauth_scope,
                     credentials_in_body=self._oauth_credentials_in_body,
                     connection=self,
@@ -1548,14 +1486,10 @@ class SnowflakeConnection:
                 # (PAT, external session ID) combination for the first time and then onwards use the (PAT, external
                 # session id) as a key to identify and authenticate the session. So we bypass actual AuthN here.
                 self.auth_class = AuthNoAuth()
-                self._rest.set_pat_and_external_session(
-                    self._token, self._external_session_id
-                )
+                self._rest.set_pat_and_external_session(self._token, self._external_session_id)
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
                 if isinstance(self._workload_identity_provider, str):
-                    self._workload_identity_provider = AttestationProvider.from_string(
-                        self._workload_identity_provider
-                    )
+                    self._workload_identity_provider = AttestationProvider.from_string(self._workload_identity_provider)
                 if not self._workload_identity_provider:
                     Error.errorhandler_wrapper(
                         self,
@@ -1566,13 +1500,9 @@ class SnowflakeConnection:
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
-                if (
-                    self._workload_identity_impersonation_path
-                    and self._workload_identity_provider
-                    not in (
-                        AttestationProvider.GCP,
-                        AttestationProvider.AWS,
-                    )
+                if self._workload_identity_impersonation_path and self._workload_identity_provider not in (
+                    AttestationProvider.GCP,
+                    AttestationProvider.AWS,
                 ):
                     Error.errorhandler_wrapper(
                         self,
@@ -1630,9 +1560,7 @@ class SnowflakeConnection:
         for name, value in filter(lambda e: e[0] not in skip_list, kwargs.items()):
             if self.validate_default_parameters:
                 if name not in DEFAULT_CONFIGURATION.keys():
-                    close_matches = get_close_matches(
-                        name, DEFAULT_CONFIGURATION.keys(), n=1, cutoff=0.8
-                    )
+                    close_matches = get_close_matches(name, DEFAULT_CONFIGURATION.keys(), n=1, cutoff=0.8)
                     guess = close_matches[0] if len(close_matches) > 0 else None
                     warnings.warn(
                         "'{}' is an unknown connection parameter{}".format(
@@ -1647,9 +1575,7 @@ class SnowflakeConnection:
                         "'{}' connection parameter should be of type '{}', but is a '{}'".format(
                             name,
                             (
-                                str(tuple(e.__name__ for e in accepted_types)).replace(
-                                    "'", ""
-                                )
+                                str(tuple(e.__name__ for e in accepted_types)).replace("'", "")
                                 if isinstance(accepted_types, tuple)
                                 else accepted_types.__name__
                             ),
@@ -1679,9 +1605,7 @@ class SnowflakeConnection:
 
             self._paramstyle = snowflake.connector.paramstyle
         elif self._paramstyle not in SUPPORTED_PARAMSTYLES:
-            raise ProgrammingError(
-                msg="Invalid paramstyle is specified", errno=ER_INVALID_VALUE
-            )
+            raise ProgrammingError(msg="Invalid paramstyle is specified", errno=ER_INVALID_VALUE)
 
         if self._auth_class and not isinstance(self._auth_class, AuthByPlugin):
             raise TypeError("auth_class must subclass AuthByPlugin")
@@ -1691,7 +1615,8 @@ class SnowflakeConnection:
                 self._host = construct_hostname(kwargs.get("region"), self._account)
 
         logger.info(
-            f"Connecting to {_DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), 'GLOBAL')} Snowflake domain"
+            "Connecting to %s Snowflake domain",
+            _DOMAIN_NAME_MAP.get(extract_top_level_domain_from_hostname(self._host), "GLOBAL"),
         )
 
         # If using a custom auth class, we should set the authenticator
@@ -1741,10 +1666,7 @@ class SnowflakeConnection:
         }
 
         if not (self._master_token and self._session_token):
-            if (
-                not self.user
-                and self._authenticator not in empty_user_allowed_authenticators
-            ):
+            if not self.user and self._authenticator not in empty_user_allowed_authenticators:
                 # Some authenticators do not require a username
                 Error.errorhandler_wrapper(
                     self,
@@ -1812,9 +1734,7 @@ class SnowflakeConnection:
         if self._account and "." in self._account:
             self._account = parse_account(self._account)
 
-        if not isinstance(self._backoff_policy, Callable) or not isinstance(
-            self._backoff_policy(), Iterator
-        ):
+        if not isinstance(self._backoff_policy, Callable) or not isinstance(self._backoff_policy(), Iterator):
             Error.errorhandler_wrapper(
                 self,
                 None,
@@ -1957,9 +1877,7 @@ class SnowflakeConnection:
             user=self.user,
             password=self._password,
         )
-        self._consent_cache_id_token = getattr(
-            auth_instance, "consent_cache_id_token", True
-        )
+        self._consent_cache_id_token = getattr(auth_instance, "consent_cache_id_token", True)
 
         auth = Auth(self.rest)
         # record start time for computing timeout
@@ -1981,8 +1899,7 @@ class SnowflakeConnection:
             )
         except OperationalError as e:
             logger.debug(
-                "Operational Error raised at authentication"
-                f"for authenticator: {type(auth_instance).__name__}"
+                "Operational Error raised at authenticationfor authenticator: %s", type(auth_instance).__name__
             )
             while True:
                 try:
@@ -2016,9 +1933,7 @@ class SnowflakeConnection:
                     continue
                 break
 
-    def _write_params_to_byte_rows(
-        self, params: list[tuple[Any | tuple]]
-    ) -> list[bytes]:
+    def _write_params_to_byte_rows(self, params: list[tuple[Any | tuple]]) -> list[bytes]:
         """Write csv-format rows of binding values as list of bytes string.
 
         Args:
@@ -2065,10 +1980,10 @@ class SnowflakeConnection:
                     cursor,
                     ProgrammingError,
                     {
-                        "msg": "Python data type [{}] cannot be "
+                        "msg": f"Python data type [{v.__class__.__name__.lower()}] cannot be "
                         "automatically mapped to Snowflake data "
                         "type. Specify the snowflake data type "
-                        "explicitly.".format(v.__class__.__name__.lower()),
+                        "explicitly.",
                         "errno": ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
                     },
                 )
@@ -2140,7 +2055,7 @@ class SnowflakeConnection:
         try:
             res = map(self._process_single_param, params)
             ret = tuple(res)
-            logger.debug(f"parameters: {ret}")
+            logger.debug("parameters: %s", ret)
             return ret
         except Exception as e:
             Error.errorhandler_wrapper(
@@ -2153,12 +2068,10 @@ class SnowflakeConnection:
                 },
             )
 
-    def _process_params_dict(
-        self, params: dict[Any, Any], cursor: SnowflakeCursor | None = None
-    ) -> dict:
+    def _process_params_dict(self, params: dict[Any, Any], cursor: SnowflakeCursor | None = None) -> dict:
         try:
             res = {k: self._process_single_param(v) for k, v in params.items()}
-            logger.debug(f"parameters: {res}")
+            logger.debug("parameters: %s", res)
             return res
         except Exception as e:
             Error.errorhandler_wrapper(
@@ -2250,9 +2163,7 @@ class SnowflakeConnection:
         real_min = int(real_max / 4)
 
         # ensure the type is integer
-        self._client_session_keep_alive_heartbeat_frequency = int(
-            self.client_session_keep_alive_heartbeat_frequency
-        )
+        self._client_session_keep_alive_heartbeat_frequency = int(self.client_session_keep_alive_heartbeat_frequency)
 
         if self.client_session_keep_alive_heartbeat_frequency is None:
             # This is an unlikely scenario but covering it just in case.
@@ -2305,11 +2216,7 @@ class SnowflakeConnection:
 
     def _format_query_for_log(self, query: str) -> str:
         ret = " ".join(line.strip() for line in query.split("\n"))
-        return (
-            ret
-            if len(ret) < self.log_max_query_length
-            else ret[0 : self.log_max_query_length] + "..."
-        )
+        return ret if len(ret) < self.log_max_query_length else ret[0 : self.log_max_query_length] + "..."
 
     def __enter__(self) -> SnowflakeConnection:
         """Context manager."""
@@ -2345,14 +2252,12 @@ class SnowflakeConnection:
             uuid.UUID(sf_qid)
         except ValueError:
             raise ValueError(f"Invalid UUID: '{sf_qid}'")
-        logger.debug(f"get_query_status sf_qid='{sf_qid}'")
+        logger.debug("get_query_status sf_qid='%s'", sf_qid)
 
         status = "NO_DATA"
         if self.is_closed():
             return QueryStatus.DISCONNECTED, {"data": {"queries": []}}
-        status_resp = self.rest.request(
-            "/monitoring/queries/" + quote(sf_qid), method="get", client="rest"
-        )
+        status_resp = self.rest.request("/monitoring/queries/" + quote(sf_qid), method="get", client="rest")
         if "queries" not in status_resp["data"]:
             return QueryStatus.FAILED_WITH_ERROR, status_resp
         queries = status_resp["data"]["queries"]
@@ -2489,9 +2394,7 @@ class SnowflakeConnection:
             sfq_id: str,
         ) -> bool:
             nonlocal found_unfinished_query
-            return found_unfinished_query or self.is_still_running(
-                self.get_query_status(sfq_id)
-            )
+            return found_unfinished_query or self.is_still_running(self.get_query_status(sfq_id))
 
         with ThreadPoolExecutor(
             max_workers=num_workers, thread_name_prefix="async_query_check_"
@@ -2510,11 +2413,7 @@ class SnowflakeConnection:
         if self._log_imported_packages_in_telemetry:
             # filter out duplicates caused by submodules
             # and internal modules with names starting with an underscore
-            imported_modules = {
-                k.split(".", maxsplit=1)[0]
-                for k in list(sys.modules)
-                if not k.startswith("_")
-            }
+            imported_modules = {k.split(".", maxsplit=1)[0] for k in list(sys.modules) if not k.startswith("_")}
             ts = get_time_millis()
             self._log_telemetry(
                 TelemetryData.from_telemetry_data_dict(
@@ -2551,10 +2450,7 @@ class SnowflakeConnection:
             return os.environ[ENV_VAR_PARTNER]
         if "streamlit" in sys.modules:
             return "streamlit"
-        if all(
-            (jpmod in sys.modules)
-            for jpmod in ("ipykernel", "jupyter_core", "jupyter_client")
-        ):
+        if all((jpmod in sys.modules) for jpmod in ("ipykernel", "jupyter_core", "jupyter_client")):
             return "jupyter_notebook"
         if "snowbooks" in sys.modules:
             return "snowflake_notebook"
@@ -2580,9 +2476,7 @@ class _ConnectionsRegistry:
         """
         with self._lock:
             self._connections.add(connection)
-            logger.debug(
-                f"Connection {id(connection)} added to pool. Total connections: {len(self._connections)}"
-            )
+            logger.debug("Connection %s added to pool. Total connections: %s", id(connection), len(self._connections))
 
     def remove_connection(self, connection: SnowflakeConnection) -> None:
         """Remove a connection from the registry.
@@ -2593,7 +2487,9 @@ class _ConnectionsRegistry:
         with self._lock:
             self._connections.discard(connection)
             logger.debug(
-                f"Connection {id(connection)} removed from registry. Total connections: {len(self._connections)}"
+                "Connection %s removed from registry. Total connections: %s",
+                id(connection),
+                len(self._connections),
             )
 
             if len(self._connections) == 0:

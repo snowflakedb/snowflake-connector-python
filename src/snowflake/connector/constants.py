@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 from enum import Enum, auto, unique
-from typing import TYPE_CHECKING, Any, Callable, DefaultDict, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from .options import pyarrow as pa
 from .sf_dirs import _resolve_platform_dirs
+
 
 if TYPE_CHECKING:
     from pyarrow import DataType
@@ -51,12 +53,12 @@ def vector_pa_type(metadata: ResultMetadataV2) -> DataType:
     Generate the Arrow type represented by the given vector column metadata.
     Vectors are represented as Arrow fixed-size lists.
     """
-    assert (
-        metadata.fields is not None and len(metadata.fields) == 1
-    ), "Invalid result metadata for vector type: expected a single field to be defined"
-    assert (
-        metadata.vector_dimension or 0
-    ) > 0, "Invalid result metadata for vector type: expected a positive dimension"
+    assert metadata.fields is not None and len(metadata.fields) == 1, (
+        "Invalid result metadata for vector type: expected a single field to be defined"
+    )
+    assert (metadata.vector_dimension or 0) > 0, (
+        "Invalid result metadata for vector type: expected a positive dimension"
+    )
 
     field_type = FIELD_TYPES[metadata.fields[0].type_code]
     return pa.list_(field_type.pa_type(metadata.fields[0]), metadata.vector_dimension)
@@ -71,9 +73,7 @@ def array_pa_type(metadata: ResultMetadataV2) -> DataType:
     if metadata.fields is None:
         return pa.string()
 
-    assert (
-        len(metadata.fields) == 1
-    ), "Invalid result metadata for array type: expected a single field to be defined"
+    assert len(metadata.fields) == 1, "Invalid result metadata for array type: expected a single field to be defined"
 
     field_type = FIELD_TYPES[metadata.fields[0].type_code]
     return pa.list_(field_type.pa_type(metadata.fields[0]))
@@ -88,14 +88,12 @@ def map_pa_type(metadata: ResultMetadataV2) -> DataType:
     if metadata.fields is None:
         return pa.string()
 
-    assert (
-        len(metadata.fields or []) == 2
-    ), "Invalid result metadata for map type: expected a field for key and a field for value"
+    assert len(metadata.fields or []) == 2, (
+        "Invalid result metadata for map type: expected a field for key and a field for value"
+    )
     key_type = FIELD_TYPES[metadata.fields[0].type_code]
     value_type = FIELD_TYPES[metadata.fields[1].type_code]
-    return pa.map_(
-        key_type.pa_type(metadata.fields[0]), value_type.pa_type(metadata.fields[1])
-    )
+    return pa.map_(key_type.pa_type(metadata.fields[0]), value_type.pa_type(metadata.fields[1]))
 
 
 def struct_pa_type(metadata: ResultMetadataV2) -> DataType:
@@ -107,15 +105,8 @@ def struct_pa_type(metadata: ResultMetadataV2) -> DataType:
     if metadata.fields is None:
         return pa.string()
 
-    assert all(
-        field.name is not None for field in metadata.fields
-    ), "All fields of a stuct type must have a name."
-    return pa.struct(
-        {
-            field.name: FIELD_TYPES[field.type_code].pa_type(field)
-            for field in metadata.fields
-        }
-    )
+    assert all(field.name is not None for field in metadata.fields), "All fields of a stuct type must have a name."
+    return pa.struct({field.name: FIELD_TYPES[field.type_code].pa_type(field) for field in metadata.fields})
 
 
 # This type mapping holds column type definitions.
@@ -126,26 +117,16 @@ def struct_pa_type(metadata: ResultMetadataV2) -> DataType:
 # PEP 249 type objects, and `pa_type` is a lambda that takes in a column's
 # result metadata and returns the corresponding Arrow type.
 FIELD_TYPES: tuple[FieldType, ...] = (
-    FieldType(
-        name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda _: pa.int64()
-    ),
-    FieldType(
-        name="REAL", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda _: pa.float64()
-    ),
-    FieldType(
-        name="TEXT", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()
-    ),
-    FieldType(
-        name="DATE", dbapi_type=[DBAPI_TYPE_TIMESTAMP], pa_type=lambda _: pa.date64()
-    ),
+    FieldType(name="FIXED", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda _: pa.int64()),
+    FieldType(name="REAL", dbapi_type=[DBAPI_TYPE_NUMBER], pa_type=lambda _: pa.float64()),
+    FieldType(name="TEXT", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()),
+    FieldType(name="DATE", dbapi_type=[DBAPI_TYPE_TIMESTAMP], pa_type=lambda _: pa.date64()),
     FieldType(
         name="TIMESTAMP",
         dbapi_type=[DBAPI_TYPE_TIMESTAMP],
         pa_type=lambda _: pa.time64("ns"),
     ),
-    FieldType(
-        name="VARIANT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda _: pa.string()
-    ),
+    FieldType(name="VARIANT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda _: pa.string()),
     FieldType(
         name="TIMESTAMP_LTZ",
         dbapi_type=[DBAPI_TYPE_TIMESTAMP],
@@ -163,26 +144,18 @@ FIELD_TYPES: tuple[FieldType, ...] = (
     ),
     FieldType(name="OBJECT", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=struct_pa_type),
     FieldType(name="ARRAY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=array_pa_type),
-    FieldType(
-        name="BINARY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda _: pa.binary()
-    ),
+    FieldType(name="BINARY", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=lambda _: pa.binary()),
     FieldType(
         name="TIME",
         dbapi_type=[DBAPI_TYPE_TIMESTAMP],
         pa_type=lambda _: pa.time64("ns"),
     ),
     FieldType(name="BOOLEAN", dbapi_type=[], pa_type=lambda _: pa.bool_()),
-    FieldType(
-        name="GEOGRAPHY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()
-    ),
-    FieldType(
-        name="GEOMETRY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()
-    ),
+    FieldType(name="GEOGRAPHY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()),
+    FieldType(name="GEOMETRY", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()),
     FieldType(name="VECTOR", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=vector_pa_type),
     FieldType(name="MAP", dbapi_type=[DBAPI_TYPE_BINARY], pa_type=map_pa_type),
-    FieldType(
-        name="FILE", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()
-    ),
+    FieldType(name="FILE", dbapi_type=[DBAPI_TYPE_STRING], pa_type=lambda _: pa.string()),
     FieldType(
         name="INTERVAL_YEAR_MONTH",
         dbapi_type=[DBAPI_TYPE_NUMBER],
@@ -195,8 +168,8 @@ FIELD_TYPES: tuple[FieldType, ...] = (
     ),
 )
 
-FIELD_NAME_TO_ID: DefaultDict[Any, int] = defaultdict(int)
-FIELD_ID_TO_NAME: DefaultDict[int, str] = defaultdict(str)
+FIELD_NAME_TO_ID: defaultdict[Any, int] = defaultdict(int)
+FIELD_ID_TO_NAME: defaultdict[int, str] = defaultdict(str)
 
 __binary_types: list[int] = []
 __binary_type_names: list[str] = []
@@ -264,10 +237,7 @@ def is_date_type_name(type_name) -> bool:
 
 
 # Log format
-LOG_FORMAT = (
-    "%(asctime)s - %(filename)s:%(lineno)d - "
-    "%(funcName)s() - %(levelname)s - %(message)s"
-)
+LOG_FORMAT = "%(asctime)s - %(filename)s:%(lineno)d - %(funcName)s() - %(levelname)s - %(message)s"
 
 # String literals
 UTF8 = "utf-8"
@@ -323,26 +293,20 @@ class FileHeader(NamedTuple):
 
 
 PARAMETER_AUTOCOMMIT = "AUTOCOMMIT"
-PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY = (
-    "CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY"
-)
+PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY = "CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY"
 PARAMETER_CLIENT_SESSION_KEEP_ALIVE = "CLIENT_SESSION_KEEP_ALIVE"
 PARAMETER_CLIENT_PREFETCH_THREADS = "CLIENT_PREFETCH_THREADS"
 PARAMETER_CLIENT_TELEMETRY_ENABLED = "CLIENT_TELEMETRY_ENABLED"
 PARAMETER_CLIENT_TELEMETRY_OOB_ENABLED = "CLIENT_OUT_OF_BAND_TELEMETRY_ENABLED"
 PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL = "CLIENT_STORE_TEMPORARY_CREDENTIAL"
 PARAMETER_CLIENT_REQUEST_MFA_TOKEN = "CLIENT_REQUEST_MFA_TOKEN"
-PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL = (
-    "CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL"
-)
+PARAMETER_CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL = "CLIENT_USE_SECURE_STORAGE_FOR_TEMPORARY_CREDENTIAL"
 PARAMETER_QUERY_CONTEXT_CACHE_SIZE = "QUERY_CONTEXT_CACHE_SIZE"
 PARAMETER_TIMEZONE = "TIMEZONE"
 PARAMETER_SERVICE_NAME = "SERVICE_NAME"
 PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS = "CLIENT_VALIDATE_DEFAULT_PARAMETERS"
 PARAMETER_PYTHON_CONNECTOR_QUERY_RESULT_FORMAT = "PYTHON_CONNECTOR_QUERY_RESULT_FORMAT"
-PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = (
-    "ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1"
-)
+PARAMETER_ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1 = "ENABLE_STAGE_S3_PRIVATELINK_FOR_US_EAST_1"
 PARAMETER_MULTI_STATEMENT_COUNT = "MULTI_STATEMENT_COUNT"
 
 HTTP_HEADER_CONTENT_TYPE = "Content-Type"

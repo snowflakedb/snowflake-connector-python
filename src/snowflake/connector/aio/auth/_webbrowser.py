@@ -9,6 +9,7 @@ import os
 import select
 import socket
 import time
+
 from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
@@ -37,6 +38,7 @@ from ...network import (
 )
 from ...url_util import is_valid_url
 from ._by_plugin import AuthByPlugin as AuthByPluginAsync
+
 
 if TYPE_CHECKING:
     from .._connection import SnowflakeConnection
@@ -87,9 +89,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
 
         if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
             if IS_WINDOWS:
-                logger.warning(
-                    "Configuration SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not available in Windows. Ignoring."
-                )
+                logger.warning("Configuration SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not available in Windows. Ignoring.")
             else:
                 socket_connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
@@ -105,8 +105,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
             except socket.gaierror as ex:
                 if ex.args[0] == socket.EAI_NONAME:
                     raise OperationalError(
-                        msg=f"{hostname} is not found. Ensure /etc/hosts has "
-                        f"{hostname} entry.",
+                        msg=f"{hostname} is not found. Ensure /etc/hosts has {hostname} entry.",
                         errno=ER_NO_HOSTNAME_FOUND,
                     )
                 else:
@@ -116,9 +115,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
 
             if conn._disable_console_login:
                 logger.debug("step 1: query GS to obtain SSO url")
-                sso_url = await self._get_sso_url(
-                    conn, authenticator, service_name, account, callback_port, user
-                )
+                sso_url = await self._get_sso_url(conn, authenticator, service_name, account, callback_port, user)
             else:
                 logger.debug("step 1: constructing console login url")
                 sso_url = self._get_console_login_url(conn, callback_port, user)
@@ -134,9 +131,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
                 )
                 return
 
-            print(
-                "Initiating login request with your identity provider. Press CTRL+C to abort and try again..."
-            )
+            print("Initiating login request with your identity provider. Press CTRL+C to abort and try again...")
 
             logger.debug("step 2: open a browser")
             print(f"Going to open: {sso_url} to authenticate...")
@@ -148,10 +143,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
                     "or your OS settings."
                 )
 
-            if (
-                browser_opened
-                or os.getenv("SNOWFLAKE_AUTH_FORCE_SERVER", "False").lower() == "true"
-            ):
+            if browser_opened or os.getenv("SNOWFLAKE_AUTH_FORCE_SERVER", "False").lower() == "true":
                 logger.debug("step 3: accept SAML token")
                 await self._receive_saml_token(conn, socket_connection)
             else:
@@ -169,10 +161,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
                         conn=conn,
                         ret={
                             "code": ER_UNABLE_TO_OPEN_BROWSER,
-                            "message": (
-                                "Unable to open a browser in this environment and "
-                                "SSO URL contained no token"
-                            ),
+                            "message": ("Unable to open a browser in this environment and SSO URL contained no token"),
                         },
                     )
                     return
@@ -191,9 +180,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
     async def update_body(self, body: dict[Any, Any]) -> None:
         AuthByWebBrowserSync.update_body(self, body)
 
-    async def _receive_saml_token(
-        self, conn: SnowflakeConnection, socket_connection
-    ) -> None:
+    async def _receive_saml_token(self, conn: SnowflakeConnection, socket_connection) -> None:
         """Receives SAML token from web browser."""
         while True:
             try:
@@ -206,15 +193,11 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
                 #   an immediate successive call to socket_client.recv gets the actual data
                 while len(raw_data) == 0 and attempts < max_attempts:
                     attempts += 1
-                    read_sockets, _write_sockets, _exception_sockets = select.select(
-                        [socket_connection], [], []
-                    )
+                    read_sockets, _write_sockets, _exception_sockets = select.select([socket_connection], [], [])
 
                     if read_sockets[0] is not None:
                         # Receive the data in small chunks and retransmit it
-                        socket_client, _ = await self._event_loop.sock_accept(
-                            socket_connection
-                        )
+                        socket_client, _ = await self._event_loop.sock_accept(socket_connection)
 
                         try:
                             # Async delta: async version of sock_recv does not take flags
@@ -234,14 +217,10 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
                                 ),
                             )
                         except asyncio.TimeoutError:
-                            logger.debug(
-                                "sock_recv timed out while attempting to retrieve callback token request"
-                            )
+                            logger.debug("sock_recv timed out while attempting to retrieve callback token request")
                             if attempts < max_attempts:
                                 sleep_time = 0.25
-                                logger.debug(
-                                    f"Waiting {sleep_time} seconds before trying again"
-                                )
+                                logger.debug("Waiting %s seconds before trying again", sleep_time)
                                 await asyncio.sleep(sleep_time)
                             else:
                                 logger.debug("Exceeded retry count")
@@ -256,9 +235,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
                 socket_client.shutdown(socket.SHUT_RDWR)
                 socket_client.close()
 
-    async def _process_options(
-        self, data: list[str], socket_client: socket.socket
-    ) -> bool:
+    async def _process_options(self, data: list[str], socket_client: socket.socket) -> bool:
         """Allows JS Ajax access to this endpoint."""
         for line in data:
             if line.startswith("OPTIONS "):
@@ -278,9 +255,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
         self._origin = requested_origin
         content = [
             "HTTP/1.1 200 OK",
-            "Date: {}".format(
-                time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
-            ),
+            "Date: {}".format(time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())),
             "Access-Control-Allow-Methods: POST, GET",
             f"Access-Control-Allow-Headers: {requested_headers}",
             "Access-Control-Max-Age: 86400",
@@ -288,9 +263,7 @@ class AuthByWebBrowser(AuthByPluginAsync, AuthByWebBrowserSync):
             "",
             "",
         ]
-        await self._event_loop.sock_sendall(
-            socket_client, "\r\n".join(content).encode("utf-8")
-        )
+        await self._event_loop.sock_sendall(socket_client, "\r\n".join(content).encode("utf-8"))
         return True
 
     async def _process_receive_saml_token(
@@ -321,9 +294,7 @@ You can close this window now and go back where you started from.
         content.append("")
         content.append(msg)
 
-        await self._event_loop.sock_sendall(
-            socket_client, "\r\n".join(content).encode("utf-8")
-        )
+        await self._event_loop.sock_sendall(socket_client, "\r\n".join(content).encode("utf-8"))
 
     async def _process_post(self, conn: SnowflakeConnection, data: list[str]) -> bool:
         for line in data:
@@ -334,8 +305,7 @@ You can close this window now and go back where you started from.
                 conn=conn,
                 ret={
                     "code": ER_IDP_CONNECTION_ERROR,
-                    "message": "Invalid HTTP request from web browser. Idp "
-                    "authentication could have failed.",
+                    "message": "Invalid HTTP request from web browser. Idp authentication could have failed.",
                 },
             )
             return False
@@ -387,9 +357,7 @@ You can close this window now and go back where you started from.
 
         body["data"]["AUTHENTICATOR"] = authenticator
         body["data"]["BROWSER_MODE_REDIRECT_PORT"] = str(callback_port)
-        logger.debug(
-            "account=%s, authenticator=%s, user=%s", account, authenticator, user
-        )
+        logger.debug("account=%s, authenticator=%s, user=%s", account, authenticator, user)
         ret = await conn._rest._post_request(
             url,
             headers,

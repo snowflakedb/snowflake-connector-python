@@ -7,7 +7,9 @@ import json
 import logging
 import re
 import uuid
-from typing import TYPE_CHECKING, Any, AsyncGenerator
+
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
 
 import OpenSSL.SSL
 
@@ -62,15 +64,13 @@ from ..network import (
     SNOWFLAKE_CONNECTOR_VERSION,
     ReauthenticationRequest,
     RetryRequest,
-)
-from ..network import SnowflakeRestful as SnowflakeRestfulSync
-from ..network import (
     SnowflakeRestfulJsonEncoder,
     get_http_retryable_error,
     is_econnreset_exception,
     is_login_request,
     is_retryable_http_code,
 )
+from ..network import SnowflakeRestful as SnowflakeRestfulSync
 from ..secret_detector import SecretDetector
 from ..sqlstate import (
     SQLSTATE_CONNECTION_NOT_EXISTS,
@@ -85,12 +85,15 @@ from ._session_manager import (
     SnowflakeSSLConnectorFactory,
 )
 
+
 if TYPE_CHECKING:
     from snowflake.connector.aio import SnowflakeConnection
 
 logger = logging.getLogger(__name__)
 
-PYTHON_CONNECTOR_USER_AGENT = f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
+PYTHON_CONNECTOR_USER_AGENT = (
+    f"{CLIENT_NAME}/{SNOWFLAKE_CONNECTOR_VERSION} ({PLATFORM}) {IMPLEMENTATION}/{PYTHON_VERSION}"
+)
 
 try:
     import aiohttp
@@ -99,9 +102,7 @@ except ImportError:
     raise
 
 
-def raise_okta_unauthorized_error(
-    connection: SnowflakeConnection | None, response: aiohttp.ClientResponse
-) -> None:
+def raise_okta_unauthorized_error(connection: SnowflakeConnection | None, response: aiohttp.ClientResponse) -> None:
     Error.errorhandler_wrapper(
         connection,
         None,
@@ -149,9 +150,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             session_manager = (
                 connection._session_manager
                 if (connection and connection._session_manager)
-                else SessionManagerFactory.get_manager(
-                    connector_factory=SnowflakeSSLConnectorFactory()
-                )
+                else SessionManagerFactory.get_manager(connector_factory=SnowflakeSSLConnectorFactory())
             )
         self._session_manager = session_manager
 
@@ -260,11 +259,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         return await self._token_request(REQUEST_TYPE_RENEW)
 
     async def _token_request(self, request_type):
-        logger.debug(
-            "updating session. master_token: {}".format(
-                "****" if self.master_token else None
-            )
-        )
+        logger.debug("updating session. master_token: %s", "****" if self.master_token else None)
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
@@ -435,11 +430,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 if self._connection._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR:
                     raise ex.cause
                 ret = await self._connection._reauthenticate()
-            logger.debug(
-                "ret[code] = {code} after renew_session".format(
-                    code=(ret.get("code", "N/A"))
-                )
-            )
+            logger.debug("ret[code] = %s after renew_session", ret.get("code", "N/A"))
             if ret.get("success"):
                 return await self._get_request(
                     url,
@@ -478,11 +469,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             _include_retry_params=_include_retry_params,
             socket_timeout=socket_timeout,
         )
-        logger.debug(
-            "ret[code] = {code}, after post request".format(
-                code=(ret.get("code", "N/A"))
-            )
-        )
+        logger.debug("ret[code] = %s, after post request", ret.get("code", "N/A"))
 
         if ret.get("code") == MASTER_TOKEN_EXPIRED_GS_CODE:
             self._connection.expired = True
@@ -493,18 +480,12 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 if self._connection._authenticator != EXTERNAL_BROWSER_AUTHENTICATOR:
                     raise ex.cause
                 ret = await self._connection._reauthenticate()
-            logger.debug(
-                "ret[code] = {code} after renew_session".format(
-                    code=(ret.get("code", "N/A"))
-                )
-            )
+            logger.debug("ret[code] = %s after renew_session", ret.get("code", "N/A"))
             if ret.get("success"):
-                return await self._post_request(
-                    url, headers, body, token=self.token, timeout=timeout
-                )
+                return await self._post_request(url, headers, body, token=self.token, timeout=timeout)
 
         if isinstance(ret.get("data"), dict) and ret["data"].get("queryId"):
-            logger.debug("Query id: {}".format(ret["data"]["queryId"]))
+            logger.debug("Query id: %s", ret["data"]["queryId"])
 
         if ret.get("code") == QUERY_IN_PROGRESS_ASYNC_CODE and _no_results:
             return ret
@@ -521,9 +502,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 headers,
                 token=self.token,
                 timeout=timeout,
-                is_fetch_query_status=bool(
-                    re.match(r"^/queries/.+/result$", result_url)
-                ),
+                is_fetch_query_status=bool(re.match(r"^/queries/.+/result$", result_url)),
             )
             logger.debug("ret[code] = %s", ret.get("code", "N/A"))
             logger.debug("ping pong done")
@@ -574,17 +553,13 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             retry_ctx = RetryCtx(
                 _include_retry_params=include_retry_params,
                 _include_retry_reason=include_retry_reason,
-                timeout=(
-                    timeout if timeout is not None else self._connection.network_timeout
-                ),
+                timeout=(timeout if timeout is not None else self._connection.network_timeout),
                 backoff_generator=self._connection._backoff_generator,
             )
 
             retry_ctx.set_start_time()
             while True:
-                ret = await self._request_exec_wrapper(
-                    session, method, full_url, headers, data, retry_ctx, **kwargs
-                )
+                ret = await self._request_exec_wrapper(session, method, full_url, headers, data, retry_ctx, **kwargs)
                 if ret is not None:
                     return ret
 
@@ -659,10 +634,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 return {}  # required for tests
 
             logger.debug(
-                "retrying: errorclass=%s, "
-                "error=%s, "
-                "counter=%s, "
-                "sleeping=%s(s)",
+                "retrying: errorclass=%s, error=%s, counter=%s, sleeping=%s(s)",
                 type(cause),
                 cause,
                 retry_ctx.current_retry_count + 1,
@@ -675,11 +647,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             if reason is None:
                 reason = 0
             else:
-                reason = (
-                    reason - ER_HTTP_GENERAL_ERROR
-                    if reason >= ER_HTTP_GENERAL_ERROR
-                    else reason
-                )
+                reason = reason - ER_HTTP_GENERAL_ERROR if reason >= ER_HTTP_GENERAL_ERROR else reason
 
             retry_ctx.retry_reason = reason
             # notes: in sync implementation we check ECONNRESET in error message and close low level urllib session
@@ -724,9 +692,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             if HEADER_AUTHORIZATION_KEY in headers:
                 del headers[HEADER_AUTHORIZATION_KEY]
             if token != NO_TOKEN:
-                headers[HEADER_AUTHORIZATION_KEY] = HEADER_SNOWFLAKE_TOKEN.format(
-                    token=token
-                )
+                headers[HEADER_AUTHORIZATION_KEY] = HEADER_SNOWFLAKE_TOKEN.format(token=token)
 
             # socket timeout is constant. You should be able to receive
             # the response within the time. If not, asyncio.TimeoutError is raised.
@@ -764,13 +730,12 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                     err = get_http_retryable_error(raw_ret.status)
                     # retryable server exceptions
                     if is_okta_authentication:
-                        raise RefreshTokenError(
-                            msg="OKTA authentication requires token refresh."
-                        )
+                        raise RefreshTokenError(msg="OKTA authentication requires token refresh.")
                     if is_login_request(full_url):
                         logger.debug(
                             "Received retryable response code while logging in. Will be handled by "
-                            f"authenticator. Ignore the following. Error stack: {err}",
+                            "authenticator. Ignore the following. Error stack: %s",
+                            err,
                             exc_info=True,
                         )
                         raise OperationalError(
@@ -778,7 +743,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                             errno=ER_RETRYABLE_CODE,
                         )
                     else:
-                        logger.debug(f"{err}. Retrying...")
+                        logger.debug("%s. Retrying...", err)
                         raise RetryRequest(err)
 
                 elif raw_ret.status == UNAUTHORIZED and catch_okta_unauthorized_error:
@@ -786,9 +751,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                     raise_okta_unauthorized_error(self._connection, raw_ret)
                     return None  # required for tests
                 else:
-                    raise_failed_request_error(
-                        self._connection, full_url, method, raw_ret
-                    )
+                    raise_failed_request_error(self._connection, full_url, method, raw_ret)
                     return None  # required for tests
             finally:
                 raw_ret.close()  # ensure response is closed
@@ -827,7 +790,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             if is_login_request(full_url):
                 logger.debug(
                     "Hit a timeout error while logging in. Will be handled by "
-                    f"authenticator. Ignore the following. Error stack: {err}",
+                    "authenticator. Ignore the following. Error stack: %s",
+                    err,
                     exc_info=True,
                 )
                 raise OperationalError(
@@ -836,8 +800,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 )
             else:
                 logger.debug(
-                    "Hit retryable client error. Retrying... Ignore the following "
-                    f"error stack: {err}",
+                    "Hit retryable client error. Retrying... Ignore the following error stack: %s",
+                    err,
                     exc_info=True,
                 )
                 raise RetryRequest(err)
@@ -853,8 +817,6 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             ) from err
 
     @contextlib.asynccontextmanager
-    async def use_session(
-        self, url: str | None = None
-    ) -> AsyncGenerator[aiohttp.ClientSession]:
+    async def use_session(self, url: str | None = None) -> AsyncGenerator[aiohttp.ClientSession]:
         async with self._session_manager.use_session(url) as session:
             yield session

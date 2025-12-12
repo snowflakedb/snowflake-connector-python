@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import sys
 import time
+
 from argparse import ArgumentParser, Namespace
 from time import gmtime, strftime
 
@@ -44,9 +45,7 @@ def main() -> None:
     args = _parse_args()
     if args.log_level:
         if args.log_file:
-            logging.basicConfig(
-                filename=args.log_file, level=getattr(logging, args.log_level.upper())
-            )
+            logging.basicConfig(filename=args.log_file, level=getattr(logging, args.log_level.upper()))
         else:
             logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
     dump_ocsp_response(args.urls, output_filename=args.output_file)
@@ -55,19 +54,11 @@ def main() -> None:
 def dump_good_status(current_time, single_response) -> None:
     print("This Update: {}".format(single_response["this_update"].native))
     print("Next Update: {}".format(single_response["next_update"].native))
-    this_update = (
-        single_response["this_update"].native.replace(tzinfo=None) - SFOCSP.ZERO_EPOCH
-    ).total_seconds()
-    next_update = (
-        single_response["next_update"].native.replace(tzinfo=None) - SFOCSP.ZERO_EPOCH
-    ).total_seconds()
+    this_update = (single_response["this_update"].native.replace(tzinfo=None) - SFOCSP.ZERO_EPOCH).total_seconds()
+    next_update = (single_response["next_update"].native.replace(tzinfo=None) - SFOCSP.ZERO_EPOCH).total_seconds()
 
     tolerable_validity = SFOCSP._calculate_tolerable_validity(this_update, next_update)
-    print(
-        "Tolerable Update: {}".format(
-            strftime("%Y%m%d%H%M%SZ", gmtime(next_update + tolerable_validity))
-        )
-    )
+    print("Tolerable Update: {}".format(strftime("%Y%m%d%H%M%SZ", gmtime(next_update + tolerable_validity))))
     if SFOCSP._is_validaity_range(current_time, this_update, next_update):
         print("OK")
     else:
@@ -78,11 +69,7 @@ def dump_revoked_status(single_response) -> None:
     revoked_info = single_response["cert_status"]
     revocation_time = revoked_info.native["revocation_time"]
     revocation_reason = revoked_info.native["revocation_reason"]
-    print(
-        "Revoked Time: {}".format(
-            revocation_time.strftime(SFOCSP.OUTPUT_TIMESTAMP_FORMAT)
-        )
-    )
+    print(f"Revoked Time: {revocation_time.strftime(SFOCSP.OUTPUT_TIMESTAMP_FORMAT)}")
     print(f"Revoked Reason: {revocation_reason}")
 
 
@@ -98,9 +85,7 @@ def dump_ocsp_response(urls, output_filename):
         cert_data = ocsp.extract_certificate_chain(connection)
         current_time = int(time.time())
         print(f"Target URL: {url}")
-        print(
-            "Current Time: {}".format(strftime("%Y%m%d%H%M%SZ", gmtime(current_time)))
-        )
+        print("Current Time: {}".format(strftime("%Y%m%d%H%M%SZ", gmtime(current_time))))
         for issuer, subject in cert_data:
             _, _ = ocsp.create_ocsp_request(issuer, subject)
             _, _, _, cert_id, ocsp_response_der = ocsp.validate_by_direct_connection(

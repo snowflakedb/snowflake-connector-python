@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import time
+
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +13,7 @@ from asn1crypto.ocsp import CertId
 from asn1crypto.x509 import Certificate
 
 import snowflake.connector.ocsp_snowflake
+
 from snowflake.connector.backoff_policies import exponential_backoff
 from snowflake.connector.compat import OK
 from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
@@ -29,11 +31,12 @@ from snowflake.connector.ocsp_snowflake import (
     OCSP_ROOT_CERTS_DICT_LOCK_TIMEOUT_DEFAULT_NO_TIMEOUT,
     OCSPCache,
     OCSPResponseValidationResult,
+    OCSPTelemetryData,
 )
 from snowflake.connector.ocsp_snowflake import OCSPServer as OCSPServerSync
-from snowflake.connector.ocsp_snowflake import OCSPTelemetryData
 from snowflake.connector.ocsp_snowflake import SnowflakeOCSP as SnowflakeOCSPSync
 from snowflake.connector.url_util import extract_top_level_domain_from_hostname
+
 
 if TYPE_CHECKING:
     from snowflake.connector.aio._session_manager import SessionManager
@@ -42,9 +45,7 @@ logger = getLogger(__name__)
 
 
 class OCSPServer(OCSPServerSync):
-    async def download_cache_from_server(
-        self, ocsp, *, session_manager: SessionManager
-    ):
+    async def download_cache_from_server(self, ocsp, *, session_manager: SessionManager):
         if self.CACHE_SERVER_ENABLED:
             # if any of them is not cache, download the cache file from
             # OCSP response cache server.
@@ -57,22 +58,19 @@ class OCSPServer(OCSPServerSync):
                         msg="OCSP Cache Server Unavailable.",
                         errno=ER_OCSP_RESPONSE_CACHE_DOWNLOAD_FAILED,
                     )
-                logger.debug(
-                    "downloaded OCSP response cache file from %s", self.CACHE_SERVER_URL
-                )
+                logger.debug("downloaded OCSP response cache file from %s", self.CACHE_SERVER_URL)
                 # len(OCSP_RESPONSE_VALIDATION_CACHE) is thread-safe, however, we do not want to
                 # block for logging purpose, thus using len(OCSP_RESPONSE_VALIDATION_CACHE._cache) here.
                 logger.debug(
                     "# of certificates: %u",
-                    len(
-                        snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE._cache
-                    ),
+                    len(snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE._cache),
                 )
             except RevocationCheckError as rce:
                 logger.debug(
                     "OCSP Response cache download failed. The client"
                     "will reach out to the OCSP Responder directly for"
-                    "any missing OCSP responses %s\n" % rce.msg
+                    "any missing OCSP responses %s\n",
+                    rce.msg,
                 )
                 raise
 
@@ -89,9 +87,7 @@ class OCSPServer(OCSPServerSync):
             logger.debug("started downloading OCSP response cache file: %s", url)
 
             if ocsp.test_mode is not None:
-                test_timeout = os.getenv(
-                    "SF_TEST_OCSP_CACHE_SERVER_CONNECTION_TIMEOUT", None
-                )
+                test_timeout = os.getenv("SF_TEST_OCSP_CACHE_SERVER_CONNECTION_TIMEOUT", None)
                 sf_cache_server_url = os.getenv("SF_TEST_OCSP_CACHE_SERVER_URL", None)
                 if test_timeout is not None:
                     sf_timeout = int(test_timeout)
@@ -112,8 +108,7 @@ class OCSPServer(OCSPServerSync):
                         ocsp.decode_ocsp_response_cache(await response.json())
                         elapsed_time = time.time() - start_time
                         logger.debug(
-                            "ended downloading OCSP response cache file. "
-                            "elapsed time: %ss",
+                            "ended downloading OCSP response cache file. elapsed time: %ss",
                             elapsed_time,
                         )
                         break
@@ -126,9 +121,7 @@ class OCSPServer(OCSPServerSync):
                         )
                     await asyncio.sleep(sleep_time)
                 else:
-                    logger.error(
-                        "Failed to get OCSP response after %s attempt.", max_retry
-                    )
+                    logger.error("Failed to get OCSP response after %s attempt.", max_retry)
                     return False
                 return True
         except Exception as e:
@@ -140,7 +133,6 @@ class OCSPServer(OCSPServerSync):
 
 
 class SnowflakeOCSP(SnowflakeOCSPSync):
-
     def __init__(
         self,
         ocsp_response_cache_uri=None,
@@ -158,9 +150,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         self._use_post_method = use_post_method
         self._root_certs_dict_lock_timeout = root_certs_dict_lock_timeout
         self.OCSP_CACHE_SERVER = OCSPServer(
-            top_level_domain=extract_top_level_domain_from_hostname(
-                kwargs.pop("hostname", None)
-            )
+            top_level_domain=extract_top_level_domain_from_hostname(kwargs.pop("hostname", None))
         )
 
         self.debug_ocsp_failure_url = None
@@ -175,9 +165,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         SnowflakeOCSP.OCSP_CACHE.reset_ocsp_response_cache_uri(ocsp_response_cache_uri)
 
         if not OCSPServer.is_enabled_new_ocsp_endpoint():
-            self.OCSP_CACHE_SERVER.reset_ocsp_dynamic_cache_server_url(
-                use_ocsp_cache_server
-            )
+            self.OCSP_CACHE_SERVER.reset_ocsp_dynamic_cache_server_url(use_ocsp_cache_server)
 
         if not snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE:
             SnowflakeOCSP.OCSP_CACHE.read_file(self)
@@ -223,12 +211,8 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         try:
             cert_data = self.extract_certificate_chain(connection)
         except RevocationCheckError:
-            telemetry_data.set_event_sub_type(
-                OCSPTelemetryData.CERTIFICATE_EXTRACTION_FAILED
-            )
-            logger.debug(
-                telemetry_data.generate_telemetry_data("RevocationCheckFailure")
-            )
+            telemetry_data.set_event_sub_type(OCSPTelemetryData.CERTIFICATE_EXTRACTION_FAILED)
+            logger.debug(telemetry_data.generate_telemetry_data("RevocationCheckFailure"))
             return None
 
         return await self._validate(
@@ -288,16 +272,11 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
     ]:
         cert_id, req = self.create_ocsp_request(issuer, subject)
         cache_key = self.decode_cert_id_key(cert_id)
-        ocsp_response_validation_result = (
-            snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE.get(
-                cache_key
-            )
+        ocsp_response_validation_result = snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE.get(
+            cache_key
         )
 
-        if (
-            ocsp_response_validation_result is None
-            or not ocsp_response_validation_result.validated
-        ):
+        if ocsp_response_validation_result is None or not ocsp_response_validation_result.validated:
             r = await self.validate_by_direct_connection(
                 issuer,
                 subject,
@@ -338,9 +317,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                 break
 
         if not in_cache:
-            await self.OCSP_CACHE_SERVER.download_cache_from_server(
-                self, session_manager=session_manager
-            )
+            await self.OCSP_CACHE_SERVER.download_cache_from_server(self, session_manager=session_manager)
 
     async def _validate_certificates_sequential(
         self,
@@ -352,13 +329,9 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         do_retry: bool = True,
     ) -> list[tuple[Exception | None, Certificate, Certificate, CertId, bytes]]:
         try:
-            await self._check_ocsp_response_cache_server(
-                cert_data, session_manager=session_manager
-            )
+            await self._check_ocsp_response_cache_server(cert_data, session_manager=session_manager)
         except RevocationCheckError as rce:
-            telemetry_data.set_event_sub_type(
-                OCSPTelemetryData.ERROR_CODE_MAP[rce.errno]
-            )
+            telemetry_data.set_event_sub_type(OCSPTelemetryData.ERROR_CODE_MAP[rce.errno])
         except Exception as ex:
             logger.debug(
                 "Caught unknown exception - %s. Continue to validate by direct connection",
@@ -390,9 +363,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                 )
                 OCSPCache.CACHE_UPDATED = True
 
-        snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE.update(
-            to_update_cache_dict
-        )
+        snowflake.connector.ocsp_snowflake.OCSP_RESPONSE_VALIDATION_CACHE.update(to_update_cache_dict)
         return results
 
     async def validate_by_direct_connection(
@@ -407,9 +378,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         **kwargs: Any,
     ) -> tuple[Exception | None, Certificate, Certificate, CertId, bytes]:
         cert_id, req = self.create_ocsp_request(issuer, subject)
-        cache_status, ocsp_response = self.is_cert_id_in_cache(
-            cert_id, subject, **kwargs
-        )
+        cache_status, ocsp_response = self.is_cert_id_in_cache(cert_id, subject, **kwargs)
 
         try:
             if not cache_status:
@@ -426,22 +395,16 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                 )
             else:
                 ocsp_url = self.extract_ocsp_url(subject)
-                cert_id_enc = self.encode_cert_id_base64(
-                    self.decode_cert_id_key(cert_id)
-                )
+                cert_id_enc = self.encode_cert_id_base64(self.decode_cert_id_key(cert_id))
                 telemetry_data.set_cache_hit(True)
-                self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(
-                    self, req, ocsp_url
-                )
+                self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(self, req, ocsp_url)
                 telemetry_data.set_ocsp_url(ocsp_url)
                 telemetry_data.set_ocsp_req(req)
                 telemetry_data.set_cert_id(cert_id_enc)
                 logger.debug("using OCSP response cache")
 
             if not ocsp_response:
-                telemetry_data.set_event_sub_type(
-                    OCSPTelemetryData.OCSP_RESPONSE_UNAVAILABLE
-                )
+                telemetry_data.set_event_sub_type(OCSPTelemetryData.OCSP_RESPONSE_UNAVAILABLE)
                 raise RevocationCheckError(
                     msg="Could not retrieve OCSP Response. Cannot perform Revocation Check",
                     errno=ER_OCSP_RESPONSE_UNAVAILABLE,
@@ -450,9 +413,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                 self.process_ocsp_response(issuer, cert_id, ocsp_response)
                 err = None
             except RevocationCheckError as op_er:
-                telemetry_data.set_event_sub_type(
-                    OCSPTelemetryData.ERROR_CODE_MAP[op_er.errno]
-                )
+                telemetry_data.set_event_sub_type(OCSPTelemetryData.ERROR_CODE_MAP[op_er.errno])
                 raise op_er
 
         except RevocationCheckError as rce:
@@ -523,17 +484,13 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
         if self.test_mode is not None:
             logger.debug("WARNING - DRIVER IS CONFIGURED IN TESTMODE.")
             test_ocsp_url = os.getenv("SF_TEST_OCSP_URL", None)
-            test_timeout = os.getenv(
-                "SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT", None
-            )
+            test_timeout = os.getenv("SF_TEST_CA_OCSP_RESPONDER_CONNECTION_TIMEOUT", None)
             if test_timeout is not None:
                 sf_timeout = int(test_timeout)
             if test_ocsp_url is not None:
                 target_url = test_ocsp_url
 
-        self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(
-            self, ocsp_request, ocsp_url
-        )
+        self.debug_ocsp_failure_url = SnowflakeOCSP.create_ocsp_debug_info(self, ocsp_request, ocsp_url)
         telemetry_data.set_ocsp_req(self.decode_ocsp_request_b64(ocsp_request))
         telemetry_data.set_ocsp_url(ocsp_url)
         telemetry_data.set_cert_id(cert_id_enc)
@@ -558,10 +515,7 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                         data=payload,
                     )
                     if response.status == OK:
-                        logger.debug(
-                            "OCSP response was successfully returned from OCSP "
-                            "server."
-                        )
+                        logger.debug("OCSP response was successfully returned from OCSP server.")
                         ret = await response.content.read()
                         break
                     elif max_retry > 1:
@@ -576,32 +530,25 @@ class SnowflakeOCSP(SnowflakeOCSPSync):
                     if max_retry > 1:
                         sleep_time = next(backoff)
                         logger.debug(
-                            "Could not fetch OCSP Response from server"
-                            "Retrying in %s(s)",
+                            "Could not fetch OCSP Response from serverRetrying in %s(s)",
                             sleep_time,
                         )
                         await asyncio.sleep(sleep_time)
                     else:
-                        telemetry_data.set_event_sub_type(
-                            OCSPTelemetryData.OCSP_RESPONSE_FETCH_EXCEPTION
-                        )
+                        telemetry_data.set_event_sub_type(OCSPTelemetryData.OCSP_RESPONSE_FETCH_EXCEPTION)
                         raise RevocationCheckError(
                             msg="Could not fetch OCSP Response from server. Consider"
-                            "checking your whitelists : Exception - {}".format(str(ex)),
+                            f"checking your whitelists : Exception - {str(ex)}",
                             errno=ER_OCSP_RESPONSE_FETCH_EXCEPTION,
                         )
             else:
                 logger.error(
-                    "Failed to get OCSP response after {} attempt. Consider checking "
-                    "for OCSP URLs being blocked".format(max_retry)
+                    "Failed to get OCSP response after %s attempt. Consider checking for OCSP URLs being blocked",
+                    max_retry,
                 )
-                telemetry_data.set_event_sub_type(
-                    OCSPTelemetryData.OCSP_RESPONSE_FETCH_FAILURE
-                )
+                telemetry_data.set_event_sub_type(OCSPTelemetryData.OCSP_RESPONSE_FETCH_FAILURE)
                 raise RevocationCheckError(
-                    msg="Failed to get OCSP response after {} attempt.".format(
-                        max_retry
-                    ),
+                    msg=f"Failed to get OCSP response after {max_retry} attempt.",
                     errno=ER_OCSP_RESPONSE_FETCH_FAILURE,
                 )
 

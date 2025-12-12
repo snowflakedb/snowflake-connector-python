@@ -5,6 +5,7 @@ from base64 import b16decode, b16encode, standard_b64encode
 
 from .errors import InternalError
 
+
 # Converts a Snowflake binary value into a "bytes" object.
 binary_to_python = b16decode
 

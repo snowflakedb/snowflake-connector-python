@@ -5,6 +5,7 @@ import gzip
 import os
 import shutil
 import struct
+
 from io import BytesIO
 from logging import getLogger
 from typing import IO
@@ -13,6 +14,7 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 
 from .constants import UTF8, kilobyte
+
 
 logger = getLogger(__name__)
 
@@ -147,7 +149,5 @@ class SnowflakeFileUtil:
         digest, size = None, None
         with open(file_name, "rb") as src:
             digest, size = SnowflakeFileUtil.get_digest_and_size(src)
-        logger.debug(
-            "getting digest and size: %s, %s, file=%s", digest, size, file_name
-        )
+        logger.debug("getting digest and size: %s, %s, file=%s", digest, size, file_name)
         return digest, size

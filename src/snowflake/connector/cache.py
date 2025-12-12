@@ -8,6 +8,7 @@ import platform
 import random
 import string
 import tempfile
+
 from collections.abc import Iterator
 from os import makedirs, path
 from threading import Lock
@@ -18,6 +19,7 @@ from typing_extensions import NamedTuple, Self
 
 from . import constants
 from .constants import ENV_VAR_TEST_MODE
+
 
 now = datetime.datetime.now
 getmtime = os.path.getmtime
@@ -90,9 +92,7 @@ class SFDictCache(Generic[K, V]):
         holding self._lock.
         """
         if test_mode:
-            assert (
-                self._lock.locked()
-            ), "The mutex self._lock should be locked by this thread"
+            assert self._lock.locked(), "The mutex self._lock should be locked by this thread"
         try:
             t, v = self._cache[k]
         except KeyError:
@@ -114,9 +114,7 @@ class SFDictCache(Generic[K, V]):
         holding self._lock.
         """
         if test_mode:
-            assert (
-                self._lock.locked()
-            ), "The mutex self._lock should be locked by this thread"
+            assert self._lock.locked(), "The mutex self._lock should be locked by this thread"
         self._cache[k] = CacheEntry(
             expiry=now() + self._entry_lifetime,
             entry=v,
@@ -184,9 +182,7 @@ class SFDictCache(Generic[K, V]):
         holding self._lock.
         """
         if test_mode:
-            assert (
-                self._lock.locked()
-            ), "The mutex self._lock should be locked by this thread"
+            assert self._lock.locked(), "The mutex self._lock should be locked by this thread"
         del self._cache[key]
         self._add_or_remove()
 
@@ -220,9 +216,7 @@ class SFDictCache(Generic[K, V]):
         holding self._lock and other._lock.
         """
         if test_mode:
-            assert (
-                self._lock.locked()
-            ), "The mutex self._lock should be locked by this thread"
+            assert self._lock.locked(), "The mutex self._lock should be locked by this thread"
         to_insert: dict[K, CacheEntry[V]]
         self._clear_expired_entries()
         if isinstance(other, (list, dict)):
@@ -293,9 +287,7 @@ class SFDictCache(Generic[K, V]):
 
     def _clear_expired_entries(self) -> None:
         if test_mode:
-            assert (
-                self._lock.locked()
-            ), "The mutex self._lock should be locked by this thread"
+            assert self._lock.locked(), "The mutex self._lock should be locked by this thread"
         cache_updated = False
         for k in list(self._cache.keys()):
             try:
@@ -550,9 +542,7 @@ class SFDictFileCache(SFDictCache):
         This function is non-locking when it comes to self._lock.
         """
         if test_mode:
-            assert (
-                self._lock.locked()
-            ), "The mutex self._lock should be locked by this thread"
+            assert self._lock.locked(), "The mutex self._lock should be locked by this thread"
         self._clear_expired_entries()
         if not self._cache_modified and not force_flush:
             # cache is not updated, so there is no need to dump cache to file, we just return
@@ -601,9 +591,7 @@ class SFDictFileCache(SFDictCache):
                     if os.path.exists(tmp_file_path) and os.path.isfile(tmp_file_path):
                         os.unlink(tmp_file_path)
         except Timeout:
-            logger.debug(
-                f"acquiring {self._file_lock_path} timed out, skipping saving..."
-            )
+            logger.debug("acquiring %s timed out, skipping saving...", self._file_lock_path)
         except (AssertionError, RuntimeError):
             raise
         except Exception as e:
@@ -674,11 +662,7 @@ class SFDictFileCache(SFDictCache):
     # Custom pickling implementation
 
     def __getstate__(self) -> dict:
-        return {
-            k: v
-            for k, v in self.__dict__.items()
-            if k in SFDictFileCache._ATTRIBUTES_TO_PICKLE
-        }
+        return {k: v for k, v in self.__dict__.items() if k in SFDictFileCache._ATTRIBUTES_TO_PICKLE}
 
     def __setstate__(self, state: dict) -> None:
         self.__dict__.update(state)

@@ -1,5 +1,6 @@
 from setuptools import find_packages, setup
 
+
 setup(
     name="snowflake_prober",
     version="1.0.0",

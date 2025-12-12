@@ -63,7 +63,7 @@ def test_should_authenticate_with_impersonation():
     if not isinstance(IMPERSONATION_PATH, str) or not IMPERSONATION_PATH:
         pytest.skip("Skipping test - IMPERSONATION_PATH is not set")
 
-    logger.debug(f"Using impersonation path: {IMPERSONATION_PATH}")
+    logger.debug("Using impersonation path: %s", IMPERSONATION_PATH)
     impersonation_path_list = IMPERSONATION_PATH.split(",")
 
     connection_params = {
@@ -94,7 +94,7 @@ def connect_and_execute_simple_query(connection_params, expected_user=None) -> b
                 assert (
                     expected_user == user
                 ), f"Expected user '{expected_user}', got user '{user}'"
-            logger.info(f"Successfully connected to Snowflake as {user}")
+            logger.info("Successfully connected to Snowflake as %s", user)
             return True
     except Exception as e:
         logger.error(e)

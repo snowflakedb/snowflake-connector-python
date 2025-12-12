@@ -5,6 +5,7 @@ import base64
 import json
 import os
 import tempfile
+
 from logging import getLogger
 from typing import IO, TYPE_CHECKING
 
@@ -15,6 +16,7 @@ from .compat import PKCS5_OFFSET, PKCS5_PAD, PKCS5_UNPAD
 from .constants import UTF8, EncryptionMetadata, MaterialDescriptor, kilobyte
 from .file_util import owner_rw_opener
 from .util_text import random_string
+
 
 block_size = int(algorithms.AES.block_size / 8)  # in bytes
 
@@ -65,9 +67,7 @@ class SnowflakeEncryptionUtil:
             The encryption metadata.
         """
         logger = getLogger(__name__)
-        decoded_key = base64.standard_b64decode(
-            encryption_material.query_stage_master_key
-        )
+        decoded_key = base64.standard_b64decode(encryption_material.query_stage_master_key)
         key_size = len(decoded_key)
         logger.debug("key_size = %s", key_size)
 
@@ -94,9 +94,7 @@ class SnowflakeEncryptionUtil:
         # encrypt key with QRMK
         cipher = Cipher(algorithms.AES(decoded_key), modes.ECB(), backend=backend)
         encryptor = cipher.encryptor()
-        enc_kek = (
-            encryptor.update(PKCS5_PAD(file_key, block_size)) + encryptor.finalize()
-        )
+        enc_kek = encryptor.update(PKCS5_PAD(file_key, block_size)) + encryptor.finalize()
 
         mat_desc = MaterialDescriptor(
             smk_id=encryption_material.smk_id,
@@ -140,9 +138,7 @@ class SnowflakeEncryptionUtil:
         )
         with open(in_filename, "rb") as infile:
             with os.fdopen(temp_output_fd, "wb") as outfile:
-                metadata = SnowflakeEncryptionUtil.encrypt_stream(
-                    encryption_material, infile, outfile, chunk_size
-                )
+                metadata = SnowflakeEncryptionUtil.encrypt_stream(encryption_material, infile, outfile, chunk_size)
         return metadata, temp_output_file
 
     @staticmethod
@@ -157,9 +153,7 @@ class SnowflakeEncryptionUtil:
 
         key_base64 = metadata.key
         iv_base64 = metadata.iv
-        decoded_key = base64.standard_b64decode(
-            encryption_material.query_stage_master_key
-        )
+        decoded_key = base64.standard_b64decode(encryption_material.query_stage_master_key)
         key_bytes = base64.standard_b64decode(key_base64)
         iv_bytes = base64.standard_b64decode(iv_base64)
 
@@ -214,7 +208,5 @@ class SnowflakeEncryptionUtil:
         file_opener = None if unsafe_file_write else owner_rw_opener
         with open(in_filename, "rb") as infile:
             with open(temp_output_file, "wb", opener=file_opener) as outfile:
-                SnowflakeEncryptionUtil.decrypt_stream(
-                    metadata, encryption_material, infile, outfile, chunk_size
-                )
+                SnowflakeEncryptionUtil.decrypt_stream(metadata, encryption_material, infile, outfile, chunk_size)
         return temp_output_file

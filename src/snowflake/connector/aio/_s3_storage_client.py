@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
+
 from datetime import datetime, timezone
 from io import IOBase
 from logging import getLogger
@@ -28,6 +29,7 @@ from ..s3_storage_client import (
 )
 from ..s3_storage_client import SnowflakeS3RestClient as SnowflakeS3RestClientSync
 from ._storage_client import SnowflakeStorageClient as SnowflakeStorageClientAsync
+
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -65,11 +67,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
         # Multipart upload only
         self.upload_id: str | None = None
         self.etags: list[str] | None = None
-        self.s3location: S3Location = (
-            SnowflakeS3RestClient._extract_bucket_name_and_path(
-                self.stage_info["location"]
-            )
-        )
+        self.s3location: S3Location = SnowflakeS3RestClient._extract_bucket_name_and_path(self.stage_info["location"])
         self.use_s3_regional_url = (
             use_s3_regional_url
             or "useS3RegionalUrl" in stage_info
@@ -82,9 +80,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
         # if GS sends us an endpoint, it's likely for FIPS. Use it.
         self.endpoint: str | None = None
         if stage_info["endPoint"]:
-            self.endpoint = (
-                f"https://{self.s3location.bucket_name}." + stage_info["endPoint"]
-            )
+            self.endpoint = f"https://{self.s3location.bucket_name}." + stage_info["endPoint"]
 
     async def _send_request_with_authentication_and_retry(
         self,
@@ -107,33 +103,26 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
         if query_parts is None:
             query_parts = {}
         parsed_url = urlparse(url)
-        x_amz_headers["x-amz-security-token"] = self.credentials.creds.get(
-            "AWS_TOKEN", ""
-        )
+        x_amz_headers["x-amz-security-token"] = self.credentials.creds.get("AWS_TOKEN", "")
         x_amz_headers["host"] = parsed_url.hostname
         if unsigned_payload:
             x_amz_headers["x-amz-content-sha256"] = UNSIGNED_PAYLOAD
         else:
-            x_amz_headers["x-amz-content-sha256"] = (
-                SnowflakeS3RestClient._hash_bytes_hex(payload).lower().decode()
-            )
+            x_amz_headers["x-amz-content-sha256"] = SnowflakeS3RestClient._hash_bytes_hex(payload).lower().decode()
 
         def generate_authenticated_url_and_args_v4() -> tuple[str, dict[str, bytes]]:
             t = datetime.now(timezone.utc).replace(tzinfo=None)
             amzdate = t.strftime("%Y%m%dT%H%M%SZ")
             short_amzdate = amzdate[:8]
             x_amz_headers["x-amz-date"] = amzdate
-            x_amz_headers["x-amz-security-token"] = self.credentials.creds.get(
-                "AWS_TOKEN", ""
-            )
+            x_amz_headers["x-amz-security-token"] = self.credentials.creds.get("AWS_TOKEN", "")
 
             (
                 canonical_request,
                 signed_headers,
             ) = self._construct_canonical_request_and_signed_headers(
                 verb=verb,
-                canonical_uri_parameter=parsed_url.path
-                + (f";{parsed_url.params}" if parsed_url.params else ""),
+                canonical_uri_parameter=parsed_url.path + (f";{parsed_url.params}" if parsed_url.params else ""),
                 query_parts=query_parts,
                 canonical_headers=x_amz_headers,
                 payload_hash=x_amz_headers["x-amz-content-sha256"],
@@ -172,9 +161,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
 
             return url, rest_args
 
-        return await self._send_request_with_retry(
-            verb, generate_authenticated_url_and_args_v4, retry_id
-        )
+        return await self._send_request_with_retry(verb, generate_authenticated_url_and_args_v4, retry_id)
 
     async def get_file_header(self, filename: str) -> FileHeader | None:
         """Gets the metadata of file in specified location.
@@ -191,9 +178,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
 
         retry_id = "HEAD"
         self.retry_count[retry_id] = 0
-        response = await self._send_request_with_authentication_and_retry(
-            url=url, verb="HEAD", retry_id=retry_id
-        )
+        response = await self._send_request_with_authentication_and_retry(url=url, verb="HEAD", retry_id=retry_id)
         if response.status == 200:
             self.meta.result_status = ResultStatus.UPLOADED
             metadata = response.headers
@@ -212,9 +197,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
                 encryption_metadata=encryption_metadata,
             )
         elif response.status == 404:
-            logger.debug(
-                f"not found. bucket: {self.s3location.bucket_name}, path: {path}"
-            )
+            logger.debug("not found. bucket: %s, path: %s", self.s3location.bucket_name, path)
             self.meta.result_status = ResultStatus.NOT_FOUND_FILE
             return None
         else:
@@ -327,7 +310,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
         response.raise_for_status()
 
     async def download_chunk(self, chunk_id: int) -> None:
-        logger.debug(f"Downloading chunk {chunk_id}")
+        logger.debug("Downloading chunk %s", chunk_id)
         path = quote(self.s3location.path + self.meta.src_file_name.lstrip("/"))
         url = self.endpoint + f"/{path}"
         if self.num_of_chunks == 1:
@@ -373,55 +356,37 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
             namespace = config.tag[: config.tag.index("}") + 1]
             statusTag = f"{namespace}Status"
             found = config.find(statusTag)
-            use_accelerate_endpoint = (
-                False if found is None else (found.text == "Enabled")
-            )
-            logger.debug(f"use_accelerate_endpoint: {use_accelerate_endpoint}")
+            use_accelerate_endpoint = False if found is None else (found.text == "Enabled")
+            logger.debug("use_accelerate_endpoint: %s", use_accelerate_endpoint)
             return use_accelerate_endpoint
         return False
 
-    async def transfer_accelerate_config(
-        self, use_accelerate_endpoint: bool | None = None
-    ) -> bool:
+    async def transfer_accelerate_config(self, use_accelerate_endpoint: bool | None = None) -> bool:
         # accelerate cannot be used in China and us government
         if self.region_name and self.region_name.startswith("cn-"):
-            self.endpoint = (
-                f"https://{self.s3location.bucket_name}."
-                f"s3.{self.region_name}.amazonaws.com.cn"
-            )
+            self.endpoint = f"https://{self.s3location.bucket_name}.s3.{self.region_name}.amazonaws.com.cn"
             return False
         # if self.endpoint has been set, e.g. by metadata, no more config is needed.
         if self.endpoint is not None:
             return self.endpoint.find("s3-accelerate.amazonaws.com") >= 0
         if self.use_s3_regional_url:
-            self.endpoint = (
-                f"https://{self.s3location.bucket_name}."
-                f"s3.{self.region_name}.amazonaws.com"
-            )
+            self.endpoint = f"https://{self.s3location.bucket_name}.s3.{self.region_name}.amazonaws.com"
             return False
         else:
             if use_accelerate_endpoint is None:
                 if str(self.s3location.bucket_name).lower().startswith("sfc-"):
                     # SNOW-2324060: no s3:GetAccelerateConfiguration and no intention to add either
                     # for internal stage, thus previously the client got HTTP403 on /accelerate call
-                    logger.debug(
-                        "Not attempting to get bucket transfer accelerate endpoint for internal stage."
-                    )
+                    logger.debug("Not attempting to get bucket transfer accelerate endpoint for internal stage.")
                     use_accelerate_endpoint = False
                 else:
-                    use_accelerate_endpoint = await self._get_bucket_accelerate_config(
-                        self.s3location.bucket_name
-                    )
+                    use_accelerate_endpoint = await self._get_bucket_accelerate_config(self.s3location.bucket_name)
 
             if use_accelerate_endpoint:
-                self.endpoint = (
-                    f"https://{self.s3location.bucket_name}.s3-accelerate.amazonaws.com"
-                )
+                self.endpoint = f"https://{self.s3location.bucket_name}.s3-accelerate.amazonaws.com"
             else:
-                self.endpoint = (
-                    f"https://{self.s3location.bucket_name}.s3.amazonaws.com"
-                )
-            logger.debug(f"Using {self.endpoint} as storage endpoint.")
+                self.endpoint = f"https://{self.s3location.bucket_name}.s3.amazonaws.com"
+            logger.debug("Using %s as storage endpoint.", self.endpoint)
             return use_accelerate_endpoint
 
     async def _has_expired_token(self, response: aiohttp.ClientResponse) -> bool:
@@ -444,9 +409,7 @@ class SnowflakeS3RestClient(SnowflakeStorageClientAsync, SnowflakeS3RestClientSy
             )
             return False
         if not message:
-            logger.debug(
-                "S3 token-expiry check: empty error body, treating as not expired"
-            )
+            logger.debug("S3 token-expiry check: empty error body, treating as not expired")
             return False
         try:
             err = ET.fromstring(message)

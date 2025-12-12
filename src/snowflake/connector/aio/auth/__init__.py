@@ -16,6 +16,7 @@ from ._usrpwdmfa import AuthByUsrPwdMfa
 from ._webbrowser import AuthByWebBrowser
 from ._workload_identity import AuthByWorkloadIdentity
 
+
 FIRST_PARTY_AUTHENTICATORS = frozenset(
     (
         AuthByDefault,

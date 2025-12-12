@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +15,7 @@ from ..constants import HTTP_HEADER_CONTENT_ENCODING, FileHeader, ResultStatus
 from ..encryption_util import EncryptionMetadata
 from ..gcs_storage_client import SnowflakeGCSRestClient as SnowflakeGCSRestClientSync
 from ._storage_client import SnowflakeStorageClient as SnowflakeStorageClientAsync
+
 
 if TYPE_CHECKING:  # pragma: no cover
     from ..file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -69,19 +71,13 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
             or "useRegionalUrl" in stage_info
             and stage_info["useRegionalUrl"]
         )
-        self.endpoint: str | None = (
-            None if "endPoint" not in stage_info else stage_info["endPoint"]
-        )
-        self.use_virtual_url: bool = (
-            "useVirtualUrl" in stage_info and stage_info["useVirtualUrl"]
-        )
+        self.endpoint: str | None = None if "endPoint" not in stage_info else stage_info["endPoint"]
+        self.use_virtual_url: bool = "useVirtualUrl" in stage_info and stage_info["useVirtualUrl"]
 
     async def _has_expired_token(self, response: aiohttp.ClientResponse) -> bool:
         return self.security_token and response.status == 401
 
-    async def _has_expired_presigned_url(
-        self, response: aiohttp.ClientResponse
-    ) -> bool:
+    async def _has_expired_presigned_url(self, response: aiohttp.ClientResponse) -> bool:
         # Presigned urls can be generated for any xml-api operation
         # offered by GCS. Hence, the error codes expected are similar
         # to xml api.
@@ -137,19 +133,13 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
                 }
             )
 
-        def generate_url_and_rest_args() -> (
-            tuple[str, dict[str, dict[str | Any, str | None] | bytes]]
-        ):
+        def generate_url_and_rest_args() -> tuple[str, dict[str, dict[str | Any, str | None] | bytes]]:
             if not self.presigned_url:
                 upload_url = self.generate_file_url(
                     self.stage_info["location"],
                     meta.dst_file_name.lstrip("/"),
                     self.use_regional_url,
-                    (
-                        None
-                        if "region" not in self.stage_info
-                        else self.stage_info["region"]
-                    ),
+                    (None if "region" not in self.stage_info else self.stage_info["region"]),
                     self.endpoint,
                     self.use_virtual_url,
                 )
@@ -162,33 +152,23 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
             rest_args = {"headers": gcs_headers, "data": chunk}
             return upload_url, rest_args
 
-        response = await self._send_request_with_retry(
-            "PUT", generate_url_and_rest_args, chunk_id
-        )
+        response = await self._send_request_with_retry("PUT", generate_url_and_rest_args, chunk_id)
         response.raise_for_status()
         meta.gcs_file_header_digest = gcs_headers[GCS_METADATA_SFC_DIGEST]
         meta.gcs_file_header_content_length = meta.upload_size
-        meta.gcs_file_header_encryption_metadata = json.loads(
-            gcs_headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, "null")
-        )
+        meta.gcs_file_header_encryption_metadata = json.loads(gcs_headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, "null"))
 
     async def download_chunk(self, chunk_id: int) -> None:
         meta = self.meta
 
-        def generate_url_and_rest_args() -> (
-            tuple[str, dict[str, dict[str, str] | bool]]
-        ):
+        def generate_url_and_rest_args() -> tuple[str, dict[str, dict[str, str] | bool]]:
             gcs_headers = {}
             if not self.presigned_url:
                 download_url = self.generate_file_url(
                     self.stage_info["location"],
                     meta.src_file_name.lstrip("/"),
                     self.use_regional_url,
-                    (
-                        None
-                        if "region" not in self.stage_info
-                        else self.stage_info["region"]
-                    ),
+                    (None if "region" not in self.stage_info else self.stage_info["region"]),
                     self.endpoint,
                     self.use_virtual_url,
                 )
@@ -199,9 +179,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
             rest_args = {"headers": gcs_headers}
             return download_url, rest_args
 
-        response = await self._send_request_with_retry(
-            "GET", generate_url_and_rest_args, chunk_id
-        )
+        response = await self._send_request_with_retry("GET", generate_url_and_rest_args, chunk_id)
         response.raise_for_status()
 
         self.write_downloaded_chunk(chunk_id, await response.read())
@@ -209,9 +187,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
         encryption_metadata = None
 
         if response.headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, None):
-            encryptiondata = json.loads(
-                response.headers[GCS_METADATA_ENCRYPTIONDATAPROP]
-            )
+            encryptiondata = json.loads(response.headers[GCS_METADATA_ENCRYPTIONDATAPROP])
 
             if encryptiondata:
                 encryption_metadata = EncryptionMetadata(
@@ -265,9 +241,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
         # for local path is not necessary in the reconstructed command.
         file_path_to_replace_with = self.meta.dst_file_name
         command_with_single_file = self._command
-        command_with_single_file = command_with_single_file.replace(
-            file_path_to_be_replaced, file_path_to_replace_with
-        )
+        command_with_single_file = command_with_single_file.replace(file_path_to_be_replaced, file_path_to_replace_with)
 
         logger.debug("getting presigned url for %s", file_path_to_replace_with)
         ret = await self._cursor._execute_helper(command_with_single_file)
@@ -292,10 +266,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
             confirmed and set the meta.result_status = UPLOADED/DOWNLOADED.
         """
         meta = self.meta
-        if (
-            meta.result_status == ResultStatus.UPLOADED
-            or meta.result_status == ResultStatus.DOWNLOADED
-        ):
+        if meta.result_status == ResultStatus.UPLOADED or meta.result_status == ResultStatus.DOWNLOADED:
             return FileHeader(
                 digest=meta.gcs_file_header_digest,
                 content_length=meta.gcs_file_header_content_length,
@@ -310,11 +281,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
                     self.stage_info["location"],
                     filename.lstrip("/"),
                     self.use_regional_url,
-                    (
-                        None
-                        if "region" not in self.stage_info
-                        else self.stage_info["region"]
-                    ),
+                    (None if "region" not in self.stage_info else self.stage_info["region"]),
                     self.endpoint,
                     self.use_virtual_url,
                 )
@@ -324,9 +291,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
 
             retry_id = "HEAD"
             self.retry_count[retry_id] = 0
-            response = await self._send_request_with_retry(
-                "HEAD", generate_url_and_authenticated_headers, retry_id
-            )
+            response = await self._send_request_with_retry("HEAD", generate_url_and_authenticated_headers, retry_id)
             if response.status == 404:
                 meta.result_status = ResultStatus.NOT_FOUND_FILE
                 return None
@@ -336,9 +301,7 @@ class SnowflakeGCSRestClient(SnowflakeStorageClientAsync, SnowflakeGCSRestClient
 
                 encryption_metadata = EncryptionMetadata("", "", "")
                 if response.headers.get(GCS_METADATA_ENCRYPTIONDATAPROP, None):
-                    encryption_data = json.loads(
-                        response.headers[GCS_METADATA_ENCRYPTIONDATAPROP]
-                    )
+                    encryption_data = json.loads(response.headers[GCS_METADATA_ENCRYPTIONDATAPROP])
 
                     if encryption_data:
                         encryption_metadata = EncryptionMetadata(

@@ -4,9 +4,11 @@ import copy
 import json
 import logging
 import uuid
+
+from collections.abc import Callable
 from datetime import datetime, timezone
 from threading import Thread
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.serialization import (
@@ -53,14 +55,14 @@ from ..network import (
     ReauthenticationRequest,
 )
 from ..platform_detection import detect_platforms
-from ..session_manager import BaseHttpConfig, HttpConfig
+from ..session_manager import BaseHttpConfig, HttpConfig, SessionManagerFactory
 from ..session_manager import SessionManager as SyncSessionManager
-from ..session_manager import SessionManagerFactory
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..version import VERSION
 from .no_auth import AuthNoAuth
 from .oauth import AuthByOAuth
+
 
 if TYPE_CHECKING:
     from . import AuthByPlugin
@@ -195,9 +197,7 @@ class Auth:
             HTTP_HEADER_USER_AGENT: PYTHON_CONNECTOR_USER_AGENT,
         }
         if HTTP_HEADER_SERVICE_NAME in session_parameters:
-            headers[HTTP_HEADER_SERVICE_NAME] = session_parameters[
-                HTTP_HEADER_SERVICE_NAME
-            ]
+            headers[HTTP_HEADER_SERVICE_NAME] = session_parameters[HTTP_HEADER_SERVICE_NAME]
         url = "/session/v1/login-request"
 
         body_template = Auth.base_auth_data(
@@ -222,8 +222,7 @@ class Auth:
         auth_instance.update_body(body)
 
         logger.debug(
-            "account=%s, user=%s, database=%s, schema=%s, "
-            "warehouse=%s, role=%s, request_id=%s",
+            "account=%s, user=%s, database=%s, schema=%s, warehouse=%s, role=%s, request_id=%s",
             account,
             user,
             database,
@@ -256,10 +255,7 @@ class Auth:
 
         logger.debug(
             "body['data']: %s",
-            {
-                k: v if k in AUTHENTICATION_REQUEST_KEY_WHITELIST else "******"
-                for (k, v) in body["data"].items()
-            },
+            {k: v if k in AUTHENTICATION_REQUEST_KEY_WHITELIST else "******" for (k, v) in body["data"].items()},
         )
 
         try:
@@ -274,10 +270,8 @@ class Auth:
             raise err.__class__(
                 msg=(
                     "Failed to connect to DB. "
-                    "Verify the account name is correct: {host}:{port}. "
-                    "{message}"
-                ).format(
-                    host=self._rest._host, port=self._rest._port, message=str(err)
+                    f"Verify the account name is correct: {self._rest._host}:{self._rest._port}. "
+                    f"{str(err)}"
                 ),
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
                 sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
@@ -287,10 +281,8 @@ class Auth:
             raise err.__class__(
                 msg=(
                     "Failed to connect to DB. "
-                    "Service is unavailable: {host}:{port}. "
-                    "{message}"
-                ).format(
-                    host=self._rest._host, port=self._rest._port, message=str(err)
+                    f"Service is unavailable: {self._rest._host}:{self._rest._port}. "
+                    f"{str(err)}"
                 ),
                 errno=ER_FAILED_TO_CONNECT_TO_DB,
                 sqlstate=SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
@@ -315,9 +307,7 @@ class Auth:
                 )
 
             # send new request to wait until MFA is approved
-            t = Thread(
-                target=post_request_wrapper, args=[self, url, headers, json.dumps(body)]
-            )
+            t = Thread(target=post_request_wrapper, args=[self, url, headers, json.dumps(body)])
             t.daemon = True
             t.start()
             if callable(mfa_callback):
@@ -329,11 +319,7 @@ class Auth:
                 t.join(timeout=timeout)
 
             ret = self.ret
-            if (
-                ret
-                and ret["data"]
-                and ret["data"].get("nextAction") == "EXT_AUTHN_SUCCESS"
-            ):
+            if ret and ret["data"] and ret["data"].get("nextAction") == "EXT_AUTHN_SUCCESS":
                 body = copy.deepcopy(body_template)
                 body["inFlightCtx"] = ret["data"].get("inFlightCtx")
                 # Add SPCS token to the follow-up login request as well.
@@ -352,11 +338,7 @@ class Auth:
                     None,
                     DatabaseError,
                     {
-                        "msg": (
-                            "Failed to connect to DB. MFA "
-                            "authentication failed: {"
-                            "host}:{port}. {message}"
-                        ).format(
+                        "msg": ("Failed to connect to DB. MFA authentication failed: {host}:{port}. {message}").format(
                             host=self._rest._host,
                             port=self._rest._port,
                             message=ret["message"],
@@ -372,11 +354,7 @@ class Auth:
                 body = copy.deepcopy(body_template)
                 body["inFlightCtx"] = ret["data"].get("inFlightCtx")
                 body["data"]["LOGIN_NAME"] = user
-                body["data"]["PASSWORD"] = (
-                    auth_instance.password
-                    if hasattr(auth_instance, "password")
-                    else None
-                )
+                body["data"]["PASSWORD"] = auth_instance.password if hasattr(auth_instance, "password") else None
                 body["data"]["CHOSEN_NEW_PASSWORD"] = password_callback()
                 # Add SPCS token to the password change login request as well.
                 self._add_spcs_token_to_body(body)
@@ -395,9 +373,7 @@ class Auth:
                 # clear stored id_token if failed to connect because of id_token
                 # raise an exception for reauth without id_token
                 self._rest.id_token = None
-                self._delete_temporary_credential(
-                    self._rest._host, user, TokenType.ID_TOKEN
-                )
+                self._delete_temporary_credential(self._rest._host, user, TokenType.ID_TOKEN)
                 raise ReauthenticationRequest(
                     ProgrammingError(
                         msg=ret["message"],
@@ -422,26 +398,20 @@ class Auth:
 
             if isinstance(auth_instance, AuthByKeyPair):
                 logger.debug(
-                    "JWT Token authentication failed. "
-                    "Token expires at: %s. "
-                    "Current Time: %s",
+                    "JWT Token authentication failed. Token expires at: %s. Current Time: %s",
                     str(auth_instance._jwt_token_exp),
                     str(datetime.now(timezone.utc).replace(tzinfo=None)),
                 )
             from . import AuthByUsrPwdMfa
 
             if isinstance(auth_instance, AuthByUsrPwdMfa):
-                self._delete_temporary_credential(
-                    self._rest._host, user, TokenType.MFA_TOKEN
-                )
+                self._delete_temporary_credential(self._rest._host, user, TokenType.MFA_TOKEN)
             Error.errorhandler_wrapper(
                 self._rest._connection,
                 None,
                 DatabaseError,
                 {
-                    "msg": (
-                        "Failed to connect to DB: {host}:{port}. " "{message}"
-                    ).format(
+                    "msg": ("Failed to connect to DB: {host}:{port}. {message}").format(
                         host=self._rest._host,
                         port=self._rest._port,
                         message=ret["message"],
@@ -453,44 +423,26 @@ class Auth:
         else:
             logger.debug(
                 "token = %s",
-                (
-                    "******"
-                    if ret["data"] and ret["data"].get("token") is not None
-                    else "NULL"
-                ),
+                ("******" if ret["data"] and ret["data"].get("token") is not None else "NULL"),
             )
             logger.debug(
                 "master_token = %s",
-                (
-                    "******"
-                    if ret["data"] and ret["data"].get("masterToken") is not None
-                    else "NULL"
-                ),
+                ("******" if ret["data"] and ret["data"].get("masterToken") is not None else "NULL"),
             )
             logger.debug(
                 "id_token = %s",
-                (
-                    "******"
-                    if ret["data"] and ret["data"].get("idToken") is not None
-                    else "NULL"
-                ),
+                ("******" if ret["data"] and ret["data"].get("idToken") is not None else "NULL"),
             )
             logger.debug(
                 "mfa_token = %s",
-                (
-                    "******"
-                    if ret["data"] and ret["data"].get("mfaToken") is not None
-                    else "NULL"
-                ),
+                ("******" if ret["data"] and ret["data"].get("mfaToken") is not None else "NULL"),
             )
             if not ret["data"]:
                 Error.errorhandler_wrapper(
                     None,
                     None,
                     Error,
-                    {
-                        "msg": "There is no data in the returning response, please retry the operation."
-                    },
+                    {"msg": "There is no data in the returning response, please retry the operation."},
                 )
             self._rest.update_tokens(
                 ret["data"].get("token"),
@@ -499,9 +451,7 @@ class Auth:
                 id_token=ret["data"].get("idToken"),
                 mfa_token=ret["data"].get("mfaToken"),
             )
-            self.write_temporary_credentials(
-                self._rest._host, user, session_parameters, ret
-            )
+            self.write_temporary_credentials(self._rest._host, user, session_parameters, ret)
             if ret["data"] and "sessionId" in ret["data"]:
                 self._rest._connection._session_id = ret["data"].get("sessionId")
             if ret["data"] and "sessionInfo" in ret["data"]:
@@ -511,9 +461,7 @@ class Auth:
                 self._rest._connection._warehouse = session_info.get("warehouseName")
                 self._rest._connection._role = session_info.get("roleName")
             if ret["data"] and "parameters" in ret["data"]:
-                session_parameters.update(
-                    {p["name"]: p["value"] for p in ret["data"].get("parameters")}
-                )
+                session_parameters.update({p["name"]: p["value"] for p in ret["data"].get("parameters")})
             self._rest._connection._update_parameters(session_parameters)
             return session_parameters
 
@@ -563,9 +511,7 @@ class Auth:
         cred: str | None,
     ) -> None:
         if not cred:
-            logger.debug(
-                "no credential is given when try to store temporary credential"
-            )
+            logger.debug("no credential is given when try to store temporary credential")
             return
         self.get_token_cache().store(TokenKey(host, user, cred_type), cred)
 
@@ -583,24 +529,15 @@ class Auth:
         2. Client has caching enabled via session parameters
         3. User consented to caching (consent_cache_id_token for ID tokens)
         """
-        if (
-            self._rest._connection.auth_class.consent_cache_id_token
-            and session_parameters.get(
-                PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False
-            )
+        if self._rest._connection.auth_class.consent_cache_id_token and session_parameters.get(
+            PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL, False
         ):
-            self._write_temporary_credential(
-                host, user, TokenType.ID_TOKEN, response["data"].get("idToken")
-            )
+            self._write_temporary_credential(host, user, TokenType.ID_TOKEN, response["data"].get("idToken"))
 
         if session_parameters.get(PARAMETER_CLIENT_REQUEST_MFA_TOKEN, False):
-            self._write_temporary_credential(
-                host, user, TokenType.MFA_TOKEN, response["data"].get("mfaToken")
-            )
+            self._write_temporary_credential(host, user, TokenType.MFA_TOKEN, response["data"].get("mfaToken"))
 
-    def _delete_temporary_credential(
-        self, host: str, user: str, cred_type: TokenType
-    ) -> None:
+    def _delete_temporary_credential(self, host: str, user: str, cred_type: TokenType) -> None:
         self.get_token_cache().remove(TokenKey(host, user, cred_type))
 
     def get_token_cache(self) -> TokenCache:
@@ -611,14 +548,10 @@ class Auth:
         return self._token_cache
 
 
-def get_token_from_private_key(
-    user: str, account: str, privatekey_path: str, key_password: str | None
-) -> str:
+def get_token_from_private_key(user: str, account: str, privatekey_path: str, key_password: str | None) -> str:
     encoded_password = key_password.encode() if key_password is not None else None
     with open(privatekey_path, "rb") as key:
-        p_key = load_pem_private_key(
-            key.read(), password=encoded_password, backend=default_backend()
-        )
+        p_key = load_pem_private_key(key.read(), password=encoded_password, backend=default_backend())
 
     private_key = p_key.private_bytes(
         encoding=Encoding.DER,
@@ -637,17 +570,13 @@ def get_token_from_private_key(
 def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
     """Helper function to generate the public key fingerprint from the private key file"""
     with open(private_key_file, "rb") as key:
-        p_key = load_pem_private_key(
-            key.read(), password=password.encode(), backend=default_backend()
-        )
+        p_key = load_pem_private_key(key.read(), password=password.encode(), backend=default_backend())
     private_key = p_key.private_bytes(
         encoding=Encoding.DER,
         format=PrivateFormat.PKCS8,
         encryption_algorithm=NoEncryption(),
     )
-    private_key = load_der_private_key(
-        data=private_key, password=None, backend=default_backend()
-    )
+    private_key = load_der_private_key(data=private_key, password=None, backend=default_backend())
     from . import AuthByKeyPair
 
     return AuthByKeyPair.calculate_public_key_fingerprint(private_key)

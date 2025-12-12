@@ -6,8 +6,10 @@ import contextlib
 import functools
 import itertools
 import logging
+
+from collections.abc import Callable, Generator, Mapping
 from dataclasses import asdict, dataclass, field, fields, replace
-from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Mapping, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 from .compat import urlparse
 from .proxy import get_proxy_url
@@ -15,11 +17,12 @@ from .url_util import should_bypass_proxies
 from .vendored import requests
 from .vendored.requests import Response, Session
 from .vendored.requests.adapters import BaseAdapter, HTTPAdapter
-from .vendored.requests.exceptions import InvalidProxyURL
+from .vendored.requests.exceptions import InvalidProxyURL, InvalidURL
 from .vendored.requests.utils import prepend_scheme_if_needed, select_proxy
 from .vendored.urllib3 import PoolManager, Retry
 from .vendored.urllib3.poolmanager import ProxyManager
 from .vendored.urllib3.util.url import parse_url
+
 
 if TYPE_CHECKING:
     from .vendored.urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
@@ -79,10 +82,7 @@ class ProxySupportAdapter(HTTPAdapter):
             proxy = prepend_scheme_if_needed(proxy, "http")
             proxy_url = parse_url(proxy)
             if not proxy_url.host:
-                raise InvalidProxyURL(
-                    "Please check proxy URL. It is malformed "
-                    "and could be missing the host."
-                )
+                raise InvalidProxyURL("Please check proxy URL. It is malformed and could be missing the host.")
             proxy_manager = self.proxy_manager_for(proxy)
 
             if isinstance(proxy_manager, ProxyManager):
@@ -98,18 +98,14 @@ class ProxySupportAdapter(HTTPAdapter):
                 proxy_manager.proxy_headers["Host"] = parsed_url.netloc
             else:
                 logger.debug(
-                    f"Unable to set 'Host' to proxy manager of type {type(proxy_manager)} as"
-                    f" it does not have attribute 'proxy_headers'."
+                    "Unable to set 'Host' to proxy manager of type %s as it does not have attribute 'proxy_headers'.",
+                    type(proxy_manager),
                 )
 
-            conn = proxy_manager.connection_from_host(
-                **host_params, pool_kwargs=pool_kwargs
-            )
+            conn = proxy_manager.connection_from_host(**host_params, pool_kwargs=pool_kwargs)
         else:
             # Only scheme should be lower case
-            conn = self.poolmanager.connection_from_host(
-                **host_params, pool_kwargs=pool_kwargs
-            )
+            conn = self.poolmanager.connection_from_host(**host_params, pool_kwargs=pool_kwargs)
 
         return conn
 
@@ -151,9 +147,7 @@ class BaseHttpConfig:
 class HttpConfig(BaseHttpConfig):
     """HTTP configuration specific to requests library."""
 
-    adapter_factory: Callable[..., HTTPAdapter] = field(
-        default_factory=ProxySupportAdapterFactory
-    )
+    adapter_factory: Callable[..., HTTPAdapter] = field(default_factory=ProxySupportAdapterFactory)
 
     def get_adapter(self, **override_adapter_factory_kwargs) -> HTTPAdapter:
         # We pass here only chosen attributes as kwargs to make the arguments received by the factory as compliant with the HttpAdapter constructor interface as possible.
@@ -165,8 +159,7 @@ class HttpConfig(BaseHttpConfig):
         )
 
         self_kwargs_for_adapter_factory = {
-            attr_name: getattr(self, attr_name)
-            for attr_name in attributes_for_adapter_factory
+            attr_name: getattr(self, attr_name) for attr_name in attributes_for_adapter_factory
         }
         self_kwargs_for_adapter_factory.update(override_adapter_factory_kwargs)
         return self.adapter_factory(**self_kwargs_for_adapter_factory)
@@ -212,19 +205,17 @@ class SessionPool(Generic[SessionT]):
 
     def __str__(self) -> str:
         total_sessions = len(self._active_sessions) + len(self._idle_sessions)
-        return (
-            f"SessionPool {len(self._active_sessions)}/{total_sessions} active sessions"
-        )
+        return f"SessionPool {len(self._active_sessions)}/{total_sessions} active sessions"
 
     def close(self) -> None:
         """Closes all active and idle sessions in this session pool."""
         if self._active_sessions:
-            logger.debug(f"Closing {len(self._active_sessions)} active sessions")
+            logger.debug("Closing %s active sessions", len(self._active_sessions))
         for session in itertools.chain(self._active_sessions, self._idle_sessions):
             try:
                 session.close()
             except Exception as e:
-                logger.info(f"Session cleanup failed - failed to close session: {e}")
+                logger.info("Session cleanup failed - failed to close session: %s", e)
         self._active_sessions.clear()
         self._idle_sessions.clear()
 
@@ -343,9 +334,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         **kwargs,
     ):
         with self.use_session(url, use_pooling) as session:
-            return session.put(
-                url, headers=headers, timeout=timeout, data=data, **kwargs
-            )
+            return session.put(url, headers=headers, timeout=timeout, data=data, **kwargs)
 
     def patch(
         self,
@@ -358,9 +347,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         **kwargs,
     ):
         with self.use_session(url, use_pooling) as session:
-            return session.patch(
-                url, headers=headers, timeout=timeout, data=data, **kwargs
-            )
+            return session.patch(url, headers=headers, timeout=timeout, data=data, **kwargs)
 
     def delete(
         self,
@@ -408,9 +395,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixi
             config = HttpConfig(**http_config_kwargs)
         self._cfg: HttpConfig = config
         # Maps hostname to SessionPool instance for its connections
-        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
-            lambda: SessionPool(self)
-        )
+        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(lambda: SessionPool(self))
 
     @classmethod
     def from_config(cls, cfg: HttpConfig, **overrides: Any) -> SessionManager:
@@ -456,9 +441,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixi
             error_message = f"Unable to get pool manager from session for {url}: {no_pool_manager_error}"
             logger.error(error_message)
             if not isinstance(adapter_for_url, HTTPAdapter):
-                logger.warning(
-                    f"Adapter was expected to be an HTTPAdapter, got {adapter_for_url.__class__.__name__}"
-                )
+                logger.warning("Adapter was expected to be an HTTPAdapter, got %s", adapter_for_url.__class__.__name__)
             else:
                 logger.debug(
                     "Adapter was expected an HTTPAdapter but didn't have attribute 'poolmanager'. This is unexpected behavior."
@@ -491,9 +474,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixi
 
     @contextlib.contextmanager
     @_propagate_session_manager_to_ocsp
-    def use_session(
-        self, url: str | bytes | None, use_pooling: bool | None = None
-    ) -> Generator[Session, Any, None]:
+    def use_session(self, url: str | bytes | None, use_pooling: bool | None = None) -> Generator[Session, Any, None]:
         """Yield a session for the given URL (used for proxy handling and pooling).
         The 'url' is an obligatory parameter due to the need for correct proxy handling (i.e. bypassing caused by no_proxy settings).
         """
@@ -508,9 +489,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixi
         else:
             yield from self._yield_session_from_pool(url_str)
 
-    def _yield_session_from_pool(
-        self, url: str | None
-    ) -> Generator[SessionT, Any, None]:
+    def _yield_session_from_pool(self, url: str | None) -> Generator[SessionT, Any, None]:
         hostname = self._get_pooling_key_from_url(url)
         pool = self._sessions_map[hostname]
         session = pool.get_session(url=url)
@@ -603,9 +582,7 @@ def request(
     Convenience wrapper – requires an explicit ``session_manager``.
     """
     if session_manager is None:
-        raise ValueError(
-            "session_manager is required - no default session manager available"
-        )
+        raise ValueError("session_manager is required - no default session manager available")
 
     return session_manager.request(
         method=method,
@@ -638,12 +615,8 @@ class ProxySessionManager(SessionManager):
 
 class SessionManagerFactory:
     @staticmethod
-    def get_manager(
-        config: HttpConfig | None = None, **http_config_kwargs
-    ) -> SessionManager:
-        has_param_proxies = (
-            config and config.proxy_host is not None
-        ) or "proxies" in http_config_kwargs
+    def get_manager(config: HttpConfig | None = None, **http_config_kwargs) -> SessionManager:
+        has_param_proxies = (config and config.proxy_host is not None) or "proxies" in http_config_kwargs
         if has_param_proxies:
             return ProxySessionManager(config, **http_config_kwargs)
         else:

@@ -8,6 +8,7 @@ import re
 import socket
 import ssl
 import tempfile
+
 from datetime import datetime
 from logging import getLogger
 from pathlib import Path
@@ -22,6 +23,7 @@ from .cursor import SnowflakeCursor
 from .session_manager import SessionManager, SessionManagerFactory
 from .url_util import extract_top_level_domain_from_hostname
 from .vendored import urllib3
+
 
 logger = getLogger(__name__)
 
@@ -43,9 +45,7 @@ def _decode_dict(d: dict[str, dict[str, Any]]):
 
 
 def _is_list_of_json_objects(allowlist: list[dict[str, Any]]):
-    if isinstance(allowlist, list) and all(
-        isinstance(item, dict) for item in allowlist
-    ):
+    if isinstance(allowlist, list) and all(isinstance(item, dict) for item in allowlist):
         try:
             json.dumps(allowlist)
             return True
@@ -85,25 +85,19 @@ class ConnectionDiagnostic:
         }
         host_type = "INITIAL"
         self.__append_message(host_type, f"Specified snowflake account: {self.account}")
-        self.__append_message(
-            host_type, f"Host based on specified account: {self.host}"
-        )
+        self.__append_message(host_type, f"Host based on specified account: {self.host}")
 
         top_level_domain = extract_top_level_domain_from_hostname(host)
-        if (
-            f".{top_level_domain}.snowflakecomputing.{top_level_domain}" in self.host
-        ):  # repeated domain name pattern
-            self.host = (
-                host.split(f".{top_level_domain}.snow", 1)[0] + f".{top_level_domain}"
-            )
+        if f".{top_level_domain}.snowflakecomputing.{top_level_domain}" in self.host:  # repeated domain name pattern
+            self.host = host.split(f".{top_level_domain}.snow", 1)[0] + f".{top_level_domain}"
             logger.warning(
-                f"Account should not have snowflakecomputing.{top_level_domain} in it. You provided {host}.  "
-                f"Continuing with fixed host."
+                "Account should not have snowflakecomputing.%s in it. You provided %s. Continuing with fixed host.",
+                top_level_domain,
+                host,
             )
             self.__append_message(
                 host_type,
-                f"We removed extra .snowflakecomputing.{top_level_domain} and will continue with host: "
-                f"{self.host}",
+                f"We removed extra .snowflakecomputing.{top_level_domain} and will continue with host: {self.host}",
             )
         else:
             self.host = host
@@ -131,39 +125,30 @@ class ConnectionDiagnostic:
         ) = self.__parse_proxy(proxy_url)
         self.__https_host_report(self.host)
         self.full_connection_diag_log_path: Path | None = (
-            Path(connection_diag_log_path)
-            if connection_diag_log_path is not None
-            else None
+            Path(connection_diag_log_path) if connection_diag_log_path is not None else None
         )
         self.full_connection_diag_allowlist_path: Path | None = (
-            Path(connection_diag_allowlist_path)
-            if connection_diag_allowlist_path is not None
-            else None
+            Path(connection_diag_allowlist_path) if connection_diag_allowlist_path is not None else None
         )
         self.tmpdir: str = tempfile.gettempdir()
         if self.full_connection_diag_log_path is None:
             self.full_connection_diag_log_path = Path(self.tmpdir)
         else:
             if not self.full_connection_diag_log_path.is_absolute():
-                logger.warning(
-                    f"Path {self.full_connection_diag_log_path} for connection test is not absolute."
-                )
+                logger.warning("Path %s for connection test is not absolute.", self.full_connection_diag_log_path)
                 self.full_connection_diag_log_path = Path(self.tmpdir)
             elif not self.full_connection_diag_log_path.exists():
-                logger.warning(
-                    f"Path {self.full_connection_diag_log_path} for connection test does not exist."
-                )
+                logger.warning("Path %s for connection test does not exist.", self.full_connection_diag_log_path)
                 self.full_connection_diag_log_path = Path(self.tmpdir)
 
-        self.report_file: Path = (
-            self.full_connection_diag_log_path / "SnowflakeConnectionTestReport.txt"
-        )
-        logger.info(f"Reporting to file {self.report_file}")
+        self.report_file: Path = self.full_connection_diag_log_path / "SnowflakeConnectionTestReport.txt"
+        logger.info("Reporting to file %s", self.report_file)
 
         if self.full_connection_diag_allowlist_path is not None:
             if not self.full_connection_diag_allowlist_path.is_absolute():
                 logger.warning(
-                    f"Path '{self.full_connection_diag_allowlist_path}' for connection test allowlist is not absolute."
+                    "Path '%s' for connection test allowlist is not absolute.",
+                    self.full_connection_diag_allowlist_path,
                 )
                 logger.warning(
                     "Will connect to Snowflake for allowlist json instead.  If you did not provide a valid "
@@ -172,7 +157,8 @@ class ConnectionDiagnostic:
                 self.full_connection_diag_allowlist_path = None
             elif not self.full_connection_diag_allowlist_path.exists():
                 logger.warning(
-                    f"File '{self.full_connection_diag_allowlist_path}' for connection test allowlist does not exist."
+                    "File '%s' for connection test allowlist does not exist.",
+                    self.full_connection_diag_allowlist_path,
                 )
                 logger.warning(
                     "Will connect to Snowflake for allowlist json instead.  If you did not provide a valid "
@@ -180,9 +166,7 @@ class ConnectionDiagnostic:
                 )
                 self.full_connection_diag_allowlist_path = None
 
-        self.allowlist_sql: str = (
-            "select /* snowflake-connector-python:connection_diagnostics */ system$allowlist();"
-        )
+        self.allowlist_sql: str = "select /* snowflake-connector-python:connection_diagnostics */ system$allowlist();"
 
         if self.__is_privatelink():
             self.ocsp_urls.append(f"ocsp.{self.host}")
@@ -261,13 +245,9 @@ class ConnectionDiagnostic:
                 return certificate
             else:
                 if self.proxy_host is not None:
-                    connect = (
-                        f"CONNECT {host}:{port} HTTP/1.1\r\n{connect_creds}\r\n\r\n"
-                    )
+                    connect = f"CONNECT {host}:{port} HTTP/1.1\r\n{connect_creds}\r\n\r\n"
                 else:
-                    connect = (
-                        f"GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
-                    )
+                    connect = f"GET / HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
 
                 conn.send(str.encode(connect))
                 response = conn.recv(4096).decode("utf-8")
@@ -276,13 +256,9 @@ class ConnectionDiagnostic:
             if response is not None:
                 good_responses = "(200|301|cloudfront)"
                 if not re.search(good_responses, response):
-                    self.__append_message(
-                        host_type, f"{host}:{port}: URL Check: Failed: {response}"
-                    )
+                    self.__append_message(host_type, f"{host}:{port}: URL Check: Failed: {response}")
                     return "FAILED"
-            self.__append_message(
-                host_type, f"{host}:{port}: URL Check: Connected Successfully"
-            )
+            self.__append_message(host_type, f"{host}:{port}: URL Check: Connected Successfully")
             return "SUCCESS"
         except ssl.SSLError as e:
             if "WRONG_VERSION_NUMBER" in str(e):
@@ -292,14 +268,10 @@ class ConnectionDiagnostic:
                 )
             return "FAILED"
         except Exception as e:
-            self.__append_message(
-                host_type, f"{host}:{port}: URL Check: Failed: Unknown Exception: {e}"
-            )
+            self.__append_message(host_type, f"{host}:{port}: URL Check: Failed: Unknown Exception: {e}")
             return "FAILED"
 
-        self.__append_message(
-            host_type, f"{host}:{port}: URL Check: Connected Successfully"
-        )
+        self.__append_message(host_type, f"{host}:{port}: URL Check: Connected Successfully")
         return "SUCCESS"
 
     def run_post_test(self) -> None:
@@ -307,13 +279,11 @@ class ConnectionDiagnostic:
         if self.full_connection_diag_allowlist_path is None:
             if self.cursor is not None:
                 try:
-                    results = self.cursor.execute(
-                        self.allowlist_sql, _is_internal=True
-                    ).fetchall()[0][0]
+                    results = self.cursor.execute(self.allowlist_sql, _is_internal=True).fetchall()[0][0]
                     results = json.loads(str(results))
                     self.allowlist_retrieval_success = True
                 except Exception as e:
-                    logger.warning(f"Unable to do allowlist checks: exception: {e}")
+                    logger.warning("Unable to do allowlist checks: exception: %s", e)
         else:
             results_file = open(self.full_connection_diag_allowlist_path)
             try:
@@ -334,14 +304,10 @@ class ConnectionDiagnostic:
 
                 if host_type in ("OCSP_RESPONDER"):
                     if host not in self.ocsp_urls:
-                        self.__test_socket_get_cert(
-                            host, port=host_port, host_type=host_type
-                        )
+                        self.__test_socket_get_cert(host, port=host_port, host_type=host_type)
                 elif host_type in ("STAGE", "OUT_OF_BAND_TELEMETRY"):
                     try:
-                        self.__https_host_report(
-                            host, port=host_port, host_type=host_type
-                        )
+                        self.__https_host_report(host, port=host_port, host_type=host_type)
                     except Exception:
                         pass
         else:
@@ -374,51 +340,35 @@ class ConnectionDiagnostic:
                                 f"must have a private ip.",
                             )
                         else:
-                            self.__append_message(
-                                host_type, f"{base_message}: public ip: {ip}"
-                            )
+                            self.__append_message(host_type, f"{base_message}: public ip: {ip}")
             else:
                 self.__append_message(host_type, f"{base_message}: {ips}")
         except Exception as e:
-            logger.warning(f"Connectivity Test Exception in list_ips: {e}")
+            logger.warning("Connectivity Test Exception in list_ips: %s", e)
 
-    def __https_host_report(
-        self, host: str, port: int = 443, host_type: str = "SNOWFLAKE_URL"
-    ) -> None:
+    def __https_host_report(self, host: str, port: int = 443, host_type: str = "SNOWFLAKE_URL") -> None:
         try:
-            certificate = self.__test_socket_get_cert(
-                host, port=port, host_type=host_type
-            )
+            certificate = self.__test_socket_get_cert(host, port=port, host_type=host_type)
             if "BEGIN CERTIFICATE" in certificate:
-                x509 = OpenSSL.crypto.load_certificate(
-                    OpenSSL.crypto.FILETYPE_PEM, certificate
-                )
+                x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, certificate)
 
                 result = {
                     "subject": dict(x509.get_subject().get_components()),
                     "issuer": dict(x509.get_issuer().get_components()),
                     "serialNumber": x509.get_serial_number(),
                     "version": x509.get_version(),
-                    "notBefore": datetime.strptime(
-                        str(x509.get_notBefore().decode("utf-8")), "%Y%m%d%H%M%SZ"
-                    ),
-                    "notAfter": datetime.strptime(
-                        str(x509.get_notAfter().decode("utf-8")), "%Y%m%d%H%M%SZ"
-                    ),
+                    "notBefore": datetime.strptime(str(x509.get_notBefore().decode("utf-8")), "%Y%m%d%H%M%SZ"),
+                    "notAfter": datetime.strptime(str(x509.get_notAfter().decode("utf-8")), "%Y%m%d%H%M%SZ"),
                 }
                 self.cert_info[host] = result
-                extensions = (
-                    x509.get_extension(i) for i in range(x509.get_extension_count())
-                )
+                extensions = (x509.get_extension(i) for i in range(x509.get_extension_count()))
                 extension_data = {}
                 for e in extensions:
                     extension_data[e.get_short_name().decode("utf-8")] = str(e)
 
                 _, _, host_suffix = host.partition(".")
                 if host_suffix in str(result["subject"]):
-                    self.__append_message(
-                        host_type, f"{host}:{port}: URL Check: Connected Successfully"
-                    )
+                    self.__append_message(host_type, f"{host}:{port}: URL Check: Connected Successfully")
                 elif "subjectAltName" in extension_data:
                     if host_suffix in str(extension_data["subjectAltName"]):
                         self.__append_message(
@@ -437,41 +387,25 @@ class ConnectionDiagnostic:
 
                 issuer_str = _decode_dict(result["issuer"])
                 self.__append_message(host_type, f"{host}: issuer: {issuer_str}")
-                self.__append_message(
-                    host_type, f"{host}: serialNumber: {result['serialNumber']}"
-                )
-                self.__append_message(
-                    host_type, f"{host}: version: {result['version']}"
-                )
-                self.__append_message(
-                    host_type, f"{host}: notBefore: {result['notBefore']}"
-                )
-                self.__append_message(
-                    host_type, f"{host}: notAfter: {result['notAfter']}"
-                )
+                self.__append_message(host_type, f"{host}: serialNumber: {result['serialNumber']}")
+                self.__append_message(host_type, f"{host}: version: {result['version']}")
+                self.__append_message(host_type, f"{host}: notBefore: {result['notBefore']}")
+                self.__append_message(host_type, f"{host}: notAfter: {result['notAfter']}")
 
                 if host_type == "SNOWFLAKE_URL":
                     if "authorityInfoAccess" in extension_data:
-                        ocsp_urls_orig = re.findall(
-                            r"(https?://\S+)", extension_data["authorityInfoAccess"]
-                        )
+                        ocsp_urls_orig = re.findall(r"(https?://\S+)", extension_data["authorityInfoAccess"])
                         for url in ocsp_urls_orig:
                             self.ocsp_urls.append(url.split("/")[2])
                     else:
-                        self.__append_message(
-                            "INITIAL", "Unable to find ocsp URLs in certificate."
-                        )
+                        self.__append_message("INITIAL", "Unable to find ocsp URLs in certificate.")
 
                     if "crlDistributionPoints" in extension_data:
-                        crl_urls_orig = re.findall(
-                            r"(https?://\S+)", extension_data["crlDistributionPoints"]
-                        )
+                        crl_urls_orig = re.findall(r"(https?://\S+)", extension_data["crlDistributionPoints"])
                         for url in crl_urls_orig:
                             self.crl_urls.append(url.split("/")[2])
                     else:
-                        self.__append_message(
-                            "IGNORE", "Unable to find crl URLs in certificate."
-                        )
+                        self.__append_message("IGNORE", "Unable to find crl URLs in certificate.")
 
                 if "subjectAltName" in extension_data:
                     self.__append_message(
@@ -483,14 +417,10 @@ class ConnectionDiagnostic:
                 self.__append_message(host_type, f"{host}: ocspURLs: {self.ocsp_urls}")
 
         except Exception as e:
-            logger.warning(f"Connectivity Test Exception in https_host_report: {e}")
+            logger.warning("Connectivity Test Exception in https_host_report: %s", e)
 
     def __get_issuer_string(self, issuer: dict[bytes, bytes]) -> str:
-        issuer_str: str = (
-            re.sub('[{}"]', "", json.dumps(_decode_dict(issuer)))
-            .replace(": ", "=")
-            .replace(",", ";")
-        )
+        issuer_str: str = re.sub('[{}"]', "", json.dumps(_decode_dict(issuer))).replace(": ", "=").replace(",", ";")
         return issuer_str
 
     def __append_message(self, host_type: str, message: str) -> None:
@@ -518,13 +448,9 @@ class ConnectionDiagnostic:
         )
 
         if "https" in system_proxies.keys():
-            proxy_host, proxy_port, proxy_user, proxy_password = self.__parse_proxy(
-                getproxies()["https"]
-            )
+            proxy_host, proxy_port, proxy_user, proxy_password = self.__parse_proxy(getproxies()["https"])
             if proxy_user is not None:
-                proxy_url_example = (
-                    f"http://{proxy_user}:{proxy_password}@{proxy_host}:{proxy_port}"
-                )
+                proxy_url_example = f"http://{proxy_user}:{proxy_password}@{proxy_host}:{proxy_port}"
             else:
                 proxy_url_example = f"http://{proxy_host}:{proxy_port}"
             self.__append_message(
@@ -537,9 +463,7 @@ class ConnectionDiagnostic:
         for restore_key in restore_keys:
             os.environ[restore_key] = env_proxy_backup[restore_key]
 
-        self.__append_message(
-            host_type, f"Proxies with Env vars restored(ENV PROXIES): {getproxies()}"
-        )
+        self.__append_message(host_type, f"Proxies with Env vars restored(ENV PROXIES): {getproxies()}")
 
         cert_authorities = (
             "C=US; O=Google Trust Services LLC",
@@ -595,9 +519,7 @@ class ConnectionDiagnostic:
 
                 request_kwargs["proxies"] = {"http": proxy_url, "https": proxy_url}
 
-            resp = self._session_manager.get(
-                "https://nonexistentdomain.invalid", use_pooling=False, **request_kwargs
-            )
+            resp = self._session_manager.get("https://nonexistentdomain.invalid", use_pooling=False, **request_kwargs)
 
             # squid does not throw exception. Check response body
             if "does not exist" in resp.text:
@@ -613,9 +535,7 @@ class ConnectionDiagnostic:
                     f"but you can probably ignore: Result: {e}",
                 )
             elif "ProxyError" in str(e):
-                self.__append_message(
-                    host_type, f"It is likely there is a proxy based on Exception: {e}"
-                )
+                self.__append_message(host_type, f"It is likely there is a proxy based on Exception: {e}")
             else:
                 self.__append_message(
                     host_type,
@@ -629,11 +549,9 @@ class ConnectionDiagnostic:
             self.__test_socket_get_cert(url, port=80, host_type="OCSP_RESPONDER")
 
     def generate_report(self) -> None:
-        message = (
-            "=========Connectivity diagnostic report================================"
-        )
+        message = "=========Connectivity diagnostic report================================"
         initial_joined_results = "\n".join(self.test_results["INITIAL"])
-        message = f"{message}\n" f"{initial_joined_results}\n"
+        message = f"{message}\n{initial_joined_results}\n"
 
         proxy_joined_results = "\n".join(self.test_results["PROXY"])
         message = (
@@ -665,10 +583,7 @@ class ConnectionDiagnostic:
                 f"diagnostic info\n"
             )
 
-        message = (
-            f"{message}\n"
-            "=========Snowflake OCSP information===================================="
-        )
+        message = f"{message}\n=========Snowflake OCSP information===================================="
         snowflake_ocsp_joined_results = "\n".join(self.test_results["OCSP_RESPONDER"])
         if self.allowlist_retrieval_success:
             message = (
@@ -682,12 +597,10 @@ class ConnectionDiagnostic:
                 "We were unable to retrieve system allowlist.\n"
                 "These OCSP hosts only came from the certificate."
             )
-        message = f"{message}\n" f"{snowflake_ocsp_joined_results}\n"
+        message = f"{message}\n{snowflake_ocsp_joined_results}\n"
 
         if self.allowlist_retrieval_success:
-            snowflake_telemetry_joined_results = "\n".join(
-                self.test_results["OUT_OF_BAND_TELEMETRY"]
-            )
+            snowflake_telemetry_joined_results = "\n".join(self.test_results["OUT_OF_BAND_TELEMETRY"])
             message = (
                 f"{message}\n"
                 "=========Snowflake Out of bound telemetry check========================\n"
@@ -710,9 +623,7 @@ class ConnectionDiagnostic:
             i = i + 1
         return registry_key_values
 
-    def __walk_win_registry(
-        self, host_type: str, hkey_str: str, registry_key_str: str
-    ) -> None:
+    def __walk_win_registry(self, host_type: str, hkey_str: str, registry_key_str: str) -> None:
         """Walks the windows registry to search for key relating to proxies"""
         if hkey_str == "HKEY_CURRENT_USER":
             hkey = winreg.HKEY_CURRENT_USER
@@ -729,16 +640,9 @@ class ConnectionDiagnostic:
                     registry_key = winreg.EnumKey(registry, i)
                     i = i + 1
                     if registry_key:
-                        new_registry_key_str = os.path.join(
-                            registry_key_str, registry_key
-                        )
-                        if (
-                            "internet settings" in str(registry_key).lower()
-                            or "wpad" in str(registry_key).lower()
-                        ):
-                            new_registry_key = winreg.OpenKey(
-                                hkey, new_registry_key_str, 0, winreg.KEY_READ
-                            )
+                        new_registry_key_str = os.path.join(registry_key_str, registry_key)
+                        if "internet settings" in str(registry_key).lower() or "wpad" in str(registry_key).lower():
+                            new_registry_key = winreg.OpenKey(hkey, new_registry_key_str, 0, winreg.KEY_READ)
                             values = self.__get_win_registry_values(new_registry_key)
                             if "AutoConfigURL" in values.keys():
                                 wpad = values["AutoConfigURL"][0]
@@ -786,8 +690,6 @@ class ConnectionDiagnostic:
                                     f"{new_registry_key_str}: value: {values}",
                                 )
 
-                        self.__walk_win_registry(
-                            host_type, hkey_str, new_registry_key_str
-                        )
+                        self.__walk_win_registry(host_type, hkey_str, new_registry_key_str)
             except OSError:
                 pass

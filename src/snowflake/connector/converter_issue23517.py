@@ -9,6 +9,7 @@ import pytz
 
 from .converter import ZERO_EPOCH, SnowflakeConverter, _generate_tzinfo_from_tzoffset
 
+
 logger = getLogger(__name__)
 
 
@@ -28,9 +29,7 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         def conv(encoded_value: str) -> datetime:
             value, tz = encoded_value.split()
             tzinfo = _generate_tzinfo_from_tzoffset(int(tz) - 1440)
-            return SnowflakeConverterIssue23517.create_timestamp_from_string(
-                value=value, scale=scale, tz=tzinfo
-            )
+            return SnowflakeConverterIssue23517.create_timestamp_from_string(value=value, scale=scale, tz=tzinfo)
 
         return conv
 
@@ -39,18 +38,14 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         scale = ctx["scale"]
 
         def conv(value: str) -> datetime:
-            ts = SnowflakeConverterIssue23517.create_timestamp_from_string(
-                value=value, scale=scale
-            )
+            ts = SnowflakeConverterIssue23517.create_timestamp_from_string(value=value, scale=scale)
             return pytz.utc.localize(ts, is_dst=False).astimezone(tzinfo)
 
         return conv
 
     def _TIMESTAMP_NTZ_to_python(self, ctx):
         scale = ctx["scale"]
-        return partial(
-            SnowflakeConverterIssue23517.create_timestamp_from_string, scale=scale
-        )
+        return partial(SnowflakeConverterIssue23517.create_timestamp_from_string, scale=scale)
 
     def _TIME_to_python(self, ctx):
         """Converts TIME to formatted string, SnowflakeDateTime, or datetime.time.
@@ -75,13 +70,9 @@ class SnowflakeConverterIssue23517(SnowflakeConverter):
         tz: tzinfo | None = None,
     ) -> datetime:
         """Windows does not support negative timestamps, so we need to do that part in Python."""
-        seconds, fraction = SnowflakeConverter.get_seconds_microseconds(
-            value=value, scale=scale
-        )
+        seconds, fraction = SnowflakeConverter.get_seconds_microseconds(value=value, scale=scale)
         if not tz:
-            return datetime.fromtimestamp(0, timezone.utc).replace(
-                tzinfo=None
-            ) + timedelta(seconds=seconds, microseconds=fraction)
-        return datetime.fromtimestamp(0, tz=tz) + timedelta(
-            seconds=seconds, microseconds=fraction
-        )
+            return datetime.fromtimestamp(0, timezone.utc).replace(tzinfo=None) + timedelta(
+                seconds=seconds, microseconds=fraction
+            )
+        return datetime.fromtimestamp(0, tz=tz) + timedelta(seconds=seconds, microseconds=fraction)

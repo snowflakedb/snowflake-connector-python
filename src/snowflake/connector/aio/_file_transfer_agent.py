@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+
 from logging import getLogger
 from typing import IO, TYPE_CHECKING, Any
 
@@ -19,16 +20,16 @@ from ..constants import (
 )
 from ..errorcode import ER_FILE_NOT_EXISTS
 from ..errors import Error, OperationalError
-from ..file_transfer_agent import SnowflakeFileMeta
+from ..file_transfer_agent import SnowflakeFileMeta, SnowflakeProgressPercentage, _chunk_size_calculator
 from ..file_transfer_agent import (
     SnowflakeFileTransferAgent as SnowflakeFileTransferAgentSync,
 )
-from ..file_transfer_agent import SnowflakeProgressPercentage, _chunk_size_calculator
 from ..local_storage_client import SnowflakeLocalStorageClient
 from ._azure_storage_client import SnowflakeAzureRestClient
 from ._gcs_storage_client import SnowflakeGCSRestClient
 from ._s3_storage_client import SnowflakeS3RestClient
 from ._storage_client import SnowflakeStorageClient
+
 
 if TYPE_CHECKING:  # pragma: no cover
     from ._cursor import SnowflakeCursor
@@ -119,15 +120,14 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 m.multipart_threshold = self._multipart_threshold
 
         # TODO: SNOW-1625364 for renaming client_prefetch_threads in asyncio
-        logger.debug(f"parallel=[{self._parallel}]")
+        logger.debug("parallel=[%s]", self._parallel)
         if self._raise_put_get_error and not self._file_metadata:
             Error.errorhandler_wrapper(
                 self._cursor.connection,
                 self._cursor,
                 OperationalError,
                 {
-                    "msg": "While getting file(s) there was an error: "
-                    "the file does not exist.",
+                    "msg": "While getting file(s) there was an error: the file does not exist.",
                     "errno": ER_FILE_NOT_EXISTS,
                 },
             )
@@ -149,7 +149,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
             done_client: SnowflakeStorageClient,
         ) -> None:
             if not success:
-                logger.debug(f"Failed to prepare {done_client.meta.name}.")
+                logger.debug("Failed to prepare %s.", done_client.meta.name)
                 try:
                     if is_upload:
                         await done_client.finish_upload()
@@ -163,20 +163,16 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 return
             else:
                 try:
-                    logger.debug(f"Finished preparing file {done_client.meta.name}")
+                    logger.debug("Finished preparing file %s", done_client.meta.name)
                     tasks = []
                     for _chunk_id in range(done_client.num_of_chunks):
                         task = (
                             asyncio.create_task(done_client.upload_chunk(_chunk_id))
                             if is_upload
-                            else asyncio.create_task(
-                                done_client.download_chunk(_chunk_id)
-                            )
+                            else asyncio.create_task(done_client.download_chunk(_chunk_id))
                         )
                         task.add_done_callback(
-                            lambda t, dc=done_client, _chunk_id=_chunk_id: transfer_done_cb(
-                                t, dc, _chunk_id
-                            )
+                            lambda t, dc=done_client, _chunk_id=_chunk_id: transfer_done_cb(t, dc, _chunk_id)
                         )
                         tasks.append(task)
                     await asyncio.gather(*tasks)
@@ -194,47 +190,51 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
         ) -> None:
             # Note: chunk_id is 0 based while num_of_chunks is count
             logger.debug(
-                f"Chunk(id: {chunk_id}) {chunk_id+1}/{done_client.num_of_chunks} of file {done_client.meta.name} reached callback"
+                "Chunk(id: %s) %s/%s of file %s reached callback",
+                chunk_id,
+                chunk_id + 1,
+                done_client.num_of_chunks,
+                done_client.meta.name,
             )
             if task.exception():
                 done_client.failed_transfers += 1
                 logger.debug(
-                    f"Chunk {chunk_id} of file {done_client.meta.name} failed to transfer for unexpected exception {task.exception()}"
+                    "Chunk %s of file %s failed to transfer for unexpected exception %s",
+                    chunk_id,
+                    done_client.meta.name,
+                    task.exception(),
                 )
             else:
                 done_client.successful_transfers += 1
             logger.debug(
-                f"Chunk progress: {done_client.meta.name}: completed: {done_client.successful_transfers} failed: {done_client.failed_transfers} total: {done_client.num_of_chunks}"
+                "Chunk progress: %s: completed: %s failed: %s total: %s",
+                done_client.meta.name,
+                done_client.successful_transfers,
+                done_client.failed_transfers,
+                done_client.num_of_chunks,
             )
-            if (
-                done_client.successful_transfers + done_client.failed_transfers
-                == done_client.num_of_chunks
-            ):
+            if done_client.successful_transfers + done_client.failed_transfers == done_client.num_of_chunks:
                 if is_upload:
-                    finish_upload_task = asyncio.create_task(
-                        done_client.finish_upload()
-                    )
+                    finish_upload_task = asyncio.create_task(done_client.finish_upload())
                     finish_download_upload_tasks.append(finish_upload_task)
                     done_client.delete_client_data()
                 else:
-                    finish_download_task = asyncio.create_task(
-                        done_client.finish_download()
-                    )
-                    finish_download_task.add_done_callback(
-                        lambda t, dc=done_client: postprocess_done_cb(t, dc)
-                    )
+                    finish_download_task = asyncio.create_task(done_client.finish_download())
+                    finish_download_task.add_done_callback(lambda t, dc=done_client: postprocess_done_cb(t, dc))
                     finish_download_upload_tasks.append(finish_download_task)
 
         def postprocess_done_cb(
             task: asyncio.Task,
             done_client: SnowflakeStorageClient,
         ) -> None:
-            logger.debug(f"File {done_client.meta.name} reached postprocess callback")
+            logger.debug("File %s reached postprocess callback", done_client.meta.name)
 
             if task.exception():
                 done_client.failed_transfers += 1
                 logger.debug(
-                    f"File {done_client.meta.name} failed to transfer for unexpected exception {task.exception()}"
+                    "File %s failed to transfer for unexpected exception %s",
+                    done_client.meta.name,
+                    task.exception(),
                 )
             # Whether there was an exception or not, we're done the file.
 
@@ -242,20 +242,14 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
         for file_client in files:
             try:
                 # TODO: SNOW-1708819 for code refactoring
-                res = (
-                    await file_client.prepare_upload()
-                    if is_upload
-                    else await file_client.prepare_download()
-                )
+                res = await file_client.prepare_upload() if is_upload else await file_client.prepare_download()
                 is_successful = True
             except Exception as e:
                 res = e
                 file_client.meta.error_details = e
                 is_successful = False
 
-            task = asyncio.create_task(
-                preprocess_done_cb(is_successful, res, done_client=file_client)
-            )
+            task = asyncio.create_task(preprocess_done_cb(is_successful, res, done_client=file_client))
             task_of_files.append(task)
         await asyncio.gather(*task_of_files)
 
@@ -266,9 +260,7 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
             client = await self._create_file_transfer_client(self._file_metadata[0])
             self._use_accelerate_endpoint = await client.transfer_accelerate_config()
 
-    async def _create_file_transfer_client(
-        self, meta: SnowflakeFileMeta
-    ) -> SnowflakeStorageClient:
+    async def _create_file_transfer_client(self, meta: SnowflakeFileMeta) -> SnowflakeStorageClient:
         if self._stage_location_type == LOCAL_FS:
             return SnowflakeLocalStorageClient(
                 meta,
@@ -306,11 +298,9 @@ class SnowflakeFileTransferAgent(SnowflakeFileTransferAgentSync):
                 unsafe_file_write=self._unsafe_file_write,
             )
             if client.security_token:
-                logger.debug(f"len(GCS_ACCESS_TOKEN): {len(client.security_token)}")
+                logger.debug("len(GCS_ACCESS_TOKEN): %s", len(client.security_token))
             else:
-                logger.debug(
-                    "No access token received from GS, requesting presigned url"
-                )
+                logger.debug("No access token received from GS, requesting presigned url")
                 await client._update_presigned_url()
             return client
         raise Exception(f"{self._stage_location_type} is an unknown stage type")

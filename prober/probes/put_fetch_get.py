@@ -9,7 +9,9 @@ from probes.login import connect
 from probes.registry import prober_function
 
 import snowflake.connector
+
 from snowflake.connector.util_text import random_string
+
 
 # Initialize logger
 logger = initialize_logger(__name__)
@@ -43,11 +45,11 @@ def generate_random_data(num_records: int, file_path: str) -> str:
             # Subtract 1 for the header row
             actual_records = len(rows) - 1
             assert actual_records == num_records, logger.error(
-                f"Expected {num_records} records, but found {actual_records}."
+                "Expected %s records, but found %s.", num_records, actual_records
             )
         return file_path
     except Exception as e:
-        logger.error(f"Error generating random data: {e}")
+        logger.error("Error generating random data: %s", e)
         sys.exit(1)
 
 
@@ -87,15 +89,11 @@ def setup_schema(
         cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name};")
         cursor.execute(f"USE SCHEMA {schema_name}")
         if cursor.fetchone():
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0")
         return schema_name
     except Exception as e:
-        logger.error(f"Error creating schema: {e}")
-        print(
-            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-        )
+        logger.error("Error creating schema: %s", e)
+        print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
         sys.exit(1)
 
 
@@ -115,15 +113,11 @@ def setup_database(
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS {database_name};")
         cursor.execute(f"USE DATABASE {database_name};")
         if cursor.fetchone():
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0")
         return database_name
     except Exception as e:
-        logger.error(f"Error creating database: {e}")
-        print(
-            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-        )
+        logger.error("Error creating database: %s", e)
+        print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
         sys.exit(1)
 
 
@@ -140,18 +134,12 @@ def setup_warehouse(
         warehouse_name (str): The name of the warehouse to set up.
     """
     try:
-        cursor.execute(
-            f"CREATE WAREHOUSE IF NOT EXISTS {warehouse_name} WAREHOUSE_SIZE='X-SMALL';"
-        )
+        cursor.execute(f"CREATE WAREHOUSE IF NOT EXISTS {warehouse_name} WAREHOUSE_SIZE='X-SMALL';")
         cursor.execute(f"USE WAREHOUSE {warehouse_name};")
-        print(
-            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
-        )
+        print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0")
     except Exception as e:
-        logger.error(f"Error setup warehouse: {e}")
-        print(
-            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-        )
+        logger.error("Error setup warehouse: %s", e)
+        print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
         sys.exit(1)
 
 
@@ -177,20 +165,14 @@ def create_data_table(
         """
         cursor.execute(create_table_query)
         if cursor.fetchone():
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0")
             # cursor.execute(f"USE TABLE {table_name};")
         else:
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
             sys.exit(1)
     except Exception as e:
-        logger.error(f"Error creating table: {e}")
-        print(
-            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-        )
+        logger.error("Error creating table: %s", e)
+        print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
         sys.exit(1)
     return table_name
 
@@ -211,20 +193,14 @@ def create_data_stage(
 
         cursor.execute(create_stage_query)
         if cursor.fetchone():
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0")
         else:
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
             sys.exit(1)
         return stage_name
     except Exception as e:
-        print(
-            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-        )
-        logger.error(f"Error creating stage: {e}")
+        print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
+        logger.error("Error creating stage: %s", e)
         sys.exit(1)
 
 
@@ -252,19 +228,13 @@ def copy_into_table_from_stage(
 
         # Check if the data was loaded successfully
         if cur.fetchall()[0][1] == "LOADED":
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0")
         else:
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
             sys.exit(1)
     except Exception as e:
-        logger.error(f"Error copying data from stage to table: {e}")
-        print(
-            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-        )
+        logger.error("Error copying data from stage to table: %s", e)
+        print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
         sys.exit(1)
 
 
@@ -283,25 +253,17 @@ def put_file_to_stage(
         cur (snowflake.connector.cursor.SnowflakeCursor): The cursor to execute the SQL command.
     """
     try:
-        response = cur.execute(
-            f"PUT file://{file_name} @{stage_name} AUTO_COMPRESS=TRUE"
-        ).fetchall()
+        response = cur.execute(f"PUT file://{file_name} @{stage_name} AUTO_COMPRESS=TRUE").fetchall()
         logger.error(response)
 
         if response[0][6] == "UPLOADED":
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0")
         else:
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
             sys.exit(1)
     except Exception as e:
-        logger.error(f"Error uploading file to stage: {e}")
-        print(
-            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-        )
+        logger.error("Error uploading file to stage: %s", e)
+        print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
         sys.exit(1)
 
 
@@ -314,19 +276,13 @@ def count_data_from_table(
     try:
         count = cur.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         if count == num_records:
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0")
         else:
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
             sys.exit(1)
     except Exception as e:
-        logger.error(f"Error counting data from table: {e}")
-        print(
-            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-        )
+        logger.error("Error counting data from table: %s", e)
+        print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
         sys.exit(1)
 
 
@@ -349,9 +305,7 @@ def compare_fetched_data(
         fetch_limit (int): Number of rows to fetch from the table for comparison. Default is 100.
     """
     try:
-        fetched_data = cur.execute(
-            f"SELECT * FROM {table_name} LIMIT {fetch_limit}"
-        ).fetchall()
+        fetched_data = cur.execute(f"SELECT * FROM {table_name} LIMIT {fetch_limit}").fetchall()
 
         with open(file_name, newline="", encoding="utf-8") as csvfile:
             reader = csv.reader(csvfile)
@@ -364,14 +318,10 @@ def compare_fetched_data(
                             f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
                         )
                         sys.exit(1)
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0")
     except Exception as e:
-        logger.error(f"Error comparing fetched data: {e}")
-        print(
-            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-        )
+        logger.error("Error comparing fetched data: %s", e)
+        print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
         sys.exit(1)
 
 
@@ -396,21 +346,15 @@ def execute_get_command(
         # Check if files are downloaded
         downloaded_files = os.listdir(download_dir)
         if downloaded_files:
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0")
 
         else:
-            print(
-                f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-            )
+            print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
             sys.exit(1)
 
     except Exception as e:
-        logger.error(f"Error downloading file from stage: {e}")
-        print(
-            f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
-        )
+        logger.error("Error downloading file from stage: %s", e)
+        print(f"{metric_name}{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1")
         sys.exit(1)
     finally:
         try:
@@ -420,9 +364,7 @@ def execute_get_command(
                     os.remove(file_path)
             os.rmdir(download_dir)
         except FileNotFoundError:
-            logger.error(
-                f"Error cleaning up directory {download_dir}. It may not exist or be empty."
-            )
+            logger.error("Error cleaning up directory %s. It may not exist or be empty.", download_dir)
             sys.exit(1)
 
 
@@ -438,7 +380,6 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
     try:
         with connect(connection_parameters) as conn:
             with conn.cursor() as cur:
-
                 logger.error("Setting up database")
                 database_name = setup_database(cur, conn.database)
                 logger.error("Database setup complete")
@@ -452,27 +393,25 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
 
                 logger.error("Creating stage")
                 stage_name = create_data_stage(cur)
-                logger.error(f"Stage {stage_name} created")
+                logger.error("Stage %s created", stage_name)
 
                 logger.error("Creating table")
                 table_name = create_data_table(cur)
-                logger.error(f"Table {table_name} created")
+                logger.error("Table %s created", table_name)
 
                 logger.error("Generating random data")
 
                 file_name = generate_random_data(num_records, f"/tmp/{table_name}.csv")
 
-                logger.error(f"Random data generated in {file_name}")
+                logger.error("Random data generated in %s", file_name)
 
                 logger.error("PUT file to stage")
                 put_file_to_stage(file_name, stage_name, cur)
-                logger.error(f"File {file_name} uploaded to stage {stage_name}")
+                logger.error("File %s uploaded to stage %s", file_name, stage_name)
 
                 logger.error("Copying data from stage to table")
                 copy_into_table_from_stage(table_name, stage_name, cur)
-                logger.error(
-                    f"Data copied from stage {stage_name} to table {table_name}"
-                )
+                logger.error("Data copied from stage %s to table %s", stage_name, table_name)
 
                 logger.error("Counting data in the table")
                 count_data_from_table(table_name, num_records, cur)
@@ -485,7 +424,7 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                 logger.error("File downloaded from stage to local directory")
 
     except Exception as e:
-        logger.error(f"Error during PUT_FETCH_GET operation: {e}")
+        logger.error("Error during PUT_FETCH_GET operation: %s", e)
         sys.exit(1)
     finally:
         try:
@@ -501,7 +440,7 @@ def perform_put_fetch_get(connection_parameters: dict, num_records: int = 1000):
                 f"cloudprober_driver_python_cleanup_resources{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
             )
         except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
+            logger.error("Error during cleanup: %s", e)
             print(
                 f"cloudprober_driver_python_cleanup_resources{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
             )

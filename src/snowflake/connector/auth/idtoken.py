@@ -7,6 +7,7 @@ from ..network import ID_TOKEN_AUTHENTICATOR
 from .by_plugin import AuthByPlugin, AuthType
 from .webbrowser import AuthByWebBrowser
 
+
 if TYPE_CHECKING:
     from ..connection import SnowflakeConnection
 

@@ -7,6 +7,7 @@ import logging
 import os
 import stat
 import sys
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -16,6 +17,7 @@ from typing import Any, TypeVar
 from .compat import IS_LINUX, IS_MACOS, IS_WINDOWS
 from .file_lock import FileLock, FileLockError
 from .options import installed_keyring, keyring
+
 
 logger = logging.getLogger(__name__)
 T = TypeVar("T")
@@ -165,38 +167,30 @@ class FileTokenCache(TokenCache):
             )
             return None
         else:
-            return FileTokenCache(
-                cache_dir, skip_file_permissions_check=skip_file_permissions_check
-            )
+            return FileTokenCache(cache_dir, skip_file_permissions_check=skip_file_permissions_check)
 
-    def __init__(
-        self, cache_dir: Path, skip_file_permissions_check: bool = False
-    ) -> None:
+    def __init__(self, cache_dir: Path, skip_file_permissions_check: bool = False) -> None:
         self.logger = logging.getLogger(__name__)
         self.cache_dir: Path = cache_dir
         self._skip_file_permissions_check = skip_file_permissions_check
 
     def store(self, key: TokenKey, token: str) -> None:
         try:
-            FileTokenCache.validate_cache_dir(
-                self.cache_dir, self._skip_file_permissions_check
-            )
+            FileTokenCache.validate_cache_dir(self.cache_dir, self._skip_file_permissions_check)
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
                 cache["tokens"][key.hash_key()] = token
                 self._write_cache_file(cache)
         except _FileTokenCacheError as e:
-            self.logger.error(f"Failed to store token: {e=}")
+            self.logger.error("Failed to store token: %s", e)
         except FileLockError as e:
-            self.logger.error(f"Unable to lock file lock: {e=}")
+            self.logger.error("Unable to lock file lock: %s", e)
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Failed to produce token key {e=}")
+            self.logger.error("Failed to produce token key %s", e)
 
     def retrieve(self, key: TokenKey) -> str | None:
         try:
-            FileTokenCache.validate_cache_dir(
-                self.cache_dir, self._skip_file_permissions_check
-            )
+            FileTokenCache.validate_cache_dir(self.cache_dir, self._skip_file_permissions_check)
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
                 token = cache["tokens"].get(key.hash_key(), None)
@@ -205,30 +199,28 @@ class FileTokenCache(TokenCache):
                 else:
                     return None
         except _FileTokenCacheError as e:
-            self.logger.error(f"Failed to retrieve token: {e=}")
+            self.logger.error("Failed to retrieve token: %s", e)
             return None
         except FileLockError as e:
-            self.logger.error(f"Unable to lock file lock: {e=}")
+            self.logger.error("Unable to lock file lock: %s", e)
             return None
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Failed to produce token key {e=}")
+            self.logger.error("Failed to produce token key %s", e)
             return None
 
     def remove(self, key: TokenKey) -> None:
         try:
-            FileTokenCache.validate_cache_dir(
-                self.cache_dir, self._skip_file_permissions_check
-            )
+            FileTokenCache.validate_cache_dir(self.cache_dir, self._skip_file_permissions_check)
             with FileLock(self.lock_file()):
                 cache = self._read_cache_file()
                 cache["tokens"].pop(key.hash_key(), None)
                 self._write_cache_file(cache)
         except _FileTokenCacheError as e:
-            self.logger.error(f"Failed to remove token: {e=}")
+            self.logger.error("Failed to remove token: %s", e)
         except FileLockError as e:
-            self.logger.error(f"Unable to lock file lock: {e=}")
+            self.logger.error("Unable to lock file lock: %s", e)
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Failed to produce token key {e=}")
+            self.logger.error("Failed to produce token key %s", e)
 
     def cache_file(self) -> Path:
         return self.cache_dir / "credential_cache_v1.json"
@@ -248,17 +240,21 @@ class FileTokenCache(TokenCache):
             data = os.read(fd, size)
             json_data = json.loads(codecs.decode(data, "utf-8"))
         except FileNotFoundError:
-            self.logger.debug(f"{self.cache_file()} not found")
+            self.logger.debug("%s not found", self.cache_file())
         except json.decoder.JSONDecodeError as e:
             self.logger.warning(
-                f"Failed to decode json read from cache file {self.cache_file()}: {e.__class__.__name__}"
+                "Failed to decode json read from cache file %s: %s",
+                self.cache_file(),
+                e.__class__.__name__,
             )
         except UnicodeError as e:
             self.logger.warning(
-                f"Failed to decode utf-8 read from cache file {self.cache_file()}: {e.__class__.__name__}"
+                "Failed to decode utf-8 read from cache file %s: %s",
+                self.cache_file(),
+                e.__class__.__name__,
             )
         except OSError as e:
-            self.logger.warning(f"Failed to read cache file {self.cache_file()}: {e}")
+            self.logger.warning("Failed to read cache file %s: %s", self.cache_file(), e)
         finally:
             if fd > 0:
                 os.close(fd)
@@ -270,11 +266,9 @@ class FileTokenCache(TokenCache):
 
     def _write_cache_file(self, json_data: dict):
         fd = -1
-        self.logger.debug(f"Writing cache file {self.cache_file()}")
+        self.logger.debug("Writing cache file %s", self.cache_file())
         try:
-            fd = os.open(
-                self.cache_file(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600
-            )
+            fd = os.open(self.cache_file(), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
             if not self._skip_file_permissions_check:
                 self._ensure_permissions(fd, 0o600)
             os.write(fd, codecs.encode(json.dumps(json_data), "utf-8"))
@@ -290,24 +284,18 @@ class FileTokenCache(TokenCache):
         def lookup_env_dir(env_var: str, subpath_segments: list[str]) -> Path | None:
             env_val = os.getenv(env_var)
             if env_val is None:
-                logger.debug(
-                    f"Environment variable {env_var} not set. Skipping it in cache directory lookup."
-                )
+                logger.debug("Environment variable %s not set. Skipping it in cache directory lookup.", env_var)
                 return None
 
             directory = Path(env_val)
 
             if len(subpath_segments) > 0:
                 if not directory.exists():
-                    logger.debug(
-                        f"Path {str(directory)} does not exist. Skipping it in cache directory lookup."
-                    )
+                    logger.debug("Path %s does not exist. Skipping it in cache directory lookup.", str(directory))
                     return None
 
                 if not directory.is_dir():
-                    logger.debug(
-                        f"Path {str(directory)} is not a directory. Skipping it in cache directory lookup."
-                    )
+                    logger.debug("Path %s is not a directory. Skipping it in cache directory lookup.", str(directory))
                     return None
 
                 for subpath in subpath_segments[:-1]:
@@ -318,9 +306,7 @@ class FileTokenCache(TokenCache):
                 directory.mkdir(exist_ok=True, mode=0o700)
 
             try:
-                FileTokenCache.validate_cache_dir(
-                    directory, skip_file_permissions_check
-                )
+                FileTokenCache.validate_cache_dir(directory, skip_file_permissions_check)
                 return directory
             except _FileTokenCacheError as e:
                 _warn(
@@ -342,9 +328,7 @@ class FileTokenCache(TokenCache):
         return None
 
     @staticmethod
-    def validate_cache_dir(
-        cache_dir: Path | None, skip_file_permissions_check: bool = False
-    ) -> None:
+    def validate_cache_dir(cache_dir: Path | None, skip_file_permissions_check: bool = False) -> None:
         try:
             statinfo = cache_dir.stat()
 
@@ -363,14 +347,10 @@ class FileTokenCache(TokenCache):
 
                 euid = os.geteuid()
                 if statinfo.st_uid != euid:
-                    raise _OwnershipError(
-                        f"Cache dir {cache_dir} has incorrect owner. {euid} != {statinfo.st_uid}"
-                    )
+                    raise _OwnershipError(f"Cache dir {cache_dir} has incorrect owner. {euid} != {statinfo.st_uid}")
 
         except FileNotFoundError:
-            raise _CacheDirNotFoundError(
-                f"Cache dir {cache_dir} was not found. Failed to stat."
-            )
+            raise _CacheDirNotFoundError(f"Cache dir {cache_dir} was not found. Failed to stat.")
 
     def _ensure_permissions(self, fd: int, permissions: int) -> None:
         try:
@@ -412,7 +392,7 @@ class KeyringTokenCache(TokenCache):
                 token,
             )
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Could not retrieve {key.tokenType} from keyring, {e=}")
+            self.logger.error("Could not retrieve %s from keyring, %s", key.tokenType, e)
         except keyring.errors.KeyringError as ke:
             self.logger.error("Could not store id_token to keyring, %s", str(ke))
 
@@ -423,13 +403,9 @@ class KeyringTokenCache(TokenCache):
                 key.user.upper(),
             )
         except keyring.errors.KeyringError as ke:
-            self.logger.error(
-                "Could not retrieve {} from secure storage : {}".format(
-                    key.tokenType.value, str(ke)
-                )
-            )
+            self.logger.error("Could not retrieve %s from secure storage : %s", key.tokenType.value, str(ke))
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Could not retrieve {key.tokenType} from keyring, {e=}")
+            self.logger.error("Could not retrieve %s from keyring, %s", key.tokenType, e)
 
     def remove(self, key: TokenKey) -> None:
         try:
@@ -438,11 +414,9 @@ class KeyringTokenCache(TokenCache):
                 key.user.upper(),
             )
         except _InvalidTokenKeyError as e:
-            self.logger.error(f"Could not retrieve {key.tokenType} from keyring, {e=}")
+            self.logger.error("Could not retrieve %s from keyring, %s", key.tokenType, e)
         except Exception as ex:
-            self.logger.error(
-                "Failed to delete credential in the keyring: err=[%s]", ex
-            )
+            self.logger.error("Failed to delete credential in the keyring: err=[%s]", ex)
         pass
 
 

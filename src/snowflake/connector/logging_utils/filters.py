@@ -5,9 +5,7 @@ import logging
 from snowflake.connector.secret_detector import SecretDetector
 
 
-def add_filter_to_logger_and_children(
-    base_logger_name: str, filter_instance: logging.Filter
-) -> None:
+def add_filter_to_logger_and_children(base_logger_name: str, filter_instance: logging.Filter) -> None:
     # Ensure the base logger exists and apply filter
     base_logger = logging.getLogger(base_logger_name)
     if filter_instance not in base_logger.filters:
@@ -63,9 +61,7 @@ class SecretMaskingFilter(logging.Filter):
             masked_data = SecretDetector.mask_secrets(message)
             record.msg = masked_data.masked_text
         except Exception as ex:
-            record.msg = SecretDetector.create_formatting_error_log(
-                record, "EXCEPTION - " + str(ex)
-            )
+            record.msg = SecretDetector.create_formatting_error_log(record, "EXCEPTION - " + str(ex))
         finally:
             record.args = ()  # Avoid format re-application of formatting
 

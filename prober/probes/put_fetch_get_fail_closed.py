@@ -19,13 +19,12 @@ from probes.put_fetch_get import (
 )
 from probes.registry import prober_function
 
+
 # Initialize logger
 logger = initialize_logger(__name__)
 
 
-def perform_put_fetch_get_fail_closed(
-    connection_parameters: dict, num_records: int = 1000
-):
+def perform_put_fetch_get_fail_closed(connection_parameters: dict, num_records: int = 1000):
     """
     Performs a PUT, fetch and GET operation using the provided connection parameters under fail closed mode.
 
@@ -37,7 +36,6 @@ def perform_put_fetch_get_fail_closed(
     try:
         with connect(connection_parameters) as conn:
             with conn.cursor() as cur:
-
                 logger.error("Setting up database")
                 database_name = setup_database(
                     cur,
@@ -62,22 +60,18 @@ def perform_put_fetch_get_fail_closed(
                 )
 
                 logger.error("Creating stage")
-                stage_name = create_data_stage(
-                    cur, "cloudprober_driver_python_create_stage_fail_closed"
-                )
-                logger.error(f"Stage {stage_name} created")
+                stage_name = create_data_stage(cur, "cloudprober_driver_python_create_stage_fail_closed")
+                logger.error("Stage %s created", stage_name)
 
                 logger.error("Creating table")
-                table_name = create_data_table(
-                    cur, "cloudprober_driver_python_create_table_fail_closed"
-                )
-                logger.error(f"Table {table_name} created")
+                table_name = create_data_table(cur, "cloudprober_driver_python_create_table_fail_closed")
+                logger.error("Table %s created", table_name)
 
                 logger.error("Generating random data")
 
                 file_name = generate_random_data(num_records, f"/tmp/{table_name}.csv")
 
-                logger.error(f"Random data generated in {file_name}")
+                logger.error("Random data generated in %s", file_name)
 
                 logger.error("PUT file to stage")
                 put_file_to_stage(
@@ -86,7 +80,7 @@ def perform_put_fetch_get_fail_closed(
                     cur,
                     "cloudprober_driver_python_perform_put_fail_closed",
                 )
-                logger.error(f"File {file_name} uploaded to stage {stage_name}")
+                logger.error("File %s uploaded to stage %s", file_name, stage_name)
 
                 logger.error("Copying data from stage to table")
                 copy_into_table_from_stage(
@@ -95,9 +89,7 @@ def perform_put_fetch_get_fail_closed(
                     cur,
                     "cloudprober_driver_python_copy_data_from_stage_into_table_fail_closed",
                 )
-                logger.error(
-                    f"Data copied from stage {stage_name} to table {table_name}"
-                )
+                logger.error("Data copied from stage %s to table %s", stage_name, table_name)
 
                 logger.error("Counting data in the table")
                 count_data_from_table(
@@ -124,7 +116,7 @@ def perform_put_fetch_get_fail_closed(
                 logger.error("File downloaded from stage to local directory")
 
     except Exception as e:
-        logger.error(f"Error during PUT_FETCH_GET operation: {e}")
+        logger.error("Error during PUT_FETCH_GET operation: %s", e)
         sys.exit(1)
     finally:
         try:
@@ -140,7 +132,7 @@ def perform_put_fetch_get_fail_closed(
                 f"cloudprober_driver_python_cleanup_resources_fail_closed{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 0"
             )
         except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
+            logger.error("Error during cleanup: %s", e)
             print(
                 f"cloudprober_driver_python_cleanup_resources_fail_closed{{python_version={get_python_version()}, driver_version={get_driver_version()}}} 1"
             )

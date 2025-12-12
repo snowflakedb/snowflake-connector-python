@@ -13,6 +13,7 @@ import socket
 import time
 import urllib.parse
 import webbrowser
+
 from typing import TYPE_CHECKING, Any
 
 from ..compat import parse_qs, urlparse, urlsplit
@@ -28,6 +29,7 @@ from ..errors import Error, ProgrammingError
 from ..token_cache import TokenCache
 from ._http_server import AuthHttpServer
 from ._oauth_base import AuthByOAuthBase
+
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection
@@ -68,9 +70,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         uri: str | None = None,
         **kwargs,
     ) -> None:
-        authentication_url, redirect_uri = self._validate_oauth_code_uris(
-            authentication_url, redirect_uri, connection
-        )
+        authentication_url, redirect_uri = self._validate_oauth_code_uris(authentication_url, redirect_uri, connection)
         client_id, client_secret = self._validate_client_credentials_with_defaults(
             client_id,
             client_secret,
@@ -126,9 +126,7 @@ class AuthByOauthCode(AuthByOAuthBase):
             code = self._do_authorization_request(callback_server, conn)
             return self._do_token_request(code, callback_server, conn)
 
-    def _check_post_requested(
-        self, data: list[str]
-    ) -> tuple[str, str] | tuple[None, None]:
+    def _check_post_requested(self, data: list[str]) -> tuple[str, str] | tuple[None, None]:
         request_line = None
         header_line = None
         origin_line = None
@@ -140,12 +138,7 @@ class AuthByOauthCode(AuthByOAuthBase):
             elif line.startswith("Origin:"):
                 origin_line = line
 
-        if (
-            not request_line
-            or not header_line
-            or not origin_line
-            or request_line.split(":")[1].strip() != "POST"
-        ):
+        if not request_line or not header_line or not origin_line or request_line.split(":")[1].strip() != "POST":
             return (None, None)
 
         return (
@@ -153,9 +146,7 @@ class AuthByOauthCode(AuthByOAuthBase):
             ":".join(origin_line.split(":")[1:]).strip(),
         )
 
-    def _process_options(
-        self, data: list[str], socket_client: socket.socket, hostname: str, port: int
-    ) -> bool:
+    def _process_options(self, data: list[str], socket_client: socket.socket, hostname: str, port: int) -> bool:
         """Allows JS Ajax access to this endpoint."""
         for line in data:
             if line.startswith("OPTIONS "):
@@ -173,9 +164,7 @@ class AuthByOauthCode(AuthByOAuthBase):
         self._origin = requested_origin
         content = [
             "HTTP/1.1 200 OK",
-            "Date: {}".format(
-                time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
-            ),
+            "Date: {}".format(time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())),
             "Access-Control-Allow-Methods: POST, GET",
             f"Access-Control-Allow-Headers: {requested_headers}",
             "Access-Control-Max-Age: 86400",
@@ -190,13 +179,9 @@ class AuthByOauthCode(AuthByOAuthBase):
         ret = urlsplit(requested_origin)
         netloc = ret.netloc.split(":")
         host_got = netloc[0]
-        port_got = (
-            netloc[1] if len(netloc) > 1 else (443 if self._protocol == "https" else 80)
-        )
+        port_got = netloc[1] if len(netloc) > 1 else (443 if self._protocol == "https" else 80)
 
-        return (
-            ret.scheme == self._protocol and host_got == hostname and port_got == port
-        )
+        return ret.scheme == self._protocol and host_got == hostname and port_got == port
 
     def _send_response(self, data: list[str], socket_client: socket.socket) -> None:
         if not self._is_request_get(data):
@@ -247,9 +232,7 @@ You can close this window now and go back where you started from.
             self._verifier = secrets.token_urlsafe(43)
             # calculate challenge and verifier
             challenge = (
-                base64.urlsafe_b64encode(
-                    hashlib.sha256(self._verifier.encode("utf-8")).digest()
-                )
+                base64.urlsafe_b64encode(hashlib.sha256(self._verifier.encode("utf-8")).digest())
                 .decode("utf-8")
                 .rstrip("=")
             )
@@ -264,9 +247,7 @@ You can close this window now and go back where you started from.
         callback_server: AuthHttpServer,
         connection: SnowflakeConnection,
     ) -> str | None:
-        authorization_request = self._construct_authorization_request(
-            callback_server.redirect_uri
-        )
+        authorization_request = self._construct_authorization_request(callback_server.redirect_uri)
         logger.debug("step 1: going to open authorization URL")
         print(
             "Initiating login request with your identity provider. A "
@@ -278,9 +259,7 @@ You can close this window now and go back where you started from.
         code, state = (
             self._receive_authorization_callback(callback_server, connection)
             if webbrowser.open(authorization_request)
-            else self._ask_authorization_callback_from_user(
-                authorization_request, connection
-            )
+            else self._ask_authorization_callback_from_user(authorization_request, connection)
         )
         if not code:
             self._handle_failure(
@@ -288,8 +267,7 @@ You can close this window now and go back where you started from.
                 ret={
                     "code": ER_UNABLE_TO_OPEN_BROWSER,
                     "message": (
-                        "Unable to open a browser in this environment and "
-                        "OAuth URL contained no authorization code."
+                        "Unable to open a browser in this environment and OAuth URL contained no authorization code."
                     ),
                 },
             )
@@ -335,9 +313,7 @@ You can close this window now and go back where you started from.
         connection: SnowflakeConnection,
     ) -> (str | None, str | None):
         logger.debug("trying to receive authorization redirected uri")
-        data, socket_connection = http_server.receive_block(
-            timeout=self._external_browser_timeout
-        )
+        data, socket_connection = http_server.receive_block(timeout=self._external_browser_timeout)
         if socket_connection is None:
             self._handle_failure(
                 conn=connection,
@@ -348,9 +324,7 @@ You can close this window now and go back where you started from.
             )
             return None, None
         try:
-            if not self._process_options(
-                data, socket_connection, http_server.hostname, http_server.port
-            ):
+            if not self._process_options(data, socket_connection, http_server.hostname, http_server.port):
                 self._send_response(data, socket_connection)
             socket_connection.shutdown(socket.SHUT_RDWR)
         except OSError:
@@ -374,9 +348,7 @@ You can close this window now and go back where you started from.
             "URL you are redirected to into the terminal:\n"
             f"{authorization_request}"
         )
-        received_redirected_request = input(
-            "Enter the URL the OAuth flow redirected you to: "
-        )
+        received_redirected_request = input("Enter the URL the OAuth flow redirected you to: ")
         code, state = self._parse_authorization_redirected_request(
             received_redirected_request,
             connection,
@@ -386,10 +358,7 @@ You can close this window now and go back where you started from.
                 conn=connection,
                 ret={
                     "code": ER_UNABLE_TO_OPEN_BROWSER,
-                    "message": (
-                        "Unable to open a browser in this environment and "
-                        "OAuth URL contained no code"
-                    ),
+                    "message": ("Unable to open a browser in this environment and OAuth URL contained no code"),
                 },
             )
         return code, state
@@ -411,9 +380,7 @@ You can close this window now and go back where you started from.
         return parsed.get("code", [None])[0], parsed.get("state", [None])[0]
 
     @staticmethod
-    def _is_snowflake_as_idp(
-        authentication_url: str, token_request_url: str, host: str
-    ) -> bool:
+    def _is_snowflake_as_idp(authentication_url: str, token_request_url: str, host: str) -> bool:
         return (authentication_url == "" or host in authentication_url) and (
             token_request_url == "" or host in token_request_url
         )
@@ -429,9 +396,7 @@ You can close this window now and go back where you started from.
         return (
             (client_id == "" or client_secret is None)
             and (client_secret == "" or client_secret is None)
-            and self.__class__._is_snowflake_as_idp(
-                authorization_url, token_request_url, host
-            )
+            and self.__class__._is_snowflake_as_idp(authorization_url, token_request_url, host)
         )
 
     def _validate_client_credentials_with_defaults(
@@ -451,9 +416,7 @@ You can close this window now and go back where you started from.
                 self.__class__._LOCAL_APPLICATION_CLIENT_CREDENTIALS,
             )
         else:
-            self._validate_client_credentials_present(
-                client_id, client_secret, connection
-            )
+            self._validate_client_credentials_present(client_id, client_secret, connection)
             return client_id, client_secret
 
     @staticmethod
@@ -470,9 +433,7 @@ You can close this window now and go back where you started from.
                     "errno": ER_INVALID_VALUE,
                 },
             )
-        if redirect_uri and not (
-            redirect_uri.startswith("http://") or redirect_uri.startswith("https://")
-        ):
+        if redirect_uri and not (redirect_uri.startswith("http://") or redirect_uri.startswith("https://")):
             Error.errorhandler_wrapper(
                 connection,
                 None,

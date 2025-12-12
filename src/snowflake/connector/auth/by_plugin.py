@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+
 """This module implements the base class for authenticator classes.
 
 Note:
@@ -11,15 +12,18 @@ Note:
 
 import logging
 import time
+
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from enum import Enum, unique
 from os import getenv
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 
 from ..errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from ..errors import DatabaseError, Error, OperationalError
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..time_util import TimeoutBackoffCtx
+
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection
@@ -212,8 +216,8 @@ class AuthByPlugin(ABC):
             raise error
         else:
             logger.debug(
-                f"Hit connection timeout, attempt number {self._retry_ctx.current_retry_count + 1}."
-                " Will retry in a bit..."
+                "Hit connection timeout, attempt number %s. Will retry in a bit...",
+                self._retry_ctx.current_retry_count + 1,
             )
             time.sleep(float(self._retry_ctx.current_sleep_time))
             self._retry_ctx.increment()

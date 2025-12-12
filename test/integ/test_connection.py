@@ -1450,30 +1450,30 @@ def _log_pattern_analysis(
     """
 
     if missing_patterns:
-        logger.warning(f"Missing expected log patterns ({len(missing_patterns)}):")
+        logger.warning("Missing expected log patterns (%s):", len(missing_patterns))
         for pattern in sorted(missing_patterns):
-            logger.warning(f"  - MISSING: '{pattern}'")
+            logger.warning("  - MISSING: '%s'", pattern)
 
     if unmatched_messages:
-        logger.warning(f"New/unexpected log messages ({len(unmatched_messages)}):")
+        logger.warning("New/unexpected log messages (%s):", len(unmatched_messages))
         for message in unmatched_messages:
             message_bytes = len(message.encode("utf-8"))
-            logger.warning(f"  + NEW: '{message}' ({message_bytes} bytes)")
+            logger.warning("  + NEW: '%s' (%s bytes)", message, message_bytes)
 
     # Log summary
     logger.warning("Log analysis summary:")
-    logger.warning(f"  - Expected patterns: {len(expected_patterns)}")
-    logger.warning(f"  - Matched patterns: {len(matched_patterns)}")
-    logger.warning(f"  - Missing patterns: {len(missing_patterns)}")
-    logger.warning(f"  - Actual messages: {len(actual_messages)}")
-    logger.warning(f"  - Unmatched messages: {len(unmatched_messages)}")
+    logger.warning("  - Expected patterns: %s", len(expected_patterns))
+    logger.warning("  - Matched patterns: %s", len(matched_patterns))
+    logger.warning("  - Missing patterns: %s", len(missing_patterns))
+    logger.warning("  - Actual messages: %s", len(actual_messages))
+    logger.warning("  - Unmatched messages: %s", len(unmatched_messages))
 
     # Show all messages if requested (useful when patterns match but bytes don't)
     if show_all_messages:
         logger.warning("All actual log messages:")
         for i, message in enumerate(actual_messages):
             message_bytes = len(message.encode("utf-8"))
-            logger.warning(f"  [{i:2d}] '{message}' ({message_bytes} bytes)")
+            logger.warning("  [%s:2d] '%s' (%s bytes)", i, message, message_bytes)
 
 
 def _assert_log_bytes_within_tolerance(actual_bytes, expected_bytes, tolerance):

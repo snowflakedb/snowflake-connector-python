@@ -137,7 +137,7 @@ class WiremockClient:
             else:
                 logger.debug("Wiremock shutdown gracefully")
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Shutdown request failed: {e}. Killing process directly.")
+            logger.warning("Shutdown request failed: %s. Killing process directly.", e)
             self.wiremock_process.kill()
 
     def _wait_for_wiremock(self):
@@ -159,14 +159,14 @@ class WiremockClient:
         try:
             response = requests.get(mappings_endpoint)
         except requests.exceptions.RequestException as e:
-            logger.warning(f"Wiremock healthcheck failed with exception: {e}")
+            logger.warning("Wiremock healthcheck failed with exception: %s", e)
             return False
 
         if (
             response.status_code == requests.codes.ok
             and response.json()["status"] != "healthy"
         ):
-            logger.warning(f"Wiremock healthcheck failed with response: {response}")
+            logger.warning("Wiremock healthcheck failed with response: %s", response)
             return False
         elif response.status_code != requests.codes.ok:
             logger.warning(

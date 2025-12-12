@@ -4,11 +4,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
+
 from datetime import datetime, timedelta, timezone
 from logging import getLogger
 from typing import Any
 
 import jwt
+
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import (
@@ -21,6 +23,7 @@ from ..errorcode import ER_CONNECTION_TIMEOUT, ER_INVALID_PRIVATE_KEY
 from ..errors import OperationalError, ProgrammingError
 from ..network import KEY_PAIR_AUTHENTICATOR
 from .by_plugin import AuthByPlugin, AuthType
+
 
 logger = getLogger(__name__)
 
@@ -51,11 +54,7 @@ class AuthByKeyPair(AuthByPlugin):
             lifetime_in_seconds: number of seconds the JWT token will be valid
         """
         super().__init__(
-            max_retry_attempts=int(
-                os.getenv(
-                    "JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS
-                )
-            ),
+            max_retry_attempts=int(os.getenv("JWT_CNXN_RETRY_ATTEMPTS", AuthByKeyPair.DEFAULT_JWT_RETRY_ATTEMPTS)),
             **kwargs,
         )
 
@@ -74,9 +73,7 @@ class AuthByKeyPair(AuthByPlugin):
         self._private_key: bytes | str | RSAPrivateKey | None = private_key
         self._jwt_token = ""
         self._jwt_token_exp = 0
-        self._lifetime = timedelta(
-            seconds=int(os.getenv("JWT_LIFETIME_IN_SECONDS", lifetime_in_seconds))
-        )
+        self._lifetime = timedelta(seconds=int(os.getenv("JWT_LIFETIME_IN_SECONDS", lifetime_in_seconds)))
 
     def reset_secrets(self) -> None:
         self._private_key = None
@@ -136,9 +133,7 @@ class AuthByKeyPair(AuthByPlugin):
         elif isinstance(self._private_key, RSAPrivateKey):
             private_key = self._private_key
         else:
-            raise TypeError(
-                f"Expected bytes or RSAPrivateKey, got {type(self._private_key)}"
-            )
+            raise TypeError(f"Expected bytes or RSAPrivateKey, got {type(self._private_key)}")
 
         public_key_fp = self.calculate_public_key_fingerprint(private_key)
 
@@ -167,17 +162,13 @@ class AuthByKeyPair(AuthByPlugin):
     @staticmethod
     def calculate_public_key_fingerprint(private_key):
         # get public key bytes
-        public_key_der = private_key.public_key().public_bytes(
-            Encoding.DER, PublicFormat.SubjectPublicKeyInfo
-        )
+        public_key_der = private_key.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
 
         # take sha256 on raw bytes and then do base64 encode
         sha256hash = hashlib.sha256()
         sha256hash.update(public_key_der)
 
-        public_key_fp = "SHA256:" + base64.b64encode(sha256hash.digest()).decode(
-            "utf-8"
-        )
+        public_key_fp = "SHA256:" + base64.b64encode(sha256hash.digest()).decode("utf-8")
         logger.debug("Public key fingerprint is %s", public_key_fp)
 
         return public_key_fp

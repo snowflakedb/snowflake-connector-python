@@ -5,6 +5,7 @@ from snowflake.connector.logging_utils.filters import (
     add_filter_to_logger_and_children,
 )
 
+
 MODULES_TO_MASK_LOGS_NAMES = [
     "snowflake.connector.vendored.urllib3",
     "botocore",

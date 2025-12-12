@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+
 from asyncio import Lock
 from typing import TYPE_CHECKING
 
@@ -11,6 +12,7 @@ from ..secret_detector import SecretDetector
 from ..telemetry import TelemetryClient as TelemetryClientSync
 from ..telemetry import TelemetryData
 from ..test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
+
 
 if TYPE_CHECKING:
     from ._network import SnowflakeRestful
@@ -61,7 +63,7 @@ class TelemetryClient(TelemetryClientSync):
         )
         if ENABLE_TELEMETRY_LOG:
             # This logger guarantees the payload won't be masked. Testing purpose.
-            rt_plain_logger.debug(f"Inband telemetry data being sent is {body}")
+            rt_plain_logger.debug("Inband telemetry data being sent is %s", body)
         try:
             ret = await self._rest.request(
                 TelemetryClient.SF_PATH_TELEMETRY,
@@ -73,8 +75,7 @@ class TelemetryClient(TelemetryClientSync):
             )
             if not ret["success"]:
                 logger.info(
-                    "Non-success response from telemetry server: %s. "
-                    "Disabling telemetry.",
+                    "Non-success response from telemetry server: %s. Disabling telemetry.",
                     str(ret),
                 )
                 self._enabled = False

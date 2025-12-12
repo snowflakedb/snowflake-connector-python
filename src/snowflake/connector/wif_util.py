@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+
 from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum, unique
@@ -10,6 +11,7 @@ from enum import Enum, unique
 import jwt
 
 from .options import boto3, botocore, installed_boto
+
 
 if installed_boto:
     SigV4Auth = botocore.auth.SigV4Auth
@@ -20,12 +22,11 @@ from .errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
 from .errors import MissingDependencyError, ProgrammingError
 from .session_manager import SessionManager, SessionManagerFactory
 
+
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
 DEFAULT_ENTRA_SNOWFLAKE_RESOURCE = "api://fd3f753b-eed3-462c-b6a7-a4b5bb650aad"
-GCP_METADATA_SERVICE_ACCOUNT_BASE_URL = (
-    "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default"
-)
+GCP_METADATA_SERVICE_ACCOUNT_BASE_URL = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default"
 
 
 @unique
@@ -140,9 +141,7 @@ def get_aws_sts_hostname(region: str, partition: str) -> str:
         # China regions have a different domain suffix
         return f"sts.{region}.amazonaws.com.cn"
     elif partition == "aws-us-gov":
-        return (
-            f"sts.{region}.amazonaws.com"  # GovCloud uses .com, but dedicated regions
-        )
+        return f"sts.{region}.amazonaws.com"  # GovCloud uses .com, but dedicated regions
     else:
         raise ProgrammingError(
             msg=f"Invalid AWS partition: '{partition}'.",
@@ -159,9 +158,7 @@ def get_aws_session(impersonation_path: list[str] | None = None):
 
     impersonation_path = impersonation_path or []
     for arn in impersonation_path:
-        response = session.client("sts").assume_role(
-            RoleArn=arn, RoleSessionName="identity-federation-session"
-        )
+        response = session.client("sts").assume_role(RoleArn=arn, RoleSessionName="identity-federation-session")
         creds = response["Credentials"]
         session = boto3.session.Session(
             aws_access_key_id=creds["AccessKeyId"],
@@ -215,9 +212,7 @@ def create_aws_attestation(
     credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
     # Unlike other providers, for AWS, we only include general identifiers (region and partition)
     # rather than specific user identifiers, since we don't actually execute a GetCallerIdentity call.
-    return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"region": region, "partition": partition}
-    )
+    return WorkloadIdentityAttestation(AttestationProvider.AWS, credential, {"region": region, "partition": partition})
 
 
 def get_gcp_access_token(session_manager: SessionManager) -> str:
@@ -242,9 +237,7 @@ def get_gcp_access_token(session_manager: SessionManager) -> str:
         )
 
 
-def get_gcp_identity_token_via_impersonation(
-    impersonation_path: list[str], session_manager: SessionManager
-) -> str:
+def get_gcp_identity_token_via_impersonation(impersonation_path: list[str], session_manager: SessionManager) -> str:
     """Gets a GCP identity token from the metadata server.
 
     If the application isn't running on GCP or no credentials were found, raises an error.
@@ -256,9 +249,7 @@ def get_gcp_identity_token_via_impersonation(
         )
 
     current_sa_token = get_gcp_access_token(session_manager)
-    impersonation_path = [
-        f"projects/-/serviceAccounts/{client_id}" for client_id in impersonation_path
-    ]
+    impersonation_path = [f"projects/-/serviceAccounts/{client_id}" for client_id in impersonation_path]
     try:
         res = session_manager.post(
             url=f"https://iamcredentials.googleapis.com/v1/{impersonation_path[-1]}:generateIdToken",
@@ -311,16 +302,12 @@ def create_gcp_attestation(
     If the application isn't running on GCP or no credentials were found, raises an error.
     """
     if impersonation_path:
-        jwt_str = get_gcp_identity_token_via_impersonation(
-            impersonation_path, session_manager
-        )
+        jwt_str = get_gcp_identity_token_via_impersonation(impersonation_path, session_manager)
     else:
         jwt_str = get_gcp_identity_token(session_manager)
 
     _, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
-    return WorkloadIdentityAttestation(
-        AttestationProvider.GCP, jwt_str, {"sub": subject}
-    )
+    return WorkloadIdentityAttestation(AttestationProvider.GCP, jwt_str, {"sub": subject})
 
 
 def create_azure_attestation(
@@ -379,9 +366,7 @@ def create_azure_attestation(
         )
 
     issuer, subject = extract_iss_and_sub_without_signature_verification(jwt_str)
-    return WorkloadIdentityAttestation(
-        AttestationProvider.AZURE, jwt_str, {"iss": issuer, "sub": subject}
-    )
+    return WorkloadIdentityAttestation(AttestationProvider.AZURE, jwt_str, {"iss": issuer, "sub": subject})
 
 
 def create_oidc_attestation(token: str | None) -> WorkloadIdentityAttestation:
@@ -396,9 +381,7 @@ def create_oidc_attestation(token: str | None) -> WorkloadIdentityAttestation:
         )
 
     issuer, subject = extract_iss_and_sub_without_signature_verification(token)
-    return WorkloadIdentityAttestation(
-        AttestationProvider.OIDC, token, {"iss": issuer, "sub": subject}
-    )
+    return WorkloadIdentityAttestation(AttestationProvider.OIDC, token, {"iss": issuer, "sub": subject})
 
 
 def create_attestation(

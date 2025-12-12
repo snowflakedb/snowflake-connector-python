@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+
 from io import BytesIO
 from logging import getLogger
 from typing import TYPE_CHECKING, cast
@@ -12,6 +13,7 @@ from snowflake.connector import Error
 from snowflake.connector._utils import get_temp_type_for_object
 from snowflake.connector.bind_upload_agent import BindUploadAgent as BindUploadAgentSync
 from snowflake.connector.errors import BindUploadError
+
 
 if TYPE_CHECKING:
     from snowflake.connector.aio import SnowflakeCursor
@@ -40,9 +42,7 @@ class BindUploadAgent(BindUploadAgentSync):
         try:
             await self._create_stage()
         except Error as err:
-            self.cursor.connection._session_parameters[
-                "CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"
-            ] = 0
+            self.cursor.connection._session_parameters["CLIENT_STAGE_ARRAY_BINDING_THRESHOLD"] = 0
             logger.debug("Failed to create stage for binding.")
             raise BindUploadError from err
 

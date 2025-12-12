@@ -10,11 +10,13 @@ import sys
 import typing
 import uuid
 import warnings
+
+from collections.abc import AsyncIterator, Iterable
 from contextlib import suppress
 from io import StringIO
 from logging import getLogger
 from types import TracebackType
-from typing import Any, AsyncIterator, Iterable, TypeVar
+from typing import Any, TypeVar
 
 from snowflake.connector import (
     DatabaseError,
@@ -102,6 +104,7 @@ from .auth import (
     AuthByWorkloadIdentity,
 )
 
+
 logger = getLogger(__name__)
 
 # deep copy to avoid pollute sync config
@@ -142,9 +145,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         # to perform async operation in the __init__ while in the sync connection we
         # perform connect
 
-        self._conn_parameters = self._init_connection_parameters(
-            kwargs, connection_name, connections_file_path
-        )
+        self._conn_parameters = self._init_connection_parameters(kwargs, connection_name, connections_file_path)
         # SNOW-2352456: disable endpoint-based platform detection queries for async connection
         if "platform_detection_timeout_seconds" not in kwargs:
             self._platform_detection_timeout_seconds = 0.0
@@ -167,26 +168,18 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         # and we only need the first part
         if self._snowflake_version is None:
             self._snowflake_version = str(
-                (
-                    await (
-                        await self.cursor().execute("SELECT CURRENT_VERSION()")
-                    ).fetchall()
-                )[0][0]
+                (await (await self.cursor().execute("SELECT CURRENT_VERSION()")).fetchall())[0][0]
             ).split(" ")[0]
 
         return self._snowflake_version
 
     def __enter__(self):
         # async connection does not support sync context manager
-        raise TypeError(
-            "'SnowflakeConnection' object does not support the context manager protocol"
-        )
+        raise TypeError("'SnowflakeConnection' object does not support the context manager protocol")
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         # async connection does not support sync context manager
-        raise TypeError(
-            "'SnowflakeConnection' object does not support the context manager protocol"
-        )
+        raise TypeError("'SnowflakeConnection' object does not support the context manager protocol")
 
     async def __aenter__(self) -> SnowflakeConnection:
         """Context manager."""
@@ -214,9 +207,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
     async def __open_connection(self):
         """Opens a new network connection."""
-        self.converter = self._converter_class(
-            use_numpy=self._numpy, support_negative_year=self._support_negative_year
-        )
+        self.converter = self._converter_class(use_numpy=self._numpy, support_negative_year=self._support_negative_year)
 
         self._rest = SnowflakeRestful(
             host=self.host,
@@ -235,9 +226,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             )
 
         if ".privatelink.snowflakecomputing." in self.host.lower():
-            await SnowflakeConnection.setup_ocsp_privatelink(
-                self.application, self.host
-            )
+            await SnowflakeConnection.setup_ocsp_privatelink(self.application, self.host)
         else:
             if "SF_OCSP_RESPONSE_CACHE_SERVER_URL" in os.environ:
                 del os.environ["SF_OCSP_RESPONSE_CACHE_SERVER_URL"]
@@ -252,24 +241,18 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
         if self._validate_default_parameters:
             # Snowflake will validate the requested database, schema, and warehouse
-            self._session_parameters[PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS] = (
-                True
-            )
+            self._session_parameters[PARAMETER_CLIENT_VALIDATE_DEFAULT_PARAMETERS] = True
 
         if self.client_session_keep_alive is not None:
-            self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE] = (
-                self._client_session_keep_alive
-            )
+            self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE] = self._client_session_keep_alive
 
         if self.client_session_keep_alive_heartbeat_frequency is not None:
-            self._session_parameters[
-                PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY
-            ] = self._validate_client_session_keep_alive_heartbeat_frequency()
+            self._session_parameters[PARAMETER_CLIENT_SESSION_KEEP_ALIVE_HEARTBEAT_FREQUENCY] = (
+                self._validate_client_session_keep_alive_heartbeat_frequency()
+            )
 
         if self.client_prefetch_threads:
-            self._session_parameters[PARAMETER_CLIENT_PREFETCH_THREADS] = (
-                self._validate_client_prefetch_threads()
-            )
+            self._session_parameters[PARAMETER_CLIENT_PREFETCH_THREADS] = self._validate_client_prefetch_threads()
 
         # Setup authenticator - validation happens in __config
         auth = Auth(self.rest)
@@ -297,9 +280,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
         else:
             if self.auth_class is not None:
-                if type(
-                    self.auth_class
-                ) not in FIRST_PARTY_AUTHENTICATORS and not issubclass(
+                if type(self.auth_class) not in FIRST_PARTY_AUTHENTICATORS and not issubclass(
                     type(self.auth_class), AuthByKeyPair
                 ):
                     raise TypeError("auth_class must be a child class of AuthByKeyPair")
@@ -311,9 +292,9 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     backoff_generator=self._backoff_generator,
                 )
             elif self._authenticator == EXTERNAL_BROWSER_AUTHENTICATOR:
-                self._session_parameters[
-                    PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL
-                ] = (self._client_store_temporary_credential if IS_LINUX else True)
+                self._session_parameters[PARAMETER_CLIENT_STORE_TEMPORARY_CREDENTIAL] = (
+                    self._client_store_temporary_credential if IS_LINUX else True
+                )
                 auth.read_temporary_credentials(
                     self.host,
                     self.user,
@@ -370,21 +351,13 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     client_id=self._oauth_client_id,
                     client_secret=self._oauth_client_secret,
                     host=self.host,
-                    authentication_url=self._oauth_authorization_url.format(
-                        host=self.host, port=self.port
-                    ),
-                    token_request_url=self._oauth_token_request_url.format(
-                        host=self.host, port=self.port
-                    ),
+                    authentication_url=self._oauth_authorization_url.format(host=self.host, port=self.port),
+                    token_request_url=self._oauth_token_request_url.format(host=self.host, port=self.port),
                     redirect_uri=self._oauth_redirect_uri,
                     uri=self._oauth_socket_uri,
                     scope=self._oauth_scope,
                     pkce_enabled=not self._oauth_disable_pkce,
-                    token_cache=(
-                        auth.get_token_cache()
-                        if self._client_store_temporary_credential
-                        else None
-                    ),
+                    token_cache=(auth.get_token_cache() if self._client_store_temporary_credential else None),
                     refresh_token_enabled=self._oauth_enable_refresh_tokens,
                     external_browser_timeout=self._external_browser_timeout,
                     enable_single_use_refresh_tokens=self._oauth_enable_single_use_refresh_tokens,
@@ -397,9 +370,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                     application=self.application,
                     client_id=self._oauth_client_id,
                     client_secret=self._oauth_client_secret,
-                    token_request_url=self._oauth_token_request_url.format(
-                        host=self.host, port=self.port
-                    ),
+                    token_request_url=self._oauth_token_request_url.format(host=self.host, port=self.port),
                     scope=self._oauth_scope,
                     connection=self,
                     credentials_in_body=self._oauth_credentials_in_body,
@@ -430,9 +401,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 )
             elif self._authenticator == WORKLOAD_IDENTITY_AUTHENTICATOR:
                 if isinstance(self._workload_identity_provider, str):
-                    self._workload_identity_provider = AttestationProvider.from_string(
-                        self._workload_identity_provider
-                    )
+                    self._workload_identity_provider = AttestationProvider.from_string(self._workload_identity_provider)
                 if not self._workload_identity_provider:
                     Error.errorhandler_wrapper(
                         self,
@@ -443,13 +412,9 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                             "errno": ER_INVALID_WIF_SETTINGS,
                         },
                     )
-                if (
-                    self._workload_identity_impersonation_path
-                    and self._workload_identity_provider
-                    not in (
-                        AttestationProvider.GCP,
-                        AttestationProvider.AWS,
-                    )
+                if self._workload_identity_impersonation_path and self._workload_identity_provider not in (
+                    AttestationProvider.GCP,
+                    AttestationProvider.AWS,
                 ):
                     Error.errorhandler_wrapper(
                         self,
@@ -517,15 +482,11 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         ) -> bool:
             try:
                 nonlocal found_unfinished_query
-                return found_unfinished_query or self.is_still_running(
-                    await self.get_query_status(sfq_id)
-                )
+                return found_unfinished_query or self.is_still_running(await self.get_query_status(sfq_id))
             except asyncio.CancelledError:
                 pass
 
-        tasks = [
-            asyncio.create_task(async_query_check_helper(sfqid)) for sfqid in queries
-        ]
+        tasks = [asyncio.create_task(async_query_check_helper(sfqid)) for sfqid in queries]
         for task in asyncio.as_completed(tasks):
             if await task:
                 found_unfinished_query = True
@@ -544,9 +505,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             user=self.user,
             password=self._password,
         )
-        self._consent_cache_id_token = getattr(
-            auth_instance, "consent_cache_id_token", True
-        )
+        self._consent_cache_id_token = getattr(auth_instance, "consent_cache_id_token", True)
 
         auth = Auth(self.rest)
         # record start time for computing timeout
@@ -568,8 +527,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             )
         except OperationalError as e:
             logger.debug(
-                "Operational Error raised at authentication"
-                f"for authenticator: {type(auth_instance).__name__}"
+                "Operational Error raised at authenticationfor authenticator: %s", type(auth_instance).__name__
             )
             while True:
                 try:
@@ -617,9 +575,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         connections_file_path: pathlib.Path | None = None,
     ) -> dict:
         ret_kwargs = connection_init_kwargs
-        self._unsafe_skip_file_permissions_check = ret_kwargs.get(
-            "unsafe_skip_file_permissions_check", False
-        )
+        self._unsafe_skip_file_permissions_check = ret_kwargs.get("unsafe_skip_file_permissions_check", False)
         easy_logging = EasyLoggingConfigPython(
             skip_config_file_permissions_check=self._unsafe_skip_file_permissions_check
         )
@@ -635,8 +591,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         self._server_param_telemetry_enabled = False
         self._session_parameters: dict[str, str | int | bool] = {}
         logger.info(
-            "Snowflake Connector for Python Version: %s, "
-            "Python Version: %s, Platform: %s",
+            "Snowflake Connector for Python Version: %s, Python Version: %s, Platform: %s",
             SNOWFLAKE_CONNECTOR_VERSION,
             PYTHON_VERSION,
             PLATFORM,
@@ -658,7 +613,9 @@ class SnowflakeConnection(SnowflakeConnectionSync):
                 connection_init_kwargs["application"] = app
 
         if "insecure_mode" in connection_init_kwargs:
-            warn_message = "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
+            warn_message = (
+                "The 'insecure_mode' connection property is deprecated. Please use 'disable_ocsp_checks' instead"
+            )
             warnings.warn(
                 warn_message,
                 DeprecationWarning,
@@ -667,8 +624,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
             if (
                 "disable_ocsp_checks" in connection_init_kwargs
-                and connection_init_kwargs["disable_ocsp_checks"]
-                != connection_init_kwargs["insecure_mode"]
+                and connection_init_kwargs["disable_ocsp_checks"] != connection_init_kwargs["insecure_mode"]
             ):
                 logger.warning(
                     "The values for 'disable_ocsp_checks' and 'insecure_mode' differ. "
@@ -685,17 +641,12 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             for i, s in enumerate(CONFIG_MANAGER._slices):
                 if s.section == "connections":
                     CONFIG_MANAGER._slices[i] = s._replace(path=connections_file_path)
-                    CONFIG_MANAGER.read_config(
-                        skip_file_permissions_check=self._unsafe_skip_file_permissions_check
-                    )
+                    CONFIG_MANAGER.read_config(skip_file_permissions_check=self._unsafe_skip_file_permissions_check)
                     break
         if connection_name is not None:
             connections = CONFIG_MANAGER["connections"]
             if connection_name not in connections:
-                raise Error(
-                    f"Invalid connection_name '{connection_name}',"
-                    f" known ones are {list(connections.keys())}"
-                )
+                raise Error(f"Invalid connection_name '{connection_name}', known ones are {list(connections.keys())}")
             ret_kwargs = {**connections[connection_name], **connection_init_kwargs}
         elif is_kwargs_empty:
             # connection_name is None and kwargs was empty when called
@@ -703,9 +654,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         # TODO: SNOW-1770153 on self.__set_error_attributes()
         return ret_kwargs
 
-    async def _cancel_query(
-        self, sql: str, request_id: uuid.UUID
-    ) -> dict[str, bool | None]:
+    async def _cancel_query(self, sql: str, request_id: uuid.UUID) -> dict[str, bool | None]:
         """Cancels the query with the exact SQL query and requestId."""
         logger.debug("_cancel_query sql=[%s], request_id=[%s]", sql, request_id)
         url_parameters = {REQUEST_ID: str(uuid.uuid4())}
@@ -722,9 +671,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         with suppress(Exception):
             asyncio.run(self.close(retry=False))
 
-    async def _get_query_status(
-        self, sf_qid: str
-    ) -> tuple[QueryStatus, dict[str, Any]]:
+    async def _get_query_status(self, sf_qid: str) -> tuple[QueryStatus, dict[str, Any]]:
         """Retrieves the status of query with sf_qid and returns it with the raw response.
 
         This is the underlying function used by the public get_status functions.
@@ -739,14 +686,12 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             uuid.UUID(sf_qid)
         except ValueError:
             raise ValueError(f"Invalid UUID: '{sf_qid}'")
-        logger.debug(f"get_query_status sf_qid='{sf_qid}'")
+        logger.debug("get_query_status sf_qid='%s'", sf_qid)
 
         status = "NO_DATA"
         if self.is_closed():
             return QueryStatus.DISCONNECTED, {"data": {"queries": []}}
-        status_resp = await self.rest.request(
-            "/monitoring/queries/" + quote(sf_qid), method="get", client="rest"
-        )
+        status_resp = await self.rest.request("/monitoring/queries/" + quote(sf_qid), method="get", client="rest")
         if "queries" not in status_resp["data"]:
             return QueryStatus.FAILED_WITH_ERROR, status_resp
         queries = status_resp["data"]["queries"]
@@ -763,11 +708,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         if self._log_imported_packages_in_telemetry:
             # filter out duplicates caused by submodules
             # and internal modules with names starting with an underscore
-            imported_modules = {
-                k.split(".", maxsplit=1)[0]
-                for k in list(sys.modules)
-                if not k.startswith("_")
-            }
+            imported_modules = {k.split(".", maxsplit=1)[0] for k in list(sys.modules) if not k.startswith("_")}
             ts = get_time_millis()
             await self._log_telemetry(
                 TelemetryData.from_telemetry_data_dict(
@@ -907,9 +848,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             await self.cursor().execute(f"ALTER SESSION SET autocommit={mode}")
         except Error as e:
             if e.sqlstate == SQLSTATE_FEATURE_NOT_SUPPORTED:
-                logger.debug(
-                    "Autocommit feature is not enabled for this " "connection. Ignored"
-                )
+                logger.debug("Autocommit feature is not enabled for this connection. Ignored")
 
     async def close(self, retry: bool = True) -> None:
         """Closes the connection."""
@@ -930,23 +869,14 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
             if self.telemetry_enabled:
                 await self._telemetry.close(retry=retry)
-            if (
-                await self._all_async_queries_finished()
-                and not self._server_session_keep_alive
-            ):
+            if await self._all_async_queries_finished() and not self._server_session_keep_alive:
                 logger.debug("No async queries seem to be running, deleting session")
                 try:
                     await self.rest.delete_session(retry=retry)
                 except Exception as e:
-                    logger.debug(
-                        "Exception encountered in deleting session. ignoring...: %s", e
-                    )
+                    logger.debug("Exception encountered in deleting session. ignoring...: %s", e)
             else:
-                logger.debug(
-                    "There are {} async queries still running, not deleting session".format(
-                        len(self._async_sfqids)
-                    )
-                )
+                logger.debug("There are %s async queries still running, not deleting session", len(self._async_sfqids))
             await self.rest.close()
             self._rest = None
             if self.query_context_cache:
@@ -954,9 +884,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             del self.messages[:]
             logger.debug("Session is closed")
         except Exception as e:
-            logger.debug(
-                "Exception encountered in closing connection. ignoring...: %s", e
-            )
+            logger.debug("Exception encountered in closing connection. ignoring...: %s", e)
 
     async def cmd_query(
         self,
@@ -1079,9 +1007,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         self._session_manager = SessionManagerFactory.get_manager(self._http_config)
 
         if self.enable_connection_diag:
-            raise NotImplementedError(
-                "Connection diagnostic is not supported in asyncio"
-            )
+            raise NotImplementedError("Connection diagnostic is not supported in asyncio")
         else:
             await self.__open_connection()
         self._telemetry = TelemetryClient(self._rest)
@@ -1113,9 +1039,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
         **kwargs,
     ) -> AsyncIterator[SnowflakeCursor, None, None]:
         """Executes a stream of SQL statements. This is a non-standard convenient method."""
-        split_statements_list = split_statements(
-            stream, remove_comments=remove_comments
-        )
+        split_statements_list = split_statements(stream, remove_comments=remove_comments)
         # Note: split_statements_list is a list of tuples of sql statements and whether they are put/get
         non_empty_statements = [e for e in split_statements_list if e[0]]
         for sql, is_put_or_get in non_empty_statements:

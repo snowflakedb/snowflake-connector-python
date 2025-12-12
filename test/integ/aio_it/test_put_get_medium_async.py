@@ -713,7 +713,7 @@ def _generate_huge_value_json(tmpdir, n=1, value_size=1):
     fname = str(tmpdir.join("test_put_get_huge_json"))
     f = gzip.open(fname, "wb")
     for i in range(n):
-        logger.debug(f"adding a value in {i}")
+        logger.debug("adding a value in %s", i)
         f.write(f'{{"k":"{random_string(value_size)}"}}')
     f.close()
     return fname

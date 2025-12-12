@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import logging
+
 from typing import TYPE_CHECKING, Any
 
 from ..errorcode import ER_NO_PASSWORD
 from ..errors import ProgrammingError
 from .by_plugin import AuthByPlugin, AuthType
+
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection

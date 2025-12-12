@@ -8,6 +8,7 @@ import base64
 import json
 import logging
 import urllib.parse
+
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError, URLError
@@ -27,6 +28,7 @@ from ..vendored import urllib3
 from ..vendored.requests.utils import get_environ_proxies, select_proxy
 from ..vendored.urllib3.poolmanager import ProxyManager
 from .by_plugin import AuthByPlugin, AuthType
+
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection
@@ -98,9 +100,7 @@ class _OAuthTokensMixin:
         Returns True if refresh token found, enabling automatic token renewal without user interaction.
         """
         if self._refresh_token_enabled:
-            self._refresh_token = self._pop_cached_token(
-                self._get_refresh_token_cache_key()
-            )
+            self._refresh_token = self._pop_cached_token(self._get_refresh_token_cache_key())
             return self._refresh_token is not None
         return False
 
@@ -129,9 +129,7 @@ class _OAuthTokensMixin:
                 "*" * len(refresh_token) if refresh_token else None,
             )
             self._refresh_token = refresh_token
-            self._reset_cached_token(
-                self._get_refresh_token_cache_key(), self._refresh_token
-            )
+            self._reset_cached_token(self._get_refresh_token_cache_key(), self._refresh_token)
 
     def _reset_temporary_state(self) -> None:
         self._access_token = None
@@ -243,9 +241,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
     ) -> dict[str, bool]:
         self._reset_access_token()
         if self._pop_cached_refresh_token():
-            logger.debug(
-                "OAuth refresh token is available, try to use it and get a new access token"
-            )
+            logger.debug("OAuth refresh token is available, try to use it and get a new access token")
             self._do_refresh_token(conn=conn)
         conn.authenticate_with_retry(self)
         return {"success": True}
@@ -264,9 +260,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         logger.debug("authenticating with OAuth authorization code flow")
         self._update_cache_keys(user=user)
         if self._pop_cached_access_token():
-            logger.info(
-                "OAuth access token is already available in cache, no need to authenticate."
-            )
+            logger.info("OAuth access token is already available in cache, no need to authenticate.")
             return
         access_token, refresh_token = self._request_tokens(
             conn=conn,
@@ -301,9 +295,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
 
         resp = self._get_refresh_token_response(conn)
         if not resp:
-            logger.info(
-                "failed to exchange the refresh token on a new OAuth access token"
-            )
+            logger.info("failed to exchange the refresh token on a new OAuth access token")
             self._reset_refresh_token()
             return
 
@@ -316,18 +308,14 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
             json.JSONDecodeError,
             KeyError,
         ):
-            logger.error(
-                "refresh token exchange response did not contain 'access_token'"
-            )
+            logger.error("refresh token exchange response did not contain 'access_token'")
             logger.debug(
                 "received the following response body when exchanging refresh token: %s",
                 SecretDetector.mask_secrets(str(resp.data)),
             )
             self._reset_refresh_token()
 
-    def _get_refresh_token_response(
-        self, conn: SnowflakeConnection
-    ) -> urllib3.BaseHTTPResponse | None:
+    def _get_refresh_token_response(self, conn: SnowflakeConnection) -> urllib3.BaseHTTPResponse | None:
         fields = {
             "grant_type": "refresh_token",
             "refresh_token": self._refresh_token,
@@ -337,11 +325,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         try:
             # TODO(SNOW-2229411) Session manager should be used here. It may require additional security validation (since we would transition from PoolManager to requests.Session) and some parameters would be passed implicitly. OAuth token exchange must NOT reuse pooled HTTP sessions. We should create a fresh SessionManager with use_pooling=False for each call.
             proxy_url = self._resolve_proxy_url(conn, self._token_request_url)
-            http_client = (
-                ProxyManager(proxy_url=proxy_url)
-                if proxy_url
-                else urllib3.PoolManager()
-            )
+            http_client = ProxyManager(proxy_url=proxy_url) if proxy_url else urllib3.PoolManager()
             return http_client.request_encode_body(
                 "POST",
                 self._token_request_url,
@@ -383,9 +367,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
     ) -> (str | None, str | None):
         # TODO(SNOW-2229411) Session manager should be used here. It may require additional security validation (since we would transition from PoolManager to requests.Session) and some parameters would be passed implicitly. Token request must bypass HTTP connection pools.
         proxy_url = self._resolve_proxy_url(connection, self._token_request_url)
-        http_client = (
-            ProxyManager(proxy_url=proxy_url) if proxy_url else urllib3.PoolManager()
-        )
+        http_client = ProxyManager(proxy_url=proxy_url) if proxy_url else urllib3.PoolManager()
         resp = http_client.request_encode_body(
             "POST",
             self._token_request_url,
@@ -412,26 +394,20 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
                 conn=connection,
                 ret={
                     "code": ER_IDP_CONNECTION_ERROR,
-                    "message": "Invalid HTTP request from web browser. Idp "
-                    "authentication could have failed.",
+                    "message": "Invalid HTTP request from web browser. Idp authentication could have failed.",
                 },
             )
         return None, None
 
     def _create_token_request_headers(self) -> dict[str, str]:
         return {
-            "Authorization": "Basic "
-            + base64.b64encode(
-                f"{self._client_id}:{self._client_secret}".encode()
-            ).decode(),
+            "Authorization": "Basic " + base64.b64encode(f"{self._client_id}:{self._client_secret}".encode()).decode(),
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         }
 
     @staticmethod
-    def _resolve_proxy_url(
-        connection: SnowflakeConnection, request_url: str
-    ) -> str | None:
+    def _resolve_proxy_url(connection: SnowflakeConnection, request_url: str) -> str | None:
         # TODO(SNOW-2229411) Session manager should be used instead. It may require additional security validation.
         """Resolve proxy URL from explicit config first, then environment variables."""
         # First try explicit proxy configuration from connection parameters

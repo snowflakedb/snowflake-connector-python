@@ -5,6 +5,7 @@ from probes.registry import prober_function
 
 import snowflake.connector
 
+
 # Initialize logger
 logger = initialize_logger(__name__)
 
@@ -37,7 +38,7 @@ def connect(connection_parameters: dict):
         )
         return connection
     except Exception as e:
-        logger.error(f"Error connecting to Snowflake: {e}")
+        logger.error("Error connecting to Snowflake: %s", e)
         return None
 
 
@@ -74,5 +75,5 @@ def perform_login(connection_parameters: dict):
         print(
             f"cloudprober_driver_python_perform_login{{python_version={python_version}, driver_version={driver_version}}} 1"
         )
-        logger.error(f"Error during login: {e}")
+        logger.error("Error during login: %s", e)
         sys.exit(1)

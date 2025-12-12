@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import os
 import warnings
+
 from importlib.metadata import PackageNotFoundError, distribution
 from logging import getLogger
 from types import ModuleType
@@ -11,6 +12,7 @@ from typing import Union
 from packaging.requirements import Requirement
 
 from . import errors
+
 
 logger = getLogger(__name__)
 
@@ -75,19 +77,15 @@ class MissingAioBoto3(MissingOptionalDependency):
 ModuleLikeObject = Union[ModuleType, MissingOptionalDependency]
 
 
-def warn_incompatible_dep(
-    dep_name: str, installed_ver: str, expected_ver: Requirement
-) -> None:
+def warn_incompatible_dep(dep_name: str, installed_ver: str, expected_ver: Requirement) -> None:
     warnings.warn(
-        "You have an incompatible version of '{}' installed ({}), please install a version that "
-        "adheres to: '{}'".format(dep_name, installed_ver, expected_ver),
+        f"You have an incompatible version of '{dep_name}' installed ({installed_ver}), please install a version that "
+        f"adheres to: '{expected_ver}'",
         stacklevel=2,
     )
 
 
-def _import_or_missing_pandas_option() -> (
-    tuple[ModuleLikeObject, ModuleLikeObject, bool]
-):
+def _import_or_missing_pandas_option() -> tuple[ModuleLikeObject, ModuleLikeObject, bool]:
     """This function tries importing the following packages: pandas, pyarrow.
 
     If available it returns pandas and pyarrow packages with a flag of whether they were imported.
@@ -109,30 +107,20 @@ def _import_or_missing_pandas_option() -> (
             pyarrow_dist = distribution("pyarrow")
             snowflake_connector_dist = distribution("snowflake-connector-python")
 
-            dependencies = snowflake_connector_dist.metadata.get_all(
-                "Requires-Dist", []
-            )
+            dependencies = snowflake_connector_dist.metadata.get_all("Requires-Dist", [])
             pandas_pyarrow_extra = None
             for dependency in dependencies:
                 dep = Requirement(dependency)
-                if (
-                    dep.marker is not None
-                    and dep.marker.evaluate({"extra": "pandas"})
-                    and dep.name == "pyarrow"
-                ):
+                if dep.marker is not None and dep.marker.evaluate({"extra": "pandas"}) and dep.name == "pyarrow":
                     pandas_pyarrow_extra = dep
                     break
 
             installed_pyarrow_version = pyarrow_dist.version
             if not pandas_pyarrow_extra.specifier.contains(installed_pyarrow_version):
-                warn_incompatible_dep(
-                    "pyarrow", installed_pyarrow_version, pandas_pyarrow_extra
-                )
+                warn_incompatible_dep("pyarrow", installed_pyarrow_version, pandas_pyarrow_extra)
 
         except PackageNotFoundError as e:
-            logger.info(
-                f"Cannot determine if compatible pyarrow is installed because of missing package(s): {e}"
-            )
+            logger.info("Cannot determine if compatible pyarrow is installed because of missing package(s): %s", e)
         return pandas, pyarrow, True
     except ImportError:
         return MissingPandas(), MissingPandas(), False
@@ -160,9 +148,7 @@ def _import_or_missing_boto_option() -> tuple[ModuleLikeObject, ModuleLikeObject
         return MissingBotocore(), MissingBoto3(), False
 
 
-def _import_or_missing_aioboto_option() -> (
-    tuple[ModuleLikeObject, ModuleLikeObject, bool]
-):
+def _import_or_missing_aioboto_option() -> tuple[ModuleLikeObject, ModuleLikeObject, bool]:
     """This function tries importing the following packages: botocore and boto3."""
     try:
         aiobotocore = importlib.import_module("aiobotocore")

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+
 from enum import Enum, unique
 from threading import Lock
 from typing import TYPE_CHECKING, Any
@@ -9,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from .description import CLIENT_NAME, SNOWFLAKE_CONNECTOR_VERSION
 from .secret_detector import SecretDetector
 from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
+
 
 if TYPE_CHECKING:
     from .connection import SnowflakeConnection
@@ -178,7 +180,7 @@ class TelemetryClient:
         )
         if ENABLE_TELEMETRY_LOG:
             # This logger guarantees the payload won't be masked. Testing purpose.
-            rt_plain_logger.debug(f"Inband telemetry data being sent is {body}")
+            rt_plain_logger.debug("Inband telemetry data being sent is %s", body)
         try:
             ret = self._rest.request(
                 TelemetryClient.SF_PATH_TELEMETRY,
@@ -190,8 +192,7 @@ class TelemetryClient:
             )
             if not ret["success"]:
                 logger.info(
-                    "Non-success response from telemetry server: %s. "
-                    "Disabling telemetry.",
+                    "Non-success response from telemetry server: %s. Disabling telemetry.",
                     str(ret),
                 )
                 self._enabled = False
@@ -237,9 +238,7 @@ def generate_telemetry_data_dict(
         {
             TelemetryField.KEY_DRIVER_TYPE.value: CLIENT_NAME,
             TelemetryField.KEY_DRIVER_VERSION.value: SNOWFLAKE_CONNECTOR_VERSION,
-            TelemetryField.KEY_SOURCE.value: (
-                connection.application if connection else CLIENT_NAME
-            ),
+            TelemetryField.KEY_SOURCE.value: (connection.application if connection else CLIENT_NAME),
             **from_dict,
         }
         if not is_oob_telemetry

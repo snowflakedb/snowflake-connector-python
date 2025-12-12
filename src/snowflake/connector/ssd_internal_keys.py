@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from binascii import unhexlify
 
+
 # key version
 ocsp_internal_dep1_key_ver = 0.1
 ocsp_internal_dep2_key_ver = 0.1

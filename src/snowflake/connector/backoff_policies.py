@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import random
-from typing import Callable, Iterator
+
+from collections.abc import Callable, Iterator
+
 
 """This module provides common implementations of backoff policies
 
@@ -63,11 +65,7 @@ def mixed_backoff(
             # equal jitter
             mult_factor = random.choice([-1, 1])
             jitter_amount = 0.5 * sleep * mult_factor if enable_jitter else 0
-            sleep = int(
-                random.choice(
-                    [sleep + jitter_amount, base * factor**cnt + jitter_amount]
-                )
-            )
+            sleep = int(random.choice([sleep + jitter_amount, base * factor**cnt + jitter_amount]))
             sleep = min(cap, sleep)
 
             yield sleep

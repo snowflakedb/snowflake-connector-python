@@ -5,13 +5,15 @@ import logging
 import os
 import stat
 import warnings
-from collections.abc import Iterable
+
+from collections.abc import Callable, Iterable
 from operator import methodcaller
 from pathlib import Path
-from typing import Any, Callable, Literal, NamedTuple, TypeVar
+from typing import Any, Literal, NamedTuple, TypeVar
 from warnings import warn
 
 import tomlkit
+
 from tomlkit.items import Table
 
 from snowflake.connector.compat import IS_WINDOWS
@@ -22,6 +24,7 @@ from snowflake.connector.errors import (
     Error,
     MissingConfigOptionError,
 )
+
 
 _T = TypeVar("_T")
 
@@ -138,10 +141,7 @@ class ConfigOption:
                 else:
                     raise
         if self.choices and value not in self.choices:
-            raise ConfigSourceError(
-                f"The value of {self.option_name} read from "
-                f"{source} is not part of {self.choices}"
-            )
+            raise ConfigSourceError(f"The value of {self.option_name} read from {source} is not part of {self.choices}")
         return value
 
     @property
@@ -186,10 +186,7 @@ class ConfigOption:
         Since this is the last resource for retrieving the value it raises
         a MissingConfigOptionError if it's unable to find this option.
         """
-        if (
-            self._root_manager.conf_file_cache is None
-            and self._root_manager.file_path is not None
-        ):
+        if self._root_manager.conf_file_cache is None and self._root_manager.file_path is not None:
             self._root_manager.read_config()
         e = self._root_manager.conf_file_cache
         if e is None:
@@ -312,16 +309,11 @@ class ConfigManager:
         adding new options to their configuration file.
         """
         if self.file_path is None:
-            raise ConfigManagerError(
-                "ConfigManager is trying to read config file, but it doesn't "
-                "have one"
-            )
+            raise ConfigManagerError("ConfigManager is trying to read config file, but it doesn't have one")
         read_config_file = tomlkit.TOMLDocument()
 
         # Read in all of the config slices
-        config_slice_options = ConfigSliceOptions(
-            check_permissions=not skip_file_permissions_check
-        )
+        config_slice_options = ConfigSliceOptions(check_permissions=not skip_file_permissions_check)
         for filep, sliceoptions, section in itertools.chain(
             ((self.file_path, config_slice_options, None),),
             self._slices,
@@ -333,7 +325,8 @@ class ConfigManager:
                     continue
             except PermissionError:
                 LOGGER.debug(
-                    f"Fail to read configuration file from {str(filep)} due to no permission on its parent directory"
+                    "Fail to read configuration file from %s due to no permission on its parent directory",
+                    str(filep),
                 )
                 continue
 
@@ -358,22 +351,18 @@ class ConfigManager:
                 and filep.stat().st_mode & READABLE_BY_OTHERS != 0
                 or (
                     # Windows doesn't have getuid, skip checking
-                    hasattr(os, "getuid")
-                    and filep.stat().st_uid != 0
-                    and filep.stat().st_uid != os.getuid()
+                    hasattr(os, "getuid") and filep.stat().st_uid != 0 and filep.stat().st_uid != os.getuid()
                 )
             ):
                 chmod_message = f'.\n * To change owner, run `chown $USER "{str(filep)}"`.\n * To restrict permissions, run `chmod 0600 "{str(filep)}"`.\n * To skip this warning, set environment variable {SKIP_WARNING_ENV_VAR}=true.\n'
 
                 if not _should_skip_warning_for_read_permissions_on_config_file():
-                    warn(f"Bad owner or permissions on {str(filep)}{chmod_message}")
-            LOGGER.debug(f"reading configuration file from {str(filep)}")
+                    warn(f"Bad owner or permissions on {str(filep)}{chmod_message}", stacklevel=2)
+            LOGGER.debug("reading configuration file from %s", str(filep))
             try:
                 read_config_piece = tomlkit.parse(filep.read_text())
             except Exception as e:
-                raise ConfigSourceError(
-                    "An unknown error happened while loading " f"'{str(filep)}'"
-                ) from e
+                raise ConfigSourceError(f"An unknown error happened while loading '{str(filep)}'") from e
             if section is None:
                 read_config_file = read_config_piece
             else:
@@ -409,9 +398,7 @@ class ConfigManager:
             name: Name to check against children.
         """
         if name in (self._options.keys() | self._sub_managers.keys()):
-            raise ConfigManagerError(
-                f"'{name}' sub-manager, or option conflicts with a child element of '{self.name}'"
-            )
+            raise ConfigManagerError(f"'{name}' sub-manager, or option conflicts with a child element of '{self.name}'")
 
     def add_submanager(self, new_child: ConfigManager) -> None:
         """Nest another ConfigManager under this one.
@@ -460,10 +447,7 @@ class ConfigManager:
         if name in self._options:
             return self._options[name].value()
         if name not in self._sub_managers:
-            raise ConfigSourceError(
-                "No ConfigManager, or ConfigOption can be found"
-                f" with the name '{name}'"
-            )
+            raise ConfigSourceError(f"No ConfigManager, or ConfigOption can be found with the name '{name}'")
         return self._sub_managers[name]
 
 

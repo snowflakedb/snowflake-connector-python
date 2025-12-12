@@ -4,8 +4,10 @@ from __future__ import annotations
 import json
 import logging
 import time
+
+from collections.abc import Callable
 from functools import partial
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from ..compat import unescape, urlencode, urlsplit
 from ..constants import (
@@ -20,6 +22,7 @@ from ..network import CONTENT_TYPE_APPLICATION_JSON, PYTHON_CONNECTOR_USER_AGENT
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from . import Auth
 from .by_plugin import AuthByPlugin, AuthType
+
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection
@@ -43,11 +46,7 @@ def _is_prefix_equal(url1, url2):
     if not port2 and parsed_url2.scheme == "https":
         port2 = "443"
 
-    return (
-        parsed_url1.hostname == parsed_url2.hostname
-        and port1 == port2
-        and parsed_url1.scheme == parsed_url2.scheme
-    )
+    return parsed_url1.hostname == parsed_url2.hostname and port1 == port2 and parsed_url1.scheme == parsed_url2.scheme
 
 
 def _get_post_back_url_from_html(html):
@@ -203,12 +202,8 @@ class AuthByOkta(AuthByPlugin):
         sso_url: str,
         token_url: str,
     ) -> None:
-        logger.debug(
-            "step 2: validate Token and SSO URL has the same prefix as authenticator"
-        )
-        if not _is_prefix_equal(authenticator, token_url) or not _is_prefix_equal(
-            authenticator, sso_url
-        ):
+        logger.debug("step 2: validate Token and SSO URL has the same prefix as authenticator")
+        if not _is_prefix_equal(authenticator, token_url) or not _is_prefix_equal(authenticator, sso_url):
             Error.errorhandler_wrapper(
                 conn._rest._connection,
                 None,
@@ -232,9 +227,7 @@ class AuthByOkta(AuthByPlugin):
         user: str,
         password: str,
     ) -> str:
-        logger.debug(
-            "step 3: query IDP token url to authenticate and " "retrieve access token"
-        )
+        logger.debug("step 3: query IDP token url to authenticate and retrieve access token")
         data = {
             "username": user,
             "password": password,
@@ -255,13 +248,7 @@ class AuthByOkta(AuthByPlugin):
                 None,
                 DatabaseError,
                 {
-                    "msg": (
-                        "The authentication failed for {user} "
-                        "by {token_url}.".format(
-                            token_url=token_url,
-                            user=user,
-                        )
-                    ),
+                    "msg": (f"The authentication failed for {user} by {token_url}."),
                     "errno": ER_IDP_CONNECTION_ERROR,
                     "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 },
@@ -274,7 +261,7 @@ class AuthByOkta(AuthByPlugin):
         generate_one_time_token: Callable,
         sso_url: str,
     ) -> dict[Any, Any]:
-        logger.debug("step 4: query IDP URL snowflake app to get SAML " "response")
+        logger.debug("step 4: query IDP URL snowflake app to get SAML response")
         timeout_time = time.time() + conn.login_timeout if conn.login_timeout else None
         response_html = {}
         origin_sso_url = sso_url
@@ -310,14 +297,8 @@ class AuthByOkta(AuthByPlugin):
     ) -> None:
         logger.debug("step 5: validate post_back_url matches Snowflake URL")
         post_back_url = _get_post_back_url_from_html(response_html)
-        full_url = "{protocol}://{host}:{port}".format(
-            protocol=conn._rest._protocol,
-            host=conn._rest._host,
-            port=conn._rest._port,
-        )
-        if not getattr(conn, "_disable_saml_url_check", False) and not _is_prefix_equal(
-            post_back_url, full_url
-        ):
+        full_url = f"{conn._rest._protocol}://{conn._rest._host}:{conn._rest._port}"
+        if not getattr(conn, "_disable_saml_url_check", False) and not _is_prefix_equal(post_back_url, full_url):
             Error.errorhandler_wrapper(
                 conn._rest._connection,
                 None,
@@ -326,11 +307,8 @@ class AuthByOkta(AuthByPlugin):
                     "msg": (
                         "The specified authenticator and destination "
                         "URL in the SAML assertion do not match: "
-                        "expected: {url}, "
-                        "post back: {post_back_url}".format(
-                            url=full_url,
-                            post_back_url=post_back_url,
-                        )
+                        f"expected: {full_url}, "
+                        f"post back: {post_back_url}"
                     ),
                     "errno": ER_INCORRECT_DESTINATION,
                     "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,

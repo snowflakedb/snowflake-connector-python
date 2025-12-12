@@ -8,7 +8,6 @@ from .by_plugin import AuthByPlugin, AuthType
 
 
 class AuthByPAT(AuthByPlugin):
-
     def __init__(self, pat_token: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self._pat_token: str | None = pat_token

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import sys
+
 from datetime import datetime, timezone
 from glob import glob
 from os import path
@@ -14,6 +15,7 @@ from OpenSSL.crypto import FILETYPE_ASN1, dump_certificate
 
 from snowflake.connector.ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto as SFOCSP
 from snowflake.connector.ssl_wrap_socket import _openssl_connect
+
 
 ZERO_EPOCH = datetime.fromtimestamp(0, timezone.utc).replace(tzinfo=None)
 
@@ -31,11 +33,9 @@ def main() -> None:
             "the certs directory."
         )
         print(
-            """
-Usage: {}  <ocsp response cache file> <hostname file> <cert file glob pattern>
-""".format(
-                path.basename(sys.argv[0])
-            )
+            f"""
+Usage: {path.basename(sys.argv[0])}  <ocsp response cache file> <hostname file> <cert file glob pattern>
+"""
         )
         sys.exit(2)
 
@@ -71,27 +71,17 @@ def raise_old_cache_exception(current_time, created_on, name, serial_number):
     )
 
 
-def raise_outdated_validity_exception(
-    current_time, name, serial_number, this_update, next_update
-):
+def raise_outdated_validity_exception(current_time, name, serial_number, this_update, next_update):
     raise Exception(
         "ERROR: OCSP response cache include "
         "outdated data: "
-        "name: {}, serial_number: {}, "
-        "current_time: {}, this_update: {}, "
-        "next_update: {}".format(
-            name,
-            serial_number,
-            strftime(SFOCSP.OUTPUT_TIMESTAMP_FORMAT, gmtime(current_time)),
-            this_update.strftime(SFOCSP.OUTPUT_TIMESTAMP_FORMAT),
-            next_update.strftime(SFOCSP.OUTPUT_TIMESTAMP_FORMAT),
-        )
+        f"name: {name}, serial_number: {serial_number}, "
+        f"current_time: {strftime(SFOCSP.OUTPUT_TIMESTAMP_FORMAT, gmtime(current_time))}, this_update: {this_update.strftime(SFOCSP.OUTPUT_TIMESTAMP_FORMAT)}, "
+        f"next_update: {next_update.strftime(SFOCSP.OUTPUT_TIMESTAMP_FORMAT)}"
     )
 
 
-def dump_ocsp_response_cache(
-    ocsp_response_cache_file, hostname_file, cert_glob_pattern
-) -> None:
+def dump_ocsp_response_cache(ocsp_response_cache_file, hostname_file, cert_glob_pattern) -> None:
     """Dump OCSP response cache contents.
 
     Show the subject name as well if the subject is included in the certificate files.
@@ -138,21 +128,13 @@ def dump_ocsp_response_cache(
             if current_time - OCSP_CACHE_SERVER_INTERVAL > created_on:
                 raise_old_cache_exception(current_time, created_on, name, serial_number)
 
-            next_update_utc = (
-                next_update.replace(tzinfo=None) - ZERO_EPOCH
-            ).total_seconds()
-            this_update_utc = (
-                this_update.replace(tzinfo=None) - ZERO_EPOCH
-            ).total_seconds()
+            next_update_utc = (next_update.replace(tzinfo=None) - ZERO_EPOCH).total_seconds()
+            this_update_utc = (this_update.replace(tzinfo=None) - ZERO_EPOCH).total_seconds()
 
             if current_time > next_update_utc or current_time < this_update_utc:
-                raise_outdated_validity_exception(
-                    current_time, name, serial_number, this_update, next_update
-                )
+                raise_outdated_validity_exception(current_time, name, serial_number, this_update, next_update)
 
-            output[json_key]["created_on"] = strftime(
-                SFOCSP.OUTPUT_TIMESTAMP_FORMAT, gmtime(created_on)
-            )
+            output[json_key]["created_on"] = strftime(SFOCSP.OUTPUT_TIMESTAMP_FORMAT, gmtime(created_on))
             output[json_key]["produce_at"] = str(produce_at)
             output[json_key]["this_update"] = str(this_update)
             output[json_key]["next_update"] = str(next_update)

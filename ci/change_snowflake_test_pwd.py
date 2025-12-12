@@ -9,9 +9,8 @@ import sys
 
 import snowflake.connector
 
-sys.path.append(
-    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test")
-)
+
+sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "test"))
 
 CLIENT_KNOWN_SSM_FILE_PATH_DOCKER = "CLIENT_KNOWN_SSM_FILE_PATH_DOCKER"
 
@@ -46,7 +45,6 @@ def generate_known_ssm_file():
 
 if __name__ == "__main__":
     from jenkins_test_parameters import SNOWFLAKE_TEST_PASSWORD_NEW
-
     from parameters import CONNECTION_PARAMETERS
 
     change_password()

@@ -38,9 +38,7 @@ def probe_connection(url):
 
             # DNS lookup for OCSP server
             try:
-                actual_hostname, aliases, ips = gethostbyname_ex(
-                    parsed_ocsp_url.hostname
-                )
+                actual_hostname, aliases, ips = gethostbyname_ex(parsed_ocsp_url.hostname)
                 ocsp_status = {
                     "input_url": ocsp_uris[0],
                     "actual_hostname": actual_hostname,

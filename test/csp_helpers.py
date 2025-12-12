@@ -32,7 +32,7 @@ def gen_dummy_id_token(
         "iat": now,
         "exp": now + 60 * 60,
     }
-    logger.debug(f"Generating dummy token with the following claims:\n{str(payload)}")
+    logger.debug("Generating dummy token with the following claims:\n%s", str(payload))
     return jwt.encode(
         payload=payload,
         key=key,
@@ -42,7 +42,7 @@ def gen_dummy_id_token(
 
 def gen_dummy_access_token(sub="test-subject", key="secret") -> str:
     """Generates a dummy access token using the given subject."""
-    logger.debug(f"Generating dummy access token for subject {sub}")
+    logger.debug("Generating dummy access token for subject %s", sub)
     return (sub + key).encode("utf-8").hex()
 
 
@@ -94,7 +94,7 @@ class FakeMetadataService(ABC):
 
     def __call__(self, method, url, headers, timeout=None):
         """Entry point for the requests mock."""
-        logger.debug(f"Received request: {method} {url} {str(headers)}")
+        logger.debug("Received request: %s %s %s", method, url, str(headers))
         parsed_url = urlparse(url)
 
         if parsed_url.hostname not in self.expected_hostnames:

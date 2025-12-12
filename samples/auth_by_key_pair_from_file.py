@@ -8,14 +8,12 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
 import snowflake.connector
+
 from snowflake.connector.auth.keypair import AuthByKeyPair
 
-PRIVATE_KEY_PASSPHRASE = (
-    None  # change to your private key passphrase if it is set, else leave it None
-)
-PRIVATE_KEY_PATH = (
-    "</path/to/private/key/file>"  # change to your own path to the private key file
-)
+
+PRIVATE_KEY_PASSPHRASE = None  # change to your private key passphrase if it is set, else leave it None
+PRIVATE_KEY_PATH = "</path/to/private/key/file>"  # change to your own path to the private key file
 CONNECTION_PARAMETERS = {  # change to your own snowflake credentials
     "account": "<account_name>",
     "user": "<user_name>",
@@ -50,8 +48,6 @@ if __name__ == "__main__":
     auth_by_key_pair_file = AuthByKeyPairFile(PRIVATE_KEY_PATH)
 
     # pass the authentication plugin instance as the auth_class
-    with snowflake.connector.connect(
-        **CONNECTION_PARAMETERS, auth_class=auth_by_key_pair_file
-    ) as conn:
+    with snowflake.connector.connect(**CONNECTION_PARAMETERS, auth_class=auth_by_key_pair_file) as conn:
         res = conn.cursor().execute("select 1;")
         print(res.fetchall())

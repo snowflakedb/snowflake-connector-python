@@ -347,7 +347,7 @@ credentials=(
                     "alter session set disable_put_and_get_on_external_stage = false"
                 )
                 async for rec in await c.execute(f"put file://{files} @{stage_name}"):
-                    logger.info(f"rec={rec}")
+                    logger.info("rec=%s", rec)
                     if rec[6] == "UPLOADED":
                         success_cnt += 1
                     elif rec[6] == "SKIPPED":
@@ -355,7 +355,7 @@ credentials=(
             assert success_cnt == number_of_files, "uploaded files"
             assert skipped_cnt == 0, "skipped files"
 
-            logger.info(f"deleting files in {stage_name}")
+            logger.info("deleting files in %s", stage_name)
 
             deleted_cnt = 0
             await cnx.cursor().execute(f"rm @{stage_name}/file0")
@@ -372,7 +372,7 @@ credentials=(
                     f"put file://{files} @{stage_name}",
                     _raise_put_get_error=False,
                 ):
-                    logger.info(f"rec={rec}")
+                    logger.info("rec=%s", rec)
                     if rec[6] == "UPLOADED":
                         success_cnt += 1
                     elif rec[6] == "SKIPPED":

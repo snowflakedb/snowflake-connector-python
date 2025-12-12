@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+
 from typing import TYPE_CHECKING
 
 from aiohttp import ClientRequest, ClientTimeout
@@ -15,27 +16,31 @@ from ..ssl_wrap_socket import FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME
 from ..url_util import should_bypass_proxies
 from ._ocsp_asn1crypto import SnowflakeOCSPAsn1Crypto
 
+
 if TYPE_CHECKING:
-    from aiohttp.tracing import Trace
     from typing import Unpack
+
     from aiohttp.client import _RequestContextManager
+    from aiohttp.tracing import Trace
 
 import abc
 import collections
 import contextlib
 import itertools
 import logging
+
+from collections.abc import AsyncGenerator, Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator, Callable, Mapping
+from typing import Any
 
 import aiohttp
 
 from ..compat import urlparse
 from ..constants import OCSPMode
-from ..session_manager import BaseHttpConfig
+from ..session_manager import BaseHttpConfig, _BaseConfigDirectAccessMixin
 from ..session_manager import SessionManager as SessionManagerSync
 from ..session_manager import SessionPool as SessionPoolSync
-from ..session_manager import _BaseConfigDirectAccessMixin
+
 
 logger = logging.getLogger(__name__)
 
@@ -67,16 +72,10 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
 
         super().__init__(*args, **kwargs)
 
-    async def connect(
-        self, req: ClientRequest, traces: list[Trace], timeout: ClientTimeout
-    ) -> Connection:
+    async def connect(self, req: ClientRequest, traces: list[Trace], timeout: ClientTimeout) -> Connection:
         connection = await super().connect(req, traces, timeout)
         protocol = connection.protocol
-        if (
-            req.is_ssl()
-            and protocol is not None
-            and not getattr(protocol, "_snowflake_ocsp_validated", False)
-        ):
+        if req.is_ssl() and protocol is not None and not getattr(protocol, "_snowflake_ocsp_validated", False):
             if self._snowflake_ocsp_mode == OCSPMode.DISABLE_OCSP_CHECKS:
                 logger.debug(
                     "This connection does not perform OCSP checks. "
@@ -98,7 +97,6 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
         *,
         session_manager: SessionManager,
     ):
-
         v = await SnowflakeOCSPAsn1Crypto(
             ocsp_response_cache_uri=FEATURE_OCSP_RESPONSE_CACHE_FILE_NAME,
             use_fail_open=self._snowflake_ocsp_mode == OCSPMode.FAIL_OPEN,
@@ -108,10 +106,7 @@ class SnowflakeSSLConnector(aiohttp.TCPConnector):
         ).validate(hostname, protocol, session_manager=session_manager)
         if not v:
             raise OperationalError(
-                msg=(
-                    "The certificate is revoked or "
-                    "could not be validated: hostname={}".format(hostname)
-                ),
+                msg=(f"The certificate is revoked or could not be validated: hostname={hostname}"),
                 errno=ER_OCSP_RESPONSE_CERT_STATUS_REVOKED,
             )
 
@@ -140,9 +135,7 @@ class AioHttpConfig(BaseHttpConfig):
     to SessionManager and SnowflakeRestful to ensure consistent HTTP behavior.
     """
 
-    connector_factory: Callable[..., aiohttp.BaseConnector] = field(
-        default_factory=SnowflakeSSLConnectorFactory
-    )
+    connector_factory: Callable[..., aiohttp.BaseConnector] = field(default_factory=SnowflakeSSLConnectorFactory)
 
     trust_env: bool = True
     """Trust environment variables for proxy configuration (HTTP_PROXY, HTTPS_PROXY, NO_PROXY).
@@ -151,16 +144,13 @@ class AioHttpConfig(BaseHttpConfig):
     snowflake_ocsp_mode: OCSPMode = OCSPMode.FAIL_OPEN
     """OCSP validation mode obtained from connection._ocsp_mode()."""
 
-    def get_connector(
-        self, **override_connector_factory_kwargs
-    ) -> aiohttp.BaseConnector:
+    def get_connector(self, **override_connector_factory_kwargs) -> aiohttp.BaseConnector:
         # We pass here only chosen attributes as kwargs to make the arguments received by the factory as compliant with the BaseConnector constructor interface as possible.
         # We could consider passing the whole HttpConfig as kwarg to the factory if necessary in the future.
         attributes_for_connector_factory = frozenset({"snowflake_ocsp_mode"})
 
         self_kwargs_for_connector_factory = {
-            attr_name: getattr(self, attr_name)
-            for attr_name in attributes_for_connector_factory
+            attr_name: getattr(self, attr_name) for attr_name in attributes_for_connector_factory
         }
         self_kwargs_for_connector_factory.update(override_connector_factory_kwargs)
         return self.connector_factory(**self_kwargs_for_connector_factory)
@@ -179,12 +169,12 @@ class SessionPool(SessionPoolSync[aiohttp.ClientSession]):
     async def close(self) -> None:
         """Closes all active and idle sessions in this session pool."""
         if self._active_sessions:
-            logger.debug(f"Closing {len(self._active_sessions)} active sessions")
+            logger.debug("Closing %s active sessions", len(self._active_sessions))
         for session in itertools.chain(self._active_sessions, self._idle_sessions):
             try:
                 await session.close()
             except Exception as e:
-                logger.info(f"Session cleanup failed - failed to close session: {e}")
+                logger.info("Session cleanup failed - failed to close session: %s", e)
         self._active_sessions.clear()
         self._idle_sessions.clear()
 
@@ -213,9 +203,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
     """
 
     @abc.abstractmethod
-    async def use_session(
-        self, url: str | bytes, use_pooling: bool
-    ) -> AsyncGenerator[aiohttp.ClientSession]: ...
+    async def use_session(self, url: str | bytes, use_pooling: bool) -> AsyncGenerator[aiohttp.ClientSession]: ...
 
     async def get(
         self,
@@ -233,9 +221,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
             timeout_obj = aiohttp.ClientTimeout(total=timeout) if timeout else None
 
         async with self.use_session(url, use_pooling) as session:
-            return await session.get(
-                url, headers=headers, timeout=timeout_obj, **kwargs
-            )
+            return await session.get(url, headers=headers, timeout=timeout_obj, **kwargs)
 
     async def options(
         self,
@@ -248,9 +234,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
     ) -> aiohttp.ClientResponse:
         async with self.use_session(url, use_pooling) as session:
             timeout_obj = aiohttp.ClientTimeout(total=timeout) if timeout else None
-            return await session.options(
-                url, headers=headers, timeout=timeout_obj, **kwargs
-            )
+            return await session.options(url, headers=headers, timeout=timeout_obj, **kwargs)
 
     async def head(
         self,
@@ -263,9 +247,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
     ) -> aiohttp.ClientResponse:
         async with self.use_session(url, use_pooling) as session:
             timeout_obj = aiohttp.ClientTimeout(total=timeout) if timeout else None
-            return await session.head(
-                url, headers=headers, timeout=timeout_obj, **kwargs
-            )
+            return await session.head(url, headers=headers, timeout=timeout_obj, **kwargs)
 
     async def post(
         self,
@@ -301,9 +283,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
     ) -> aiohttp.ClientResponse:
         async with self.use_session(url, use_pooling) as session:
             timeout_obj = aiohttp.ClientTimeout(total=timeout) if timeout else None
-            return await session.put(
-                url, headers=headers, timeout=timeout_obj, data=data, **kwargs
-            )
+            return await session.put(url, headers=headers, timeout=timeout_obj, data=data, **kwargs)
 
     async def patch(
         self,
@@ -317,9 +297,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
     ) -> aiohttp.ClientResponse:
         async with self.use_session(url, use_pooling) as session:
             timeout_obj = aiohttp.ClientTimeout(total=timeout) if timeout else None
-            return await session.patch(
-                url, headers=headers, timeout=timeout_obj, data=data, **kwargs
-            )
+            return await session.patch(url, headers=headers, timeout=timeout_obj, data=data, **kwargs)
 
     async def delete(
         self,
@@ -332,9 +310,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
     ) -> aiohttp.ClientResponse:
         async with self.use_session(url, use_pooling) as session:
             timeout_obj = aiohttp.ClientTimeout(total=timeout) if timeout else None
-            return await session.delete(
-                url, headers=headers, timeout=timeout_obj, **kwargs
-            )
+            return await session.delete(url, headers=headers, timeout=timeout_obj, **kwargs)
 
 
 class _AsyncHttpConfigDirectAccessMixin(_BaseConfigDirectAccessMixin, abc.ABC):
@@ -378,9 +354,7 @@ class SessionManager(
 
         # Don't call super().__init__ to avoid creating sync SessionPool
         self._cfg: AioHttpConfig = config
-        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
-            lambda: SessionPool(self)
-        )
+        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(lambda: SessionPool(self))
 
     @classmethod
     def from_config(cls, cfg: AioHttpConfig, **overrides: Any) -> SessionManager:
@@ -482,9 +456,7 @@ async def request(
     Convenience wrapper – requires an explicit ``session_manager``.
     """
     if session_manager is None:
-        raise ValueError(
-            "session_manager is required - no default session manager available"
-        )
+        raise ValueError("session_manager is required - no default session manager available")
 
     return await session_manager.request(
         method=method,
@@ -509,9 +481,7 @@ class ProxySessionManager(SessionManager):
 
         else:
 
-            def request(
-                self, method: str, url: StrOrURL, **kwargs: Any
-            ) -> _RequestContextManager:
+            def request(self, method: str, url: StrOrURL, **kwargs: Any) -> _RequestContextManager:
                 """Perform HTTP request."""
                 # Inject Host header when proxying
                 try:
@@ -550,9 +520,7 @@ class ProxySessionManager(SessionManager):
 
             # We use requests.utils here (in asynch code) to keep the behaviour uniform for synch and asynch code. If we wanted each version to depict its http library's behaviour, we could use here: aiohttp.helpers.proxy_bypass(url, proxies={...}) here
             proxy_from_conn_params = (
-                None
-                if should_bypass_proxies(url, no_proxy=self.config.no_proxy)
-                else self.proxy_url
+                None if should_bypass_proxies(url, no_proxy=self.config.no_proxy) else self.proxy_url
             )
         # Construct session with base proxy set, request() may override per-URL when bypassing
         return self.SessionWithProxy(
@@ -564,9 +532,7 @@ class ProxySessionManager(SessionManager):
 
 class SessionManagerFactory:
     @staticmethod
-    def get_manager(
-        config: AioHttpConfig | None = None, **http_config_kwargs
-    ) -> SessionManager:
+    def get_manager(config: AioHttpConfig | None = None, **http_config_kwargs) -> SessionManager:
         """Return a proxy-aware or plain async SessionManager based on config.
 
         If any explicit proxy parameters are provided (in config or kwargs),
