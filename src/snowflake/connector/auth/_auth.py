@@ -17,7 +17,11 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 
-from .._utils import get_application_path, get_spcs_token
+from .._utils import (
+    build_minicore_usage_for_session,
+    get_application_path,
+    get_spcs_token,
+)
 from ..compat import urlencode
 from ..constants import (
     DAY_IN_SECONDS,
@@ -155,6 +159,7 @@ class Auth:
                         platform_detection_timeout_seconds=platform_detection_timeout_seconds,
                         session_manager=session_manager.clone(max_retries=0),
                     ),
+                    **build_minicore_usage_for_session(),
                 },
             },
         }

@@ -42,6 +42,7 @@ from ._query_context_cache import QueryContextCache
 from ._utils import (
     _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+    build_minicore_usage_for_telemetry,
 )
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
@@ -681,6 +682,7 @@ class SnowflakeConnection:
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
+        self._log_minicore_import()
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
@@ -2505,6 +2507,28 @@ class SnowflakeConnection:
                 f.cancel()
 
         return not found_unfinished_query
+
+    def _log_minicore_import(self):
+        """
+                OS - meaningful value like Windows, Linux, Darwin/MacOS etc.
+        OS_VERSION - meaningful version like kernel version for Linux/Darwin, etc. that your language provides
+        ISA - instruction set architecture, like amd64/arm64.
+        CORE_VERSION - result of sf_core_full_version call, if finished successfully.
+        CORE_FILE_NAME - a string representing binary name that driver tried to load
+        CORE_LOAD_ERROR - flag or error type included if there are any errors (can’t write a library to disk, can’t load it, can’t find symbols, etc).
+                :return:
+        """
+        ts = get_time_millis()
+        self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict={
+                    TelemetryField.KEY_TYPE.value: TelemetryField.CORE_IMPORT.value,
+                    TelemetryField.KEY_VALUE.value: build_minicore_usage_for_telemetry(),
+                },
+                timestamp=ts,
+                connection=self,
+            )
+        )
 
     def _log_telemetry_imported_packages(self) -> None:
         if self._log_imported_packages_in_telemetry:
