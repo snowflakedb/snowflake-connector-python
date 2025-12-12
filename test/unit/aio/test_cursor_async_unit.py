@@ -60,7 +60,7 @@ def test_get_filetransfer_type(sql, _type):
     assert SnowflakeCursor.get_file_transfer_type(sql) == _type
 
 
-def test_cursor_attribute():
+async def test_cursor_attribute():
     fake_conn = FakeConnection()
     cursor = SnowflakeCursor(fake_conn)
     assert cursor.lastrowid is None
