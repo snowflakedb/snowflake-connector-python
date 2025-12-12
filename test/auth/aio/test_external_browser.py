@@ -45,6 +45,9 @@ async def test_external_browser_successful():
 
 @pytest.mark.auth
 @pytest.mark.asyncio
+@pytest.mark.skip(
+    reason="SNOW-2895170: Script providing credentials cannot connect to browser"
+)
 async def test_external_browser_mismatched_user():
     connection_parameters = (
         AuthConnectionParameters().get_external_browser_connection_parameters()
