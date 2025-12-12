@@ -36,7 +36,7 @@ async def test_spcs_token_included_in_login_request_async(monkeypatch):
         }
 
     with mock.patch(
-        "snowflake.connector.aio.network.SnowflakeRestful._post_request",
+        "snowflake.connector.aio._network.SnowflakeRestful._post_request",
         side_effect=mock_post_request,
     ):
         conn = snowflake.connector.aio.SnowflakeConnection(
@@ -76,7 +76,7 @@ async def test_spcs_token_not_included_when_file_missing_async(monkeypatch):
         }
 
     with mock.patch(
-        "snowflake.connector.aio.network.SnowflakeRestful._post_request",
+        "snowflake.connector.aio._network.SnowflakeRestful._post_request",
         side_effect=mock_post_request,
     ):
         conn = snowflake.connector.aio.SnowflakeConnection(
@@ -127,7 +127,7 @@ async def test_spcs_token_default_path_used_when_env_unset_async(
         }
 
     with mock.patch(
-        "snowflake.connector.aio.network.SnowflakeRestful._post_request",
+        "snowflake.connector.aio._network.SnowflakeRestful._post_request",
         side_effect=mock_post_request,
     ):
         conn = snowflake.connector.aio.SnowflakeConnection(
