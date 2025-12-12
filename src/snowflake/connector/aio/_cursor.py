@@ -47,6 +47,7 @@ from snowflake.connector.cursor import (
 from snowflake.connector.cursor import SnowflakeCursorBase as SnowflakeCursorBaseSync
 from snowflake.connector.cursor import T
 from snowflake.connector.errorcode import (
+    ER_CURSOR_EXECUTE_IN_PROGRESS,
     ER_CURSOR_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
     ER_FAILED_TO_REWRITE_MULTI_ROW_INSERT,
@@ -85,6 +86,7 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
         self._lock_canceling = asyncio.Lock()
         self._timebomb: asyncio.Task | None = None
         self._prefetch_hook: typing.Callable[[], typing.Awaitable] | None = None
+        self._executing: bool = False
 
     def __aiter__(self):
         return self
@@ -552,9 +554,6 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
         _force_qmark_paramstyle: bool = False,
         _dataframe_ast: str | None = None,
     ) -> Self | dict[str, Any] | None:
-        if _exec_async:
-            _no_results = True
-        logger.debug("executing SQL/command")
         if self.is_closed():
             Error.errorhandler_wrapper(
                 self.connection,
@@ -562,6 +561,85 @@ class SnowflakeCursorBase(SnowflakeCursorBaseSync, abc.ABC, typing.Generic[Fetch
                 InterfaceError,
                 {"msg": "Cursor is closed in execute.", "errno": ER_CURSOR_IS_CLOSED},
             )
+        if self._executing:
+            Error.errorhandler_wrapper(
+                self.connection,
+                self,
+                InterfaceError,
+                {
+                    "msg": "Another execute is already in progress on this cursor. "
+                    "Async cursors are not safe for concurrent use by multiple coroutines. "
+                    "Use a separate cursor for each concurrent operation.",
+                    "errno": ER_CURSOR_EXECUTE_IN_PROGRESS,
+                },
+            )
+
+        self._executing = True
+        try:
+            return await self._execute_impl(
+                command=command,
+                params=params,
+                _bind_stage=_bind_stage,
+                timeout=timeout,
+                _exec_async=_exec_async,
+                _no_retry=_no_retry,
+                _do_reset=_do_reset,
+                _put_callback=_put_callback,
+                _put_azure_callback=_put_azure_callback,
+                _put_callback_output_stream=_put_callback_output_stream,
+                _get_callback=_get_callback,
+                _get_azure_callback=_get_azure_callback,
+                _get_callback_output_stream=_get_callback_output_stream,
+                _show_progress_bar=_show_progress_bar,
+                _statement_params=_statement_params,
+                _is_internal=_is_internal,
+                _describe_only=_describe_only,
+                _no_results=_no_results,
+                _is_put_get=_is_put_get,
+                _raise_put_get_error=_raise_put_get_error,
+                _force_put_overwrite=_force_put_overwrite,
+                _skip_upload_on_content_match=_skip_upload_on_content_match,
+                file_stream=file_stream,
+                num_statements=num_statements,
+                _force_qmark_paramstyle=_force_qmark_paramstyle,
+                _dataframe_ast=_dataframe_ast,
+            )
+        finally:
+            self._executing = False
+
+    async def _execute_impl(
+        self,
+        command: str,
+        params: Sequence[Any] | dict[Any, Any] | None = None,
+        _bind_stage: str | None = None,
+        timeout: int | None = None,
+        _exec_async: bool = False,
+        _no_retry: bool = False,
+        _do_reset: bool = True,
+        _put_callback: SnowflakeProgressPercentage = None,
+        _put_azure_callback: SnowflakeProgressPercentage = None,
+        _put_callback_output_stream: IO[str] = sys.stdout,
+        _get_callback: SnowflakeProgressPercentage = None,
+        _get_azure_callback: SnowflakeProgressPercentage = None,
+        _get_callback_output_stream: IO[str] = sys.stdout,
+        _show_progress_bar: bool = True,
+        _statement_params: dict[str, str] | None = None,
+        _is_internal: bool = False,
+        _describe_only: bool = False,
+        _no_results: bool = False,
+        _is_put_get: bool | None = None,
+        _raise_put_get_error: bool = True,
+        _force_put_overwrite: bool = False,
+        _skip_upload_on_content_match: bool = False,
+        file_stream: IO[bytes] | None = None,
+        num_statements: int | None = None,
+        _force_qmark_paramstyle: bool = False,
+        _dataframe_ast: str | None = None,
+    ) -> Self | dict[str, Any] | None:
+        """Internal implementation of execute, called after concurrency checks."""
+        if _exec_async:
+            _no_results = True
+        logger.debug("executing SQL/command")
 
         if _do_reset:
             self.reset()
