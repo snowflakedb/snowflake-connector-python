@@ -22,10 +22,10 @@ async def test_spcs_token_included_in_login_request_async(monkeypatch):
     mock_open = mock.mock_open(read_data="TEST_SPCS_TOKEN_ASYNC")
     monkeypatch.setattr("snowflake.connector._utils.open", mock_open, raising=False)
 
-    captured_bodies: list[dict] = []
+    captured_requests: list[tuple[str, dict]] = []
 
     async def mock_post_request(url, headers, body, **kwargs):
-        captured_bodies.append(json.loads(body))
+        captured_requests.append((url, json.loads(body)))
         return {
             "success": True,
             "message": None,
@@ -51,8 +51,9 @@ async def test_spcs_token_included_in_login_request_async(monkeypatch):
         await conn.close()
 
     # Exactly one login-request should have been sent for this simple flow
-    assert len(captured_bodies) == 1
-    body = captured_bodies[0]
+    login_bodies = [body for (url, body) in captured_requests if "login-request" in url]
+    assert len(login_bodies) == 1
+    body = login_bodies[0]
     assert body["data"]["SPCS_TOKEN"] == "TEST_SPCS_TOKEN_ASYNC"
 
 
@@ -62,10 +63,10 @@ async def test_spcs_token_not_included_when_file_missing_async(monkeypatch):
 
     monkeypatch.delenv("SF_SPCS_TOKEN_PATH", raising=False)
 
-    captured_bodies: list[dict] = []
+    captured_requests: list[tuple[str, dict]] = []
 
     async def mock_post_request(url, headers, body, **kwargs):
-        captured_bodies.append(json.loads(body))
+        captured_requests.append((url, json.loads(body)))
         return {
             "success": True,
             "message": None,
@@ -91,8 +92,9 @@ async def test_spcs_token_not_included_when_file_missing_async(monkeypatch):
         await conn.close()
 
     # Exactly one login-request should have been sent for this simple flow
-    assert len(captured_bodies) == 1
-    body = captured_bodies[0]
+    login_bodies = [body for (url, body) in captured_requests if "login-request" in url]
+    assert len(login_bodies) == 1
+    body = login_bodies[0]
     assert "SPCS_TOKEN" not in body["data"]
 
 
@@ -113,10 +115,10 @@ async def test_spcs_token_default_path_used_when_env_unset_async(
     mock_open = mock.mock_open(read_data="DEFAULT_PATH_SPCS_TOKEN_ASYNC")
     monkeypatch.setattr("snowflake.connector._utils.open", mock_open, raising=False)
 
-    captured_bodies: list[dict] = []
+    captured_requests: list[tuple[str, dict]] = []
 
     async def mock_post_request(url, headers, body, **kwargs):
-        captured_bodies.append(json.loads(body))
+        captured_requests.append((url, json.loads(body)))
         return {
             "success": True,
             "message": None,
@@ -142,6 +144,7 @@ async def test_spcs_token_default_path_used_when_env_unset_async(
         await conn.close()
 
     # Exactly one login-request should have been sent for this simple flow
-    assert len(captured_bodies) == 1
-    body = captured_bodies[0]
+    login_bodies = [body for (url, body) in captured_requests if "login-request" in url]
+    assert len(login_bodies) == 1
+    body = login_bodies[0]
     assert body["data"]["SPCS_TOKEN"] == "DEFAULT_PATH_SPCS_TOKEN_ASYNC"
