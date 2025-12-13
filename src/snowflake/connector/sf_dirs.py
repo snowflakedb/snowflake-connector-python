@@ -4,6 +4,7 @@ import os
 import pathlib
 from functools import cached_property
 from typing import Protocol
+from warnings import warn
 
 from platformdirs import PlatformDirs
 
@@ -30,16 +31,20 @@ def _resolve_platform_dirs() -> PlatformDirsProto:
     snowflake_home = pathlib.Path(
         os.environ.get("SNOWFLAKE_HOME", "~/.snowflake/"),
     ).expanduser()
-    if snowflake_home.exists():
-        return SFPlatformDirs(
-            str(snowflake_home),
-            **platformdir_kwargs,
+    try:
+        if snowflake_home.exists():
+            return SFPlatformDirs(str(snowflake_home), **platformdir_kwargs)
+        else:
+            # In case SNOWFLAKE_HOME does not exist we fall back to using
+            # platformdirs to determine where system files should be placed. Please
+            # see docs for all the directories defined in the module at
+            # https://platformdirs.readthedocs.io/
+            return PlatformDirs(**platformdir_kwargs)
+    except PermissionError as pe:
+        warn(
+            f"Received permission error while checking if {snowflake_home} exists. Continue without snowflake home directory.\n"
+            f"Original Error: {pe}"
         )
-    else:
-        # In case SNOWFLAKE_HOME does not exist we fall back to using
-        # platformdirs to determine where system files should be placed. Please
-        # see docs for all the directories defined in the module at
-        # https://platformdirs.readthedocs.io/
         return PlatformDirs(**platformdir_kwargs)
 
 
