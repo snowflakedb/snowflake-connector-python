@@ -26,7 +26,7 @@ from .network import (
 from .options import installed_pandas
 from .options import pyarrow as pa
 from .secret_detector import SecretDetector
-from .session_manager import HttpConfig, SessionManager
+from .session_manager import HttpConfig, SessionManager, SessionManagerFactory
 from .time_util import TimerContextManager
 
 logger = getLogger(__name__)
@@ -261,7 +261,7 @@ class ResultBatch(abc.ABC):
             [s._to_result_metadata_v1() for s in schema] if schema is not None else None
         )
         self._use_dict_result = use_dict_result
-        # Passed to contain the configured Http behavior in case the connectio is no longer active for the download
+        # Passed to contain the configured Http behavior in case the connection is no longer active for the download
         # Can be overridden with setters if needed.
         self._session_manager = session_manager
         self._metrics: dict[str, int] = {}
@@ -319,7 +319,7 @@ class ResultBatch(abc.ABC):
         if self._session_manager:
             self._session_manager.config = config
         else:
-            self._session_manager = SessionManager(config=config)
+            self._session_manager = SessionManagerFactory.get_manager(config=config)
 
     def __iter__(
         self,
@@ -360,21 +360,27 @@ class ResultBatch(abc.ABC):
                         and connection.rest.session_manager is not None
                     ):
                         # If connection was explicitly passed and not closed yet - we can reuse SessionManager with session pooling
-                        with connection.rest.use_requests_session() as session:
+                        with connection.rest.use_requests_session(
+                            request_data["url"]
+                        ) as session:
                             logger.debug(
                                 f"downloading result batch id: {self.id} with existing session {session}"
                             )
                             response = session.request("get", **request_data)
                     elif self._session_manager is not None:
                         # If connection is not accessible or was already closed, but cursors are now used to fetch the data - we will only reuse the http setup (through cloned SessionManager without session pooling)
-                        with self._session_manager.use_requests_session() as session:
+                        with self._session_manager.use_session(
+                            request_data["url"]
+                        ) as session:
                             response = session.request("get", **request_data)
                     else:
                         # If there was no session manager cloned, then we are using a default Session Manager setup, since it is very unlikely to enter this part outside of testing
                         logger.debug(
                             f"downloading result batch id: {self.id} with new session through local session manager"
                         )
-                        local_session_manager = SessionManager(use_pooling=False)
+                        local_session_manager = SessionManagerFactory.get_manager(
+                            use_pooling=False
+                        )
                         response = local_session_manager.get(**request_data)
 
                     if response.status_code == OK:

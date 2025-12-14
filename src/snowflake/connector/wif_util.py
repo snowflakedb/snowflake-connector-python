@@ -7,15 +7,18 @@ from base64 import b64encode
 from dataclasses import dataclass
 from enum import Enum, unique
 
-import boto3
 import jwt
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-from botocore.utils import InstanceMetadataRegionFetcher
+
+from .options import boto3, botocore, installed_boto
+
+if installed_boto:
+    SigV4Auth = botocore.auth.SigV4Auth
+    AWSRequest = botocore.awsrequest.AWSRequest
+    InstanceMetadataRegionFetcher = botocore.utils.InstanceMetadataRegionFetcher
 
 from .errorcode import ER_INVALID_WIF_SETTINGS, ER_WIF_CREDENTIALS_NOT_FOUND
-from .errors import ProgrammingError
-from .session_manager import SessionManager
+from .errors import MissingDependencyError, ProgrammingError
+from .session_manager import SessionManager, SessionManagerFactory
 
 logger = logging.getLogger(__name__)
 SNOWFLAKE_AUDIENCE = "snowflakecomputing.com"
@@ -93,10 +96,11 @@ def extract_iss_and_sub_without_signature_verification(jwt_str: str) -> tuple[st
 
 def get_aws_region() -> str:
     """Get the current AWS workload's region, or raises an error if it's missing."""
-    region = None
-    if "AWS_REGION" in os.environ:  # Lambda
-        region = os.environ["AWS_REGION"]
-    else:  # EC2
+
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+
+    if not region:
+        # Fallback for EC2 environments
         # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
         region = InstanceMetadataRegionFetcher().retrieve_region()
 
@@ -105,6 +109,7 @@ def get_aws_region() -> str:
             msg="No AWS region was found. Ensure the application is running on AWS.",
             errno=ER_WIF_CREDENTIALS_NOT_FOUND,
         )
+
     return region
 
 
@@ -145,15 +150,43 @@ def get_aws_sts_hostname(region: str, partition: str) -> str:
         )
 
 
+def get_aws_session(impersonation_path: list[str] | None = None):
+    """Creates a boto3 session with the appropriate credentials.
+
+    If impersonation_path is provided, this uses the role at the end of the path. Otherwise, this uses the role attached to the current workload.
+    """
+    session = boto3.session.Session()
+
+    impersonation_path = impersonation_path or []
+    for arn in impersonation_path:
+        response = session.client("sts").assume_role(
+            RoleArn=arn, RoleSessionName="identity-federation-session"
+        )
+        creds = response["Credentials"]
+        session = boto3.session.Session(
+            aws_access_key_id=creds["AccessKeyId"],
+            aws_secret_access_key=creds["SecretAccessKey"],
+            aws_session_token=creds["SessionToken"],
+        )
+    return session
+
+
 def create_aws_attestation(
-    session_manager: SessionManager | None = None,
+    impersonation_path: list[str] | None = None,
 ) -> WorkloadIdentityAttestation:
     """Tries to create a workload identity attestation for AWS.
 
     If the application isn't running on AWS or no credentials were found, raises an error.
     """
+    if not installed_boto:
+        raise MissingDependencyError(
+            msg="AWS Workload Identity Federation can't be used because boto3 or botocore optional dependency is not installed. Try installing missing dependencies.",
+            errno=ER_WIF_CREDENTIALS_NOT_FOUND,
+        )
+
     # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
-    session = boto3.session.Session()
+    session = get_aws_session(impersonation_path)
+
     aws_creds = session.get_credentials()
     if not aws_creds:
         raise ProgrammingError(
@@ -383,11 +416,11 @@ def create_attestation(
     session_manager = (
         session_manager.clone()
         if session_manager
-        else SessionManager(use_pooling=True, max_retries=0)
+        else SessionManagerFactory.get_manager(use_pooling=True, max_retries=0)
     )
 
     if provider == AttestationProvider.AWS:
-        return create_aws_attestation(session_manager)
+        return create_aws_attestation(impersonation_path)
     elif provider == AttestationProvider.AZURE:
         return create_azure_attestation(entra_resource, session_manager)
     elif provider == AttestationProvider.GCP:

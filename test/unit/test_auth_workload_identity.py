@@ -1,6 +1,7 @@
 import json
 import logging
 from base64 import b64decode
+from test.helpers import apply_auth_class_update_body, create_mock_auth_body
 from unittest import mock
 from urllib.parse import parse_qs, urlparse
 
@@ -14,7 +15,11 @@ from snowflake.connector.vendored.requests.exceptions import (
     HTTPError,
     Timeout,
 )
-from snowflake.connector.wif_util import AttestationProvider, get_aws_sts_hostname
+from snowflake.connector.wif_util import (
+    AttestationProvider,
+    WorkloadIdentityAttestation,
+    get_aws_sts_hostname,
+)
 
 from ..csp_helpers import (
     FakeAwsEnvironment,
@@ -122,6 +127,40 @@ def test_wif_authenticator_is_case_insensitive(
     assert isinstance(connection.auth_class, AuthByWorkloadIdentity)
 
 
+@pytest.mark.parametrize(
+    "provider,additional_args",
+    [
+        (AttestationProvider.AWS, {}),
+        (AttestationProvider.GCP, {}),
+        (AttestationProvider.AZURE, {}),
+        (
+            AttestationProvider.OIDC,
+            {"token": gen_dummy_id_token(sub="service-1", iss="issuer-1")},
+        ),
+    ],
+)
+def test_auth_prepare_body_does_not_overwrite_client_environment_fields(
+    provider, additional_args
+):
+    auth_class = AuthByWorkloadIdentity(provider=provider, **additional_args)
+    auth_class.attestation = WorkloadIdentityAttestation(
+        provider=AttestationProvider.GCP,
+        credential=None,
+        user_identifier_components=None,
+    )
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = apply_auth_class_update_body(auth_class, req_body_before)
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )
+
+
 # -- OIDC Tests --
 
 
@@ -136,6 +175,7 @@ def test_explicit_oidc_valid_inline_token_plumbed_to_api():
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "OIDC",
         "TOKEN": dummy_token,
+        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 0},
     }
 
 
@@ -191,6 +231,9 @@ def test_explicit_aws_encodes_audience_host_signature_to_api(
     data = extract_api_data(auth_class)
     assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
     assert data["PROVIDER"] == "AWS"
+    assert (
+        data["CLIENT_ENVIRONMENT"]["WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH"] == 0
+    )
     verify_aws_token(data["TOKEN"], fake_aws_environment.region)
 
 
@@ -274,6 +317,22 @@ def test_get_aws_sts_hostname_invalid_inputs(region, partition):
     assert "Invalid AWS partition" in str(excinfo.value)
 
 
+def test_aws_impersonation_calls_correct_apis_for_each_role_in_impersonation_path(
+    fake_aws_environment: FakeAwsEnvironment,
+):
+    impersonation_path = [
+        "arn:aws:iam::123456789:role/role2",
+        "arn:aws:iam::123456789:role/role3",
+    ]
+    fake_aws_environment.assumption_path = impersonation_path
+    auth_class = AuthByWorkloadIdentity(
+        provider=AttestationProvider.AWS, impersonation_path=impersonation_path
+    )
+    auth_class.prepare(conn=None)
+
+    assert fake_aws_environment.assume_role_call_count == 2
+
+
 # -- GCP Tests --
 
 
@@ -308,6 +367,7 @@ def test_explicit_gcp_plumbs_token_to_api(
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "GCP",
         "TOKEN": fake_gce_metadata_service.token,
+        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 0},
     }
 
 
@@ -357,6 +417,7 @@ def test_gcp_calls_correct_apis_and_populates_auth_data_for_final_sa(
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "GCP",
         "TOKEN": sa3_id_token,
+        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 2},
     }
 
 
@@ -409,6 +470,7 @@ def test_explicit_azure_plumbs_token_to_api(fake_azure_metadata_service):
         "AUTHENTICATOR": "WORKLOAD_IDENTITY",
         "PROVIDER": "AZURE",
         "TOKEN": fake_azure_metadata_service.token,
+        "CLIENT_ENVIRONMENT": {"WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH": 0},
     }
 
 

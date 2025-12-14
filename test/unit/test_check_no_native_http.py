@@ -130,6 +130,34 @@ urllib3.HTTPSConnectionPool("x")
                 ViolationType.URLLIB3_DIRECT_API,
             ],
         ),
+        # SNOW012 aiohttp.ClientSession()
+        (
+            """import aiohttp
+aiohttp.ClientSession()
+""",
+            [ViolationType.AIOHTTP_CLIENT_SESSION],
+        ),
+        # SNOW013 aiohttp.request()
+        (
+            """import aiohttp
+aiohttp.request("GET", "http://x")
+""",
+            [ViolationType.AIOHTTP_REQUEST],
+        ),
+        # SNOW014 direct import of ClientSession + usage
+        (
+            """from aiohttp import ClientSession
+ClientSession()
+""",
+            [ViolationType.DIRECT_AIOHTTP_IMPORT, ViolationType.AIOHTTP_CLIENT_SESSION],
+        ),
+        # SNOW010 star import from aiohttp
+        (
+            """from aiohttp import *
+ClientSession()
+""",
+            [ViolationType.STAR_IMPORT],
+        ),
     ],
 )
 def test_minimal_violation_snippets(code, expected):
@@ -142,20 +170,22 @@ def test_minimal_violation_snippets(code, expected):
 
 def test_aliasing_and_chained_calls():
     code = """
-import requests, urllib3
+import requests, urllib3, aiohttp
 req = requests
 req.get("http://x")
 requests.Session().post("http://x")
 urllib3.PoolManager().request("GET", "http://x")
 urllib3.PoolManager().urlopen("GET", "http://x")
+aiohttp.ClientSession().get("http://x")
 """
     v = analyze(code)
-    # Expect: requests.get, Session().post (Session), PoolManager().request, PoolManager().urlopen
+    # Expect: requests.get, Session().post (Session), PoolManager().request, PoolManager().urlopen, ClientSession().get
     expected = [
         ViolationType.REQUESTS_HTTP_METHOD,
         ViolationType.REQUESTS_SESSION,
         ViolationType.URLLIB3_POOLMANAGER,
         ViolationType.URLLIB3_POOLMANAGER,
+        ViolationType.AIOHTTP_CLIENT_SESSION,
     ]
     assert_types(v, expected)
 
@@ -194,6 +224,33 @@ urllib3.PoolManager().request_encode_body("POST", "http://x", fields={})
         ViolationType.URLLIB3_POOLMANAGER,
         ViolationType.URLLIB3_POOLMANAGER,
     ]
+    assert_types(v, expected)
+
+
+def test_chained_aiohttp_clientsession_variants():
+    code = """
+import aiohttp
+aiohttp.ClientSession().get("http://x")
+aiohttp.ClientSession().post("http://x")
+aiohttp.ClientSession().request("GET", "http://x")
+"""
+    v = analyze(code)
+    expected = [
+        ViolationType.AIOHTTP_CLIENT_SESSION,
+        ViolationType.AIOHTTP_CLIENT_SESSION,
+        ViolationType.AIOHTTP_CLIENT_SESSION,
+    ]
+    assert_types(v, expected)
+
+
+def test_aiohttp_aliasing():
+    code = """
+import aiohttp
+aioh = aiohttp
+aioh.ClientSession()
+"""
+    v = analyze(code)
+    expected = [ViolationType.AIOHTTP_CLIENT_SESSION]
     assert_types(v, expected)
 
 
@@ -260,9 +317,10 @@ def test_type_hints_only_allowed():
     code = """
 from requests import Session
 from urllib3 import PoolManager
+from aiohttp import ClientSession
 from typing import Generator
 
-def f(s: Session, p: PoolManager) -> Generator[Session, None, None]:
+def f(s: Session, p: PoolManager, c: ClientSession) -> Generator[Session, None, None]:
     pass
 """
     assert analyze(code) == []
@@ -286,8 +344,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from requests import Session
     from urllib3 import PoolManager
+    from aiohttp import ClientSession
 
-def g(s: 'Session', p: 'PoolManager'):
+def g(s: 'Session', p: 'PoolManager', c: 'ClientSession'):
     pass
 """
     assert analyze(code) == []
@@ -296,8 +355,10 @@ def g(s: 'Session', p: 'PoolManager'):
 def test_pep604_and_string_annotations():
     code = """
 from requests import Session
+from aiohttp import ClientSession
 def f(a: Session | None) -> Session | str: pass
 def g(x: "Session") -> "Session | None": pass
+def h(c: ClientSession | None) -> "ClientSession": pass
 """
     assert analyze(code) == []
 
@@ -309,6 +370,7 @@ def g(x: "Session") -> "Session | None": pass
     "path,expected",
     [
         ("src/snowflake/connector/session_manager.py", True),
+        ("src/snowflake/connector/aio/_session_manager.py", True),
         ("src/snowflake/connector/vendored/requests/__init__.py", True),
         ("test/unit/test_something.py", True),
         ("conftest.py", True),
@@ -378,14 +440,16 @@ def test_valid_file_processing_tempfile(tmp_path):
 
 def test_integration_class_definition():
     code = """
-import requests, urllib3
+import requests, urllib3, aiohttp
 from requests import Session, get as rget
 from urllib3 import PoolManager
+from aiohttp import ClientSession
 
 class C:
     def __init__(self):
         self.s = requests.Session()
         self.p = urllib3.PoolManager()
+        self.c = aiohttp.ClientSession()  # AIOHTTP_CLIENT_SESSION
 
     def run(self, url):
         a = requests.get(url)
@@ -393,17 +457,21 @@ class C:
         c = self.p.request("GET", url)
         d = rget(url)
         e = PoolManager().request("GET", url)
-        return a,b,c,d,e
+        f = ClientSession()  # AIOHTTP_CLIENT_SESSION
+        return a,b,c,d,e,f
 """
     v = analyze(code, filename="mix.py")
     # Expect a mix of types, not exact counts
     vt = {x.violation_type for x in v}
+    # Check that we have at least these violation types
     assert {
         ViolationType.REQUESTS_SESSION,
         ViolationType.URLLIB3_POOLMANAGER,
         ViolationType.REQUESTS_HTTP_METHOD,
         ViolationType.DIRECT_HTTP_IMPORT,
         ViolationType.DIRECT_POOL_IMPORT,
+        ViolationType.AIOHTTP_CLIENT_SESSION,
+        ViolationType.DIRECT_AIOHTTP_IMPORT,
     } <= vt
 
 
@@ -479,5 +547,46 @@ class Svc:
         ViolationType.REQUESTS_SESSION,  # requests.Session
         ViolationType.URLLIB3_POOLMANAGER,  # ProxyManager.request
         ViolationType.REQUESTS_HTTP_METHOD,  # self.req_lib.get (alias)
+    ]
+    assert types == expected
+
+
+def test_aiohttp_integration(tmp_path):
+    """
+    End-to-end aiohttp test:
+      - legit type-hint-only imports (ClientSession, TCPConnector allowed in TYPE_CHECKING)
+      - violations: aiohttp.ClientSession(), aiohttp.ClientSession().get()
+    """
+    code = """
+from typing import TYPE_CHECKING, Optional
+from aiohttp import ClientSession  # type-hint only
+import aiohttp
+
+if TYPE_CHECKING:
+    from aiohttp import TCPConnector  # allowed - config object like HTTPAdapter
+
+class AsyncSvc:
+    def ok(self, c: ClientSession) -> Optional[ClientSession]:
+        return None
+
+    async def bad(self, url: str):
+        async with aiohttp.ClientSession() as session:  # AIOHTTP_CLIENT_SESSION
+            x = await session.get(url)
+        y = await aiohttp.ClientSession().get(url)     # AIOHTTP_CLIENT_SESSION (chained)
+        return x, y
+"""
+    p = tmp_path / "aiohttp_integration.py"
+    p.write_text(code, encoding="utf-8")
+
+    checker = FileChecker(str(p))
+    violations, messages = checker.check_file()
+
+    assert messages == []
+    types = [v.violation_type for v in violations]
+
+    # Expect exactly two violations
+    expected = [
+        ViolationType.AIOHTTP_CLIENT_SESSION,  # aiohttp.ClientSession()
+        ViolationType.AIOHTTP_CLIENT_SESSION,  # aiohttp.ClientSession().get (chained)
     ]
     assert types == expected

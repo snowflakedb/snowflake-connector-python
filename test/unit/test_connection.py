@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 import snowflake.connector
+from snowflake.connector import SnowflakeConnection, connect
 from snowflake.connector.connection import DEFAULT_CONFIGURATION
 from snowflake.connector.errors import (
     Error,
@@ -41,7 +42,6 @@ except ImportError:
     AuthByDefault = AuthByOkta = AuthByOAuth = AuthByWebBrowser = MagicMock
 
 try:  # pragma: no cover
-    import snowflake.connector.vendored.requests as requests
     from snowflake.connector.auth import AuthByUsrPwdMfa
     from snowflake.connector.config_manager import CONFIG_MANAGER
     from snowflake.connector.constants import (
@@ -670,28 +670,28 @@ def test_workload_identity_provider_is_required_for_wif_authenticator(
             snowflake.connector.connect(
                 account="account",
                 authenticator="WORKLOAD_IDENTITY",
-                provider=provider_param,
+                workload_identity_provider=provider_param,
             )
-        assert (
+        expected_error_msg = (
             "workload_identity_provider must be set to one of AWS,AZURE,GCP,OIDC when authenticator is WORKLOAD_IDENTITY"
-            in str(excinfo.value)
+            if provider_param is None
+            else f"Unknown workload_identity_provider: '{provider_param}'. Expected one of: AWS, AZURE, GCP, OIDC"
         )
+        assert expected_error_msg in str(excinfo.value)
 
 
 @pytest.mark.parametrize(
     "provider_param",
     [
         # Strongly-typed values.
-        AttestationProvider.AWS,
         AttestationProvider.AZURE,
         AttestationProvider.OIDC,
         # String values.
-        "AWS",
         "AZURE",
         "OIDC",
     ],
 )
-def test_workload_identity_impersonation_path_unsupported_for_non_gcp_providers(
+def test_workload_identity_impersonation_path_errors_for_unsupported_providers(
     monkeypatch, provider_param
 ):
     with monkeypatch.context() as m:
@@ -709,20 +709,22 @@ def test_workload_identity_impersonation_path_unsupported_for_non_gcp_providers(
                 ],
             )
         assert (
-            "workload_identity_impersonation_path is currently only supported for GCP."
+            "workload_identity_impersonation_path is currently only supported for GCP and AWS."
             in str(excinfo.value)
         )
 
 
 @pytest.mark.parametrize(
-    "provider_param",
+    "provider_param,impersonation_path",
     [
-        AttestationProvider.GCP,
-        "GCP",
+        (AttestationProvider.GCP, ["sa2@project.iam.gserviceaccount.com"]),
+        (AttestationProvider.AWS, ["arn:aws:iam::1234567890:role/role2"]),
+        ("GCP", ["sa2@project.iam.gserviceaccount.com"]),
+        ("AWS", ["arn:aws:iam::1234567890:role/role2"]),
     ],
 )
-def test_workload_identity_impersonation_path_supported_for_gcp_provider(
-    monkeypatch, provider_param
+def test_workload_identity_impersonation_path_populates_auth_class_for_supported_provider(
+    monkeypatch, provider_param, impersonation_path
 ):
     with monkeypatch.context() as m:
         m.setattr(
@@ -733,14 +735,9 @@ def test_workload_identity_impersonation_path_supported_for_gcp_provider(
             account="account",
             authenticator="WORKLOAD_IDENTITY",
             workload_identity_provider=provider_param,
-            workload_identity_impersonation_path=[
-                "sa2@project.iam.gserviceaccount.com"
-            ],
+            workload_identity_impersonation_path=impersonation_path,
         )
-        assert conn.auth_class.provider == AttestationProvider.GCP
-        assert conn.auth_class.impersonation_path == [
-            "sa2@project.iam.gserviceaccount.com"
-        ]
+        assert conn.auth_class.impersonation_path == impersonation_path
 
 
 @pytest.mark.parametrize(
@@ -875,85 +872,111 @@ def test_reraise_error_in_file_transfer_work_function_config(
 
 
 @pytest.mark.skipolddriver
-@pytest.mark.parametrize("proxy_method", ["explicit_args", "env_vars"])
-def test_large_query_through_proxy(
-    wiremock_generic_mappings_dir,
-    wiremock_target_proxy_pair,
-    wiremock_mapping_dir,
-    proxy_env_vars,
-    proxy_method,
-):
-    target_wm, proxy_wm = wiremock_target_proxy_pair
+def test_connect_metadata_preservation():
+    """Test that the sync connect function preserves metadata from SnowflakeConnection.__init__.
 
-    password_mapping = wiremock_mapping_dir / "auth/password/successful_flow.json"
-    multi_chunk_request_mapping = (
-        wiremock_mapping_dir / "queries/select_large_request_successful.json"
+    This test verifies that various inspection methods return consistent metadata,
+    ensuring IDE support, type checking, and documentation generation work correctly.
+    """
+    import inspect
+
+    # Test 1: Check __name__ is correct
+    assert (
+        connect.__name__ == "__init__"
+    ), f"connect.__name__ should be 'connect', but got '{connect.__name__}'"
+
+    # Test 2: Check __wrapped__ points to SnowflakeConnection.__init__
+    assert hasattr(connect, "__wrapped__"), "connect should have __wrapped__ attribute"
+    assert (
+        connect.__wrapped__ is SnowflakeConnection.__init__
+    ), "connect.__wrapped__ should reference SnowflakeConnection.__init__"
+
+    # Test 3: Check __module__ is preserved
+    assert hasattr(connect, "__module__"), "connect should have __module__ attribute"
+    assert connect.__module__ == SnowflakeConnection.__init__.__module__, (
+        f"connect.__module__ should match SnowflakeConnection.__init__.__module__, "
+        f"but got '{connect.__module__}' vs '{SnowflakeConnection.__init__.__module__}'"
     )
-    disconnect_mapping = (
-        wiremock_generic_mappings_dir / "snowflake_disconnect_successful.json"
+
+    # Test 4: Check __doc__ is preserved
+    assert hasattr(connect, "__doc__"), "connect should have __doc__ attribute"
+    assert (
+        connect.__doc__ == SnowflakeConnection.__init__.__doc__
+    ), "connect.__doc__ should match SnowflakeConnection.__init__.__doc__"
+
+    # Test 5: Check __annotations__ are preserved (or at least available)
+    assert hasattr(
+        connect, "__annotations__"
+    ), "connect should have __annotations__ attribute"
+    src_annotations = getattr(SnowflakeConnection.__init__, "__annotations__", {})
+    connect_annotations = getattr(connect, "__annotations__", {})
+    assert connect_annotations == src_annotations, (
+        f"connect.__annotations__ should match SnowflakeConnection.__init__.__annotations__, "
+        f"but got {connect_annotations} vs {src_annotations}"
     )
-    telemetry_mapping = wiremock_generic_mappings_dir / "telemetry.json"
-    chunk_1_mapping = wiremock_mapping_dir / "queries/chunk_1.json"
-    chunk_2_mapping = wiremock_mapping_dir / "queries/chunk_2.json"
 
-    # Configure mappings with proxy header verification
-    expected_headers = {"Via": {"contains": "wiremock"}}
-
-    target_wm.import_mapping(password_mapping, expected_headers=expected_headers)
-    target_wm.add_mapping_with_default_placeholders(
-        multi_chunk_request_mapping, expected_headers
-    )
-    target_wm.add_mapping(disconnect_mapping, expected_headers=expected_headers)
-    target_wm.add_mapping(telemetry_mapping, expected_headers=expected_headers)
-    target_wm.add_mapping_with_default_placeholders(chunk_1_mapping, expected_headers)
-    target_wm.add_mapping_with_default_placeholders(chunk_2_mapping, expected_headers)
-
-    # Configure proxy based on test parameter
-    set_proxy_env_vars, clear_proxy_env_vars = proxy_env_vars
-    connect_kwargs = {
-        "user": "testUser",
-        "password": "testPassword",
-        "account": "testAccount",
-        "host": target_wm.wiremock_host,
-        "port": target_wm.wiremock_http_port,
-        "protocol": "http",
-        "warehouse": "TEST_WH",
-    }
-
-    if proxy_method == "explicit_args":
-        connect_kwargs.update(
-            {
-                "proxy_host": proxy_wm.wiremock_host,
-                "proxy_port": str(proxy_wm.wiremock_http_port),
-                "proxy_user": "proxyUser",
-                "proxy_password": "proxyPass",
-            }
+    # Test 6: Check inspect.signature works correctly
+    try:
+        connect_sig = inspect.signature(connect)
+        source_sig = inspect.signature(SnowflakeConnection.__init__)
+        assert str(connect_sig) == str(source_sig), (
+            f"inspect.signature(connect) should match inspect.signature(SnowflakeConnection.__init__), "
+            f"but got '{connect_sig}' vs '{source_sig}'"
         )
-        clear_proxy_env_vars()  # Ensure no env vars interfere
-    else:  # env_vars
-        proxy_url = f"http://proxyUser:proxyPass@{proxy_wm.wiremock_host}:{proxy_wm.wiremock_http_port}"
-        set_proxy_env_vars(proxy_url)
+    except Exception as e:
+        pytest.fail(f"inspect.signature(connect) failed: {e}")
 
-    row_count = 50_000
-    with snowflake.connector.connect(**connect_kwargs) as conn:
-        cursors = conn.execute_string(
-            f"select seq4() as n from table(generator(rowcount => {row_count}));"
-        )
-        assert len(cursors[0]._result_set.batches) > 1  # We need to have remote results
-    assert list(cursors[0])
+    # Test 7: Check inspect.getdoc works correctly
+    connect_doc = inspect.getdoc(connect)
+    source_doc = inspect.getdoc(SnowflakeConnection.__init__)
+    assert (
+        connect_doc == source_doc
+    ), "inspect.getdoc(connect) should match inspect.getdoc(SnowflakeConnection.__init__)"
 
-    # Ensure proxy saw query
-    proxy_reqs = requests.get(f"{proxy_wm.http_host_with_port}/__admin/requests").json()
-    assert any(
-        "/queries/v1/query-request" in r["request"]["url"]
-        for r in proxy_reqs["requests"]
-    )
+    # Test 8: Check that connect is callable
+    assert callable(connect), "connect should be callable"
 
-    # Ensure backend saw query
-    target_reqs = requests.get(
-        f"{target_wm.http_host_with_port}/__admin/requests"
-    ).json()
-    assert any(
-        "/queries/v1/query-request" in r["request"]["url"]
-        for r in target_reqs["requests"]
-    )
+    # Test 9: Check type() and __class__ values (important for user introspection)
+    assert (
+        type(connect).__name__ == "function"
+    ), f"type(connect).__name__ should be 'function', but got '{type(connect).__name__}'"
+    assert (
+        connect.__class__.__name__ == "function"
+    ), f"connect.__class__.__name__ should be 'function', but got '{connect.__class__.__name__}'"
+    assert inspect.isfunction(
+        connect
+    ), "connect should be recognized as a function by inspect.isfunction()"
+
+    # Test 10: Verify the function has proper introspection capabilities
+    # IDEs and type checkers should be able to resolve parameters
+    sig = inspect.signature(connect)
+    params = list(sig.parameters.keys())
+    assert (
+        len(params) > 0
+    ), "connect should have parameters from SnowflakeConnection.__init__"
+    # Should have parameters like account, user, password, etc.
+
+
+@mock.patch("snowflake.connector.connection.CRLCacheFactory")
+def test_connections_registry_lifecycle(crl_mock, mock_post_requests):
+    """Test the individual methods of _ConnectionsPool."""
+    from snowflake.connector.connection import _ConnectionsRegistry
+
+    # Mock the registry to avoid side effects from other tests due to _ConnectionsRegistry being a singleton
+    with mock.patch(
+        "snowflake.connector.connection._connections_registry", _ConnectionsRegistry()
+    ) as mock_registry:
+        # Create a connection
+        conn1 = fake_connector()
+        conn2 = fake_connector()
+        assert mock_registry.get_connection_count() == 2
+
+        # Don't stop the task if pool is not empty
+        conn1.close()
+        crl_mock.stop_periodic_cleanup.assert_not_called()
+        assert mock_registry.get_connection_count() == 1
+
+        # Stop the task if the pool is emptied
+        conn2.close()
+        assert mock_registry.get_connection_count() == 0
+        crl_mock.stop_periodic_cleanup.assert_called_once()

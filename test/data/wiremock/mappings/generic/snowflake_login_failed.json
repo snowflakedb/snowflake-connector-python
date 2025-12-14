@@ -7,10 +7,10 @@
       "request": {
         "urlPathPattern": "/session/v1/login-request",
         "method": "POST",
-	"queryParameters": {
-	  "request_id": {
+        "queryParameters": {
+          "request_id": {
             "matches": ".*"
-	  },
+          },
           "roleName": {
             "equalTo": "ANALYST"
           }
@@ -31,6 +31,9 @@
       },
       "response": {
         "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
         "jsonBody": {
           "data": {
             "nextAction": "RETRY_LOGIN",

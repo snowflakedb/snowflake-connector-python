@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from test.helpers import apply_auth_class_update_body, create_mock_auth_body
 from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
@@ -17,6 +18,22 @@ try:  # pragma: no cover
     from snowflake.connector.auth import AuthByOkta
 except ImportError:
     from snowflake.connector.auth_okta import AuthByOkta
+
+
+def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
+    application = "testapplication"
+    auth_class = AuthByOkta(application)
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = apply_auth_class_update_body(auth_class, req_body_before)
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )
 
 
 def test_auth_okta():
@@ -328,6 +345,7 @@ def _init_rest(
     connection = mock_connection(disable_saml_url_check=disable_saml_url_check)
     connection.errorhandler = Mock(return_value=None)
     connection._ocsp_mode = Mock(return_value=OCSPMode.FAIL_OPEN)
+    connection.cert_revocation_check_mode = "TEST_CRL_MODE"
     type(connection).application = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_name = PropertyMock(return_value=CLIENT_NAME)
     type(connection)._internal_application_version = PropertyMock(

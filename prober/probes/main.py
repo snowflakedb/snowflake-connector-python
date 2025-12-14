@@ -3,7 +3,7 @@ import base64
 import logging
 import sys
 
-from probes import login, put_fetch_get  # noqa
+from probes import login, put_fetch_get, put_fetch_get_fail_closed  # noqa
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
 

@@ -20,7 +20,11 @@ repos:
                 src/snowflake/connector/nanoarrow_cpp/ArrowIterator/flatcc/.*\.h|
             )$
     -   id: check-yaml
-        exclude: .github/repo_meta.yaml
+        exclude: >
+            (?x)^(
+                .github/repo_meta.yaml|
+                ci/anaconda/recipe/meta.yaml|
+            )$
     -   id: debug-statements
     -   id: check-ast
 -   repo: https://github.com/asottile/yesqa
@@ -57,8 +61,16 @@ repos:
         exclude: |
             (?x)^(
                 src/snowflake/connector/session_manager\.py|
+                src/snowflake/connector/aio/_session_manager\.py|
                 src/snowflake/connector/vendored/.*
             )$
+        args: [--show-fixes]
+    -   id: check-optional-imports
+        name: Check for direct imports of modules which might be unavailable
+        entry: python ci/pre-commit/check_optional_imports.py
+        language: system
+        files: ^src/snowflake/connector/.*\.py$
+        exclude: src/snowflake/connector/options.py
         args: [--show-fixes]
 -   repo: https://github.com/PyCQA/flake8
     rev: 7.1.1

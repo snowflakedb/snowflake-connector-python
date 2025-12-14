@@ -6,11 +6,12 @@ import contextlib
 import functools
 import itertools
 import logging
-from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, Callable, Generator, Mapping
+from dataclasses import asdict, dataclass, field, fields, replace
+from typing import TYPE_CHECKING, Any, Callable, Generator, Generic, Mapping, TypeVar
 
 from .compat import urlparse
 from .proxy import get_proxy_url
+from .url_util import should_bypass_proxies
 from .vendored import requests
 from .vendored.requests import Response, Session
 from .vendored.requests.adapters import BaseAdapter, HTTPAdapter
@@ -23,9 +24,11 @@ from .vendored.urllib3.util.url import parse_url
 if TYPE_CHECKING:
     from .vendored.urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 
-
 logger = logging.getLogger(__name__)
 REQUESTS_RETRY = 1  # requests library builtin retry
+
+# Generic type for session objects (requests.Session, aiohttp.ClientSession, etc.) - no specific interface is required
+SessionT = TypeVar("SessionT")
 
 
 def _propagate_session_manager_to_ocsp(generator_func):
@@ -60,19 +63,25 @@ def _propagate_session_manager_to_ocsp(generator_func):
 class ProxySupportAdapter(HTTPAdapter):
     """This Adapter creates proper headers for Proxy CONNECT messages."""
 
-    def get_connection(
-        self, url: str, proxies: dict | None = None
+    def get_connection_with_tls_context(
+        self, request, verify, proxies=None, cert=None
     ) -> HTTPConnectionPool | HTTPSConnectionPool:
-        proxy = select_proxy(url, proxies)
-        parsed_url = urlparse(url)
-
+        proxy = select_proxy(request.url, proxies)
+        try:
+            host_params, pool_kwargs = self.build_connection_pool_key_attributes(
+                request,
+                verify,
+                cert,
+            )
+        except ValueError as e:
+            raise InvalidURL(e, request=request)
         if proxy:
             proxy = prepend_scheme_if_needed(proxy, "http")
             proxy_url = parse_url(proxy)
             if not proxy_url.host:
                 raise InvalidProxyURL(
-                    "Please check proxy URL. It is malformed"
-                    " and could be missing the host."
+                    "Please check proxy URL. It is malformed "
+                    "and could be missing the host."
                 )
             proxy_manager = self.proxy_manager_for(proxy)
 
@@ -85,17 +94,22 @@ class ProxySupportAdapter(HTTPAdapter):
                 # Note: netloc also keeps user-info (user:pass@host) if present in URL. The driver never sends
                 # URLs with embedded credentials, so we leave them unhandled — for full support
                 # we’d need to manually concatenate hostname with optional port and IPv6 brackets.
+                parsed_url = urlparse(request.url)
                 proxy_manager.proxy_headers["Host"] = parsed_url.netloc
             else:
                 logger.debug(
                     f"Unable to set 'Host' to proxy manager of type {type(proxy_manager)} as"
                     f" it does not have attribute 'proxy_headers'."
                 )
-            conn = proxy_manager.connection_from_url(url)
+
+            conn = proxy_manager.connection_from_host(
+                **host_params, pool_kwargs=pool_kwargs
+            )
         else:
             # Only scheme should be lower case
-            url = parsed_url.geturl()
-            conn = self.poolmanager.connection_from_url(url)
+            conn = self.poolmanager.connection_from_host(
+                **host_params, pool_kwargs=pool_kwargs
+            )
 
         return conn
 
@@ -112,22 +126,34 @@ class ProxySupportAdapterFactory(AdapterFactory):
 
 
 @dataclass(frozen=True)
-class HttpConfig:
+class BaseHttpConfig:
     """Immutable HTTP configuration shared by SessionManager instances."""
 
-    adapter_factory: Callable[..., HTTPAdapter] = field(
-        default_factory=ProxySupportAdapterFactory
-    )
     use_pooling: bool = True
     max_retries: int | Retry | None = REQUESTS_RETRY
     proxy_host: str | None = None
     proxy_port: str | None = None
     proxy_user: str | None = None
     proxy_password: str | None = None
+    no_proxy: str | None = None
 
-    def copy_with(self, **overrides: Any) -> HttpConfig:
-        """Return a new HttpConfig with overrides applied."""
+    def copy_with(self, **overrides: Any) -> BaseHttpConfig:
+        """Return a new config with overrides applied."""
         return replace(self, **overrides)
+
+    def to_base_dict(self) -> dict[str, Any]:
+        """Extract only BaseHttpConfig fields as a dict, excluding subclass-specific fields."""
+        base_field_names = {f.name for f in fields(BaseHttpConfig)}
+        return {k: v for k, v in asdict(self).items() if k in base_field_names}
+
+
+@dataclass(frozen=True)
+class HttpConfig(BaseHttpConfig):
+    """HTTP configuration specific to requests library."""
+
+    adapter_factory: Callable[..., HTTPAdapter] = field(
+        default_factory=ProxySupportAdapterFactory
+    )
 
     def get_adapter(self, **override_adapter_factory_kwargs) -> HTTPAdapter:
         # We pass here only chosen attributes as kwargs to make the arguments received by the factory as compliant with the HttpAdapter constructor interface as possible.
@@ -146,9 +172,9 @@ class HttpConfig:
         return self.adapter_factory(**self_kwargs_for_adapter_factory)
 
 
-class SessionPool:
+class SessionPool(Generic[SessionT]):
     """
-    Component responsible for storing and reusing established instances of requests.Session class.
+    Component responsible for storing and reusing established session instances.
 
     This approach is especially useful in scenarios where multiple requests would have to be sent
     to the same host in short period of time. Instead of repeatedly establishing a new TCP connection
@@ -157,24 +183,26 @@ class SessionPool:
 
     Sessions are created using the factory method make_session of a passed instance of the
     SessionManager class.
+
+    Generic over SessionT to support different session types (requests.Session, aiohttp.ClientSession, etc.)
     """
 
     def __init__(self, manager: SessionManager) -> None:
         # A stack of the idle sessions
-        self._idle_sessions = []
-        self._active_sessions = set()
+        self._idle_sessions: list[SessionT] = []
+        self._active_sessions: set[SessionT] = set()
         self._manager = manager
 
-    def get_session(self) -> Session:
+    def get_session(self, *, url: str | None = None) -> SessionT:
         """Returns a session from the session pool or creates a new one."""
         try:
             session = self._idle_sessions.pop()
         except IndexError:
-            session = self._manager.make_session()
+            session = self._manager.make_session(url=url)
         self._active_sessions.add(session)
         return session
 
-    def return_session(self, session: Session) -> None:
+    def return_session(self, session: SessionT) -> None:
         """Places an active session back into the idle session stack."""
         try:
             self._active_sessions.remove(session)
@@ -201,7 +229,7 @@ class SessionPool:
         self._idle_sessions.clear()
 
 
-class _ConfigDirectAccessMixin(abc.ABC):
+class _BaseConfigDirectAccessMixin(abc.ABC):
     @property
     @abc.abstractmethod
     def config(self) -> HttpConfig: ...
@@ -219,14 +247,6 @@ class _ConfigDirectAccessMixin(abc.ABC):
         self.config = self.config.copy_with(use_pooling=value)
 
     @property
-    def adapter_factory(self) -> Callable[..., HTTPAdapter]:
-        return self.config.adapter_factory
-
-    @adapter_factory.setter
-    def adapter_factory(self, value: Callable[..., HTTPAdapter]) -> None:
-        self.config = self.config.copy_with(adapter_factory=value)
-
-    @property
     def max_retries(self) -> Retry | int:
         return self.config.max_retries
 
@@ -235,26 +255,36 @@ class _ConfigDirectAccessMixin(abc.ABC):
         self.config = self.config.copy_with(max_retries=value)
 
 
+class _HttpConfigDirectAccessMixin(_BaseConfigDirectAccessMixin, abc.ABC):
+    @property
+    def adapter_factory(self) -> Callable[..., HTTPAdapter]:
+        return self.config.adapter_factory
+
+    @adapter_factory.setter
+    def adapter_factory(self, value: Callable[..., HTTPAdapter]) -> None:
+        self.config = self.config.copy_with(adapter_factory=value)
+
+
 class _RequestVerbsUsingSessionMixin(abc.ABC):
     """
     Mixin that provides HTTP methods (get, post, put, etc.) mirroring requests.Session, maintaining their default argument behavior (e.g., HEAD uses allow_redirects=False).
     These wrappers manage the SessionManager's use of pooled/non-pooled sessions and delegate the actual request to the corresponding session.<verb>() method.
-    The subclass must implement use_requests_session to yield a *requests.Session* instance.
+    The subclass must implement use_session to yield a *requests.Session* instance.
     """
 
     @abc.abstractmethod
-    def use_requests_session(self, url: str, use_pooling: bool) -> Session: ...
+    def use_session(self, url: str, use_pooling: bool) -> Session: ...
 
     def get(
         self,
         url: str,
         *,
         headers: Mapping[str, str] | None = None,
-        timeout: int | None = 3,
+        timeout: int | tuple[int, int] | None = 3,
         use_pooling: bool | None = None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.get(url, headers=headers, timeout=timeout, **kwargs)
 
     def options(
@@ -266,7 +296,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         use_pooling: bool | None = None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.options(url, headers=headers, timeout=timeout, **kwargs)
 
     def head(
@@ -278,7 +308,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         use_pooling: bool | None = None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.head(url, headers=headers, timeout=timeout, **kwargs)
 
     def post(
@@ -292,7 +322,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         json=None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.post(
                 url,
                 headers=headers,
@@ -312,7 +342,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         data=None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.put(
                 url, headers=headers, timeout=timeout, data=data, **kwargs
             )
@@ -327,7 +357,7 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         data=None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.patch(
                 url, headers=headers, timeout=timeout, data=data, **kwargs
             )
@@ -341,11 +371,11 @@ class _RequestVerbsUsingSessionMixin(abc.ABC):
         use_pooling: bool | None = None,
         **kwargs,
     ):
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.delete(url, headers=headers, timeout=timeout, **kwargs)
 
 
-class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
+class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixin):
     """
     Central HTTP session manager that handles all external requests from the Snowflake driver.
 
@@ -377,6 +407,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
             logger.debug("Creating a config for the SessionManager")
             config = HttpConfig(**http_config_kwargs)
         self._cfg: HttpConfig = config
+        # Maps hostname to SessionPool instance for its connections
         self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
             lambda: SessionPool(self)
         )
@@ -448,32 +479,56 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
             )
             return
 
-    def make_session(self) -> Session:
+    def make_session(self, *, url: str | None = None) -> Session:
         session = requests.Session()
         self._mount_adapters(session)
-        session.proxies = {"http": self.proxy_url, "https": self.proxy_url}
         return session
+
+    @staticmethod
+    def _normalize_url(url: str | bytes | None) -> str:
+        """Normalize URL to string format (handles bytes from storage client)."""
+        return url.decode("utf-8") if isinstance(url, bytes) else url
 
     @contextlib.contextmanager
     @_propagate_session_manager_to_ocsp
-    def use_requests_session(
-        self, url: str | bytes | None = None, use_pooling: bool | None = None
+    def use_session(
+        self, url: str | bytes | None, use_pooling: bool | None = None
     ) -> Generator[Session, Any, None]:
+        """Yield a session for the given URL (used for proxy handling and pooling).
+        The 'url' is an obligatory parameter due to the need for correct proxy handling (i.e. bypassing caused by no_proxy settings).
+        """
+        url_str = self._normalize_url(url)
         use_pooling = use_pooling if use_pooling is not None else self.use_pooling
         if not use_pooling:
-            session = self.make_session()
+            session = self.make_session(url=url_str)
             try:
                 yield session
             finally:
                 session.close()
         else:
-            hostname = urlparse(url).hostname if url else None
-            pool = self._sessions_map[hostname]
-            session = pool.get_session()
-            try:
-                yield session
-            finally:
-                pool.return_session(session)
+            yield from self._yield_session_from_pool(url_str)
+
+    def _yield_session_from_pool(
+        self, url: str | None
+    ) -> Generator[SessionT, Any, None]:
+        hostname = self._get_pooling_key_from_url(url)
+        pool = self._sessions_map[hostname]
+        session = pool.get_session(url=url)
+        try:
+            yield session
+        finally:
+            pool.return_session(session)
+
+    @staticmethod
+    def _get_pooling_key_from_url(url: str) -> str | None:
+        """
+        Derive the session pooling key (hostname) from a URL.
+
+        :param url: Absolute URL the session will be used for.
+        :return: Hostname string or None if URL is missing/invalid.
+        """
+        hostname = urlparse(url).hostname if url else None
+        return hostname
 
     def request(
         self,
@@ -490,7 +545,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
         This wraps :pymeth:`use_session` so callers don’t have to manage the
         context manager themselves.
         """
-        with self.use_requests_session(url, use_pooling) as session:
+        with self.use_session(url, use_pooling) as session:
             return session.request(
                 method=method.upper(),
                 url=url,
@@ -516,7 +571,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _ConfigDirectAccessMixin):
         Optional kwargs (e.g. *use_pooling* / *adapter_factory* / max_retries etc.) - overrides to create a modified
         copy of the HttpConfig before instantiation.
         """
-        return SessionManager.from_config(self._cfg, **http_config_overrides)
+        return self.from_config(self._cfg, **http_config_overrides)
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -560,3 +615,36 @@ def request(
         use_pooling=use_pooling,
         **kwargs,
     )
+
+
+class ProxySessionManager(SessionManager):
+    def make_session(self, *, url: str | None = None) -> Session:
+        session = requests.Session()
+        self._mount_adapters(session)
+        proxies = (
+            {
+                "no_proxy": self._cfg.no_proxy,
+            }
+            if should_bypass_proxies(url, no_proxy=self.config.no_proxy)
+            else {
+                "http": self.proxy_url,
+                "https": self.proxy_url,
+                "no_proxy": self.config.no_proxy,
+            }
+        )
+        session.proxies = proxies
+        return session
+
+
+class SessionManagerFactory:
+    @staticmethod
+    def get_manager(
+        config: HttpConfig | None = None, **http_config_kwargs
+    ) -> SessionManager:
+        has_param_proxies = (
+            config and config.proxy_host is not None
+        ) or "proxies" in http_config_kwargs
+        if has_param_proxies:
+            return ProxySessionManager(config, **http_config_kwargs)
+        else:
+            return SessionManager(config, **http_config_kwargs)

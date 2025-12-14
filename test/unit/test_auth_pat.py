@@ -4,6 +4,8 @@
 #
 from __future__ import annotations
 
+from test.helpers import apply_auth_class_update_body, create_mock_auth_body
+
 import pytest
 
 from snowflake.connector.auth import AuthByPAT, AuthNoAuth
@@ -24,6 +26,22 @@ def test_auth_pat():
 
     auth.reset_secrets()
     assert auth.assertion_content is None
+
+
+def test_pat_prepare_body_does_not_overwrite_client_environment_fields():
+    token = "patToken"
+    auth_class = AuthByPAT(token)
+
+    req_body_before = create_mock_auth_body()
+    req_body_after = apply_auth_class_update_body(auth_class, req_body_before)
+
+    assert all(
+        [
+            req_body_before["data"]["CLIENT_ENVIRONMENT"][k]
+            == req_body_after["data"]["CLIENT_ENVIRONMENT"][k]
+            for k in req_body_before["data"]["CLIENT_ENVIRONMENT"]
+        ]
+    )
 
 
 def test_auth_pat_reauthenticate():
@@ -51,6 +69,7 @@ def test_pat_authenticator_creates_auth_by_pat(
     """
     import snowflake.connector
 
+    # Mock the network request - this prevents actual network calls and connection errors
     def mock_post_request(request, url, headers, json_body, **kwargs):
         return {
             "success": True,
@@ -63,6 +82,7 @@ def test_pat_authenticator_creates_auth_by_pat(
             },
         }
 
+    # Apply the mock using monkeypatch
     monkeypatch.setattr(
         snowflake.connector.network.SnowflakeRestful, "_post_request", mock_post_request
     )

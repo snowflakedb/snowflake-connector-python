@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pre-commit hook to prevent direct usage of requests and urllib3 calls.
+Pre-commit hook to prevent direct usage of requests, urllib3, and aiohttp calls.
 Ensures all HTTP requests go through SessionManager.
 """
 import argparse
@@ -24,6 +24,9 @@ class ViolationType(Enum):
     DIRECT_SESSION_IMPORT = "SNOW008"
     STAR_IMPORT = "SNOW010"
     URLLIB3_DIRECT_API = "SNOW011"
+    AIOHTTP_CLIENT_SESSION = "SNOW012"
+    AIOHTTP_REQUEST = "SNOW013"
+    DIRECT_AIOHTTP_IMPORT = "SNOW014"
 
 
 @dataclass(frozen=True)
@@ -57,6 +60,7 @@ class ModulePattern:
     # Core module names
     REQUESTS_MODULES = {"requests"}
     URLLIB3_MODULES = {"urllib3"}
+    AIOHTTP_MODULES = {"aiohttp"}
 
     # HTTP-related symbols
     HTTP_METHODS = {
@@ -71,6 +75,8 @@ class ModulePattern:
     }
     POOL_MANAGERS = {"PoolManager", "ProxyManager"}
     URLLIB3_APIS = {"request", "urlopen", "HTTPConnectionPool", "HTTPSConnectionPool"}
+    AIOHTTP_SESSIONS = {"ClientSession"}
+    AIOHTTP_APIS = {"request"}
 
     @classmethod
     def is_requests_module(cls, module_or_symbol: str) -> bool:
@@ -113,6 +119,22 @@ class ModulePattern:
         return False
 
     @classmethod
+    def is_aiohttp_module(cls, module_or_symbol: str) -> bool:
+        """Check if module or symbol is aiohttp-related."""
+        if not module_or_symbol:
+            return False
+
+        # Exact match
+        if module_or_symbol in cls.AIOHTTP_MODULES:
+            return True
+
+        # Dotted path ending in .aiohttp
+        if module_or_symbol.endswith(".aiohttp"):
+            return True
+
+        return False
+
+    @classmethod
     def is_http_method(cls, name: str) -> bool:
         """Check if name is an HTTP method."""
         return name in cls.HTTP_METHODS
@@ -126,6 +148,16 @@ class ModulePattern:
     def is_urllib3_api(cls, name: str) -> bool:
         """Check if name is a urllib3 API function."""
         return name in cls.URLLIB3_APIS
+
+    @classmethod
+    def is_aiohttp_session(cls, name: str) -> bool:
+        """Check if name is an aiohttp session class."""
+        return name in cls.AIOHTTP_SESSIONS
+
+    @classmethod
+    def is_aiohttp_api(cls, name: str) -> bool:
+        """Check if name is an aiohttp API function."""
+        return name in cls.AIOHTTP_APIS
 
 
 class ImportContext:
@@ -230,6 +262,29 @@ class ImportContext:
         # Check star imports
         for module in self.star_imports:
             if ModulePattern.is_urllib3_module(module):
+                return True
+
+        return False
+
+    def is_aiohttp_related(self, name: str) -> bool:
+        """Check if name refers to aiohttp module or its components."""
+        resolved_name = self.resolve_name(name)
+
+        # Direct aiohttp module
+        if resolved_name == "aiohttp":
+            return True
+
+        # Check import info
+        if resolved_name in self.imports:
+            import_info = self.imports[resolved_name]
+            return ModulePattern.is_aiohttp_module(import_info.module) or (
+                import_info.imported_name
+                and ModulePattern.is_aiohttp_module(import_info.imported_name)
+            )
+
+        # Check star imports
+        for module in self.star_imports:
+            if ModulePattern.is_aiohttp_module(module):
                 return True
 
         return False
@@ -380,10 +435,12 @@ class ContextBuilder(ast.NodeVisitor):
                         else:
                             # Handle v = snowflake.connector.vendored.requests
                             full_path = ".".join(dotted_chain)
-                            # Check if this points to a requests or urllib3 module
-                            if ModulePattern.is_requests_module(
-                                full_path
-                            ) or ModulePattern.is_urllib3_module(full_path):
+                            # Check if this points to a requests, urllib3, or aiohttp module
+                            if (
+                                ModulePattern.is_requests_module(full_path)
+                                or ModulePattern.is_urllib3_module(full_path)
+                                or ModulePattern.is_aiohttp_module(full_path)
+                            ):
                                 self.context.add_variable_alias(var_name, full_path)
 
             # Handle attribute assignments: self.attr = value
@@ -484,7 +541,7 @@ class ContextBuilder(ast.NodeVisitor):
             # Match Python identifiers that could be type names
             names = re.findall(r"\b([A-Z][a-zA-Z0-9_]*)\b", annotation_str)
             for name in names:
-                if name in ["Session", "PoolManager", "ProxyManager"]:
+                if name in ["Session", "PoolManager", "ProxyManager", "ClientSession"]:
                     self.context.add_type_hint_usage(name)
 
     def _extract_from_subscript(self, node: ast.Subscript):
@@ -535,9 +592,11 @@ class ViolationAnalyzer:
     def analyze_star_imports(self):
         """Analyze star import violations."""
         for module in self.context.star_imports:
-            if ModulePattern.is_requests_module(
-                module
-            ) or ModulePattern.is_urllib3_module(module):
+            if (
+                ModulePattern.is_requests_module(module)
+                or ModulePattern.is_urllib3_module(module)
+                or ModulePattern.is_aiohttp_module(module)
+            ):
                 self.violations.append(
                     HTTPViolation(
                         self.filename,
@@ -552,7 +611,7 @@ class ViolationAnalyzer:
         """Check a single import for violations."""
         violations = []
 
-        # Always flag HTTP method imports
+        # Always flag HTTP method imports from requests
         if (
             import_info.imported_name
             and ModulePattern.is_requests_module(import_info.module)
@@ -568,7 +627,7 @@ class ViolationAnalyzer:
                 )
             )
 
-        # Flag Session/PoolManager imports only if used at runtime
+        # Flag Session/PoolManager/ClientSession imports only if used at runtime
         if import_info.imported_name and self.context.is_runtime(
             import_info.alias_name
         ):
@@ -597,6 +656,19 @@ class ViolationAnalyzer:
                         import_info.col,
                         ViolationType.DIRECT_POOL_IMPORT,
                         f"Direct import of {import_info.imported_name} from urllib3 for runtime use is forbidden, use SessionManager instead",
+                    )
+                )
+
+            elif ModulePattern.is_aiohttp_module(
+                import_info.module
+            ) and ModulePattern.is_aiohttp_session(import_info.imported_name):
+                violations.append(
+                    HTTPViolation(
+                        self.filename,
+                        import_info.line,
+                        import_info.col,
+                        ViolationType.DIRECT_AIOHTTP_IMPORT,
+                        f"Direct import of {import_info.imported_name} from aiohttp for runtime use is forbidden, use SessionManager instead",
                     )
                 )
 
@@ -671,7 +743,7 @@ class CallAnalyzer(ast.NodeVisitor):
                     f"Direct use of imported {import_info.imported_name}() is forbidden, use SessionManager instead",
                 )
 
-            # Session/PoolManager instantiation
+            # Session/PoolManager/ClientSession instantiation
             if (
                 import_info.imported_name == "Session"
                 and ModulePattern.is_requests_module(import_info.module)
@@ -697,6 +769,19 @@ class CallAnalyzer(ast.NodeVisitor):
                     f"Direct use of imported {import_info.imported_name}() is forbidden, use SessionManager instead",
                 )
 
+            if (
+                import_info.imported_name
+                and ModulePattern.is_aiohttp_session(import_info.imported_name)
+                and ModulePattern.is_aiohttp_module(import_info.module)
+            ):
+                return HTTPViolation(
+                    self.filename,
+                    node.lineno,
+                    node.col_offset,
+                    ViolationType.AIOHTTP_CLIENT_SESSION,
+                    f"Direct use of imported {import_info.imported_name}() is forbidden, use SessionManager instead",
+                )
+
         # Check star imports
         for module in self.context.star_imports:
             if ModulePattern.is_requests_module(
@@ -719,7 +804,7 @@ class CallAnalyzer(ast.NodeVisitor):
         )
 
     def _check_chained_calls(self, node: ast.Call) -> Optional[HTTPViolation]:
-        """Check for chained calls like requests.Session().get() or urllib3.PoolManager().request()."""
+        """Check for chained calls like requests.Session().get(), urllib3.PoolManager().request(), or aiohttp.ClientSession().get()."""
         if isinstance(node.func, ast.Attribute) and isinstance(
             node.func.value, ast.Call
         ):
@@ -762,6 +847,23 @@ class CallAnalyzer(ast.NodeVisitor):
                         f"Chained call urllib3.{inner_func}().{outer_method}() is forbidden, use SessionManager instead",
                     )
 
+                # Check for aiohttp.ClientSession().method()
+                if (
+                    (
+                        inner_module == "aiohttp"
+                        or self.context.is_aiohttp_related(inner_module)
+                    )
+                    and ModulePattern.is_aiohttp_session(inner_func)
+                    and ModulePattern.is_http_method(outer_method)
+                ):
+                    return HTTPViolation(
+                        self.filename,
+                        node.lineno,
+                        node.col_offset,
+                        ViolationType.AIOHTTP_CLIENT_SESSION,
+                        f"Chained call aiohttp.{inner_func}().{outer_method}() is forbidden, use SessionManager instead",
+                    )
+
         return None
 
     def _check_two_part_call(
@@ -780,6 +882,10 @@ class CallAnalyzer(ast.NodeVisitor):
             resolved_module
         ):
             return self._check_urllib3_call(node, func_name)
+        elif module_name == "aiohttp" or self.context.is_aiohttp_related(
+            resolved_module
+        ):
+            return self._check_aiohttp_call(node, func_name)
 
         # Check for aliased module calls (e.g., v = vendored.requests; v.get())
         if module_name in self.context.variable_aliases:
@@ -788,13 +894,15 @@ class CallAnalyzer(ast.NodeVisitor):
                 return self._check_requests_call(node, func_name)
             elif ModulePattern.is_urllib3_module(aliased_module):
                 return self._check_urllib3_call(node, func_name)
+            elif ModulePattern.is_aiohttp_module(aliased_module):
+                return self._check_aiohttp_call(node, func_name)
 
         return None
 
     def _check_multi_part_call(
         self, node: ast.Call, chain: List[str]
     ) -> Optional[HTTPViolation]:
-        """Check multi-part calls like requests.sessions.Session or self.req_lib.get."""
+        """Check multi-part calls like requests.sessions.Session, aiohttp.client.ClientSession or self.req_lib.get."""
         if len(chain) >= 3:
             module_name = chain[0]
 
@@ -817,6 +925,20 @@ class CallAnalyzer(ast.NodeVisitor):
                         node.lineno,
                         node.col_offset,
                         ViolationType.REQUESTS_HTTP_METHOD,
+                        f"Direct use of {'.'.join(chain)}() is forbidden, use SessionManager instead",
+                    )
+
+            elif module_name == "aiohttp" or self.context.is_aiohttp_related(
+                module_name
+            ):
+                # aiohttp.client.ClientSession, etc.
+                func_name = chain[-1]
+                if ModulePattern.is_aiohttp_session(func_name):
+                    return HTTPViolation(
+                        self.filename,
+                        node.lineno,
+                        node.col_offset,
+                        ViolationType.AIOHTTP_CLIENT_SESSION,
                         f"Direct use of {'.'.join(chain)}() is forbidden, use SessionManager instead",
                     )
 
@@ -848,6 +970,16 @@ class CallAnalyzer(ast.NodeVisitor):
                             ViolationType.URLLIB3_POOLMANAGER,
                             f"Direct use of aliased {chain[0]}.{potential_alias}.{func_name}() is forbidden, use SessionManager instead",
                         )
+                    elif ModulePattern.is_aiohttp_module(
+                        aliased_module
+                    ) and ModulePattern.is_aiohttp_session(func_name):
+                        return HTTPViolation(
+                            self.filename,
+                            node.lineno,
+                            node.col_offset,
+                            ViolationType.AIOHTTP_CLIENT_SESSION,
+                            f"Direct use of aliased {chain[0]}.{potential_alias}.{func_name}() is forbidden, use SessionManager instead",
+                        )
 
         return None
 
@@ -869,7 +1001,7 @@ class CallAnalyzer(ast.NodeVisitor):
                 node.lineno,
                 node.col_offset,
                 ViolationType.REQUESTS_SESSION,
-                "Direct use of requests.Session() is forbidden, use SessionManager.use_requests_session() instead",
+                "Direct use of requests.Session() is forbidden, use SessionManager.use_session() instead",
             )
         elif ModulePattern.is_http_method(func_name):
             return HTTPViolation(
@@ -903,12 +1035,35 @@ class CallAnalyzer(ast.NodeVisitor):
             )
         return None
 
+    def _check_aiohttp_call(
+        self, node: ast.Call, func_name: str
+    ) -> Optional[HTTPViolation]:
+        """Check aiohttp module calls."""
+        if ModulePattern.is_aiohttp_session(func_name):
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.AIOHTTP_CLIENT_SESSION,
+                f"Direct use of aiohttp.{func_name}() is forbidden, use SessionManager instead",
+            )
+        elif ModulePattern.is_aiohttp_api(func_name):
+            return HTTPViolation(
+                self.filename,
+                node.lineno,
+                node.col_offset,
+                ViolationType.AIOHTTP_REQUEST,
+                f"Direct use of aiohttp.{func_name}() is forbidden, use SessionManager instead",
+            )
+        return None
+
 
 class FileChecker:
     """Handles file-level checking logic with proper glob path matching."""
 
     EXEMPT_PATTERNS = [
         "**/session_manager.py",
+        "**/_session_manager.py",
         "**/vendored/**/*",
     ]
 
@@ -1039,14 +1194,15 @@ def main():
             print()
             print("How to fix:")
             print("  - Replace requests.request() with SessionManager.request()")
+            print("  - Replace requests.Session() with SessionManager.use_session()")
             print(
-                "  - Replace requests.Session() with SessionManager.use_requests_session()"
+                "  - Replace urllib3.PoolManager/ProxyManager() with session from session_manager.use_session()"
             )
             print(
-                "  - Replace urllib3.PoolManager/ProxyManager() with session from session_manager.use_requests_session()"
+                "  - Replace aiohttp.ClientSession() with async SessionManager.use_session()"
             )
             print("  - Replace direct HTTP method imports with SessionManager usage")
-            print("  - Use SessionManager for all HTTP operations")
+            print("  - Use SessionManager for all HTTP operations (sync and async)")
 
         print()
         print(f"Found {len(all_violations)} violation(s)")

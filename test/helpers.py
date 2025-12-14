@@ -1,20 +1,25 @@
 #!/usr/bin/env python
 from __future__ import annotations
 
+import asyncio
 import base64
+import copy
+import functools
 import math
 import os
 import random
 import secrets
 import time
 from typing import TYPE_CHECKING, Pattern, Sequence
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from snowflake.connector.auth._auth import Auth
 from snowflake.connector.compat import OK
 
 if TYPE_CHECKING:
+    import snowflake.connector.aio
     import snowflake.connector.connection
 
 try:
@@ -37,6 +42,10 @@ try:
     from snowflake.connector.constants import QueryStatus
 except ImportError:
     QueryStatus = None
+try:
+    import snowflake.connector.aio
+except ImportError:
+    pass
 
 
 def create_mock_response(status_code: int) -> Mock:
@@ -50,6 +59,16 @@ def create_mock_response(status_code: int) -> Mock:
     mock_resp.status_code = status_code
     mock_resp.raw = "success" if status_code == OK else "fail"
     return mock_resp
+
+
+def create_async_mock_response(status: int) -> AsyncMock:
+    async def _create_async_mock_response(url, *, status, **kwargs):
+        resp = AsyncMock(status=status)
+        resp.read.return_value = "success" if status == OK else "fail"
+        resp.status = status
+        return resp
+
+    return functools.partial(_create_async_mock_response, status=status)
 
 
 def verify_log_tuple(
@@ -100,6 +119,40 @@ def _wait_until_query_success(
         if status == QueryStatus.SUCCESS:
             break
         time.sleep(sleep_per_check)
+    else:
+        pytest.fail(
+            "We should have broke out of wait loop for query success."
+            f"Query ID: {sfqid}"
+            f"Final query status: {status}"
+        )
+
+
+async def _wait_while_query_running_async(
+    con: snowflake.connector.aio.SnowflakeConnection,
+    sfqid: str,
+    sleep_time: int,
+    dont_cache: bool = False,
+) -> None:
+    """
+    Checks if the provided still returns that it is still running, and if so,
+    sleeps for the specified time in a while loop.
+    """
+    query_status = con._get_query_status if dont_cache else con.get_query_status
+    while con.is_still_running(await query_status(sfqid)):
+        await asyncio.sleep(sleep_time)
+
+
+async def _wait_until_query_success_async(
+    con: snowflake.connector.aio.SnowflakeConnection,
+    sfqid: str,
+    num_checks: int,
+    sleep_per_check: int,
+) -> None:
+    for _ in range(num_checks):
+        status = await con.get_query_status(sfqid)
+        if status == QueryStatus.SUCCESS:
+            break
+        await asyncio.sleep(sleep_per_check)
     else:
         pytest.fail(
             "We should have broke out of wait loop for query success."
@@ -260,3 +313,37 @@ def _arrow_error_stream_random_input_test(use_table_iterator):
     # error instance users get should be the same
     assert len(exception_result)
     assert len(result_array) == 0
+
+
+def create_mock_auth_body():
+    ocsp_mode = Mock()
+    ocsp_mode.name = "ocsp_mode"
+    session_manager = Mock()
+    session_manager.clone = lambda max_retries: "session_manager"
+
+    return Auth.base_auth_data(
+        "user",
+        "account",
+        "application",
+        "internal_application_name",
+        "internal_application_version",
+        ocsp_mode,
+        "CRL_MODE",
+        login_timeout=60 * 60,
+        network_timeout=60 * 60,
+        socket_timeout=60 * 60,
+        platform_detection_timeout_seconds=0.2,
+        session_manager=session_manager,
+    )
+
+
+def apply_auth_class_update_body(auth_class, req_body_before):
+    req_body_after = copy.deepcopy(req_body_before)
+    auth_class.update_body(req_body_after)
+    return req_body_after
+
+
+async def apply_auth_class_update_body_async(auth_class, req_body_before):
+    req_body_after = copy.deepcopy(req_body_before)
+    await auth_class.update_body(req_body_after)
+    return req_body_after
