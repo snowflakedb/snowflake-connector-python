@@ -10,7 +10,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
-CHECKED_MODULES = ["boto3", "botocore", "pandas", "pyarrow", "keyring"]
+CHECKED_MODULES = [
+    "boto3",
+    "botocore",
+    "aioboto3",
+    "aiobotocore",
+    "pandas",
+    "pyarrow",
+    "keyring",
+]
 
 
 @dataclass(frozen=True)

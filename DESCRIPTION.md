@@ -7,7 +7,17 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v4.1.0(TBD)
+- v4.2.0(TBD)
+  - Added support for async I/O. Asynchronous version of connector is available via `snowflake.connector.aio` module.
+  - Added `SnowflakeCursor.stats` property to expose granular DML statistics (rows inserted, deleted, updated, and duplicates) for operations like CTAS where `rowcount` is insufficient.
+  - Added support for injecting SPCS service identifier token (`SPCS_TOKEN`) into login requests when present in SPCS containers.
+
+- v4.1.1(TBD)
+  - Relaxed pandas dependency requirements for Python below 3.12.
+  - Changed CRL cache cleanup background task to daemon to avoid blocking main thread.
+  - Fixed NO_PROXY issues with PUT operations
+
+- v4.1.0(November 18,2025)
   - Added the `SNOWFLAKE_AUTH_FORCE_SERVER` environment variable to force the use of the local-listening server when using the `externalbrowser` auth method.
     - This allows headless environments (like Docker or Airflow) running locally to auth via a browser URL.
   - Fix compilation error when building from sources with libc++.
