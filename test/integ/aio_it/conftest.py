@@ -5,6 +5,7 @@
 import os
 from contextlib import asynccontextmanager
 from test.integ.conftest import (
+    USE_PASSWORD_AUTH,
     _get_private_key_bytes_for_olddriver,
     get_db_parameters,
     is_public_testaccount,
@@ -75,20 +76,22 @@ def fill_conn_kwargs_for_tests(connection_name: str, **kwargs) -> dict[str, Any]
     ret = get_db_parameters(connection_name)
     ret.update(kwargs)
 
-    # Handle private key authentication for old driver if applicable
-    if RUNNING_OLD_DRIVER and "private_key_file" in ret and "private_key" not in ret:
-        private_key_file = ret.get("private_key_file")
-        if private_key_file:
-            private_key_bytes = _get_private_key_bytes_for_olddriver(private_key_file)
-            ret["authenticator"] = "SNOWFLAKE_JWT"
-            ret["private_key"] = private_key_bytes
-            ret.pop("private_key_file", None)
-
-    # If authenticator is explicitly provided and it's not key-pair based, drop key-pair fields
-    authenticator_value = ret.get("authenticator")
-    if authenticator_value.lower() not in {"key_pair_authenticator", "snowflake_jwt"}:
-        ret.pop("private_key", None)
-        ret.pop("private_key_file", None)
+    # Handle private key authentication differently for old vs new driver (only if not using password auth)
+    if not USE_PASSWORD_AUTH and "private_key_file" in ret:
+        if RUNNING_OLD_DRIVER:
+            # Old driver (3.1.0) expects private_key as bytes and SNOWFLAKE_JWT authenticator
+            private_key_file = ret.get("private_key_file")
+            if (
+                private_key_file and "private_key" not in ret
+            ):  # Don't override if private_key already set
+                private_key_bytes = _get_private_key_bytes_for_olddriver(
+                    private_key_file
+                )
+                ret["authenticator"] = "SNOWFLAKE_JWT"
+                ret["private_key"] = private_key_bytes
+                ret.pop(
+                    "private_key_file", None
+                )  # Remove private_key_file for old driver
 
     return ret
 
