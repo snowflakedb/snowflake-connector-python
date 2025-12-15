@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import time
+
 from collections import namedtuple
 from datetime import date, datetime, timedelta
 from time import struct_time
+
 
 ZERO_TIMEDELTA = timedelta(0)
 
@@ -141,9 +143,7 @@ class SnowflakeDateTimeFormat:
 
         # format method
         self.format = getattr(self, f"_format_{datetime_class.__name__}")
-        self._compile(
-            support_negative_year=support_negative_year, inject_fraction=inject_fraction
-        )
+        self._compile(support_negative_year=support_negative_year, inject_fraction=inject_fraction)
 
     def _pre_format(self, value: SnowflakeDateTime | struct_time) -> str:
         fmt = []
@@ -185,9 +185,7 @@ class SnowflakeDateTimeFormat:
     def _add_raw_char(self, ch) -> None:
         self._elements.append((_inject_others, "%%" if ch == "%" else ch))
 
-    def _compile(
-        self, support_negative_year: bool = True, inject_fraction: bool = True
-    ) -> None:
+    def _compile(self, support_negative_year: bool = True, inject_fraction: bool = True) -> None:
         self._elements = []
         idx = 0
         u_sql_format = self._sql_format.upper()
@@ -282,9 +280,7 @@ class SnowflakeDateTimeFormat:
                     self._add_raw_char(ch)
                 idx += 1
             elif ch == "F":
-                if u_sql_format[idx:].startswith(
-                    ElementType["MilliSecond_ElementType"][0]
-                ):
+                if u_sql_format[idx:].startswith(ElementType["MilliSecond_ElementType"][0]):
                     idx += len(ElementType["MilliSecond_ElementType"][0])
                     if inject_fraction:
                         # Construct formatter to find fractions position.
@@ -325,9 +321,7 @@ class SnowflakeDateTimeFormat:
             return
         del self._elements[-1]
         del self._elements[-1]
-        self._elements.append(
-            (_inject_others, second_last_element[1] + last_element[1])
-        )
+        self._elements.append((_inject_others, second_last_element[1] + last_element[1]))
 
 
 class SnowflakeDateFormat(SnowflakeDateTimeFormat):

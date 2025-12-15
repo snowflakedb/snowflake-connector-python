@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import os
 import shutil
+
 from logging import getLogger
 from typing import TYPE_CHECKING, Any
 
 from .constants import FileHeader, ResultStatus
 from .storage_client import SnowflakeStorageClient
 from .vendored import requests
+
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta
@@ -24,23 +26,15 @@ class SnowflakeLocalStorageClient(SnowflakeStorageClient):
         chunk_size: int,
         unsafe_file_write: bool = False,
     ) -> None:
-        super().__init__(
-            meta, stage_info, chunk_size, unsafe_file_write=unsafe_file_write
-        )
+        super().__init__(meta, stage_info, chunk_size, unsafe_file_write=unsafe_file_write)
         self.data_file = meta.src_file_name
-        self.full_dst_file_name: str = os.path.join(
-            stage_info["location"], os.path.basename(meta.dst_file_name)
-        )
+        self.full_dst_file_name: str = os.path.join(stage_info["location"], os.path.basename(meta.dst_file_name))
         if meta.local_location:
             src_file_name = self.data_file
             if src_file_name.startswith("/"):
                 src_file_name = src_file_name[1:]
-            self.stage_file_name: str = os.path.join(
-                stage_info["location"], src_file_name
-            )
-            self.full_dst_file_name = os.path.join(
-                meta.local_location, os.path.basename(meta.dst_file_name)
-            )
+            self.stage_file_name: str = os.path.join(stage_info["location"], src_file_name)
+            self.full_dst_file_name = os.path.join(meta.local_location, os.path.basename(meta.dst_file_name))
 
     def get_file_header(self, filename: str) -> FileHeader | None:
         """

@@ -3,8 +3,10 @@ from __future__ import annotations
 import abc
 import asyncio
 import json
+
+from collections.abc import Iterator, Sequence
 from logging import getLogger
-from typing import TYPE_CHECKING, Any, Iterator, Sequence
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
@@ -26,14 +28,19 @@ from snowflake.connector.network import (
     get_http_retryable_error,
     is_retryable_http_code,
 )
-from snowflake.connector.result_batch import SSE_C_AES, SSE_C_ALGORITHM, SSE_C_KEY
+from snowflake.connector.result_batch import (
+    SSE_C_AES,
+    SSE_C_ALGORITHM,
+    SSE_C_KEY,
+    DownloadMetrics,
+    RemoteChunkInfo,
+    _create_nanoarrow_iterator,
+)
 from snowflake.connector.result_batch import ArrowResultBatch as ArrowResultBatchSync
-from snowflake.connector.result_batch import DownloadMetrics
 from snowflake.connector.result_batch import JSONResultBatch as JSONResultBatchSync
-from snowflake.connector.result_batch import RemoteChunkInfo
 from snowflake.connector.result_batch import ResultBatch as ResultBatchSync
-from snowflake.connector.result_batch import _create_nanoarrow_iterator
 from snowflake.connector.secret_detector import SecretDetector
+
 
 if TYPE_CHECKING:
     from pandas import DataFrame
@@ -67,9 +74,7 @@ def create_batches_from_response(
 
         def col_to_converter(col: dict[str, Any]) -> tuple[str, SnowflakeConverterType]:
             type_name = col["type"].upper()
-            python_method = cursor._connection.converter.to_python_method(
-                type_name, col
-            )
+            python_method = cursor._connection.converter.to_python_method(type_name, col)
             return type_name, python_method
 
         column_converters = [col_to_converter(c) for c in rowtypes]
@@ -78,7 +83,7 @@ def create_batches_from_response(
         arrow_context = ArrowConverterContext(cursor._connection._session_parameters)
     if "chunks" in data:
         chunks = data["chunks"]
-        logger.debug(f"chunk size={len(chunks)}")
+        logger.debug("chunk size=%s", len(chunks))
         # prepare the downloader for further fetch
         qrmk = data.get("qrmk")
         chunk_headers: dict[str, Any] = {}
@@ -87,11 +92,9 @@ def create_batches_from_response(
             for header_key, header_value in data["chunkHeaders"].items():
                 chunk_headers[header_key] = header_value
                 if "encryption" not in header_key:
-                    logger.debug(
-                        f"added chunk header: key={header_key}, value={header_value}"
-                    )
+                    logger.debug("added chunk header: key=%s, value=%s", header_key, header_value)
         elif qrmk is not None:
-            logger.debug(f"qrmk={SecretDetector.mask_secrets(qrmk)}")
+            logger.debug("qrmk=%s", SecretDetector.mask_secrets(qrmk))
             chunk_headers[SSE_C_ALGORITHM] = SSE_C_AES
             chunk_headers[SSE_C_KEY] = qrmk
 
@@ -154,7 +157,7 @@ def create_batches_from_response(
             session_manager=cursor._connection._session_manager.clone(),
         )
     else:
-        logger.error(f"Don't know how to construct ResultBatches from response: {data}")
+        logger.error("Don't know how to construct ResultBatches from response: %s", data)
         first_chunk = ArrowResultBatch.from_data(
             "",
             0,
@@ -180,12 +183,7 @@ class ResultBatch(ResultBatchSync):
     @abc.abstractmethod
     async def create_iter(
         self, **kwargs
-    ) -> (
-        Iterator[dict | Exception]
-        | Iterator[tuple | Exception]
-        | Iterator[Table]
-        | Iterator[DataFrame]
-    ):
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table] | Iterator[DataFrame]:
         """Downloads the data from blob storage that this ResultChunk points at.
 
         This function is the one that does the actual work for ``self.__iter__``.
@@ -196,34 +194,25 @@ class ResultBatch(ResultBatchSync):
         """
         raise NotImplementedError()
 
-    async def _download(
-        self, connection: SnowflakeConnection | None = None, **kwargs
-    ) -> tuple[bytes, str]:
+    async def _download(self, connection: SnowflakeConnection | None = None, **kwargs) -> tuple[bytes, str]:
         """Downloads the data that the ``ResultBatch`` is pointing at."""
         sleep_timer = 1
-        backoff = (
-            connection._backoff_generator
-            if connection is not None
-            else exponential_backoff()()
-        )
+        backoff = connection._backoff_generator if connection is not None else exponential_backoff()()
 
         async def download_chunk(http_session):
             response, content, encoding = None, None, None
-            logger.debug(
-                f"downloading result batch id: {self.id} with session {http_session}"
-            )
+            logger.debug("downloading result batch id: %s with session %s", self.id, http_session)
             response = await http_session.get(**request_data)
             if response.status == OK:
-                logger.debug(f"successfully downloaded result batch id: {self.id}")
+                logger.debug("successfully downloaded result batch id: %s", self.id)
                 content, encoding = await response.read(), response.get_encoding()
             return response, content, encoding
 
         content, encoding = None, None
         for retry in range(max(MAX_DOWNLOAD_RETRY, 1)):
             try:
-
                 async with TimerContextManager() as download_metric:
-                    logger.debug(f"started downloading result batch id: {self.id}")
+                    logger.debug("started downloading result batch id: %s", self.id)
                     chunk_url = self._remote_chunk_info.url
                     request_data = {
                         "url": chunk_url,
@@ -237,39 +226,26 @@ class ResultBatch(ResultBatchSync):
                     # if DOWNLOAD_TIMEOUT is not set, by default the aiohttp session timeout comes into effect
                     # which originates from the connection config.
                     if DOWNLOAD_TIMEOUT:
-                        request_data["timeout"] = aiohttp.ClientTimeout(
-                            total=DOWNLOAD_TIMEOUT
-                        )
+                        request_data["timeout"] = aiohttp.ClientTimeout(total=DOWNLOAD_TIMEOUT)
                     request_url = request_data["url"]
                     # Use SessionManager with same fallback pattern as sync version
-                    if (
-                        connection
-                        and connection.rest
-                        and connection.rest.session_manager is not None
-                    ):
+                    if connection and connection.rest and connection.rest.session_manager is not None:
                         # If connection was explicitly passed and not closed yet - we can reuse SessionManager with session pooling
                         async with connection.rest.use_session(request_url) as session:
-                            logger.debug(
-                                f"downloading result batch id: {self.id} with existing session {session}"
-                            )
+                            logger.debug("downloading result batch id: %s with existing session %s", self.id, session)
                             response, content, encoding = await download_chunk(session)
                     elif self._session_manager is not None:
                         # If connection is not accessible or was already closed, but cursors are now used to fetch the data - we will only reuse the http setup (through cloned SessionManager without session pooling)
-                        async with self._session_manager.use_session(
-                            request_url
-                        ) as session:
+                        async with self._session_manager.use_session(request_url) as session:
                             response, content, encoding = await download_chunk(session)
                     else:
                         # If there was no session manager cloned, then we are using a default Session Manager setup, since it is very unlikely to enter this part outside of testing
                         logger.debug(
-                            f"downloading result batch id: {self.id} with new session through local session manager"
+                            "downloading result batch id: %s with new session through local session manager",
+                            self.id,
                         )
-                        local_session_manager = SessionManagerFactory.get_manager(
-                            use_pooling=False
-                        )
-                        async with local_session_manager.use_session(
-                            request_url
-                        ) as session:
+                        local_session_manager = SessionManagerFactory.get_manager(use_pooling=False)
+                        async with local_session_manager.use_session(request_url) as session:
                             response, content, encoding = await download_chunk(session)
 
                     if response.status == OK:
@@ -292,15 +268,17 @@ class ResultBatch(ResultBatchSync):
                     raise e
                 sleep_timer = next(backoff)
                 logger.exception(
-                    f"Failed to fetch the large result set batch "
-                    f"{self.id} for the {retry + 1} th time, "
-                    f"backing off for {sleep_timer}s for the reason: '{e}'"
+                    "Failed to fetch the large result set batch "
+                    "%s for the %s th time, "
+                    "backing off for %ss for the reason: '%s'",
+                    self.id,
+                    retry + 1,
+                    sleep_timer,
+                    e,
                 )
                 await asyncio.sleep(sleep_timer)
 
-        self._metrics[DownloadMetrics.download.value] = (
-            download_metric.get_timing_millis()
-        )
+        self._metrics[DownloadMetrics.download.value] = download_metric.get_timing_millis()
         return content, encoding
 
 
@@ -312,10 +290,10 @@ class JSONResultBatch(ResultBatch, JSONResultBatchSync):
             return iter(self._data)
         content, encoding = await self._download(connection=connection)
         # Load data to a intermediate form
-        logger.debug(f"started loading result batch id: {self.id}")
+        logger.debug("started loading result batch id: %s", self.id)
         async with TimerContextManager() as load_metric:
             downloaded_data = await self._load(content, encoding)
-        logger.debug(f"finished loading result batch id: {self.id}")
+        logger.debug("finished loading result batch id: %s", self.id)
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         # Process downloaded data
         async with TimerContextManager() as parse_metric:
@@ -347,9 +325,7 @@ class JSONResultBatch(ResultBatch, JSONResultBatchSync):
 
 
 class ArrowResultBatch(ResultBatch, ArrowResultBatchSync):
-    async def _load(
-        self, content, row_unit: IterUnit
-    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
+    async def _load(self, content, row_unit: IterUnit) -> Iterator[dict | Exception] | Iterator[tuple | Exception]:
         """Creates a ``PyArrowIterator`` from a response.
 
         This is used to iterate through results in different ways depending on which
@@ -374,24 +350,22 @@ class ArrowResultBatch(ResultBatch, ArrowResultBatchSync):
                 return self._from_data(self._data, iter_unit)
             except Exception:
                 if connection and getattr(connection, "_debug_arrow_chunk", False):
-                    logger.debug(f"arrow data can not be parsed: {self._data}")
+                    logger.debug("arrow data can not be parsed: %s", self._data)
                 raise
         content, _ = await self._download(connection=connection)
-        logger.debug(f"started loading result batch id: {self.id}")
+        logger.debug("started loading result batch id: %s", self.id)
         async with TimerContextManager() as load_metric:
             try:
                 loaded_data = await self._load(content, iter_unit)
             except Exception:
                 if connection and getattr(connection, "_debug_arrow_chunk", False):
-                    logger.debug(f"arrow data can not be parsed: {content}")
+                    logger.debug("arrow data can not be parsed: %s", content)
                 raise
-        logger.debug(f"finished loading result batch id: {self.id}")
+        logger.debug("finished loading result batch id: %s", self.id)
         self._metrics[DownloadMetrics.load.value] = load_metric.get_timing_millis()
         return loaded_data
 
-    async def _get_pandas_iter(
-        self, connection: SnowflakeConnection | None = None, **kwargs
-    ) -> Iterator[DataFrame]:
+    async def _get_pandas_iter(self, connection: SnowflakeConnection | None = None, **kwargs) -> Iterator[DataFrame]:
         """An iterator for this batch which yields a pandas DataFrame"""
         iterator_data = []
         dataframe = await self.to_pandas(connection=connection, **kwargs)
@@ -399,13 +373,9 @@ class ArrowResultBatch(ResultBatch, ArrowResultBatchSync):
             iterator_data.append(dataframe)
         return iter(iterator_data)
 
-    async def _get_arrow_iter(
-        self, connection: SnowflakeConnection | None = None
-    ) -> Iterator[Table]:
+    async def _get_arrow_iter(self, connection: SnowflakeConnection | None = None) -> Iterator[Table]:
         """Returns an iterator for this batch which yields a pyarrow Table"""
-        return await self._create_iter(
-            iter_unit=IterUnit.TABLE_UNIT, connection=connection
-        )
+        return await self._create_iter(iter_unit=IterUnit.TABLE_UNIT, connection=connection)
 
     async def to_arrow(self, connection: SnowflakeConnection | None = None) -> Table:
         """Returns this batch as a pyarrow Table"""
@@ -414,9 +384,7 @@ class ArrowResultBatch(ResultBatch, ArrowResultBatchSync):
             return val
         return self._create_empty_table()
 
-    async def to_pandas(
-        self, connection: SnowflakeConnection | None = None, **kwargs
-    ) -> DataFrame:
+    async def to_pandas(self, connection: SnowflakeConnection | None = None, **kwargs) -> DataFrame:
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
         table = await self.to_arrow(connection=connection)
@@ -424,12 +392,7 @@ class ArrowResultBatch(ResultBatch, ArrowResultBatchSync):
 
     async def create_iter(
         self, connection: SnowflakeConnection | None = None, **kwargs
-    ) -> (
-        Iterator[dict | Exception]
-        | Iterator[tuple | Exception]
-        | Iterator[Table]
-        | Iterator[DataFrame]
-    ):
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table] | Iterator[DataFrame]:
         """The interface used by ResultSet to create an iterator for this ResultBatch."""
         iter_unit: IterUnit = kwargs.pop("iter_unit", IterUnit.ROW_UNIT)
         if iter_unit == IterUnit.TABLE_UNIT:

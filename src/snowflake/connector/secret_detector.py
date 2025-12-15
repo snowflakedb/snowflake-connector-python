@@ -5,12 +5,15 @@ It masks secrets that might be leaked from two potential avenues
     1. Out of Band Telemetry
     2. Logging
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import re
+
 from typing import NamedTuple
+
 
 MIN_TOKEN_LEN = os.getenv("MIN_TOKEN_LEN", 32)
 MIN_PWD_LEN = os.getenv("MIN_PWD_LEN", 8)
@@ -59,27 +62,19 @@ class SecretDetector(logging.Formatter):
 
     @staticmethod
     def mask_connection_token(text: str) -> str:
-        return SecretDetector.CONNECTION_TOKEN_PATTERN.sub(
-            r"\1\2" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text
-        )
+        return SecretDetector.CONNECTION_TOKEN_PATTERN.sub(r"\1\2" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text)
 
     @staticmethod
     def mask_password(text: str) -> str:
-        return SecretDetector.PASSWORD_PATTERN.sub(
-            r"\1\2" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text
-        )
+        return SecretDetector.PASSWORD_PATTERN.sub(r"\1\2" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text)
 
     @staticmethod
     def mask_aws_keys(text: str) -> str:
-        return SecretDetector.AWS_KEY_PATTERN.sub(
-            r"\1=" + f"'{SecretDetector.SECRET_STARRED_MASK_STR}'", text
-        )
+        return SecretDetector.AWS_KEY_PATTERN.sub(r"\1=" + f"'{SecretDetector.SECRET_STARRED_MASK_STR}'", text)
 
     @staticmethod
     def mask_sas_tokens(text: str) -> str:
-        return SecretDetector.SAS_TOKEN_PATTERN.sub(
-            r"\1=" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text
-        )
+        return SecretDetector.SAS_TOKEN_PATTERN.sub(r"\1=" + f"{SecretDetector.SECRET_STARRED_MASK_STR}", text)
 
     @staticmethod
     def mask_aws_tokens(text: str) -> str:
@@ -93,9 +88,7 @@ class SecretDetector(logging.Formatter):
 
     @staticmethod
     def mask_private_key_data(text: str) -> str:
-        return SecretDetector.PRIVATE_KEY_DATA_PATTERN.sub(
-            '"privateKeyData": "XXXX"', text
-        )
+        return SecretDetector.PRIVATE_KEY_DATA_PATTERN.sub('"privateKeyData": "XXXX"', text)
 
     @staticmethod
     def mask_secrets(text: str) -> MaskedMessageData:
@@ -118,9 +111,7 @@ class SecretDetector(logging.Formatter):
                     SecretDetector.mask_private_key_data(
                         SecretDetector.mask_private_key(
                             SecretDetector.mask_aws_tokens(
-                                SecretDetector.mask_sas_tokens(
-                                    SecretDetector.mask_aws_keys(text)
-                                )
+                                SecretDetector.mask_sas_tokens(SecretDetector.mask_aws_keys(text))
                             )
                         )
                     )
@@ -139,9 +130,7 @@ class SecretDetector(logging.Formatter):
         return MaskedMessageData(masked, masked_text, err_str)
 
     @staticmethod
-    def create_formatting_error_log(
-        original_record: logging.LogRecord, error_message: str
-    ) -> str:
+    def create_formatting_error_log(original_record: logging.LogRecord, error_message: str) -> str:
         return "{} - {} {} - {} - {} - {}".format(
             original_record.asctime,
             original_record.threadName,
@@ -164,9 +153,7 @@ class SecretDetector(logging.Formatter):
         """
         try:
             unsanitized_log = super().format(record)
-            masked, optional_sanitized_log, err_str = SecretDetector.mask_secrets(
-                unsanitized_log
-            )
+            masked, optional_sanitized_log, err_str = SecretDetector.mask_secrets(unsanitized_log)
             # Added to comply with type hints (Optional[str] is not accepted for str)
             sanitized_log = optional_sanitized_log or ""
 
@@ -174,8 +161,6 @@ class SecretDetector(logging.Formatter):
                 sanitized_log = self.create_formatting_error_log(record, err_str)
 
         except Exception as ex:
-            sanitized_log = self.create_formatting_error_log(
-                record, "EXCEPTION - " + str(ex)
-            )
+            sanitized_log = self.create_formatting_error_log(record, "EXCEPTION - " + str(ex))
 
         return sanitized_log

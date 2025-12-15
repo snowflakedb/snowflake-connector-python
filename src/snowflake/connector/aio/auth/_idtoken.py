@@ -6,6 +6,7 @@ from ...auth.idtoken import AuthByIdToken as AuthByIdTokenSync
 from ._by_plugin import AuthByPlugin as AuthByPluginAsync
 from ._webbrowser import AuthByWebBrowser
 
+
 if TYPE_CHECKING:
     from .._connection import SnowflakeConnection
 
@@ -21,9 +22,7 @@ class AuthByIdToken(AuthByPluginAsync, AuthByIdTokenSync):
         **kwargs,
     ) -> None:
         """Initialized an instance with an IdToken."""
-        AuthByIdTokenSync.__init__(
-            self, id_token, application, protocol, host, port, **kwargs
-        )
+        AuthByIdTokenSync.__init__(self, id_token, application, protocol, host, port, **kwargs)
 
     async def reset_secrets(self) -> None:
         AuthByIdTokenSync.reset_secrets(self)

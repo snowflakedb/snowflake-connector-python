@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import warnings
+
 from collections.abc import Mapping
 from typing import Any
 
@@ -61,7 +62,7 @@ class SnowLogger(logging.LoggerAdapter):
         **kwargs: Any,
     ) -> None:
         warnings.warn(
-            "The 'warn' method is deprecated, " "use 'warning' instead",
+            "The 'warn' method is deprecated, use 'warning' instead",
             DeprecationWarning,
             stacklevel=2,
         )

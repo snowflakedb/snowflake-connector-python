@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import time
+
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from logging import getLogger
 from time import struct_time
-from typing import Any, Callable
+from typing import Any
 
 import pytz
 
@@ -21,15 +23,12 @@ from .converter import (
 from .sfbinaryformat import SnowflakeBinaryFormat, binary_to_python
 from .sfdatetime import SnowflakeDateFormat, SnowflakeDateTime, SnowflakeDateTimeFormat
 
+
 logger = getLogger(__name__)
 
 
-def format_sftimestamp(
-    ctx: dict[str, Any], value: datetime | struct_time, franction_of_nanoseconds: int
-) -> str:
-    sf_datetime = SnowflakeDateTime(
-        datetime=value, nanosecond=franction_of_nanoseconds, scale=ctx.get("scale")
-    )
+def format_sftimestamp(ctx: dict[str, Any], value: datetime | struct_time, franction_of_nanoseconds: int) -> str:
+    sf_datetime = SnowflakeDateTime(datetime=value, nanosecond=franction_of_nanoseconds, scale=ctx.get("scale"))
     return ctx["fmt"].format(sf_datetime) if ctx.get("fmt") else str(sf_datetime)
 
 
@@ -65,9 +64,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
     # FROM Snowflake to Python objects
     #
     # Note: Callable doesn't implement operator|
-    def to_python_method(
-        self, type_name: str, column: dict[str, Any]
-    ) -> Callable | None:
+    def to_python_method(self, type_name: str, column: dict[str, Any]) -> Callable | None:
         ctx = column.copy()
         if ctx.get("scale") is not None:
             ctx["max_fraction"] = int(10 ** ctx["scale"])
@@ -151,9 +148,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                 if pytz.utc != tzinfo:
                     t += tzinfo.utcoffset(t)
                 t = t.replace(tzinfo=tzinfo)
-            fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
-                value, max_fraction, scale
-            )
+            fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(value, max_fraction, scale)
 
             return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 
@@ -170,9 +165,7 @@ class SnowflakeConverterSnowSQL(SnowflakeConverter):
                     t += tzinfo.utcoffset(t)
                 t = t.replace(tzinfo=tzinfo)
 
-            fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(
-                value, max_fraction, scale
-            )
+            fraction_of_nanoseconds = _adjust_fraction_of_nanoseconds(value, max_fraction, scale)
 
             return format_sftimestamp(ctx, t, fraction_of_nanoseconds)
 

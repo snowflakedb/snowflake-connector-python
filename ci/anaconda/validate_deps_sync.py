@@ -11,8 +11,9 @@ Exit behavior:
 import configparser
 import re
 import sys
+
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
 
 import yaml
 
@@ -36,7 +37,7 @@ def normalize_name(name: str) -> str:
     return name.strip().lower().replace("_", "-")
 
 
-def split_requirement(req: str) -> Tuple[str, str]:
+def split_requirement(req: str) -> tuple[str, str]:
     """Split a requirement into name and version specifier.
 
     Drops PEP 508 markers (after ';') and conda selectors (after '#').
@@ -71,7 +72,7 @@ def split_requirement(req: str) -> Tuple[str, str]:
     return normalize_name(name), spec
 
 
-def get_setup_install_requires(cfg_path: Path) -> List[str]:
+def get_setup_install_requires(cfg_path: Path) -> list[str]:
     """Extract normalized install_requires entries from setup.cfg.
 
     Args:
@@ -87,7 +88,7 @@ def get_setup_install_requires(cfg_path: Path) -> List[str]:
     if not parser.has_option("options", "install_requires"):
         raise RuntimeError(f"Missing install_requires under [options] in {cfg_path}")
     raw_value = parser.get("options", "install_requires")
-    deps: List[str] = []
+    deps: list[str] = []
     for line in raw_value.splitlines():
         item = line.strip()
         if not item or item.startswith("#"):
@@ -98,7 +99,7 @@ def get_setup_install_requires(cfg_path: Path) -> List[str]:
     return deps
 
 
-def get_meta_run_requirements(meta_path: Path) -> List[str]:
+def get_meta_run_requirements(meta_path: Path) -> list[str]:
     """Extract normalized run requirements from meta.yaml.
 
     Args:
@@ -108,7 +109,7 @@ def get_meta_run_requirements(meta_path: Path) -> List[str]:
       List of strings in the form "<name> <spec>" where spec may be empty.
     """
     text = meta_path.read_text(encoding="utf-8")
-    cleaned_lines: List[str] = []
+    cleaned_lines: list[str] = []
     for line in text.splitlines():
         if "{%" in line or "%}" in line:
             continue
@@ -125,7 +126,7 @@ def get_meta_run_requirements(meta_path: Path) -> List[str]:
     reqs = data.get("requirements", {}) or {}
     run_items = reqs.get("run", []) or []
 
-    deps: List[str] = []
+    deps: list[str] = []
     for idx, it in enumerate(run_items):
         if not isinstance(it, str):
             raise TypeError(
@@ -138,7 +139,7 @@ def get_meta_run_requirements(meta_path: Path) -> List[str]:
     return deps
 
 
-def get_setup_extra_requires(cfg_path: Path, extra: str) -> List[str]:
+def get_setup_extra_requires(cfg_path: Path, extra: str) -> list[str]:
     """Extract normalized requirements for a given extra from setup.cfg.
 
     Args:
@@ -155,11 +156,9 @@ def get_setup_extra_requires(cfg_path: Path, extra: str) -> List[str]:
         raise RuntimeError(f"Missing [options.extras_require] section in {cfg_path}")
     key = extra.strip().lower()
     if not parser.has_option(section, key):
-        raise RuntimeError(
-            f"Missing extra '{key}' under [options.extras_require] in {cfg_path}"
-        )
+        raise RuntimeError(f"Missing extra '{key}' under [options.extras_require] in {cfg_path}")
     raw_value = parser.get(section, key)
-    deps: List[str] = []
+    deps: list[str] = []
     for line in raw_value.splitlines():
         item = line.strip()
         if not item or item.startswith("#"):
@@ -181,8 +180,8 @@ def compare_deps(setup_deps: Iterable[str], meta_deps: Iterable[str]) -> str:
       Empty string if equal, otherwise a multi-line diff description.
     """
 
-    def to_map(items: Iterable[str]) -> Dict[str, str]:
-        mapping: Dict[str, str] = {}
+    def to_map(items: Iterable[str]) -> dict[str, str]:
+        mapping: dict[str, str] = {}
         for it in items:
             parts = it.split(" ", 1)
             name = parts[0]
@@ -198,7 +197,7 @@ def compare_deps(setup_deps: Iterable[str], meta_deps: Iterable[str]) -> str:
     missing = sorted(s_names - m_names)
     extra = sorted(m_names - s_names)
 
-    mismatches: List[Tuple[str, str, str]] = []
+    mismatches: list[tuple[str, str, str]] = []
     for name in sorted(s_names & m_names):
         if s_map.get(name, "") != m_map.get(name, ""):
             mismatches.append((name, s_map.get(name, ""), m_map.get(name, "")))
@@ -206,7 +205,7 @@ def compare_deps(setup_deps: Iterable[str], meta_deps: Iterable[str]) -> str:
     if not (missing or extra or mismatches):
         return ""
 
-    lines: List[str] = []
+    lines: list[str] = []
     if missing:
         lines.append("Missing in meta.yaml run:")
         for n in missing:
@@ -229,9 +228,7 @@ def main() -> int:
     boto_deps = get_setup_extra_requires(setup_cfg_path, "boto")
     # Make sure to update ci/anaconda/recipe/meta.yaml accordingly when there is dependency set update.
     expected_deps = setup_deps + boto_deps
-    meta_deps = get_meta_run_requirements(
-        root / "ci" / "anaconda" / "recipe" / "meta.yaml"
-    )
+    meta_deps = get_meta_run_requirements(root / "ci" / "anaconda" / "recipe" / "meta.yaml")
     diff = compare_deps(expected_deps, meta_deps)
     if not diff:
         return 0

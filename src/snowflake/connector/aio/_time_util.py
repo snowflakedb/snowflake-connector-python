@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Callable
+
+from collections.abc import Callable
 
 from ..time_util import TimerContextManager as TimerContextManagerSync
+
 
 logger = logging.getLogger(__name__)
 
@@ -12,9 +14,7 @@ logger = logging.getLogger(__name__)
 class HeartBeatTimer:
     """An asyncio-based timer which executes a function every client_session_keep_alive_heartbeat_frequency seconds."""
 
-    def __init__(
-        self, client_session_keep_alive_heartbeat_frequency: int, f: Callable
-    ) -> None:
+    def __init__(self, client_session_keep_alive_heartbeat_frequency: int, f: Callable) -> None:
         self.interval = client_session_keep_alive_heartbeat_frequency
         self.function = f
         self._task = None

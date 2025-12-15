@@ -10,9 +10,11 @@ import platform
 import queue
 import urllib.parse
 import urllib.request
+
 from typing import Any
 
 from . import constants
+
 
 IS_LINUX = platform.system() == "Linux"
 IS_WINDOWS = platform.system() == "Windows"
@@ -108,8 +110,7 @@ def PKCS5_PAD(value: bytes, block_size: int) -> bytes:
     return b"".join(
         [
             value,
-            (block_size - len(value) % block_size)
-            * chr(block_size - len(value) % block_size).encode(constants.UTF8),
+            (block_size - len(value) % block_size) * chr(block_size - len(value) % block_size).encode(constants.UTF8),
         ]
     )
 

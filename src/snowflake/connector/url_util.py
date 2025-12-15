@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import re
 import urllib.parse
+
+from collections.abc import Iterable
 from logging import getLogger
-from typing import Iterable
 
 from .constants import _TOP_LEVEL_DOMAIN_REGEX
 from .vendored import requests
+
 
 logger = getLogger(__name__)
 

@@ -1,9 +1,11 @@
 import logging
 import sys
 import xml.etree.ElementTree as ET
+
 from glob import glob
 from pathlib import Path
 from subprocess import PIPE, Popen
+
 
 LOGGER = logging.getLogger(__name__)
 REPO_PATH = "/home/user/snowflake-connector-python"
@@ -30,7 +32,7 @@ def run_tests():
     for wheel in glob(f"{REPO_PATH}/dist/*.whl"):
         args.extend(["--installpkg", wheel])
 
-    LOGGER.info(f"Popen args: {args}")
+    LOGGER.info("Popen args: %s", args)
 
     test_log, err = Popen(
         args,

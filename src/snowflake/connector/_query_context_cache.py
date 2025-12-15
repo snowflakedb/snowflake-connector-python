@@ -1,21 +1,21 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from functools import total_ordering
 from hashlib import md5
 from logging import getLogger
 from threading import Lock
-from typing import Any, Iterable
+from typing import Any
 
 from sortedcontainers import SortedSet
+
 
 logger = getLogger(__name__)
 
 
 @total_ordering
 class QueryContextElement:
-    def __init__(
-        self, id: int, read_timestamp: int, priority: int, context: str
-    ) -> None:
+    def __init__(self, id: int, read_timestamp: int, priority: int, context: str) -> None:
         # entry with id = 0 is the main entry
         self.id = id
         self.read_timestamp = read_timestamp
@@ -36,9 +36,7 @@ class QueryContextElement:
 
     def __lt__(self, other: Any) -> bool:
         if not isinstance(other, QueryContextElement):
-            raise TypeError(
-                f"cannot compare QueryContextElement with object of type {type(other)}"
-            )
+            raise TypeError(f"cannot compare QueryContextElement with object of type {type(other)}")
         return self.priority < other.priority
 
     def __hash__(self) -> int:
@@ -48,9 +46,7 @@ class QueryContextElement:
         _hash += (_hash * 31) + self.read_timestamp
         _hash += (_hash * 31) + self.priority
         if self.context:
-            _hash += (_hash * 31) + int.from_bytes(
-                md5(self.context.encode("utf-8")).digest(), "big"
-            )
+            _hash += (_hash * 31) + int.from_bytes(md5(self.context.encode("utf-8")).digest(), "big")
         return _hash
 
     def __str__(self) -> str:
@@ -84,9 +80,7 @@ class QueryContextCache:
         self._priority_map.pop(qce.priority)
         self._tree_set.remove(qce)
 
-    def _replace_qce(
-        self, old_qce: QueryContextElement, new_qce: QueryContextElement
-    ) -> None:
+    def _replace_qce(self, old_qce: QueryContextElement, new_qce: QueryContextElement) -> None:
         """This is just a convenience function to call a remove and add operation back-to-back"""
         self._remove_qce(old_qce)
         self._add_qce(new_qce)
@@ -96,7 +90,9 @@ class QueryContextCache:
         Sync the _intermediate_priority_map with the _priority_map at the end of the current round of inserts.
         """
         logger.debug(
-            f"sync_priority_map called priority_map size = {len(self._priority_map)}, new_priority_map size = {len(self._intermediate_priority_map)}"
+            "sync_priority_map called priority_map size = %s, new_priority_map size = %s",
+            len(self._priority_map),
+            len(self._intermediate_priority_map),
         )
 
         self._priority_map.update(self._intermediate_priority_map)
@@ -122,7 +118,9 @@ class QueryContextCache:
 
     def trim_cache(self) -> None:
         logger.debug(
-            f"trim_cache() called. treeSet size is {len(self._tree_set)} and cache capacity is {self.capacity}"
+            "trim_cache() called. treeSet size is %s and cache capacity is %s",
+            len(self._tree_set),
+            self.capacity,
         )
 
         while len(self) > self.capacity:
@@ -131,7 +129,9 @@ class QueryContextCache:
             self._remove_qce(qce)
 
         logger.debug(
-            f"trim_cache() returns. treeSet size is {len(self._tree_set)} and cache capacity is {self.capacity}"
+            "trim_cache() returns. treeSet size is %s and cache capacity is %s",
+            len(self._tree_set),
+            self.capacity,
         )
 
     def clear_cache(self) -> None:
@@ -162,11 +162,7 @@ class QueryContextCache:
                             "id": qce.id,
                             "timestamp": qce.read_timestamp,
                             "priority": qce.priority,
-                            "context": (
-                                {"base64Data": qce.context}
-                                if qce.context is not None
-                                else {}
-                            ),
+                            "context": ({"base64Data": qce.context} if qce.context is not None else {}),
                         }
                         for qce in self._tree_set
                     ]
@@ -174,18 +170,18 @@ class QueryContextCache:
                 # Because on GS side, `context` field is an object with `base64Data`  string member variable,
                 # we should serialize `context` field to an object instead of string directly to stay consistent with GS side.
 
-                logger.debug(f"serialize_to_dict(): data to send to server {data}")
+                logger.debug("serialize_to_dict(): data to send to server %s", data)
 
                 # query context shoule be an object field of the HTTP request body JSON and on GS side. here we should only return a dict
                 # and let the outer HTTP request body to convert the entire big dict to a single JSON.
                 return data
             except Exception as e:
-                logger.debug(f"serialize_to_dict(): Exception {e}")
+                logger.debug("serialize_to_dict(): Exception %s", e)
                 return {}
 
     def deserialize_json_dict(self, data: dict) -> None:
         with self._lock:
-            logger.debug(f"deserialize_json_dict() called: data from server: {data}")
+            logger.debug("deserialize_json_dict() called: data from server: %s", data)
             self.log_cache_entries()
 
             if data is None or len(data) == 0:
@@ -226,12 +222,10 @@ class QueryContextCache:
                 # Deserialize entries
                 entries = data.get("entries", list())
                 for entry in entries:
-                    logger.debug(f"deserialize {entry}")
+                    logger.debug("deserialize %s", entry)
                     if not isinstance(entry.get("id"), int):
                         logger.debug("id type error")
-                        raise TypeError(
-                            f"Invalid type for 'id' field: Expected int, got {type(entry['id'])}"
-                        )
+                        raise TypeError(f"Invalid type for 'id' field: Expected int, got {type(entry['id'])}")
                     if not isinstance(entry.get("timestamp"), int):
                         logger.debug("timestamp type error")
                         raise TypeError(
@@ -247,9 +241,7 @@ class QueryContextCache:
                     context = entry.get("context", None)
                     if context and not isinstance(entry.get("context"), str):
                         logger.debug("context type error")
-                        raise TypeError(
-                            f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}"
-                        )
+                        raise TypeError(f"Invalid type for 'context' field: Expected str, got {type(entry['context'])}")
                     self.insert(
                         entry.get("id"),
                         entry.get("timestamp"),
@@ -260,7 +252,7 @@ class QueryContextCache:
                 # Sync the priority map at the end of for loop insert.
                 self._sync_priority_map()
             except Exception as e:
-                logger.debug(f"deserialize_json_dict: Exception = {e}")
+                logger.debug("deserialize_json_dict: Exception = %s", e)
                 # clear cache due to incomplete insert
                 self.clear_cache()
 
@@ -270,7 +262,7 @@ class QueryContextCache:
 
     def log_cache_entries(self) -> None:
         for qce in self._tree_set:
-            logger.debug(f"Cache Entry: {str(qce)}")
+            logger.debug("Cache Entry: %s", str(qce))
 
     def __len__(self) -> int:
         return len(self._tree_set)

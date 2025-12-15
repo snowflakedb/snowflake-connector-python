@@ -6,8 +6,10 @@ from __future__ import annotations
 import json
 import logging
 import time
+
+from collections.abc import Awaitable, Callable
 from functools import partial
-from typing import TYPE_CHECKING, Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any
 
 from snowflake.connector.aio.auth import Auth
 
@@ -25,6 +27,7 @@ from ...errors import RefreshTokenError
 from ...network import CONTENT_TYPE_APPLICATION_JSON, PYTHON_CONNECTOR_USER_AGENT
 from ...sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ._by_plugin import AuthByPlugin as AuthByPluginAsync
+
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection
@@ -168,9 +171,7 @@ class AuthByOkta(AuthByPluginAsync, AuthByOktaSync):
         user: str,
         password: str,
     ) -> str:
-        logger.debug(
-            "step 3: query IDP token url to authenticate and " "retrieve access token"
-        )
+        logger.debug("step 3: query IDP token url to authenticate and retrieve access token")
         data = {
             "username": user,
             "password": password,
@@ -191,13 +192,7 @@ class AuthByOkta(AuthByPluginAsync, AuthByOktaSync):
                 None,
                 DatabaseError,
                 {
-                    "msg": (
-                        "The authentication failed for {user} "
-                        "by {token_url}.".format(
-                            token_url=token_url,
-                            user=user,
-                        )
-                    ),
+                    "msg": (f"The authentication failed for {user} by {token_url}."),
                     "errno": ER_IDP_CONNECTION_ERROR,
                     "sqlstate": SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
                 },
@@ -210,7 +205,7 @@ class AuthByOkta(AuthByPluginAsync, AuthByOktaSync):
         generate_one_time_token: Callable[[], Awaitable[str]],
         sso_url: str,
     ) -> dict[Any, Any]:
-        logger.debug("step 4: query IDP URL snowflake app to get SAML " "response")
+        logger.debug("step 4: query IDP URL snowflake app to get SAML response")
         timeout_time = time.time() + conn.login_timeout if conn.login_timeout else None
         response_html = {}
         origin_sso_url = sso_url

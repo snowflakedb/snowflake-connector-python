@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Iterator
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, Any
 
 from ... import DatabaseError, Error, OperationalError
 from ...auth import AuthByPlugin as AuthByPluginSync
 from ...errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from ...sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
+
 
 if TYPE_CHECKING:
     from .. import SnowflakeConnection
@@ -124,8 +127,8 @@ class AuthByPlugin(AuthByPluginSync):
             raise error
         else:
             logger.debug(
-                f"Hit connection timeout, attempt number {self._retry_ctx.current_retry_count + 1}."
-                " Will retry in a bit..."
+                "Hit connection timeout, attempt number %s. Will retry in a bit...",
+                self._retry_ctx.current_retry_count + 1,
             )
             await asyncio.sleep(float(self._retry_ctx.current_sleep_time))
             self._retry_ctx.increment()

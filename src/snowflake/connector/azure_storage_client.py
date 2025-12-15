@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import xml.etree.ElementTree as ET
+
 from datetime import datetime, timezone
 from logging import getLogger
 from random import choice
@@ -16,6 +17,7 @@ from .encryption_util import EncryptionMetadata
 from .storage_client import SnowflakeStorageClient
 from .util_text import get_md5_for_integrity
 from .vendored import requests
+
 
 if TYPE_CHECKING:  # pragma: no cover
     from .file_transfer_agent import SnowflakeFileMeta, StorageCredential
@@ -58,9 +60,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             end_point = end_point[len("blob.") :]
         self.endpoint = end_point
         self.storage_account: str = stage_info["storageAccount"]
-        self.azure_location = self.extract_container_name_and_path(
-            stage_info["location"]
-        )
+        self.azure_location = self.extract_container_name_and_path(stage_info["location"])
         self.block_ids: list[str] = []
 
     @staticmethod
@@ -109,9 +109,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
                 rest_args["data"] = data
             return _url, rest_args
 
-        return self._send_request_with_retry(
-            verb, generate_authenticated_url_and_rest_args, retry_id
-        )
+        return self._send_request_with_retry(verb, generate_authenticated_url_and_rest_args, retry_id)
 
     def get_file_header(self, filename: str) -> FileHeader | None:
         """Gets Azure file properties."""
@@ -143,9 +141,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             )
         elif r.status_code == 404:
             meta.result_status = ResultStatus.NOT_FOUND_FILE
-            return FileHeader(
-                digest=None, content_length=None, encryption_metadata=None
-            )
+            return FileHeader(digest=None, content_length=None, encryption_metadata=None)
         else:
             r.raise_for_status()
 
@@ -179,10 +175,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         return azure_metadata
 
     def _initiate_multipart_upload(self) -> None:
-        self.block_ids = [
-            "".join(choice(hexdigits) for _ in range(20))
-            for _ in range(self.num_of_chunks)
-        ]
+        self.block_ids = ["".join(choice(hexdigits) for _ in range(20)) for _ in range(self.num_of_chunks)]
 
     def _upload_chunk(self, chunk_id: int, chunk: bytes) -> None:
         container_name = quote(self.azure_location.container_name)
@@ -195,9 +188,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
                 f"&blockid={block_id}"
             )
             headers = {"Content-Length": str(len(chunk))}
-            r = self._send_request_with_authentication_and_retry(
-                "PUT", url, chunk_id, headers=headers, data=chunk
-            )
+            r = self._send_request_with_authentication_and_retry("PUT", url, chunk_id, headers=headers, data=chunk)
         else:
             # single request
             azure_metadata = self._prepare_file_metadata()
@@ -207,18 +198,13 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
                 "Content-Encoding": "utf-8",
             }
             headers.update(azure_metadata)
-            r = self._send_request_with_authentication_and_retry(
-                "PUT", url, chunk_id, headers=headers, data=chunk
-            )
+            r = self._send_request_with_authentication_and_retry("PUT", url, chunk_id, headers=headers, data=chunk)
         r.raise_for_status()  # expect status code 201
 
     def _complete_multipart_upload(self) -> None:
         container_name = quote(self.azure_location.container_name)
         path = quote(self.azure_location.path + self.meta.dst_file_name.lstrip("/"))
-        url = (
-            f"https://{self.storage_account}.blob.{self.endpoint}/{container_name}/{path}?comp"
-            f"=blocklist"
-        )
+        url = f"https://{self.storage_account}.blob.{self.endpoint}/{container_name}/{path}?comp=blocklist"
         root = ET.Element("BlockList")
         for block_id in self.block_ids:
             part = ET.Element("Latest")
@@ -226,11 +212,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
             root.append(part)
         # SNOW-1778088: We need to calculate the MD5 sum of this file for Azure Blob storage
         new_stream = not bool(self.meta.src_stream or self.meta.intermediate_stream)
-        fd = (
-            self.meta.src_stream
-            or self.meta.intermediate_stream
-            or open(self.meta.real_src_file_name, "rb")
-        )
+        fd = self.meta.src_stream or self.meta.intermediate_stream or open(self.meta.real_src_file_name, "rb")
         try:
             if not new_stream:
                 # Reset position in file
@@ -241,9 +223,7 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
                 fd.close()
         headers = {
             "x-ms-blob-content-encoding": "utf-8",
-            "x-ms-blob-content-md5": base64.b64encode(
-                get_md5_for_integrity(file_content)
-            ).decode("utf-8"),
+            "x-ms-blob-content-md5": base64.b64encode(get_md5_for_integrity(file_content)).decode("utf-8"),
         }
         azure_metadata = self._prepare_file_metadata()
         headers.update(azure_metadata)
@@ -261,13 +241,11 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         if self.num_of_chunks > 1:
             chunk_size = self.chunk_size
             if chunk_id < self.num_of_chunks - 1:
-                _range = f"{chunk_id * chunk_size}-{(chunk_id+1)*chunk_size-1}"
+                _range = f"{chunk_id * chunk_size}-{(chunk_id + 1) * chunk_size - 1}"
             else:
                 _range = f"{chunk_id * chunk_size}-"
             headers = {"Range": f"bytes={_range}"}
-            r = self._send_request_with_authentication_and_retry(
-                "GET", url, chunk_id, headers=headers
-            )  # expect 206
+            r = self._send_request_with_authentication_and_retry("GET", url, chunk_id, headers=headers)  # expect 206
         else:
             # single request
             r = self._send_request_with_authentication_and_retry("GET", url, chunk_id)

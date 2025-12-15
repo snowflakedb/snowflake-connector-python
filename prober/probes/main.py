@@ -7,6 +7,7 @@ from probes import login, put_fetch_get, put_fetch_get_fail_closed  # noqa
 from probes.logging_config import initialize_logger
 from probes.registry import PROBES_FUNCTIONS
 
+
 # Initialize logger
 logger = initialize_logger(__name__)
 
@@ -38,9 +39,7 @@ def main():
     # Parse arguments
     args = parser.parse_args()
 
-    private_key_str = (
-        open(args.private_key_file).read().strip().replace("_", "/").replace("-", "+")
-    )
+    private_key_str = open(args.private_key_file).read().strip().replace("_", "/").replace("-", "+")
 
     # Decode the private key from Base64
     private_key_bytes = base64.b64decode(private_key_str)
@@ -59,16 +58,14 @@ def main():
     }
 
     if args.scope not in PROBES_FUNCTIONS:
-        logging.error(
-            f"Invalid scope: {args.scope}. Available scopes: {list(PROBES_FUNCTIONS.keys())}"
-        )
+        logging.error("Invalid scope: %s. Available scopes: %s", args.scope, list(PROBES_FUNCTIONS.keys()))
         sys.exit(1)
     else:
-        logging.info(f"Running probe for scope: {args.scope}")
+        logging.info("Running probe for scope: %s", args.scope)
         try:
             PROBES_FUNCTIONS[args.scope](connection_params)
         except Exception as e:
-            logging.error(f"Error running probe {args.scope}: {e}")
+            logging.error("Error running probe %s: %s", args.scope, e)
             sys.exit(1)
 
 

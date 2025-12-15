@@ -49,7 +49,7 @@ def get_access_token_oauth(cfg):
         return response.json()["access_token"]
 
     except requests.exceptions.HTTPError as http_err:
-        logger.error(f"HTTP error occurred: {http_err}")
+        logger.error("HTTP error occurred: %s", http_err)
         raise
 
 
@@ -58,7 +58,7 @@ def clean_browser_processes():
         try:
             clean_browser_processes_path = "/externalbrowser/cleanBrowserProcesses.js"
             process = subprocess.run(["node", clean_browser_processes_path], timeout=15)
-            logger.debug(f"OUTPUT:  {process.stdout}, ERRORS: {process.stderr}")
+            logger.debug("OUTPUT:  %s, ERRORS: %s", process.stdout, process.stderr)
         except Exception as e:
             raise RuntimeError(e)
 
@@ -149,7 +149,7 @@ class AuthorizationTestHelper:
                 ],
                 timeout=15,
             )
-            logger.debug(f"OUTPUT:  {process.stdout}, ERRORS: {process.stderr}")
+            logger.debug("OUTPUT:  %s, ERRORS: %s", process.stdout, process.stderr)
         except Exception as e:
             self.error_msg = e
             raise RuntimeError(e)
@@ -164,7 +164,7 @@ class AuthorizationTestHelper:
                     capture_output=True,
                     text=True,
                 )
-                logger.debug(f"OUTPUT:  {process.stdout}, ERRORS: {process.stderr}")
+                logger.debug("OUTPUT:  %s, ERRORS: %s", process.stdout, process.stderr)
                 return process.stdout.strip().split()
             except Exception as e:
                 self.error_msg = e
@@ -192,7 +192,7 @@ class AuthorizationTestHelper:
     def connect_and_execute_simple_query_with_mfa_token(self, totp_codes):
         # Try each TOTP code until one works
         for i, totp_code in enumerate(totp_codes):
-            logging.info(f"Trying TOTP code {i + 1}/{len(totp_codes)}")
+            logging.info("Trying TOTP code %s/%s", i + 1, len(totp_codes))
 
             self.configuration["passcode"] = totp_code
             self.error_msg = ""
@@ -200,15 +200,15 @@ class AuthorizationTestHelper:
             connection_success = self.connect_and_execute_simple_query()
 
             if connection_success:
-                logging.info(f"Successfully connected with TOTP code {i + 1}")
+                logging.info("Successfully connected with TOTP code %s", i + 1)
                 return True
             else:
                 last_error = str(self.error_msg)
-                logging.warning(f"TOTP code {i + 1} failed: {last_error}")
+                logging.warning("TOTP code %s failed: %s", i + 1, last_error)
                 if "TOTP Invalid" in last_error:
                     logging.info("TOTP/MFA error detected.")
                     continue
                 else:
-                    logging.error(f"Non-TOTP error detected: {last_error}")
+                    logging.error("Non-TOTP error detected: %s", last_error)
                     break
         return False

@@ -49,7 +49,7 @@ def _query_run(conn, shared, expectedCanceled=True):
             for rec in c:
                 with shared.lock:
                     shared.session_id = int(rec[0])
-        logger.info(f"Current Session id: {shared.session_id}")
+        logger.info("Current Session id: %s", shared.session_id)
 
         # Run a long query and see if we're canceled
         canceled = False
@@ -95,7 +95,7 @@ def _query_cancel(conn, shared, user, password, expectedCanceled):
                     break
             logger.info("User %s is waiting for Session ID to be available", user)
             time.sleep(1)
-        logger.info(f"Target Session id: {shared.session_id}")
+        logger.info("Target Session id: %s", shared.session_id)
         try:
             query = f"call system$cancel_all_queries({shared.session_id})"
             logger.info("Query: %s", query)

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import typing
+
 from enum import Enum, unique
+
 
 if typing.TYPE_CHECKING:
     from snowflake.connector.connection import SnowflakeConnection
@@ -74,26 +76,20 @@ class AuthByWorkloadIdentity(AuthByPlugin):
 
     def update_body(self, body: dict[typing.Any, typing.Any]) -> None:
         body["data"]["AUTHENTICATOR"] = WORKLOAD_IDENTITY_AUTHENTICATOR
-        body["data"]["PROVIDER"] = ApiFederatedAuthenticationType.from_attestation(
-            self.attestation
-        ).value
+        body["data"]["PROVIDER"] = ApiFederatedAuthenticationType.from_attestation(self.attestation).value
         body["data"]["TOKEN"] = self.attestation.credential
-        body["data"].setdefault("CLIENT_ENVIRONMENT", {})[
-            "WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH"
-        ] = len(self.impersonation_path or [])
+        body["data"].setdefault("CLIENT_ENVIRONMENT", {})["WORKLOAD_IDENTITY_IMPERSONATION_PATH_LENGTH"] = len(
+            self.impersonation_path or []
+        )
 
-    def prepare(
-        self, *, conn: SnowflakeConnection | None, **kwargs: typing.Any
-    ) -> None:
+    def prepare(self, *, conn: SnowflakeConnection | None, **kwargs: typing.Any) -> None:
         """Fetch the token."""
         self.attestation = create_attestation(
             self.provider,
             self.entra_resource,
             self.token,
             self.impersonation_path,
-            session_manager=(
-                conn._session_manager.clone(max_retries=0) if conn else None
-            ),
+            session_manager=(conn._session_manager.clone(max_retries=0) if conn else None),
         )
 
     def reauthenticate(self, **kwargs: typing.Any) -> dict[str, bool]:

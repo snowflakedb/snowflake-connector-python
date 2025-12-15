@@ -6,6 +6,7 @@ from logging import getLogger
 
 from snowflake.connector.converter_snowsql import SnowflakeConverterSnowSQL
 
+
 logger = getLogger(__name__)
 
 ConverterSnowSQL = SnowflakeConverterSnowSQL

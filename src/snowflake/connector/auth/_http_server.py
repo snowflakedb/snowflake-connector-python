@@ -10,12 +10,14 @@ import select
 import socket
 import time
 import urllib.parse
+
 from collections.abc import Callable
 from types import TracebackType
 
 from typing_extensions import Self
 
 from ..compat import IS_WINDOWS
+
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +26,7 @@ def _use_msg_dont_wait() -> bool:
     if os.getenv("SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT", "false").lower() != "true":
         return False
     if IS_WINDOWS:
-        logger.warning(
-            "Configuration SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT is not available in Windows. Ignoring."
-        )
+        logger.warning("Configuration SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT is not available in Windows. Ignoring.")
         return False
     return True
 
@@ -37,9 +37,7 @@ def _wrap_socket_recv() -> Callable[[socket.socket, int], bytes]:
         # WSL containerized environment sometimes causes socket_client.recv to hang indefinetly
         #   To avoid this, passing the socket.MSG_DONTWAIT flag which raises BlockingIOError if
         #   operation would block
-        logger.debug(
-            "Will call socket.recv with MSG_DONTWAIT flag due to SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT env var"
-        )
+        logger.debug("Will call socket.recv with MSG_DONTWAIT flag due to SNOWFLAKE_AUTH_SOCKET_MSG_DONTWAIT env var")
     socket_recv = (
         (lambda sock, buf_size: socket.socket.recv(sock, buf_size, socket.MSG_DONTWAIT))
         if dont_wait
@@ -78,9 +76,7 @@ class AuthHttpServer:
         self.buf_size = buf_size
         if os.getenv("SNOWFLAKE_AUTH_SOCKET_REUSE_PORT", "False").lower() == "true":
             if IS_WINDOWS:
-                logger.warning(
-                    "Configuration SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not available in Windows. Ignoring."
-                )
+                logger.warning("Configuration SNOWFLAKE_AUTH_SOCKET_REUSE_PORT is not available in Windows. Ignoring.")
             else:
                 self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
 
@@ -99,25 +95,24 @@ class AuthHttpServer:
                 )
                 break
             except socket.gaierror as ex:
-                logger.error(
-                    f"Failed to bind authorization callback server to port {server_port}: {ex}"
-                )
+                logger.error("Failed to bind authorization callback server to port %s: %s", server_port, ex)
                 raise
             except OSError as ex:
                 if attempt == self.DEFAULT_MAX_ATTEMPTS:
-                    logger.error(
-                        f"Failed to bind authorization callback server to port {server_port}: {ex}"
-                    )
+                    logger.error("Failed to bind authorization callback server to port %s: %s", server_port, ex)
                     raise
                 logger.warning(
-                    f"Attempt {attempt}/{self.DEFAULT_MAX_ATTEMPTS}. "
-                    f"Failed to bind authorization callback server to port {server_port}: {ex}"
+                    "Attempt %s/%s. Failed to bind authorization callback server to port %s: %s",
+                    attempt,
+                    self.DEFAULT_MAX_ATTEMPTS,
+                    server_port,
+                    ex,
                 )
                 time.sleep(self.PORT_BIND_TIMEOUT / self.PORT_BIND_MAX_ATTEMPTS)
         try:
             self._socket.listen(0)  # no backlog
         except Exception as ex:
-            logger.error(f"Failed to start listening for auth callback: {ex}")
+            logger.error("Failed to start listening for auth callback: %s", ex)
             self.close()
             raise
 
@@ -132,12 +127,9 @@ class AuthHttpServer:
         )
 
         if parsed_redirect:
-            if (
-                self._is_local_uri(parsed_redirect)
-                and server_port != parsed_redirect.port
-            ):
+            if self._is_local_uri(parsed_redirect) and server_port != parsed_redirect.port:
                 logger.debug(
-                    f"Updating redirect port {parsed_redirect.port} to match the server port {server_port}."
+                    "Updating redirect port %s to match the server port %s.", parsed_redirect.port, server_port
                 )
                 self._redirect_uri = urllib.parse.ParseResult(
                     scheme=parsed_redirect.scheme,
@@ -173,9 +165,7 @@ class AuthHttpServer:
     def hostname(self) -> str:
         return self._uri.hostname
 
-    def _try_poll(
-        self, attempts: int, attempt_timeout: float | None
-    ) -> (socket.socket | None, int):
+    def _try_poll(self, attempts: int, attempt_timeout: float | None) -> (socket.socket | None, int):
         for attempt in range(attempts):
             read_sockets = select.select([self._socket], [], [], attempt_timeout)[0]
             if read_sockets and read_sockets[0] is not None:
@@ -195,14 +185,15 @@ class AuthHttpServer:
                 if attempt < attempts - 1:
                     cooldown = min(attempt_timeout, 0.25) if attempt_timeout else 0.25
                     logger.debug(
-                        f"BlockingIOError raised from socket.recv on {1 + attempt}/{attempts} attempt."
-                        f"Waiting for {cooldown} seconds before trying again"
+                        "BlockingIOError raised from socket.recv on %s/%s attempt. "
+                        "Waiting for %s seconds before trying again",
+                        1 + attempt,
+                        attempts,
+                        cooldown,
                     )
                     time.sleep(cooldown)
-            except socket.timeout:
-                logger.debug(
-                    f"socket.recv timed out on {1 + attempt}/{attempts} attempt."
-                )
+            except TimeoutError:
+                logger.debug("socket.recv timed out on %s/%s attempt.", 1 + attempt, attempts)
         return None
 
     def receive_block(
@@ -216,16 +207,12 @@ class AuthHttpServer:
             timeout = self.DEFAULT_TIMEOUT
         """Receive a message with a maximum attempt count and a timeout in seconds, blocking."""
         if not self._socket:
-            raise RuntimeError(
-                "Operation is not supported, server was already shut down."
-            )
+            raise RuntimeError("Operation is not supported, server was already shut down.")
         attempt_timeout = timeout / max_attempts if timeout else None
         client_socket, poll_attempts = self._try_poll(max_attempts, attempt_timeout)
         if client_socket is None:
             return None, None
-        raw_block = self._try_receive_block(
-            client_socket, max_attempts - poll_attempts, attempt_timeout
-        )
+        raw_block = self._try_receive_block(client_socket, max_attempts - poll_attempts, attempt_timeout)
         if raw_block:
             return raw_block.decode("utf-8").split("\r\n"), client_socket
         try:

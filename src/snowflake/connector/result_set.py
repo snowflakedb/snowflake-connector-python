@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import inspect
+
 from collections import deque
+from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ALL_COMPLETED, Future, ProcessPoolExecutor, wait
 from concurrent.futures.thread import ThreadPoolExecutor
 from logging import getLogger
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
-    Deque,
-    Iterable,
-    Iterator,
     Literal,
     overload,
 )
@@ -29,6 +27,7 @@ from .result_batch import (
 from .telemetry import TelemetryField
 from .time_util import get_time_millis
 
+
 if TYPE_CHECKING:  # pragma: no cover
     from pandas import DataFrame
     from pyarrow import Table
@@ -40,8 +39,8 @@ logger = getLogger(__name__)
 
 def result_set_iterator(
     first_batch_iter: Iterator[tuple],
-    unconsumed_batches: Deque[Future[Iterator[tuple]]],
-    unfetched_batches: Deque[ResultBatch],
+    unconsumed_batches: deque[Future[Iterator[tuple]]],
+    unfetched_batches: deque[ResultBatch],
     final: Callable[[], None],
     prefetch_thread_num: int,
     use_mp: bool,
@@ -88,19 +87,15 @@ def result_set_iterator(
             logger.debug("beginning to schedule result batch downloads")
             yield from first_batch_iter
             while unfetched_batches:
-                logger.debug(
-                    f"queuing download of result batch id: {unfetched_batches[0].id}"
-                )
-                future = pool.submit(
-                    create_fetch_task(unfetched_batches.popleft()), **kw
-                )
+                logger.debug("queuing download of result batch id: %s", unfetched_batches[0].id)
+                future = pool.submit(create_fetch_task(unfetched_batches.popleft()), **kw)
                 unconsumed_batches.append(future)
             _, _ = wait(unconsumed_batches, return_when=ALL_COMPLETED)
             i = 1
             while unconsumed_batches:
-                logger.debug(f"user began consuming result batch {i}")
+                logger.debug("user began consuming result batch %s", i)
                 yield from get_fetch_result(unconsumed_batches.popleft().result())
-                logger.debug(f"user began consuming result batch {i}")
+                logger.debug("user began consuming result batch %s", i)
                 i += 1
         final()
     else:
@@ -110,27 +105,19 @@ def result_set_iterator(
             logger.debug("beginning to schedule result batch downloads")
 
             for _ in range(min(prefetch_thread_num, len(unfetched_batches))):
-                logger.debug(
-                    f"queuing download of result batch id: {unfetched_batches[0].id}"
-                )
-                unconsumed_batches.append(
-                    pool.submit(create_fetch_task(unfetched_batches.popleft()), **kw)
-                )
+                logger.debug("queuing download of result batch id: %s", unfetched_batches[0].id)
+                unconsumed_batches.append(pool.submit(create_fetch_task(unfetched_batches.popleft()), **kw))
 
             yield from first_batch_iter
 
             i = 1
             while unconsumed_batches:
-                logger.debug(f"user requesting to consume result batch {i}")
+                logger.debug("user requesting to consume result batch %s", i)
 
                 # Submit the next un-fetched batch to the pool
                 if unfetched_batches:
-                    logger.debug(
-                        f"queuing download of result batch id: {unfetched_batches[0].id}"
-                    )
-                    future = pool.submit(
-                        create_fetch_task(unfetched_batches.popleft()), **kw
-                    )
+                    logger.debug("queuing download of result batch id: %s", unfetched_batches[0].id)
+                    future = pool.submit(create_fetch_task(unfetched_batches.popleft()), **kw)
                     unconsumed_batches.append(future)
 
                 future = unconsumed_batches.popleft()
@@ -138,9 +125,9 @@ def result_set_iterator(
                 # this will raise an exception if one has occurred
                 batch_iterator = get_fetch_result(future.result())
 
-                logger.debug(f"user began consuming result batch {i}")
+                logger.debug("user began consuming result batch %s", i)
                 yield from batch_iterator
-                logger.debug(f"user finished consuming result batch {i}")
+                logger.debug("user finished consuming result batch %s", i)
 
                 i += 1
         final()
@@ -179,12 +166,8 @@ class ResultSet(Iterable[list]):
         TIME_PARSING_CHUNKS in that order.
         """
         if self._cursor._first_chunk_time is not None:
-            time_consume_last_result = (
-                get_time_millis() - self._cursor._first_chunk_time
-            )
-            self._cursor._log_telemetry_job_data(
-                TelemetryField.TIME_CONSUME_LAST_RESULT, time_consume_last_result
-            )
+            time_consume_last_result = get_time_millis() - self._cursor._first_chunk_time
+            self._cursor._log_telemetry_job_data(TelemetryField.TIME_CONSUME_LAST_RESULT, time_consume_last_result)
         metrics = self._get_metrics()
         if DownloadMetrics.download.value in metrics:
             self._cursor._log_telemetry_job_data(
@@ -207,10 +190,7 @@ class ResultSet(Iterable[list]):
         #  represents them all
         head_type = type(self.batches[0])
         if head_type != ArrowResultBatch:
-            raise NotSupportedError(
-                f"Trying to use arrow fetching on {head_type} which "
-                f"is not ArrowResultChunk"
-            )
+            raise NotSupportedError(f"Trying to use arrow fetching on {head_type} which is not ArrowResultChunk")
 
     def _fetch_arrow_batches(
         self,
@@ -240,9 +220,7 @@ class ResultSet(Iterable[list]):
         Snowflake's back-end.
         """
         self._can_create_arrow_iter()
-        return self._create_iter(
-            iter_unit=IterUnit.TABLE_UNIT, structure="pandas", **kwargs
-        )
+        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="pandas", **kwargs)
 
     def _fetch_pandas_all(self, **kwargs) -> DataFrame:
         """Fetches a single Pandas dataframe."""
@@ -273,12 +251,7 @@ class ResultSet(Iterable[list]):
     def _create_iter(
         self,
         **kwargs,
-    ) -> (
-        Iterator[dict | Exception]
-        | Iterator[tuple | Exception]
-        | Iterator[Table]
-        | Iterator[DataFrame]
-    ):
+    ) -> Iterator[dict | Exception] | Iterator[tuple | Exception] | Iterator[Table] | Iterator[DataFrame]:
         """Set up a new iterator through all batches with first 5 chunks downloaded.
 
         This function is a helper function to ``__iter__`` and it was introduced for the
@@ -293,12 +266,12 @@ class ResultSet(Iterable[list]):
         first_batch_iter = self.batches[0].create_iter(**kwargs)
 
         # Iterator[Tuple] Futures that have not been consumed by the user
-        unconsumed_batches: Deque[Future[Iterator[tuple]]] = deque()
+        unconsumed_batches: deque[Future[Iterator[tuple]]] = deque()
 
         # batches that have not been fetched
         unfetched_batches = deque(self.batches[1:])
         for num, batch in enumerate(unfetched_batches):
-            logger.debug(f"result batch {num + 1} has id: {batch.id}")
+            logger.debug("result batch %s has id: %s", num + 1, batch.id)
 
         return result_set_iterator(
             first_batch_iter,

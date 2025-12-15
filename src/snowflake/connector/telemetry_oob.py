@@ -5,6 +5,7 @@ import datetime
 import json
 import logging
 import uuid
+
 from collections import namedtuple
 from queue import Queue
 from threading import Lock
@@ -17,6 +18,7 @@ from .telemetry import TelemetryField, generate_telemetry_data_dict
 from .test_util import ENABLE_TELEMETRY_LOG, rt_plain_logger
 from .vendored import requests
 
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_BATCH_SIZE = 10
@@ -25,9 +27,7 @@ REQUEST_TIMEOUT = 3
 
 TelemetryAPI = namedtuple("TelemetryAPI", ["url", "api_key"])
 TelemetryServer = namedtuple("TelemetryServer", ["name", "url", "api_key"])
-TelemetryEventBase = namedtuple(
-    "TelemetryEventBase", ["name", "tags", "urgent", "value"]
-)
+TelemetryEventBase = namedtuple("TelemetryEventBase", ["name", "tags", "urgent", "value"])
 
 
 class TelemetryAPIEndpoint:
@@ -46,21 +46,11 @@ class TelemetryAPIEndpoint:
 
 
 class TelemetryServerDeployments:
-    DEV = TelemetryServer(
-        "dev", TelemetryAPIEndpoint.SFCTEST.url, TelemetryAPIEndpoint.SFCTEST.api_key
-    )
-    REG = TelemetryServer(
-        "reg", TelemetryAPIEndpoint.SFCTEST.url, TelemetryAPIEndpoint.SFCTEST.api_key
-    )
-    QA1 = TelemetryServer(
-        "qa1", TelemetryAPIEndpoint.SFCDEV.url, TelemetryAPIEndpoint.SFCDEV.api_key
-    )
-    PREPROD3 = TelemetryServer(
-        "preprod3", TelemetryAPIEndpoint.SFCDEV.url, TelemetryAPIEndpoint.SFCDEV.api_key
-    )
-    PROD = TelemetryServer(
-        "prod", TelemetryAPIEndpoint.PROD.url, TelemetryAPIEndpoint.PROD.api_key
-    )
+    DEV = TelemetryServer("dev", TelemetryAPIEndpoint.SFCTEST.url, TelemetryAPIEndpoint.SFCTEST.api_key)
+    REG = TelemetryServer("reg", TelemetryAPIEndpoint.SFCTEST.url, TelemetryAPIEndpoint.SFCTEST.api_key)
+    QA1 = TelemetryServer("qa1", TelemetryAPIEndpoint.SFCDEV.url, TelemetryAPIEndpoint.SFCDEV.api_key)
+    PREPROD3 = TelemetryServer("preprod3", TelemetryAPIEndpoint.SFCDEV.url, TelemetryAPIEndpoint.SFCDEV.api_key)
+    PROD = TelemetryServer("prod", TelemetryAPIEndpoint.PROD.url, TelemetryAPIEndpoint.PROD.api_key)
 
 
 ENABLED_DEPLOYMENTS = (
@@ -125,12 +115,8 @@ class TelemetryEvent(TelemetryEventBase):
         # Add telemetry service generated tags
         tags[TelemetryField.KEY_OOB_DRIVER.value] = CLIENT_NAME
         tags[TelemetryField.KEY_OOB_VERSION.value] = str(SNOWFLAKE_CONNECTOR_VERSION)
-        tags[TelemetryField.KEY_OOB_TELEMETRY_SERVER_DEPLOYMENT.value] = (
-            telemetry.deployment.name
-        )
-        tags[TelemetryField.KEY_OOB_CONNECTION_STRING.value] = (
-            telemetry.get_connection_string()
-        )
+        tags[TelemetryField.KEY_OOB_TELEMETRY_SERVER_DEPLOYMENT.value] = telemetry.deployment.name
+        tags[TelemetryField.KEY_OOB_CONNECTION_STRING.value] = telemetry.get_connection_string()
         if telemetry.context and len(telemetry.context) > 0:
             for k, v in telemetry.context.items():
                 if v is not None:
@@ -171,9 +157,7 @@ class TelemetryService:
         self._enabled = False
         self._queue = Queue()
         self.batch_size = DEFAULT_BATCH_SIZE
-        self.num_of_retry_to_trigger_telemetry = (
-            DEFAULT_NUM_OF_RETRY_TO_TRIGGER_TELEMETRY
-        )
+        self.num_of_retry_to_trigger_telemetry = DEFAULT_NUM_OF_RETRY_TO_TRIGGER_TELEMETRY
         self.context = dict()
         self.connection_params = dict()
         self.deployment = TelemetryServerDeployments.PROD
@@ -296,26 +280,14 @@ class TelemetryService:
         self.context = dict()
 
         for key, value in connection_params.items():
-            if (
-                "password" not in key
-                and "passcode" not in key
-                and "privateKey" not in key
-            ):
+            if "password" not in key and "passcode" not in key and "privateKey" not in key:
                 self.context[key] = value
 
     def configure_deployment(self, connection_params) -> None:
         """Determines which deployment we are sending Telemetry OOB messages to."""
         self.connection_params = connection_params
-        account = (
-            self.connection_params.get("account")
-            if self.connection_params.get("account")
-            else ""
-        )
-        host = (
-            self.connection_params.get("host")
-            if self.connection_params.get("host")
-            else ""
-        )
+        account = self.connection_params.get("account") if self.connection_params.get("account") else ""
+        host = self.connection_params.get("host") if self.connection_params.get("host") else ""
         port = self.connection_params.get("port", None)
 
         # Set as PROD by default
@@ -347,22 +319,16 @@ class TelemetryService:
             if self.enabled:
                 event_name = "OCSPException"
                 if exception is not None:
-                    telemetry_data[TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value] = (
-                        str(exception)
-                    )
+                    telemetry_data[TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value] = str(exception)
                 if stack_trace is not None:
-                    telemetry_data[
-                        TelemetryField.KEY_OOB_EXCEPTION_STACK_TRACE.value
-                    ] = stack_trace
+                    telemetry_data[TelemetryField.KEY_OOB_EXCEPTION_STACK_TRACE.value] = stack_trace
 
                 if tags is None:
                     tags = dict()
 
                 tags[TelemetryField.KEY_OOB_EVENT_TYPE.value] = event_type
 
-                log_event = TelemetryLogEvent(
-                    name=event_name, tags=tags, urgent=urgent, value=telemetry_data
-                )
+                log_event = TelemetryLogEvent(name=event_name, tags=tags, urgent=urgent, value=telemetry_data)
 
                 self.add(log_event)
         except Exception:
@@ -400,46 +366,28 @@ class TelemetryService:
                     is_oob_telemetry=True,
                 )
                 if response:
-                    telemetry_data[TelemetryField.KEY_OOB_RESPONSE.value] = (
-                        response.json()
-                    )
-                    telemetry_data[
-                        TelemetryField.KEY_OOB_RESPONSE_STATUS_LINE.value
-                    ] = str(response.reason)
+                    telemetry_data[TelemetryField.KEY_OOB_RESPONSE.value] = response.json()
+                    telemetry_data[TelemetryField.KEY_OOB_RESPONSE_STATUS_LINE.value] = str(response.reason)
                     if response.status_code:
                         response_status_code = str(response.status_code)
-                        telemetry_data[
-                            TelemetryField.KEY_OOB_RESPONSE_STATUS_CODE.value
-                        ] = response_status_code
+                        telemetry_data[TelemetryField.KEY_OOB_RESPONSE_STATUS_CODE.value] = response_status_code
                 if retry_timeout:
-                    telemetry_data[TelemetryField.KEY_OOB_RETRY_TIMEOUT.value] = str(
-                        retry_timeout
-                    )
+                    telemetry_data[TelemetryField.KEY_OOB_RETRY_TIMEOUT.value] = str(retry_timeout)
                 if retry_count:
-                    telemetry_data[TelemetryField.KEY_OOB_RETRY_COUNT.value] = str(
-                        retry_count
-                    )
+                    telemetry_data[TelemetryField.KEY_OOB_RETRY_COUNT.value] = str(retry_count)
                 if exception:
-                    telemetry_data[TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value] = (
-                        str(exception)
-                    )
+                    telemetry_data[TelemetryField.KEY_OOB_EXCEPTION_MESSAGE.value] = str(exception)
                 if stack_trace:
-                    telemetry_data[
-                        TelemetryField.KEY_OOB_EXCEPTION_STACK_TRACE.value
-                    ] = stack_trace
+                    telemetry_data[TelemetryField.KEY_OOB_EXCEPTION_STACK_TRACE.value] = stack_trace
 
                 if tags is None:
                     tags = dict()
 
-                tags[TelemetryField.KEY_OOB_RESPONSE_STATUS_CODE.value] = (
-                    response_status_code
-                )
+                tags[TelemetryField.KEY_OOB_RESPONSE_STATUS_CODE.value] = response_status_code
                 tags[TelemetryField.KEY_OOB_SQL_STATE.value] = str(sqlstate)
                 tags[TelemetryField.KEY_OOB_ERROR_CODE.value] = errno
 
-                log_event = TelemetryLogEvent(
-                    name=event_name, tags=tags, value=telemetry_data, urgent=urgent
-                )
+                log_event = TelemetryLogEvent(name=event_name, tags=tags, value=telemetry_data, urgent=urgent)
 
                 self.add(log_event)
         except Exception:
@@ -458,9 +406,7 @@ class TelemetryService:
             tags = dict()
         try:
             if self.enabled:
-                log_event = TelemetryLogEvent(
-                    name=event_name, tags=tags, value=telemetry_data, urgent=urgent
-                )
+                log_event = TelemetryLogEvent(name=event_name, tags=tags, value=telemetry_data, urgent=urgent)
                 self.add(log_event)
         except Exception:
             # Do nothing on exception, just log
@@ -477,10 +423,10 @@ class TelemetryService:
             if not self.is_deployment_enabled():
                 logger.debug("Skip the disabled deployment: %s", self.deployment.name)
                 return
-            logger.debug(f"Sending OOB telemetry data. Payload: {payload}")
+            logger.debug("Sending OOB telemetry data. Payload: %s", payload)
             if ENABLE_TELEMETRY_LOG:
                 # This logger guarantees the payload won't be masked. Testing purpose.
-                rt_plain_logger.debug(f"OOB telemetry data being sent is {payload}")
+                rt_plain_logger.debug("OOB telemetry data being sent is %s", payload)
 
             # TODO(SNOW-2259522): Telemetry OOB is currently disabled. If Telemetry OOB is to be re-enabled, this HTTP call must be routed through the connection_argument.session_manager.use_session(use_pooling) (so the SessionManager instance attached to the connection which initialization's fail most likely triggered this telemetry log). It would allow to pick up proxy configuration & custom headers (see tickets SNOW-694457 and SNOW-2203079).
             with requests.Session() as session:
@@ -494,17 +440,10 @@ class TelemetryService:
                     headers=headers,
                     timeout=REQUEST_TIMEOUT,
                 )
-                if (
-                    response.status_code == OK
-                    and json.loads(response.text).get("statusCode", 0) == OK
-                ):
-                    logger.debug(
-                        "telemetry server request success: %d", response.status_code
-                    )
+                if response.status_code == OK and json.loads(response.text).get("statusCode", 0) == OK:
+                    logger.debug("telemetry server request success: %d", response.status_code)
                 else:
-                    logger.debug(
-                        "telemetry server request error: %d", response.status_code
-                    )
+                    logger.debug("telemetry server request error: %d", response.status_code)
                     success = False
         except Exception as e:
             logger.debug(
@@ -526,8 +465,8 @@ class TelemetryService:
             payload = json.dumps(logs)
         except Exception:
             logger.debug(
-                "Failed to generate a JSON dump from the passed in telemetry OOB events. String representation of logs: %s"
-                % str(logs),
+                "Failed to generate a JSON dump from the passed in telemetry OOB events. String representation of logs: %s",
+                str(logs),
                 exc_info=True,
             )
             payload = None
