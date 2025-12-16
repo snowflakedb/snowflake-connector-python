@@ -191,10 +191,6 @@ class SetDefaultInstallationExtras(egg_info):
             boto_extras = self.distribution.extras_require.get("boto", [])
             self.distribution.install_requires += boto_extras
 
-            if "aio" in self.distribution.extras_require:
-                aioboto_extras = self.distribution.extras_require.get("aioboto", [])
-                self.distribution.extras_require["aio"] += aioboto_extras
-
 
 # Update command classes
 cmd_class["egg_info"] = SetDefaultInstallationExtras
