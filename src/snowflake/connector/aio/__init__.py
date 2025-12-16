@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-# temporarily disable aio
+# temporarily disable aio - SNOW-2905263
 raise ImportError("aio is not supported in this version of the connector")
 
 
