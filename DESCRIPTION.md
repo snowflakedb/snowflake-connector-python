@@ -7,7 +7,7 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v4.2.0(TBD)
+- v4.2.0(December 17,2025)
   - Added `SnowflakeCursor.stats` property to expose granular DML statistics (rows inserted, deleted, updated, and duplicates) for operations like CTAS where `rowcount` is insufficient.
   - Added support for injecting SPCS service identifier token (`SPCS_TOKEN`) into login requests when present in SPCS containers.
   - Introduced shared library for extended telemetry to identify and prepare testing platform for native rust extensions.
