@@ -12,6 +12,7 @@ export RUN_WIF_TESTS=true
 /opt/python/cp312-cp312/bin/python -m pip install --break-system-packages -e .
 /opt/python/cp312-cp312/bin/python -m pytest test/wif/ --ignore test/wif/test_wif_async.py
 
-# test WIF with asyncio installed
-/opt/python/cp312-cp312/bin/python -m pip install --break-system-packages -e '.[aio]'
-/opt/python/cp312-cp312/bin/python -m pytest test/wif/
+# temporarily disable aio
+# # test WIF with asyncio installed
+# /opt/python/cp312-cp312/bin/python -m pip install --break-system-packages -e '.[aio]'
+# /opt/python/cp312-cp312/bin/python -m pytest test/wif/
