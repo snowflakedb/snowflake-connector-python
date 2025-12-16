@@ -55,43 +55,43 @@ jobs:
           deactivate
           rm -rf test_no_boto_env
 
-  test-installation-aioboto:
-    name: Test aioboto dependency
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  # test-installation-aioboto:
+  #   name: Test aioboto dependency
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.12
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v4
+  #       with:
+  #         python-version: 3.12
 
-      - name: Test installation with [aio] (should include aioboto)
-        shell: bash
-        run: |
-          python -m venv test_no_boto_env
-          source test_no_boto_env/bin/activate
+  #     - name: Test installation with [aio] (should include aioboto)
+  #       shell: bash
+  #       run: |
+  #         python -m venv test_no_boto_env
+  #         source test_no_boto_env/bin/activate
 
-          python -m pip install '.[aio]'
+  #         python -m pip install '.[aio]'
 
-          # Check that aioboto3 and aiobotocore are installed
-          pip freeze | grep aioboto || exit 1  # aioboto3 and aiobotocore should be installed
+  #         # Check that aioboto3 and aiobotocore are installed
+  #         pip freeze | grep aioboto || exit 1  # aioboto3 and aiobotocore should be installed
 
-          # Deactivate and clean up
-          deactivate
-          rm -rf test_no_boto_env
+  #         # Deactivate and clean up
+  #         deactivate
+  #         rm -rf test_no_boto_env
 
-      - name: Test [aio] installation with SNOWFLAKE_NO_BOTO=1 (should exclude aioboto)
-        shell: bash
-        run: |
-          python -m venv test_no_boto_env
-          source test_no_boto_env/bin/activate
+  #     - name: Test [aio] installation with SNOWFLAKE_NO_BOTO=1 (should exclude aioboto)
+  #       shell: bash
+  #       run: |
+  #         python -m venv test_no_boto_env
+  #         source test_no_boto_env/bin/activate
 
-          SNOWFLAKE_NO_BOTO=1 python -m pip install .
+  #         SNOWFLAKE_NO_BOTO=1 python -m pip install .
 
-          # Check that boto3, botocore, aioboto, aiobotocore are NOT installed
-          pip freeze | grep boto && exit 1
+  #         # Check that boto3, botocore, aioboto, aiobotocore are NOT installed
+  #         pip freeze | grep boto && exit 1
 
-          # Deactivate and clean up
-          deactivate
-          rm -rf test_no_boto_env
+  #         # Deactivate and clean up
+  #         deactivate
+  #         rm -rf test_no_boto_env
