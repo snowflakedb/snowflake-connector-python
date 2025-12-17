@@ -4,7 +4,7 @@
 # NOTES:
 #   - This is designed to ONLY be called in our build docker image
 #   - To compile only a specific version(s) pass in versions like: `./build_linux.sh "3.9 3.10"`
-set -o pipefail
+set -ox pipefail
 
 U_WIDTH=16
 PYTHON_VERSIONS="${1:-3.9 3.10 3.11 3.12 3.13}"
@@ -20,6 +20,39 @@ if [ -d "${DIST_DIR}" ]; then
     rm -rf "${DIST_DIR}"
 fi
 mkdir -p ${REPAIRED_DIR}
+
+# Clean up unnecessary minicore directories for the current platform
+# This ensures only relevant binary files are included in the wheel
+MINICORE_DIR="${CONNECTOR_DIR}/src/snowflake/connector/minicore"
+arch=$(uname -m)
+
+# Determine libc type (glibc or musl)
+if ldd --version 2>&1 | grep -qi musl; then
+    libc_type="musl"
+else
+    libc_type="glibc"
+fi
+
+# Determine which directory to keep based on architecture and libc
+if [[ $arch == "x86_64" ]]; then
+    keep_dir="linux_x86_64_${libc_type}"
+elif [[ $arch == "aarch64" ]]; then
+    keep_dir="linux_aarch64_${libc_type}"
+else
+    echo "[WARN] Unknown architecture: $arch, not cleaning minicore directories"
+    keep_dir=""
+fi
+
+if [[ -n "$keep_dir" && -d "${MINICORE_DIR}" ]]; then
+    echo "[Info] Cleaning minicore directories, keeping only ${keep_dir}"
+    for dir in "${MINICORE_DIR}"/*/; do
+        dir_name=$(basename "$dir")
+        if [[ "$dir_name" != "$keep_dir" && "$dir_name" != "__pycache__" ]]; then
+            echo "[Info] Removing minicore/${dir_name}"
+            rm -rf "$dir"
+        fi
+    done
+fi
 
 # Necessary for cpython_path
 source /home/user/multibuild/manylinux_utils.sh
@@ -39,6 +72,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     ${PYTHON} -m build --outdir ${BUILD_DIR} .
     # On Linux we should repair wheel(s) generated
 arch=$(uname -p)
+auditwheel show ${BUILD_DIR}/*.whl
 if [[ $arch == x86_64 ]]; then
   auditwheel repair --plat manylinux2014_x86_64 ${BUILD_DIR}/*.whl -w ${REPAIRED_DIR}
 else

@@ -13,6 +13,9 @@ exclude src/snowflake/connector/nanoarrow_cpp/ArrowIterator/nanoarrow_arrow_iter
 exclude src/snowflake/connector/nanoarrow_cpp/scripts/.clang-format
 exclude src/snowflake/connector/nanoarrow_cpp/scripts/format.sh
 
+include src/snowflake/connector/minicore __init__.py
+recursive-include src/snowflake/connector/minicore *.so *.dll *.dylib *.a *.h *.lib
+
 exclude .git-blame-ignore-revs
 exclude .pre-commit-config.yaml
 exclude license_header.txt
