@@ -89,11 +89,15 @@ def test_put_get_with_azure(tmpdir, conn_cnx, from_path, caplog):
         if "blob.core.windows.net" in line and expected_token_prefix in line:
             azure_request_present = True
             # getattr is used to stay compatible with old driver - before SECRET_STARRED_MASK_STR was added
-            assert (
-                expected_token_prefix
-                + getattr(SecretDetector, "SECRET_STARRED_MASK_STR", "****")
-                in line
-            ), "connectionpool logger is leaking sensitive information"
+            masked_signature = expected_token_prefix + getattr(
+                SecretDetector, "SECRET_STARRED_MASK_STR", "****"
+            )
+            if masked_signature not in line:
+                # Use SecretDetector to mask the line before showing it in error
+                _, masked_line, _ = SecretDetector.mask_secrets(line)
+                raise AssertionError(
+                    f"connectionpool logger is leaking sensitive information. Masked line: {masked_line}"
+                )
 
     assert (
         azure_request_present
