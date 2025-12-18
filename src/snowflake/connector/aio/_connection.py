@@ -933,12 +933,15 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
             if not self._server_session_keep_alive:
                 if await self._all_async_queries_finished():
-                    logger.debug("No async queries seem to be running, deleting session")
+                    logger.debug(
+                        "No async queries seem to be running, deleting session"
+                    )
                     try:
                         await self.rest.delete_session(retry=retry)
                     except Exception as e:
                         logger.debug(
-                            "Exception encountered in deleting session. ignoring...: %s", e
+                            "Exception encountered in deleting session. ignoring...: %s",
+                            e,
                         )
                 else:
                     logger.debug(

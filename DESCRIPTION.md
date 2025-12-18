@@ -7,6 +7,9 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- v4.2.1(TBD)
+  - Made the parameter `server_session_keep_alive` in `SnowflakeConnection` skip checking for pending async queries, providing faster connection close times especially when many async queries are executed.
+
 - v4.2.0(December 17,2025)
   - Added `SnowflakeCursor.stats` property to expose granular DML statistics (rows inserted, deleted, updated, and duplicates) for operations like CTAS where `rowcount` is insufficient.
   - Added support for injecting SPCS service identifier token (`SPCS_TOKEN`) into login requests when present in SPCS containers.
@@ -367,7 +370,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Bumped cryptography dependency from <41.0.0,>=3.1.0 to >=3.1.0,<42.0.0.
   - Improved OCSP response caching to remove tmp cache files on Windows.
   - Improved OCSP response caching to reduce the times of disk writing.
-  - Added a parameter `server_session_keep_alive` in `SnowflakeConnection` that skips session deletion when client connection closes.
   - Tightened our pinning of platformdirs, to prevent their new releases breaking us.
   - Fixed a bug where SFPlatformDirs would incorrectly append application_name/version to its path.
   - Added retry reason for queries that are retried by the client.
