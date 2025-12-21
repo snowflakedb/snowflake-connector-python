@@ -27,7 +27,7 @@ We require our contributors to sign a CLA, available at https://github.com/snowf
 What is a development environment? It's a [virtualenv](https://virtualenv.pypa.io) that has all of necessary
 dependencies installed with `snowflake-connector-python` installed as an editable package.
 
-Setting up a development environment is super easy with this [one simple tox command](https://tox.wiki/en/latest/example/devenv.html).
+Setting up a development environment is super easy with this [one simple tox command](https://tox.wiki/en/legacy/example/devenv.html).
 
 ```shell
 tox --devenv venv37 -e py37
