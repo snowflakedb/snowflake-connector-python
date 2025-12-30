@@ -308,6 +308,33 @@ class SnowflakeRestfulJsonEncoder(json.JSONEncoder):
         return super().default(o)
 
 
+class RetryCtx(TimeoutBackoffCtx):
+    def __init__(
+        self,
+        _include_retry_params: bool = False,
+        _include_retry_reason: bool = False,
+        **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.retry_reason = 0
+        self._include_retry_params = _include_retry_params
+        self._include_retry_reason = _include_retry_reason
+
+    def add_retry_params(self, full_url: str) -> str:
+        if self._include_retry_params and self.current_retry_count > 0:
+            retry_params = {
+                "clientStartTime": self._start_time_millis,
+                "retryCount": self.current_retry_count,
+            }
+            if self._include_retry_reason:
+                retry_params.update({"retryReason": self.retry_reason})
+            suffix = urlencode(retry_params)
+            sep = "&" if urlparse(full_url).query else "?"
+            return full_url + sep + suffix
+        else:
+            return full_url
+
+
 class SnowflakeRestful:
     """Snowflake Restful class."""
 
@@ -828,33 +855,6 @@ class SnowflakeRestful:
         **kwargs,
     ) -> dict[Any, Any]:
         """Carry out API request with session management."""
-
-        class RetryCtx(TimeoutBackoffCtx):
-            def __init__(
-                self,
-                _include_retry_params: bool = False,
-                _include_retry_reason: bool = False,
-                **kwargs,
-            ) -> None:
-                super().__init__(**kwargs)
-                self.retry_reason = 0
-                self._include_retry_params = _include_retry_params
-                self._include_retry_reason = _include_retry_reason
-
-            def add_retry_params(self, full_url: str) -> str:
-                if self._include_retry_params and self.current_retry_count > 0:
-                    retry_params = {
-                        "clientStartTime": self._start_time_millis,
-                        "retryCount": self.current_retry_count,
-                    }
-                    if self._include_retry_reason:
-                        retry_params.update({"retryReason": self.retry_reason})
-                    suffix = urlencode(retry_params)
-                    sep = "&" if urlparse(full_url).query else "?"
-                    return full_url + sep + suffix
-                else:
-                    return full_url
-
         include_retry_reason = self._connection._enable_retry_reason_in_query_response
         include_retry_params = kwargs.pop("_include_retry_params", False)
 
