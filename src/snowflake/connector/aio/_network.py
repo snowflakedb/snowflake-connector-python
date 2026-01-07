@@ -143,7 +143,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         session_manager: SessionManager | None = None,
     ):
         super().__init__(host, port, protocol, inject_client_pause, connection)
-        self._lock_token = asyncio.Lock()
+        self._token_async_lock = asyncio.Lock()
 
         if session_manager is None:
             session_manager = (
@@ -156,15 +156,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         self._session_manager = session_manager
 
     async def close(self) -> None:
-        if hasattr(self, "_token"):
-            del self._token
-        if hasattr(self, "_master_token"):
-            del self._master_token
-        if hasattr(self, "_id_token"):
-            del self._id_token
-        if hasattr(self, "_mfa_token"):
-            del self._mfa_token
-
+        async with self._token_async_lock:
+            self._remove_token_state()
         await self._session_manager.close()
 
     async def request(
@@ -182,7 +175,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         logger.debug("%s %s", method.upper(), url)
         if body is None:
             body = {}
-        if self.master_token is None and self.token is None:
+        state = self._get_token_state()
+        if state.master_token is None and state.session_token is None:
             Error.errorhandler_wrapper(
                 self._connection,
                 None,
@@ -225,7 +219,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 url,
                 headers,
                 json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
-                token=self.token,
+                token=state.session_token,
                 _no_results=_no_results,
                 timeout=timeout,
                 _include_retry_params=_include_retry_params,
@@ -235,7 +229,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             return await self._get_request(
                 url,
                 headers,
-                token=self.token,
+                token=state.session_token,
                 timeout=timeout,
             )
 
@@ -248,21 +242,25 @@ class SnowflakeRestful(SnowflakeRestfulSync):
         mfa_token=None,
     ) -> None:
         """Updates session and master tokens and optionally temporary credential."""
-        async with self._lock_token:
-            self._token = session_token
-            self._master_token = master_token
-            self._id_token = id_token
-            self._mfa_token = mfa_token
-            self._master_validity_in_seconds = master_validity_in_seconds
+        async with self._token_async_lock:
+            async with self._lock_token:
+                self._token_state = self._token_state.copy(
+                    session_token=session_token,
+                    master_token=master_token,
+                    master_validity_in_seconds=master_validity_in_seconds,
+                    id_token=id_token,
+                    mfa_token=mfa_token,
+                )
 
     async def _renew_session(self):
         """Renew a session and master token."""
         return await self._token_request(REQUEST_TYPE_RENEW)
 
     async def _token_request(self, request_type):
+        state = self._get_token_state()
         logger.debug(
             "updating session. master_token: {}".format(
-                "****" if self.master_token else None
+                "****" if state.master_token else None
             )
         )
         headers = {
@@ -278,9 +276,9 @@ class SnowflakeRestful(SnowflakeRestfulSync):
 
         # NOTE: ensure an empty key if master token is not set.
         # This avoids HTTP 400.
-        header_token = self.master_token or ""
+        header_token = state.master_token or ""
         body = {
-            "oldSessionToken": self.token,
+            "oldSessionToken": state.session_token,
             "requestType": request_type,
         }
         ret = await self._post_request(
@@ -331,6 +329,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             )
 
     async def _heartbeat(self) -> Any | dict[Any, Any] | None:
+        state = self._get_token_state()
         headers = {
             HTTP_HEADER_CONTENT_TYPE: CONTENT_TYPE_APPLICATION_JSON,
             HTTP_HEADER_ACCEPT: CONTENT_TYPE_APPLICATION_JSON,
@@ -345,7 +344,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             url,
             headers,
             None,
-            token=self.token,
+            token=state.session_token,
         )
         if not ret.get("success"):
             logger.error("Failed to heartbeat. code: %s, url: %s", ret.get("code"), url)
@@ -353,7 +352,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
 
     async def delete_session(self, retry: bool = False) -> None:
         """Deletes the session."""
-        if self.master_token is None:
+        state = self._get_token_state()
+        if state.master_token is None:
             Error.errorhandler_wrapper(
                 self._connection,
                 None,
@@ -385,7 +385,7 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                     url,
                     headers,
                     json.dumps(body, cls=SnowflakeRestfulJsonEncoder),
-                    token=self.token,
+                    token=state.session_token,
                     timeout=5,
                     no_retry=True,
                 )
@@ -441,10 +441,11 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 )
             )
             if ret.get("success"):
+                refreshed_state = self._get_token_state()
                 return await self._get_request(
                     url,
                     headers,
-                    token=self.token,
+                    token=refreshed_state.session_token,
                     is_fetch_query_status=is_fetch_query_status,
                 )
 
@@ -499,8 +500,13 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 )
             )
             if ret.get("success"):
+                refreshed_state = self._get_token_state()
                 return await self._post_request(
-                    url, headers, body, token=self.token, timeout=timeout
+                    url,
+                    headers,
+                    body,
+                    token=refreshed_state.session_token,
+                    timeout=timeout,
                 )
 
         if isinstance(ret.get("data"), dict) and ret["data"].get("queryId"):
@@ -516,10 +522,11 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             # ping pong
             result_url = ret["data"]["getResultUrl"]
             logger.debug("ping pong starting...")
+            refreshed_state = self._get_token_state()
             ret = await self._get_request(
                 result_url,
                 headers,
-                token=self.token,
+                token=refreshed_state.session_token,
                 timeout=timeout,
                 is_fetch_query_status=bool(
                     re.match(r"^/queries/.+/result$", result_url)

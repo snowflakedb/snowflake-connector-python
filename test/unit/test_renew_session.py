@@ -21,8 +21,7 @@ def test_renew_session():
     rest = SnowflakeRestful(
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
-    rest._token = OLD_SESSION_TOKEN
-    rest._master_token = OLD_MASTER_TOKEN
+    rest.update_tokens(OLD_SESSION_TOKEN, OLD_MASTER_TOKEN)
 
     # inject a fake method (success)
     def fake_request_exec(**_):
@@ -51,7 +50,12 @@ def test_renew_session():
     assert rest._connection.errorhandler.called  # error
 
     # no master token
-    del rest._master_token
+    del rest._token_state
+    rest._renew_session()
+    assert rest._connection.errorhandler.called  # error
+
+    # no master token
+    rest.update_tokens(OLD_SESSION_TOKEN, None)
     rest._renew_session()
     assert rest._connection.errorhandler.called  # error
 
@@ -69,8 +73,7 @@ def test_mask_token_when_renew_session(caplog):
     rest = SnowflakeRestful(
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
-    rest._token = OLD_SESSION_TOKEN
-    rest._master_token = OLD_MASTER_TOKEN
+    rest.update_tokens(OLD_SESSION_TOKEN, OLD_MASTER_TOKEN)
 
     # inject a fake method (success)
     def fake_request_exec(**_):

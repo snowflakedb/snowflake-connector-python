@@ -24,8 +24,7 @@ async def test_renew_session():
     rest = SnowflakeRestful(
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
-    rest._token = OLD_SESSION_TOKEN
-    rest._master_token = OLD_MASTER_TOKEN
+    await rest.update_tokens(OLD_SESSION_TOKEN, OLD_MASTER_TOKEN)
 
     # inject a fake method (success)
     async def fake_request_exec(**_):
@@ -54,9 +53,36 @@ async def test_renew_session():
     assert rest._connection.errorhandler.called  # error
 
     # no master token
-    del rest._master_token
+    await rest.update_tokens(OLD_SESSION_TOKEN, None)
     await rest._renew_session()
     assert rest._connection.errorhandler.called  # error
+
+
+async def test_token_state_snapshot_preserves_attributes_async():
+    connection = mock_connection()
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com", port=443, connection=connection
+    )
+
+    await rest.update_tokens("legacy-session", "legacy-master")
+
+    state = rest._get_token_state()
+    assert state.session_token == "legacy-session"
+    assert state.master_token == "legacy-master"
+
+    await rest.update_tokens(
+        "new-session",
+        "new-master",
+        master_validity_in_seconds=33,
+        id_token="id-token",
+    )
+
+    updated_state = rest._get_token_state()
+    assert updated_state.session_token == "new-session"
+    assert updated_state.master_token == "new-master"
+    assert rest.master_validity_in_seconds == 33
+    assert rest.token == "new-session"
+    assert rest.master_token == "new-master"
 
 
 async def test_mask_token_when_renew_session(caplog):
@@ -72,8 +98,7 @@ async def test_mask_token_when_renew_session(caplog):
     rest = SnowflakeRestful(
         host="testaccount.snowflakecomputing.com", port=443, connection=connection
     )
-    rest._token = OLD_SESSION_TOKEN
-    rest._master_token = OLD_MASTER_TOKEN
+    await rest.update_tokens(OLD_SESSION_TOKEN, OLD_MASTER_TOKEN)
 
     # inject a fake method (success)
     async def fake_request_exec(**_):
