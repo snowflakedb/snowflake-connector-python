@@ -9,6 +9,8 @@ import logging
 from test.unit.aio.mock_utils import mock_connection
 from unittest.mock import Mock, PropertyMock
 
+import pytest
+
 from snowflake.connector.aio._network import SnowflakeRestful
 
 
@@ -130,3 +132,25 @@ async def test_mask_token_when_renew_session(caplog):
     assert "new_master_token" not in caplog.text
     assert "old_session_token" not in caplog.text
     assert "old_master_token" not in caplog.text
+
+
+async def test_sync_setters_blocked_and_async_setters_work():
+    connection = mock_connection()
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com", port=443, connection=connection
+    )
+
+    with pytest.raises(TypeError):
+        rest.id_token = "id-token"
+    with pytest.raises(TypeError):
+        rest.mfa_token = "mfa-token"
+    with pytest.raises(TypeError):
+        rest.master_validity_in_seconds = 10
+
+    await rest.set_id_token_async("id-token")
+    await rest.set_mfa_token_async("mfa-token")
+    await rest.set_master_validity_in_seconds_async(55)
+
+    assert rest.id_token == "id-token"
+    assert rest.mfa_token == "mfa-token"
+    assert rest.master_validity_in_seconds == 55

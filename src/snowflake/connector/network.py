@@ -534,13 +534,14 @@ class SnowflakeRestful:
     ) -> None:
         """Updates session and master tokens and optionally temporary credential."""
         with self._lock_token:
-            self._token_state = self._get_token_state().copy(
+            new_state = self._get_token_state().copy(
                 session_token=session_token,
                 master_token=master_token,
                 master_validity_in_seconds=master_validity_in_seconds,
                 id_token=id_token,
                 mfa_token=mfa_token,
             )
+            self._token_state = new_state
 
     def set_pat_and_external_session(
         self,
@@ -549,11 +550,12 @@ class SnowflakeRestful:
     ) -> None:
         """Updates session and master tokens and optionally temporary credential."""
         with self._lock_token:
-            self._token_state = self._get_token_state().copy(
+            new_state = self._get_token_state().copy(
                 session_token=personal_access_token,
                 personal_access_token=personal_access_token,
                 external_session_id=external_session_id,
             )
+            self._token_state = new_state
 
     def _renew_session(self):
         """Renew a session and master token."""

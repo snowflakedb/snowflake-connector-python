@@ -77,7 +77,7 @@ from ..sqlstate import (
     SQLSTATE_CONNECTION_REJECTED,
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
 )
-from ..time_util import TimeoutBackoffCtx
+from ..time_util import DEFAULT_MASTER_VALIDITY_IN_SECONDS, TimeoutBackoffCtx
 from ._description import CLIENT_NAME
 from ._session_manager import (
     SessionManager,
@@ -154,6 +154,50 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 )
             )
         self._session_manager = session_manager
+
+    @property
+    def id_token(self):
+        return super().id_token
+
+    @id_token.setter
+    def id_token(self, value) -> None:
+        raise TypeError("Use set_id_token_async() in async connections.")
+
+    @property
+    def mfa_token(self) -> str | None:
+        return super().mfa_token
+
+    @mfa_token.setter
+    def mfa_token(self, value: str) -> None:
+        raise TypeError("Use set_mfa_token_async() in async connections.")
+
+    @property
+    def master_validity_in_seconds(self) -> int:
+        return super().master_validity_in_seconds
+
+    @master_validity_in_seconds.setter
+    def master_validity_in_seconds(self, value) -> None:
+        raise TypeError(
+            "Use set_master_validity_in_seconds_async() in async connections."
+        )
+
+    async def set_id_token_async(self, value) -> None:
+        async with self._token_async_lock:
+            with self._lock_token:
+                self._token_state = self._get_token_state().copy(id_token=value)
+
+    async def set_mfa_token_async(self, value: str) -> None:
+        async with self._token_async_lock:
+            with self._lock_token:
+                self._token_state = self._get_token_state().copy(mfa_token=value)
+
+    async def set_master_validity_in_seconds_async(self, value) -> None:
+        async with self._token_async_lock:
+            with self._lock_token:
+                target = value if value else DEFAULT_MASTER_VALIDITY_IN_SECONDS
+                self._token_state = self._get_token_state().copy(
+                    master_validity_in_seconds=target
+                )
 
     async def close(self) -> None:
         async with self._token_async_lock:
@@ -233,6 +277,11 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 timeout=timeout,
             )
 
+    # TODO(future): Decide legacy vs new token flow and serialization model. Current gaps:
+    # - Legacy consumers/tests still read connection._token (and friends) which are set at init, but not kept in sync after renewals; either mirror updates here (and delete on close) or audit/remove those reads to rely solely on _TokenState-backed properties.
+    # - Mutations are serialized via _token_async_lock + _lock_token; sync setters are disabled to avoid blocking the loop, but if we want to keep them, we need a coherent locking story.
+    # - The race we aim to avoid: mixed token snapshots across concurrent requests/renew/close; consider passing token snapshots via a context var instead of shared mutable state.
+    # - Post-close: we currently allow recreating state via _get_token_state(); if we prefer hard-fail after close, add an explicit closed guard instead of AttributeError.
     async def update_tokens(
         self,
         session_token,
@@ -243,14 +292,15 @@ class SnowflakeRestful(SnowflakeRestfulSync):
     ) -> None:
         """Updates session and master tokens and optionally temporary credential."""
         async with self._token_async_lock:
-            async with self._lock_token:
-                self._token_state = self._token_state.copy(
+            with self._lock_token:
+                new_state = self._get_token_state().copy(
                     session_token=session_token,
                     master_token=master_token,
                     master_validity_in_seconds=master_validity_in_seconds,
                     id_token=id_token,
                     mfa_token=mfa_token,
                 )
+                self._token_state = new_state
 
     async def _renew_session(self):
         """Renew a session and master token."""
