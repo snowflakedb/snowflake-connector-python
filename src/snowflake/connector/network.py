@@ -380,7 +380,7 @@ class SnowflakeRestful:
         _ = "dummy".encode("idna").decode("utf-8")
 
     def _get_token_state(self) -> _TokenState:
-        return self._token_state
+        return self._token_state if hasattr(self, "_token_state") else _TokenState()
 
     @property
     def token(self) -> str | None:
@@ -406,12 +406,11 @@ class SnowflakeRestful:
     @master_validity_in_seconds.setter
     def master_validity_in_seconds(self, value) -> None:
         with self._lock_token:
-            new_state = self._token_state.copy(
+            self._token_state = self._get_token_state().copy(
                 master_validity_in_seconds=(
                     value if value else DEFAULT_MASTER_VALIDITY_IN_SECONDS
                 )
             )
-            self._token_state = new_state
 
     @property
     def id_token(self):
@@ -420,8 +419,7 @@ class SnowflakeRestful:
     @id_token.setter
     def id_token(self, value) -> None:
         with self._lock_token:
-            new_state = self._token_state.copy(id_token=value)
-            self._token_state = new_state
+            self._token_state = self._get_token_state().copy(id_token=value)
 
     @property
     def mfa_token(self) -> str | None:
@@ -430,8 +428,7 @@ class SnowflakeRestful:
     @mfa_token.setter
     def mfa_token(self, value: str) -> None:
         with self._lock_token:
-            new_state = self._token_state.copy(mfa_token=value)
-            self._token_state = new_state
+            self._token_state = self._get_token_state().copy(mfa_token=value)
 
     @property
     def server_url(self) -> str:
@@ -537,7 +534,7 @@ class SnowflakeRestful:
     ) -> None:
         """Updates session and master tokens and optionally temporary credential."""
         with self._lock_token:
-            self._token_state = self._token_state.copy(
+            self._token_state = self._get_token_state().copy(
                 session_token=session_token,
                 master_token=master_token,
                 master_validity_in_seconds=master_validity_in_seconds,
@@ -552,7 +549,7 @@ class SnowflakeRestful:
     ) -> None:
         """Updates session and master tokens and optionally temporary credential."""
         with self._lock_token:
-            self._token_state = self._token_state.copy(
+            self._token_state = self._get_token_state().copy(
                 session_token=personal_access_token,
                 personal_access_token=personal_access_token,
                 external_session_id=external_session_id,
