@@ -254,6 +254,24 @@ def construct_hostname(region: str | None, account: str) -> str:
     return host
 
 
+ACCOUNT_ID_VALIDATOR_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def is_valid_account_identifier(account: str) -> bool:
+    """Validate the Snowflake account identifier format.
+
+    The account identifier must be a single label (no dots or slashes) composed
+    only of ASCII letters, digits, underscores, or hyphens.
+    """
+    if not isinstance(account, str) or not account:
+        return False
+
+    if "/" in account or "\\" in account:
+        return False
+
+    return all(bool(ACCOUNT_ID_VALIDATOR_RE.fullmatch(p)) for p in account.split("."))
+
+
 def parse_account(account):
     url_parts = account.split(".")
     # if this condition is true, then we have some extra
