@@ -10,7 +10,6 @@ from typing import NamedTuple
 import pytest
 
 import snowflake.connector
-import snowflake.connector.vendored.requests as requests
 from snowflake.connector.compat import urlparse as compat_urlparse
 from snowflake.connector.errors import OperationalError
 from snowflake.connector.session_manager import (
@@ -176,20 +175,10 @@ def test_basic_query_through_proxy(
     cnx.close()
 
     # Ensure proxy saw query
-    proxy_reqs = requests.get(f"{proxy_wm.http_host_with_port}/__admin/requests").json()
-    assert any(
-        "/queries/v1/query-request" in r["request"]["url"]
-        for r in proxy_reqs["requests"]
-    )
+    assert proxy_wm.saw_urls_matching(["/queries/v1/query-request"])
 
     # Ensure backend saw query
-    target_reqs = requests.get(
-        f"{target_wm.http_host_with_port}/__admin/requests"
-    ).json()
-    assert any(
-        "/queries/v1/query-request" in r["request"]["url"]
-        for r in target_reqs["requests"]
-    )
+    assert target_wm.saw_urls_matching(["/queries/v1/query-request"])
 
 
 @pytest.mark.skipolddriver
@@ -374,13 +363,15 @@ def _set_mappings_for_query_and_chunks(
 
 
 def _execute_large_query(connect_kwargs, row_count: int):
+    """Execute a large query using connection kwargs.
+
+    Creates a connection, executes the large query, and validates it uses multiple batches.
+    """
     with snowflake.connector.connect(**connect_kwargs) as conn:
-        cursors = conn.execute_string(
-            f"select seq4() as n from table(generator(rowcount => {row_count}));"
-        )
-        assert len(cursors[0]._result_set.batches) > 1
-    rs = list(cursors[0])
-    assert rs
+        with conn.cursor() as cur:
+            _execute_large_query_on_cursor(cur, row_count)
+            # Verify that the query used multiple batches (remote storage)
+            assert len(cur._result_set.batches) > 1
 
 
 @pytest.fixture
@@ -411,30 +402,15 @@ class RequestFlags(NamedTuple):
 
 
 def _collect_request_flags(proxy_wm, target_wm, storage_wm) -> RequestFlags:
-    proxy_reqs = requests.get(f"{proxy_wm.http_host_with_port}/__admin/requests").json()
-    target_reqs = requests.get(
-        f"{target_wm.http_host_with_port}/__admin/requests"
-    ).json()
-    storage_reqs = requests.get(
-        f"{storage_wm.http_host_with_port}/__admin/requests"
-    ).json()
+    proxy_saw_db = proxy_wm.saw_urls_matching(["/queries/v1/query-request"])
+    target_saw_db = target_wm.saw_urls_matching(["/queries/v1/query-request"])
+    proxy_saw_storage = proxy_wm.saw_urls_matching(
+        ["/amazonaws/test/s3testaccount/stage/results/"]
+    )
+    storage_saw_storage = storage_wm.saw_urls_matching(
+        ["/amazonaws/test/s3testaccount/stage/results/"]
+    )
 
-    proxy_saw_db = any(
-        "/queries/v1/query-request" in r["request"]["url"]
-        for r in proxy_reqs["requests"]
-    )
-    target_saw_db = any(
-        "/queries/v1/query-request" in r["request"]["url"]
-        for r in target_reqs["requests"]
-    )
-    proxy_saw_storage = any(
-        "/amazonaws/test/s3testaccount/stage/results/" in r["request"]["url"]
-        for r in proxy_reqs["requests"]
-    )
-    storage_saw_storage = any(
-        "/amazonaws/test/s3testaccount/stage/results/" in r["request"]["url"]
-        for r in storage_reqs["requests"]
-    )
     return RequestFlags(
         proxy_saw_db=proxy_saw_db,
         target_saw_db=target_saw_db,
@@ -449,19 +425,14 @@ class DbRequestFlags(NamedTuple):
 
 
 def _collect_db_request_flags_only(proxy_wm, target_wm) -> DbRequestFlags:
-    proxy_reqs = requests.get(f"{proxy_wm.http_host_with_port}/__admin/requests").json()
-    target_reqs = requests.get(
-        f"{target_wm.http_host_with_port}/__admin/requests"
-    ).json()
-    proxy_saw_db = any(
-        "/queries/v1/query-request" in r["request"]["url"]
-        for r in proxy_reqs["requests"]
-    )
-    target_saw_db = any(
-        "/queries/v1/query-request" in r["request"]["url"]
-        for r in target_reqs["requests"]
-    )
+    proxy_saw_db = proxy_wm.saw_urls_matching(["/queries/v1/query-request"])
+    target_saw_db = target_wm.saw_urls_matching(["/queries/v1/query-request"])
     return DbRequestFlags(proxy_saw_db=proxy_saw_db, target_saw_db=target_saw_db)
+
+
+def _execute_large_query_on_cursor(cursor, row_count: int = 100000):
+    cursor.execute(f"SELECT seq4() as n FROM TABLE(GENERATOR(ROWCOUNT => {row_count}))")
+    return cursor.fetchall()
 
 
 class ProxyPrecedenceFlags(NamedTuple):
@@ -473,29 +444,14 @@ class ProxyPrecedenceFlags(NamedTuple):
 def _collect_proxy_precedence_flags(
     proxy1_wm, proxy2_wm, target_wm
 ) -> ProxyPrecedenceFlags:
-    """Collect flags for proxy precedence tests to see which proxy was used."""
-    proxy1_reqs = requests.get(
-        f"{proxy1_wm.http_host_with_port}/__admin/requests"
-    ).json()
-    proxy2_reqs = requests.get(
-        f"{proxy2_wm.http_host_with_port}/__admin/requests"
-    ).json()
-    target_reqs = requests.get(
-        f"{target_wm.http_host_with_port}/__admin/requests"
-    ).json()
+    """Collect flags for proxy precedence tests.
 
-    proxy1_saw_request = any(
-        "/queries/v1/query-request" in r["request"]["url"]
-        for r in proxy1_reqs["requests"]
-    )
-    proxy2_saw_request = any(
-        "/queries/v1/query-request" in r["request"]["url"]
-        for r in proxy2_reqs["requests"]
-    )
-    backend_saw_request = any(
-        "/queries/v1/query-request" in r["request"]["url"]
-        for r in target_reqs["requests"]
-    )
+    Checks which proxy (or target) saw query requests, useful for verifying
+    that connection parameters take precedence over environment variables.
+    """
+    proxy1_saw_request = proxy1_wm.saw_urls_matching(["/queries/v1/query-request"])
+    proxy2_saw_request = proxy2_wm.saw_urls_matching(["/queries/v1/query-request"])
+    backend_saw_request = target_wm.saw_urls_matching(["/queries/v1/query-request"])
 
     return ProxyPrecedenceFlags(
         proxy1_saw_request=proxy1_saw_request,
@@ -694,6 +650,7 @@ def test_no_proxy_multiple_values_param_only(
     wiremock_mapping_dir,
     proxy_env_vars,
     no_proxy_factory,
+    host_port_pooling,
 ):
     target_wm, storage_wm, proxy_wm = wiremock_backend_storage_proxy
     _setup_backend_storage_mappings(
