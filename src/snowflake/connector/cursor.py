@@ -78,6 +78,7 @@ from .options import installed_pandas
 from .sqlstate import SQLSTATE_FEATURE_NOT_SUPPORTED
 from .telemetry import TelemetryData, TelemetryField
 from .time_util import get_time_millis
+from .xp import is_xp_environment
 
 if TYPE_CHECKING:  # pragma: no cover
     from pandas import DataFrame
@@ -1867,6 +1868,42 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         file_transfer_agent.execute()
         self._init_result_and_meta(file_transfer_agent.result())
 
+    def _download_stream_xp(
+        self, stage_location: str, decompress: bool = False
+    ) -> IO[bytes]:
+        """Downloads from stage location as a stream using XP _sfstream.
+
+        Args:
+            stage_location (str): The location of the stage to download from.
+            decompress (bool, optional): Whether to decompress the file, by
+                default we do not decompress.
+
+        Returns:
+            IO[bytes]: A stream to read from.
+        """
+        import _sfstream
+
+        # Get RSO ID from connection if available
+        rso_id = getattr(self.connection, "_rso_id", None)
+
+        # Open stream for reading
+        stream = _sfstream.SfStream(
+            stage_location,
+            file_type=_sfstream.FileType.STAGE,
+            mode=_sfstream.Mode.READ,
+            rso_id=rso_id,
+        )
+
+        if decompress:
+            import gzip
+            import io
+
+            data = stream.read()
+            stream.close()
+            return io.BytesIO(gzip.decompress(data))
+
+        return stream
+
     def _download_stream(
         self, stage_location: str, decompress: bool = False
     ) -> IO[bytes]:
@@ -1880,6 +1917,11 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         Returns:
             IO[bytes]: A stream to read from.
         """
+        # XP environment: use _sfstream for direct stage access
+        if is_xp_environment():
+            return self._download_stream_xp(stage_location, decompress)
+
+        # Standard environment: use HTTP/cloud storage
         # Interpret the file operation.
         ret = self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,
@@ -1892,6 +1934,38 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
 
         # Set up stream downloading based on the interpretation and return the stream for reading.
         return self.connection._stream_downloader.download_as_stream(ret, decompress)
+
+    def _upload_stream_xp(
+        self,
+        input_stream: IO[bytes],
+        stage_location: str,
+    ) -> None:
+        """Uploads content in the input stream to stage location using XP _sfstream.
+
+        Args:
+            input_stream (IO[bytes]): A stream to read from.
+            stage_location (str): The location of the stage to upload to.
+        """
+        import _sfstream
+
+        # Get RSO ID from connection if available
+        rso_id = getattr(self.connection, "_rso_id", None)
+
+        # Open stream for writing
+        stream = _sfstream.SfStream(
+            stage_location,
+            file_type=_sfstream.FileType.STAGE,
+            mode=_sfstream.Mode.WRITE,
+            rso_id=rso_id,
+        )
+
+        # Write content from input stream
+        input_stream.seek(0)
+        data = input_stream.read()
+        stream.write(data)
+        stream.close()
+
+        logger.debug(f"Successfully uploaded stream to {stage_location}")
 
     def _upload_stream(
         self,
@@ -1913,6 +1987,12 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         if _do_reset:
             self.reset()
 
+        # XP environment: use _sfstream for direct stage access
+        if is_xp_environment():
+            self._upload_stream_xp(input_stream, stage_location)
+            return
+
+        # Standard environment: use HTTP/cloud storage
         # Interpret the file operation.
         ret = self.connection._file_operation_parser.parse_file_operation(
             stage_location=stage_location,

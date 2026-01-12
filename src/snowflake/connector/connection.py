@@ -130,6 +130,7 @@ from .network import (
     WORKLOAD_IDENTITY_AUTHENTICATOR,
     ReauthenticationRequest,
     SnowflakeRestful,
+    create_restful_client,
 )
 from .session_manager import (
     HttpConfig,
@@ -1336,7 +1337,7 @@ class SnowflakeConnection:
             use_numpy=self._numpy, support_negative_year=self._support_negative_year
         )
 
-        self._rest = SnowflakeRestful(
+        self._rest = create_restful_client(
             host=self.host,
             port=self.port,
             protocol=self._protocol,

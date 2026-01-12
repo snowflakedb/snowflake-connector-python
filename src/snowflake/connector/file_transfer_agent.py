@@ -56,13 +56,17 @@ from .gcs_storage_client import SnowflakeGCSRestClient
 from .local_storage_client import SnowflakeLocalStorageClient
 from .s3_storage_client import SnowflakeS3RestClient
 from .storage_client import SnowflakeFileEncryptionMaterial, SnowflakeStorageClient
+from .xp import is_xp_environment
 
 if TYPE_CHECKING:  # pragma: no cover
     from .connection import SnowflakeConnection
     from .cursor import SnowflakeCursor
     from .file_compression_type import CompressionType
 
-VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS]
+# XP storage type constant
+STORED_PROC_FS = "STORED_PROC_FS"
+
+VALID_STORAGE = [LOCAL_FS, S3_FS, AZURE_FS, GCS_FS, STORED_PROC_FS]
 
 INJECT_WAIT_IN_PUT = 0
 
@@ -732,6 +736,17 @@ class SnowflakeFileTransferAgent:
                 self._command,
                 unsafe_file_write=self._unsafe_file_write,
             )
+        elif self._stage_location_type == STORED_PROC_FS:
+            # XP storage client for stored procedures
+            from .xp.storage_client import XPStorageClient
+
+            return XPStorageClient(
+                meta,
+                self._stage_info,
+                4 * megabyte,
+                credentials=self._credentials,
+                unsafe_file_write=self._unsafe_file_write,
+            )
         raise Exception(f"{self._stage_location_type} is an unknown stage type")
 
     def _transfer_accelerate_config(self) -> None:
@@ -1237,8 +1252,24 @@ class SnowflakeFileTransferAgent:
     def _strip_stage_prefix_from_dst_file_name_for_download(self, dst_file_name):
         """Strips the stage prefix from dst_file_name for download.
 
-        Note that this is no-op in most cases, and therefore we return as is.
-        But for some workloads they will monkeypatch this method to add their
-        stripping logic.
+        In XP environment, strips stage name prefix from file paths to ensure
+        consistent behavior with non-XP downloads.
+
+        Args:
+            dst_file_name: The destination file name, possibly with stage prefix
+
+        Returns:
+            File name with stage prefix removed if in XP environment
         """
+        # XP-specific: strip stage prefix for stored procedure downloads
+        if is_xp_environment() and dst_file_name:
+            # Find the position after the stage name
+            # Stage names are in format: @stage_name/path/to/file
+            if dst_file_name.startswith("@"):
+                # Find first slash after the stage name
+                first_slash = dst_file_name.find("/")
+                if first_slash > 0:
+                    # Strip everything up to and including the first slash
+                    return dst_file_name[first_slash + 1 :]
+
         return dst_file_name
