@@ -56,6 +56,7 @@ jobs:
           rm -rf test_no_boto_env
 
   test-installation-aioboto:
+    if: false  # temporarily disable aio - SNOW-2905263
     name: Test aioboto dependency
     runs-on: ubuntu-latest
     steps:

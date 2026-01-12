@@ -19,6 +19,7 @@ import pytest
 
 import snowflake.connector
 from snowflake.connector import DatabaseError, OperationalError, ProgrammingError
+from snowflake.connector._utils import _core_loader
 from snowflake.connector.compat import IS_WINDOWS
 from snowflake.connector.connection import (
     DEFAULT_CLIENT_PREFETCH_THREADS,
@@ -26,7 +27,12 @@ from snowflake.connector.connection import (
 )
 from snowflake.connector.constants import PARAMETER_MULTI_STATEMENT_COUNT
 from snowflake.connector.cursor import QueryResultStats
-from snowflake.connector.description import CLIENT_NAME
+from snowflake.connector.description import (
+    CLIENT_NAME,
+    ISA,
+    OPERATING_SYSTEM,
+    OS_VERSION,
+)
 from snowflake.connector.errorcode import (
     ER_CONNECTION_IS_CLOSED,
     ER_FAILED_PROCESSING_PYFORMAT,
@@ -1233,6 +1239,38 @@ def test_imported_packages_telemetry(conn_cnx, capture_sf_telemetry):
 
 
 @pytest.mark.skipolddriver
+def test_minicore_import_telemetry(conn_cnx, capture_sf_telemetry):
+    """Test that minicore import telemetry is logged with all required fields and correct values."""
+    with (
+        conn_cnx() as conn,
+        capture_sf_telemetry.patch_connection(conn, False) as telemetry_test,
+    ):
+        conn._log_minicore_import()
+        assert len(telemetry_test.records) > 0
+        # Check that the telemetry record contains the proper structure
+        found_minicore_telemetry = False
+        for t in telemetry_test.records:
+            if (
+                t.message.get(TelemetryField.KEY_TYPE.value)
+                == TelemetryField.CORE_IMPORT.value
+                and TelemetryField.KEY_VALUE.value in t.message
+            ):
+                found_minicore_telemetry = True
+                # Verify that the value contains all required fields with correct values
+                value = t.message[TelemetryField.KEY_VALUE.value]
+                assert value["OS"] == OPERATING_SYSTEM
+                assert value["OS_VERSION"] == OS_VERSION
+                assert value["ISA"] == ISA
+                assert value["CORE_VERSION"] == _core_loader.get_core_version()
+                assert value["CORE_FILE_NAME"] == _core_loader.get_file_name()
+                assert value["CORE_LOAD_ERROR"] == _core_loader.get_load_error()
+                break
+        assert (
+            found_minicore_telemetry
+        ), "Minicore telemetry not found in telemetry records"
+
+
+@pytest.mark.skipolddriver
 def test_disable_query_context_cache(conn_cnx) -> None:
     with conn_cnx(disable_query_context_cache=True) as conn:
         # check that connector function correctly when query context
@@ -1749,8 +1787,8 @@ def test_disable_telemetry(conn_cnx, caplog):
             with conn.cursor() as cur:
                 cur.execute("select 1").fetchall()
             assert (
-                len(conn._telemetry._log_batch) == 3
-            )  # 3 events are import package, fetch first, fetch last
+                len(conn._telemetry._log_batch) == 4
+            )  # 4 events are import package, minicore import, fetch first, fetch last
     assert "POST /telemetry/send" in caplog.text
     caplog.clear()
 
@@ -1773,7 +1811,7 @@ def test_disable_telemetry(conn_cnx, caplog):
     # test disable telemetry in the client
     with caplog.at_level(logging.DEBUG):
         with conn_cnx() as conn:
-            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 1
+            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 2
             conn.telemetry_enabled = False
             with conn.cursor() as cur:
                 cur.execute("select 1").fetchall()
