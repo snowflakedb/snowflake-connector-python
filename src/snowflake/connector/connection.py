@@ -232,6 +232,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), bytes, str, RSAPrivateKey)),
+    "private_key_passphrase": (None, (type(None), bytes)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
     "token": (None, (type(None), str)),  # OAuth/JWT/PAT/OIDC Token
@@ -1463,6 +1464,7 @@ class SnowflakeConnection:
 
             elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
                 private_key = self._private_key
+                private_key_passphrase = self._private_key_passphrase
 
                 if self._private_key_file:
                     private_key = _get_private_bytes_from_file(
@@ -1472,6 +1474,7 @@ class SnowflakeConnection:
 
                 self.auth_class = AuthByKeyPair(
                     private_key=private_key,
+                    private_key_passphrase=private_key_passphrase,
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
