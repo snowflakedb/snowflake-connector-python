@@ -11,6 +11,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Added `SnowflakeCursor.stats` property to expose granular DML statistics (rows inserted, deleted, updated, and duplicates) for operations like CTAS where `rowcount` is insufficient.
   - Added support for injecting SPCS service identifier token (`SPCS_TOKEN`) into login requests when present in SPCS containers.
   - Introduced shared library([source code](https://github.com/snowflakedb/universal-driver/tree/main/sf_mini_core)) for extended telemetry to identify and prepare testing platform for native rust extensions.
+  - Added `private_key_passphrase` connection parameter for key pair authentication with encrypted private keys.
 
 - v4.1.1(December 12,2025)
   - Relaxed pandas dependency requirements for Python below 3.12.
