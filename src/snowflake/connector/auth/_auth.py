@@ -633,8 +633,8 @@ def get_token_from_private_key(
     from . import AuthByKeyPair
 
     auth_instance = AuthByKeyPair(
-        private_key,
-        DAY_IN_SECONDS,
+        private_key=private_key,
+        lifetime_in_seconds=DAY_IN_SECONDS,
     )  # token valid for 24 hours
     return auth_instance.prepare(account=account, user=user)
 
