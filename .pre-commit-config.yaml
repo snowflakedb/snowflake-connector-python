@@ -47,7 +47,7 @@ repos:
               - --append-only
           files: ^src/snowflake/connector/.*\.py$
 -   repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.2
+    rev: v3.19.0
     hooks:
         - id: pyupgrade
           args: [--py38-plus]
