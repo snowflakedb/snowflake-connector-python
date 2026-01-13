@@ -932,22 +932,32 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
             if self.telemetry_enabled:
                 await self._telemetry.close(retry=retry)
-            if (
-                await self._all_async_queries_finished()
-                and not self._server_session_keep_alive
-            ):
-                logger.debug("No async queries seem to be running, deleting session")
-                try:
-                    await self.rest.delete_session(retry=retry)
-                except Exception as e:
+
+            if not self._server_session_keep_alive:
+                if await self._all_async_queries_finished():
                     logger.debug(
-                        "Exception encountered in deleting session. ignoring...: %s", e
+                        "No async queries seem to be running, deleting session"
+                    )
+                    try:
+                        await self.rest.delete_session(retry=retry)
+                    except Exception as e:
+                        logger.debug(
+                            "Exception encountered in deleting session. ignoring...: %s",
+                            e,
+                        )
+                else:
+                    logger.debug(
+                        "There are {} async queries still running, not deleting session".format(
+                            len(self._async_sfqids)
+                        )
                     )
             else:
-                logger.debug(
-                    "There are {} async queries still running, not deleting session".format(
-                        len(self._async_sfqids)
-                    )
+                logger.info(
+                    "Parameter server_session_keep_alive was set to True - skipping session logout. "
+                    "If there are any not-finished queries in the current session (session_id: %s) - "
+                    "they will continue to live in Snowflake and consume credits until they finish. "
+                    "To cancel them use Monitoring tab in Snowsight or plain SQL.",
+                    self.session_id,
                 )
             await self.rest.close()
             self._rest = None
