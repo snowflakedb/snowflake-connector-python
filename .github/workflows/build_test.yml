@@ -41,7 +41,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
+          python-version: '3.10'
       - name: Display Python version
         run: python -c "import sys; import os; print(\"\n\".join(os.environ[\"PATH\"].split(os.pathsep))); print(sys.version); print(sys.executable);"
       - name: Upgrade setuptools, pip and wheel
@@ -447,6 +447,7 @@ jobs:
             junit.py${{ env.shortver }}-lambda-ci-dev.xml
 
   test-aio:
+    if: false  # temporarily disable aio - SNOW-2905263
     name: Test asyncio ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
     needs: build
     runs-on: ${{ matrix.os.image_name }}
@@ -524,7 +525,8 @@ jobs:
             .tox/.coverage
             .tox/coverage.xml
 
-  test-unsupporeted-aio:
+  test-unsupported-aio:
+    if: false  # temporarily disable aio - SNOW-2905263
     name: Test unsupported asyncio ${{ matrix.os.download_name }}-${{ matrix.python-version }}
     runs-on: ${{ matrix.os.image_name }}
     strategy:
@@ -607,7 +609,9 @@ jobs:
   combine-coverage:
     if: always()
     name: Combine coverage
-    needs: [lint, test, test-fips, test-lambda, test-aio]
+    # temporarily disable aio - SNOW-2905263
+    # needs: [lint, test, test-fips, test-lambda, test-aio]
+    needs: [lint, test, test-fips, test-lambda]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,0 +1,70 @@
+name: Check Async Changes
+
+on:
+  pull_request:
+    branches:
+      - '**'
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check-async-changes:
+    name: Check for corresponding async changes
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'NO_ASYNC_CHANGES') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for missing async changes
+        run: |
+          # Get the list of changed files
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+          echo ""
+
+          FAILED=false
+
+          # Define checks: "sync_pattern|async_pattern|sync_label|async_path"
+          CHECKS=(
+            "^src/snowflake/connector/|^src/snowflake/connector/aio/|Connector source|src/snowflake/connector/aio/"
+            "^test/unit/|^test/unit/aio/|Unit tests|test/unit/aio/"
+            "^test/integ/|^test/integ/aio_it/|Integration tests|test/integ/aio_it/"
+            "^test/wif/test_wif\.py$|^test/wif/test_wif_async\.py$|WIF tests|test/wif/test_wif_async.py"
+          )
+
+          for CHECK in "${CHECKS[@]}"; do
+            IFS='|' read -r SYNC_PATTERN ASYNC_PATTERN LABEL ASYNC_PATH <<< "$CHECK"
+
+            # Get sync changes (matching sync pattern but NOT async pattern)
+            SYNC_CHANGES=$(echo "$CHANGED_FILES" | grep -E "$SYNC_PATTERN" | grep -vE "$ASYNC_PATTERN" || true)
+            ASYNC_CHANGES=$(echo "$CHANGED_FILES" | grep -E "$ASYNC_PATTERN" || true)
+
+            if [ -n "$SYNC_CHANGES" ] && [ -z "$ASYNC_CHANGES" ]; then
+              echo "❌ $LABEL: Changes detected without corresponding changes in $ASYNC_PATH"
+              echo "   Sync changes found:"
+              echo "$SYNC_CHANGES" | sed 's/^/     /'
+              echo ""
+              FAILED=true
+            else
+              echo "✅ $LABEL: OK"
+            fi
+          done
+
+          echo ""
+          if [ "$FAILED" = "true" ]; then
+            echo "ℹ️  If async changes are intentionally not needed, add the 'NO_ASYNC_CHANGES' label to this PR."
+            exit 1
+          fi
+
+          echo "🎉 All async change checks passed!"

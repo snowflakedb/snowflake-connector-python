@@ -39,6 +39,8 @@ class TelemetryField(Enum):
     PANDAS_WRITE = "client_write_pandas"
     # imported packages along with client
     IMPORTED_PACKAGES = "client_imported_packages"
+    # Core import
+    CORE_IMPORT = "mini_core_import"
     # multi-statement usage
     MULTI_STATEMENT = "client_multi_statement_query"
     # Keys for telemetry data sent through either in-band or out-of-band telemetry
