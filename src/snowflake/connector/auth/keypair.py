@@ -124,7 +124,8 @@ class AuthByKeyPair(AuthByPlugin):
             except Exception as e:
                 raise ProgrammingError(
                     msg=f"Failed to load private key: {e}\nPlease provide a valid "
-                    "unencrypted rsa private key in DER format as bytes object",
+                    "rsa private key in DER format as bytes object. If the key is "
+                    "encrypted, provide the passphrase via private_key_passphrase",
                     errno=ER_INVALID_PRIVATE_KEY,
                 )
 
