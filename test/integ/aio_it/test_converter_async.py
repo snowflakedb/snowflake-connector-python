@@ -468,6 +468,72 @@ SELECT
             assert rec[0] == "05:34:56.123456 Jan 03, 2012"
 
 
+async def test_binary_list_parameter_in_query(conn_cnx):
+    """Test that binary data in list parameters works correctly.
+
+    Regression test for GitHub Issue #2311.
+    When binary data (bytes) is passed in a list parameter for an IN clause,
+    the converter should properly hex-encode each item in the list.
+    Without the fix, this raises UnicodeDecodeError when bytes contain non-ASCII values.
+    """
+    import uuid
+
+    # Use UUIDs that generate non-ASCII bytes (bytes > 127)
+    business_uuid = uuid.UUID("4363f57d-c9ca-4e63-92c7-3e67786c8a30")
+    user_uuid1 = uuid.UUID("4363f57d-c9ca-4e63-92c7-3e67786c8a30")
+    user_uuid2 = uuid.UUID("f5abcdef-1234-5678-9abc-def012345678")
+
+    async with conn_cnx() as conn:
+        cur = conn.cursor()
+        try:
+            # Create a temporary table for testing
+            await cur.execute(
+                "CREATE OR REPLACE TEMPORARY TABLE test_binary_list_param "
+                "(business_uuid BINARY, user_uuid BINARY)"
+            )
+
+            # Insert test data
+            await cur.execute(
+                "INSERT INTO test_binary_list_param VALUES (%(business_uuid)s, %(user_uuid)s)",
+                params={
+                    "business_uuid": business_uuid.bytes,
+                    "user_uuid": user_uuid1.bytes,
+                },
+            )
+
+            # Test single binary parameter (this should work)
+            await cur.execute(
+                "SELECT * FROM test_binary_list_param WHERE business_uuid = %(business_uuid)s",
+                params={"business_uuid": business_uuid.bytes},
+            )
+            results = await cur.fetchall()
+            assert len(results) == 1
+
+            # Test binary in list parameter (this was failing with UnicodeDecodeError)
+            await cur.execute(
+                "SELECT * FROM test_binary_list_param "
+                "WHERE business_uuid = %(business_uuid)s AND user_uuid IN (%(user_uuids)s)",
+                params={
+                    "business_uuid": business_uuid.bytes,
+                    "user_uuids": [user_uuid1.bytes],
+                },
+            )
+            results = await cur.fetchall()
+            assert len(results) == 1
+
+            # Test with multiple binary values in list
+            await cur.execute(
+                "SELECT * FROM test_binary_list_param "
+                "WHERE user_uuid IN (%(user_uuids)s)",
+                params={"user_uuids": [user_uuid1.bytes, user_uuid2.bytes]},
+            )
+            results = await cur.fetchall()
+            assert len(results) == 1  # Only user_uuid1 exists in the table
+
+        finally:
+            await cur.execute("DROP TABLE IF EXISTS test_binary_list_param")
+
+
 async def test_fetch_fraction_timestamp(conn_cnx):
     """Additional fetch timestamp tests. Mainly used for SnowSQL which converts to string representations."""
     PST_TZ = "America/Los_Angeles"
