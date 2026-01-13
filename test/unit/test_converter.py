@@ -137,10 +137,14 @@ def test_year_month_interval_to_timedelta(months):
 
 
 def test_converter_to_snowflake_bytes():
+    """Test that bytes in a list are properly hex-encoded."""
     uuid = UUID("12345678-1234-5678-1234-567812345678")
 
     converter = SnowflakeConverter()
-    assert converter.to_snowflake([uuid.bytes]) == ["X'\x124Vx\x124Vx\x124Vx\x124Vx'"]
+    # After fix for GH-2311: bytes are now properly hex-encoded via to_snowflake()
+    assert converter.to_snowflake([uuid.bytes]) == [
+        "X'12345678123456781234567812345678'"
+    ]
 
 
 def test_converter_list_with_binary_to_snowflake():
