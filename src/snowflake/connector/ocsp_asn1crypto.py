@@ -247,7 +247,7 @@ class SnowflakeOCSPAsn1Crypto(SnowflakeOCSP):
                 ocsp_load_failure = getenv("SF_TEST_OCSP_FORCE_BAD_OCSP_RESPONSE")
                 if ocsp_load_failure is not None:
                     raise RevocationCheckError(
-                        "Force fail", errno=ER_OCSP_RESPONSE_LOAD_FAILURE
+                        msg="Force fail", errno=ER_OCSP_RESPONSE_LOAD_FAILURE
                     )
         except Exception:
             raise RevocationCheckError(
