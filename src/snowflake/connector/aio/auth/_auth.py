@@ -148,7 +148,7 @@ class Auth(AuthSync):
 
         # Add secondary_roles connection parameter if specified
         secondary_roles = getattr(self._rest._connection, "_secondary_roles", None)
-        if secondary_roles:
+        if secondary_roles and isinstance(secondary_roles, str):
             body["data"]["SECONDARY_ROLES"] = secondary_roles.upper()
 
         logger.debug(
