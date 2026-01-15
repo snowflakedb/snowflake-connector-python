@@ -343,6 +343,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
             elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
                 private_key = self._private_key
+                private_key_passphrase = self._private_key_passphrase
 
                 if self._private_key_file:
                     private_key = _get_private_bytes_from_file(
@@ -352,6 +353,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
 
                 self.auth_class = AuthByKeyPair(
                     private_key=private_key,
+                    private_key_passphrase=private_key_passphrase,
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
