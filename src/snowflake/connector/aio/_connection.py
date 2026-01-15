@@ -76,7 +76,7 @@ from ..wif_util import AttestationProvider
 from ._cursor import SnowflakeCursor, SnowflakeCursorBase
 from ._description import CLIENT_NAME
 from ._direct_file_operation_utils import FileOperationParser, StreamDownloader
-from ._network import SnowflakeRestful
+from ._network import SnowflakeRestful, create_restful_client
 from ._session_manager import (
     AioHttpConfig,
     SessionManager,
@@ -218,7 +218,7 @@ class SnowflakeConnection(SnowflakeConnectionSync):
             use_numpy=self._numpy, support_negative_year=self._support_negative_year
         )
 
-        self._rest = SnowflakeRestful(
+        self._rest = create_restful_client(
             host=self.host,
             port=self.port,
             protocol=self._protocol,
