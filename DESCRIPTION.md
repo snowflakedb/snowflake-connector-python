@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - v4.2.1(TBD)
+  - Ensured proper list conversion - the converter runs to_snowflake on all list elements.
   - Made the parameter `server_session_keep_alive` in `SnowflakeConnection` skip checking for pending async queries, providing faster connection close times especially when many async queries are executed.
   - Fix string representation of INTERVAL YEAR and INTERVAL MONTH types.
 
