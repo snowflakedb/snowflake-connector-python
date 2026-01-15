@@ -129,8 +129,8 @@ def test_with_tokens(conn_cnx):
             timezone="UTC",
         ) as initial_cnx:
             assert initial_cnx, "invalid initial cnx"
-            master_token = initial_cnx.rest._master_token
-            session_token = initial_cnx.rest._token
+            master_token = initial_cnx.rest.master_token
+            session_token = initial_cnx.rest.token
             token_cnx = create_connection(
                 "default", session_token=session_token, master_token=master_token
             )
@@ -153,8 +153,8 @@ def test_with_tokens_expired(conn_cnx):
             timezone="UTC",
         ) as initial_cnx:
             assert initial_cnx, "invalid initial cnx"
-            master_token = initial_cnx._rest._master_token
-            session_token = initial_cnx._rest._token
+            master_token = initial_cnx._rest.master_token
+            session_token = initial_cnx._rest.token
 
         with pytest.raises(ProgrammingError):
             token_cnx = create_connection(
@@ -1518,7 +1518,7 @@ def _assert_log_bytes_within_tolerance(actual_bytes, expected_bytes, tolerance):
     """Assert that log bytes are within acceptable tolerance."""
     assert actual_bytes == pytest.approx(expected_bytes, rel=tolerance), (
         f"Log bytes {actual_bytes} is not approximately equal to expected {expected_bytes} "
-        f"within {tolerance*100}% tolerance. "
+        f"within {tolerance * 100}% tolerance. "
         f"This may indicate unwanted logs being produced or changes in logging behavior."
     )
 
