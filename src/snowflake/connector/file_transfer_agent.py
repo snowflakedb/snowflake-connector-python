@@ -879,6 +879,7 @@ class SnowflakeFileTransferAgent:
                     file_name = file_name[1:]
                 if not os.path.isabs(file_name):
                     file_name = os.path.abspath(file_name)
+                safe_file_name = glob.escape(file_name)
                 files = glob.glob(file_name)
                 canonical_locations += files
             else:
