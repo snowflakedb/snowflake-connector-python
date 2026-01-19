@@ -132,7 +132,7 @@ def test_day_time_interval_decimal_to_timedelta(nanos):
 def test_year_month_interval_to_timedelta(months):
     converter = ArrowConverterContext()
     assert converter.INTERVAL_YEAR_MONTH_to_numpy_timedelta(
-        months
+        months, scale=0
     ) == numpy.timedelta64(months, "M")
 
 
