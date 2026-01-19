@@ -64,6 +64,86 @@ def test_auth_keypair(authenticator):
     assert rest.master_token == "MASTER_TOKEN"
 
 
+def test_auth_keypair_with_passphrase():
+    """Simple Key Pair test with passphrase."""
+
+    passphrase = b"test"
+    private_key_der, public_key_der_encoded = generate_key_pair(
+        2048,
+        passphrase=passphrase,
+    )
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    auth_instance = AuthByKeyPair(
+        private_key=private_key_der,
+        private_key_passphrase=passphrase,
+    )
+    auth_instance._retry_ctx.set_start_time()
+    auth_instance.handle_timeout(
+        authenticator="SNOWFLAKE_JWT",
+        service_name=None,
+        account=account,
+        user=user,
+        password=None,
+    )
+
+    # success test case
+    rest = _init_rest(application, _create_mock_auth_keypair_rest_response())
+    auth = Auth(rest)
+    auth.authenticate(auth_instance, account, user)
+    assert not rest._connection.errorhandler.called  # not error
+    assert rest.token == "TOKEN"
+    assert rest.master_token == "MASTER_TOKEN"
+
+
+def test_auth_keypair_encrypted_without_passphrase():
+    """Test that encrypted key without passphrase raises error with helpful message."""
+    from snowflake.connector.errors import ProgrammingError
+
+    passphrase = b"test"
+    private_key_der, _ = generate_key_pair(
+        2048,
+        passphrase=passphrase,
+    )
+    account = "testaccount"
+    user = "testuser"
+
+    # Create auth instance without providing passphrase for encrypted key
+    auth_instance = AuthByKeyPair(private_key=private_key_der)
+
+    with raises(ProgrammingError) as ex:
+        auth_instance.prepare(account=account, user=user)
+
+    # Verify the error message mentions the passphrase option
+    assert "private_key_passphrase" in str(ex.value)
+
+
+def test_auth_keypair_wrong_passphrase():
+    """Test that wrong passphrase raises error."""
+    from snowflake.connector.errors import ProgrammingError
+
+    passphrase = b"correct_passphrase"
+    private_key_der, _ = generate_key_pair(
+        2048,
+        passphrase=passphrase,
+    )
+    account = "testaccount"
+    user = "testuser"
+
+    # Create auth instance with wrong passphrase
+    auth_instance = AuthByKeyPair(
+        private_key=private_key_der,
+        private_key_passphrase=b"wrong_passphrase",
+    )
+
+    with raises(ProgrammingError) as ex:
+        auth_instance.prepare(account=account, user=user)
+
+    # Verify the error mentions the private key loading failure
+    assert "Failed to load private key" in str(ex.value)
+
+
 def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
     private_key_der, _ = generate_key_pair(2048)
     auth_class = AuthByKeyPair(private_key=private_key_der)
@@ -169,7 +249,7 @@ def _init_rest(application, post_requset):
     return rest
 
 
-def generate_key_pair(key_length):
+def generate_key_pair(key_length: int, *, passphrase: bytes | None = None):
     private_key = rsa.generate_private_key(
         backend=default_backend(), public_exponent=65537, key_size=key_length
     )
@@ -177,7 +257,11 @@ def generate_key_pair(key_length):
     private_key_der = private_key.private_bytes(
         encoding=serialization.Encoding.DER,
         format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
+        encryption_algorithm=(
+            serialization.BestAvailableEncryption(passphrase)
+            if passphrase
+            else serialization.NoEncryption()
+        ),
     )
 
     public_key_pem = (
