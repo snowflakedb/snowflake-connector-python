@@ -230,7 +230,7 @@ def test_context_var_weakref_does_not_leak():
     sm = SessionManager(passed_config)
     token = set_current_session_manager(sm)
 
-    # The context var should return the same object while it’s alive
+    # The context var should return the same object while it's alive
     assert (
         get_current_session_manager(create_default_if_missing=False).config
         == passed_config
