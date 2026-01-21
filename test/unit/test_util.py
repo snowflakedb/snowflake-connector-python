@@ -389,6 +389,76 @@ class TestCoreLoader:
         assert isinstance(result, str)
         assert result != ""
 
+    def test_get_present_binaries_with_mocked_structure(self, tmp_path):
+        """Test get_present_binaries with mocked directory structure."""
+        loader = _CoreLoader()
+
+        # Create a temporary directory structure mimicking minicore layout
+        # Create platform directories with binary files
+        linux_dir = tmp_path / "linux_x86_64_glibc"
+        linux_dir.mkdir()
+        (linux_dir / "libsf_mini_core.so").write_text("fake binary content")
+
+        macos_dir = tmp_path / "macos_aarch64"
+        macos_dir.mkdir()
+        (macos_dir / "libsf_mini_core.dylib").write_text("fake binary content")
+
+        windows_dir = tmp_path / "windows_x86_64"
+        windows_dir.mkdir()
+        (windows_dir / "sf_mini_core.dll").write_text("fake binary content")
+
+        # Create a __pycache__ directory that should be ignored
+        pycache_dir = tmp_path / "__pycache__"
+        pycache_dir.mkdir()
+        (pycache_dir / "some_file.pyc").write_text("cached file")
+
+        # Mock importlib.resources.files to return our temp directory
+        with mock.patch("importlib.resources.files") as mock_files:
+            mock_files.return_value = tmp_path
+
+            result = loader.get_present_binaries()
+
+            # Verify the function was called with correct module name
+            mock_files.assert_called_once_with("snowflake.connector.minicore")
+
+            # Parse the result
+            binaries = result.split(",")
+            assert len(binaries) == 3
+
+            # Verify all expected binaries are present
+            assert "linux_x86_64_glibc/libsf_mini_core.so" in binaries
+            assert "macos_aarch64/libsf_mini_core.dylib" in binaries
+            assert "windows_x86_64/sf_mini_core.dll" in binaries
+
+            # Verify __pycache__ files are not included
+            assert not any("__pycache__" in binary for binary in binaries)
+
+    def test_get_present_binaries_with_empty_directory(self, tmp_path):
+        """Test get_present_binaries returns empty string for empty directory."""
+        loader = _CoreLoader()
+
+        # Create an empty temp directory
+        # Mock importlib.resources.files to return our temp directory
+        with mock.patch("importlib.resources.files") as mock_files:
+            mock_files.return_value = tmp_path
+
+            result = loader.get_present_binaries()
+
+            assert result == ""
+
+    def test_get_present_binaries_handles_exceptions(self):
+        """Test get_present_binaries handles exceptions gracefully."""
+        loader = _CoreLoader()
+
+        # Mock importlib.resources.files to raise an exception
+        with mock.patch("importlib.resources.files") as mock_files:
+            mock_files.side_effect = Exception("Failed to access resources")
+
+            # Should not raise, but return empty string
+            result = loader.get_present_binaries()
+
+            assert result == ""
+
 
 def test_importing_snowflake_connector_triggers_core_loader_load():
     """Test that importing snowflake.connector triggers core_loader.load()."""
