@@ -274,9 +274,7 @@ class _CoreLoader:
                                     f"{platform_name}/{binary_file.name}"
                                 )
                     except Exception as e:
-                        logger.debug(
-                            f"Error listing binaries in {platform_name}: {e}"
-                        )
+                        logger.debug(f"Error listing binaries in {platform_name}: {e}")
         except Exception as e:
             logger.debug(f"Error populating present binaries: {e}")
 
