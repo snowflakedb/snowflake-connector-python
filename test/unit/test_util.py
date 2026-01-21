@@ -38,6 +38,9 @@ class TestCoreLoader:
         sleep(2)
         assert loader.get_load_error() == str(None)
         assert loader.get_core_version() == "0.0.1"
+        # Verify load time was measured
+        assert loader.get_load_time() is not None
+        assert loader.get_load_time() >= 0
 
     def test_core_loader_initialization(self):
         """Test that _CoreLoader initializes with None values."""
@@ -45,6 +48,7 @@ class TestCoreLoader:
         assert loader._version is None
         assert loader._error is None
         assert loader._path is None
+        assert loader._load_time is None
 
     @pytest.mark.parametrize(
         "system,expected",
@@ -194,26 +198,30 @@ class TestCoreLoader:
         assert mock_core.sf_core_full_version.restype == ctypes.c_char_p
 
     def test_load_minicore(self):
-        """Test that _load_minicore loads the library."""
+        """Test that _load_minicore loads the library and measures load time."""
+        loader = _CoreLoader()
         mock_path = mock.MagicMock()
         mock_lib_path = "/path/to/libsf_mini_core.so"
 
         with mock.patch("importlib.resources.as_file") as mock_as_file:
             with mock.patch("ctypes.CDLL") as mock_cdll:
-                # Setup the context manager
-                mock_as_file.return_value.__enter__ = mock.Mock(
-                    return_value=mock_lib_path
-                )
-                mock_as_file.return_value.__exit__ = mock.Mock(return_value=False)
+                with mock.patch("time.perf_counter", side_effect=[0.0, 0.005]):
+                    # Setup the context manager
+                    mock_as_file.return_value.__enter__ = mock.Mock(
+                        return_value=mock_lib_path
+                    )
+                    mock_as_file.return_value.__exit__ = mock.Mock(return_value=False)
 
-                mock_core = mock.MagicMock()
-                mock_cdll.return_value = mock_core
+                    mock_core = mock.MagicMock()
+                    mock_cdll.return_value = mock_core
 
-                result = _CoreLoader._load_minicore(mock_path)
+                    result = loader._load_minicore(mock_path)
 
-                mock_as_file.assert_called_once_with(mock_path)
-                mock_cdll.assert_called_once_with(str(mock_lib_path))
-                assert result == mock_core
+                    mock_as_file.assert_called_once_with(mock_path)
+                    mock_cdll.assert_called_once_with(str(mock_lib_path))
+                    assert result == mock_core
+                    # Verify load time was measured (0.005 - 0.0) * 1000 = 5 ms
+                    assert loader._load_time == 5.0
 
     @pytest.mark.parametrize("env_value", ["1", "true", "True", "TRUE"])
     def test_is_core_disabled_returns_true(self, env_value):
@@ -260,12 +268,17 @@ class TestCoreLoader:
         mock_version = b"1.2.3"
         mock_core.sf_core_full_version = mock.MagicMock(return_value=mock_version)
 
+        def mock_load_minicore_side_effect(path):
+            # Simulate _load_minicore setting _load_time
+            loader._load_time = 15.5
+            return mock_core
+
         with mock.patch.object(loader, "_is_core_disabled", return_value=False):
             with mock.patch.object(
                 loader, "_get_core_path", return_value=mock_path
             ) as mock_get_path:
                 with mock.patch.object(
-                    loader, "_load_minicore", return_value=mock_core
+                    loader, "_load_minicore", side_effect=mock_load_minicore_side_effect
                 ) as mock_load:
                     with mock.patch.object(
                         loader, "_register_functions"
@@ -279,6 +292,7 @@ class TestCoreLoader:
                         assert loader._version == mock_version
                         assert loader._error is None
                         assert loader._path == str(mock_path)
+                        assert loader._load_time == 15.5
 
     def test_load_failure(self):
         """Test that load captures exceptions."""
@@ -348,6 +362,32 @@ class TestCoreLoader:
         result = loader.get_file_name()
 
         assert result is None
+
+    def test_get_load_time_with_time(self):
+        """Test get_load_time returns the load time when it has been set."""
+        loader = _CoreLoader()
+        loader._load_time = 42.5
+
+        result = loader.get_load_time()
+
+        assert result == 42.5
+
+    def test_get_load_time_no_time(self):
+        """Test get_load_time returns None when no load time exists."""
+        loader = _CoreLoader()
+
+        result = loader.get_load_time()
+
+        assert result is None
+
+    def test_get_present_binaries_contains_expected_paths(self):
+        """Test get_present_binaries returns binaries for expected paths."""
+        loader = _CoreLoader()
+
+        result = loader.get_present_binaries()
+
+        assert isinstance(result, str)
+        assert result != ""
 
 
 def test_importing_snowflake_connector_triggers_core_loader_load():
