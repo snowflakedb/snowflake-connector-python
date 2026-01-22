@@ -198,30 +198,26 @@ class TestCoreLoader:
         assert mock_core.sf_core_full_version.restype == ctypes.c_char_p
 
     def test_load_minicore(self):
-        """Test that _load_minicore loads the library and measures load time."""
-        loader = _CoreLoader()
+        """Test that _load_minicore loads the library correctly."""
         mock_path = mock.MagicMock()
         mock_lib_path = "/path/to/libsf_mini_core.so"
 
         with mock.patch("importlib.resources.as_file") as mock_as_file:
             with mock.patch("ctypes.CDLL") as mock_cdll:
-                with mock.patch("time.perf_counter", side_effect=[0.0, 0.005]):
-                    # Setup the context manager
-                    mock_as_file.return_value.__enter__ = mock.Mock(
-                        return_value=mock_lib_path
-                    )
-                    mock_as_file.return_value.__exit__ = mock.Mock(return_value=False)
+                # Setup the context manager
+                mock_as_file.return_value.__enter__ = mock.Mock(
+                    return_value=mock_lib_path
+                )
+                mock_as_file.return_value.__exit__ = mock.Mock(return_value=False)
 
-                    mock_core = mock.MagicMock()
-                    mock_cdll.return_value = mock_core
+                mock_core = mock.MagicMock()
+                mock_cdll.return_value = mock_core
 
-                    result = loader._load_minicore(mock_path)
+                result = _CoreLoader._load_minicore(mock_path)
 
-                    mock_as_file.assert_called_once_with(mock_path)
-                    mock_cdll.assert_called_once_with(str(mock_lib_path))
-                    assert result == mock_core
-                    # Verify load time was measured (0.005 - 0.0) * 1000 = 5 ms
-                    assert loader._load_time == 5.0
+                mock_as_file.assert_called_once_with(mock_path)
+                mock_cdll.assert_called_once_with(str(mock_lib_path))
+                assert result == mock_core
 
     @pytest.mark.parametrize("env_value", ["1", "true", "True", "TRUE"])
     def test_is_core_disabled_returns_true(self, env_value):
@@ -263,36 +259,33 @@ class TestCoreLoader:
     def test_load_success(self):
         """Test successful load of the core library."""
         loader = _CoreLoader()
-        mock_path = mock.MagicMock()
+        mock_path = "/path/to/libsf_mini_core.so"
         mock_core = mock.MagicMock()
         mock_version = b"1.2.3"
         mock_core.sf_core_full_version = mock.MagicMock(return_value=mock_version)
-
-        def mock_load_minicore_side_effect(path):
-            # Simulate _load_minicore setting _load_time
-            loader._load_time = 15.5
-            return mock_core
 
         with mock.patch.object(loader, "_is_core_disabled", return_value=False):
             with mock.patch.object(
                 loader, "_get_core_path", return_value=mock_path
             ) as mock_get_path:
                 with mock.patch.object(
-                    loader, "_load_minicore", side_effect=mock_load_minicore_side_effect
+                    loader, "_load_minicore", return_value=mock_core
                 ) as mock_load:
                     with mock.patch.object(
                         loader, "_register_functions"
                     ) as mock_register:
-                        loader.load()
-                        sleep(2)
+                        with mock.patch("time.perf_counter", side_effect=[0.0, 0.0155]):
+                            loader.load()
+                            sleep(2)
 
-                        mock_get_path.assert_called_once()
-                        mock_load.assert_called_once_with(mock_path)
-                        mock_register.assert_called_once_with(mock_core)
-                        assert loader._version == mock_version
-                        assert loader._error is None
-                        assert loader._path == str(mock_path)
-                        assert loader._load_time == 15.5
+                            mock_get_path.assert_called_once()
+                            mock_load.assert_called_once_with(mock_path)
+                            mock_register.assert_called_once_with(mock_core)
+                            assert loader._version == mock_version
+                            assert loader._error is None
+                            assert loader._path == mock_path
+                            # (0.0155 - 0.0) * 1000 = 15.5 ms
+                            assert loader._load_time == 15.5
 
     def test_load_failure(self):
         """Test that load captures exceptions."""

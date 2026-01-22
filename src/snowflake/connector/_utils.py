@@ -231,14 +231,14 @@ class _CoreLoader:
             return "libsf_mini_core.so"
 
     @staticmethod
-    def _get_core_path() -> str:
+    def _get_core_path():
         """Get the path to the minicore library for the current platform."""
         subdir = _CoreLoader._get_platform_subdir()
         lib_name = _CoreLoader._get_lib_name()
 
         files = importlib.resources.files("snowflake.connector.minicore")
 
-        return str(files.joinpath(subdir, lib_name))
+        return files.joinpath(subdir, lib_name)
 
     @staticmethod
     def _register_functions(core: ctypes.CDLL):
@@ -287,8 +287,9 @@ class _CoreLoader:
     def _load(self) -> None:
         start_time = time.perf_counter()
         try:
-            self._path = self._get_core_path()
-            core = self._load_minicore(self._path)
+            path = self._get_core_path()
+            self._path = str(path)
+            core = self._load_minicore(path)
             self._register_functions(core)
             self._version = core.sf_core_full_version()
             self._error = None
