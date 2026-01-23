@@ -1,14 +1,24 @@
 from __future__ import annotations
 
+import logging
 import os
 import time
 from unittest.mock import Mock, patch
 
 import pytest
 
-from snowflake.connector.platform_detection import detect_platforms
+from snowflake.connector.platform_detection import (
+    _PLATFORM_DETECTION_DISABLED_RESULT,
+    ENV_VAR_DISABLE_PLATFORM_DETECTION,
+    detect_platforms,
+    is_azure_vm,
+    is_ec2_instance,
+)
 from snowflake.connector.vendored.requests.exceptions import RequestException
 from src.snowflake.connector.vendored.requests import Response
+
+# Expected maximum timeout for platform detection in seconds (SNOW-2204396)
+EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION = 0.2
 
 
 def build_response(content: bytes = b"", status_code: int = 200, headers=None):
@@ -56,13 +66,15 @@ class TestDetectPlatforms:
     def test_no_platforms_detected(
         self, unavailable_metadata_service_with_request_exception
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(
+            platform_detection_timeout_seconds=1
+        )  # increase timeout to make sure no Thread-based timeout messes the results
         assert result == []
 
     def test_ec2_instance_detection(
         self, unavailable_metadata_service_with_request_exception, fake_aws_environment
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_ec2_instance" in result
 
     def test_aws_lambda_detection(
@@ -70,7 +82,7 @@ class TestDetectPlatforms:
         unavailable_metadata_service_with_request_exception,
         fake_aws_lambda_environment,
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_aws_lambda" in result
 
     @pytest.mark.parametrize(
@@ -90,44 +102,44 @@ class TestDetectPlatforms:
         fake_aws_environment,
         arn,
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "has_aws_identity" in result
 
     def test_azure_vm_detection(self, fake_azure_vm_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_azure_vm" in result
 
     def test_azure_function_detection(self, fake_azure_function_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_azure_function" in result
 
     def test_azure_function_with_managed_identity(
         self, fake_azure_function_metadata_service
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_azure_function" in result
         assert "has_azure_managed_identity" in result
 
     def test_gce_vm_detection(self, fake_gce_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_gce_vm" in result
 
     def test_gce_cloud_run_service_detection(
         self, fake_gce_cloud_run_service_metadata_service
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_gce_cloud_run_service" in result
 
     def test_gce_cloud_run_job_detection(self, fake_gce_cloud_run_job_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_gce_cloud_run_job" in result
 
     def test_gcp_identity_detection(self, fake_gce_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "has_gcp_identity" in result
 
     def test_github_actions_detection(self, fake_github_actions_metadata_service):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_github_action" in result
 
     def test_multiple_platforms_detection(
@@ -136,7 +148,7 @@ class TestDetectPlatforms:
         fake_github_actions_metadata_service,
         fake_gce_cloud_run_service_metadata_service,
     ):
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_aws_lambda" in result
         assert "has_aws_identity" in result
         assert "is_github_action" in result
@@ -253,14 +265,14 @@ class TestDetectPlatforms:
         arn,
     ):
         fake_aws_environment.caller_identity = {"Arn": arn}
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "has_aws_identity" not in result
 
     def test_missing_arn_handling(
         self, unavailable_metadata_service_with_request_exception, fake_aws_environment
     ):
         fake_aws_environment.caller_identity = {"UserId": "test-user"}
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "has_aws_identity" not in result
 
     def test_azure_managed_identity_no_token_endpoint(
@@ -280,7 +292,7 @@ class TestDetectPlatforms:
         self, unavailable_metadata_service_with_request_exception, fake_aws_environment
     ):
         fake_aws_environment.instance_document = b""
-        result = detect_platforms(platform_detection_timeout_seconds=None)
+        result = detect_platforms(platform_detection_timeout_seconds=1)
         assert "is_ec2_instance" not in result
 
     def test_aws_lambda_empty_task_root(
@@ -327,3 +339,151 @@ class TestDetectPlatforms:
     ):
         result = detect_platforms(platform_detection_timeout_seconds=0)
         assert not labels_detected_by_endpoints.intersection(result)
+
+    @pytest.mark.parametrize(
+        "env_value,expected_result",
+        [
+            ("true", _PLATFORM_DETECTION_DISABLED_RESULT),
+            ("TRUE", _PLATFORM_DETECTION_DISABLED_RESULT),
+            ("True", _PLATFORM_DETECTION_DISABLED_RESULT),
+            ("TrUe", _PLATFORM_DETECTION_DISABLED_RESULT),
+            ("1", []),
+            ("yes", []),
+            ("false", []),
+            ("", []),
+        ],
+        ids=[
+            "lowercase_true",
+            "uppercase_true",
+            "capitalized_true",
+            "mixed_case_true",
+            "numeric_1",
+            "yes",
+            "false",
+            "empty_string",
+        ],
+    )
+    def test_platform_detection_disable_env_var_values(
+        self,
+        unavailable_metadata_service_with_request_exception,
+        env_value,
+        expected_result,
+    ):
+        """Test that ENV_VAR_DISABLE_PLATFORM_DETECTION only disables when set to 'true' (case-insensitive)"""
+        with patch.dict(os.environ, {ENV_VAR_DISABLE_PLATFORM_DETECTION: env_value}):
+            result = detect_platforms(platform_detection_timeout_seconds=1)
+            assert result == expected_result
+
+    def test_platform_detection_disabled_overrides_all_other_detection(
+        self,
+        fake_aws_lambda_environment,
+        fake_github_actions_metadata_service,
+        fake_gce_cloud_run_service_metadata_service,
+    ):
+        """Test that ENV_VAR_DISABLE_PLATFORM_DETECTION takes precedence over all detections"""
+        with patch.dict(os.environ, {ENV_VAR_DISABLE_PLATFORM_DETECTION: "true"}):
+            result = detect_platforms(platform_detection_timeout_seconds=1)
+            assert result == _PLATFORM_DETECTION_DISABLED_RESULT
+            assert "is_aws_lambda" not in result
+            assert "is_github_action" not in result
+            assert "is_gce_cloud_run_service" not in result
+
+    def test_platform_detection_default_timeout_is_200ms(
+        self, unavailable_metadata_service_with_request_exception
+    ):
+        """Test that platform detection defaults to 0.2s (200ms) timeout when None is provided"""
+        # Mock the internal detection functions to capture the timeout they receive
+        timeout_captured = []
+
+        def capture_timeout_ec2(timeout):
+            timeout_captured.append(timeout)
+            return is_ec2_instance(timeout)
+
+        def capture_timeout_azure(timeout, session_manager):
+            timeout_captured.append(timeout)
+            return is_azure_vm(timeout, session_manager)
+
+        with patch(
+            "snowflake.connector.platform_detection.is_ec2_instance",
+            side_effect=capture_timeout_ec2,
+        ), patch(
+            "snowflake.connector.platform_detection.is_azure_vm",
+            side_effect=capture_timeout_azure,
+        ):
+            detect_platforms(platform_detection_timeout_seconds=None)
+
+            # Verify that functions were called with timeout <= 200ms
+            assert len(timeout_captured) > 0, "No timeout was captured"
+            assert all(
+                t <= EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION
+                for t in timeout_captured
+            ), (
+                f"Expected all timeouts to be <= {EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION}, "
+                f"but got {timeout_captured}"
+            )
+
+    def test_platform_detection_completes_within_timeout(
+        self, unavailable_metadata_service_with_request_exception
+    ):
+        """Test that platform detection completes within the specified timeout (200ms + overhead)"""
+        start_time = time.time()
+        detect_platforms(
+            platform_detection_timeout_seconds=EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION
+        )
+        end_time = time.time()
+
+        execution_time = end_time - start_time
+
+        # Allow ~30% overhead for thread management, environment variable checks, etc.
+        # The timeout is 200ms per network call, but they run in parallel
+        # So total time should be ~200ms + overhead, not 200ms * number_of_calls
+        epsilon_for_overhead = 0.3
+        max_allowed_time = EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION * (
+            1 + epsilon_for_overhead
+        )
+        assert execution_time < max_allowed_time, (
+            f"Platform detection took {execution_time:.3f}s, "
+            f"which exceeds the maximum allowed time of {max_allowed_time}s"
+        )
+        if execution_time > 0.01:
+            logging.warning(
+                f"Platform detection completed very quickly ({execution_time:.3f}s), "
+                "which may indicate detection was skipped or some other issues happened"
+            )
+
+    def test_platform_detection_suppresses_all_library_logs(
+        self, unavailable_metadata_service, caplog
+    ):
+        """Test that platform detection suppresses ALL logs from urllib3 and botocore (SNOW-2204396)"""
+        # Set DEBUG level to ensure we would normally see these logs
+        caplog.set_level(logging.DEBUG)
+
+        # Run platform detection
+        detect_platforms(
+            platform_detection_timeout_seconds=EXPECTED_MAX_TIMEOUT_FOR_PLATFORM_DETECTION
+        )
+
+        # Verify that NO logs from noisy libraries are present (any level)
+        library_log_records = [
+            record
+            for record in caplog.records
+            if any(
+                logger in record.name
+                for logger in [
+                    "urllib3.connectionpool",
+                    "botocore.utils",
+                    "botocore.httpsession",
+                ]
+            )
+        ]
+        assert (
+            len(library_log_records) == 0
+        ), f"Library logs were not suppressed: {library_log_records}"
+
+        # Verify our own debug logs are still present
+        our_logs = [
+            record
+            for record in caplog.records
+            if record.name == "snowflake.connector.platform_detection"
+        ]
+        assert len(our_logs) > 0, "Our own debug logs should not be suppressed"

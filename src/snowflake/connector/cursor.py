@@ -418,6 +418,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._log_max_query_length = connection.log_max_query_length
         self._inner_cursor: SnowflakeCursorBase | None = None
         self._prefetch_hook = None
+        self._stats_data: dict[str, int] | None = (
+            None  # Stores stats from response for DML operations
+        )
+
         self._rownumber: int | None = None
 
         self.reset()
@@ -453,6 +457,23 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
     @property
     def rowcount(self) -> int | None:
         return self._total_rowcount if self._total_rowcount >= 0 else None
+
+    @property
+    def stats(self) -> QueryResultStats | None:
+        """Returns detailed rows affected statistics for DML operations.
+
+        Returns a NamedTuple with fields:
+        - num_rows_inserted: Number of rows inserted
+        - num_rows_deleted: Number of rows deleted
+        - num_rows_updated: Number of rows updated
+        - num_dml_duplicates: Number of duplicates in DML statement
+
+        Returns None on each position if no DML stats are available - this includes DML operations where no rows were
+            affected as well as other type of SQL statements (e.g. DDL, DQL).
+        """
+        if self._stats_data is None:
+            return QueryResultStats(None, None, None, None)
+        return QueryResultStats.from_dict(self._stats_data)
 
     @property
     def rownumber(self) -> int | None:
@@ -1200,6 +1221,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         )
         self._rownumber = -1
         self._result_state = ResultState.VALID
+
+        # Extract stats object if available (for DML operations like CTAS, INSERT, UPDATE, DELETE)
+        self._stats_data = data.get("stats", None)
+        logger.debug("Execution DML stats: %s", self.stats)
 
         # don't update the row count when the result is returned from `describe` method
         if is_dml and "rowset" in data and len(data["rowset"]) > 0:
@@ -2007,3 +2032,26 @@ def __getattr__(name):
         )
         return None
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+class QueryResultStats(NamedTuple):
+    """
+    Statistics for rows affected by a DML operation.
+    None value expresses particular statistic being unknown - not returned by the backend service.
+
+    Added in the first place to expose DML data of CTAS statements - SNOW-295953
+    """
+
+    num_rows_inserted: int | None = None
+    num_rows_deleted: int | None = None
+    num_rows_updated: int | None = None
+    num_dml_duplicates: int | None = None
+
+    @classmethod
+    def from_dict(cls, stats_dict: dict[str, int]) -> QueryResultStats:
+        return cls(
+            num_rows_inserted=stats_dict.get("numRowsInserted", None),
+            num_rows_deleted=stats_dict.get("numRowsDeleted", None),
+            num_rows_updated=stats_dict.get("numRowsUpdated", None),
+            num_dml_duplicates=stats_dict.get("numDmlDuplicates", None),
+        )

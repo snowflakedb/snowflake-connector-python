@@ -64,6 +64,8 @@ class CRLConfig:
     crl_cache_removal_delay_days: int = 7
     crl_cache_cleanup_interval_hours: int = 1
     crl_cache_start_cleanup: bool = False
+    crl_download_max_size: int = 200 * 1024 * 1024  # 200 MB
+    unsafe_skip_file_permissions_check: bool = False
 
     @classmethod
     def from_connection(cls, sf_connection) -> CRLConfig:
@@ -158,6 +160,15 @@ class CRLConfig:
             if sf_connection.crl_cache_start_cleanup is None
             else bool(sf_connection.crl_cache_start_cleanup)
         )
+        crl_download_max_size = (
+            cls.crl_download_max_size
+            if sf_connection.crl_download_max_size is None
+            else int(sf_connection.crl_download_max_size)
+        )
+        # Use the existing unsafe_skip_file_permissions_check flag from connection
+        unsafe_skip_file_permissions_check = bool(
+            sf_connection._unsafe_skip_file_permissions_check
+        )
 
         return cls(
             cert_revocation_check_mode=cert_revocation_check_mode,
@@ -171,6 +182,8 @@ class CRLConfig:
             crl_cache_removal_delay_days=crl_cache_removal_delay_days,
             crl_cache_cleanup_interval_hours=crl_cache_cleanup_interval_hours,
             crl_cache_start_cleanup=crl_cache_start_cleanup,
+            crl_download_max_size=crl_download_max_size,
+            unsafe_skip_file_permissions_check=unsafe_skip_file_permissions_check,
         )
 
 
@@ -185,6 +198,7 @@ class CRLValidator:
         read_timeout_ms: int = CRLConfig.read_timeout_ms,
         cache_validity_time: timedelta = CRLConfig.cache_validity_time,
         cache_manager: CRLCacheManager | None = None,
+        crl_download_max_size: int = CRLConfig.crl_download_max_size,
     ):
         self._session_manager = session_manager
         self._cert_revocation_check_mode = cert_revocation_check_mode
@@ -193,6 +207,7 @@ class CRLValidator:
         self._read_timeout_ms = read_timeout_ms
         self._cache_validity_time = cache_validity_time
         self._cache_manager = cache_manager or CRLCacheManager.noop()
+        self._crl_download_max_size = crl_download_max_size
 
         # list of trusted CA and their certificates
         self._trusted_ca: dict[x509.Name, list[x509.Certificate]] = defaultdict(list)
@@ -237,7 +252,9 @@ class CRLValidator:
             if config.enable_crl_file_cache:
                 removal_delay = timedelta(days=config.crl_cache_removal_delay_days)
                 file_cache = CRLCacheFactory.get_file_cache(
-                    cache_dir=config.crl_cache_dir, removal_delay=removal_delay
+                    cache_dir=config.crl_cache_dir,
+                    removal_delay=removal_delay,
+                    unsafe_skip_file_permissions_check=config.unsafe_skip_file_permissions_check,
                 )
             else:
                 from snowflake.connector.crl_cache import NoopCRLCache
@@ -268,63 +285,70 @@ class CRLValidator:
             read_timeout_ms=config.read_timeout_ms,
             cache_validity_time=config.cache_validity_time,
             cache_manager=cache_manager,
+            crl_download_max_size=config.crl_download_max_size,
         )
 
-    def validate_certificate_chains(
-        self, certificate_chains: list[list[x509.Certificate]]
+    def validate_certificate_chain(
+        self, peer_cert: x509.Certificate, chain: list[x509.Certificate] | None
     ) -> bool:
         """
-        Validate certificate chains against CRLs with actual HTTP requests
+        Validate a certificate chain against CRLs with actual HTTP requests
 
         Args:
-            certificate_chains: List of certificate chains to validate
+            peer_cert: The peer certificate to validate (e.g., server certificate)
+            chain: Certificate chain to use for validation (can be None or empty)
 
         Returns:
             True if validation passes, False otherwise
-
-        Raises:
-            ValueError: If certificate_chains is None or empty
         """
         if self._cert_revocation_check_mode == CertRevocationCheckMode.DISABLED:
             return True
 
-        if certificate_chains is None or len(certificate_chains) == 0:
-            logger.warning("Certificate chains are empty")
-            return self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
+        chain = chain if chain is not None else []
+        result = self._validate_chain(peer_cert, chain)
 
-        results = []
-        for chain in certificate_chains:
-            result = self._validate_single_chain(chain)
-            # If any of the chains is valid, the whole check is considered positive
-            if result == CRLValidationResult.UNREVOKED:
-                return True
-            results.append(result)
-
-        # In non-advisory mode we require at least one chain get a clear UNREVOKED status
-        if self._cert_revocation_check_mode != CertRevocationCheckMode.ADVISORY:
+        if result == CRLValidationResult.UNREVOKED:
+            return True
+        if result == CRLValidationResult.REVOKED:
             return False
+        # In advisory mode, errors are treated positively
+        return self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
 
-        # We're in advisory mode, so any error is treated positively
-        return any(result == CRLValidationResult.ERROR for result in results)
-
-    def _validate_single_chain(
-        self, chain: list[x509.Certificate]
+    def _validate_chain(
+        self, start_cert: x509.Certificate, chain: list[x509.Certificate]
     ) -> CRLValidationResult:
         """
+        Validate a certificate chain starting from start_cert.
+
+        Args:
+            start_cert: The certificate to start validation from
+            chain: List of certificates to use for building the trust path
+
         Returns:
           UNREVOKED: If there is a path to any trusted certificate where all certificates are unrevoked.
           REVOKED: If all paths to trusted certificates are revoked.
           ERROR: If there is a path to any trusted certificate on which none certificate is revoked,
              but some certificates can't be verified.
         """
-        # An empty chain is considered an error
-        if len(chain) == 0:
+        # Check if start certificate is expired
+        if not self._is_within_validity_dates(start_cert):
+            logger.warning(
+                "Start certificate is expired or not yet valid: %s", start_cert.subject
+            )
             return CRLValidationResult.ERROR
 
         subject_certificates: dict[x509.Name, list[x509.Certificate]] = defaultdict(
             list
         )
         for cert in chain:
+            if not self._is_ca_certificate(cert):
+                logger.warning("Ignoring non-CA certificate: %s", cert)
+                continue
+            if not self._is_within_validity_dates(cert):
+                logger.warning(
+                    "Ignoring certificate not within validity dates: %s", cert
+                )
+                continue
             subject_certificates[cert.subject].append(cert)
         currently_visited_subjects: set[x509.Name] = set()
 
@@ -387,19 +411,7 @@ class CRLValidator:
             # no ERROR result found, all paths are REVOKED
             return CRLValidationResult.REVOKED
 
-        currently_visited_subjects.add(chain[0].subject)
-        error_result = False
-        revoked_result = False
-        for cert in subject_certificates[chain[0].subject]:
-            result = traverse_chain(cert)
-            if result == CRLValidationResult.UNREVOKED:
-                return result
-            error_result |= result == CRLValidationResult.ERROR
-            revoked_result |= result == CRLValidationResult.REVOKED
-
-        if error_result or not revoked_result:
-            return CRLValidationResult.ERROR
-        return CRLValidationResult.REVOKED
+        return traverse_chain(start_cert)
 
     def _is_certificate_trusted_by_os(self, cert: x509.Certificate) -> bool:
         if cert.subject not in self._trusted_ca:
@@ -425,6 +437,50 @@ class CRLValidator:
             return True
         except Exception:
             return False
+
+    @staticmethod
+    def _is_ca_certificate(ca_cert: x509.Certificate) -> bool:
+        # Check if a certificate has basicConstraints extension with CA flag set to True.
+        try:
+            basic_constraints = ca_cert.extensions.get_extension_for_oid(
+                ExtensionOID.BASIC_CONSTRAINTS
+            ).value
+            return basic_constraints.ca
+        except x509.ExtensionNotFound:
+            # If the extension is not present, the certificate is not a CA
+            return False
+
+    @staticmethod
+    def _get_certificate_validity_dates(
+        cert: x509.Certificate,
+    ) -> tuple[datetime, datetime]:
+        # Extract UTC-aware validity dates from a certificate.
+
+        try:
+            # Use timezone-aware versions to avoid deprecation warnings
+            not_valid_before = cert.not_valid_before_utc
+            not_valid_after = cert.not_valid_after_utc
+        except AttributeError:
+            # Fallback for older versions without _utc methods
+            not_valid_before = cert.not_valid_before
+            not_valid_after = cert.not_valid_after
+
+            # Convert to UTC if not timezone-aware
+            if not_valid_before.tzinfo is None:
+                not_valid_before = not_valid_before.replace(tzinfo=timezone.utc)
+            if not_valid_after.tzinfo is None:
+                not_valid_after = not_valid_after.replace(tzinfo=timezone.utc)
+
+        return not_valid_before, not_valid_after
+
+    @staticmethod
+    def _is_within_validity_dates(cert: x509.Certificate) -> bool:
+        # Check if a certificate is currently valid (not expired and not before validity period).
+        not_valid_before, not_valid_after = (
+            CRLValidator._get_certificate_validity_dates(cert)
+        )
+        now = datetime.now(timezone.utc)
+        return not_valid_before <= now <= not_valid_after
 
     def _validate_certificate_is_not_revoked_with_cache(
         self, cert: x509.Certificate, ca_cert: x509.Certificate
@@ -474,23 +530,13 @@ class CRLValidator:
         - For certificates issued on or after 15 March 2026:
           validity period <= 7 days (604,800 seconds)
         """
-        try:
-            # Use timezone.utc versions to avoid deprecation warnings
-            issue_date = cert.not_valid_before_utc
-            validity_period = cert.not_valid_after_utc - cert.not_valid_before_utc
-        except AttributeError:
-            # Fallback for older versions
-            issue_date = cert.not_valid_before
-            validity_period = cert.not_valid_after - cert.not_valid_before
-
-        # Convert issue_date to UTC if it's not timezone-aware
-        if issue_date.tzinfo is None:
-            issue_date = issue_date.replace(tzinfo=timezone.utc)
+        issue_date, expiry_date = CRLValidator._get_certificate_validity_dates(cert)
+        validity_period = expiry_date - issue_date + timedelta(days=1)
 
         march_15_2026 = datetime(2026, 3, 15, tzinfo=timezone.utc)
         if issue_date >= march_15_2026:
-            return validity_period.total_seconds() <= 604800  # 7 days in seconds
-        return validity_period.total_seconds() <= 864000  # 10 days in seconds
+            return validity_period.days <= 7
+        return validity_period.days <= 10
 
     @staticmethod
     def _extract_crl_distribution_points(cert: x509.Certificate) -> list[str]:
@@ -522,14 +568,98 @@ class CRLValidator:
         try:
             logger.debug("Trying to download CRL from: %s", crl_url)
             response = self._session_manager.get(
-                crl_url, timeout=(self._connection_timeout_ms, self._read_timeout_ms)
+                crl_url,
+                timeout=(self._connection_timeout_ms, self._read_timeout_ms),
+                stream=True,
             )
             response.raise_for_status()
-            return response.content
+
+            # Check Content-Length header first if available
+            content_length = response.headers.get("Content-Length")
+            if content_length:
+                try:
+                    size = int(content_length)
+                    if size > self._crl_download_max_size:
+                        logger.warning(
+                            "CRL from %s exceeds maximum size limit (%d bytes > %d bytes)",
+                            crl_url,
+                            size,
+                            self._crl_download_max_size,
+                        )
+                        return None
+                except ValueError:
+                    logger.debug(
+                        "Invalid Content-Length header for %s: %s",
+                        crl_url,
+                        content_length,
+                    )
+
+            # Stream the content and check size as we download
+            chunks = []
+            total_size = 0
+            for chunk in response.iter_content(chunk_size=8192):
+                if not chunk:
+                    continue
+                total_size += len(chunk)
+                if total_size > self._crl_download_max_size:
+                    logger.warning(
+                        "CRL from %s exceeded maximum size limit during download (%d bytes)",
+                        crl_url,
+                        self._crl_download_max_size,
+                    )
+                    return None
+                chunks.append(chunk)
+
+            return b"".join(chunks)
         except Exception:
             # CRL fetch or parsing failed
             logger.exception("Failed to download CRL from %s", crl_url)
             return None
+
+    def _get_crl_last_update(
+        self, crl: x509.CertificateRevocationList
+    ) -> datetime | None:
+        """
+        Get the last_update timestamp from a CRL.
+
+        Args:
+            crl: The CRL to extract the timestamp from
+
+        Returns:
+            The last_update timestamp, or None if not available
+        """
+        try:
+            return crl.last_update_utc
+        except AttributeError:
+            return getattr(crl, "last_update", None)
+
+    def _is_crl_more_recent(
+        self,
+        new_crl: x509.CertificateRevocationList,
+        cached_crl: x509.CertificateRevocationList,
+    ) -> bool:
+        """
+        Check if a newly downloaded CRL is more recent than a cached CRL.
+
+        Args:
+            new_crl: The newly downloaded CRL
+            cached_crl: The cached CRL
+
+        Returns:
+            True if new_crl is more recent (has a later last_update), False otherwise
+        """
+        new_last_update = self._get_crl_last_update(new_crl)
+        cached_last_update = self._get_crl_last_update(cached_crl)
+
+        if new_last_update is None:
+            logger.warning("New CRL has no last_update timestamp")
+            return False
+
+        if cached_last_update is None:
+            logger.warning("Cached CRL has no last_update timestamp")
+            return True
+
+        return new_last_update > cached_last_update
 
     def _download_crl(
         self, crl_url: str
@@ -544,7 +674,12 @@ class CRLValidator:
             except AttributeError:
                 next_update = crl.next_update
 
-            if next_update and now > next_update:
+            if not next_update:
+                # reject CRL as lack of next_update timestamp is a violation of both the RFC and the governing policy documents.
+                logger.warning("CRL from %s has no next_update timestamp", crl_url)
+                return None, None
+
+            if now > next_update:
                 logger.warning(
                     "The CRL from %s was expired on %s", crl_url, next_update
                 )
@@ -567,9 +702,27 @@ class CRLValidator:
             or cached_crl.is_crl_expired_by(now)
             or cached_crl.is_evicted_by(now, self._cache_validity_time)
         ):
+            logger.debug("Cached CRL is None/expired/evicted, downloading new CRL")
             crl, ts = self._download_crl(crl_url)
-            if crl and ts:
-                self._put_crl_to_cache(crl_url, crl, ts)
+            if crl is not None and ts is not None:
+                # Only cache the downloaded CRL if it's more recent than the cached one
+                is_more_recent = cached_crl is None or self._is_crl_more_recent(
+                    crl, cached_crl.crl
+                )
+                logger.debug(
+                    "Is downloaded CRL more recent? cached_crl is None=%s, is_more_recent=%s",
+                    cached_crl is None,
+                    is_more_recent,
+                )
+                if is_more_recent:
+                    self._put_crl_to_cache(crl_url, crl, ts)
+                    logger.debug("Cached newly downloaded CRL for %s", crl_url)
+                else:
+                    logger.info(
+                        "Downloaded CRL for %s is not more recent than cached version, keeping cached CRL",
+                        crl_url,
+                    )
+                    crl = cached_crl.crl
         else:
             crl = cached_crl.crl
 
@@ -592,6 +745,11 @@ class CRLValidator:
             logger.warning("CRL signature verification failed for URL: %s", crl_url)
             # Always return ERROR when signature verification fails
             # We cannot trust a CRL whose signature cannot be verified
+            return CRLValidationResult.ERROR
+
+        # Verify that the CRL URL matches the IDP extension
+        if not self._verify_against_idp_extension(crl, crl_url):
+            logger.warning("CRL URL does not match IDP extension for URL: %s", crl_url)
             return CRLValidationResult.ERROR
 
         # Check if certificate is revoked
@@ -645,6 +803,52 @@ class CRLValidator:
             logger.warning("CRL signature verification failed: %s", e)
             return False
 
+    def _verify_against_idp_extension(
+        self, crl: x509.CertificateRevocationList, crl_url: str
+    ) -> bool:
+        # Verify that the CRL distribution point URL matches the IDP extension.
+        logger.debug(
+            "Trying to verify CRL URL against IDP extension for URL: %s", crl_url
+        )
+
+        try:
+            idp_extension = crl.extensions.get_extension_for_oid(
+                ExtensionOID.ISSUING_DISTRIBUTION_POINT
+            )
+            idp = idp_extension.value
+
+            # If the IDP has a distribution point, verify it matches the CRL URL
+            if not idp.full_name:
+                # according to baseline requirements this should not happen
+                # https://github.com/cabforum/servercert/blob/main/docs/BR.md
+                logger.debug(
+                    "IDP extension has no full_name - treating as invalid",
+                    crl_url,
+                )
+                return False
+
+            for name in idp.full_name:
+                if isinstance(name, x509.UniformResourceIdentifier):
+                    if name.value == crl_url:
+                        logger.debug("CRL URL matches IDP extension: %s", crl_url)
+                        return True
+            # If we found distribution points but none matched
+            logger.warning(
+                "CRL URL %s does not match any IDP distribution point", crl_url
+            )
+            return False
+
+        except x509.ExtensionNotFound:
+            # If the IDP extension is not present, consider it valid
+            logger.debug(
+                "No IDP extension found in CRL, treating as valid for URL: %s", crl_url
+            )
+            return True
+        except Exception as e:
+            # If we can't parse the IDP extension, log and treat as error
+            logger.warning("Failed to verify IDP extension: %s", e)
+            return False
+
     def _check_certificate_against_crl(
         self, cert: x509.Certificate, crl: x509.CertificateRevocationList
     ) -> CRLValidationResult:
@@ -660,8 +864,8 @@ class CRLValidator:
         """
         Validate an OpenSSL connection against CRLs.
 
-        This method extracts certificate chains from the connection and validates them
-        against Certificate Revocation Lists (CRLs).
+        This method extracts the peer certificate and certificate chain from the
+        connection and validates them against Certificate Revocation Lists (CRLs).
 
         Args:
             connection: OpenSSL connection object
@@ -669,35 +873,47 @@ class CRLValidator:
         Returns:
             True if validation passes, False otherwise
         """
-        certificate_chains = self._extract_certificate_chains_from_connection(
-            connection
-        )
-        return self.validate_certificate_chains(certificate_chains)
+        try:
+            # Get the peer certificate (the start certificate)
+            peer_cert = connection.get_peer_certificate(as_cryptography=True)
+            if peer_cert is None:
+                logger.warning("No peer certificate found in connection")
+                return (
+                    self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
+                )
 
-    def _extract_certificate_chains_from_connection(
+            # Extract the certificate chain
+            cert_chain = self._extract_certificate_chain_from_connection(connection)
+
+            return self.validate_certificate_chain(peer_cert, cert_chain)
+        except Exception as e:
+            logger.warning("Failed to validate connection: %s", e)
+            return self._cert_revocation_check_mode == CertRevocationCheckMode.ADVISORY
+
+    def _extract_certificate_chain_from_connection(
         self, connection
-    ) -> list[list[x509.Certificate]]:
-        """Extract certificate chains from OpenSSL connection for CRL validation.
+    ) -> list[x509.Certificate] | None:
+        """Extract certificate chain from OpenSSL connection for CRL validation.
 
         Args:
             connection: OpenSSL connection object
 
         Returns:
-            List of certificate chains, where each chain is a list of x509.Certificate objects
+            Certificate chain as a list of x509.Certificate objects, or None on error
         """
         try:
             # Convert OpenSSL certificates to cryptography x509 certificates
             cert_chain = connection.get_peer_cert_chain(as_cryptography=True)
             if not cert_chain:
                 logger.debug("No certificate chain found in connection")
-                return []
+                return None
             logger.debug(
                 "Extracted %d certificates for CRL validation", len(cert_chain)
             )
-            return [cert_chain]  # Return as a single chain
+            return cert_chain
 
         except Exception as e:
             logger.warning(
                 "Failed to extract certificate chain for CRL validation: %s", e
             )
-            return []
+            return None

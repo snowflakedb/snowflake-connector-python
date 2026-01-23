@@ -22,6 +22,9 @@ gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" ${PARAMS
 # Decrypt private key file
 gpg --quiet --batch --yes --decrypt --passphrase="${PARAMETERS_SECRET}" "${CONNECTOR_DIR}/.github/workflows/parameters/public/rsa_keys/rsa_key_python_${cloud_provider}.p8.gpg" > "test/rsa_key_python_${cloud_provider}.p8"
 
+# Remove CRL cache directory if it exists to avoid permission issues (if it was created by older version of the connector)
+rm -rf ~/Library/Caches/Snowflake/crls
+
 rm -rf venv
 python3.12 -m venv venv
 . venv/bin/activate

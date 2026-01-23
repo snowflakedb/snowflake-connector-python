@@ -7,10 +7,32 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v4.1.0(TBD)
+- v4.2.1(TBD)
+  - Ensured proper list conversion - the converter runs to_snowflake on all list elements.
+  - Made the parameter `server_session_keep_alive` in `SnowflakeConnection` skip checking for pending async queries, providing faster connection close times especially when many async queries are executed.
+  - Fix string representation of INTERVAL YEAR and INTERVAL MONTH types.
+
+- v4.2.0(January 07,2026)
+  - Added `SnowflakeCursor.stats` property to expose granular DML statistics (rows inserted, deleted, updated, and duplicates) for operations like CTAS where `rowcount` is insufficient.
+  - Added support for injecting SPCS service identifier token (`SPCS_TOKEN`) into login requests when present in SPCS containers.
+  - Introduced shared library([source code](https://github.com/snowflakedb/universal-driver/tree/main/sf_mini_core)) for extended telemetry to identify and prepare testing platform for native rust extensions.
+  - Added `private_key_passphrase` connection parameter for key pair authentication with encrypted private keys.
+
+- v4.1.1(December 12,2025)
+  - Relaxed pandas dependency requirements for Python below 3.12.
+  - Changed CRL cache cleanup background task to daemon to avoid blocking main thread.
+  - Fixed NO_PROXY issues with PUT operations
+
+- v4.1.0(November 18,2025)
   - Added the `SNOWFLAKE_AUTH_FORCE_SERVER` environment variable to force the use of the local-listening server when using the `externalbrowser` auth method.
     - This allows headless environments (like Docker or Airflow) running locally to auth via a browser URL.
   - Fix compilation error when building from sources with libc++.
+  - Pin lower versions of dependencies to oldest version without vulnerabilities.
+  - Added no_proxy parameter for proxy configuration without using environmental variables.
+  - Added OAUTH_AUTHORIZATION_CODE and OAUTH_CLIENT_CREDENTIALS to list of authenticators that don't require user to be set
+  - Added `oauth_socket_uri` connection parameter allowing to separate server and redirect URIs for local OAuth server.
+  - Made platform_detection logs silent and improved its timeout handling. Added support for ENV_VAR_DISABLE_PLATFORM_DETECTION environment variable.
+  - Fixed FIPS environments md5 hash issues with multipart upload on Azure.
 
 - v4.0.0(October 09,2025)
   - Added support for checking certificates revocation using revocation lists (CRLs)
