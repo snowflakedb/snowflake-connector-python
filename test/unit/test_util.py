@@ -38,6 +38,9 @@ class TestCoreLoader:
         sleep(2)
         assert loader.get_load_error() == str(None)
         assert loader.get_core_version() == "0.0.1"
+        # Verify load time was measured
+        assert loader.get_load_time() is not None
+        assert loader.get_load_time() >= 0
 
     def test_core_loader_initialization(self):
         """Test that _CoreLoader initializes with None values."""
@@ -45,6 +48,7 @@ class TestCoreLoader:
         assert loader._version is None
         assert loader._error is None
         assert loader._path is None
+        assert loader._load_time is None
 
     @pytest.mark.parametrize(
         "system,expected",
@@ -194,7 +198,7 @@ class TestCoreLoader:
         assert mock_core.sf_core_full_version.restype == ctypes.c_char_p
 
     def test_load_minicore(self):
-        """Test that _load_minicore loads the library."""
+        """Test that _load_minicore loads the library correctly."""
         mock_path = mock.MagicMock()
         mock_lib_path = "/path/to/libsf_mini_core.so"
 
@@ -255,7 +259,7 @@ class TestCoreLoader:
     def test_load_success(self):
         """Test successful load of the core library."""
         loader = _CoreLoader()
-        mock_path = mock.MagicMock()
+        mock_path = "/path/to/libsf_mini_core.so"
         mock_core = mock.MagicMock()
         mock_version = b"1.2.3"
         mock_core.sf_core_full_version = mock.MagicMock(return_value=mock_version)
@@ -270,15 +274,18 @@ class TestCoreLoader:
                     with mock.patch.object(
                         loader, "_register_functions"
                     ) as mock_register:
-                        loader.load()
-                        sleep(2)
+                        with mock.patch("time.perf_counter", side_effect=[0.0, 0.0155]):
+                            loader.load()
+                            sleep(2)
 
-                        mock_get_path.assert_called_once()
-                        mock_load.assert_called_once_with(mock_path)
-                        mock_register.assert_called_once_with(mock_core)
-                        assert loader._version == mock_version
-                        assert loader._error is None
-                        assert loader._path == str(mock_path)
+                            mock_get_path.assert_called_once()
+                            mock_load.assert_called_once_with(mock_path)
+                            mock_register.assert_called_once_with(mock_core)
+                            assert loader._version == mock_version
+                            assert loader._error is None
+                            assert loader._path == mock_path
+                            # (0.0155 - 0.0) * 1000 = 15.5 ms
+                            assert loader._load_time == 15.5
 
     def test_load_failure(self):
         """Test that load captures exceptions."""
@@ -348,6 +355,102 @@ class TestCoreLoader:
         result = loader.get_file_name()
 
         assert result is None
+
+    def test_get_load_time_with_time(self):
+        """Test get_load_time returns the load time when it has been set."""
+        loader = _CoreLoader()
+        loader._load_time = 42.5
+
+        result = loader.get_load_time()
+
+        assert result == 42.5
+
+    def test_get_load_time_no_time(self):
+        """Test get_load_time returns None when no load time exists."""
+        loader = _CoreLoader()
+
+        result = loader.get_load_time()
+
+        assert result is None
+
+    def test_get_present_binaries_contains_expected_paths(self):
+        """Test get_present_binaries returns binaries for expected paths."""
+        loader = _CoreLoader()
+
+        result = loader.get_present_binaries()
+
+        assert isinstance(result, str)
+        assert result != ""
+
+    def test_get_present_binaries_with_mocked_structure(self, tmp_path):
+        """Test get_present_binaries with mocked directory structure."""
+        loader = _CoreLoader()
+
+        # Create a temporary directory structure mimicking minicore layout
+        # Create platform directories with binary files
+        linux_dir = tmp_path / "linux_x86_64_glibc"
+        linux_dir.mkdir()
+        (linux_dir / "libsf_mini_core.so").write_text("fake binary content")
+
+        macos_dir = tmp_path / "macos_aarch64"
+        macos_dir.mkdir()
+        (macos_dir / "libsf_mini_core.dylib").write_text("fake binary content")
+
+        windows_dir = tmp_path / "windows_x86_64"
+        windows_dir.mkdir()
+        (windows_dir / "sf_mini_core.dll").write_text("fake binary content")
+
+        # Create a __pycache__ directory that should be ignored
+        pycache_dir = tmp_path / "__pycache__"
+        pycache_dir.mkdir()
+        (pycache_dir / "some_file.pyc").write_text("cached file")
+
+        # Mock importlib.resources.files to return our temp directory
+        with mock.patch("importlib.resources.files") as mock_files:
+            mock_files.return_value = tmp_path
+
+            result = loader.get_present_binaries()
+
+            # Verify the function was called with correct module name
+            mock_files.assert_called_once_with("snowflake.connector.minicore")
+
+            # Parse the result
+            binaries = result.split(",")
+            assert len(binaries) == 3
+
+            # Verify all expected binaries are present
+            assert "linux_x86_64_glibc/libsf_mini_core.so" in binaries
+            assert "macos_aarch64/libsf_mini_core.dylib" in binaries
+            assert "windows_x86_64/sf_mini_core.dll" in binaries
+
+            # Verify __pycache__ files are not included
+            assert not any("__pycache__" in binary for binary in binaries)
+
+    def test_get_present_binaries_with_empty_directory(self, tmp_path):
+        """Test get_present_binaries returns empty string for empty directory."""
+        loader = _CoreLoader()
+
+        # Create an empty temp directory
+        # Mock importlib.resources.files to return our temp directory
+        with mock.patch("importlib.resources.files") as mock_files:
+            mock_files.return_value = tmp_path
+
+            result = loader.get_present_binaries()
+
+            assert result == ""
+
+    def test_get_present_binaries_handles_exceptions(self):
+        """Test get_present_binaries handles exceptions gracefully."""
+        loader = _CoreLoader()
+
+        # Mock importlib.resources.files to raise an exception
+        with mock.patch("importlib.resources.files") as mock_files:
+            mock_files.side_effect = Exception("Failed to access resources")
+
+            # Should not raise, but return empty string
+            result = loader.get_present_binaries()
+
+            assert result == ""
 
 
 def test_importing_snowflake_connector_triggers_core_loader_load():
