@@ -10,6 +10,12 @@ from typing import Any
 
 import jwt
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric.ec import (
+    EllipticCurvePrivateKey,
+    SECP256R1,
+    SECP384R1,
+    SECP521R1,
+)
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
@@ -28,7 +34,11 @@ logger = getLogger(__name__)
 class AuthByKeyPair(AuthByPlugin):
     """Key pair based authentication."""
 
-    ALGORITHM = "RS256"
+    ALG_RS256 = "RS256"
+    ALG_ES256 = "ES256"
+    ALG_ES384 = "ES384"
+    ALG_ES512 = "ES512"
+
     ISSUER = "iss"
     SUBJECT = "sub"
     EXPIRE_TIME = "exp"
@@ -39,7 +49,7 @@ class AuthByKeyPair(AuthByPlugin):
 
     def __init__(
         self,
-        private_key: bytes | str | RSAPrivateKey,
+        private_key: bytes | str | RSAPrivateKey | EllipticCurvePrivateKey,
         private_key_passphrase: bytes | None = None,
         lifetime_in_seconds: int = LIFETIME,
         **kwargs,
@@ -48,7 +58,7 @@ class AuthByKeyPair(AuthByPlugin):
 
         Args:
             private_key: a byte array of der formats of private key, or an
-                object that implements the `RSAPrivateKey` interface.
+                object that implements the `RSAPrivateKey` or `EllipticCurvePrivateKey` interface.
             lifetime_in_seconds: number of seconds the JWT token will be valid
         """
         super().__init__(
@@ -72,7 +82,7 @@ class AuthByKeyPair(AuthByPlugin):
             ).total_seconds()
         )
 
-        self._private_key: bytes | str | RSAPrivateKey | None = private_key
+        self._private_key: bytes | str | RSAPrivateKey | EllipticCurvePrivateKey | None = private_key
         self._private_key_passphrase: bytes | None = private_key_passphrase
         self._jwt_token = ""
         self._jwt_token_exp = 0
@@ -109,7 +119,7 @@ class AuthByKeyPair(AuthByPlugin):
             except Exception as e:
                 raise ProgrammingError(
                     msg=f"Failed to decode private key: {e}\nPlease provide a valid "
-                    "unencrypted rsa private key in base64-encoded DER format as a "
+                    "unencrypted RSA or ECDSA private key in base64-encoded DER format as a "
                     "str object",
                     errno=ER_INVALID_PRIVATE_KEY,
                 )
@@ -124,23 +134,23 @@ class AuthByKeyPair(AuthByPlugin):
             except Exception as e:
                 raise ProgrammingError(
                     msg=f"Failed to load private key: {e}\nPlease provide a valid "
-                    "rsa private key in DER format as bytes object. If the key is "
+                    "RSA or ECDSA private key in DER format as bytes object. If the key is "
                     "encrypted, provide the passphrase via private_key_passphrase",
                     errno=ER_INVALID_PRIVATE_KEY,
                 )
 
-            if not isinstance(private_key, RSAPrivateKey):
+            if not isinstance(private_key, (RSAPrivateKey, EllipticCurvePrivateKey)):
                 raise ProgrammingError(
                     msg=f"Private key type ({private_key.__class__.__name__}) not supported."
-                    "\nPlease provide a valid rsa private key in DER format as bytes "
+                    "\nPlease provide a valid RSA or ECDSA private key in DER format as bytes "
                     "object",
                     errno=ER_INVALID_PRIVATE_KEY,
                 )
-        elif isinstance(self._private_key, RSAPrivateKey):
+        elif isinstance(self._private_key, (RSAPrivateKey, EllipticCurvePrivateKey)):
             private_key = self._private_key
         else:
             raise TypeError(
-                f"Expected bytes or RSAPrivateKey, got {type(self._private_key)}"
+                f"Expected bytes, RSAPrivateKey, or EllipticCurvePrivateKey, got {type(self._private_key)}"
             )
 
         public_key_fp = self.calculate_public_key_fingerprint(private_key)
@@ -153,7 +163,24 @@ class AuthByKeyPair(AuthByPlugin):
             self.EXPIRE_TIME: self._jwt_token_exp,
         }
 
-        _jwt_token = jwt.encode(payload, private_key, algorithm=self.ALGORITHM)
+        # select algorithm based on key type and curve
+        if isinstance(private_key, EllipticCurvePrivateKey):
+            curve = private_key.curve
+            if isinstance(curve, SECP256R1):
+                algorithm = self.ALG_ES256
+            elif isinstance(curve, SECP384R1):
+                algorithm = self.ALG_ES384
+            elif isinstance(curve, SECP521R1):
+                algorithm = self.ALG_ES512
+            else:
+                raise ProgrammingError(
+                    msg=f"Unsupported EC curve: {curve.name}. Supported: SECP256R1, SECP384R1, SECP521R1",
+                    errno=ER_INVALID_PRIVATE_KEY,
+                )
+        else:
+            algorithm = self.ALG_RS256
+
+        _jwt_token = jwt.encode(payload, private_key, algorithm=algorithm)
 
         # jwt.encode() returns bytes in pyjwt 1.x and a string
         # in pyjwt 2.x
