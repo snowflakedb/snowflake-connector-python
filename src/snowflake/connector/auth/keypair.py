@@ -11,10 +11,10 @@ from typing import Any
 import jwt
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric.ec import (
-    EllipticCurvePrivateKey,
     SECP256R1,
     SECP384R1,
     SECP521R1,
+    EllipticCurvePrivateKey,
 )
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import (
@@ -82,7 +82,9 @@ class AuthByKeyPair(AuthByPlugin):
             ).total_seconds()
         )
 
-        self._private_key: bytes | str | RSAPrivateKey | EllipticCurvePrivateKey | None = private_key
+        self._private_key: (
+            bytes | str | RSAPrivateKey | EllipticCurvePrivateKey | None
+        ) = private_key
         self._private_key_passphrase: bytes | None = private_key_passphrase
         self._jwt_token = ""
         self._jwt_token_exp = 0
