@@ -448,6 +448,7 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
                 SecretDetector.mask_secrets(url),
                 e,
             )
+
     @staticmethod
     def _resolve_proxy_url(
         connection: SnowflakeConnection, request_url: str
