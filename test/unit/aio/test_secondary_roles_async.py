@@ -121,4 +121,3 @@ class TestSecondaryRolesParameterAsync:
         assert "body" in captured_body
         assert "data" in captured_body["body"]
         assert "SECONDARY_ROLES" not in captured_body["body"]["data"]
-
