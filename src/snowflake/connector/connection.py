@@ -482,6 +482,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # Maximum CRL file size in bytes
+    "secondary_roles": (
+        None,
+        (type(None), str),
+    ),  # Secondary roles mode: ALL or NONE or no value
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
