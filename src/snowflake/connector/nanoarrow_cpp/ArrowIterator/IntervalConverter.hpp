@@ -12,7 +12,7 @@ namespace sf {
 class IntervalYearMonthConverter : public IColumnConverter {
  public:
   explicit IntervalYearMonthConverter(ArrowArrayView* array, PyObject* context,
-                                      bool useNumpy);
+                                      bool useNumpy, int scale);
   virtual ~IntervalYearMonthConverter() = default;
 
   PyObject* toPyObject(int64_t rowIndex) const override;
@@ -20,6 +20,7 @@ class IntervalYearMonthConverter : public IColumnConverter {
  private:
   ArrowArrayView* m_array;
   PyObject* m_context;
+  int m_scale;
   const char* m_method;
 };
 

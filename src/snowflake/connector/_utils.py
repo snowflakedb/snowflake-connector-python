@@ -7,6 +7,7 @@ import os
 import platform
 import string
 import threading
+import time
 from enum import Enum
 from inspect import stack
 from pathlib import Path
@@ -141,6 +142,7 @@ class _CoreLoader:
         self._version: bytes | None = None
         self._error: Exception | None = None
         self._path: str | None = None
+        self._load_time: float | None = None
 
     @staticmethod
     def _detect_os() -> str:
@@ -229,7 +231,7 @@ class _CoreLoader:
             return "libsf_mini_core.so"
 
     @staticmethod
-    def _get_core_path() -> Path:
+    def _get_core_path():
         """Get the path to the minicore library for the current platform."""
         subdir = _CoreLoader._get_platform_subdir()
         lib_name = _CoreLoader._get_lib_name()
@@ -253,20 +255,49 @@ class _CoreLoader:
             core = ctypes.CDLL(str(lib_path))
         return core
 
+    def get_present_binaries(self) -> str:
+        present_binaries = []
+        try:
+            minicore_files = importlib.resources.files("snowflake.connector.minicore")
+            # Iterate through all items in the minicore module
+            for item in minicore_files.iterdir():
+                # Skip non-platform directories like __pycache__
+                if item.is_dir() and not item.name.startswith("__"):
+                    # This is a platform subdirectory
+                    platform_name = item.name
+                    try:
+                        # List all files in this subdirectory
+                        for binary_file in item.iterdir():
+                            if binary_file.is_file():
+                                # Store as "platform/filename"
+                                present_binaries.append(
+                                    f"{platform_name}/{binary_file.name}"
+                                )
+                    except Exception as e:
+                        logger.debug(f"Error listing binaries in {platform_name}: {e}")
+        except Exception as e:
+            logger.debug(f"Error populating present binaries: {e}")
+
+        return ",".join(present_binaries)
+
     def _is_core_disabled(self) -> bool:
         value = str(os.getenv("SNOWFLAKE_DISABLE_MINICORE", None)).lower()
         return value in ["1", "true"]
 
     def _load(self) -> None:
+        start_time = time.perf_counter()
         try:
             path = self._get_core_path()
+            self._path = str(path)
             core = self._load_minicore(path)
             self._register_functions(core)
             self._version = core.sf_core_full_version()
             self._error = None
-            self._path = str(path)
         except Exception as err:
             self._error = err
+        end_time = time.perf_counter()
+        # Store load time in milliseconds (with sub-millisecond precision)
+        self._load_time = (end_time - start_time) * 1000
 
     def load(self):
         """Spawn a separate thread to load the minicore library (non-blocking)."""
@@ -291,6 +322,10 @@ class _CoreLoader:
     def get_file_name(self) -> str:
         return self._path
 
+    def get_load_time(self) -> float | None:
+        """Return the time it took to load the minicore binary in milliseconds."""
+        return self._load_time
+
 
 _core_loader = _CoreLoader()
 
@@ -308,5 +343,7 @@ def build_minicore_usage_for_telemetry() -> dict[str, str | None]:
         "OS": OPERATING_SYSTEM,
         "OS_VERSION": OS_VERSION,
         "CORE_LOAD_ERROR": _core_loader.get_load_error(),
+        "CORE_BINARIES_PRESENT": _core_loader.get_present_binaries(),
+        "CORE_LOAD_TIME": _core_loader.get_load_time(),
         **build_minicore_usage_for_session(),
     }
