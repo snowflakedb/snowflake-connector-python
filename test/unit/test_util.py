@@ -5,7 +5,6 @@ from time import sleep
 from unittest import mock
 
 import pytest
-
 from snowflake.connector._utils import (
     _CoreLoader,
     _TrackedQueryCancellationTimer,
@@ -117,9 +116,7 @@ class TestCoreLoader:
         """Test _get_platform_subdir raises OSError for unsupported OS."""
         with mock.patch.object(_CoreLoader, "_detect_os", return_value="unknown"):
             with mock.patch.object(_CoreLoader, "_detect_arch", return_value="x86_64"):
-                with pytest.raises(
-                    OSError, match="Mini core binary for unknown x86_64 not found"
-                ):
+                with pytest.raises(OSError, match="Mini core binary for unknown x86_64 not found"):
                     _CoreLoader._get_platform_subdir()
 
     @pytest.mark.parametrize(
@@ -147,9 +144,7 @@ class TestCoreLoader:
                     _CoreLoader._get_core_path()
 
                     mock_files.assert_called_once_with("snowflake.connector.minicore")
-                    mock_files_obj.joinpath.assert_called_once_with(
-                        "windows_x86_64", "sf_mini_core.dll"
-                    )
+                    mock_files_obj.joinpath.assert_called_once_with("windows_x86_64", "sf_mini_core.dll")
 
     def test_get_core_path_darwin(self):
         """Test _get_core_path returns correct path for macOS."""
@@ -162,29 +157,21 @@ class TestCoreLoader:
                     _CoreLoader._get_core_path()
 
                     mock_files.assert_called_once_with("snowflake.connector.minicore")
-                    mock_files_obj.joinpath.assert_called_once_with(
-                        "macos_aarch64", "libsf_mini_core.dylib"
-                    )
+                    mock_files_obj.joinpath.assert_called_once_with("macos_aarch64", "libsf_mini_core.dylib")
 
     def test_get_core_path_linux(self):
         """Test _get_core_path returns correct path for Linux."""
         with mock.patch.object(_CoreLoader, "_detect_os", return_value="linux"):
             with mock.patch.object(_CoreLoader, "_detect_arch", return_value="x86_64"):
-                with mock.patch.object(
-                    _CoreLoader, "_detect_libc", return_value="glibc"
-                ):
+                with mock.patch.object(_CoreLoader, "_detect_libc", return_value="glibc"):
                     with mock.patch("importlib.resources.files") as mock_files:
                         mock_files_obj = mock.MagicMock()
                         mock_files.return_value = mock_files_obj
 
                         _CoreLoader._get_core_path()
 
-                        mock_files.assert_called_once_with(
-                            "snowflake.connector.minicore"
-                        )
-                        mock_files_obj.joinpath.assert_called_once_with(
-                            "linux_x86_64_glibc", "libsf_mini_core.so"
-                        )
+                        mock_files.assert_called_once_with("snowflake.connector.minicore")
+                        mock_files_obj.joinpath.assert_called_once_with("linux_x86_64_glibc", "libsf_mini_core.so")
 
     def test_register_functions(self):
         """Test that _register_functions sets up the C library functions correctly."""
@@ -293,9 +280,7 @@ class TestCoreLoader:
         test_error = Exception("Test error loading core")
 
         with mock.patch.object(loader, "_is_core_disabled", return_value=False):
-            with mock.patch.object(
-                loader, "_get_core_path", side_effect=test_error
-            ) as mock_get_path:
+            with mock.patch.object(loader, "_get_core_path", side_effect=test_error) as mock_get_path:
                 loader.load()
                 sleep(2)
 
@@ -484,9 +469,7 @@ def test_snowflake_connector_loads_when_core_loader_fails():
             # If we reach here, the module loaded successfully despite core_loader.load() failing
             assert True
         except Exception as e:
-            pytest.fail(
-                f"snowflake.connector failed to load when core_loader.load() raised an exception: {e}"
-            )
+            pytest.fail(f"snowflake.connector failed to load when core_loader.load() raised an exception: {e}")
 
         # Verify the module has expected attributes
         assert hasattr(snowflake.connector, "connect")
