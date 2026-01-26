@@ -438,10 +438,16 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         try:
             parsed_url = urllib.parse.urlparse(url)
             if parsed_url.scheme == "http":
-                logger.warning(f"OAuth URL uses insecure HTTP protocol: {url}")
+                logger.warning(
+                    "OAuth URL uses insecure HTTP protocol: %s",
+                    SecretDetector.mask_secrets(url),
+                )
         except Exception as e:
-            logger.warning(f"Cannot parse URL: {url}. {e}")
-
+            logger.warning(
+                "Cannot parse URL: %s. %s",
+                SecretDetector.mask_secrets(url),
+                e,
+            )
     @staticmethod
     def _resolve_proxy_url(
         connection: SnowflakeConnection, request_url: str
