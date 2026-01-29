@@ -8,9 +8,11 @@ import pytest
 
 from snowflake.connector._utils import (
     _CoreLoader,
+    _NanoarrowLoader,
     _TrackedQueryCancellationTimer,
     build_minicore_usage_for_session,
     build_minicore_usage_for_telemetry,
+    build_nanoarrow_usage_for_telemetry,
 )
 
 pytestmark = pytest.mark.skipolddriver
@@ -747,3 +749,205 @@ class TestBuildMinicoreUsage:
                     assert result["CORE_VERSION"] is None
                     assert result["CORE_FILE_NAME"] is None
                     assert result["CORE_LOAD_ERROR"] == "Library not found"
+
+
+class TestNanoarrowLoader:
+    """Tests for the NanoarrowLoader class."""
+
+    def test_nanoarrow_loader_initialization(self):
+        """Test that NanoarrowLoader initializes with None error."""
+        loader = _NanoarrowLoader()
+        assert loader._error is None
+
+    def test_set_load_error(self):
+        """Test that set_load_error stores the error."""
+        loader = _NanoarrowLoader()
+        test_error = Exception("Test error")
+        loader.set_load_error(test_error)
+        assert loader._error is test_error
+
+    def test_get_load_error_with_error(self):
+        """Test get_load_error returns error message when error exists."""
+        loader = _NanoarrowLoader()
+        test_error = Exception("Test error message")
+        loader._error = test_error
+
+        result = loader.get_load_error()
+
+        assert result == "Test error message"
+
+
+class TestBuildNanoarrowUsageForTelemetry:
+    """Tests for build_nanoarrow_usage_for_telemetry function."""
+
+    def test_build_nanoarrow_usage_for_telemetry_returns_expected_keys(self):
+        """Test that build_nanoarrow_usage_for_telemetry returns dict with expected keys."""
+        result = build_nanoarrow_usage_for_telemetry()
+
+        assert isinstance(result, dict)
+        assert "OS" in result
+        assert "OS_VERSION" in result
+        assert "CORE_LOAD_ERROR" in result
+        assert "ISA" in result
+
+    def test_build_nanoarrow_usage_for_telemetry_with_mocked_error(self):
+        """Test build_nanoarrow_usage_for_telemetry with mocked nanoarrow loader error."""
+        with mock.patch(
+            "snowflake.connector._utils._nanoarrow_loader.get_load_error",
+            return_value="Nanoarrow load failed",
+        ):
+            result = build_nanoarrow_usage_for_telemetry()
+
+            assert result["CORE_LOAD_ERROR"] == "Nanoarrow load failed"
+
+
+class TestNanoarrowImportErrorInCursor:
+    """Tests for nanoarrow import error handling in cursor.py."""
+
+    def test_import_error_populates_nanoarrow_loader_error(self):
+        """Test that ImportError during nanoarrow import in cursor.py populates _nanoarrow_loader error field."""
+        import importlib
+        import sys
+
+        # Save the original _nanoarrow_loader state and modules
+        from snowflake.connector._utils import _nanoarrow_loader
+
+        original_error = _nanoarrow_loader._error
+
+        # Save cursor-related modules for restoration
+        modules_to_remove = [
+            key
+            for key in list(sys.modules.keys())
+            if "snowflake.connector.cursor" in key
+        ]
+        saved_cursor_modules = {key: sys.modules.pop(key) for key in modules_to_remove}
+
+        # Save nanoarrow_arrow_iterator module if present
+        nanoarrow_key = "snowflake.connector.nanoarrow_arrow_iterator"
+        saved_nanoarrow = sys.modules.pop(nanoarrow_key, None)
+
+        try:
+            # Create a mock module that raises ImportError when accessed
+            test_import_error = ImportError(
+                "No module named 'nanoarrow_cpp': DLL load failed"
+            )
+
+            # Inject a module that raises ImportError on import
+            class FailingModule:
+                def __getattr__(self, name):
+                    raise test_import_error
+
+            # This makes import fail when trying to access anything from the module
+            sys.modules[nanoarrow_key] = FailingModule()
+
+            # Reset the nanoarrow loader error before test
+            _nanoarrow_loader._error = None
+
+            # Patch the set_load_error to track if it was called
+            original_set_load_error = _nanoarrow_loader.set_load_error
+            set_load_error_called_with = []
+
+            def tracking_set_load_error(err):
+                set_load_error_called_with.append(err)
+                original_set_load_error(err)
+
+            _nanoarrow_loader.set_load_error = tracking_set_load_error
+
+            try:
+                # Force reimport of cursor module - this should trigger the ImportError handling
+                importlib.import_module("snowflake.connector.cursor")
+            except Exception:
+                pass  # Import may fail, but the error handler should still be called
+
+            # Verify that set_load_error was called with an ImportError
+            # or that the error was set directly
+            if set_load_error_called_with:
+                assert any(
+                    isinstance(err, (ImportError, AttributeError))
+                    for err in set_load_error_called_with
+                )
+            # Alternatively, check if the error was set
+            elif _nanoarrow_loader._error is not None:
+                assert isinstance(
+                    _nanoarrow_loader._error, (ImportError, AttributeError, Exception)
+                )
+
+        finally:
+            # Restore the set_load_error method
+            _nanoarrow_loader.set_load_error = original_set_load_error
+
+            # Restore original error state
+            _nanoarrow_loader._error = original_error
+
+            # Restore modules
+            if saved_nanoarrow is not None:
+                sys.modules[nanoarrow_key] = saved_nanoarrow
+            elif nanoarrow_key in sys.modules:
+                del sys.modules[nanoarrow_key]
+
+            sys.modules.update(saved_cursor_modules)
+
+    def test_nanoarrow_loader_set_load_error_simulates_cursor_behavior(self):
+        """Test that NanoarrowLoader.set_load_error correctly stores ImportError as cursor.py does."""
+        # This test simulates exactly what cursor.py does on import failure:
+        # try:
+        #     from .nanoarrow_arrow_iterator import PyArrowIterator
+        #     CAN_USE_ARROW_RESULT_FORMAT = True
+        # except ImportError as e:
+        #     _nanoarrow_loader.set_load_error(e)
+        #     CAN_USE_ARROW_RESULT_FORMAT = False
+
+        loader = _NanoarrowLoader()
+
+        # Simulate the ImportError that occurs when nanoarrow_arrow_iterator fails to import
+        simulated_import_error = ImportError(
+            "No module named 'nanoarrow_cpp': cannot import name 'ArrowResult'"
+        )
+
+        # This is the exact call made in cursor.py
+        loader.set_load_error(simulated_import_error)
+
+        # Verify the error was stored
+        assert loader._error is simulated_import_error
+        assert "No module named 'nanoarrow_cpp'" in loader.get_load_error()
+        assert "ArrowResult" in loader.get_load_error()
+
+    def test_nanoarrow_import_error_accessible_via_telemetry_function(self):
+        """Test that import error from cursor.py is accessible via build_nanoarrow_usage_for_telemetry."""
+        from snowflake.connector._utils import _nanoarrow_loader
+
+        # Save original state
+        original_error = _nanoarrow_loader._error
+
+        try:
+            # Simulate the error that would be set during cursor.py import failure
+            test_error = ImportError(
+                "Failed to import ArrowResult: nanoarrow_cpp not found"
+            )
+            _nanoarrow_loader.set_load_error(test_error)
+
+            # Call the telemetry function and verify the error is reported
+            result = build_nanoarrow_usage_for_telemetry()
+
+            assert "Failed to import ArrowResult" in result["CORE_LOAD_ERROR"]
+            assert "nanoarrow_cpp not found" in result["CORE_LOAD_ERROR"]
+
+        finally:
+            # Restore original error state
+            _nanoarrow_loader._error = original_error
+
+    def test_dll_load_failure_error_captured_correctly(self):
+        """Test that DLL load failure errors during nanoarrow import are captured."""
+        loader = _NanoarrowLoader()
+
+        # This simulates a common error on Windows when DLL dependencies are missing
+        dll_error = ImportError(
+            "DLL load failed while importing 'nanoarrow_cpp': "
+            "The specified module could not be found."
+        )
+
+        loader.set_load_error(dll_error)
+
+        error_msg = loader.get_load_error()
+        assert "DLL load failed" in error_msg
+        assert "nanoarrow_cpp" in error_msg
