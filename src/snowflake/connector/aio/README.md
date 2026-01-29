@@ -1,9 +1,9 @@
 # Notice
 
-### This is experimental feature and should not be used in production code.
-
-This module contains experimental asynchronous version of connector. There's no commitment
-to maintain this implementation of aio.
+**This component is a Preview feature provided for experimental purposes only.
+It is provided "AS IS" and without warranty of any kind. This module is not
+supported by Snowflake Support. Use of this code is at your own risk and it
+is not intended for production environments.**
 
 ## Features NOT Supported
 
