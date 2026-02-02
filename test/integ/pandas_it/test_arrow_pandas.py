@@ -543,6 +543,74 @@ def test_timestamp_down_scale(conn_cnx):
     reason="arrow_iterator extension is not built, or pandas is missing.",
 )
 @pytest.mark.parametrize(
+    "date_type",
+    [
+        "TIMESTAMP_NTZ",
+        "TIMESTAMP_TZ",
+        "TIMESTAMP_LTZ",
+    ],
+)
+def test_timestamp_inconsistent_schema_across_batches(conn_cnx, date_type):
+    """Test for GitHub issue #1868.
+
+    When fetching datetime data with mixed in-range and out-of-range values
+    across multiple batches, the schema of the batches is inconsistent.
+    """
+    over_single_chunk_size = 10_000
+    normal_date = "1987-01-30 23:59:59.123456789"
+    overflow_date = "9999-12-31 00:00:00.000000000"
+
+    with conn_cnx() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""
+            CREATE TEMPORARY TABLE test_timestamp_mixed_batches (id INT, dt {date_type}(9))
+            """
+        )
+
+        # fill first batch with normal dates
+        cursor.execute(
+            f"""
+            INSERT INTO test_timestamp_mixed_batches (id, dt)
+            SELECT seq4(), '{normal_date}'::{date_type}(9)
+            FROM TABLE(GENERATOR(ROWCOUNT => {over_single_chunk_size}))
+            """
+        )
+        # Insert 10 out-of-range dates (overflow int64 ns, will be downcast to us)
+        cursor.execute(
+            f"""
+            INSERT INTO test_timestamp_mixed_batches (id, dt)
+            SELECT seq4() + {over_single_chunk_size}, '{overflow_date}'::{date_type}(9)
+            FROM TABLE(GENERATOR(ROWCOUNT => 10))
+            """
+        )
+
+        # Fetch all data
+        cursor.execute("SELECT id, dt FROM test_timestamp_mixed_batches ORDER BY id")
+        # This call may raise pyarrow.lib.ArrowInvalid if batches have inconsistent schemas
+        table = cursor.fetch_arrow_all()
+
+        # Verify we got all rows
+        assert table.num_rows == over_single_chunk_size + 10
+
+        # Verify the normal dates
+        normal_dt = table[1][0].as_py()  # first row's dt
+        assert normal_dt.year == 1987
+        assert normal_dt.month == 1
+        assert normal_dt.day == 30
+
+        # Verify the out-of-range dates
+        overflow_dt = table[1][10000].as_py()  # first overflow row's dt
+        assert overflow_dt.year == 9999
+        assert overflow_dt.month == 12
+        assert overflow_dt.day == 31
+
+
+@pytest.mark.skipif(
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.",
+)
+@pytest.mark.parametrize(
     "scale, timezone",
     itertools.product(
         [i for i in range(10)], ["UTC", "America/New_York", "Australia/Sydney"]
