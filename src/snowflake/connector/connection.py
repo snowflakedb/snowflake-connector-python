@@ -172,6 +172,11 @@ def _get_private_bytes_from_file(
 ) -> bytes:
     if private_key_file_pwd is not None and isinstance(private_key_file_pwd, str):
         private_key_file_pwd = private_key_file_pwd.encode("utf-8")
+
+    # expand tilde
+    if isinstance(private_key_file, str):
+        private_key_file = os.path.expanduser(private_key_file)
+
     with open(private_key_file, "rb") as key:
         private_key = serialization.load_pem_private_key(
             key.read(),

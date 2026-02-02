@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from threading import Thread
@@ -641,6 +642,9 @@ def get_token_from_private_key(
 
 def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
     """Helper function to generate the public key fingerprint from the private key file"""
+    # expand tilde
+    private_key_file = os.path.expanduser(private_key_file)
+
     with open(private_key_file, "rb") as key:
         p_key = load_pem_private_key(
             key.read(), password=password.encode(), backend=default_backend()
