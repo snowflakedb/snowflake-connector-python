@@ -39,6 +39,7 @@ from ..description import (
     PLATFORM,
     PYTHON_VERSION,
 )
+from ..os_details import get_os_details
 from ..errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from ..errors import (
     BadGatewayError,
@@ -159,6 +160,7 @@ class Auth:
                         platform_detection_timeout_seconds=platform_detection_timeout_seconds,
                         session_manager=session_manager.clone(max_retries=0),
                     ),
+                    "OS_DETAILS": get_os_details(),
                     **build_minicore_usage_for_session(),
                 },
             },
