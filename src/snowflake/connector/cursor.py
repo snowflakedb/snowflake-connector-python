@@ -1335,7 +1335,21 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             )
         return self
 
-    def fetch_arrow_batches(self) -> Iterator[Table]:
+    def fetch_arrow_batches(
+        self,
+        force_microsecond_precision: bool = False,
+    ) -> Iterator[Table]:
+        """Fetch Arrow Tables in batches.
+
+        Args:
+            force_microsecond_precision: When True, all timestamp columns are converted
+                to microsecond precision, ensuring consistent schema across all batches.
+                This is useful when your data contains timestamps outside the nanosecond
+                range (1677-2262), such as '9999-12-31' or '0001-01-01'. When False
+                (default), precision is determined per-batch based on the data, which
+                may cause pyarrow schema mismatch errors when combining batches.
+                Note: enabling this truncates sub-microsecond precision (scale 7-9).
+        """
         self.check_can_use_arrow_resultset()
         if self._prefetch_hook is not None:
             self._prefetch_hook()
@@ -1344,20 +1358,43 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         self._log_telemetry_job_data(
             TelemetryField.ARROW_FETCH_BATCHES, TelemetryData.TRUE
         )
-        return self._result_set._fetch_arrow_batches()
+        return self._result_set._fetch_arrow_batches(
+            force_microsecond_precision=force_microsecond_precision
+        )
 
     @overload
-    def fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None: ...
+    def fetch_arrow_all(
+        self,
+        force_return_table: Literal[False] = ...,
+        force_microsecond_precision: bool = ...,
+    ) -> Table | None: ...
 
     @overload
-    def fetch_arrow_all(self, force_return_table: Literal[True]) -> Table: ...
+    def fetch_arrow_all(
+        self,
+        force_return_table: Literal[True],
+        force_microsecond_precision: bool = ...,
+    ) -> Table: ...
 
-    def fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
-        """
+    def fetch_arrow_all(
+        self,
+        force_return_table: bool = False,
+        force_microsecond_precision: bool = False,
+    ) -> Table | None:
+        """Fetch all results as a single Arrow Table.
+
         Args:
             force_return_table: Set to True so that when the query returns zero rows,
-                an empty pyarrow table will be returned with schema using the highest bit length for each column.
-                Default value is False in which case None is returned in case of zero rows.
+                an empty pyarrow table will be returned with schema using the highest
+                bit length for each column. Default value is False in which case None
+                is returned in case of zero rows.
+            force_microsecond_precision: When True, all timestamp columns are converted
+                to microsecond precision, ensuring consistent schema across all batches.
+                This is useful when your data contains timestamps outside the nanosecond
+                range (1677-2262), such as '9999-12-31' or '0001-01-01'. When False
+                (default), precision is determined per-batch based on the data, which
+                may cause pyarrow schema mismatch errors when combining batches.
+                Note: enabling this truncates sub-microsecond precision (scale 7-9).
         """
         self.check_can_use_arrow_resultset()
 
@@ -1366,7 +1403,10 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         if self._query_result_format != "arrow":
             raise NotSupportedError
         self._log_telemetry_job_data(TelemetryField.ARROW_FETCH_ALL, TelemetryData.TRUE)
-        return self._result_set._fetch_arrow_all(force_return_table=force_return_table)
+        return self._result_set._fetch_arrow_all(
+            force_return_table=force_return_table,
+            force_microsecond_precision=force_microsecond_precision,
+        )
 
     def fetch_pandas_batches(self, **kwargs: Any) -> Iterator[DataFrame]:
         """Fetches a single Arrow Table."""

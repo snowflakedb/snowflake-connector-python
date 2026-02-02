@@ -588,7 +588,7 @@ def test_timestamp_inconsistent_schema_across_batches(conn_cnx, date_type):
         # Fetch all data
         cursor.execute("SELECT id, dt FROM test_timestamp_mixed_batches ORDER BY id")
         # This call may raise pyarrow.lib.ArrowInvalid if batches have inconsistent schemas
-        table = cursor.fetch_arrow_all()
+        table = cursor.fetch_arrow_all(force_microsecond_precision=True)
 
         # Verify we got all rows
         assert table.num_rows == over_single_chunk_size + 10

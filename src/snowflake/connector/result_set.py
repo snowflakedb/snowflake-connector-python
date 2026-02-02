@@ -214,20 +214,41 @@ class ResultSet(Iterable[list]):
 
     def _fetch_arrow_batches(
         self,
+        force_microsecond_precision: bool = False,
     ) -> Iterator[Table]:
         """Fetches all the results as Arrow Tables, chunked by Snowflake back-end."""
         self._can_create_arrow_iter()
-        return self._create_iter(iter_unit=IterUnit.TABLE_UNIT, structure="arrow")
+        return self._create_iter(
+            iter_unit=IterUnit.TABLE_UNIT,
+            structure="arrow",
+            force_microsecond_precision=force_microsecond_precision,
+        )
 
     @overload
-    def _fetch_arrow_all(self, force_return_table: Literal[False]) -> Table | None: ...
+    def _fetch_arrow_all(
+        self,
+        force_return_table: Literal[False] = ...,
+        force_microsecond_precision: bool = ...,
+    ) -> Table | None: ...
 
     @overload
-    def _fetch_arrow_all(self, force_return_table: Literal[True]) -> Table: ...
+    def _fetch_arrow_all(
+        self,
+        force_return_table: Literal[True],
+        force_microsecond_precision: bool = ...,
+    ) -> Table: ...
 
-    def _fetch_arrow_all(self, force_return_table: bool = False) -> Table | None:
+    def _fetch_arrow_all(
+        self,
+        force_return_table: bool = False,
+        force_microsecond_precision: bool = False,
+    ) -> Table | None:
         """Fetches a single Arrow Table from all of the ``ResultBatch``."""
-        tables = list(self._fetch_arrow_batches())
+        tables = list(
+            self._fetch_arrow_batches(
+                force_microsecond_precision=force_microsecond_precision
+            )
+        )
         if tables:
             return pa.concat_tables(tables)
         else:
