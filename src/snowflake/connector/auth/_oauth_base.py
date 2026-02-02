@@ -429,6 +429,27 @@ class AuthByOAuthBase(AuthByPlugin, _OAuthTokensMixin, ABC):
         }
 
     @staticmethod
+    def _log_if_http_in_use(url: str) -> None:
+        """Log a warning if the URL uses insecure HTTP protocol.
+
+        Args:
+            url: The URL to check for HTTP usage
+        """
+        try:
+            parsed_url = urllib.parse.urlparse(url)
+            if parsed_url.scheme == "http":
+                logger.warning(
+                    "OAuth URL uses insecure HTTP protocol: %s",
+                    SecretDetector.mask_secrets(url),
+                )
+        except Exception as e:
+            logger.warning(
+                "Cannot parse URL: %s. %s",
+                SecretDetector.mask_secrets(url),
+                e,
+            )
+
+    @staticmethod
     def _resolve_proxy_url(
         connection: SnowflakeConnection, request_url: str
     ) -> str | None:
