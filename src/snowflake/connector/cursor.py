@@ -42,6 +42,7 @@ from . import compat
 from ._sql_util import get_file_transfer_type
 from ._utils import (
     REQUEST_ID_STATEMENT_PARAM_NAME,
+    _nanoarrow_loader,
     _snowflake_max_parallelism_for_file_transfer,
     _TrackedQueryCancellationTimer,
     is_uuid4,
@@ -112,6 +113,7 @@ except ImportError as e:  # pragma: no cover
     logger.warning(
         f"Failed to import ArrowResult. No Apache Arrow result set format can be used. ImportError: {e}",
     )
+    _nanoarrow_loader.set_load_error(e)
     CAN_USE_ARROW_RESULT_FORMAT = False
 
 STATEMENT_TYPE_ID_DML = 0x3000
