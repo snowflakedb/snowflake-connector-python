@@ -178,18 +178,32 @@ class AuthByWebBrowser(AuthByPlugin):
                     "or your OS settings."
                 )
 
+            is_vscode_remote = os.getenv(
+                "TERM_PROGRAM"
+            ) == "vscode" and (  # is set for both local and remote vscode
+                os.getenv("SSH_CONNECTION") is not None  # remote SSH
+                or os.getenv("REMOTE_CONTAINERS") is not None  # Dev Containers
+            )
+
             if (
                 browser_opened
                 or os.getenv("SNOWFLAKE_AUTH_FORCE_SERVER", "False").lower() == "true"
-            ):
+            ) and not is_vscode_remote:
                 logger.debug("step 3: accept SAML token")
                 self._receive_saml_token(conn, socket_connection)
             else:
-                print(
-                    "We were unable to open a browser window for you, "
-                    "please open the url above manually then paste the "
-                    "URL you are redirected to into the terminal."
-                )
+                if is_vscode_remote:
+                    print(
+                        "Detected VSCode remote environment. "
+                        "Please complete authentication in your browser, then paste the "
+                        "URL you are redirected to below."
+                    )
+                else:
+                    print(
+                        "We were unable to open a browser window for you, "
+                        "please open the url above manually then paste the "
+                        "URL you are redirected to into the terminal."
+                    )
                 url = input("Enter the URL the SSO URL redirected you to: ")
                 self._process_get_url(url)
                 if not self._token:
