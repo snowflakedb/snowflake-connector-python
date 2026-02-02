@@ -12,6 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Made the parameter `server_session_keep_alive` in `SnowflakeConnection` skip checking for pending async queries, providing faster connection close times especially when many async queries are executed.
   - Fix string representation of INTERVAL YEAR and INTERVAL MONTH types.
   - Log a warning when using http protocol for OAuth urls.
+  - Added `externalbrowser` authentication support for remote VSCode environments
 
 - v4.2.0(January 07,2026)
   - Added `SnowflakeCursor.stats` property to expose granular DML statistics (rows inserted, deleted, updated, and duplicates) for operations like CTAS where `rowcount` is insufficient.
