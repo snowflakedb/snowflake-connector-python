@@ -6,7 +6,6 @@ from __future__ import annotations
 import logging
 import platform
 import re
-from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,11 +25,11 @@ ALLOWED_KEYS = [
 OS_RELEASE_KEY_VALUE_REGEX = re.compile(r'^([A-Z0-9_]+)=(?:"([^"]*)"|(.*))$')
 
 # Cache the OS details so we only read the file once
-_cached_os_details: Optional[Dict[str, str]] = None
+_cached_os_details: dict[str, str] | None = None
 _cache_initialized = False
 
 
-def extract_linux_os_release() -> Dict[str, str]:
+def extract_linux_os_release() -> dict[str, str]:
     """
     Extract OS details from /etc/os-release file.
 
@@ -41,9 +40,9 @@ def extract_linux_os_release() -> Dict[str, str]:
         FileNotFoundError: If /etc/os-release does not exist.
         IOError: If there's an error reading the file.
     """
-    result: Dict[str, str] = {}
+    result: dict[str, str] = {}
 
-    with open("/etc/os-release", "r", encoding="utf-8") as f:
+    with open("/etc/os-release", encoding="utf-8") as f:
         contents = f.read()
 
     for line in contents.split("\n"):
@@ -51,12 +50,14 @@ def extract_linux_os_release() -> Dict[str, str]:
         if match:
             key, quoted_value, unquoted_value = match.groups()
             if key in ALLOWED_KEYS:
-                result[key] = quoted_value if quoted_value is not None else unquoted_value
+                result[key] = (
+                    quoted_value if quoted_value is not None else unquoted_value
+                )
 
     return result
 
 
-def get_os_details() -> Optional[Dict[str, str]]:
+def get_os_details() -> dict[str, str] | None:
     """
     Get OS details from /etc/os-release (Linux only).
 

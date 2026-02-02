@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import platform
 from unittest import mock
 
 import pytest

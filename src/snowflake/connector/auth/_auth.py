@@ -39,7 +39,6 @@ from ..description import (
     PLATFORM,
     PYTHON_VERSION,
 )
-from ..os_details import get_os_details
 from ..errorcode import ER_FAILED_TO_CONNECT_TO_DB
 from ..errors import (
     BadGatewayError,
@@ -57,6 +56,7 @@ from ..network import (
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
+from ..os_details import get_os_details
 from ..platform_detection import detect_platforms
 from ..session_manager import BaseHttpConfig, HttpConfig
 from ..session_manager import SessionManager as SyncSessionManager
