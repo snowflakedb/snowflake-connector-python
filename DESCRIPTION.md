@@ -13,6 +13,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fix string representation of INTERVAL YEAR and INTERVAL MONTH types.
   - Log a warning when using http protocol for OAuth urls.
   - Deprecated support for custom revocation error classes in OCSP response cache deserialization. By default, only `RevocationCheckError` exceptions are deserialized from OCSP cache. Custom exception classes can be temporarily enabled by setting the `SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS` environment variable to `true` or `1`, but this support will be removed in a future release.
+  - Bumped up vendored `urllib3` to `2.6.3`
 
 - v4.2.0(January 07,2026)
   - Added `SnowflakeCursor.stats` property to expose granular DML statistics (rows inserted, deleted, updated, and duplicates) for operations like CTAS where `rowcount` is insufficient.
