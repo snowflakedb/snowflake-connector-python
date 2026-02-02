@@ -365,6 +365,6 @@ def build_nanoarrow_usage_for_telemetry() -> dict[str, str | None]:
     return {
         "OS": OPERATING_SYSTEM,
         "OS_VERSION": OS_VERSION,
-        "CORE_LOAD_ERROR": _nanoarrow_loader.get_load_error(),
+        "NANOARROW_LOAD_ERROR": _nanoarrow_loader.get_load_error(),
         "ISA": ISA,
     }

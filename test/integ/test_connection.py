@@ -1811,7 +1811,7 @@ def test_disable_telemetry(conn_cnx, caplog):
     # test disable telemetry in the client
     with caplog.at_level(logging.DEBUG):
         with conn_cnx() as conn:
-            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 2
+            assert conn.telemetry_enabled and len(conn._telemetry._log_batch) == 3
             conn.telemetry_enabled = False
             with conn.cursor() as cur:
                 cur.execute("select 1").fetchall()

@@ -787,7 +787,7 @@ class TestBuildNanoarrowUsageForTelemetry:
         assert isinstance(result, dict)
         assert "OS" in result
         assert "OS_VERSION" in result
-        assert "CORE_LOAD_ERROR" in result
+        assert "NANOARROW_LOAD_ERROR" in result
         assert "ISA" in result
 
     def test_build_nanoarrow_usage_for_telemetry_with_mocked_error(self):
@@ -798,7 +798,7 @@ class TestBuildNanoarrowUsageForTelemetry:
         ):
             result = build_nanoarrow_usage_for_telemetry()
 
-            assert result["CORE_LOAD_ERROR"] == "Nanoarrow load failed"
+            assert result["NANOARROW_LOAD_ERROR"] == "Nanoarrow load failed"
 
 
 class TestNanoarrowImportErrorInCursor:
@@ -929,8 +929,8 @@ class TestNanoarrowImportErrorInCursor:
             # Call the telemetry function and verify the error is reported
             result = build_nanoarrow_usage_for_telemetry()
 
-            assert "Failed to import ArrowResult" in result["CORE_LOAD_ERROR"]
-            assert "nanoarrow_cpp not found" in result["CORE_LOAD_ERROR"]
+            assert "Failed to import ArrowResult" in result["NANOARROW_LOAD_ERROR"]
+            assert "nanoarrow_cpp not found" in result["NANOARROW_LOAD_ERROR"]
 
         finally:
             # Restore original error state
