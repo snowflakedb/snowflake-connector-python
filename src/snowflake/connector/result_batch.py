@@ -811,27 +811,50 @@ class ArrowResultBatch(ResultBatch):
         ]
         return pa.schema(fields).empty_table()
 
-    def to_arrow(self, connection: SnowflakeConnection | None = None) -> Table:
+    def to_arrow(
+        self,
+        connection: SnowflakeConnection | None = None,
+        force_microsecond_precision: bool = False,
+    ) -> Table:
         """Returns this batch as a pyarrow Table"""
-        val = next(self._get_arrow_iter(connection=connection), None)
+        val = next(
+            self._get_arrow_iter(
+                connection=connection,
+                force_microsecond_precision=force_microsecond_precision,
+            ),
+            None,
+        )
         if val is not None:
             return val
         return self._create_empty_table()
 
     def to_pandas(
-        self, connection: SnowflakeConnection | None = None, **kwargs
+        self,
+        connection: SnowflakeConnection | None = None,
+        force_microsecond_precision: bool = False,
+        **kwargs,
     ) -> DataFrame:
         """Returns this batch as a pandas DataFrame"""
         self._check_can_use_pandas()
-        table = self.to_arrow(connection=connection)
+        table = self.to_arrow(
+            connection=connection,
+            force_microsecond_precision=force_microsecond_precision,
+        )
         return table.to_pandas(**kwargs)
 
     def _get_pandas_iter(
-        self, connection: SnowflakeConnection | None = None, **kwargs
+        self,
+        connection: SnowflakeConnection | None = None,
+        force_microsecond_precision: bool = False,
+        **kwargs,
     ) -> Iterator[DataFrame]:
         """An iterator for this batch which yields a pandas DataFrame"""
         iterator_data = []
-        dataframe = self.to_pandas(connection=connection, **kwargs)
+        dataframe = self.to_pandas(
+            connection=connection,
+            force_microsecond_precision=force_microsecond_precision,
+            **kwargs,
+        )
         if not dataframe.empty:
             iterator_data.append(dataframe)
         return iter(iterator_data)
@@ -852,7 +875,11 @@ class ArrowResultBatch(ResultBatch):
         if iter_unit == IterUnit.TABLE_UNIT:
             structure = kwargs.pop("structure", "pandas")
             if structure == "pandas":
-                return self._get_pandas_iter(connection=connection, **kwargs)
+                return self._get_pandas_iter(
+                    connection=connection,
+                    force_microsecond_precision=force_microsecond_precision,
+                    **kwargs,
+                )
             else:
                 return self._get_arrow_iter(
                     connection=connection,
