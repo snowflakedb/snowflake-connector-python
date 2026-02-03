@@ -543,6 +543,77 @@ def test_timestamp_down_scale(conn_cnx):
     reason="arrow_iterator extension is not built, or pandas is missing.",
 )
 @pytest.mark.parametrize(
+    "date_type", ["TIMESTAMP_NTZ", "TIMESTAMP_TZ", "TIMESTAMP_LTZ"]
+)
+@pytest.mark.parametrize("fetch_method", ["arrow", "pandas"])
+def test_timestamp_force_microsecond_precision(conn_cnx, date_type, fetch_method):
+    """Test for GitHub issue #1868.
+
+    When fetching datetime data with mixed in-range and out-of-range values
+    across multiple batches, the schema of the batches is inconsistent.
+
+    This can be avoided by setting force_microsecond_precision=True when fetching the data.
+    Tests both fetch_arrow_all and fetch_pandas_all.
+    """
+    over_single_chunk_size = 10_000
+    normal_date = "1987-01-30 23:59:59.123456789"
+    overflow_date = "9999-12-31 00:00:00.000000000"
+
+    def fill_table(cursor: SnowflakeCursor, date: str, amount: int, start_id: int = 0):
+        cursor.execute(
+            f"""
+            INSERT INTO test_timestamp_mixed_batches (id, dt)
+            SELECT seq4() + {start_id}, '{date}'::{date_type}(9)
+            FROM TABLE(GENERATOR(ROWCOUNT => {amount}))
+            """
+        )
+
+    with conn_cnx() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""
+            CREATE TEMPORARY TABLE test_timestamp_mixed_batches (id INT, dt {date_type}(9))
+            """
+        )
+
+        # Fill first batch with normal dates
+        fill_table(cursor, normal_date, over_single_chunk_size)
+        # Insert 10 out-of-range dates (overflow int64 ns, will be downcast to us)
+        fill_table(cursor, overflow_date, 10, start_id=over_single_chunk_size)
+
+        # Fetch all data - may raise pyarrow.lib.ArrowInvalid without force_microsecond_precision
+        cursor.execute("SELECT id, dt FROM test_timestamp_mixed_batches ORDER BY id")
+
+        if fetch_method == "arrow":
+            table = cursor.fetch_arrow_all(force_microsecond_precision=True)
+            row_count = table.num_rows
+            normal_dt = table[1][0].as_py()
+            overflow_dt = table[1][over_single_chunk_size].as_py()
+        else:
+            df = cursor.fetch_pandas_all(force_microsecond_precision=True)
+            row_count = len(df)
+            normal_dt = df["DT"].iloc[0].to_pydatetime()
+            overflow_dt = df["DT"].iloc[over_single_chunk_size].to_pydatetime()
+
+        # Verify we got all rows
+        assert row_count == over_single_chunk_size + 10
+
+        # Verify the normal dates
+        assert normal_dt.year == 1987
+        assert normal_dt.month == 1
+        assert normal_dt.day == 30
+
+        # Verify the out-of-range dates
+        assert overflow_dt.year == 9999
+        assert overflow_dt.month == 12
+        assert overflow_dt.day == 31
+
+
+@pytest.mark.skipif(
+    not installed_pandas or no_arrow_iterator_ext,
+    reason="arrow_iterator extension is not built, or pandas is missing.",
+)
+@pytest.mark.parametrize(
     "scale, timezone",
     itertools.product(
         [i for i in range(10)], ["UTC", "America/New_York", "Australia/Sydney"]
