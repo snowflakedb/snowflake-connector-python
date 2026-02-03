@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 import json
 import logging
-import os
 import uuid
 from datetime import datetime, timezone
 from threading import Thread
@@ -63,6 +62,7 @@ from ..session_manager import SessionManager as SyncSessionManager
 from ..session_manager import SessionManagerFactory
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..token_cache import TokenCache, TokenKey, TokenType
+from ..util_text import expand_tilde
 from ..version import VERSION
 from .no_auth import AuthNoAuth
 from .oauth import AuthByOAuth
@@ -642,8 +642,7 @@ def get_token_from_private_key(
 
 def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
     """Helper function to generate the public key fingerprint from the private key file"""
-    # expand tilde
-    private_key_file = os.path.expanduser(private_key_file)
+    private_key_file = expand_tilde(private_key_file)
 
     with open(private_key_file, "rb") as key:
         p_key = load_pem_private_key(

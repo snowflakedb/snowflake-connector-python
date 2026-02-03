@@ -276,3 +276,23 @@ def generate_key_pair(key_length: int, *, passphrase: bytes | None = None):
     public_key_der_encoded = "".join(public_key_pem.split("\n")[1:-2])
 
     return private_key_der, public_key_der_encoded
+
+
+@pytest.mark.skipolddriver
+def test_expand_tilde():
+    from os import environ
+
+    from snowflake.connector.util_text import expand_tilde
+
+    old_home = environ["HOME"]
+    environ["HOME"] = "/home/myuser"
+
+    assert expand_tilde("/path/to/key.p8") == "/path/to/key.p8"
+    assert expand_tilde("~/key.p8") == "/home/myuser/key.p8"
+
+    del environ["HOME"]
+    assert isinstance(
+        expand_tilde("~/key.p8"), str
+    )  # should still resolve from /etc/passwd
+
+    environ["HOME"] = old_home

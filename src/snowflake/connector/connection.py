@@ -142,7 +142,7 @@ from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPO
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
-from .util_text import construct_hostname, parse_account, split_statements
+from .util_text import construct_hostname, expand_tilde, parse_account, split_statements
 from .wif_util import AttestationProvider
 
 if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
@@ -174,9 +174,7 @@ def _get_private_bytes_from_file(
     if private_key_file_pwd is not None and isinstance(private_key_file_pwd, str):
         private_key_file_pwd = private_key_file_pwd.encode("utf-8")
 
-    # expand tilde
-    if isinstance(private_key_file, str):
-        private_key_file = os.path.expanduser(private_key_file)
+    private_key_file = expand_tilde(private_key_file)
 
     with open(private_key_file, "rb") as key:
         private_key = serialization.load_pem_private_key(
