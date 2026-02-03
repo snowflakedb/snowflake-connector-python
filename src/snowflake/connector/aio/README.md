@@ -18,6 +18,7 @@ is not intended for production environments.**
 
 ## Installation & Import
 
+Using aio version requires additional installation of `aiohttp` dependency.
 
 ```python
 # Same package, different import
