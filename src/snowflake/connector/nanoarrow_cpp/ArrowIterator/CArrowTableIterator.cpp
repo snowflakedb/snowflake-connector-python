@@ -335,10 +335,12 @@ void CArrowTableIterator::reconstructRecordBatches_nanoarrow() {
 
 CArrowTableIterator::CArrowTableIterator(PyObject* context, char* arrow_bytes,
                                          int64_t arrow_bytes_size,
-                                         const bool number_to_decimal)
+                                         const bool number_to_decimal,
+                                         const bool force_microsecond_precision)
     : CArrowIterator(arrow_bytes, arrow_bytes_size),
       m_context(context),
-      m_convert_number_to_decimal(number_to_decimal) {
+      m_convert_number_to_decimal(number_to_decimal),
+      m_force_microsecond_precision(force_microsecond_precision) {
   if (py::checkPyError()) {
     return;
   }
@@ -745,8 +747,11 @@ void CArrowTableIterator::convertTimestampColumn_nanoarrow(
   // Find epoch and fraction arrays for overflow detection
   ArrowArrayView* epochArray = nullptr;
   ArrowArrayView* fractionArray = nullptr;
-  bool has_overflow_to_downscale = false;
-  if (scale > 6 && field->type == NANOARROW_TYPE_STRUCT) {
+  // When m_force_microsecond_precision is true, always use microsecond
+  // precision to ensure consistent schema across all batches
+  bool has_overflow_to_downscale = m_force_microsecond_precision;
+  if (!m_force_microsecond_precision && scale > 6 &&
+      field->type == NANOARROW_TYPE_STRUCT) {
     for (int64_t i = 0; i < field->schema->n_children; i++) {
       ArrowSchema* c_schema = field->schema->children[i];
       if (std::strcmp(c_schema->name, internal::FIELD_NAME_EPOCH.c_str()) ==
@@ -977,9 +982,10 @@ void CArrowTableIterator::convertTimestampTZColumn_nanoarrow(
     }
   }
 
-  // Check for timestamp overflow and determine if downscaling is needed
-  bool has_overflow_to_downscale = false;
-  if (scale > 6 && byteLength == 16) {
+  // When m_force_microsecond_precision is true, always use microsecond
+  // precision to ensure consistent schema across all batches
+  bool has_overflow_to_downscale = m_force_microsecond_precision;
+  if (!m_force_microsecond_precision && scale > 6 && byteLength == 16) {
     has_overflow_to_downscale = _checkNanosecondTimestampOverflowAndDownscale(
         columnArray, epochArray, fractionArray);
   }
