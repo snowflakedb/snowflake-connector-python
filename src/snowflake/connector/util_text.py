@@ -306,13 +306,13 @@ def get_md5_for_integrity(text: str | bytes) -> bytes:
 
 def expand_tilde(path_to_expand: Any) -> Any:
     try:
-        (
-            path_to_expand == str(Path(path_to_expand).expanduser())
+        path_to_expand = (
+            str(Path(path_to_expand).expanduser())
             if isinstance(path_to_expand, str)
             else path_to_expand
         )
     except RuntimeError:
-        # home could not be resolved
+        # user home could not be resolved
         _logger.debug("User home could not be determined, not expanding tilde.")
 
     return path_to_expand
