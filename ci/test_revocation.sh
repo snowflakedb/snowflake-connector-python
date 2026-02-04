@@ -57,14 +57,14 @@ echo "[Info] Current directory: $(pwd)"
 echo "[Info] WORKSPACE: ${WORKSPACE}"
 echo "[Info] Go version: $(go version)"
 
+# Verify the wheel file exists
+echo "[Debug] Checking wheel file exists: ${WHEEL_FILE}"
+ls -la "${WHEEL_FILE}" || { echo "[Error] Wheel file not found!"; exit 1; }
+
 # Run revocation validation tests with pre-built wheel
 echo "[Info] Running revocation validation tests..."
-go run . \
-    --client snowflake-python \
-    --python-wheel "${WHEEL_FILE}" \
-    --output "${WORKSPACE}/revocation-results.json" \
-    --output-html "${WORKSPACE}/revocation-report.html" \
-    --log-level info
+echo "[Debug] go run args: --client snowflake-python --python-wheel ${WHEEL_FILE} --output ${WORKSPACE}/revocation-results.json --output-html ${WORKSPACE}/revocation-report.html --log-level debug"
+go run . --client snowflake-python --python-wheel "${WHEEL_FILE}" --output "${WORKSPACE}/revocation-results.json" --output-html "${WORKSPACE}/revocation-report.html" --log-level debug
 
 EXIT_CODE=$?
 
