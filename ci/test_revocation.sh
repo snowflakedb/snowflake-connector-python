@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash
 #
 # Test certificate revocation validation using the revocation-validation framework.
 # Uses --python-wheel to install from pre-built wheel instead of building from source.
@@ -10,19 +10,29 @@ THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
 WORKSPACE=${WORKSPACE:-${CONNECTOR_DIR}}
 
-# Find pre-built wheel
-WHEEL_FILE=$(ls ${WORKSPACE}/dist/*.whl 2>/dev/null | head -1)
+echo "[Info] Starting revocation validation tests"
+echo "[Info] WORKSPACE: $WORKSPACE"
+
+# Find pre-built wheel (use find instead of ls to avoid exit code issues)
+WHEEL_FILE=$(find "${WORKSPACE}/dist" -maxdepth 1 -name "*.whl" 2>/dev/null | head -1)
 if [ -z "$WHEEL_FILE" ]; then
-    WHEEL_FILE=$(ls ${WORKSPACE}/dist/repaired_wheels/*.whl 2>/dev/null | head -1)
+    WHEEL_FILE=$(find "${WORKSPACE}/dist/repaired_wheels" -maxdepth 1 -name "*.whl" 2>/dev/null | head -1)
 fi
 
 if [ -z "$WHEEL_FILE" ]; then
     echo "[Error] No wheel found in dist/ or dist/repaired_wheels/"
     echo "[Info] Make sure to run the build stage first"
+    echo "[Debug] Contents of dist/:"
+    ls -la "${WORKSPACE}/dist/" 2>/dev/null || echo "  dist/ directory not found"
+    echo "[Debug] Contents of dist/repaired_wheels/:"
+    ls -la "${WORKSPACE}/dist/repaired_wheels/" 2>/dev/null || echo "  dist/repaired_wheels/ directory not found"
     exit 1
 fi
 
 echo "[Info] Using wheel: $WHEEL_FILE"
+
+# Enable strict mode now that wheel discovery is done
+set -e
 
 # Clone revocation-validation framework
 REVOCATION_DIR="/tmp/revocation-validation"
