@@ -103,10 +103,7 @@ timestamps {
               |
               |# Run tests against this PR's Python SDK
               |cd /tmp/revocation-validation
-              |go run . --client snowflake-python \
-              |  --python-sdk-path ${WORKSPACE} \
-              |  --output ${WORKSPACE}/revocation-results.json \
-              |  --output-html ${WORKSPACE}/revocation-report.html
+              |go run . --client snowflake-python --python-sdk-path ${WORKSPACE} --output ${WORKSPACE}/revocation-results.json --output-html ${WORKSPACE}/revocation-report.html
               '''.stripMargin()
             } finally {
               archiveArtifacts artifacts: 'revocation-results.json,revocation-report.html', allowEmptyArchive: true
