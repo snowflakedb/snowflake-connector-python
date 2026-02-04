@@ -64,6 +64,7 @@ cdef extern from "CArrowTableIterator.hpp" namespace "sf":
             char* arrow_bytes,
             int64_t arrow_bytes_size,
             bint number_to_decimal,
+            bint force_microsecond_precision,
         ) except +
 
 
@@ -100,6 +101,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
     cdef object check_error_on_every_column
     cdef object number_to_decimal
     cdef object pyarrow_table
+    cdef bint force_microsecond_precision
 
     def __cinit__(
             self,
@@ -109,7 +111,8 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
             object use_dict_result,
             object numpy,
             object number_to_decimal,
-            object check_error_on_every_column
+            object check_error_on_every_column,
+            object force_microsecond_precision=False,
     ):
         self.context = arrow_context
         self.cIterator = NULL
@@ -122,6 +125,7 @@ cdef class PyArrowIterator(EmptyPyArrowIterator):
         self.table_returned = False
         self.arrow_bytes = <char*>arrow_bytes
         self.arrow_bytes_size = len(arrow_bytes)
+        self.force_microsecond_precision = force_microsecond_precision
 
     def __dealloc__(self):
         del self.cIterator
@@ -202,9 +206,10 @@ cdef class PyArrowTableIterator(PyArrowIterator):
         object use_dict_result,
         object numpy,
         object number_to_decimal,
-        object check_error_on_every_column
+        object check_error_on_every_column,
+        object force_microsecond_precision=False,
     ):
-        super().__init__(cursor, py_inputstream, arrow_context, use_dict_result, numpy, number_to_decimal, check_error_on_every_column)
+        super().__init__(cursor, py_inputstream, arrow_context, use_dict_result, numpy, number_to_decimal, check_error_on_every_column, force_microsecond_precision)
         if not INSTALLED_PYARROW:
             raise Error.errorhandler_make_exception(
                 ProgrammingError,
@@ -225,6 +230,7 @@ cdef class PyArrowTableIterator(PyArrowIterator):
             self.arrow_bytes,
             self.arrow_bytes_size,
             self.number_to_decimal,
+            self.force_microsecond_precision,
         )
         cdef ReturnVal cret = self.cIterator.checkInitializationStatus()
         if cret.exception:

@@ -137,6 +137,17 @@ def get_spcs_token() -> str | None:
         return None
 
 
+class _NanoarrowLoader:
+    def __init__(self):
+        self._error: Exception | None = None
+
+    def set_load_error(self, err: Exception):
+        self._error = err
+
+    def get_load_error(self) -> str:
+        return str(self._error)
+
+
 class _CoreLoader:
     def __init__(self):
         self._version: bytes | None = None
@@ -328,6 +339,7 @@ class _CoreLoader:
 
 
 _core_loader = _CoreLoader()
+_nanoarrow_loader = _NanoarrowLoader()
 
 
 def build_minicore_usage_for_session() -> dict[str, str | None]:
@@ -346,4 +358,13 @@ def build_minicore_usage_for_telemetry() -> dict[str, str | None]:
         "CORE_BINARIES_PRESENT": _core_loader.get_present_binaries(),
         "CORE_LOAD_TIME": _core_loader.get_load_time(),
         **build_minicore_usage_for_session(),
+    }
+
+
+def build_nanoarrow_usage_for_telemetry() -> dict[str, str | None]:
+    return {
+        "OS": OPERATING_SYSTEM,
+        "OS_VERSION": OS_VERSION,
+        "NANOARROW_LOAD_ERROR": _nanoarrow_loader.get_load_error(),
+        "ISA": ISA,
     }

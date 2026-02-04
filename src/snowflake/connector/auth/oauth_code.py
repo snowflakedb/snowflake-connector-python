@@ -79,6 +79,11 @@ class AuthByOauthCode(AuthByOAuthBase):
             host,
             connection,
         )
+        # Warn if HTTP is used for OAuth URLs
+        if authentication_url:
+            self._log_if_http_in_use(authentication_url)
+        if token_request_url:
+            self._log_if_http_in_use(token_request_url)
 
         super().__init__(
             client_id=client_id,
