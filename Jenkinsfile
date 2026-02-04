@@ -95,6 +95,13 @@ timestamps {
             try {
               sh '''\
               |#!/bin/bash -e
+              |echo "[Debug] Starting revocation validation test"
+              |echo "[Debug] WORKSPACE=$WORKSPACE"
+              |echo "[Debug] Checking script exists..."
+              |ls -la $WORKSPACE/ci/test_revocation.sh || echo "Script not found!"
+              |echo "[Debug] Making script executable..."
+              |chmod +x $WORKSPACE/ci/test_revocation.sh
+              |echo "[Debug] Running script..."
               |$WORKSPACE/ci/test_revocation.sh
               '''.stripMargin()
             } finally {

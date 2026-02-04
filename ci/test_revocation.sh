@@ -43,6 +43,10 @@ echo "[Info] Using revocation-validation branch: $REVOCATION_BRANCH"
 
 cd "$REVOCATION_DIR"
 
+echo "[Info] Current directory: $(pwd)"
+echo "[Info] WORKSPACE: ${WORKSPACE}"
+echo "[Info] Go version: $(go version)"
+
 # Run revocation validation tests with pre-built wheel
 echo "[Info] Running revocation validation tests..."
 go run . \
@@ -54,8 +58,25 @@ go run . \
 
 EXIT_CODE=$?
 
-echo "[Info] Tests completed. Results saved to:"
-echo "  - ${WORKSPACE}/revocation-results.json"
-echo "  - ${WORKSPACE}/revocation-report.html"
+echo "[Info] Test exit code: $EXIT_CODE"
+
+# Check if output files were created
+if [ -f "${WORKSPACE}/revocation-results.json" ]; then
+    echo "[Info] Results JSON created: ${WORKSPACE}/revocation-results.json"
+    ls -la "${WORKSPACE}/revocation-results.json"
+else
+    echo "[Warning] Results JSON NOT found at: ${WORKSPACE}/revocation-results.json"
+    echo "[Debug] Checking for files in WORKSPACE:"
+    ls -la "${WORKSPACE}/"*.json 2>/dev/null || echo "  No .json files found"
+    echo "[Debug] Checking for files in current directory:"
+    ls -la *.json 2>/dev/null || echo "  No .json files found"
+fi
+
+if [ -f "${WORKSPACE}/revocation-report.html" ]; then
+    echo "[Info] HTML report created: ${WORKSPACE}/revocation-report.html"
+    ls -la "${WORKSPACE}/revocation-report.html"
+else
+    echo "[Warning] HTML report NOT found at: ${WORKSPACE}/revocation-report.html"
+fi
 
 exit $EXIT_CODE
