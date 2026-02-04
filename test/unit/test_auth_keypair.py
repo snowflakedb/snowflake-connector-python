@@ -305,8 +305,7 @@ def test_expand_tilde(monkeypatch, tmp_path):
     # this should be expanded properly
     expected_expanded = str(Path(mock_home) / "key.p8")
     tilde_path = "~/key.p8"
-    result = expand_tilde(tilde_path)
-    assert Path(result) == Path(expected_expanded)
+    assert expand_tilde(tilde_path) == expected_expanded
 
     # without USERPROFILE/HOME. should still resolve per fallback mechanism
     if sys.platform == "win32":
