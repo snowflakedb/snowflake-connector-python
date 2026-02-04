@@ -294,16 +294,16 @@ def test_expand_tilde(monkeypatch, tmp_path):
         # also set HOME for consistency
         monkeypatch.setenv("USERPROFILE", str(mock_home))
         monkeypatch.setenv("HOME", str(mock_home))
-        expected_expanded = str(Path(mock_home) / "key.p8")
+        absolute_path = "C:\\temp\\key.p8"
     else:
         # Linux and Mac, uses HOME
         monkeypatch.setenv("HOME", str(mock_home))
-        expected_expanded = str(Path(mock_home) / "key.p8")
+        absolute_path = "/path/to/key.p8"
 
-    absolute_path = "/path/to/key.p8"
     assert expand_tilde(absolute_path) == absolute_path
 
     # this should be expanded properly
+    expected_expanded = str(Path(mock_home) / "key.p8")
     tilde_path = "~/key.p8"
     result = expand_tilde(tilde_path)
     assert Path(result) == Path(expected_expanded)
