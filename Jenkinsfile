@@ -87,32 +87,38 @@ timestamps {
       },
       'Test Revocation Validation': {
         stage('Test Revocation Validation') {
-          try {
-            sh '''\
-            |#!/bin/bash -e
-            |set -o pipefail
-            |
-            |# Clone revocation-validation framework
-            |rm -rf /tmp/revocation-validation
-            |git clone --depth 1 https://github.com/snowflakedb/revocation-validation.git /tmp/revocation-validation
-            |
-            |# Run tests against this PR's Python SDK
-            |cd /tmp/revocation-validation
-            |go run . --client snowflake-python \
-            |  --python-sdk-path ${WORKSPACE} \
-            |  --output ${WORKSPACE}/revocation-results.json \
-            |  --output-html ${WORKSPACE}/revocation-report.html
-            '''.stripMargin()
-          } finally {
-            archiveArtifacts artifacts: 'revocation-results.json,revocation-report.html', allowEmptyArchive: true
-            publishHTML(target: [
-              allowMissing: true,
-              alwaysLinkToLastBuild: true,
-              keepAll: true,
-              reportDir: '.',
-              reportFiles: 'revocation-report.html',
-              reportName: 'Revocation Validation Report'
-            ])
+          withCredentials([
+            usernamePassword(credentialsId: 'jenkins-snowflakedb-github-app',
+              usernameVariable: 'GITHUB_USER',
+              passwordVariable: 'GITHUB_TOKEN')
+          ]) {
+            try {
+              sh '''\
+              |#!/bin/bash -e
+              |set -o pipefail
+              |
+              |# Clone revocation-validation framework with authentication
+              |rm -rf /tmp/revocation-validation
+              |git clone --depth 1 https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/snowflakedb/revocation-validation.git /tmp/revocation-validation
+              |
+              |# Run tests against this PR's Python SDK
+              |cd /tmp/revocation-validation
+              |go run . --client snowflake-python \
+              |  --python-sdk-path ${WORKSPACE} \
+              |  --output ${WORKSPACE}/revocation-results.json \
+              |  --output-html ${WORKSPACE}/revocation-report.html
+              '''.stripMargin()
+            } finally {
+              archiveArtifacts artifacts: 'revocation-results.json,revocation-report.html', allowEmptyArchive: true
+              publishHTML(target: [
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: '.',
+                reportFiles: 'revocation-report.html',
+                reportName: 'Revocation Validation Report'
+              ])
+            }
           }
         }
       }
