@@ -90,19 +90,35 @@ timestamps {
           withCredentials([
             usernamePassword(credentialsId: 'jenkins-snowflakedb-github-app',
               usernameVariable: 'GITHUB_USER',
-              passwordVariable: 'GITHUB_TOKEN')
+              passwordVariable: 'GITHUB_TOKEN'),
+            string(credentialsId: 'a791118f-a1ea-46cd-b876-56da1b9bc71c', variable: 'NEXUS_PASSWORD')
           ]) {
             try {
               sh '''\
               |#!/bin/bash -e
-              |echo "[Debug] Starting revocation validation test"
-              |echo "[Debug] WORKSPACE=$WORKSPACE"
-              |echo "[Debug] Checking script exists..."
-              |ls -la $WORKSPACE/ci/test_revocation.sh || echo "Script not found!"
-              |echo "[Debug] Making script executable..."
-              |chmod +x $WORKSPACE/ci/test_revocation.sh
-              |echo "[Debug] Running script..."
-              |$WORKSPACE/ci/test_revocation.sh
+              |echo "[Debug] Starting revocation validation test (in Docker)"
+              |
+              |# Use same Docker setup as other tests
+              |source $WORKSPACE/ci/set_base_image.sh
+              |cd $WORKSPACE/ci/docker/connector_test
+              |
+              |CONTAINER_NAME=test_pyconnector_revocation
+              |GOSU_URL=https://github.com/tianon/gosu/releases/download/1.14/gosu-amd64
+              |
+              |echo "[Debug] Building Docker image with BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014"
+              |docker build --pull -t ${CONTAINER_NAME}:1.0 --build-arg BASE_IMAGE=$BASE_IMAGE_MANYLINUX2014 --build-arg GOSU_URL="$GOSU_URL" . -f Dockerfile
+              |
+              |echo "[Debug] Running revocation tests in Docker..."
+              |user_id=$(id -u ${USER})
+              |docker run --network=host \
+              |    -e TERM=vt102 \
+              |    -e LOCAL_USER_ID=${user_id} \
+              |    -e GITHUB_USER \
+              |    -e GITHUB_TOKEN \
+              |    -e WORKSPACE=/home/user/snowflake-connector-python \
+              |    --mount type=bind,source="${WORKSPACE}",target=/home/user/snowflake-connector-python \
+              |    ${CONTAINER_NAME}:1.0 \
+              |    /home/user/snowflake-connector-python/ci/test_revocation.sh
               '''.stripMargin()
             } finally {
               archiveArtifacts artifacts: 'revocation-results.json,revocation-report.html', allowEmptyArchive: true

@@ -13,33 +13,46 @@ WORKSPACE=${WORKSPACE:-${CONNECTOR_DIR}}
 echo "[Info] Starting revocation validation tests"
 echo "[Info] WORKSPACE: $WORKSPACE"
 
-# ======= FIND PYTHON 3.9+ & SELECT MATCHING WHEEL =======
+# ======= USE PYTHON FROM /opt/python (manylinux) =======
 echo "[Info] ======= PYTHON & WHEEL SELECTION ======="
 
-# Default python3 might be too old (e.g., 3.6), find a supported version (3.9+)
-echo "[Info] Default python3: $(which python3) -> $(python3 --version 2>&1)"
-
-# Try to find Python 3.9+ in common locations (newest first)
+# Use Python from /opt/python (manylinux Docker image) - newest first
 PYTHON_BIN=""
 for v in 3.13 3.12 3.11 3.10 3.9; do
-    for p in "/opt/python/${v}/bin/python3" "/usr/bin/python${v}" "/usr/local/bin/python${v}" "python${v}"; do
-        if command -v "$p" &>/dev/null; then
-            PYTHON_BIN="$p"
+    # manylinux format: /opt/python/cp313-cp313/bin/python
+    p="/opt/python/cp${v//./}-cp${v//./}/bin/python"
+    if [ -x "$p" ]; then
+        PYTHON_BIN="$p"
+        echo "[Info] Found Python ${v}: ${PYTHON_BIN}"
+        break
+    fi
+done
+
+# Fallback: try system pythonX.Y
+if [ -z "$PYTHON_BIN" ]; then
+    echo "[Info] /opt/python not found, trying system Python..."
+    for v in 3.13 3.12 3.11 3.10 3.9; do
+        if command -v "python${v}" &>/dev/null; then
+            PYTHON_BIN=$(command -v "python${v}")
             echo "[Info] Found Python ${v}: ${PYTHON_BIN}"
-            break 2
+            break
         fi
     done
-done
+fi
 
 if [ -z "$PYTHON_BIN" ]; then
     echo "[Error] No Python 3.9+ found! Wheels require Python 3.9, 3.10, 3.11, 3.12, or 3.13"
+    echo "[Debug] Contents of /opt/python/:"
+    ls -la /opt/python/ 2>/dev/null || echo "  /opt/python not found"
     exit 1
 fi
 
-# Add found Python to PATH so Go tool uses it
-PYTHON_DIR=$(dirname "$PYTHON_BIN")
-export PATH="${PYTHON_DIR}:${PATH}"
-echo "[Info] Added to PATH: ${PYTHON_DIR}"
+# Create a temp directory with symlink to make python3 point to found version
+TEMP_PYTHON_DIR=$(mktemp -d)
+ln -s "$PYTHON_BIN" "${TEMP_PYTHON_DIR}/python3"
+ln -s "$PYTHON_BIN" "${TEMP_PYTHON_DIR}/python"
+export PATH="${TEMP_PYTHON_DIR}:${PATH}"
+echo "[Info] Created python3 symlink: ${TEMP_PYTHON_DIR}/python3 -> ${PYTHON_BIN}"
 echo "[Info] python3 now: $(which python3) -> $(python3 --version 2>&1)"
 
 # Detect Python version and convert to wheel tag
