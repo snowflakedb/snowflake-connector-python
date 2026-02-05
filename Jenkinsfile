@@ -93,13 +93,7 @@ timestamps {
               passwordVariable: 'GITHUB_TOKEN')
           ]) {
             try {
-              sh '''\
-              |#!/bin/bash -e
-              |echo "[Debug] Starting revocation validation test"
-              |echo "[Debug] WORKSPACE=$WORKSPACE"
-              |chmod +x $WORKSPACE/ci/test_revocation.sh
-              |$WORKSPACE/ci/test_revocation.sh
-              '''.stripMargin()
+              sh '$WORKSPACE/ci/test_revocation.sh'
             } finally {
               archiveArtifacts artifacts: 'revocation-results.json,revocation-report.html', allowEmptyArchive: true
               publishHTML(target: [
