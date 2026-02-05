@@ -13,13 +13,38 @@ WORKSPACE=${WORKSPACE:-${CONNECTOR_DIR}}
 echo "[Info] Starting revocation validation tests"
 echo "[Info] WORKSPACE: $WORKSPACE"
 
-# ======= DETECT PYTHON & SELECT MATCHING WHEEL =======
+# ======= FIND PYTHON 3.9+ & SELECT MATCHING WHEEL =======
 echo "[Info] ======= PYTHON & WHEEL SELECTION ======="
 
-# Detect current Python version and convert to wheel tag (e.g., Python 3.13 -> cp313)
+# Default python3 might be too old (e.g., 3.6), find a supported version (3.9+)
+echo "[Info] Default python3: $(which python3) -> $(python3 --version 2>&1)"
+
+# Try to find Python 3.9+ in common locations (newest first)
+PYTHON_BIN=""
+for v in 3.13 3.12 3.11 3.10 3.9; do
+    for p in "/opt/python/${v}/bin/python3" "/usr/bin/python${v}" "/usr/local/bin/python${v}" "python${v}"; do
+        if command -v "$p" &>/dev/null; then
+            PYTHON_BIN="$p"
+            echo "[Info] Found Python ${v}: ${PYTHON_BIN}"
+            break 2
+        fi
+    done
+done
+
+if [ -z "$PYTHON_BIN" ]; then
+    echo "[Error] No Python 3.9+ found! Wheels require Python 3.9, 3.10, 3.11, 3.12, or 3.13"
+    exit 1
+fi
+
+# Add found Python to PATH so Go tool uses it
+PYTHON_DIR=$(dirname "$PYTHON_BIN")
+export PATH="${PYTHON_DIR}:${PATH}"
+echo "[Info] Added to PATH: ${PYTHON_DIR}"
+echo "[Info] python3 now: $(which python3) -> $(python3 --version 2>&1)"
+
+# Detect Python version and convert to wheel tag
 PYTHON_VERSION=$(python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
 TARGET_PYTHON="cp${PYTHON_VERSION//./}"
-echo "[Info] System Python: $(which python3) -> Python ${PYTHON_VERSION}"
 echo "[Info] Looking for wheel: ${TARGET_PYTHON}"
 
 # Find wheel matching the system Python version
