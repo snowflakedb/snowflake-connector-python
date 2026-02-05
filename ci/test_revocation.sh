@@ -14,7 +14,18 @@ echo "[Info] Starting revocation validation tests"
 echo "[Info] WORKSPACE: $WORKSPACE"
 
 # Find pre-built wheel (use find instead of ls to avoid exit code issues)
-WHEEL_FILE=$(find "${WORKSPACE}/dist" -maxdepth 1 -name "*.whl" 2>/dev/null | head -1)
+# Prefer platform-compatible wheel on macOS
+if [[ "$(uname)" == "Darwin" ]]; then
+    # On macOS, prefer macosx wheels, then universal wheels
+    WHEEL_FILE=$(find "${WORKSPACE}/dist" -maxdepth 1 -name "*macosx*.whl" 2>/dev/null | head -1)
+    if [ -z "$WHEEL_FILE" ]; then
+        WHEEL_FILE=$(find "${WORKSPACE}/dist/repaired_wheels" -maxdepth 1 -name "*macosx*.whl" 2>/dev/null | head -1)
+    fi
+fi
+# Fall back to any wheel if platform-specific not found
+if [ -z "$WHEEL_FILE" ]; then
+    WHEEL_FILE=$(find "${WORKSPACE}/dist" -maxdepth 1 -name "*.whl" 2>/dev/null | head -1)
+fi
 if [ -z "$WHEEL_FILE" ]; then
     WHEEL_FILE=$(find "${WORKSPACE}/dist/repaired_wheels" -maxdepth 1 -name "*.whl" 2>/dev/null | head -1)
 fi
