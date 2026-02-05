@@ -13,30 +13,38 @@ WORKSPACE=${WORKSPACE:-${CONNECTOR_DIR}}
 echo "[Info] Starting revocation validation tests"
 echo "[Info] WORKSPACE: $WORKSPACE"
 
-# Find pre-built wheel (use find instead of ls to avoid exit code issues)
-# Prefer platform-compatible wheel on macOS
+# ======= DETECT PYTHON & SELECT MATCHING WHEEL =======
+echo "[Info] ======= PYTHON & WHEEL SELECTION ======="
+
+# Detect current Python version and convert to wheel tag (e.g., Python 3.13 -> cp313)
+PYTHON_VERSION=$(python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+TARGET_PYTHON="cp${PYTHON_VERSION//./}"
+echo "[Info] System Python: $(which python3) -> Python ${PYTHON_VERSION}"
+echo "[Info] Looking for wheel: ${TARGET_PYTHON}"
+
+# Find wheel matching the system Python version
 if [[ "$(uname)" == "Darwin" ]]; then
-    # On macOS, prefer macosx wheels, then universal wheels
-    WHEEL_FILE=$(find "${WORKSPACE}/dist" -maxdepth 1 -name "*macosx*.whl" 2>/dev/null | head -1)
-    if [ -z "$WHEEL_FILE" ]; then
-        WHEEL_FILE=$(find "${WORKSPACE}/dist/repaired_wheels" -maxdepth 1 -name "*macosx*.whl" 2>/dev/null | head -1)
-    fi
-fi
-# Fall back to any wheel if platform-specific not found
-if [ -z "$WHEEL_FILE" ]; then
-    WHEEL_FILE=$(find "${WORKSPACE}/dist" -maxdepth 1 -name "*.whl" 2>/dev/null | head -1)
-fi
-if [ -z "$WHEEL_FILE" ]; then
-    WHEEL_FILE=$(find "${WORKSPACE}/dist/repaired_wheels" -maxdepth 1 -name "*.whl" 2>/dev/null | head -1)
+    WHEEL_FILE=$(find "${WORKSPACE}/dist" "${WORKSPACE}/dist/repaired_wheels" -maxdepth 1 -name "*${TARGET_PYTHON}*macosx*.whl" 2>/dev/null | head -1)
+else
+    WHEEL_FILE=$(find "${WORKSPACE}/dist/repaired_wheels" "${WORKSPACE}/dist" -maxdepth 1 -name "*${TARGET_PYTHON}*.whl" 2>/dev/null | grep -v macosx | head -1)
 fi
 
+if [ -n "$WHEEL_FILE" ]; then
+    echo "[Info] Found matching wheel: $(basename "$WHEEL_FILE")"
+else
+    echo "[Warn] No wheel found for ${TARGET_PYTHON}, listing available wheels..."
+fi
+echo "[Info] ============================================"
+
 if [ -z "$WHEEL_FILE" ]; then
-    echo "[Error] No wheel found in dist/ or dist/repaired_wheels/"
+    echo "[Error] ======= NO MATCHING WHEEL FOUND ======="
+    echo "[Error] Looking for ${TARGET_PYTHON} wheel"
     echo "[Info] Make sure to run the build stage first"
-    echo "[Debug] Contents of dist/:"
-    ls -la "${WORKSPACE}/dist/" 2>/dev/null || echo "  dist/ directory not found"
-    echo "[Debug] Contents of dist/repaired_wheels/:"
-    ls -la "${WORKSPACE}/dist/repaired_wheels/" 2>/dev/null || echo "  dist/repaired_wheels/ directory not found"
+    echo "[Debug] Available wheels in dist/:"
+    find "${WORKSPACE}/dist" -maxdepth 1 -name "*.whl" 2>/dev/null || echo "  No wheels in dist/"
+    echo "[Debug] Available wheels in dist/repaired_wheels/:"
+    find "${WORKSPACE}/dist/repaired_wheels" -maxdepth 1 -name "*.whl" 2>/dev/null || echo "  No wheels in dist/repaired_wheels/"
+    echo "[Error] ========================================="
     exit 1
 fi
 
@@ -67,6 +75,12 @@ cd "$REVOCATION_DIR"
 echo "[Info] Current directory: $(pwd)"
 echo "[Info] WORKSPACE: ${WORKSPACE}"
 echo "[Info] Go version: $(go version)"
+
+# Confirm Python/wheel match
+echo "[Info] ======= VERIFICATION ======="
+echo "[Info] Python: $(python3 --version 2>&1)"
+echo "[Info] Wheel: $(basename "${WHEEL_FILE}")"
+echo "[Info] =============================="
 
 # Verify the wheel file exists
 echo "[Debug] Checking wheel file exists: ${WHEEL_FILE}"
