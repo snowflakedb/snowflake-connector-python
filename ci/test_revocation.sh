@@ -16,16 +16,37 @@ echo "[Info] WORKSPACE: $WORKSPACE"
 # ======= DETECT PYTHON & SELECT MATCHING WHEEL =======
 echo "[Info] ======= PYTHON & WHEEL SELECTION ======="
 echo "[Info] Default python3: $(which python3 2>/dev/null || echo 'not found') -> $(python3 --version 2>&1 || echo 'N/A')"
+
+# Find Python 3.9+ (check /opt/sfc/ first, then system)
 echo "[Debug] ======= AVAILABLE PYTHON VERSIONS ======="
-for v in 3.9 3.10 3.11 3.12 3.13; do
-    bin=$(command -v "python${v}" 2>/dev/null || echo "")
-    if [ -n "$bin" ]; then
-        echo "[Debug]   python${v}: ${bin} -> $($bin --version 2>&1)"
-    else
+PYTHON_BIN=""
+for v in 3.11 3.10 3.9 3.13 3.12; do
+    # Check /opt/sfc/ first (Snowflake internal path)
+    for p in "/opt/sfc/python${v}/bin/python${v}" "python${v}"; do
+        bin=$(command -v "$p" 2>/dev/null || echo "")
+        if [ -n "$bin" ] && [ -x "$bin" ]; then
+            echo "[Debug]   python${v}: ${bin} -> $($bin --version 2>&1)"
+            if [ -z "$PYTHON_BIN" ]; then
+                PYTHON_BIN="$bin"
+                echo "[Info] Selected: ${PYTHON_BIN}"
+            fi
+            break
+        fi
+    done
+    if [ -z "$bin" ]; then
         echo "[Debug]   python${v}: not found"
     fi
 done
 echo "[Debug] =========================================="
+
+# Use the found Python
+if [ -n "$PYTHON_BIN" ]; then
+    TEMP_PYTHON_DIR=$(mktemp -d)
+    ln -s "$PYTHON_BIN" "${TEMP_PYTHON_DIR}/python3"
+    ln -s "$PYTHON_BIN" "${TEMP_PYTHON_DIR}/python"
+    export PATH="${TEMP_PYTHON_DIR}:${PATH}"
+    echo "[Info] python3 now: $(which python3) -> $(python3 --version 2>&1)"
+fi
 
 # Detect Python version and convert to wheel tag
 PYTHON_VERSION=$(python3 --version 2>&1 | grep -oE '[0-9]+\.[0-9]+' | head -1)

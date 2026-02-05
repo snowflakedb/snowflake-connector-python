@@ -86,34 +86,30 @@ timestamps {
         }
       },
       'Test Revocation Validation': {
-        node('regular-memory-node') {
-          stage('Test Revocation Validation') {
-            checkout scm
-            withCredentials([
-              usernamePassword(credentialsId: 'jenkins-snowflakedb-github-app',
-                usernameVariable: 'GITHUB_USER',
-                passwordVariable: 'GITHUB_TOKEN')
-            ]) {
-              try {
-                sh '''\
-                |#!/bin/bash -e
-                |echo "[Debug] Starting revocation validation test"
-                |echo "[Debug] WORKSPACE=$WORKSPACE"
-                |echo "[Debug] Python version: $(python3 --version)"
-                |chmod +x $WORKSPACE/ci/test_revocation.sh
-                |$WORKSPACE/ci/test_revocation.sh
-                '''.stripMargin()
-              } finally {
-                archiveArtifacts artifacts: 'revocation-results.json,revocation-report.html', allowEmptyArchive: true
-                publishHTML(target: [
-                  allowMissing: true,
-                  alwaysLinkToLastBuild: true,
-                  keepAll: true,
-                  reportDir: '.',
-                  reportFiles: 'revocation-report.html',
-                  reportName: 'Revocation Validation Report'
-                ])
-              }
+        stage('Test Revocation Validation') {
+          withCredentials([
+            usernamePassword(credentialsId: 'jenkins-snowflakedb-github-app',
+              usernameVariable: 'GITHUB_USER',
+              passwordVariable: 'GITHUB_TOKEN')
+          ]) {
+            try {
+              sh '''\
+              |#!/bin/bash -e
+              |echo "[Debug] Starting revocation validation test"
+              |echo "[Debug] WORKSPACE=$WORKSPACE"
+              |chmod +x $WORKSPACE/ci/test_revocation.sh
+              |$WORKSPACE/ci/test_revocation.sh
+              '''.stripMargin()
+            } finally {
+              archiveArtifacts artifacts: 'revocation-results.json,revocation-report.html', allowEmptyArchive: true
+              publishHTML(target: [
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: '.',
+                reportFiles: 'revocation-report.html',
+                reportName: 'Revocation Validation Report'
+              ])
             }
           }
         }
