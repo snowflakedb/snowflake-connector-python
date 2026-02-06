@@ -14,7 +14,8 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Log a warning when using http protocol for OAuth urls.
   - Deprecated support for custom revocation error classes in OCSP response cache deserialization. By default, only `RevocationCheckError` exceptions are deserialized from OCSP cache. Custom exception classes can be temporarily enabled by setting the `SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS` environment variable to `true` or `1`, but this support will be removed in a future release.
   - Bumped up vendored `urllib3` to `2.6.3`
-  - Added `force_microseconds_precision` to `cursor.fetch_arrow_all` and `cursor.fetch_pandas_all` to avoid PyArrow schema incosistency between batches.
+  - Added `force_microseconds_precision` to `cursor.fetch_arrow_all` and `cursor.fetch_pandas_all` to avoid PyArrow schema inconsistency between batches.
+  - Fixed a bug where tilde in path to `private_key_file` specified in the connection was not properly expanded
 
 - v4.2.0(January 07,2026)
   - Added `SnowflakeCursor.stats` property to expose granular DML statistics (rows inserted, deleted, updated, and duplicates) for operations like CTAS where `rowcount` is insufficient.

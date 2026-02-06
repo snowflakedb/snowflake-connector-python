@@ -276,3 +276,50 @@ def generate_key_pair(key_length: int, *, passphrase: bytes | None = None):
     public_key_der_encoded = "".join(public_key_pem.split("\n")[1:-2])
 
     return private_key_der, public_key_der_encoded
+
+
+@pytest.mark.skipolddriver
+def test_expand_tilde(monkeypatch, tmp_path):
+    """Test tilde expansion on both Windows and Linux/Mac"""
+    import sys
+    from pathlib import Path
+
+    from snowflake.connector.util_text import expand_tilde
+
+    mock_home = tmp_path / "test_home"
+    mock_home.mkdir()
+
+    if sys.platform == "win32":
+        # Windows uses USERPROFILE (and falls back to HOMEDRIVE+HOMEPATH)
+        # also set HOME for consistency
+        monkeypatch.setenv("USERPROFILE", str(mock_home))
+        monkeypatch.setenv("HOME", str(mock_home))
+        absolute_path = "C:\\temp\\key.p8"
+    else:
+        # Linux and Mac, uses HOME
+        monkeypatch.setenv("HOME", str(mock_home))
+        absolute_path = "/path/to/key.p8"
+
+    assert expand_tilde(absolute_path) == absolute_path
+
+    # this should be expanded properly
+    expected_expanded = str(Path(mock_home) / "key.p8")
+    tilde_path = "~/key.p8"
+    assert expand_tilde(tilde_path) == expected_expanded
+
+    # without USERPROFILE/HOME. should still resolve per fallback mechanism
+    if sys.platform == "win32":
+        monkeypatch.delenv("USERPROFILE", raising=False)
+        monkeypatch.delenv("HOME", raising=False)
+        result = expand_tilde("~/key.p8")
+        assert isinstance(result, str)
+    else:
+        monkeypatch.delenv("HOME", raising=False)
+        result = expand_tilde("~/key.p8")
+        # should still resolve from /etc/passwd
+        # checking if it's a string which starts with / , not the exact path
+        assert result.startswith("/")
+
+    # non-string inputs
+    assert expand_tilde(None) is None
+    assert expand_tilde(123) == 123
