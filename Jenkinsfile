@@ -10,14 +10,6 @@ timestamps {
       env.GIT_COMMIT = scmInfo.GIT_COMMIT
     }
 
-    stage('Authenticate Artifactory') {
-      script {
-        new DevEnvUtils().withSfCli {
-          sh "sf artifact oci auth"
-        }
-      }
-    }
-
     stage('Build') {
       withCredentials([
         usernamePassword(credentialsId: '063fc85b-62a6-4181-9d72-873b43488411', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')
