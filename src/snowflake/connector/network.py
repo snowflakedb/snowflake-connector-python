@@ -109,6 +109,7 @@ from .vendored.requests.exceptions import (
 )
 from .vendored.urllib3.exceptions import ProtocolError
 from .vendored.urllib3.util.url import parse_url
+from .xp import is_xp_environment
 
 if TYPE_CHECKING:
     from .connection import SnowflakeConnection
@@ -1225,3 +1226,51 @@ class SnowflakeRestful:
 
     def use_requests_session(self, url: str | bytes) -> Generator[Session, Any, None]:
         return self.use_session(url)
+
+
+def create_restful_client(
+    host: str = "127.0.0.1",
+    port: int = 8080,
+    protocol: str = "http",
+    inject_client_pause: int = 0,
+    connection: SnowflakeConnection | None = None,
+    session_manager: SessionManager | None = None,
+) -> SnowflakeRestful:
+    """Factory function to create appropriate REST client based on environment.
+
+    In XP environment, returns XPRestful which uses direct XP API calls.
+    Otherwise, returns standard SnowflakeRestful which uses HTTP.
+
+    Args:
+        host: Server hostname
+        port: Server port
+        protocol: Protocol (http/https)
+        inject_client_pause: Client pause injection for testing
+        connection: Snowflake connection object
+        session_manager: Session manager for HTTP requests
+
+    Returns:
+        Appropriate REST client instance
+    """
+    if is_xp_environment():
+        logger.debug("Creating XPRestful client for XP environment")
+        from .xp.network import XPRestful
+
+        return XPRestful(
+            host=host,
+            port=port,
+            protocol=protocol,
+            inject_client_pause=inject_client_pause,
+            connection=connection,
+            session_manager=session_manager,
+        )
+    else:
+        logger.debug("Creating SnowflakeRestful client for standard environment")
+        return SnowflakeRestful(
+            host=host,
+            port=port,
+            protocol=protocol,
+            inject_client_pause=inject_client_pause,
+            connection=connection,
+            session_manager=session_manager,
+        )
