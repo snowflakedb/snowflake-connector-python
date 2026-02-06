@@ -25,5 +25,5 @@ docker run \
   -v $(cd $THIS_DIR/.. && pwd):/mnt/host \
   -v $WORKSPACE:/mnt/workspace \
   --rm \
-    artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/internal-production-docker-snowflake-virtual/snowdrivers-test-external-browser-python:3 \
+    artifactory.ci1.us-west-2.aws-dev.app.snowflake.com/internal-production-docker-snowflake-virtual/docker/snowdrivers-test-external-browser-python:3 \
   "/mnt/host/ci/container/test_authentication.sh"
