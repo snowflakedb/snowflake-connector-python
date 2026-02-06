@@ -1,3 +1,5 @@
+@Library('pipeline-utils')
+import com.snowflake.DevEnvUtils
 import groovy.json.JsonOutput
 
 
@@ -8,6 +10,14 @@ timestamps {
       println("${scmInfo}")
       env.GIT_BRANCH = scmInfo.GIT_BRANCH
       env.GIT_COMMIT = scmInfo.GIT_COMMIT
+    }
+
+    stage('Authenticate Artifactory') {
+      script {
+        new DevEnvUtils().withSfCli {
+          sh "sf artifact oci auth"
+        }
+      }
     }
 
     stage('Build') {
