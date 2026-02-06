@@ -10,10 +10,17 @@ timestamps {
       env.GIT_COMMIT = scmInfo.GIT_COMMIT
     }
 
+    stage('Authenticate Artifactory') {
+      script {
+        new DevEnvUtils().withSfCli {
+          sh "sf artifact oci auth"
+        }
+      }
+    }
+
     stage('Build') {
       withCredentials([
-        usernamePassword(credentialsId: '063fc85b-62a6-4181-9d72-873b43488411', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY'),
-        string(credentialsId: 'a791118f-a1ea-46cd-b876-56da1b9bc71c',variable: 'NEXUS_PASSWORD')
+        usernamePassword(credentialsId: '063fc85b-62a6-4181-9d72-873b43488411', usernameVariable: 'AWS_ACCESS_KEY_ID', passwordVariable: 'AWS_SECRET_ACCESS_KEY')
         ]) {
         sh '''\
         |cd $WORKSPACE
@@ -63,7 +70,6 @@ timestamps {
       'Test Authentication': {
         stage('Test Authentication') {
           withCredentials([
-            string(credentialsId: 'a791118f-a1ea-46cd-b876-56da1b9bc71c', variable: 'NEXUS_PASSWORD'),
             string(credentialsId: 'sfctest0-parameters-secret', variable: 'PARAMETERS_SECRET')
           ]) {
             sh '''\
