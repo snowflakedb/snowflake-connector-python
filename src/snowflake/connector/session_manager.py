@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import abc
-import collections
 import contextlib
 import functools
 import itertools
@@ -170,6 +169,24 @@ class HttpConfig(BaseHttpConfig):
         }
         self_kwargs_for_adapter_factory.update(override_adapter_factory_kwargs)
         return self.adapter_factory(**self_kwargs_for_adapter_factory)
+
+
+class _SessionsMap(dict):
+    """A dict subclass that auto-creates SessionPool on missing key access.
+
+    Unlike defaultdict with a lambda, this avoids creating a reference cycle
+    between the SessionManager and the factory function closure, preventing
+    memory leaks (see GitHub issue #2727).
+    """
+
+    def __init__(self, manager: SessionManager) -> None:
+        super().__init__()
+        self._manager = manager
+
+    def __missing__(self, key):
+        pool = SessionPool(self._manager)
+        self[key] = pool
+        return pool
 
 
 class SessionPool(Generic[SessionT]):
@@ -408,9 +425,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixi
             config = HttpConfig(**http_config_kwargs)
         self._cfg: HttpConfig = config
         # Maps hostname to SessionPool instance for its connections
-        self._sessions_map: dict[str | None, SessionPool] = collections.defaultdict(
-            lambda: SessionPool(self)
-        )
+        self._sessions_map: dict[str | None, SessionPool] = _SessionsMap(self)
 
     @classmethod
     def from_config(cls, cfg: HttpConfig, **overrides: Any) -> SessionManager:
@@ -575,8 +590,8 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixi
 
     def __getstate__(self):
         state = self.__dict__.copy()
-        # `_sessions_map` contains a defaultdict with a lambda referencing `self`,
-        # which is not pickle-able.  Convert to a regular dict for serialization.
+        # `_sessions_map` contains a _SessionsMap referencing `self`,
+        # which is not directly pickle-able.  Convert to a regular dict for serialization.
         state["_sessions_map_items"] = list(state.pop("_sessions_map").items())
         return state
 
@@ -584,7 +599,7 @@ class SessionManager(_RequestVerbsUsingSessionMixin, _HttpConfigDirectAccessMixi
         # Restore attributes except sessions_map
         sessions_items = state.pop("_sessions_map_items", [])
         self.__dict__.update(state)
-        self._sessions_map = collections.defaultdict(lambda: SessionPool(self))
+        self._sessions_map = _SessionsMap(self)
         for host, pool in sessions_items:
             self._sessions_map[host] = pool
 
