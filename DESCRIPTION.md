@@ -7,10 +7,14 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v4.2.1(TBD)
+- v4.3.0(February 12,2026)
   - Ensured proper list conversion - the converter runs to_snowflake on all list elements.
   - Made the parameter `server_session_keep_alive` in `SnowflakeConnection` skip checking for pending async queries, providing faster connection close times especially when many async queries are executed.
   - Fix string representation of INTERVAL YEAR and INTERVAL MONTH types.
+  - Log a warning when using http protocol for OAuth urls.
+  - Deprecated support for custom revocation error classes in OCSP response cache deserialization. By default, only `RevocationCheckError` exceptions are deserialized from OCSP cache. Custom exception classes can be temporarily enabled by setting the `SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS` environment variable to `true` or `1`, but this support will be removed in a future release.
+  - Bumped up vendored `urllib3` to `2.6.3`
+  - Added `force_microseconds_precision` to `cursor.fetch_arrow_all` and `cursor.fetch_pandas_all` to avoid PyArrow schema incosistency between batches.
   - Added `secondary_roles` connection parameter to control secondary role activation at session creation. Supports `ALL` or `NONE` or no value.
 
 - v4.2.0(January 07,2026)

@@ -43,6 +43,7 @@ from ._utils import (
     _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     build_minicore_usage_for_telemetry,
+    build_nanoarrow_usage_for_telemetry,
 )
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
@@ -687,6 +688,7 @@ class SnowflakeConnection:
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
+        self._log_nanoarrow_import()
         self._log_minicore_import()
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
@@ -2540,6 +2542,19 @@ class SnowflakeConnection:
                 from_dict={
                     TelemetryField.KEY_TYPE.value: TelemetryField.CORE_IMPORT.value,
                     TelemetryField.KEY_VALUE.value: build_minicore_usage_for_telemetry(),
+                },
+                timestamp=ts,
+                connection=self,
+            )
+        )
+
+    def _log_nanoarrow_import(self):
+        ts = get_time_millis()
+        self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict={
+                    TelemetryField.KEY_TYPE.value: TelemetryField.NANOARROW_IMPORT.value,
+                    TelemetryField.KEY_VALUE.value: build_nanoarrow_usage_for_telemetry(),
                 },
                 timestamp=ts,
                 connection=self,

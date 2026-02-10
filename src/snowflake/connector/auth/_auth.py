@@ -56,6 +56,7 @@ from ..network import (
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
+from ..os_details import get_os_details
 from ..platform_detection import detect_platforms
 from ..session_manager import BaseHttpConfig, HttpConfig
 from ..session_manager import SessionManager as SyncSessionManager
@@ -160,6 +161,7 @@ class Auth:
                         platform_detection_timeout_seconds=platform_detection_timeout_seconds,
                         session_manager=session_manager.clone(max_retries=0),
                     ),
+                    "OS_DETAILS": get_os_details(),
                     **build_minicore_usage_for_session(),
                 },
             },

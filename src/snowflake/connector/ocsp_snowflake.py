@@ -10,6 +10,7 @@ import re
 import sys
 import tempfile
 import time
+import warnings
 from base64 import b64decode, b64encode
 from datetime import datetime, timezone
 from logging import getLogger
@@ -28,7 +29,10 @@ from OpenSSL.SSL import Connection
 
 from snowflake.connector import SNOWFLAKE_CONNECTOR_VERSION
 from snowflake.connector.compat import OK, urlsplit, urlunparse
-from snowflake.connector.constants import HTTP_HEADER_USER_AGENT
+from snowflake.connector.constants import (
+    ENV_VAR_ENABLE_CUSTOM_REVOCATION_ERRORS,
+    HTTP_HEADER_USER_AGENT,
+)
 from snowflake.connector.errorcode import (
     ER_INVALID_OCSP_RESPONSE_SSD,
     ER_INVALID_SSD,
@@ -122,19 +126,40 @@ class OCSPResponseValidationResult(NamedTuple):
                 return
             exc_class = exception_dict.get("class")
             exc_module = exception_dict.get("module")
+
+            # For RevocationCheckError, deserialize directly
+            if (
+                exc_class == "RevocationCheckError"
+                and exc_module == "snowflake.connector.errors"
+            ):
+                return RevocationCheckError(
+                    msg=exception_dict["msg"],
+                    errno=exception_dict.get("errno", ER_OCSP_RESPONSE_LOAD_FAILURE),
+                )
+
+            # For non-RevocationCheckError, always try to deserialize to detect failures
             try:
-                if (
-                    exc_class == "RevocationCheckError"
-                    and exc_module == "snowflake.connector.errors"
+                module = importlib.import_module(exc_module)
+                exc_cls = getattr(module, exc_class)
+                custom_exc = exc_cls(exception_dict["msg"])
+
+                # If env var is set, return the custom exception with deprecation warning
+                if os.getenv(ENV_VAR_ENABLE_CUSTOM_REVOCATION_ERRORS, "").lower() in (
+                    "true",
+                    "1",
                 ):
-                    return RevocationCheckError(
-                        msg=exception_dict["msg"],
-                        errno=exception_dict["errno"],
+                    warnings.warn(
+                        "Support for custom revocation error classes will be removed in a future release.",
+                        DeprecationWarning,
+                        stacklevel=3,
                     )
-                else:
-                    module = importlib.import_module(exc_module)
-                    exc_cls = getattr(module, exc_class)
-                    return exc_cls(exception_dict["msg"])
+                    return custom_exc
+
+                # Otherwise, convert to RevocationCheckError
+                return RevocationCheckError(
+                    msg=exception_dict["msg"],
+                    errno=exception_dict.get("errno", ER_OCSP_RESPONSE_LOAD_FAILURE),
+                )
             except Exception as deserialize_exc:
                 logger.debug(
                     f"hitting error {str(deserialize_exc)} while deserializing exception,"
