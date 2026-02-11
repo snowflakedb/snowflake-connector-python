@@ -311,8 +311,10 @@ def expand_tilde(path_to_expand: Any) -> Any:
             if isinstance(path_to_expand, str)
             else path_to_expand
         )
-    except RuntimeError:
+    except Exception as e:
         # user home could not be resolved
-        _logger.debug("User home could not be determined, not expanding tilde.")
+        _logger.debug(
+            "User home could not be determined, not expanding tilde. Exception: %s", e
+        )
 
     return path_to_expand
