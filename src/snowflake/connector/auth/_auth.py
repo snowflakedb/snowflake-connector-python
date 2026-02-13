@@ -89,6 +89,7 @@ AUTHENTICATION_REQUEST_KEY_WHITELIST = {
     "CLIENT_ENVIRONMENT",
     "EXT_AUTHN_DUO_METHOD",
     "LOGIN_NAME",
+    "SECONDARY_ROLES",
     "SESSION_PARAMETERS",
     "SVN_REVISION",
 }
@@ -261,6 +262,11 @@ class Auth:
 
         if session_parameters:
             body["data"]["SESSION_PARAMETERS"] = session_parameters
+
+        # Add secondary_roles connection parameter if specified
+        secondary_roles = getattr(self._rest._connection, "_secondary_roles", None)
+        if secondary_roles and isinstance(secondary_roles, str):
+            body["data"]["SECONDARY_ROLES"] = secondary_roles.upper()
 
         logger.debug(
             "body['data']: %s",
