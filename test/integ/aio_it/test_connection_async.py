@@ -122,8 +122,8 @@ async def test_with_tokens(conn_cnx):
             timezone="UTC",
         ) as initial_cnx:
             assert initial_cnx, "invalid initial cnx"
-            master_token = initial_cnx.rest._master_token
-            session_token = initial_cnx.rest._token
+            master_token = initial_cnx.rest.master_token
+            session_token = initial_cnx.rest.token
             token_cnx = await create_connection(
                 "default", session_token=session_token, master_token=master_token
             )
@@ -146,8 +146,8 @@ async def test_with_tokens_expired(conn_cnx):
             timezone="UTC",
         ) as initial_cnx:
             assert initial_cnx, "invalid initial cnx"
-            master_token = initial_cnx._rest._master_token
-            session_token = initial_cnx._rest._token
+            master_token = initial_cnx._rest.master_token
+            session_token = initial_cnx._rest.token
 
         with pytest.raises(ProgrammingError):
             async with conn_cnx(
