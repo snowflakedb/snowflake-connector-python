@@ -18,6 +18,7 @@ repos:
             (?x)^(
                 license_header.txt|
                 src/snowflake/connector/nanoarrow_cpp/ArrowIterator/flatcc/.*\.h|
+                \.github/workflows/generated_.*|
             )$
     -   id: check-yaml
         exclude: >
@@ -72,6 +73,15 @@ repos:
         files: ^src/snowflake/connector/.*\.py$
         exclude: src/snowflake/connector/options.py
         args: [--show-fixes]
+    -   id: check-ci-matrix
+        name: Check if CI matrix changed
+        entry: python ci/generate_full_matrix.py
+        language: system
+        files: |
+          (?x)^(
+              ci/generate_full_matrix\.py|
+              \.github/workflows/generated_.*
+          )$
 -   repo: https://github.com/PyCQA/flake8
     rev: 7.1.1
     hooks:
