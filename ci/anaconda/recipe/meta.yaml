@@ -37,9 +37,7 @@ requirements:
     - cython
     - python {{ python }}
   run:
-    {% if py == 39 %}
-    - python >=3.9,<3.10.0a0
-    {% elif py == 310 %}
+    {% if py == 310 %}
     - python >=3.10,<3.11.0a0
     {% elif py == 311 %}
     - python >=3.11,<3.12.0a0
@@ -47,6 +45,8 @@ requirements:
     - python >=3.12,<3.13.0a0
     {% elif py == 313 %}
     - python >=3.13,<3.14.0a0
+    {% elif py == 314 %}
+    - python >=3.14,<3.15.0a0
     {% else %}
     - python
     {% endif %}

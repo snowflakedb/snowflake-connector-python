@@ -2,8 +2,8 @@
 #
 # Build Snowflake Python Connector on Mac
 # NOTES:
-#   - To compile only a specific version(s) pass in versions like: `./build_darwin.sh "3.9 3.10"`
-PYTHON_VERSIONS="${1:-3.9 3.10 3.11 3.12 3.13}"
+#   - To compile only a specific version(s) pass in versions like: `./build_darwin.sh "3.10 3.11"`
+PYTHON_VERSIONS="${1:-3.10 3.11 3.12 3.13 3.14}"
 
 THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTOR_DIR="$(dirname "${THIS_DIR}")"

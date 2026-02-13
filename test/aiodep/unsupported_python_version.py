@@ -8,8 +8,8 @@ import sys
 import snowflake.connector.aio
 
 assert (
-    sys.version_info.major == 3 and sys.version_info.minor <= 9
-), "This test is only for Python 3.9 and lower"
+    sys.version_info.major == 3 and sys.version_info.minor <= 10
+), "This test is only for Python 3.10 and lower"
 
 
 CONNECTION_PARAMETERS = {
@@ -33,7 +33,7 @@ async def main():
     except Exception as exc:
         assert isinstance(
             exc, RuntimeError
-        ) and "Async Snowflake Python Connector requires Python 3.10+" in str(
+        ) and "Async Snowflake Python Connector requires Python 3.11+" in str(
             exc
         ), "should raise RuntimeError"
 

@@ -17,7 +17,7 @@ fi
 THIS_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # shellcheck disable=SC1090
 CONNECTOR_DIR="$( dirname "${THIS_DIR}")"
-CONNECTOR_WHL="$(ls $CONNECTOR_DIR/dist/*cp39*manylinux2014*.whl | sort -r | head -n 1)"
+CONNECTOR_WHL="$(ls $CONNECTOR_DIR/dist/*cp310*manylinux2014*.whl | sort -r | head -n 1)"
 
 # fetch wiremock
 curl https://repo1.maven.org/maven2/org/wiremock/wiremock-standalone/3.11.0/wiremock-standalone-3.11.0.jar --output "${CONNECTOR_DIR}/.wiremock/wiremock-standalone.jar"

@@ -11,9 +11,9 @@ WORKSPACE=${WORKSPACE:-${CONNECTOR_DIR}}
 
 echo "[Info] Starting revocation validation tests"
 
-# Find Python 3.9+ (check /opt/sfc/ first for Snowflake Jenkins nodes)
+# Find Python 3.10+ (check /opt/sfc/ first for Snowflake Jenkins nodes)
 PYTHON_BIN=""
-for v in 3.11 3.10 3.9 3.13 3.12; do
+for v in 3.11 3.10 3.14 3.13 3.12; do
     for p in "/opt/sfc/python${v}/bin/python${v}" "python${v}"; do
         bin=$(command -v "$p" 2>/dev/null || echo "")
         if [ -n "$bin" ] && [ -x "$bin" ]; then
