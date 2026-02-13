@@ -92,6 +92,29 @@ timestamps {
             '''.stripMargin()
           }
         }
+      },
+      'Test Revocation Validation': {
+        stage('Test Revocation Validation') {
+          withCredentials([
+            usernamePassword(credentialsId: 'jenkins-snowflakedb-github-app',
+              usernameVariable: 'GITHUB_USER',
+              passwordVariable: 'GITHUB_TOKEN')
+          ]) {
+            try {
+              sh '$WORKSPACE/ci/test_revocation.sh'
+            } finally {
+              archiveArtifacts artifacts: 'revocation-results.json,revocation-report.html', allowEmptyArchive: true
+              publishHTML(target: [
+                allowMissing: true,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: '.',
+                reportFiles: 'revocation-report.html',
+                reportName: 'Revocation Validation Report'
+              ])
+            }
+          }
+        }
       }
     )
   }
