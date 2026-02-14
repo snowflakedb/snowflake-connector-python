@@ -715,7 +715,7 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
             try:
                 if self._timebomb is not None:
                     self._timebomb.cancel()
-                    logger.debug("cancelled timebomb in finally")
+                    logger.debug("cancelled timebomb in interrupt handler")
                     self._timebomb = None
                 self.__cancel_query(query)
             finally:
