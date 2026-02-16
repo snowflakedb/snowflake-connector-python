@@ -379,6 +379,7 @@ class FakeAwsEnvironment:
             b'{"region": "us-east-1", "instanceId": "i-1234567890abcdef0"}'
         )
         self.metadata_token = "test-token"
+        self.web_identity_token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhd3MtdGVzdCIsImF1ZCI6InNub3dmbGFrZWNvbXB1dGluZy5jb20ifQ.fake-signature"
 
     def assume_role(self, **kwargs):
         if (
@@ -423,6 +424,9 @@ class FakeAwsEnvironment:
         mock_client = mock.Mock()
         mock_client.get_caller_identity.return_value = self.caller_identity
         mock_client.assume_role = self.assume_role
+        mock_client.get_web_identity_token.return_value = {
+            "WebIdentityToken": self.web_identity_token
+        }
         return mock_client
 
     def __enter__(self):
