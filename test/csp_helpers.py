@@ -379,7 +379,7 @@ class FakeAwsEnvironment:
             b'{"region": "us-east-1", "instanceId": "i-1234567890abcdef0"}'
         )
         self.metadata_token = "test-token"
-        self.web_identity_token = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhd3MtdGVzdCIsImF1ZCI6InNub3dmbGFrZWNvbXB1dGluZy5jb20ifQ.fake-signature"
+        self.web_identity_token = "fake.jwt.token-for-testing-only"
 
     def assume_role(self, **kwargs):
         if (
