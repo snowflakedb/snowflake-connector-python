@@ -195,29 +195,45 @@ def create_aws_attestation(
         )
     region = get_aws_region()
     partition = session.get_partition_for_region(region)
-    sts_hostname = get_aws_sts_hostname(region, partition)
-    request = AWSRequest(
-        method="POST",
-        url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
-        headers={
-            "Host": sts_hostname,
-            "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
-        },
-    )
+    if os.environ.get("ENABLE_AWS_WIF_OUTBOUND_TOKEN", "false").lower() == "true":
+        sts_client = session.client("sts")
+        response = sts_client.get_web_identity_token(
+            Audience=[SNOWFLAKE_AUDIENCE], SigningAlgorithm="ES384"
+        )
+        jwt_token = response["WebIdentityToken"]
+        return WorkloadIdentityAttestation(
+            AttestationProvider.AWS,
+            jwt_token,
+            {"region": region, "partition": partition},
+        )
+    else:
+        sts_hostname = get_aws_sts_hostname(region, partition)
+        request = AWSRequest(
+            method="POST",
+            url=f"https://{sts_hostname}/?Action=GetCallerIdentity&Version=2011-06-15",
+            headers={
+                "Host": sts_hostname,
+                "X-Snowflake-Audience": SNOWFLAKE_AUDIENCE,
+            },
+        )
 
-    SigV4Auth(aws_creds, "sts", region).add_auth(request)
+        SigV4Auth(aws_creds, "sts", region).add_auth(request)
 
-    assertion_dict = {
-        "url": request.url,
-        "method": request.method,
-        "headers": dict(request.headers.items()),
-    }
-    credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode("utf-8")
-    # Unlike other providers, for AWS, we only include general identifiers (region and partition)
-    # rather than specific user identifiers, since we don't actually execute a GetCallerIdentity call.
-    return WorkloadIdentityAttestation(
-        AttestationProvider.AWS, credential, {"region": region, "partition": partition}
-    )
+        assertion_dict = {
+            "url": request.url,
+            "method": request.method,
+            "headers": dict(request.headers.items()),
+        }
+        credential = b64encode(json.dumps(assertion_dict).encode("utf-8")).decode(
+            "utf-8"
+        )
+        # Unlike other providers, for AWS, we only include general identifiers (region and partition)
+        # rather than specific user identifiers, since we don't actually execute a GetCallerIdentity call.
+        return WorkloadIdentityAttestation(
+            AttestationProvider.AWS,
+            credential,
+            {"region": region, "partition": partition},
+        )
 
 
 def get_gcp_access_token(session_manager: SessionManager) -> str:
