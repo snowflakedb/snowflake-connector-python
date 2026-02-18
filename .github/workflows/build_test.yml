@@ -144,7 +144,7 @@ jobs:
               -o "$DEST"
           fi
       - name: Building wheel
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v3.3.1
         env:
           CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os_download_name }}
           CIBW_ARCHS_WINDOWS: ${{ matrix.os_download_name == 'win_arm64' && 'ARM64' || 'auto' }}
@@ -583,7 +583,7 @@ jobs:
               -o "$DEST"
           fi
       - name: Build wheel for Rocky Linux
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v3.3.1
         env:
           CIBW_BUILD: cp${{ env.shortver }}-manylinux_x86_64
           MACOSX_DEPLOYMENT_TARGET: 10.14
