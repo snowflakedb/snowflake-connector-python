@@ -47,6 +47,8 @@ requirements:
     - python >=3.12,<3.13.0a0
     {% elif py == 313 %}
     - python >=3.13,<3.14.0a0
+    {% elif py == 314 %}
+    - python >=3.14,<3.15.0a0
     {% else %}
     - python
     {% endif %}
