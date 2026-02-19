@@ -2,7 +2,7 @@
 #
 # Test Snowflake Connector in Rocky Linux 9
 # NOTES:
-#   - Versions to be tested should be passed in as the first argument, e.g: "3.9 3.11". If omitted 3.9-3.13 will be assumed.
+#   - Versions to be tested should be passed in as the first argument, e.g: "3.9 3.11". If omitted 3.9 + 3.11 + 3.12 will be assumed.
 #   - This script assumes that ../dist has the wheel(s) built for all versions to be tested
 #   - This is the script that test_rockylinux9_docker.sh runs inside of the docker container
 
