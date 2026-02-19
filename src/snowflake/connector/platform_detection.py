@@ -429,6 +429,21 @@ def is_github_action():
     )
 
 
+def is_aws_wif_outbound_token_enabled():
+    """
+    Check if AWS WIF outbound token is enabled via environment variable.
+
+    Returns:
+        _DetectionState: DETECTED if ENABLE_AWS_WIF_OUTBOUND_TOKEN env var is true,
+                        NOT_DETECTED otherwise.
+    """
+    return (
+        _DetectionState.DETECTED
+        if os.environ.get("ENABLE_AWS_WIF_OUTBOUND_TOKEN", "false").lower() == "true"
+        else _DetectionState.NOT_DETECTED
+    )
+
+
 @cache
 def detect_platforms(
     platform_detection_timeout_seconds: float | None,
@@ -490,6 +505,7 @@ def detect_platforms(
                 "is_gce_cloud_run_service": is_gcp_cloud_run_service(),
                 "is_gce_cloud_run_job": is_gcp_cloud_run_job(),
                 "is_github_action": is_github_action(),
+                "is_aws_wif_outbound_token_enabled": is_aws_wif_outbound_token_enabled(),
             }
 
             # Run network-calling functions in parallel
