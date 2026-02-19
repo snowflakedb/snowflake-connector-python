@@ -198,7 +198,7 @@ def create_aws_attestation(
     # TODO: Remove this environment variable check once AWS WIF outbound token is fully released
     # and make it the default behavior (SNOW-2919437)
     if os.environ.get("ENABLE_AWS_WIF_OUTBOUND_TOKEN", "false").lower() == "true":
-        sts_client = session.client("sts")
+        sts_client = session.client("sts", region_name=region)
         response = sts_client.get_web_identity_token(
             Audience=[SNOWFLAKE_AUDIENCE], SigningAlgorithm="ES384"
         )
