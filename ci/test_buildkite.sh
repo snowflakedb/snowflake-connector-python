@@ -56,6 +56,9 @@ PYEOF
 
 echo "[Info] Generated test/parameters.py"
 
+cp test/parameters.py test/parameters_jenkins.py
+echo "[Info] Generated test/parameters_jenkins.py (copy for Jenkins compatibility)"
+
 echo "${PASSWORD}" > test/snowflake_ssm_rt.txt
 export CLIENT_KNOWN_SSM_FILE_PATH_DOCKER="${CONNECTOR_DIR}/test/snowflake_ssm_rt.txt"
 

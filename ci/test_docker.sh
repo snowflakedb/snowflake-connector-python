@@ -45,6 +45,8 @@ docker run --network=host \
     -e JENKINS_HOME \
     -e is_old_driver \
     -e GITHUB_ACTIONS \
+    -e BUILDKITE \
+    -e CLIENT_KNOWN_SSM_FILE_PATH_DOCKER \
     -e USE_PASSWORD=true \
     --mount type=bind,source="${CONNECTOR_DIR}",target=/home/user/snowflake-connector-python \
     ${CONTAINER_NAME}:1.0 \
