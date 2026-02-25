@@ -7,11 +7,8 @@
 #   SF_REGRESS_GLOBAL_SERVICES_PORT - SUT port
 #   SF_ACCOUNT                      - account name (default: testaccount)
 #
-# Env var from plugin (sut_change_to_complex_password):
-#   SF_REGRESS_UPDATED_COMPLEX_PASSWORD
-#
 # Env vars from pipeline step (optional overrides):
-#   SF_ACCOUNT, SF_REGRESS_USER, SF_REGRESS_SCHEMA,
+#   SF_REGRESS_USER, SF_REGRESS_PASSWORD, SF_REGRESS_SCHEMA,
 #   SF_REGRESS_DATABASE, SF_REGRESS_PROTOCOL,
 #   python_env, py_test_mode
 
@@ -20,7 +17,7 @@ THIS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTOR_DIR="$(dirname "${THIS_DIR}")"
 cd "${CONNECTOR_DIR}"
 
-for var in SF_REGRESS_GLOBAL_SERVICES_IP SF_REGRESS_GLOBAL_SERVICES_PORT SF_REGRESS_UPDATED_COMPLEX_PASSWORD; do
+for var in SF_REGRESS_GLOBAL_SERVICES_IP SF_REGRESS_GLOBAL_SERVICES_PORT; do
     if [ -z "${!var}" ]; then
         echo "ERROR: ${var} is not set."
         exit 1
@@ -29,9 +26,9 @@ done
 
 HOST="${SF_REGRESS_GLOBAL_SERVICES_IP}"
 PORT="${SF_REGRESS_GLOBAL_SERVICES_PORT}"
-ACCOUNT="${SF_ACCOUNT:-s3testaccount}"
-USER="${SF_REGRESS_USER:-snowman}"
-PASSWORD="${SF_REGRESS_UPDATED_COMPLEX_PASSWORD}"
+ACCOUNT="${SF_ACCOUNT:-testaccount}"
+SF_USER="${SF_REGRESS_USER:-snowman}"
+PASSWORD="${SF_REGRESS_PASSWORD:-test}"
 SCHEMA="${SF_REGRESS_SCHEMA:-testschema}"
 DATABASE="${SF_REGRESS_DATABASE:-testdb}"
 PROTOCOL="${SF_REGRESS_PROTOCOL:-http}"
@@ -40,14 +37,14 @@ echo "=== SUT Connection ==="
 echo "  Host:     ${HOST}"
 echo "  Port:     ${PORT}"
 echo "  Account:  ${ACCOUNT}"
-echo "  User:     ${USER}"
+echo "  User:     ${SF_USER}"
 echo "  Protocol: ${PROTOCOL}"
 echo "======================"
 
 cat > test/parameters.py <<PYEOF
 CONNECTION_PARAMETERS = {
     'account': '${ACCOUNT}',
-    'user': '${USER}',
+    'user': '${SF_USER}',
     'password': '${PASSWORD}',
     'schema': '${SCHEMA}',
     'database': '${DATABASE}',
