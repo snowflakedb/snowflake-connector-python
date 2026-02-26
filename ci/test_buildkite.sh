@@ -63,31 +63,48 @@ echo "${PASSWORD}" > test/snowflake_ssm_rt.txt
 export CLIENT_KNOWN_SSM_FILE_PATH_DOCKER="${CONNECTOR_DIR}/test/snowflake_ssm_rt.txt"
 
 # Download pre-built wheel from S3 (mirrors Jenkins ci/test.sh)
-client_git_branch="origin/$(git rev-parse --abbrev-ref HEAD)"
+# Jenkins stores branches without origin/ prefix (e.g., "main" not "origin/main")
+client_git_branch="$(git rev-parse --abbrev-ref HEAD)"
 client_git_commit=$(git rev-parse HEAD)
 
 echo "[Info] Downloading wheel artifacts from S3..."
 echo "  Branch: ${client_git_branch}"
 echo "  Commit: ${client_git_commit}"
 
+S3_BASE="s3://sfc-eng-jenkins/repository/python_connector/linux"
 mkdir -p dist
-if ! aws s3 cp --recursive --only-show-errors \
-    "s3://sfc-eng-jenkins/repository/python_connector/linux/${client_git_branch}/${client_git_commit}/" dist; then
+
+# Try exact branch+commit first
+aws s3 cp --recursive --only-show-errors "${S3_BASE}/${client_git_branch}/${client_git_commit}/" dist || true
+
+# If empty, try branch latest_commit
+if [ -z "$(ls -A dist/ 2>/dev/null)" ]; then
     echo "[WARN] No artifacts for exact commit, trying latest_commit for branch..."
-    latest_commit=$(aws s3 cp "s3://sfc-eng-jenkins/repository/python_connector/linux/${client_git_branch}/latest_commit" - 2>/dev/null || true)
+    latest_commit=$(aws s3 cp "${S3_BASE}/${client_git_branch}/latest_commit" - 2>/dev/null || true)
     if [ -n "$latest_commit" ]; then
         echo "[Info] Using latest_commit: ${latest_commit}"
-        aws s3 cp --recursive --only-show-errors \
-            "s3://sfc-eng-jenkins/repository/python_connector/linux/${client_git_branch}/${latest_commit}/" dist
-    else
-        echo "[ERROR] No wheel artifacts found in S3 for branch ${client_git_branch}"
-        echo "[ERROR] Ensure Jenkins build pipeline has run for this branch."
-        exit 1
+        aws s3 cp --recursive --only-show-errors "${S3_BASE}/${client_git_branch}/${latest_commit}/" dist || true
     fi
 fi
 
+# If still empty, fall back to main branch
+if [ -z "$(ls -A dist/ 2>/dev/null)" ]; then
+    echo "[WARN] No artifacts for branch ${client_git_branch}, falling back to main..."
+    latest_commit=$(aws s3 cp "${S3_BASE}/main/latest_commit" - 2>/dev/null || true)
+    if [ -n "$latest_commit" ]; then
+        echo "[Info] Using main latest_commit: ${latest_commit}"
+        aws s3 cp --recursive --only-show-errors "${S3_BASE}/main/${latest_commit}/" dist || true
+    fi
+fi
+
+# Final check
+if [ -z "$(ls -A dist/ 2>/dev/null)" ]; then
+    echo "[ERROR] No wheel artifacts found in S3"
+    exit 1
+fi
+
 echo "[Info] Downloaded artifacts:"
-ls -la dist/ || true
+ls -la dist/
 
 if [ "${py_test_mode}" = "fips" ]; then
     ${THIS_DIR}/test_fips_docker.sh
