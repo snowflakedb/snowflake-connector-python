@@ -491,7 +491,43 @@ CONFIG_MANAGER.add_option(
 )
 
 
+def _get_conn_params_in_spcs():
+    """
+    Checks for the SPCS token file and returns connection parameters.
+    Returns a dict of parameters or None if not in an SPCS environment.
+    """
+    # Standard SPCS path for the session token
+    token_path = "/snowflake/session/token"
+
+    if os.path.exists(token_path):
+        # Fetch required environment variables provided by SPCS
+        # Note: SNOWFLAKE_HOST is critical for internal routing
+        # See https://docs.snowflake.com/en/developer-guide/snowpark-container-services/spcs-execute-sql
+        params = {
+            "account": os.getenv("SNOWFLAKE_ACCOUNT"),
+            "host": os.getenv("SNOWFLAKE_HOST"),
+            "authenticator": "oauth",
+            "token_file_path": token_path,
+            # Optional: SPCS adds them based on service's location
+            "database": os.getenv("SNOWFLAKE_DATABASE"),
+            "schema": os.getenv("SNOWFLAKE_SCHEMA"),
+            # Optional: Add context variables if provided in user's spec
+            "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
+            "role": os.getenv("SNOWFLAKE_ROLE"),
+        }
+
+        # Remove None values for optional env vars not set
+        return {k: v for k, v in params.items() if v is not None}
+
+    return None
+
+
 def _get_default_connection_params() -> dict[str, Any]:
+    # If within SPCS container, use params set in env.
+    spcs_params_if_any = _get_conn_params_in_spcs()
+    if spcs_params_if_any:
+        return spcs_params_if_any
+
     def_connection_name = CONFIG_MANAGER["default_connection_name"]
     connections = CONFIG_MANAGER["connections"]
     if def_connection_name not in connections:
