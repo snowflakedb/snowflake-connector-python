@@ -10,7 +10,6 @@ import threading
 import time
 from enum import Enum
 from inspect import stack
-from pathlib import Path
 from random import choice
 from threading import Timer
 from uuid import UUID
@@ -188,26 +187,10 @@ class _CoreLoader:
     @staticmethod
     def _detect_libc() -> str:
         """Detect libc type on Linux (glibc vs musl)."""
-        # Check if we're on Alpine/musl
-        if Path("/etc/alpine-release").exists():
-            return "musl"
-
-        # Check for musl by looking at the libc library
-        try:
-            import subprocess
-
-            result = subprocess.run(
-                ["ldd", "--version"],
-                capture_output=True,
-                text=True,
-            )
-            if "musl" in result.stdout.lower() or "musl" in result.stderr.lower():
-                return "musl"
-        except Exception:
-            pass
-
-        # Default to glibc
-        return "glibc"
+        lib, _ = platform.libc_ver()
+        if lib == "glibc":
+            return "glibc"
+        return "musl"
 
     @staticmethod
     def _get_platform_subdir() -> str:
