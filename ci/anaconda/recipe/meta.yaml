@@ -16,7 +16,7 @@ build:
     - export SF_NO_COPY_ARROW_LIB=1              # [unix]
     - export SF_ARROW_LIBDIR="${PREFIX}/lib"     # [unix]
     - export ENABLE_EXT_MODULES=true             # [unix]
-    - {{ PYTHON }} -m pip install . --no-use-pep517 --no-deps -vvv
+    - {{ PYTHON }} -m pip install . --no-build-isolation --no-deps -vvv
   entry_points:
     - snowflake-dump-ocsp-response = snowflake.connector.tool.dump_ocsp_response:main
     - snowflake-dump-ocsp-response-cache = snowflake.connector.tool.dump_ocsp_response_cache:main

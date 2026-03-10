@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
 from test.test_utils.cross_module_fixtures.http_fixtures import *  # NOQA
+from test.test_utils.cross_module_fixtures.mitm_fixtures import *  # NOQA
 from test.test_utils.cross_module_fixtures.wiremock_fixtures import *  # NOQA
 from typing import Generator
 

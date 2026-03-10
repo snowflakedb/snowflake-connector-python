@@ -31,6 +31,9 @@ class AuthByOauthCredentials(AuthByOAuthBase):
         **kwargs,
     ) -> None:
         self._validate_client_credentials_present(client_id, client_secret, connection)
+        # Warn if HTTP is used for OAuth token request URL
+        if token_request_url:
+            self._log_if_http_in_use(token_request_url)
         super().__init__(
             client_id=client_id,
             client_secret=client_secret,

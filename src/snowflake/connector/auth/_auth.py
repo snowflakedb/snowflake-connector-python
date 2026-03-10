@@ -17,7 +17,11 @@ from cryptography.hazmat.primitives.serialization import (
     load_pem_private_key,
 )
 
-from .._utils import get_application_path
+from .._utils import (
+    build_minicore_usage_for_session,
+    get_application_path,
+    get_spcs_token,
+)
 from ..compat import urlencode
 from ..constants import (
     DAY_IN_SECONDS,
@@ -52,12 +56,14 @@ from ..network import (
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
+from ..os_details import get_os_details
 from ..platform_detection import detect_platforms
 from ..session_manager import BaseHttpConfig, HttpConfig
 from ..session_manager import SessionManager as SyncSessionManager
 from ..session_manager import SessionManagerFactory
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..token_cache import TokenCache, TokenKey, TokenType
+from ..util_text import expand_tilde
 from ..version import VERSION
 from .no_auth import AuthNoAuth
 from .oauth import AuthByOAuth
@@ -83,6 +89,7 @@ AUTHENTICATION_REQUEST_KEY_WHITELIST = {
     "CLIENT_ENVIRONMENT",
     "EXT_AUTHN_DUO_METHOD",
     "LOGIN_NAME",
+    "SECONDARY_ROLES",
     "SESSION_PARAMETERS",
     "SVN_REVISION",
 }
@@ -94,6 +101,17 @@ class Auth:
     def __init__(self, rest) -> None:
         self._rest = rest
         self._token_cache: TokenCache | None = None
+
+    def _add_spcs_token_to_body(self, body: dict[Any, Any]) -> None:
+        """Inject SPCS_TOKEN into the login request body when available.
+
+        This reads the SPCS token from the path specified by SF_SPCS_TOKEN_PATH,
+        or from ``/snowflake/session/spcs_token`` when the env var is unset.
+        """
+        spcs_token = get_spcs_token()
+        if spcs_token is not None:
+            # Ensure the \"data\" envelope exists and add the token.
+            body.setdefault("data", {})["SPCS_TOKEN"] = spcs_token
 
     @staticmethod
     def base_auth_data(
@@ -144,6 +162,8 @@ class Auth:
                         platform_detection_timeout_seconds=platform_detection_timeout_seconds,
                         session_manager=session_manager.clone(max_retries=0),
                     ),
+                    "OS_DETAILS": get_os_details(),
+                    **build_minicore_usage_for_session(),
                 },
             },
         }
@@ -205,6 +225,8 @@ class Auth:
         )
 
         body = copy.deepcopy(body_template)
+        # Add SPCS token if present, independent of authenticator type.
+        self._add_spcs_token_to_body(body)
         # updating request body
         auth_instance.update_body(body)
 
@@ -240,6 +262,11 @@ class Auth:
 
         if session_parameters:
             body["data"]["SESSION_PARAMETERS"] = session_parameters
+
+        # Add secondary_roles connection parameter if specified
+        secondary_roles = getattr(self._rest._connection, "_secondary_roles", None)
+        if secondary_roles and isinstance(secondary_roles, str):
+            body["data"]["SECONDARY_ROLES"] = secondary_roles.upper()
 
         logger.debug(
             "body['data']: %s",
@@ -323,6 +350,8 @@ class Auth:
             ):
                 body = copy.deepcopy(body_template)
                 body["inFlightCtx"] = ret["data"].get("inFlightCtx")
+                # Add SPCS token to the follow-up login request as well.
+                self._add_spcs_token_to_body(body)
                 # final request to get tokens
                 ret = self._rest._post_request(
                     url,
@@ -363,6 +392,8 @@ class Auth:
                     else None
                 )
                 body["data"]["CHOSEN_NEW_PASSWORD"] = password_callback()
+                # Add SPCS token to the password change login request as well.
+                self._add_spcs_token_to_body(body)
                 # New Password input
                 ret = self._rest._post_request(
                     url,
@@ -611,14 +642,16 @@ def get_token_from_private_key(
     from . import AuthByKeyPair
 
     auth_instance = AuthByKeyPair(
-        private_key,
-        DAY_IN_SECONDS,
+        private_key=private_key,
+        lifetime_in_seconds=DAY_IN_SECONDS,
     )  # token valid for 24 hours
     return auth_instance.prepare(account=account, user=user)
 
 
 def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
     """Helper function to generate the public key fingerprint from the private key file"""
+    private_key_file = expand_tilde(private_key_file)
+
     with open(private_key_file, "rb") as key:
         p_key = load_pem_private_key(
             key.read(), password=password.encode(), backend=default_backend()

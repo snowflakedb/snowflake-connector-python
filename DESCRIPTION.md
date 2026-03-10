@@ -7,9 +7,29 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
-- v4.1.1(TBD)
+- v4.3.0(February 12,2026)
+  - Ensured proper list conversion - the converter runs to_snowflake on all list elements.
+  - Made the parameter `server_session_keep_alive` in `SnowflakeConnection` skip checking for pending async queries, providing faster connection close times especially when many async queries are executed.
+  - Fix string representation of INTERVAL YEAR and INTERVAL MONTH types.
+  - Log a warning when using http protocol for OAuth urls.
+  - Deprecated support for custom revocation error classes in OCSP response cache deserialization. By default, only `RevocationCheckError` exceptions are deserialized from OCSP cache. Custom exception classes can be temporarily enabled by setting the `SNOWFLAKE_ENABLE_CUSTOM_REVOCATION_ERRORS` environment variable to `true` or `1`, but this support will be removed in a future release.
+  - Bumped up vendored `urllib3` to `2.6.3`
+  - Added `force_microseconds_precision` to `cursor.fetch_arrow_all` and `cursor.fetch_pandas_all` to avoid PyArrow schema inconsistency between batches.
+  - Fixed a bug where tilde in path to `private_key_file` specified in the connection was not properly expanded
+  - Added `secondary_roles` connection parameter to control secondary role activation at session creation. Supports `ALL` or `NONE` or no value.
+
+
+- v4.2.0(January 07,2026)
+  - Added `SnowflakeCursor.stats` property to expose granular DML statistics (rows inserted, deleted, updated, and duplicates) for operations like CTAS where `rowcount` is insufficient.
+  - Added support for injecting SPCS service identifier token (`SPCS_TOKEN`) into login requests when present in SPCS containers.
+  - Introduced shared library([source code](https://github.com/snowflakedb/universal-driver/tree/main/sf_mini_core)) for extended telemetry to identify and prepare testing platform for native rust extensions.
+  - Added `private_key_passphrase` connection parameter for key pair authentication with encrypted private keys.
+
+- v4.1.1(December 12,2025)
   - Relaxed pandas dependency requirements for Python below 3.12.
   - Changed CRL cache cleanup background task to daemon to avoid blocking main thread.
+  - Fixed NO_PROXY issues with PUT operations
+
 - v4.1.0(November 18,2025)
   - Added the `SNOWFLAKE_AUTH_FORCE_SERVER` environment variable to force the use of the local-listening server when using the `externalbrowser` auth method.
     - This allows headless environments (like Docker or Airflow) running locally to auth via a browser URL.

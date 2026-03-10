@@ -42,6 +42,8 @@ from ._query_context_cache import QueryContextCache
 from ._utils import (
     _DEFAULT_VALUE_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
     _VARIABLE_NAME_SERVER_DOP_CAP_FOR_FILE_TRANSFER,
+    build_minicore_usage_for_telemetry,
+    build_nanoarrow_usage_for_telemetry,
 )
 from .auth import (
     FIRST_PARTY_AUTHENTICATORS,
@@ -140,7 +142,7 @@ from .sqlstate import SQLSTATE_CONNECTION_NOT_EXISTS, SQLSTATE_FEATURE_NOT_SUPPO
 from .telemetry import TelemetryClient, TelemetryData, TelemetryField
 from .time_util import HeartBeatTimer, get_time_millis
 from .url_util import extract_top_level_domain_from_hostname
-from .util_text import construct_hostname, parse_account, split_statements
+from .util_text import construct_hostname, expand_tilde, parse_account, split_statements
 from .wif_util import AttestationProvider
 
 if sys.version_info >= (3, 13) or typing.TYPE_CHECKING:
@@ -171,6 +173,9 @@ def _get_private_bytes_from_file(
 ) -> bytes:
     if private_key_file_pwd is not None and isinstance(private_key_file_pwd, str):
         private_key_file_pwd = private_key_file_pwd.encode("utf-8")
+
+    private_key_file = expand_tilde(private_key_file)
+
     with open(private_key_file, "rb") as key:
         private_key = serialization.load_pem_private_key(
             key.read(),
@@ -231,6 +236,7 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
     "passcode_in_password": (False, bool),  # Snowflake MFA
     "passcode": (None, (type(None), str)),  # Snowflake MFA
     "private_key": (None, (type(None), bytes, str, RSAPrivateKey)),
+    "private_key_passphrase": (None, (type(None), bytes)),
     "private_key_file": (None, (type(None), str)),
     "private_key_file_pwd": (None, (type(None), str, bytes)),
     "token": (None, (type(None), str)),  # OAuth/JWT/PAT/OIDC Token
@@ -480,6 +486,10 @@ DEFAULT_CONFIGURATION: dict[str, tuple[Any, type | tuple[type, ...]]] = {
         None,
         (type(None), int),
     ),  # Maximum CRL file size in bytes
+    "secondary_roles": (
+        None,
+        (type(None), str),
+    ),  # Secondary roles mode: ALL or NONE or no value
 }
 
 APPLICATION_RE = re.compile(r"[\w\d_]+")
@@ -681,6 +691,8 @@ class SnowflakeConnection:
 
         # get the imported modules from sys.modules
         self._log_telemetry_imported_packages()
+        self._log_nanoarrow_import()
+        self._log_minicore_import()
         # check SNOW-1218851 for long term improvement plan to refactor ocsp code
         atexit.register(self._close_at_exit)
 
@@ -1195,17 +1207,26 @@ class SnowflakeConnection:
             logger.debug("closed")
             if self.telemetry_enabled:
                 self._telemetry.close(retry=retry)
-            if (
-                self._all_async_queries_finished()
-                and not self._server_session_keep_alive
-            ):
-                logger.debug("No async queries seem to be running, deleting session")
-                self.rest.delete_session(retry=retry)
-            else:
-                logger.debug(
-                    "There are {} async queries still running, not deleting session".format(
-                        len(self._async_sfqids)
+
+            if not self._server_session_keep_alive:
+                if self._all_async_queries_finished():
+                    logger.debug(
+                        "No async queries seem to be running, deleting session"
                     )
+                    self.rest.delete_session(retry=retry)
+                else:
+                    logger.debug(
+                        "There are {} async queries still running, not deleting session".format(
+                            len(self._async_sfqids)
+                        )
+                    )
+            else:
+                logger.info(
+                    "Parameter server_session_keep_alive was set to True - skipping session logout. "
+                    "If there are any not-finished queries in the current session (session_id: %s) - "
+                    "they will continue to live in Snowflake and consume credits until they finish. "
+                    "To cancel them use Monitoring tab in Snowsight or plain SQL.",
+                    self.session_id,
                 )
             self.rest.close()
             self._rest = None
@@ -1461,6 +1482,7 @@ class SnowflakeConnection:
 
             elif self._authenticator == KEY_PAIR_AUTHENTICATOR:
                 private_key = self._private_key
+                private_key_passphrase = self._private_key_passphrase
 
                 if self._private_key_file:
                     private_key = _get_private_bytes_from_file(
@@ -1470,6 +1492,7 @@ class SnowflakeConnection:
 
                 self.auth_class = AuthByKeyPair(
                     private_key=private_key,
+                    private_key_passphrase=private_key_passphrase,
                     timeout=self.login_timeout,
                     backoff_generator=self._backoff_generator,
                 )
@@ -2505,6 +2528,41 @@ class SnowflakeConnection:
                 f.cancel()
 
         return not found_unfinished_query
+
+    def _log_minicore_import(self):
+        """
+                OS - meaningful value like Windows, Linux, Darwin/MacOS etc.
+        OS_VERSION - meaningful version like kernel version for Linux/Darwin, etc. that your language provides
+        ISA - instruction set architecture, like amd64/arm64.
+        CORE_VERSION - result of sf_core_full_version call, if finished successfully.
+        CORE_FILE_NAME - a string representing binary name that driver tried to load
+        CORE_LOAD_ERROR - flag or error type included if there are any errors (can’t write a library to disk, can’t load it, can’t find symbols, etc).
+                :return:
+        """
+        ts = get_time_millis()
+        self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict={
+                    TelemetryField.KEY_TYPE.value: TelemetryField.CORE_IMPORT.value,
+                    TelemetryField.KEY_VALUE.value: build_minicore_usage_for_telemetry(),
+                },
+                timestamp=ts,
+                connection=self,
+            )
+        )
+
+    def _log_nanoarrow_import(self):
+        ts = get_time_millis()
+        self._log_telemetry(
+            TelemetryData.from_telemetry_data_dict(
+                from_dict={
+                    TelemetryField.KEY_TYPE.value: TelemetryField.NANOARROW_IMPORT.value,
+                    TelemetryField.KEY_VALUE.value: build_nanoarrow_usage_for_telemetry(),
+                },
+                timestamp=ts,
+                connection=self,
+            )
+        )
 
     def _log_telemetry_imported_packages(self) -> None:
         if self._log_imported_packages_in_telemetry:
