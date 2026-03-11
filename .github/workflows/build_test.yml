@@ -124,8 +124,25 @@ jobs:
           path: |
             ~/.cache/cibuildwheel
             ~/Library/Caches/cibuildwheel
-            ~/AppData/Local/cibuildwheel/Cache
+            ~/AppData/Local/pypa/cibuildwheel/Cache
           key: cibw-v2.21.3-${{ matrix.download_name }}
+      - name: Pre-download virtualenv for cibuildwheel
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            CACHE_DIR="$LOCALAPPDATA/pypa/cibuildwheel/Cache"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            CACHE_DIR="$HOME/Library/Caches/cibuildwheel"
+          else
+            CACHE_DIR="$HOME/.cache/cibuildwheel"
+          fi
+          mkdir -p "$CACHE_DIR"
+          DEST="$CACHE_DIR/virtualenv-20.26.6.pyz"
+          if [ ! -f "$DEST" ]; then
+            curl --retry 5 --retry-delay 5 --retry-all-errors -sSL \
+              "https://github.com/pypa/get-virtualenv/blob/20.26.6/public/virtualenv.pyz?raw=true" \
+              -o "$DEST"
+          fi
       - name: Building wheel
         uses: pypa/cibuildwheel@v2.21.3
         env:
@@ -554,6 +571,17 @@ jobs:
         with:
           path: ~/.cache/cibuildwheel
           key: cibw-v2.21.3-manylinux_x86_64
+      - name: Pre-download virtualenv for cibuildwheel
+        shell: bash
+        run: |
+          CACHE_DIR="$HOME/.cache/cibuildwheel"
+          mkdir -p "$CACHE_DIR"
+          DEST="$CACHE_DIR/virtualenv-20.26.6.pyz"
+          if [ ! -f "$DEST" ]; then
+            curl --retry 5 --retry-delay 5 --retry-all-errors -sSL \
+              "https://github.com/pypa/get-virtualenv/blob/20.26.6/public/virtualenv.pyz?raw=true" \
+              -o "$DEST"
+          fi
       - name: Build wheel for Rocky Linux
         uses: pypa/cibuildwheel@v2.21.3
         env:
