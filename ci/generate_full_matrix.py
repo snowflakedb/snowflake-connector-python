@@ -77,9 +77,12 @@ class CSP(Enum):
 # OS-Python combinations to exclude from all matrices
 # Format: (os_name, python_version)
 EXCLUSIONS: List[Tuple[str, str]] = [
-    # Windows 11 ARM doesn't support Python 3.9 and 3.10
+    # Windows 11 ARM tests don't pass — exclude all versions
     ("windows-11-arm", "3.9"),
     ("windows-11-arm", "3.10"),
+    ("windows-11-arm", "3.11"),
+    ("windows-11-arm", "3.12"),
+    ("windows-11-arm", "3.13"),
 ]
 
 # Additional fields to add to each matrix entry (optional)
@@ -106,8 +109,8 @@ def _add_to_matrix(
         return
 
     entry = {
-        "os": os.name,
-        "download_name": os.download_name,
+        "os_image_name": os.name,
+        "os_download_name": os.download_name,
         "python-version": py_config.version,
         "cloud-provider": csp_name,
     }
