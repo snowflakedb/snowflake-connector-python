@@ -118,6 +118,14 @@ jobs:
           image: tonistiigi/binfmt:qemu-v8.1.5
           platforms: all
       - uses: actions/checkout@v4
+      - name: Cache cibuildwheel dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/cibuildwheel
+            ~/Library/Caches/cibuildwheel
+            ~/AppData/Local/cibuildwheel/Cache
+          key: cibw-v2.21.3-${{ matrix.download_name }}
       - name: Building wheel
         uses: pypa/cibuildwheel@v2.21.3
         env:
@@ -541,6 +549,11 @@ jobs:
           longver: ${{ matrix.python-version }}
         shell: bash
       - uses: actions/checkout@v4
+      - name: Cache cibuildwheel dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/cibuildwheel
+          key: cibw-v2.21.3-manylinux_x86_64
       - name: Build wheel for Rocky Linux
         uses: pypa/cibuildwheel@v2.21.3
         env:
