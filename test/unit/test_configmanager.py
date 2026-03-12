@@ -694,6 +694,66 @@ def test_error_config_file_writable_by_group(tmp_path):
 
 
 @pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
+def test_skip_file_permissions_check_applies_to_slices(tmp_path):
+    """Test that skip_file_permissions_check also applies to config slices (connections.toml)."""
+    config_file = tmp_path / "config.toml"
+    connections_file = tmp_path / "connections.toml"
+
+    # Create config manager with connections slice
+    cm = ConfigManager(
+        name="test",
+        file_path=config_file,
+        _slices=(ConfigSlice(connections_file, ConfigSliceOptions(), "connections"),),
+    )
+    cm.add_option(name="connections")
+
+    # Write both files
+    config_file.write_text(
+        dedent(
+            """\
+            [settings]
+            """
+        )
+    )
+    connections_file.write_text(
+        dedent(
+            """\
+            [snowflake]
+            account = "snowflake"
+            user = "snowball"
+            password = "password"
+            """
+        )
+    )
+
+    # Make connections file writable by others (would trigger error)
+    connections_file.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IWOTH)
+    file_permissions = oct(connections_file.stat().st_mode)[-3:]
+
+    # Without skip flag, reading connections.toml should raise error
+    with pytest.raises(
+        ConfigSourceError,
+        match=re.escape(
+            f"file '{str(connections_file)}' is writable by group or others — "
+            f"this poses a security risk because it allows unauthorized users "
+            f"to modify sensitive settings. Your Permission: {file_permissions}"
+        ),
+    ):
+        cm.read_config(skip_file_permissions_check=False)
+
+    # With skip flag, should not raise error
+    cm.conf_file_cache = None  # Reset cache
+    cm.read_config(skip_file_permissions_check=True)
+    assert cm["connections"] == {
+        "snowflake": {
+            "account": "snowflake",
+            "user": "snowball",
+            "password": "password",
+        }
+    }
+
+
+@pytest.mark.skipif(IS_WINDOWS, reason="chmod doesn't work on Windows")
 def test_skip_warning_config_file_permissions(tmp_path, monkeypatch):
     c_file = tmp_path / "config.toml"
     c1 = ConfigManager(file_path=c_file, name="root_parser")
