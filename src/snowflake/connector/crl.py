@@ -64,7 +64,7 @@ class CRLConfig:
     crl_cache_removal_delay_days: int = 7
     crl_cache_cleanup_interval_hours: int = 1
     crl_cache_start_cleanup: bool = False
-    crl_download_max_size: int = 200 * 1024 * 1024  # 200 MB
+    crl_download_max_size: int = 20 * 1024 * 1024  # 20 MB
     unsafe_skip_file_permissions_check: bool = False
 
     @classmethod
