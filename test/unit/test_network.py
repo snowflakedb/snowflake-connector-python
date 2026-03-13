@@ -97,8 +97,7 @@ def test_fetch_auth():
     rest = SnowflakeRestful(
         host="test.snowflakecomputing.com", port=443, connection=connection
     )
-    rest._token = "test-token"
-    rest._master_token = "test-master-token"
+    rest.update_tokens("test-token", "test-master-token")
 
     captured_auth = None
 
@@ -143,3 +142,31 @@ def test_fetch_auth():
         )
     assert isinstance(captured_auth, PATWithExternalSessionAuth)
     assert captured_auth.external_session_id == "dummy-external-session-id"
+
+
+def test_token_state_snapshot_preserves_attributes():
+    connection = mock_connection()
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com", port=443, connection=connection
+    )
+
+    rest.update_tokens("legacy-session", "legacy-master")
+
+    state = rest._get_token_state()
+    assert state.session_token == "legacy-session"
+    assert state.master_token == "legacy-master"
+
+    rest.update_tokens(
+        "new-session",
+        "new-master",
+        master_validity_in_seconds=42,
+        id_token="id-token",
+        mfa_token="mfa-token",
+    )
+
+    updated_state = rest._get_token_state()
+    assert updated_state.session_token == "new-session"
+    assert updated_state.master_token == "new-master"
+    assert rest.master_validity_in_seconds == 42
+    assert rest.token == "new-session"
+    assert rest.master_token == "new-master"
