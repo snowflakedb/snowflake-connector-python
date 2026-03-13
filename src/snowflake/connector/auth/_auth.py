@@ -56,12 +56,14 @@ from ..network import (
     PYTHON_CONNECTOR_USER_AGENT,
     ReauthenticationRequest,
 )
+from ..os_details import get_os_details
 from ..platform_detection import detect_platforms
 from ..session_manager import BaseHttpConfig, HttpConfig
 from ..session_manager import SessionManager as SyncSessionManager
 from ..session_manager import SessionManagerFactory
 from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..token_cache import TokenCache, TokenKey, TokenType
+from ..util_text import expand_tilde
 from ..version import VERSION
 from .no_auth import AuthNoAuth
 from .oauth import AuthByOAuth
@@ -87,6 +89,7 @@ AUTHENTICATION_REQUEST_KEY_WHITELIST = {
     "CLIENT_ENVIRONMENT",
     "EXT_AUTHN_DUO_METHOD",
     "LOGIN_NAME",
+    "SECONDARY_ROLES",
     "SESSION_PARAMETERS",
     "SVN_REVISION",
 }
@@ -159,6 +162,7 @@ class Auth:
                         platform_detection_timeout_seconds=platform_detection_timeout_seconds,
                         session_manager=session_manager.clone(max_retries=0),
                     ),
+                    "OS_DETAILS": get_os_details(),
                     **build_minicore_usage_for_session(),
                 },
             },
@@ -258,6 +262,11 @@ class Auth:
 
         if session_parameters:
             body["data"]["SESSION_PARAMETERS"] = session_parameters
+
+        # Add secondary_roles connection parameter if specified
+        secondary_roles = getattr(self._rest._connection, "_secondary_roles", None)
+        if secondary_roles and isinstance(secondary_roles, str):
+            body["data"]["SECONDARY_ROLES"] = secondary_roles.upper()
 
         logger.debug(
             "body['data']: %s",
@@ -641,6 +650,8 @@ def get_token_from_private_key(
 
 def get_public_key_fingerprint(private_key_file: str, password: str) -> str:
     """Helper function to generate the public key fingerprint from the private key file"""
+    private_key_file = expand_tilde(private_key_file)
+
     with open(private_key_file, "rb") as key:
         p_key = load_pem_private_key(
             key.read(), password=password.encode(), backend=default_backend()

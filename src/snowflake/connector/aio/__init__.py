@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-# temporarily disable aio - SNOW-2905263
-raise ImportError("aio is not supported in this version of the connector")
-
-
 from functools import wraps
 from typing import Any, Coroutine, Generator, Protocol, TypeVar, runtime_checkable
 
