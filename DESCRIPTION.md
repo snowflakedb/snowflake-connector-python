@@ -7,6 +7,10 @@ https://docs.snowflake.com/
 Source code is also available at: https://github.com/snowflakedb/snowflake-connector-python
 
 # Release Notes
+- Upcoming Release
+  - Fixed default `crl_download_max_size` to be 20MB instead of 200MB, as the previous value was set too high and could cause out-of-memory issues.
+  - Fixed a bug where Azure GET commands would incorrectly set the file status to UPLOADED instead of preserving the DOWNLOADED status during metadata retrieval.
+
 - v4.3.0(February 12,2026)
   - Ensured proper list conversion - the converter runs to_snowflake on all list elements.
   - Made the parameter `server_session_keep_alive` in `SnowflakeConnection` skip checking for pending async queries, providing faster connection close times especially when many async queries are executed.
