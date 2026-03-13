@@ -333,6 +333,38 @@ def test_aws_impersonation_calls_correct_apis_for_each_role_in_impersonation_pat
     assert fake_aws_environment.assume_role_call_count == 2
 
 
+@pytest.mark.parametrize(
+    "env_value,expected_format",
+    [
+        ("true", "jwt"),
+        ("false", "old"),
+        (None, "old"),
+    ],
+)
+def test_aws_token_format_based_on_env_variable(
+    fake_aws_environment: FakeAwsEnvironment,
+    monkeypatch,
+    env_value,
+    expected_format,
+):
+    """Test that AWS uses correct token format based on ENABLE_AWS_WIF_OUTBOUND_TOKEN environment variable."""
+    if env_value is not None:
+        monkeypatch.setenv("ENABLE_AWS_WIF_OUTBOUND_TOKEN", env_value)
+
+    auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
+    auth_class.prepare(conn=None)
+
+    data = extract_api_data(auth_class)
+
+    assert data["AUTHENTICATOR"] == "WORKLOAD_IDENTITY"
+    assert data["PROVIDER"] == "AWS"
+
+    if expected_format == "jwt":
+        assert data["TOKEN"] == fake_aws_environment.web_identity_token
+    else:
+        verify_aws_token(data["TOKEN"], fake_aws_environment.region)
+
+
 # -- GCP Tests --
 
 
