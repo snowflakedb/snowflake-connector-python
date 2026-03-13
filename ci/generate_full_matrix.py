@@ -63,7 +63,8 @@ class Python(Enum):
     PY310 = PythonVersion("3.10", test_on_pr=False)
     PY311 = PythonVersion("3.11", test_on_pr=False)
     PY312 = PythonVersion("3.12", test_on_pr=False)
-    PY313 = PythonVersion("3.13", test_on_pr=True)
+    PY313 = PythonVersion("3.13", test_on_pr=False)
+    PY314 = PythonVersion("3.14", test_on_pr=True)
 
 
 class CSP(Enum):
@@ -83,6 +84,7 @@ EXCLUSIONS: List[Tuple[str, str]] = [
     ("windows-11-arm", "3.11"),
     ("windows-11-arm", "3.12"),
     ("windows-11-arm", "3.13"),
+    ("windows-11-arm", "3.14"),
 ]
 
 # Additional fields to add to each matrix entry (optional)
