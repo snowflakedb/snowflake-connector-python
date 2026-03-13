@@ -7,7 +7,8 @@ from unittest.mock import Mock, PropertyMock, patch
 import pytest
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.serialization import load_der_private_key
 from pytest import raises
@@ -41,7 +42,7 @@ def _create_mock_auth_keypair_rest_response():
 @pytest.mark.parametrize("authenticator", ["SNOWFLAKE_JWT", "snowflake_jwt"])
 def test_auth_keypair(authenticator):
     """Simple Key Pair test."""
-    private_key_der, public_key_der_encoded = generate_key_pair(2048)
+    private_key_der, public_key_der_encoded = generate_rsa_key_pair(2048)
     application = "testapplication"
     account = "testaccount"
     user = "testuser"
@@ -68,7 +69,7 @@ def test_auth_keypair_with_passphrase():
     """Simple Key Pair test with passphrase."""
 
     passphrase = b"test"
-    private_key_der, public_key_der_encoded = generate_key_pair(
+    private_key_der, public_key_der_encoded = generate_rsa_key_pair(
         2048,
         passphrase=passphrase,
     )
@@ -102,7 +103,7 @@ def test_auth_keypair_encrypted_without_passphrase():
     from snowflake.connector.errors import ProgrammingError
 
     passphrase = b"test"
-    private_key_der, _ = generate_key_pair(
+    private_key_der, _ = generate_rsa_key_pair(
         2048,
         passphrase=passphrase,
     )
@@ -124,7 +125,7 @@ def test_auth_keypair_wrong_passphrase():
     from snowflake.connector.errors import ProgrammingError
 
     passphrase = b"correct_passphrase"
-    private_key_der, _ = generate_key_pair(
+    private_key_der, _ = generate_rsa_key_pair(
         2048,
         passphrase=passphrase,
     )
@@ -145,7 +146,7 @@ def test_auth_keypair_wrong_passphrase():
 
 
 def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
-    private_key_der, _ = generate_key_pair(2048)
+    private_key_der, _ = generate_rsa_key_pair(2048)
     auth_class = AuthByKeyPair(private_key=private_key_der)
 
     req_body_before = create_mock_auth_body()
@@ -162,7 +163,7 @@ def test_auth_prepare_body_does_not_overwrite_client_environment_fields():
 
 def test_auth_keypair_abc():
     """Simple Key Pair test using abstraction layer."""
-    private_key_der, public_key_der_encoded = generate_key_pair(2048)
+    private_key_der, public_key_der_encoded = generate_rsa_key_pair(2048)
     application = "testapplication"
     account = "testaccount"
     user = "testuser"
@@ -211,7 +212,7 @@ def test_auth_keypair_bad_type():
 
 @patch("snowflake.connector.auth.keypair.AuthByKeyPair.prepare")
 def test_renew_token(mockPrepare):
-    private_key_der, _ = generate_key_pair(2048)
+    private_key_der, _ = generate_rsa_key_pair(2048)
     auth_instance = AuthByKeyPair(private_key=private_key_der)
 
     # force renew condition to be met
@@ -249,7 +250,7 @@ def _init_rest(application, post_requset):
     return rest
 
 
-def generate_key_pair(key_length: int, *, passphrase: bytes | None = None):
+def generate_rsa_key_pair(key_length: int, *, passphrase: bytes | None = None):
     private_key = rsa.generate_private_key(
         backend=default_backend(), public_exponent=65537, key_size=key_length
     )
@@ -276,6 +277,148 @@ def generate_key_pair(key_length: int, *, passphrase: bytes | None = None):
     public_key_der_encoded = "".join(public_key_pem.split("\n")[1:-2])
 
     return private_key_der, public_key_der_encoded
+
+
+def generate_ec_key_pair(
+    curve: ec.EllipticCurve,
+    *,
+    passphrase: bytes | None = None,
+):
+    private_key = ec.generate_private_key(curve, default_backend())
+
+    private_key_der = private_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=(
+            serialization.BestAvailableEncryption(passphrase)
+            if passphrase
+            else serialization.NoEncryption()
+        ),
+    )
+
+    public_key_pem = (
+        private_key.public_key()
+        .public_bytes(
+            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+        )
+        .decode("utf-8")
+    )
+
+    # strip off header
+    public_key_der_encoded = "".join(public_key_pem.split("\n")[1:-2])
+
+    return private_key_der, public_key_der_encoded
+
+
+@pytest.mark.skipolddriver
+@pytest.mark.parametrize(
+    "curve",
+    [ec.SECP256R1(), ec.SECP384R1(), ec.SECP521R1()],
+    ids=["P-256", "P-384", "P-521"],
+)
+def test_auth_keypair_ecdsa(curve):
+    """ECDSA Key Pair test for supported curves."""
+    private_key_der, _ = generate_ec_key_pair(curve)
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    auth_instance = AuthByKeyPair(private_key=private_key_der)
+    auth_instance._retry_ctx.set_start_time()
+    auth_instance.handle_timeout(
+        authenticator="SNOWFLAKE_JWT",
+        service_name=None,
+        account=account,
+        user=user,
+        password=None,
+    )
+
+    rest = _init_rest(application, _create_mock_auth_keypair_rest_response())
+    auth = Auth(rest)
+    auth.authenticate(auth_instance, account, user)
+    assert not rest._connection.errorhandler.called
+    assert rest.token == "TOKEN"
+    assert rest.master_token == "MASTER_TOKEN"
+
+
+@pytest.mark.skipolddriver
+def test_auth_keypair_ecdsa_with_passphrase():
+    """ECDSA Key Pair test with passphrase."""
+    passphrase = b"test"
+    private_key_der, _ = generate_ec_key_pair(ec.SECP256R1(), passphrase=passphrase)
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+    auth_instance = AuthByKeyPair(
+        private_key=private_key_der,
+        private_key_passphrase=passphrase,
+    )
+    auth_instance._retry_ctx.set_start_time()
+    auth_instance.handle_timeout(
+        authenticator="SNOWFLAKE_JWT",
+        service_name=None,
+        account=account,
+        user=user,
+        password=None,
+    )
+
+    rest = _init_rest(application, _create_mock_auth_keypair_rest_response())
+    auth = Auth(rest)
+    auth.authenticate(auth_instance, account, user)
+    assert not rest._connection.errorhandler.called
+    assert rest.token == "TOKEN"
+    assert rest.master_token == "MASTER_TOKEN"
+
+
+@pytest.mark.skipolddriver
+def test_auth_keypair_ecdsa_abc():
+    """ECDSA Key Pair test using abstraction layer."""
+    private_key_der, _ = generate_ec_key_pair(ec.SECP256R1())
+    application = "testapplication"
+    account = "testaccount"
+    user = "testuser"
+
+    private_key = load_der_private_key(
+        data=private_key_der,
+        password=None,
+        backend=default_backend(),
+    )
+
+    assert isinstance(private_key, EllipticCurvePrivateKey)
+
+    auth_instance = AuthByKeyPair(private_key=private_key)
+    auth_instance._retry_ctx.set_start_time()
+    auth_instance.handle_timeout(
+        authenticator="SNOWFLAKE_JWT",
+        service_name=None,
+        account=account,
+        user=user,
+        password=None,
+    )
+
+    rest = _init_rest(application, _create_mock_auth_keypair_rest_response())
+    auth = Auth(rest)
+    auth.authenticate(auth_instance, account, user)
+    assert not rest._connection.errorhandler.called
+    assert rest.token == "TOKEN"
+    assert rest.master_token == "MASTER_TOKEN"
+
+
+@pytest.mark.skipolddriver
+def test_auth_keypair_ecdsa_unsupported_curve():
+    """Test that unsupported EC curve raises error."""
+    from snowflake.connector.errors import ProgrammingError
+
+    # SECP192R1 is not supported
+    private_key_der, _ = generate_ec_key_pair(ec.SECP192R1())
+    account = "testaccount"
+    user = "testuser"
+
+    auth_instance = AuthByKeyPair(private_key=private_key_der)
+
+    with raises(ProgrammingError) as ex:
+        auth_instance.prepare(account=account, user=user)
+
+    assert "Unsupported EC curve" in str(ex.value)
 
 
 @pytest.mark.skipolddriver
