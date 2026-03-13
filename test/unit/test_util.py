@@ -85,16 +85,15 @@ class TestCoreLoader:
         with mock.patch("platform.machine", return_value=machine):
             assert _CoreLoader._detect_arch() == expected
 
-    def test_detect_libc_alpine(self, tmp_path):
-        """Test _detect_libc returns musl on Alpine Linux."""
-        with mock.patch("pathlib.Path.exists", return_value=True):
-            assert _CoreLoader._detect_libc() == "musl"
+    def test_detect_libc_glibc(self):
+        """Test _detect_libc returns glibc when platform reports glibc."""
+        with mock.patch("platform.libc_ver", return_value=("glibc", "2.31")):
+            assert _CoreLoader._detect_libc() == "glibc"
 
-    def test_detect_libc_glibc_default(self):
-        """Test _detect_libc returns glibc by default."""
-        with mock.patch("pathlib.Path.exists", return_value=False):
-            with mock.patch("subprocess.run", side_effect=Exception("not found")):
-                assert _CoreLoader._detect_libc() == "glibc"
+    def test_detect_libc_musl(self):
+        """Test _detect_libc returns musl when platform does not report glibc."""
+        with mock.patch("platform.libc_ver", return_value=("", "")):
+            assert _CoreLoader._detect_libc() == "musl"
 
     @pytest.mark.parametrize(
         "os_name,arch,libc,expected_subdir",
