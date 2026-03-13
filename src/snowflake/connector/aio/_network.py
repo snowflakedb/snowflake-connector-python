@@ -78,6 +78,7 @@ from ..sqlstate import (
     SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED,
 )
 from ..time_util import TimeoutBackoffCtx
+from ..xp import is_xp_environment
 from ._description import CLIENT_NAME
 from ._session_manager import (
     SessionManager,
@@ -858,3 +859,54 @@ class SnowflakeRestful(SnowflakeRestfulSync):
     ) -> AsyncGenerator[aiohttp.ClientSession]:
         async with self._session_manager.use_session(url) as session:
             yield session
+
+
+def create_restful_client(
+    host: str = "127.0.0.1",
+    port: int = 8080,
+    protocol: str = "http",
+    inject_client_pause: int = 0,
+    connection: SnowflakeConnection | None = None,
+    session_manager: SessionManager | None = None,
+) -> SnowflakeRestful | SnowflakeRestfulSync:
+    """Factory function to create appropriate REST client based on environment.
+
+    In XP environment, returns XPRestful (sync) which uses direct XP API calls.
+    The XP modules are synchronous, so we return the sync version even in async context.
+    Otherwise, returns async SnowflakeRestful which uses HTTP.
+
+    Args:
+        host: Server hostname
+        port: Server port
+        protocol: Protocol (http/https)
+        inject_client_pause: Client pause injection for testing
+        connection: Snowflake connection object
+        session_manager: Session manager for HTTP requests
+
+    Returns:
+        Appropriate REST client instance
+    """
+    if is_xp_environment():
+        logger.debug(
+            "Creating XPRestful client for XP environment (sync, even in async context)"
+        )
+        from ..xp.network import XPRestful
+
+        return XPRestful(
+            host=host,
+            port=port,
+            protocol=protocol,
+            inject_client_pause=inject_client_pause,
+            connection=connection,
+            session_manager=session_manager,
+        )
+    else:
+        logger.debug("Creating async SnowflakeRestful client for standard environment")
+        return SnowflakeRestful(
+            host=host,
+            port=port,
+            protocol=protocol,
+            inject_client_pause=inject_client_pause,
+            connection=connection,
+            session_manager=session_manager,
+        )

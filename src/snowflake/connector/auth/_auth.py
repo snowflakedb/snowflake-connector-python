@@ -65,6 +65,7 @@ from ..sqlstate import SQLSTATE_CONNECTION_WAS_NOT_ESTABLISHED
 from ..token_cache import TokenCache, TokenKey, TokenType
 from ..util_text import expand_tilde
 from ..version import VERSION
+from ..xp import is_xp_environment
 from .no_auth import AuthNoAuth
 from .oauth import AuthByOAuth
 
@@ -190,6 +191,10 @@ class Auth:
         # For no-auth connection, authentication is no-op, and we can return early here.
         if isinstance(auth_instance, AuthNoAuth):
             return {}
+
+        # XP environment: bypass HTTP authentication and use XP API
+        if is_xp_environment():
+            return self._authenticate_xp(session_parameters or {})
 
         if timeout is None:
             timeout = auth_instance.timeout
@@ -623,6 +628,53 @@ class Auth:
                 skip_file_permissions_check=self._rest._connection._unsafe_skip_file_permissions_check
             )
         return self._token_cache
+
+    def _authenticate_xp(
+        self, session_parameters: dict[Any, Any]
+    ) -> dict[str, str | int | bool]:
+        """Authenticate in XP environment using direct XP API calls.
+
+        This method bypasses HTTP authentication and directly fetches session
+        parameters from the XP environment.
+
+        Args:
+            session_parameters: Session parameters to be populated
+
+        Returns:
+            Dictionary of session parameters
+        """
+        logger.debug("Authenticating in XP environment")
+
+        try:
+            import _snowflake
+
+            # Execute a simple query with describe_only to fetch session parameters
+            # This is equivalent to the monkey-patched authentication approach
+            result = _snowflake.execute_sql(
+                "SELECT 1",
+                is_describe_only=True,
+                stmt_params=None,
+                binding_params=None,
+                _no_results=False,
+            )
+
+            # Extract parameters from result
+            if isinstance(result, dict) and "parameters" in result:
+                for param in result["parameters"]:
+                    if isinstance(param, dict) and "name" in param and "value" in param:
+                        session_parameters[param["name"]] = param["value"]
+
+            # Update connection parameters
+            if session_parameters:
+                self._rest._connection._update_parameters(session_parameters)
+
+            logger.debug("XP authentication completed")
+            return session_parameters
+
+        except Exception as e:
+            logger.error(f"XP authentication failed: {e}", exc_info=True)
+            # Fall back to empty parameters if XP authentication fails
+            return session_parameters
 
 
 def get_token_from_private_key(
