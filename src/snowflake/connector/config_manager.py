@@ -339,8 +339,17 @@ class ConfigManager:
                 del read_config_file[section]
             try:
                 if not filep.exists():
+                    # Python 3.14+ (cpython#118243): Path.exists() suppresses
+                    # PermissionError and returns False instead of raising, so
+                    # we explicitly check parent directory access.
+                    if not os.access(filep.parent, os.R_OK | os.X_OK):
+                        LOGGER.debug(
+                            f"Fail to read configuration file from {str(filep)} due to no permission on its parent directory"
+                        )
                     continue
             except PermissionError:
+                # Python < 3.14: Path.exists() raises PermissionError when
+                # the parent directory is not accessible.
                 LOGGER.debug(
                     f"Fail to read configuration file from {str(filep)} due to no permission on its parent directory"
                 )
