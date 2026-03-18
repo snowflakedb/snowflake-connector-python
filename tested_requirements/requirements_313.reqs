@@ -13,7 +13,7 @@ packaging==26.0
 platformdirs==4.5.1
 pycparser==3.0
 PyJWT==2.11.0
-pyOpenSSL==25.3.0
+pyOpenSSL==26.0.0
 python-dateutil==2.9.0.post0
 pytz==2025.2
 requests==2.32.5

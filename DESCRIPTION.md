@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - Upcoming Release
+  - Removed pyOpenSSL upper bound dependency constraint to allow installation of pyOpenSSL 26.0.0+, which includes a fix for GHSA-vp96-hxj8-p424.
   - Fixed Azure IMDS `Metadata` header to use lowercase `"true"` instead of `"True"`, which caused 400 errors during Azure Workload Identity Federation authentication.
   - Fixed default `crl_download_max_size` to be 20MB instead of 200MB, as the previous value was set too high and could cause out-of-memory issues.
   - Fixed a bug where Azure GET commands would incorrectly set the file status to UPLOADED instead of preserving the DOWNLOADED status during metadata retrieval.
