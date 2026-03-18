@@ -195,7 +195,7 @@ def is_azure_vm(
     try:
         token_resp = session_manager.get(
             "http://169.254.169.254/metadata/instance?api-version=2021-02-01",
-            headers={"Metadata": "True"},
+            headers={"Metadata": "true"},
             timeout=platform_detection_timeout_seconds,
         )
         return (
