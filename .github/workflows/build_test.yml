@@ -102,6 +102,10 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.define-matrix.outputs.test_matrix) }}
     name: Build ${{ matrix.os_download_name }}-py${{ matrix.python-version }}
+    # Build is independent of cloud-provider, so we only run it once per (os, python) combo.
+    # Without this, multiple matrix entries would try to upload artifacts with the same name,
+    # causing 409 Conflict errors on workflow re-runs.
+    if: ${{ matrix.cloud-provider == 'aws' }}
     runs-on: ${{ matrix.os_image_name }}
     steps:
       - name: Set shortver
