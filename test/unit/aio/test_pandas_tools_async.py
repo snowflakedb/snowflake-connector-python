@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -21,18 +21,18 @@ def mock_connection():
 
 @pytest.fixture
 def mock_cursor(mock_connection):
-    cursor = MagicMock()
+    cursor = AsyncMock()
     mock_connection.cursor.return_value = cursor
 
-    def _execute_side_effect(sql, *args, **kwargs):
-        result = MagicMock()
+    async def _execute_side_effect(sql, *args, **kwargs):
+        result = AsyncMock()
         if "infer_schema" in sql:
             result.fetchall.return_value = _INFER_SCHEMA_RESULT
         elif "COPY INTO" in sql:
             result.fetchall.return_value = _COPY_RESULT
         return result
 
-    cursor.execute.side_effect = _execute_side_effect
+    cursor.execute = AsyncMock(side_effect=_execute_side_effect)
     return cursor
 
 
@@ -41,25 +41,29 @@ def _get_executed_sqls(mock_cursor):
     return [c.args[0] for c in mock_cursor.execute.call_args_list]
 
 
-class TestWritePandasOverwriteWithoutAutoCreate:
-    """Tests for SNOW-1184290: write_pandas() with auto_create_table=False and
+class TestWritePandasAsyncOverwriteWithoutAutoCreate:
+    """Tests for SNOW-1184290: async write_pandas() with auto_create_table=False and
     overwrite=True should NOT execute CREATE TABLE IF NOT EXISTS."""
 
+    @pytest.mark.asyncio
     @patch(
-        "snowflake.connector.pandas_tools._create_temp_stage", return_value="tmp_stage"
+        "snowflake.connector.aio._pandas_tools._create_temp_stage",
+        new_callable=AsyncMock,
+        return_value="tmp_stage",
     )
     @patch(
-        "snowflake.connector.pandas_tools._create_temp_file_format",
+        "snowflake.connector.aio._pandas_tools._create_temp_file_format",
+        new_callable=AsyncMock,
         return_value="tmp_fmt",
     )
-    def test_overwrite_without_auto_create_does_not_create_table(
+    async def test_overwrite_without_auto_create_does_not_create_table(
         self, mock_file_format, mock_stage, mock_connection, mock_cursor
     ):
-        from snowflake.connector.pandas_tools import write_pandas
+        from snowflake.connector.aio._pandas_tools import write_pandas
 
         df = pandas.DataFrame([("Mark", 10)], columns=["name", "points"])
 
-        write_pandas(
+        await write_pandas(
             mock_connection,
             df,
             "test_table",
@@ -75,21 +79,25 @@ class TestWritePandasOverwriteWithoutAutoCreate:
             "TRUNCATE" in sql for sql in executed_sqls
         ), "Expected TRUNCATE TABLE when overwrite=True and auto_create_table=False"
 
+    @pytest.mark.asyncio
     @patch(
-        "snowflake.connector.pandas_tools._create_temp_stage", return_value="tmp_stage"
+        "snowflake.connector.aio._pandas_tools._create_temp_stage",
+        new_callable=AsyncMock,
+        return_value="tmp_stage",
     )
     @patch(
-        "snowflake.connector.pandas_tools._create_temp_file_format",
+        "snowflake.connector.aio._pandas_tools._create_temp_file_format",
+        new_callable=AsyncMock,
         return_value="tmp_fmt",
     )
-    def test_overwrite_with_auto_create_does_create_table(
+    async def test_overwrite_with_auto_create_does_create_table(
         self, mock_file_format, mock_stage, mock_connection, mock_cursor
     ):
-        from snowflake.connector.pandas_tools import write_pandas
+        from snowflake.connector.aio._pandas_tools import write_pandas
 
         df = pandas.DataFrame([("Mark", 10)], columns=["name", "points"])
 
-        write_pandas(
+        await write_pandas(
             mock_connection,
             df,
             "test_table",
@@ -105,17 +113,20 @@ class TestWritePandasOverwriteWithoutAutoCreate:
             "TRUNCATE" in sql for sql in executed_sqls
         ), "Should not TRUNCATE when auto_create_table=True (uses drop+rename instead)"
 
+    @pytest.mark.asyncio
     @patch(
-        "snowflake.connector.pandas_tools._create_temp_stage", return_value="tmp_stage"
+        "snowflake.connector.aio._pandas_tools._create_temp_stage",
+        new_callable=AsyncMock,
+        return_value="tmp_stage",
     )
-    def test_no_overwrite_no_auto_create_no_create_table(
+    async def test_no_overwrite_no_auto_create_no_create_table(
         self, mock_stage, mock_connection, mock_cursor
     ):
-        from snowflake.connector.pandas_tools import write_pandas
+        from snowflake.connector.aio._pandas_tools import write_pandas
 
         df = pandas.DataFrame([("Mark", 10)], columns=["name", "points"])
 
-        write_pandas(
+        await write_pandas(
             mock_connection,
             df,
             "test_table",
