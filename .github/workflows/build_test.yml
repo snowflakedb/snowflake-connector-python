@@ -37,6 +37,7 @@ jobs:
     runs-on: "ubuntu-latest"
     outputs:
       test_matrix: ${{ steps.test_matrix.outputs.test_matrix }}
+      build_matrix: ${{ steps.test_matrix.outputs.build_matrix }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -47,11 +48,13 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "Using full matrix"
-            echo "test_matrix=$(jq -c . < ./.github/workflows/generated_full_matrix.json)" >> "$GITHUB_OUTPUT"
+            MATRIX=$(jq -c . < ./.github/workflows/generated_full_matrix.json)
           else
             echo "Using PR matrix"
-            echo "test_matrix=$(jq -c . < ./.github/workflows/generated_pr_matrix.json)" >> "$GITHUB_OUTPUT"
+            MATRIX=$(jq -c . < ./.github/workflows/generated_pr_matrix.json)
           fi
+          echo "test_matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "build_matrix=$(echo "$MATRIX" | jq -c '[group_by(.os_download_name, .["python-version"]) | .[] | first]')" >> "$GITHUB_OUTPUT"
   lint:
     name: Check linting
     runs-on: ubuntu-latest
@@ -100,7 +103,7 @@ jobs:
     needs: [lint, define-matrix]
     strategy:
       matrix:
-        include: ${{ fromJSON(needs.define-matrix.outputs.test_matrix) }}
+        include: ${{ fromJSON(needs.define-matrix.outputs.build_matrix) }}
     name: Build ${{ matrix.os_download_name }}-py${{ matrix.python-version }}
     runs-on: ${{ matrix.os_image_name }}
     steps:
