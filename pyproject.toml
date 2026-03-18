@@ -18,13 +18,6 @@ archs = ["x86_64", "aarch64"]
 # Exclude pre-built minicore libraries from auditwheel repair
 repair-wheel-command = ""
 
-# Python 3.14 is not available in the manylinux2014 (CentOS 7) image
-[[tool.cibuildwheel.overrides]]
-select = "cp314-*"
-manylinux-x86_64-image = "manylinux_2_28"
-manylinux-aarch64-image = "manylinux_2_28"
-environment = {AUDITWHEEL_PLAT="manylinux_2_28_$(uname -m)"}
-
 [tool.cibuildwheel.macos]
 archs = ["x86_64", "arm64"]
 # Don't repair macOS wheels
