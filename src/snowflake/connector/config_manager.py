@@ -333,7 +333,20 @@ class ConfigManager:
         )
         for filep, sliceoptions, section in itertools.chain(
             ((self.file_path, config_slice_options, None),),
-            self._slices,
+            (
+                (
+                    s.path,
+                    (
+                        s.options._replace(
+                            check_permissions=not skip_file_permissions_check
+                        )
+                        if skip_file_permissions_check
+                        else s.options
+                    ),
+                    s.section,
+                )
+                for s in self._slices
+            ),
         ):
             if sliceoptions.only_in_slice:
                 del read_config_file[section]
