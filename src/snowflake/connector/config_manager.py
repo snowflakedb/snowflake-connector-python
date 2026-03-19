@@ -333,14 +333,36 @@ class ConfigManager:
         )
         for filep, sliceoptions, section in itertools.chain(
             ((self.file_path, config_slice_options, None),),
-            self._slices,
+            (
+                (
+                    s.path,
+                    (
+                        s.options._replace(
+                            check_permissions=not skip_file_permissions_check
+                        )
+                        if skip_file_permissions_check
+                        else s.options
+                    ),
+                    s.section,
+                )
+                for s in self._slices
+            ),
         ):
             if sliceoptions.only_in_slice:
                 del read_config_file[section]
             try:
                 if not filep.exists():
+                    # Python 3.14+ (cpython#118243): Path.exists() suppresses
+                    # PermissionError and returns False instead of raising, so
+                    # we explicitly check parent directory access.
+                    if not os.access(filep.parent, os.R_OK | os.X_OK):
+                        LOGGER.debug(
+                            f"Fail to read configuration file from {str(filep)} due to no permission on its parent directory"
+                        )
                     continue
             except PermissionError:
+                # Python < 3.14: Path.exists() raises PermissionError when
+                # the parent directory is not accessible.
                 LOGGER.debug(
                     f"Fail to read configuration file from {str(filep)} due to no permission on its parent directory"
                 )

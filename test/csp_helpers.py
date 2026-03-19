@@ -180,13 +180,13 @@ class FakeAzureVmMetadataService(FakeMetadataService):
         if (
             method == "GET"
             and parsed_url.path == "/metadata/instance"
-            and headers.get("Metadata") == "True"
+            and headers.get("Metadata") == "true"
         ):
             return build_response(content=b"", status_code=200)
         elif (
             method == "GET"
             and parsed_url.path == "/metadata/identity/oauth2/token"
-            and headers.get("Metadata") == "True"
+            and headers.get("Metadata") == "true"
             and query_string["resource"]
             and self.has_token_endpoint
         ):
