@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from unittest.mock import Mock
 
 import pytest
@@ -221,3 +222,80 @@ def test_cursor_download_uses_original_http_config(
     # Every ResultBatch download reused the same HTTP configuration values
     for cfg in download_cfgs:
         assert cfg == original_cfg
+
+
+# ---------------------------------------------------------------------------
+# Multichunk JSON gzip decompression regression test
+#
+# Verifies that the _ensure_decompressed safety net in _download() correctly
+# handles the case where the HTTP transport does not decompress gzip chunk
+# responses (missing Content-Encoding: gzip header from cloud storage).
+#
+# The standard Snowflake download path *does* decompress correctly because
+# the server sets Content-Encoding: gzip and urllib3 honours it.  The client
+# failure occurs under environmental conditions we cannot reproduce in CI
+# (e.g. a corporate proxy or CDN stripping Content-Encoding).
+#
+# To prove the safety net works we instrument _download to strip the
+# Content-Encoding header from the *real* server response before urllib3
+# consumes it, forcing urllib3 to skip decompression.
+# ---------------------------------------------------------------------------
+
+
+def _strip_content_encoding(response):
+    """Remove Content-Encoding from a urllib3 raw response so decompression is skipped.
+
+    Must be called *before* response.content is accessed (i.e. before the
+    requests library iterates the body), because once the body is consumed
+    the encoding has already been (or not been) applied.
+    """
+    if hasattr(response, "raw") and response.raw is not None:
+        response.raw.headers.pop("Content-Encoding", None)
+        response.raw.headers.pop("content-encoding", None)
+        response.raw._decoder = None
+        response.raw.decode_content = False
+
+
+@pytest.mark.aws
+@pytest.mark.skipolddriver
+def test_multichunk_json_gzip_decompression_with_fix(
+    conn_cnx, db_parameters, ingest_data
+):
+    """With _ensure_decompressed active, multichunk JSON downloads succeed
+    even when the HTTP layer skips gzip decompression."""
+    from snowflake.connector.vendored.requests.adapters import HTTPAdapter
+
+    original_send = HTTPAdapter.send
+    chunks_intercepted = 0
+    chunks_intercepted_lock = threading.Lock()
+
+    def send_strip_encoding(self, request, *args, **kwargs):
+        """Intercept the adapter to strip Content-Encoding after the real
+        HTTP round-trip but before requests reads the body."""
+        nonlocal chunks_intercepted
+        response = original_send(self, request, *args, **kwargs)
+        if response.status_code == 200:
+            _strip_content_encoding(response)
+            with chunks_intercepted_lock:
+                chunks_intercepted += 1
+        return response
+
+    table_name = db_parameters["name"]
+    with conn_cnx(
+        session_parameters={"python_connector_query_result_format": "JSON"},
+    ) as cnx:
+        original_adapter_send = HTTPAdapter.send
+        HTTPAdapter.send = send_strip_encoding
+        try:
+            cur = cnx.cursor()
+            cur.execute(f"select * from {table_name} order by 1")
+            rows = cur.fetchall()
+        finally:
+            HTTPAdapter.send = original_adapter_send
+
+    assert (
+        len(rows) == NUMBER_OF_ROWS
+    ), f"Expected {NUMBER_OF_ROWS} rows, got {len(rows)}"
+    assert (
+        chunks_intercepted > 0
+    ), "No HTTP responses were intercepted -- test didn't exercise the fix"
