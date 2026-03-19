@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from snowflake.connector.options import pandas
+pandas = pytest.importorskip("pandas")
 
 # Fake COPY INTO result row: (file, status, rows_parsed, rows_loaded, ...)
 _COPY_RESULT = [("file0.txt", "LOADED", 1, 1, 0, 0, None, None, None, None)]
@@ -41,6 +41,8 @@ def _get_executed_sqls(mock_cursor):
     return [c.args[0] for c in mock_cursor.execute.call_args_list]
 
 
+@pytest.mark.pandas
+@pytest.mark.unit
 class TestWritePandasOverwriteWithoutAutoCreate:
     """Tests for SNOW-1184290: write_pandas() with auto_create_table=False and
     overwrite=True should NOT execute CREATE TABLE IF NOT EXISTS."""
