@@ -170,15 +170,15 @@ def main():
     print(f"✓ Written to: {pr_path}")
 
     # Final summary
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("✅ Successfully generated both matrices")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
     print(f"  Full matrix: {len(full_matrix):2d} combinations")
     print(
         f"  PR matrix:   {len(pr_matrix):2d} combinations (saves {len(full_matrix) - len(pr_matrix)} jobs)"
     )
     print(f"  Exclusions:  {len(EXCLUSIONS):2d}")
-    print(f"{'='*70}\n")
+    print(f"{'=' * 70}\n")
 
 
 if __name__ == "__main__":
