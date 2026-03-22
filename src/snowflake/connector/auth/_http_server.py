@@ -217,15 +217,19 @@ class AuthHttpServer:
         while self._seconds_until(deadline) > 0 and recv_timeouts < max_attempts:
             remaining = self._seconds_until(deadline)
             per_op_timeout = (
-                min(remaining, slice_timeout) if slice_timeout is not None else remaining
+                min(remaining, slice_timeout)
+                if slice_timeout is not None
+                else remaining
             )
             if not use_dont_wait and per_op_timeout > 0:
                 client_socket.settimeout(per_op_timeout)
             try:
                 return recv(client_socket, self.buf_size)
             except BlockingIOError:
-                cooldown = min(0.25, per_op_timeout, remaining) if per_op_timeout else min(
-                    0.25, remaining
+                cooldown = (
+                    min(0.25, per_op_timeout, remaining)
+                    if per_op_timeout
+                    else min(0.25, remaining)
                 )
                 if cooldown <= 0:
                     cooldown = min(0.001, remaining) if remaining > 0 else 0
@@ -237,7 +241,9 @@ class AuthHttpServer:
                     time.sleep(cooldown)
             except socket.timeout:
                 recv_timeouts += 1
-                logger.debug("socket.recv timed out while waiting for auth callback; retrying")
+                logger.debug(
+                    "socket.recv timed out while waiting for auth callback; retrying"
+                )
         return None
 
     def receive_block(
