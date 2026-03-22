@@ -180,9 +180,12 @@ class AuthHttpServer:
         self,
         deadline: float,
         slice_timeout: float | None,
+        max_attempts: int,
     ) -> socket.socket | None:
-        """Wait until a client connects or ``deadline``, using short select slices."""
-        while self._seconds_until(deadline) > 0:
+        """Wait until a client connects, ``deadline``, or ``max_attempts`` poll iterations."""
+        for _ in range(max_attempts):
+            if self._seconds_until(deadline) <= 0:
+                break
             remaining = self._seconds_until(deadline)
             if slice_timeout is not None:
                 sel_timeout = min(remaining, slice_timeout)
@@ -201,11 +204,17 @@ class AuthHttpServer:
         client_socket: socket.socket,
         deadline: float,
         slice_timeout: float | None,
+        max_attempts: int,
     ) -> bytes | None:
-        """Read the first chunk of the request before ``deadline`` (same contract as before)."""
+        """Read the first chunk before ``deadline`` or ``max_attempts`` blocking recv timeouts.
+
+        ``max_attempts`` counts socket timeouts only, not ``BlockingIOError`` retries
+        (MSG_DONTWAIT path), so WSL-style polling does not exhaust the recv budget early.
+        """
         recv = _wrap_socket_recv()
         use_dont_wait = _use_msg_dont_wait()
-        while self._seconds_until(deadline) > 0:
+        recv_timeouts = 0
+        while self._seconds_until(deadline) > 0 and recv_timeouts < max_attempts:
             remaining = self._seconds_until(deadline)
             per_op_timeout = (
                 min(remaining, slice_timeout) if slice_timeout is not None else remaining
@@ -227,6 +236,7 @@ class AuthHttpServer:
                     )
                     time.sleep(cooldown)
             except socket.timeout:
+                recv_timeouts += 1
                 logger.debug("socket.recv timed out while waiting for auth callback; retrying")
         return None
 
@@ -237,9 +247,9 @@ class AuthHttpServer:
     ) -> tuple[list[str] | None, socket.socket | None]:
         """Receive a message within ``timeout`` seconds (wall clock), blocking.
 
-        Uses ``max_attempts`` only to derive a per-iteration select/recv slice size,
-        not to shrink how long recv may run after accept (that uses the full remaining
-        budget until ``deadline``).
+        ``max_attempts`` caps poll iterations and blocking recv timeouts (full budget for
+        recv, not reduced by poll usage). It also sets per-iteration select/recv slice
+        size as ``timeout / max_attempts`` when both are positive.
         """
         if max_attempts is None:
             max_attempts = self.DEFAULT_MAX_ATTEMPTS
@@ -250,15 +260,16 @@ class AuthHttpServer:
             raise RuntimeError(
                 "Operation is not supported, server was already shut down."
             )
+        ma = max(1, max_attempts)
         deadline = time.monotonic() + timeout_f
-        slice_timeout = (timeout_f / max_attempts) if max_attempts and timeout_f > 0 else None
+        slice_timeout = (timeout_f / ma) if timeout_f > 0 else None
 
-        client_socket = self._poll_for_client(deadline, slice_timeout)
+        client_socket = self._poll_for_client(deadline, slice_timeout, ma)
         if client_socket is None:
             return None, None
 
         raw_block = self._receive_first_chunk_until(
-            client_socket, deadline, slice_timeout
+            client_socket, deadline, slice_timeout, ma
         )
         if raw_block:
             return raw_block.decode("utf-8").split("\r\n"), client_socket
