@@ -173,58 +173,92 @@ class AuthHttpServer:
     def hostname(self) -> str:
         return self._uri.hostname
 
-    def _try_poll(
-        self, attempts: int, attempt_timeout: float | None
-    ) -> (socket.socket | None, int):
-        for attempt in range(attempts):
-            read_sockets = select.select([self._socket], [], [], attempt_timeout)[0]
-            if read_sockets and read_sockets[0] is not None:
-                return self._socket.accept()[0], attempt
-        return None, attempts
+    def _seconds_until(self, deadline: float) -> float:
+        return max(0.0, deadline - time.monotonic())
 
-    def _try_receive_block(
-        self, client_socket: socket.socket, attempts: int, attempt_timeout: float | None
+    def _poll_for_client(
+        self,
+        deadline: float,
+        slice_timeout: float | None,
+    ) -> socket.socket | None:
+        """Wait until a client connects or ``deadline``, using short select slices."""
+        while self._seconds_until(deadline) > 0:
+            remaining = self._seconds_until(deadline)
+            if slice_timeout is not None:
+                sel_timeout = min(remaining, slice_timeout)
+            else:
+                sel_timeout = remaining
+            # Avoid zero-timeout busy loops when slice rounds down
+            if sel_timeout <= 0:
+                break
+            read_sockets = select.select([self._socket], [], [], sel_timeout)[0]
+            if read_sockets and read_sockets[0] is not None:
+                return self._socket.accept()[0]
+        return None
+
+    def _receive_first_chunk_until(
+        self,
+        client_socket: socket.socket,
+        deadline: float,
+        slice_timeout: float | None,
     ) -> bytes | None:
-        if attempt_timeout is not None:
-            client_socket.settimeout(attempt_timeout)
+        """Read the first chunk of the request before ``deadline`` (same contract as before)."""
         recv = _wrap_socket_recv()
-        for attempt in range(attempts):
+        use_dont_wait = _use_msg_dont_wait()
+        while self._seconds_until(deadline) > 0:
+            remaining = self._seconds_until(deadline)
+            per_op_timeout = (
+                min(remaining, slice_timeout) if slice_timeout is not None else remaining
+            )
+            if not use_dont_wait and per_op_timeout > 0:
+                client_socket.settimeout(per_op_timeout)
             try:
                 return recv(client_socket, self.buf_size)
             except BlockingIOError:
-                if attempt < attempts - 1:
-                    cooldown = min(attempt_timeout, 0.25) if attempt_timeout else 0.25
+                cooldown = min(0.25, per_op_timeout, remaining) if per_op_timeout else min(
+                    0.25, remaining
+                )
+                if cooldown <= 0:
+                    cooldown = min(0.001, remaining) if remaining > 0 else 0
+                if cooldown > 0:
                     logger.debug(
-                        f"BlockingIOError raised from socket.recv on {1 + attempt}/{attempts} attempt."
-                        f"Waiting for {cooldown} seconds before trying again"
+                        "BlockingIOError from socket.recv while waiting for auth callback; "
+                        f"sleeping {cooldown} s before retry"
                     )
                     time.sleep(cooldown)
             except socket.timeout:
-                logger.debug(
-                    f"socket.recv timed out on {1 + attempt}/{attempts} attempt."
-                )
+                logger.debug("socket.recv timed out while waiting for auth callback; retrying")
         return None
 
     def receive_block(
         self,
         max_attempts: int = None,
         timeout: float | int | None = None,
-    ) -> (list[str] | None, socket.socket | None):
+    ) -> tuple[list[str] | None, socket.socket | None]:
+        """Receive a message within ``timeout`` seconds (wall clock), blocking.
+
+        Uses ``max_attempts`` only to derive a per-iteration select/recv slice size,
+        not to shrink how long recv may run after accept (that uses the full remaining
+        budget until ``deadline``).
+        """
         if max_attempts is None:
             max_attempts = self.DEFAULT_MAX_ATTEMPTS
         if timeout is None:
             timeout = self.DEFAULT_TIMEOUT
-        """Receive a message with a maximum attempt count and a timeout in seconds, blocking."""
+        timeout_f = float(timeout)
         if not self._socket:
             raise RuntimeError(
                 "Operation is not supported, server was already shut down."
             )
-        attempt_timeout = timeout / max_attempts if timeout else None
-        client_socket, poll_attempts = self._try_poll(max_attempts, attempt_timeout)
+        deadline = time.monotonic() + timeout_f
+        slice_timeout = (timeout_f / max_attempts) if max_attempts and timeout_f > 0 else None
+
+        client_socket = self._poll_for_client(deadline, slice_timeout)
         if client_socket is None:
             return None, None
-        raw_block = self._try_receive_block(
-            client_socket, max_attempts - poll_attempts, attempt_timeout
+
+        raw_block = self._receive_first_chunk_until(
+            client_socket, deadline, slice_timeout
         )
         if raw_block:
             return raw_block.decode("utf-8").split("\r\n"), client_socket
