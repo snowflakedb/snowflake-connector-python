@@ -198,7 +198,7 @@ class AuthHttpServer:
                         f"BlockingIOError raised from socket.recv on {1 + attempt}/{attempts} attempt."
                         f"Waiting for {cooldown} seconds before trying again"
                     )
-                    time.sleep(cooldown)
+                    select.select([client_socket], [], [], cooldown)
             except socket.timeout:
                 logger.debug(
                     f"socket.recv timed out on {1 + attempt}/{attempts} attempt."
