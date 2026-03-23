@@ -9,6 +9,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 # Release Notes
 - Upcoming Release
   - Fixed a bug where `write_pandas()` with `auto_create_table=False` and `overwrite=True` would execute `CREATE TABLE IF NOT EXISTS`, which required unnecessary `OWNERSHIP` privilege on the table. Now only `TRUNCATE TABLE` is executed in this case. Note: users who relied on the table being implicitly created despite `auto_create_table=False` should set `auto_create_table=True` instead.
+  - Bump lower boundary of cryptography to 46.0.5 due to CVE-2026-26007.
   - Added support for Python 3.14.
   - Removed pyOpenSSL upper bound dependency constraint to allow installation of pyOpenSSL 26.0.0+, which includes a fix for GHSA-vp96-hxj8-p424.
   - Fixed Azure IMDS `Metadata` header to use lowercase `"true"` instead of `"True"`, which caused 400 errors during Azure Workload Identity Federation authentication.
@@ -16,6 +17,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Fixed a bug where Azure GET commands would incorrectly set the file status to UPLOADED instead of preserving the DOWNLOADED status during metadata retrieval.
   - Renamed the environment variable for skipping config file permission warnings from `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` to `SF_SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION`. The old variable is still supported but emits a deprecation warning.
   - Fixed `unsafe_skip_file_permissions_check` flag not being respected when reading `connections.toml`.
+  - Fixed JSONDecodeError in result_batch._load() when fetching large result sets
 
 - v4.3.0(February 12,2026)
   - Ensured proper list conversion - the converter runs to_snowflake on all list elements.
