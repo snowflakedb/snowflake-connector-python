@@ -8,6 +8,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 
 # Release Notes
 - Upcoming Release
+  - Fixed a bug where `write_pandas()` with `auto_create_table=False` and `overwrite=True` would execute `CREATE TABLE IF NOT EXISTS`, which required unnecessary `OWNERSHIP` privilege on the table. Now only `TRUNCATE TABLE` is executed in this case. Note: users who relied on the table being implicitly created despite `auto_create_table=False` should set `auto_create_table=True` instead.
   - Bump lower boundary of cryptography to 46.0.5 due to CVE-2026-26007.
   - Added support for Python 3.14.
   - Removed pyOpenSSL upper bound dependency constraint to allow installation of pyOpenSSL 26.0.0+, which includes a fix for GHSA-vp96-hxj8-p424.
