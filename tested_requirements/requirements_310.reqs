@@ -1,21 +1,21 @@
-# Generated on: Python 3.10.19
+# Generated on: Python 3.10.20
 asn1crypto==1.5.1
-boto3==1.42.44
-botocore==1.42.44
-certifi==2026.1.4
+boto3==1.42.73
+botocore==1.42.73
+certifi==2026.2.25
 cffi==2.0.0
-charset-normalizer==3.4.4
-cryptography==46.0.4
-filelock==3.20.3
+charset-normalizer==3.4.6
+cryptography==46.0.5
+filelock==3.25.2
 idna==3.11
 jmespath==1.1.0
 packaging==26.0
-platformdirs==4.5.1
+platformdirs==4.9.4
 pycparser==3.0
-PyJWT==2.11.0
+PyJWT==2.12.1
 pyOpenSSL==26.0.0
 python-dateutil==2.9.0.post0
-pytz==2025.2
+pytz==2026.1.post1
 requests==2.32.5
 s3transfer==0.16.0
 six==1.17.0
@@ -23,4 +23,4 @@ sortedcontainers==2.4.0
 tomlkit==0.14.0
 typing_extensions==4.15.0
 urllib3==2.6.3
-snowflake-connector-python==4.3.0
+snowflake-connector-python==4.4.0
