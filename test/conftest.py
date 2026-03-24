@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import socket
 from contextlib import contextmanager
 from logging import getLogger
 from pathlib import Path
@@ -155,6 +156,27 @@ def pytest_runtest_setup(item) -> None:
     if "wif" in test_tags:
         if os.getenv("RUN_WIF_TESTS") != "true":
             pytest.skip("Skipping WIF test in current environment")
+
+
+def pytest_unconfigure(config) -> None:
+    """Shut down the pytest-rerunfailures socket server to prevent session hangs.
+
+    The ServerStatusDB.run_server thread blocks forever on socket.accept()
+    with no shutdown mechanism. Closing the socket here unblocks it so the
+    interpreter can exit cleanly instead of deadlocking during teardown.
+    See: https://github.com/pytest-dev/pytest-rerunfailures/issues/295
+    """
+    db = getattr(config, "failures_db", None)
+    sock = getattr(db, "sock", None)
+    if sock is not None:
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            sock.close()
+        except OSError:
+            pass
 
 
 def get_server_parameter_value(connection, parameter_name: str) -> str | None:
