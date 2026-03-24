@@ -128,13 +128,16 @@ def generate_matrix(pr_only: bool = False):
     matrix = []
 
     if pr_only:
-        csp_to_test = list(CSP)
-        for system in OperatingSystem:
-            os_config = system.value
-            csp_name = csp_to_test.pop(0).value if csp_to_test else CSP.AWS.value
-            for py_version in Python:
-                if py_version.value.test_on_pr:
-                    _add_to_matrix(matrix, os_config, csp_name, py_version.value)
+        pr_jobs = [
+            (OperatingSystem.MACOS, ["3.12", "3.13", "3.14"]),
+            (OperatingSystem.UBUNTU, ["3.9", "3.10", "3.11", "3.12"]),
+            (OperatingSystem.WINDOWS, ["3.9", "3.12", "3.13"]),
+        ]
+        py_by_ver = {p.value.version: p.value for p in Python}
+        for os_enum, versions in pr_jobs:
+            for ver in versions:
+                if ver in py_by_ver:
+                    _add_to_matrix(matrix, os_enum.value, CSP.AWS.value, py_by_ver[ver])
     else:
         operating_systems = [os_enum.value for os_enum in OperatingSystem]
         python_versions = [py_enum.value for py_enum in Python]
