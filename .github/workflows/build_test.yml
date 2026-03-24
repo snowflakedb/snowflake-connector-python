@@ -38,6 +38,7 @@ jobs:
     outputs:
       test_matrix: ${{ steps.test_matrix.outputs.test_matrix }}
       build_matrix: ${{ steps.test_matrix.outputs.build_matrix }}
+      lambda_matrix: ${{ steps.test_matrix.outputs.lambda_matrix }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -55,6 +56,7 @@ jobs:
           fi
           echo "test_matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "build_matrix=$(echo "$MATRIX" | jq -c '[group_by(.os_download_name, .["python-version"]) | .[] | first]')" >> "$GITHUB_OUTPUT"
+          echo "lambda_matrix=$(echo "$MATRIX" | jq -c '[.[] | select(.cloud-provider == "aws" and .os_download_name == "manylinux_x86_64")]')" >> "$GITHUB_OUTPUT"
   lint:
     name: Check linting
     runs-on: ubuntu-latest
@@ -380,15 +382,12 @@ jobs:
 
   test-lambda:
     name: Test Lambda linux-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
-    needs: build
+    needs: [build, define-matrix]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(needs.define-matrix.outputs.test_matrix) }}
-        exclude:
-          - cloud-provider: gcp
-          - cloud-provider: azure
+        include: ${{ fromJSON(needs.define-matrix.outputs.lambda_matrix) }}
     steps:
       - name: Set shortver
         run: echo "shortver=${longver//./}" >> $GITHUB_ENV
