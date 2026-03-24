@@ -69,7 +69,7 @@ class TokenCache(ABC):
 
     Platform-specific implementations:
     - macOS/Windows: Uses OS keyring (Keychain/Credential Manager) via 'keyring' library
-    - Linux: Uses encrypted JSON file in ~/.cache/snowflake/ with 0o600 permissions
+    - Linux: Uses JSON file in ~/.cache/snowflake/ with 0o600 permissions
     - Fallback: NoopTokenCache (no caching) if secure storage unavailable
 
     Tokens are keyed by (host, user, token_type) to support multiple accounts.

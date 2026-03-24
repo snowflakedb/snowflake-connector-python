@@ -124,7 +124,9 @@ class SnowflakeAzureRestClient(SnowflakeStorageClient):
         self.retry_count[retry_id] = 0
         r = self._send_request_with_authentication_and_retry("HEAD", url, retry_id)
         if r.status_code == 200:
-            meta.result_status = ResultStatus.UPLOADED
+            # If we are in download path, do not update to UPLOADED
+            if meta.result_status != ResultStatus.DOWNLOADED:
+                meta.result_status = ResultStatus.UPLOADED
             enc_data_str = r.headers.get(ENCRYPTION_DATA)
             encryption_data = None if enc_data_str is None else json.loads(enc_data_str)
             encryption_metadata = (
