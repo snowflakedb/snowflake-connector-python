@@ -86,7 +86,7 @@ def _check_multi_statement_results(
 
 def test_multi_statement_basic(conn_cnx, skip_to_last_set: bool):
     """Selects fixed integer data using statement level parameters."""
-    with conn_cnx() as con:
+    with conn_cnx(paramstyle="pyformat") as con:
         with con.cursor() as cur:
             statement_params = dict()
             cur.execute(
@@ -157,7 +157,7 @@ def test_binding_multi(conn_cnx, style: str, skip_to_last_set: bool):
 @pytest.mark.parametrize("cursor_class", [SnowflakeCursor, DictCursor])
 def test_async_exec_multi(conn_cnx, cursor_class, skip_to_last_set: bool):
     """Tests whether async execution query works within a multi-statement"""
-    with conn_cnx() as con:
+    with conn_cnx(paramstyle="pyformat") as con:
         with con.cursor(cursor_class) as cur:
             cur.execute_async(
                 "select 1; select 2; select count(*) from table(generator(timeLimit => 1)); select 'b';",
@@ -166,7 +166,7 @@ def test_async_exec_multi(conn_cnx, cursor_class, skip_to_last_set: bool):
             q_id = cur.sfqid
             assert con.is_still_running(con.get_query_status(q_id))
         _wait_while_query_running(con, q_id, sleep_time=1)
-    with conn_cnx() as con:
+    with conn_cnx(paramstyle="pyformat") as con:
         with con.cursor(cursor_class) as cur:
             _wait_until_query_success(con, q_id, num_checks=3, sleep_per_check=1)
             assert con.get_query_status_throw_if_error(q_id) == QueryStatus.SUCCESS
@@ -322,7 +322,7 @@ def test_executemany_multi(conn_cnx, skip_to_last_set: bool):
     """Tests executemany with multi-statement optimizations enabled through the num_statements parameter."""
     table1 = random_string(5, "test_executemany_multi_")
     table2 = random_string(5, "test_executemany_multi_")
-    with conn_cnx() as con:
+    with conn_cnx(paramstyle="pyformat") as con:
         with con.cursor() as cur:
             cur.execute(
                 f"create temp table {table1} (aa number); create temp table {table2} (bb number);",
