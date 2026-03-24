@@ -33,6 +33,28 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
 
 jobs:
+  define-matrix:
+    runs-on: "ubuntu-latest"
+    outputs:
+      test_matrix: ${{ steps.test_matrix.outputs.test_matrix }}
+      build_matrix: ${{ steps.test_matrix.outputs.build_matrix }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Define testing matrix
+        id: test_matrix
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "Using full matrix"
+            MATRIX=$(jq -c . < ./.github/workflows/generated_full_matrix.json)
+          else
+            echo "Using PR matrix"
+            MATRIX=$(jq -c . < ./.github/workflows/generated_pr_matrix.json)
+          fi
+          echo "test_matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "build_matrix=$(echo "$MATRIX" | jq -c '[group_by(.os_download_name, .["python-version"]) | .[] | first]')" >> "$GITHUB_OUTPUT"
   lint:
     name: Check linting
     runs-on: ubuntu-latest
@@ -59,10 +81,11 @@ jobs:
 
   dependency:
     name: Check dependency
+    needs: define-matrix
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        include: ${{ fromJSON(needs.define-matrix.outputs.test_matrix) }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -77,34 +100,12 @@ jobs:
         run: python -m tox run -e dependency
 
   build:
-    needs: lint
+    needs: [lint, define-matrix]
     strategy:
       matrix:
-        os:
-          - image: ubuntu-latest
-            id: manylinux_x86_64
-          - image: ubuntu-latest
-            id: manylinux_aarch64
-          - image: windows-latest
-            id: win_amd64
-          - image: windows-11-arm
-            id: win_arm64
-          - image: macos-latest
-            id: macosx_x86_64
-          - image: macos-latest
-            id: macosx_arm64
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        exclude:
-          - os:
-              image: windows-11-arm
-              id: win_arm64
-            python-version: "3.9"
-          - os:
-              image: windows-11-arm
-              id: win_arm64
-            python-version: "3.10"
-    name: Build ${{ matrix.os.id }}-py${{ matrix.python-version }}
-    runs-on: ${{ matrix.os.image }}
+        include: ${{ fromJSON(needs.define-matrix.outputs.build_matrix) }}
+    name: Build ${{ matrix.os_download_name }}-py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os_image_name }}
     steps:
       - name: Set shortver
         run: echo "shortver=${longver//./}" >> $GITHUB_ENV
@@ -112,7 +113,7 @@ jobs:
           longver: ${{ matrix.python-version }}
         shell: bash
       - name: Set up QEMU
-        if: ${{ matrix.os.id == 'manylinux_aarch64' }}
+        if: ${{ matrix.os_download_name == 'manylinux_aarch64' }}
         uses: docker/setup-qemu-action@v2
         with:
           # xref https://github.com/docker/setup-qemu-action/issues/188
@@ -120,11 +121,36 @@ jobs:
           image: tonistiigi/binfmt:qemu-v8.1.5
           platforms: all
       - uses: actions/checkout@v4
+      - name: Cache cibuildwheel dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/cibuildwheel
+            ~/Library/Caches/cibuildwheel
+            ~/AppData/Local/pypa/cibuildwheel/Cache
+          key: cibw-v3.3.1-${{ matrix.os_download_name }}
+      - name: Pre-download virtualenv for cibuildwheel
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            CACHE_DIR="$LOCALAPPDATA/pypa/cibuildwheel/Cache"
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            CACHE_DIR="$HOME/Library/Caches/cibuildwheel"
+          else
+            CACHE_DIR="$HOME/.cache/cibuildwheel"
+          fi
+          mkdir -p "$CACHE_DIR"
+          DEST="$CACHE_DIR/virtualenv-20.26.6.pyz"
+          if [ ! -f "$DEST" ]; then
+            curl --retry 5 --retry-delay 5 --retry-all-errors -sSL \
+              "https://github.com/pypa/get-virtualenv/blob/20.26.6/public/virtualenv.pyz?raw=true" \
+              -o "$DEST"
+          fi
       - name: Building wheel
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v3.3.1
         env:
-          CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os.id }}
-          CIBW_ARCHS_WINDOWS: ${{ matrix.os.id == 'win_arm64' && 'ARM64' || 'auto' }}
+          CIBW_BUILD: cp${{ env.shortver }}-${{ matrix.os_download_name }}
+          CIBW_ARCHS_WINDOWS: ${{ matrix.os_download_name == 'win_arm64' && 'ARM64' || 'auto' }}
           MACOSX_DEPLOYMENT_TARGET: 10.14  # Should be kept in sync with ci/build_darwin.sh
         with:
           output-dir: dist
@@ -134,49 +160,17 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           include-hidden-files: true
-          name: ${{ matrix.os.id }}_py${{ matrix.python-version }}
+          name: ${{ matrix.os_download_name }}_py${{ matrix.python-version }}
           path: dist/
 
   test:
-    name: Test ${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
-    needs: build
-    runs-on: ${{ matrix.os.image_name }}
+    name: Test ${{ matrix.os_download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+    needs: [build, define-matrix]
+    runs-on: ${{ matrix.os_image_name }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-         - image_name: ubuntu-latest
-           download_name: manylinux_x86_64
-         - image_name: macos-latest
-           download_name: macosx_x86_64
-         - image_name: windows-latest
-           download_name: win_amd64
-         - image_name: windows-11-arm
-           download_name: win_arm64
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        cloud-provider: [aws, azure, gcp]
-        exclude:
-          - os:
-              image_name: windows-11-arm
-              download_name: win_arm64
-            python-version: "3.9"
-          - os:
-              image_name: windows-11-arm
-              download_name: win_arm64
-            python-version: "3.10"
-          - os:
-              image_name: windows-11-arm
-              download_name: win_arm64
-            python-version: "3.11"
-          - os:
-              image_name: windows-11-arm
-              download_name: win_arm64
-            python-version: "3.12"
-          - os:
-              image_name: windows-11-arm
-              download_name: win_arm64
-            python-version: "3.13"
-
+        include: ${{ fromJSON(needs.define-matrix.outputs.test_matrix) }}
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -188,7 +182,7 @@ jobs:
       - name: Set up Java
         uses: actions/setup-java@v4 # for wiremock
         with:
-          java-version: ${{ matrix.os.download_name == 'win_arm64' && '21.0.5+11.0.LTS' || '11' }}
+          java-version: ${{ matrix.os_download_name == 'win_arm64' && '21.0.5+11.0.LTS' || '11' }}
           distribution: 'temurin'
           java-package: 'jre'
       - name: Fetch Wiremock
@@ -211,7 +205,7 @@ jobs:
       - name: Download wheel(s)
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.os.download_name }}_py${{ matrix.python-version }}
+          name: ${{ matrix.os_download_name }}_py${{ matrix.python-version }}
           path: dist
       - name: Show wheels downloaded
         run: ls -lh dist
@@ -236,7 +230,7 @@ jobs:
         if: always()
         with:
           include-hidden-files: true
-          name: coverage_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          name: coverage_${{ matrix.os_download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
             .tox/.coverage
             .tox/coverage.xml
@@ -244,7 +238,7 @@ jobs:
         if: always()
         with:
           include-hidden-files: true
-          name: junit_${{ matrix.os.download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
+          name: junit_${{ matrix.os_download_name }}-${{ matrix.python-version }}-${{ matrix.cloud-provider }}
           path: |
             .tox/junit.*.xml
 
@@ -391,8 +385,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        cloud-provider: [aws]
+        include: ${{ fromJSON(needs.define-matrix.outputs.test_matrix) }}
+        exclude:
+          - cloud-provider: gcp
+          - cloud-provider: azure
     steps:
       - name: Set shortver
         run: echo "shortver=${longver//./}" >> $GITHUB_ENV
@@ -573,8 +569,24 @@ jobs:
           longver: ${{ matrix.python-version }}
         shell: bash
       - uses: actions/checkout@v4
+      - name: Cache cibuildwheel dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/cibuildwheel
+          key: cibw-v3.3.1-manylinux_x86_64
+      - name: Pre-download virtualenv for cibuildwheel
+        shell: bash
+        run: |
+          CACHE_DIR="$HOME/.cache/cibuildwheel"
+          mkdir -p "$CACHE_DIR"
+          DEST="$CACHE_DIR/virtualenv-20.26.6.pyz"
+          if [ ! -f "$DEST" ]; then
+            curl --retry 5 --retry-delay 5 --retry-all-errors -sSL \
+              "https://github.com/pypa/get-virtualenv/blob/20.26.6/public/virtualenv.pyz?raw=true" \
+              -o "$DEST"
+          fi
       - name: Build wheel for Rocky Linux
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v3.3.1
         env:
           CIBW_BUILD: cp${{ env.shortver }}-manylinux_x86_64
           MACOSX_DEPLOYMENT_TARGET: 10.14
