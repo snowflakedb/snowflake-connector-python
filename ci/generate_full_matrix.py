@@ -137,9 +137,7 @@ def generate_matrix(pr_only: bool = False):
         for os_enum, versions in pr_jobs:
             for ver in versions:
                 if ver in py_by_ver:
-                    _add_to_matrix(
-                        matrix, os_enum.value, CSP.AWS.value, py_by_ver[ver]
-                    )
+                    _add_to_matrix(matrix, os_enum.value, CSP.AWS.value, py_by_ver[ver])
     else:
         operating_systems = [os_enum.value for os_enum in OperatingSystem]
         python_versions = [py_enum.value for py_enum in Python]
