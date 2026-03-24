@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import time
+import threading
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
@@ -80,8 +80,17 @@ def test_query_can_be_empty_with_dataframe_ast():
 
 @patch("snowflake.connector.cursor.SnowflakeCursor._SnowflakeCursorBase__cancel_query")
 def test_cursor_execute_timeout(mockCancelQuery):
+    # Use an event to synchronize: cmd_query blocks until the cancel mock is
+    # called by the timebomb, avoiding any reliance on sleep duration which is
+    # unreliable on Windows Python <3.11 (time.sleep can return early).
+    cancel_called = threading.Event()
+    mockCancelQuery.side_effect = lambda *a, **kw: cancel_called.set()
+
     def mock_cmd_query(*args, **kwargs):
-        time.sleep(10)
+        # Wait for the timebomb to fire (it calls __cancel_query which sets
+        # the event).  Fall back to a generous timeout so the test doesn't
+        # hang forever if something goes wrong.
+        cancel_called.wait(timeout=10)
         raise ServiceUnavailableError()
 
     fake_conn = FakeConnection()
