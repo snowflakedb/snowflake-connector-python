@@ -59,12 +59,12 @@ class OperatingSystem(Enum):
 class Python(Enum):
     """Available Python versions."""
 
-    PY39 = PythonVersion("3.9", test_on_pr=True)
+    PY39 = PythonVersion("3.9", test_on_pr=False)
     PY310 = PythonVersion("3.10", test_on_pr=False)
     PY311 = PythonVersion("3.11", test_on_pr=False)
-    PY312 = PythonVersion("3.12", test_on_pr=False)
+    PY312 = PythonVersion("3.12", test_on_pr=True)
     PY313 = PythonVersion("3.13", test_on_pr=False)
-    PY314 = PythonVersion("3.14", test_on_pr=True)
+    PY314 = PythonVersion("3.14", test_on_pr=False)
 
 
 class CSP(Enum):
@@ -128,13 +128,11 @@ def generate_matrix(pr_only: bool = False):
     matrix = []
 
     if pr_only:
-        csp_to_test = list(CSP)
-        for system in OperatingSystem:
-            os_config = system.value
-            csp_name = csp_to_test.pop(0).value if csp_to_test else CSP.AWS.value
-            for py_version in Python:
-                if py_version.value.test_on_pr:
-                    _add_to_matrix(matrix, os_config, csp_name, py_version.value)
+        for py_version in Python:
+            if py_version.value.test_on_pr:
+                _add_to_matrix(
+                    matrix, OperatingSystem.MACOS.value, CSP.AWS.value, py_version.value
+                )
     else:
         operating_systems = [os_enum.value for os_enum in OperatingSystem]
         python_versions = [py_enum.value for py_enum in Python]
