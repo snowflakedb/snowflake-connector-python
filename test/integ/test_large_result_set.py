@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import threading
 from unittest.mock import Mock
+from urllib.parse import urlparse
 
 import pytest
 
@@ -274,7 +275,8 @@ def test_multichunk_json_gzip_decompression_with_fix(
         HTTP round-trip but before requests reads the body."""
         nonlocal chunks_intercepted
         response = original_send(self, request, *args, **kwargs)
-        if response.status_code == 200:
+        hostname = urlparse(request.url).hostname or ""
+        if response.status_code == 200 and "snowflakecomputing." not in hostname:
             _strip_content_encoding(response)
             with chunks_intercepted_lock:
                 chunks_intercepted += 1
