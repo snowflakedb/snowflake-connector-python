@@ -80,8 +80,9 @@ def test_query_can_be_empty_with_dataframe_ast():
 
 @patch("snowflake.connector.cursor.SnowflakeCursor._SnowflakeCursorBase__cancel_query")
 def test_cursor_execute_timeout(mockCancelQuery):
-    # Use an event instead of time.sleep to avoid early wakeups on
-    # Windows Python <3.11 (see https://github.com/python/cpython/issues/85609).
+    # On Windows Python <3.11, time.sleep() can return early when an APC
+    # is triggered (e.g. by --dist worksteal socket I/O), causing the
+    # timebomb to be cancelled before it fires. Use an event instead.
     cancel_called = threading.Event()
     mockCancelQuery.side_effect = lambda *a, **kw: cancel_called.set()
 
