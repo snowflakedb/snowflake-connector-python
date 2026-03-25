@@ -129,7 +129,7 @@ def generate_matrix(pr_only: bool = False):
 
     if pr_only:
         csp_to_test = list(CSP)
-        oses  = list(OperatingSystem)
+        oses = list(OperatingSystem)
         for py_version in Python:
             os_config = oses.pop(0).value if oses else OperatingSystem.UBUNTU.value
             csp_name = csp_to_test.pop(0).value if csp_to_test else CSP.AWS.value
