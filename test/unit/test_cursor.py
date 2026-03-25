@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
@@ -77,26 +78,19 @@ def test_query_can_be_empty_with_dataframe_ast():
         cursor.execute("", _dataframe_ast="ABCD")
 
 
-@patch("snowflake.connector.cursor._TrackedQueryCancellationTimer")
 @patch("snowflake.connector.cursor.SnowflakeCursor._SnowflakeCursorBase__cancel_query")
-def test_cursor_execute_timeout(mockCancelQuery, MockTimer):
-    # Mock the timer to fire its callback synchronously when started.
-    # This eliminates all timing and threading dependencies, making the test
-    # reliable across platforms (e.g. Windows Python <3.11 with --dist worksteal).
-    def make_instant_timer(interval, fn, args, kwargs=None):
-        timer = MagicMock()
-        timer.executed = False
-
-        def start():
-            fn(*args)
-            timer.executed = True
-
-        timer.start = start
-        return timer
-
-    MockTimer.side_effect = make_instant_timer
+def test_cursor_execute_timeout(mockCancelQuery):
+    # Use a Lock with no timeout (maps to WaitForSingleObjectEx(INFINITE)) instead
+    # of threading.Event.wait(N). On Windows Python <3.11 under --dist worksteal,
+    # WaitForSingleObjectEx with a finite timeout can return WAIT_FAILED under heavy
+    # socket I/O, causing acquire() to return False early. INFINITE cannot return
+    # early — it only returns when the lock is actually released.
+    cancel_lock = threading.Lock()
+    cancel_lock.acquire()  # pre-acquire; mock_cmd_query will block on second acquire
+    mockCancelQuery.side_effect = lambda *a, **kw: cancel_lock.release()
 
     def mock_cmd_query(*args, **kwargs):
+        cancel_lock.acquire()  # blocks until the timer fires and releases
         raise ServiceUnavailableError()
 
     fake_conn = FakeConnection()
