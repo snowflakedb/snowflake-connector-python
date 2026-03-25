@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import threading
 import time
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
@@ -79,42 +78,10 @@ def test_query_can_be_empty_with_dataframe_ast():
         cursor.execute("", _dataframe_ast="ABCD")
 
 
-@pytest.mark.timeout(60)
 @patch("snowflake.connector.cursor.SnowflakeCursor._SnowflakeCursorBase__cancel_query")
 def test_cursor_execute_timeout(mockCancelQuery):
-    # Use a polling loop that checks Event.is_set() between short waits.
-    #
-    # On Windows Python <3.11 under --dist worksteal, two independent failure
-    # modes have been observed:
-    #
-    # 1. Event.wait(N) with a single long finite timeout returns early due to
-    #    WaitForSingleObjectEx returning WAIT_FAILED under heavy socket I/O.
-    #    This causes mock_cmd_query to exit before the timer fires, the timer is
-    #    then cancelled by the finally block, and the assertion fails.
-    #
-    # 2. INFINITE waits (Lock.acquire() / Semaphore.acquire() with no timeout)
-    #    hang indefinitely when the timer thread is CPU-starved on an overloaded
-    #    CI runner and never gets scheduled within the test timeout window.
-    #
-    # The fix: poll with short-interval Event.wait(0.05) slices.
-    # - Event.is_set() reads self._flag (a Python bool), no OS call, always
-    #   reliable regardless of WaitForSingleObjectEx state.
-    # - Event.set() writes self._flag under the GIL; reliable even if notify
-    #   fails to wake sleepers.
-    # - If wait(0.05) returns early (WAIT_FAILED), is_set() re-checks the flag
-    #   on the next iteration immediately.
-    # - The 15 s deadline gives the timer thread ample time even under CPU load.
-    # @pytest.mark.timeout(60) is the hard safety bound against any infinite hang.
-    cancel_called = threading.Event()
-    mockCancelQuery.side_effect = lambda *a, **kw: cancel_called.set()
-
     def mock_cmd_query(*args, **kwargs):
-        deadline = time.monotonic() + 15
-        while not cancel_called.is_set():
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                break
-            cancel_called.wait(timeout=min(0.05, remaining))
+        time.sleep(10)
         raise ServiceUnavailableError()
 
     fake_conn = FakeConnection()
