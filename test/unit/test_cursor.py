@@ -78,6 +78,7 @@ def test_query_can_be_empty_with_dataframe_ast():
         cursor.execute("", _dataframe_ast="ABCD")
 
 
+@pytest.mark.timeout(30)
 @patch("snowflake.connector.cursor.SnowflakeCursor._SnowflakeCursorBase__cancel_query")
 def test_cursor_execute_timeout(mockCancelQuery):
     # Use a Lock with no timeout (maps to WaitForSingleObjectEx(INFINITE)) instead
@@ -85,6 +86,9 @@ def test_cursor_execute_timeout(mockCancelQuery):
     # WaitForSingleObjectEx with a finite timeout can return WAIT_FAILED under heavy
     # socket I/O, causing acquire() to return False early. INFINITE cannot return
     # early — it only returns when the lock is actually released.
+    # @pytest.mark.timeout(30) provides the safety bound: if __cancel_query is never
+    # called (timer doesn't fire), the test fails with a clear timeout error in 30s
+    # rather than hanging indefinitely.
     cancel_lock = threading.Lock()
     cancel_lock.acquire()  # pre-acquire; mock_cmd_query will block on second acquire
     mockCancelQuery.side_effect = lambda *a, **kw: cancel_lock.release()
