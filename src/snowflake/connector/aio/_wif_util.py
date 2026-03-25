@@ -235,7 +235,7 @@ async def create_azure_attestation(
 
     If the application isn't running on Azure or no credentials were found, raises an error.
     """
-    headers = {"Metadata": "True"}
+    headers = {"Metadata": "true"}
     url_without_query_string = "http://169.254.169.254/metadata/identity/oauth2/token"
     query_params = f"api-version=2018-02-01&resource={snowflake_entra_resource}"
 
