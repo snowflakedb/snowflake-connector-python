@@ -50,20 +50,20 @@ class OperatingSystem(Enum):
         name="windows-latest",
         download_name="win_amd64",
     )
-    WINDOWS_ARM = OperatingSystemInfo(
-        name="windows-11-arm",
-        download_name="win_arm64",
-    )
+    # WINDOWS_ARM = OperatingSystemInfo(
+    #     name="windows-11-arm",
+    #     download_name="win_arm64",
+    # )
 
 
 class Python(Enum):
     """Available Python versions."""
 
     PY39 = PythonVersion("3.9", test_on_pr=True)
-    PY310 = PythonVersion("3.10", test_on_pr=False)
-    PY311 = PythonVersion("3.11", test_on_pr=False)
-    PY312 = PythonVersion("3.12", test_on_pr=False)
-    PY313 = PythonVersion("3.13", test_on_pr=False)
+    PY310 = PythonVersion("3.10", test_on_pr=True)
+    PY311 = PythonVersion("3.11", test_on_pr=True)
+    PY312 = PythonVersion("3.12", test_on_pr=True)
+    PY313 = PythonVersion("3.13", test_on_pr=True)
     PY314 = PythonVersion("3.14", test_on_pr=True)
 
 
@@ -129,12 +129,13 @@ def generate_matrix(pr_only: bool = False):
 
     if pr_only:
         csp_to_test = list(CSP)
-        for system in OperatingSystem:
-            os_config = system.value
+        oses  = list(OperatingSystem)
+        for py_version in Python:
+            os_config = oses.pop(0).value if oses else OperatingSystem.UBUNTU.value
             csp_name = csp_to_test.pop(0).value if csp_to_test else CSP.AWS.value
-            for py_version in Python:
-                if py_version.value.test_on_pr:
-                    _add_to_matrix(matrix, os_config, csp_name, py_version.value)
+            if py_version.value.test_on_pr:
+                print(f"Adding {os_config.name} {csp_name} {py_version.value.version}")
+                _add_to_matrix(matrix, os_config, csp_name, py_version.value)
     else:
         operating_systems = [os_enum.value for os_enum in OperatingSystem]
         python_versions = [py_enum.value for py_enum in Python]
