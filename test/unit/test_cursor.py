@@ -81,20 +81,18 @@ def test_query_can_be_empty_with_dataframe_ast():
 @pytest.mark.timeout(30)
 @patch("snowflake.connector.cursor.SnowflakeCursor._SnowflakeCursorBase__cancel_query")
 def test_cursor_execute_timeout(mockCancelQuery):
-    # Use a Lock with no timeout (maps to WaitForSingleObjectEx(INFINITE)) instead
-    # of threading.Event.wait(N). On Windows Python <3.11 under --dist worksteal,
-    # WaitForSingleObjectEx with a finite timeout can return WAIT_FAILED under heavy
-    # socket I/O, causing acquire() to return False early. INFINITE cannot return
-    # early — it only returns when the lock is actually released.
-    # @pytest.mark.timeout(30) provides the safety bound: if __cancel_query is never
-    # called (timer doesn't fire), the test fails with a clear timeout error in 30s
-    # rather than hanging indefinitely.
-    cancel_lock = threading.Lock()
-    cancel_lock.acquire()  # pre-acquire; mock_cmd_query will block on second acquire
-    mockCancelQuery.side_effect = lambda *a, **kw: cancel_lock.release()
+    # Use a Semaphore(0) so mock_cmd_query blocks until the timer fires.
+    # Semaphore.acquire() with no timeout maps to WaitForSingleObjectEx(INFINITE),
+    # which cannot return early under Windows socket load (unlike Event.wait(N)).
+    # Unlike a Lock, no pre-acquisition is needed — the semaphore starts at 0 and
+    # acquire() blocks from any thread, including the test thread itself (which is the
+    # same thread that calls mock_cmd_query via cursor.execute).
+    # @pytest.mark.timeout(30) is the safety bound if __cancel_query never fires.
+    cancel_sem = threading.Semaphore(0)
+    mockCancelQuery.side_effect = lambda *a, **kw: cancel_sem.release()
 
     def mock_cmd_query(*args, **kwargs):
-        cancel_lock.acquire()  # blocks until the timer fires and releases
+        cancel_sem.acquire()  # blocks until the timer fires and releases
         raise ServiceUnavailableError()
 
     fake_conn = FakeConnection()
