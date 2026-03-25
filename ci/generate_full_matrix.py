@@ -60,7 +60,7 @@ class Python(Enum):
     """Available Python versions."""
 
     PY39 = PythonVersion("3.9", test_on_pr=True)
-    PY310 = PythonVersion("3.10", test_on_pr=False)
+    PY310 = PythonVersion("3.10", test_on_pr=True)
     PY311 = PythonVersion("3.11", test_on_pr=False)
     PY312 = PythonVersion("3.12", test_on_pr=False)
     PY313 = PythonVersion("3.13", test_on_pr=False)
@@ -85,6 +85,18 @@ EXCLUSIONS: List[Tuple[str, str]] = [
     ("windows-11-arm", "3.12"),
     ("windows-11-arm", "3.13"),
     ("windows-11-arm", "3.14"),
+]
+
+# Extra (os_image_name, python_version, cloud_provider) combinations to always
+# include in the PR matrix on top of the regular round-robin OS-CSP pairings.
+# Use this when a specific OS+Python combination needs full CSP coverage on PRs.
+PR_EXTRA_COMBINATIONS: List[Tuple[str, str, str]] = [
+    # Windows Python <3.11 is susceptible to a WaitForSingleObjectEx kernel bug
+    # under heavy socket I/O. Test all three CSPs to verify fixes hold everywhere.
+    ("windows-latest", "3.9", "aws"),
+    ("windows-latest", "3.9", "azure"),
+    ("windows-latest", "3.10", "aws"),
+    ("windows-latest", "3.10", "azure"),
 ]
 
 # Additional fields to add to each matrix entry (optional)
@@ -135,6 +147,20 @@ def generate_matrix(pr_only: bool = False):
             for py_version in Python:
                 if py_version.value.test_on_pr:
                     _add_to_matrix(matrix, os_config, csp_name, py_version.value)
+        # Add explicitly requested extra combinations, deduplicating against the
+        # round-robin entries already generated above.
+        for os_name, py_ver, csp_name in PR_EXTRA_COMBINATIONS:
+            os_info = next(os.value for os in OperatingSystem if os.value.name == os_name)
+            py_config = next(py.value for py in Python if py.value.version == py_ver)
+            entry = {
+                "os_image_name": os_info.name,
+                "os_download_name": os_info.download_name,
+                "python-version": py_config.version,
+                "cloud-provider": csp_name,
+                **(ADDITIONAL_FIELDS or {}),
+            }
+            if entry not in matrix:
+                matrix.append(entry)
     else:
         operating_systems = [os_enum.value for os_enum in OperatingSystem]
         python_versions = [py_enum.value for py_enum in Python]
