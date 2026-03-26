@@ -33,6 +33,7 @@ class OperatingSystemInfo:
 
     name: str  # GitHub Actions runner image (e.g., "ubuntu-latest")
     download_name: str  # Artifact download name (e.g., "manylinux_x86_64")
+    test_on_pr: bool = True
 
 
 class OperatingSystem(Enum):
@@ -50,10 +51,11 @@ class OperatingSystem(Enum):
         name="windows-latest",
         download_name="win_amd64",
     )
-    # WINDOWS_ARM = OperatingSystemInfo(
-    #     name="windows-11-arm",
-    #     download_name="win_arm64",
-    # )
+    WINDOWS_ARM = OperatingSystemInfo(
+        name="windows-11-arm",
+        download_name="win_arm64",
+        test_on_pr=False,
+    )
 
 
 class Python(Enum):
@@ -128,14 +130,13 @@ def generate_matrix(pr_only: bool = False):
     matrix = []
 
     if pr_only:
-        csp_to_test = list(CSP)
-        oses = list(OperatingSystem)
-        for py_version in Python:
-            os_config = oses.pop(0).value if oses else OperatingSystem.UBUNTU.value
-            csp_name = csp_to_test.pop(0).value if csp_to_test else CSP.AWS.value
-            if py_version.value.test_on_pr:
-                print(f"Adding {os_config.name} {csp_name} {py_version.value.version}")
-                _add_to_matrix(matrix, os_config, csp_name, py_version.value)
+        csps = list(CSP)
+        oses = [os for os in OperatingSystem if os.value.test_on_pr]
+        pr_pythons = [py for py in Python if py.value.test_on_pr]
+        for i, py_version in enumerate(pr_pythons):
+            os_config = oses[i % len(oses)].value
+            csp_name = csps[i % len(csps)].value
+            _add_to_matrix(matrix, os_config, csp_name, py_version.value)
     else:
         operating_systems = [os_enum.value for os_enum in OperatingSystem]
         python_versions = [py_enum.value for py_enum in Python]
