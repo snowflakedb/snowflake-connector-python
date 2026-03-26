@@ -187,6 +187,23 @@ def create_aws_attestation(
     # TODO: SNOW-2223669 Investigate if our adapters - containing settings of http traffic - should be passed here as boto urllib3session. Those requests go to local servers, so they do not need Proxy setup or Headers customization in theory. But we may want to have all the traffic going through one class (e.g. Adapter or mixin).
     session = get_aws_session(impersonation_path)
 
+    # enable_aws_get_web_identity_token_for_wif = os.environ.get(
+    #     "ENABLE_AWS_GET_WEB_IDENTITY_TOKEN_FOR_WIF"
+    # )
+    # if (
+    #     enable_aws_get_web_identity_token_for_wif
+    #     and enable_aws_get_web_identity_token_for_wif.lower() == "true"
+    # ):
+    #     response = session.client("sts").get_web_identity_token(
+    #         Audience=[SNOWFLAKE_AUDIENCE],
+    #         SigningAlgorithm="RS256",
+    #     )
+    #     return WorkloadIdentityAttestation(
+    #         AttestationProvider.AWS,
+    #         response["WebIdentityToken"],
+    #         {"region": region, "partition": partition},
+    #     )
+
     aws_creds = session.get_credentials()
     if not aws_creds:
         raise ProgrammingError(
