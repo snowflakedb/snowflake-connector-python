@@ -65,6 +65,7 @@ class Python(Enum):
     PY312 = PythonVersion("3.12", test_on_pr=False)
     PY313 = PythonVersion("3.13", test_on_pr=False)
     PY314 = PythonVersion("3.14", test_on_pr=True)
+    PY314t = PythonVersion("3.14t", test_on_pr=True)
 
 
 class CSP(Enum):
