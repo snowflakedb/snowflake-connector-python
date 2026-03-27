@@ -25,6 +25,7 @@ class PythonVersion:
 
     version: str
     test_on_pr: bool = False
+    test_on_all_os: bool = False
 
 
 @dataclass
@@ -66,7 +67,7 @@ class Python(Enum):
     PY311 = PythonVersion("3.11", test_on_pr=True)
     PY312 = PythonVersion("3.12", test_on_pr=True)
     PY313 = PythonVersion("3.13", test_on_pr=True)
-    PY314 = PythonVersion("3.14", test_on_pr=True)
+    PY314 = PythonVersion("3.14", test_on_pr=True, test_on_all_os=True)
 
 
 class CSP(Enum):
@@ -133,7 +134,16 @@ def generate_matrix(pr_only: bool = False):
         csps = list(CSP)
         oses = [os for os in OperatingSystem if os.value.test_on_pr]
         pr_pythons = [py for py in Python if py.value.test_on_pr]
-        for i, py_version in enumerate(pr_pythons):
+
+        all_os_pythons = [py for py in pr_pythons if py.value.test_on_all_os]
+        rotating_pythons = [py for py in pr_pythons if not py.value.test_on_all_os]
+
+        for py_version in all_os_pythons:
+            for i, os_enum in enumerate(oses):
+                csp_name = csps[i % len(csps)].value
+                _add_to_matrix(matrix, os_enum.value, csp_name, py_version.value)
+
+        for i, py_version in enumerate(rotating_pythons):
             os_config = oses[i % len(oses)].value
             csp_name = csps[i % len(csps)].value
             _add_to_matrix(matrix, os_config, csp_name, py_version.value)
