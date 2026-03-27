@@ -353,7 +353,7 @@ class AuthByWebBrowser(AuthByPlugin):
             msg = f"""
 <!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <link rel="icon" href="data:,">
-<title>SAML Response for Snowflake</title></head>
+<title>SAML Response for Snowflake</title><script>window.setTimeout(() => window.close(), 10000);</script></head>
 <body>
 Your identity was confirmed and propagated to Snowflake {self._application}.
 You can close this window now and go back where you started from.
