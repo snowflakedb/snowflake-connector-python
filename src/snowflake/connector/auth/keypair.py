@@ -38,6 +38,7 @@ class AuthByKeyPair(AuthByPlugin):
     ALG_ES256 = "ES256"
     ALG_ES384 = "ES384"
     ALG_ES512 = "ES512"
+    ALGORITHM = ALG_RS256  # deprecated, kept for backward compatibility
 
     ISSUER = "iss"
     SUBJECT = "sub"
