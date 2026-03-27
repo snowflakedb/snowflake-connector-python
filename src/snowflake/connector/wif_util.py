@@ -206,6 +206,7 @@ def create_aws_attestation(
             Audience=[SNOWFLAKE_AUDIENCE], SigningAlgorithm="ES384"
         )
         jwt_token = response["WebIdentityToken"]
+        logger.debug("AWS outbound token prefix: %s", jwt_token[:10])
         return WorkloadIdentityAttestation(
             AttestationProvider.AWS,
             jwt_token,
