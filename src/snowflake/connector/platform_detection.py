@@ -434,12 +434,12 @@ def is_aws_wif_outbound_token_enabled():
     Check if AWS WIF outbound token is enabled via environment variable.
 
     Returns:
-        _DetectionState: DETECTED if ENABLE_AWS_WIF_OUTBOUND_TOKEN env var is true,
+        _DetectionState: DETECTED if SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN env var is true,
                         NOT_DETECTED otherwise.
     """
     return (
         _DetectionState.DETECTED
-        if os.environ.get("ENABLE_AWS_WIF_OUTBOUND_TOKEN", "false").lower() == "true"
+        if os.environ.get("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", "false").lower() == "true"
         else _DetectionState.NOT_DETECTED
     )
 

@@ -10,8 +10,9 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
 - Upcoming Release
   - Added HTTP 307/308 redirect status codes to the retryable set as defense-in-depth, with redirect-aware logging in both sync and async paths.
   - Consolidated keyring token cache to use a single service name with hashed account keys, reducing macOS Keychain password prompts. Legacy entries are auto-migrated on first read.
+  - Added support for AWS outbound JWT token attestation for Workload Identity Federation (WIF). This can be enabled by setting the `SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN` environment variable to `true`.
 
-- v4.4.0(March 25,2026)
+- v4.4.0(March 24,2026)
   - Bump the lower boundary of cryptography to 46.0.5 due to CVE-2026-26007.
   - Added support for Python 3.14.
   - Removed pyOpenSSL upper bound dependency constraint to allow installation of pyOpenSSL 26.0.0+, which includes a fix for GHSA-vp96-hxj8-p424.
@@ -21,8 +22,6 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Renamed the environment variable for skipping config file permission warnings from `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` to `SF_SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION`. The old variable is still supported but emits a deprecation warning.
   - Fixed `unsafe_skip_file_permissions_check` flag not being respected when reading `connections.toml`.
   - Fixed JSONDecodeError in result_batch._load() when fetching large result sets
-  - Added support for AWS outbound JWT token attestation for Workload Identity Federation (WIF). This can be enabled by setting the
-      `ENABLE_AWS_WIF_OUTBOUND_TOKEN` environment variable to `true`.
 
 - v4.3.0(February 12,2026)
   - Ensured proper list conversion - the converter runs to_snowflake on all list elements.

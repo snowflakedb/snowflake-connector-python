@@ -347,9 +347,9 @@ def test_aws_token_format_based_on_env_variable(
     env_value,
     expected_format,
 ):
-    """Test that AWS uses correct token format based on ENABLE_AWS_WIF_OUTBOUND_TOKEN environment variable."""
+    """Test that AWS uses correct token format based on SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN environment variable."""
     if env_value is not None:
-        monkeypatch.setenv("ENABLE_AWS_WIF_OUTBOUND_TOKEN", env_value)
+        monkeypatch.setenv("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", env_value)
 
     auth_class = AuthByWorkloadIdentity(provider=AttestationProvider.AWS)
     auth_class.prepare(conn=None)
