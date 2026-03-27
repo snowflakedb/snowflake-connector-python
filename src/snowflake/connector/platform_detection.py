@@ -439,7 +439,8 @@ def is_aws_wif_outbound_token_enabled():
     """
     return (
         _DetectionState.DETECTED
-        if os.environ.get("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", "false").lower() == "true"
+        if os.environ.get("SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN", "false").lower()
+        == "true"
         else _DetectionState.NOT_DETECTED
     )
 
