@@ -376,23 +376,5 @@
     "os_download_name": "win_amd64",
     "python-version": "3.14t",
     "cloud-provider": "gcp"
-  },
-  {
-    "os_image_name": "windows-11-arm",
-    "os_download_name": "win_arm64",
-    "python-version": "3.14t",
-    "cloud-provider": "aws"
-  },
-  {
-    "os_image_name": "windows-11-arm",
-    "os_download_name": "win_arm64",
-    "python-version": "3.14t",
-    "cloud-provider": "azure"
-  },
-  {
-    "os_image_name": "windows-11-arm",
-    "os_download_name": "win_arm64",
-    "python-version": "3.14t",
-    "cloud-provider": "gcp"
   }
 ]

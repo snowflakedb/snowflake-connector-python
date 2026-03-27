@@ -86,6 +86,8 @@ EXCLUSIONS: List[Tuple[str, str]] = [
     ("windows-11-arm", "3.12"),
     ("windows-11-arm", "3.13"),
     ("windows-11-arm", "3.14"),
+    # cryptography doesn't publish cp314t-win_arm64 wheels yet
+    ("windows-11-arm", "3.14t"),
 ]
 
 # Additional fields to add to each matrix entry (optional)
