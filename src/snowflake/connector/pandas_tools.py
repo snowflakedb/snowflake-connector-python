@@ -592,11 +592,10 @@ def write_pandas(
             f"{' BINARY_AS_TEXT=FALSE' if auto_create_table or overwrite or infer_schema else ''}"
             f"{sql_use_logical_type}"
             f") "
-            f"PURGE=TRUE ON_ERROR=?"
+            f"PURGE=TRUE ON_ERROR='{on_error}'"
         )
         params = (
             target_table_location,
-            on_error,
         )
         logger.debug(f"copying into with '{copy_into_sql}'. params: %s", params)
         copy_results = cursor.execute(
