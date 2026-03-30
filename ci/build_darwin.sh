@@ -1,4 +1,4 @@
-#!/bin/bash -e
+#!/bin/bash -e -l
 #
 # Build Snowflake Python Connector on Mac
 # NOTES:
@@ -35,6 +35,15 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
     VENV_DIR="${CONNECTOR_DIR}/venv-${PYTHON_VERSION}"
 
     log "[Info] ===== Starting build for Python ${PYTHON_VERSION} ====="
+
+    # Select the matching pyenv-installed version (e.g. 3.9 -> 3.9.21)
+    if command -v pyenv &> /dev/null; then
+        PYENV_MATCH=$(pyenv versions --bare | grep "^${PYTHON_VERSION}" | head -1)
+        if [ -n "$PYENV_MATCH" ]; then
+            pyenv local "$PYENV_MATCH"
+            log "[Info] pyenv local set to $PYENV_MATCH"
+        fi
+    fi
 
     log "[Info] Checking if ${PYTHON} is available..."
     which ${PYTHON} || { log "[ERROR] ${PYTHON} not found in PATH, skipping"; continue; }
