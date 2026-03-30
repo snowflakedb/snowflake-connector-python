@@ -4,11 +4,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from snowflake.connector.token_cache import (
-    KeyringTokenCache,
-    TokenKey,
-    TokenType,
-)
+from snowflake.connector.token_cache import KeyringTokenCache, TokenKey, TokenType
 
 
 @pytest.fixture
@@ -25,12 +21,18 @@ def cache():
 
 
 SERVICE = KeyringTokenCache.SERVICE_NAME
-KEY = TokenKey(user="ALICE", host="myhost.snowflakecomputing.com", tokenType=TokenType.OAUTH_ACCESS_TOKEN)
+KEY = TokenKey(
+    user="ALICE",
+    host="myhost.snowflakecomputing.com",
+    tokenType=TokenType.OAUTH_ACCESS_TOKEN,
+)
 ACCOUNT = KEY.hash_key()
 
 
 class TestStore:
-    def test_stores_under_unified_service_with_hashed_account(self, cache, mock_keyring):
+    def test_stores_under_unified_service_with_hashed_account(
+        self, cache, mock_keyring
+    ):
         cache.store(KEY, "tok123")
         mock_keyring.set_password.assert_called_once_with(
             SERVICE,
@@ -50,15 +52,20 @@ class TestRetrieve:
         mock_keyring.get_password.side_effect = [None, "legacy_tok"]
         result = cache.retrieve(KEY)
         assert result == "legacy_tok"
-        mock_keyring.get_password.assert_has_calls([
-            call(SERVICE, ACCOUNT),
-            call(KEY.string_key(), KEY.user.upper()),
-        ])
+        mock_keyring.get_password.assert_has_calls(
+            [
+                call(SERVICE, ACCOUNT),
+                call(KEY.string_key(), KEY.user.upper()),
+            ]
+        )
         mock_keyring.set_password.assert_called_once_with(
-            SERVICE, ACCOUNT, "legacy_tok",
+            SERVICE,
+            ACCOUNT,
+            "legacy_tok",
         )
         mock_keyring.delete_password.assert_called_once_with(
-            KEY.string_key(), KEY.user.upper(),
+            KEY.string_key(),
+            KEY.user.upper(),
         )
 
     def test_returns_none_when_not_found_anywhere(self, cache, mock_keyring):
