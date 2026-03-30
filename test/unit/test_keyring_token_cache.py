@@ -4,7 +4,13 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
+from snowflake.connector.options import installed_keyring
 from snowflake.connector.token_cache import KeyringTokenCache, TokenKey, TokenType
+
+pytestmark = pytest.mark.skipif(
+    not installed_keyring,
+    reason="keyring is not installed",
+)
 
 
 @pytest.fixture
