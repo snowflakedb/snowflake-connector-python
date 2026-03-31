@@ -38,7 +38,7 @@ for PYTHON_VERSION in ${PYTHON_VERSIONS}; do
 
     # Select the matching pyenv-installed version (e.g. 3.9 -> 3.9.21)
     if command -v pyenv &> /dev/null; then
-        PYENV_MATCH=$(pyenv versions --bare | grep "^${PYTHON_VERSION}" | head -1)
+        PYENV_MATCH=$(pyenv versions --bare | grep "^${PYTHON_VERSION//./\\.}" | head -1)
         if [ -n "$PYENV_MATCH" ]; then
             pyenv local "$PYENV_MATCH"
             log "[Info] pyenv local set to $PYENV_MATCH"
