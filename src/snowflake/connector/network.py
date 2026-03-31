@@ -108,6 +108,7 @@ from .vendored.requests.exceptions import (
     ConnectTimeout,
     ReadTimeout,
     SSLError,
+    TooManyRedirects,
 )
 from .vendored.urllib3.exceptions import ProtocolError
 from .vendored.urllib3.util.url import parse_url
@@ -1129,7 +1130,8 @@ class SnowflakeRestful:
             )
             download_end_time = get_time_millis()
 
-            # Log if the response came through a redirect chain (defense-in-depth observability)
+            # Log when the HTTP library auto-followed a redirect chain before
+            # delivering this response (history is populated by requests).
             if raw_ret.history:
                 for hist_resp in raw_ret.history:
                     if hist_resp.status_code in (
@@ -1237,6 +1239,23 @@ class SnowflakeRestful:
             else:
                 logger.debug(
                     "Hit retryable client error. Retrying... Ignore the following "
+                    f"error stack: {err}",
+                    exc_info=True,
+                )
+                raise RetryRequest(err)
+        except TooManyRedirects as err:
+            # requests raises TooManyRedirects when max_redirects is exceeded.
+            # Unlike .NET's HttpClient (which returns the last 307/308 response),
+            # requests throws here — so is_retryable_http_code(307/308) never fires.
+            # Catch explicitly and apply the same retry/login logic.
+            if is_login_request(full_url):
+                raise OperationalError(
+                    msg="Login request is retryable. Will be handled by authenticator",
+                    errno=ER_RETRYABLE_CODE,
+                )
+            else:
+                logger.debug(
+                    "Too many redirects. Retrying... Ignore the following "
                     f"error stack: {err}",
                     exc_info=True,
                 )

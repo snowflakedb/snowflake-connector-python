@@ -54,18 +54,27 @@ def _count_requests_matching(wiremock_client: WiremockClient, url_pattern: str) 
 def test_http_redirect_retry(
     wiremock_client: WiremockClient, status_code, mapping_file, expected_query_id
 ):
-    """Test that a query succeeds after a 307/308 redirect triggers a retry.
+    """Test that a query succeeds after a redirect-then-timeout triggers a retry.
+
+    Note on what this test exercises: the HTTP library (requests) auto-follows
+    the 307/308 redirect to /temp-redirect-target. That target has a 30-second
+    delay, so socket_timeout fires. The connector's existing timeout-based retry
+    logic then retries the original /queries/v1/query-request URL, which now
+    returns 200. This tests the auto-follow+timeout-retry path, NOT the
+    is_retryable_http_code(307/308) defense-in-depth path (which is triggered
+    when TooManyRedirects is raised — covered by test_too_many_redirects_*).
 
     Scenario:
     1. Login succeeds
-    2. First query gets a redirect (307/308) to a target that delays (timeout)
-    3. Timeout triggers a retry to the original URL
-    4. Retry returns a successful query result
+    2. First query request → WireMock returns 307 with Location: /temp-redirect-target
+    3. requests auto-follows to /temp-redirect-target (30s delay) → socket timeout
+    4. Timeout triggers a retry to the original /queries/v1/query-request URL
+    5. Retry returns a successful query result
 
-    Verified via WireMock request journal (like JDBC verifyRequestCount):
+    Verified via WireMock request journal (mirrors JDBC verifyRequestCount):
     - Exactly 2 POSTs to /queries/v1/query-request (original + retry)
     - At least 1 POST to /temp-redirect-target (redirect was followed)
-    - Response queryId matches the retry scenario state (like .NET)
+    - Response queryId matches the retry scenario state (mirrors .NET AssertResponseId)
     """
     wiremock_client.import_mapping(WIREMOCK_REDIRECT_DIR / mapping_file)
 

@@ -685,3 +685,65 @@ async def test_redirect_history_logged(caplog):
     assert (
         "Request was redirected: HTTP 307 to /internal-redirect-target" in caplog.text
     )
+
+
+async def test_too_many_redirects_raises_retry_request():
+    """TooManyRedirects from session.request() must raise RetryRequest for query URLs.
+
+    aiohttp raises TooManyRedirects (not returns a 307) when the redirect chain
+    exceeds max_redirects. This is the Python equivalent of .NET's HttpClient
+    returning a 307/308 response at the redirect limit — both should be retried.
+    """
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    # aiohttp.TooManyRedirects requires a RequestInfo-like object as first arg
+    request_info = MagicMock()
+    request_info.real_url = (
+        "https://testaccount.snowflakecomputing.com/queries/v1/query-request"
+    )
+    session = AsyncMock()
+    session.request.side_effect = aiohttp.TooManyRedirects(request_info, history=())
+
+    with pytest.raises(RetryRequest):
+        await rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+
+async def test_too_many_redirects_on_login_raises_operational_error():
+    """TooManyRedirects on login URL must raise OperationalError, not RetryRequest."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    request_info = MagicMock()
+    request_info.real_url = (
+        "https://testaccount.snowflakecomputing.com/session/v1/login-request"
+    )
+    session = AsyncMock()
+    session.request.side_effect = aiohttp.TooManyRedirects(request_info, history=())
+
+    with pytest.raises(OperationalError):
+        await rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/session/v1/login-request?request_id=abc",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )

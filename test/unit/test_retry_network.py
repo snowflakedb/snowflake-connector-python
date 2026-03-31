@@ -54,11 +54,14 @@ from .mock_utils import (
 try:
     import snowflake.connector.vendored.urllib3.contrib.pyopenssl
     from snowflake.connector.vendored import requests, urllib3
-    from snowflake.connector.vendored.requests.exceptions import SSLError
+    from snowflake.connector.vendored.requests.exceptions import (
+        SSLError,
+        TooManyRedirects,
+    )
 except ImportError:  # pragma: no cover
     import requests
     import urllib3
-    from requests.exceptions import SSLError
+    from requests.exceptions import SSLError, TooManyRedirects
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
@@ -562,8 +565,6 @@ def test_sslerror_without_econnreset_does_not_retry():
 
 def test_is_retryable_http_code_includes_307_308():
     """Test that 307 and 308 redirect status codes are considered retryable."""
-    assert is_retryable_http_code(307) is True
-    assert is_retryable_http_code(308) is True
     assert is_retryable_http_code(TEMPORARY_REDIRECT) is True
     assert is_retryable_http_code(PERMANENT_REDIRECT) is True
 
@@ -706,3 +707,56 @@ def test_redirect_history_logged(caplog):
     assert (
         "Request was redirected: HTTP 307 to /internal-redirect-target" in caplog.text
     )
+
+
+def test_too_many_redirects_raises_retry_request():
+    """TooManyRedirects from session.request() must raise RetryRequest for query URLs.
+
+    requests raises TooManyRedirects (not returns a 307) when the redirect chain
+    exceeds max_redirects. This is the Python equivalent of .NET's HttpClient
+    returning a 307/308 response at the redirect limit — both should be retried.
+    """
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    session = MagicMock()
+    session.request.side_effect = TooManyRedirects("exceeded redirect limit")
+
+    with pytest.raises(RetryRequest):
+        rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+
+def test_too_many_redirects_on_login_raises_operational_error():
+    """TooManyRedirects on login URL must raise OperationalError, not RetryRequest."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    session = MagicMock()
+    session.request.side_effect = TooManyRedirects("exceeded redirect limit")
+
+    with pytest.raises(OperationalError):
+        rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/session/v1/login-request?request_id=abc",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
