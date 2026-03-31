@@ -24,8 +24,10 @@ from .compat import (
     INTERNAL_SERVER_ERROR,
     METHOD_NOT_ALLOWED,
     OK,
+    PERMANENT_REDIRECT,
     REQUEST_TIMEOUT,
     SERVICE_UNAVAILABLE,
+    TEMPORARY_REDIRECT,
     TOO_MANY_REQUESTS,
     UNAUTHORIZED,
     BadStatusLine,
@@ -191,8 +193,17 @@ PAT_WITH_EXTERNAL_SESSION = "PAT_WITH_EXTERNAL_SESSION"
 
 
 def is_retryable_http_code(code: int) -> bool:
-    """Decides whether code is a retryable HTTP issue."""
+    """Decides whether code is a retryable HTTP issue.
+
+    Note: 307/308 are normally auto-followed by the HTTP library (vendored
+    requests / aiohttp). They appear here as defense-in-depth — if a redirect
+    response is ever surfaced without being followed (e.g. max redirects
+    reached, allow_redirects=False, or library edge case), we retry instead
+    of failing. See SNOW-1997074.
+    """
     return 500 <= code < 600 or code in (
+        TEMPORARY_REDIRECT,  # 307
+        PERMANENT_REDIRECT,  # 308
         BAD_REQUEST,  # 400
         FORBIDDEN,  # 403
         METHOD_NOT_ALLOWED,  # 405
@@ -1117,6 +1128,19 @@ class SnowflakeRestful:
                 auth=auth,
             )
             download_end_time = get_time_millis()
+
+            # Log if the response came through a redirect chain (defense-in-depth observability)
+            if raw_ret.history:
+                for hist_resp in raw_ret.history:
+                    if hist_resp.status_code in (
+                        TEMPORARY_REDIRECT,
+                        PERMANENT_REDIRECT,
+                    ):
+                        logger.debug(
+                            "Request was redirected: HTTP %d to %s",
+                            hist_resp.status_code,
+                            hist_resp.headers.get("Location", "unknown"),
+                        )
 
             try:
                 if raw_ret.status_code == OK:

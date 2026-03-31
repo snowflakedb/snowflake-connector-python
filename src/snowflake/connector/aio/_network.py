@@ -11,7 +11,16 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 import OpenSSL.SSL
 
-from ..compat import FORBIDDEN, OK, UNAUTHORIZED, urlencode, urlparse, urlsplit
+from ..compat import (
+    FORBIDDEN,
+    OK,
+    PERMANENT_REDIRECT,
+    TEMPORARY_REDIRECT,
+    UNAUTHORIZED,
+    urlencode,
+    urlparse,
+    urlsplit,
+)
 from ..constants import (
     _CONNECTIVITY_ERR_MSG,
     HTTP_HEADER_ACCEPT,
@@ -741,6 +750,17 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 data=input_data,
                 timeout=aiohttp.ClientTimeout(socket_timeout),
             )
+
+            # Log if the response came through a redirect chain (defense-in-depth observability)
+            if raw_ret.history:
+                for hist_resp in raw_ret.history:
+                    if hist_resp.status in (TEMPORARY_REDIRECT, PERMANENT_REDIRECT):
+                        logger.debug(
+                            "Request was redirected: HTTP %d to %s",
+                            hist_resp.status,
+                            hist_resp.headers.get("Location", "unknown"),
+                        )
+
             try:
                 if raw_ret.status == OK:
                     logger.debug("SUCCESS")

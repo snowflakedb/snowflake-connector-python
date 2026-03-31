@@ -29,7 +29,9 @@ from snowflake.connector.compat import (
     GATEWAY_TIMEOUT,
     INTERNAL_SERVER_ERROR,
     OK,
+    PERMANENT_REDIRECT,
     SERVICE_UNAVAILABLE,
+    TEMPORARY_REDIRECT,
     UNAUTHORIZED,
 )
 from snowflake.connector.errors import (
@@ -513,3 +515,134 @@ async def test_sslerror_without_econnreset_does_not_retry():
     # This should raise OperationalError, not RetryRequest
     with pytest.raises(OperationalError):
         await rest._request_exec(session=session, **default_parameters)
+
+
+@pytest.mark.parametrize("status_code", [TEMPORARY_REDIRECT, PERMANENT_REDIRECT])
+async def test_redirect_status_raises_retry_request(status_code):
+    """Test that 307/308 responses raise RetryRequest for non-login URLs."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    request_mock = AsyncMock()
+    type(request_mock).status = PropertyMock(return_value=status_code)
+    request_mock.history = ()
+
+    session = AsyncMock()
+    session.request.return_value = request_mock
+
+    with pytest.raises(RetryRequest):
+        await rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+
+@pytest.mark.parametrize("status_code", [TEMPORARY_REDIRECT, PERMANENT_REDIRECT])
+async def test_redirect_login_raises_operational_error(status_code):
+    """Test that 307/308 on login URLs raises OperationalError (not RetryRequest)."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    request_mock = AsyncMock()
+    type(request_mock).status = PropertyMock(return_value=status_code)
+    request_mock.history = ()
+
+    session = AsyncMock()
+    session.request.return_value = request_mock
+
+    with pytest.raises(OperationalError):
+        await rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/session/v1/login-request?request_id=abc",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+
+async def test_redirect_retry_succeeds_on_second_attempt():
+    """Test that a redirect-triggered retry eventually succeeds using the original URL."""
+    connection = mock_connection(backoff_policy=zero_backoff)
+    connection.errorhandler = Mock(return_value=None)
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    call_count = 0
+
+    async def fake_request_exec(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            raise RetryRequest(OtherHTTPRetryableError(errno=307))
+        return {"success": True, "data": "valid data"}
+
+    rest._request_exec = fake_request_exec
+
+    ret = await rest.fetch(
+        method="POST",
+        full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+        headers={},
+        data='{"code": 12345}',
+        timeout=10,
+    )
+    assert ret == {"success": True, "data": "valid data"}
+    assert call_count == 2
+
+
+async def test_redirect_history_logged(caplog):
+    """Test that redirect history is logged at debug level."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    # Create a mock redirect history entry (aiohttp uses .status, not .status_code)
+    hist_response = MagicMock()
+    hist_response.status = 307
+    hist_response.headers = {"Location": "/internal-redirect-target"}
+
+    # Create the final 200 response with history
+    output_data = {"success": True, "code": 12345}
+    request_mock = AsyncMock()
+    type(request_mock).status = PropertyMock(return_value=OK)
+    request_mock.json.return_value = output_data
+    request_mock.history = (hist_response,)  # aiohttp uses tuple
+
+    session = AsyncMock()
+    session.request.return_value = request_mock
+
+    with caplog.at_level(logging.DEBUG):
+        ret = await rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+    assert ret == output_data
+    assert (
+        "Request was redirected: HTTP 307 to /internal-redirect-target" in caplog.text
+    )
