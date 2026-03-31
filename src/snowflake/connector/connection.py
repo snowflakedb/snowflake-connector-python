@@ -2272,20 +2272,21 @@ class SnowflakeConnection:
         real_max = int(self.rest.master_validity_in_seconds / 4)
         real_min = int(real_max / 4)
 
-        # ensure the type is integer
-        self._client_session_keep_alive_heartbeat_frequency = int(
-            self.client_session_keep_alive_heartbeat_frequency
-        )
+        value = self.client_session_keep_alive_heartbeat_frequency
 
-        if self.client_session_keep_alive_heartbeat_frequency is None:
-            # This is an unlikely scenario but covering it just in case.
+        if value is None:
             self._client_session_keep_alive_heartbeat_frequency = real_min
-        elif self.client_session_keep_alive_heartbeat_frequency > real_max:
-            self._client_session_keep_alive_heartbeat_frequency = real_max
-        elif self.client_session_keep_alive_heartbeat_frequency < real_min:
-            self._client_session_keep_alive_heartbeat_frequency = real_min
+            return real_min
 
-        return self.client_session_keep_alive_heartbeat_frequency
+        value = int(value)
+
+        if value > real_max:
+            value = real_max
+        elif value < real_min:
+            value = real_min
+
+        self._client_session_keep_alive_heartbeat_frequency = value
+        return value
 
     def _validate_client_prefetch_threads(self) -> int:
         if self.client_prefetch_threads <= 0:
