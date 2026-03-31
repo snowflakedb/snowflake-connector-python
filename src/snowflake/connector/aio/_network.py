@@ -752,7 +752,8 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             )
 
             # Log if the response came through a redirect chain (defense-in-depth observability)
-            if raw_ret.history:
+            # isinstance guard avoids TypeError when tests use plain Mock() responses
+            if isinstance(raw_ret.history, tuple):
                 for hist_resp in raw_ret.history:
                     if hist_resp.status in (TEMPORARY_REDIRECT, PERMANENT_REDIRECT):
                         logger.debug(
