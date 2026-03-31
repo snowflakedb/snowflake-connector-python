@@ -1130,8 +1130,7 @@ class SnowflakeRestful:
             download_end_time = get_time_millis()
 
             # Log if the response came through a redirect chain (defense-in-depth observability)
-            # isinstance guard avoids TypeError when tests use plain Mock() responses
-            if isinstance(raw_ret.history, list):
+            if raw_ret.history:
                 for hist_resp in raw_ret.history:
                     if hist_resp.status_code in (
                         TEMPORARY_REDIRECT,

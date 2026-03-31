@@ -361,6 +361,7 @@ def test_request_throws_http_exception_for_non_retryable(status_code):
     mock_response.status_code = status_code
     mock_response.reason = f"HTTP {status_code} Error"
     mock_response.close = Mock()
+    mock_response.history = []
 
     with mock.patch.object(Session, "request") as request_mocked:
         request_mocked.return_value = mock_response
@@ -399,6 +400,7 @@ def test_request_throws_http_exception_for_retryable(status_code, expected_excep
     mock_response.status_code = status_code
     mock_response.reason = f"HTTP {status_code} Error"
     mock_response.close = Mock()
+    mock_response.history = []
 
     with mock.patch.object(Session, "request") as request_mocked:
         request_mocked.return_value = mock_response
