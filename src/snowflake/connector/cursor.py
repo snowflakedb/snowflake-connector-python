@@ -19,7 +19,6 @@ from typing import (
     IO,
     TYPE_CHECKING,
     Any,
-    Callable,
     Dict,
     Generic,
     Iterator,
@@ -70,6 +69,8 @@ from .errorcode import (
 from .errors import (
     DatabaseError,
     Error,
+    ErrorDetails,
+    StructuredErrorHandler,
     IntegrityError,
     InterfaceError,
     NotSupportedError,
@@ -376,13 +377,8 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         """
         self._connection: SnowflakeConnection = connection
 
-        self._errorhandler: Callable[
-            [SnowflakeConnection, SnowflakeCursor, type[Error], dict[str, str]],
-            None,
-        ] = Error.default_errorhandler
-        self.messages: list[
-            tuple[type[Error] | type[Exception], dict[str, str | bool]]
-        ] = []
+        self._errorhandler: StructuredErrorHandler = Error.default_errorhandler
+        self.messages: list[tuple[type[Error], ErrorDetails]] = []
         self._timebomb: _TrackedQueryCancellationTimer | None = (
             None  # must be here for abort_exit method
         )
@@ -546,11 +542,11 @@ class SnowflakeCursorBase(abc.ABC, Generic[FetchRow]):
         return self._connection
 
     @property
-    def errorhandler(self) -> Callable:
+    def errorhandler(self) -> StructuredErrorHandler:
         return self._errorhandler
 
     @errorhandler.setter
-    def errorhandler(self, value: Callable | None) -> None:
+    def errorhandler(self, value: StructuredErrorHandler | None) -> None:
         logger.debug("setting errorhandler: %s", value)
         if value is None:
             raise ProgrammingError("Invalid errorhandler is specified")

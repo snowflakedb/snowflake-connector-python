@@ -7,7 +7,7 @@ import os
 import re
 import traceback
 from logging import getLogger
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict, Protocol
 
 from .errorcode import ER_HTTP_GENERAL_ERROR
 from .secret_detector import SecretDetector
@@ -26,6 +26,22 @@ connector_base_path = os.path.join("snowflake", "connector")
 
 RE_FORMATTED_ERROR = re.compile(r"^(\d{6,})(?: \((\S+)\))?:")
 
+class ErrorDetails(TypedDict, total=False):
+    msg: str
+    errno: int | None
+    sqlstate: str | None
+    sfqid: str | None
+    query: str | None
+    done_format_msg: bool
+
+class StructuredErrorHandler(Protocol):
+    def __call__(
+        self,
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None,
+        cursor: SnowflakeCursor | AsyncSnowflakeCursor | None,
+        error_class: type[Error],
+        error_value: ErrorDetails,
+    ) -> None: ...
 
 class Error(Exception):
     """Base Snowflake exception class."""
@@ -208,10 +224,10 @@ class Error(Exception):
 
     @staticmethod
     def default_errorhandler(
-        connection: SnowflakeConnection,
-        cursor: SnowflakeCursor,
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None,
+        cursor: SnowflakeCursor | AsyncSnowflakeCursor | None,
         error_class: type[Error],
-        error_value: dict[str, str],
+        error_value: ErrorDetails,
     ) -> None:
         """Default error handler that raises an error.
 
@@ -241,9 +257,9 @@ class Error(Exception):
 
     @staticmethod
     def errorhandler_wrapper_from_cause(
-        connection: SnowflakeConnection,
-        cause: Error | Exception,
-        cursor: SnowflakeCursor | None = None,
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None,
+        cause: Error,
+        cursor: SnowflakeCursor | AsyncSnowflakeCursor | None = None,
     ) -> None:
         """Wrapper for errorhandler_wrapper, it is called with a cause instead of a dictionary.
 
@@ -274,10 +290,10 @@ class Error(Exception):
 
     @staticmethod
     def errorhandler_wrapper(
-        connection: SnowflakeConnection | None,
-        cursor: SnowflakeCursor | None,
-        error_class: type[Error] | type[Exception],
-        error_value: dict[str, Any],
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None,
+        cursor: SnowflakeCursor | AsyncSnowflakeCursor | None,
+        error_class: type[Error],
+        error_value: ErrorDetails,
     ) -> None:
         """Error handler wrapper that calls the errorhandler method.
 
@@ -309,36 +325,34 @@ class Error(Exception):
 
     @staticmethod
     def errorhandler_wrapper_from_ready_exception(
-        connection: SnowflakeConnection | None,
-        cursor: SnowflakeCursor | None,
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None,
+        cursor: SnowflakeCursor | AsyncSnowflakeCursor | None,
         error_exc: Error | Exception,
     ) -> None:
         """Like errorhandler_wrapper, but it takes a ready to go Exception."""
-        if isinstance(error_exc, Error):
-            error_value = {
+        if not isinstance(error_exc, Error):
+            raise error_exc
+
+        Error.errorhandler_wrapper(
+            connection,
+            cursor,
+            type(error_exc),
+            {
                 "msg": error_exc.msg,
                 "errno": error_exc.errno,
                 "sqlstate": error_exc.sqlstate,
                 "sfqid": error_exc.sfqid,
-            }
-        else:
-            error_value = error_exc.args
-
-        handed_over = Error.hand_to_other_handler(
-            connection,
-            cursor,
-            type(error_exc),
-            error_value,
+                "query": error_exc.query,
+                "done_format_msg": True,
+            },
         )
-        if not handed_over:
-            raise error_exc
 
     @staticmethod
     def hand_to_other_handler(
-        connection: SnowflakeConnection | None,
-        cursor: SnowflakeCursor | None,
-        error_class: type[Error] | type[Exception],
-        error_value: dict[str, str | bool],
+        connection: SnowflakeConnection | AsyncSnowflakeConnection | None,
+        cursor: SnowflakeCursor | AsyncSnowflakeCursor | None,
+        error_class: type[Error],
+        error_value: ErrorDetails,
     ) -> bool:
         """If possible give error to a higher error handler in connection, or cursor.
 
@@ -367,20 +381,17 @@ class Error(Exception):
 
     @staticmethod
     def errorhandler_make_exception(
-        error_class: type[Error] | type[Exception],
-        error_value: dict[str, str | bool],
-    ) -> Error | Exception:
+        error_class: type[Error],
+        error_value: ErrorDetails,
+    ) -> Error:
         """Helper function to errorhandler_wrapper that creates the exception."""
         error_value.setdefault("done_format_msg", False)
-
-        if issubclass(error_class, Error):
-            return error_class(
-                msg=error_value["msg"],
-                errno=error_value.get("errno"),
-                sqlstate=error_value.get("sqlstate"),
-                sfqid=error_value.get("sfqid"),
-            )
-        return error_class(error_value)
+        return error_class(
+            msg=error_value["msg"],
+            errno=error_value.get("errno"),
+            sqlstate=error_value.get("sqlstate"),
+            sfqid=error_value.get("sfqid"),
+        )
 
 
 class _Warning(Exception):
