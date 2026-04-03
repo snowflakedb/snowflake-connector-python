@@ -1281,6 +1281,50 @@ def test_disable_query_context_cache(conn_cnx) -> None:
 
 
 @pytest.mark.skipolddriver
+def test_qcc_updated_on_failed_query_with_hybrid_table(conn_cnx) -> None:
+    """SNOW-3010877: QCC must be merged even when a query fails.
+
+    Reproduces the exact hybrid table scenario from the bug report:
+    a duplicate-key INSERT inside a transaction fails, but the server
+    still sends queryContext in the error response.  The client must
+    merge it so that subsequent queries on different GS nodes see the
+    updated sessionDPO / read snapshot watermark.
+    """
+    with conn_cnx() as conn:
+        cur = conn.cursor()
+        table_name = f"test_qcc_hybrid_{random_string(5)}"
+        try:
+            cur.execute(
+                f"create or replace hybrid table {table_name} "
+                f"(pk text primary key, val text)"
+            )
+            cur.execute("alter session set TRANSACTION_ABORT_ON_ERROR = true")
+            cur.execute("begin")
+
+            # Q1 — successful insert
+            cur.execute(f"insert into {table_name} values ('k1', 'v1')")
+            qcc_after_success = len(conn.query_context_cache)
+            assert qcc_after_success > 0, (
+                "QCC should have entries after successful query"
+            )
+
+            # Q2 — duplicate key insert, expected to fail
+            with pytest.raises(ProgrammingError):
+                cur.execute(f"insert into {table_name} values ('k1', 'v1')")
+
+            # The critical assertion: QCC must still have been updated
+            # despite the query failure.  The entry count must not have
+            # decreased — it should stay the same or grow.
+            qcc_after_failure = len(conn.query_context_cache)
+            assert qcc_after_failure >= qcc_after_success, (
+                f"QCC should not shrink after a failed query: "
+                f"before={qcc_after_success}, after={qcc_after_failure}"
+            )
+        finally:
+            cur.execute(f"drop table if exists {table_name}")
+
+
+@pytest.mark.skipolddriver
 @pytest.mark.parametrize("mode", ("file", "env"))
 @pytest.mark.parametrize("connection_name", ["default", "custom_connection_for_test"])
 def test_connection_name_loading(
