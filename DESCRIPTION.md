@@ -20,6 +20,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Renamed the environment variable for skipping config file permission warnings from `SF_SKIP_WARNING_FOR_READ_PERMISSIONS_ON_CONFIG_FILE` to `SF_SKIP_TOKEN_FILE_PERMISSIONS_VERIFICATION`. The old variable is still supported but emits a deprecation warning.
   - Fixed `unsafe_skip_file_permissions_check` flag not being respected when reading `connections.toml`.
   - Fixed JSONDecodeError in result_batch._load() when fetching large result sets
+  - Fixed a bug where `client_prefetch_threads=0` could fall back to the default thread count instead of following the existing lower-bound correction, and aligned async `client_prefetch_threads` validation with the sync path.
 
 - v4.3.0(February 12,2026)
   - Ensured proper list conversion - the converter runs to_snowflake on all list elements.
