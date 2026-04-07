@@ -11,7 +11,16 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 import OpenSSL.SSL
 
-from ..compat import FORBIDDEN, OK, UNAUTHORIZED, urlencode, urlparse, urlsplit
+from ..compat import (
+    FORBIDDEN,
+    OK,
+    PERMANENT_REDIRECT,
+    TEMPORARY_REDIRECT,
+    UNAUTHORIZED,
+    urlencode,
+    urlparse,
+    urlsplit,
+)
 from ..constants import (
     _CONNECTIVITY_ERR_MSG,
     HTTP_HEADER_ACCEPT,
@@ -741,6 +750,18 @@ class SnowflakeRestful(SnowflakeRestfulSync):
                 data=input_data,
                 timeout=aiohttp.ClientTimeout(socket_timeout),
             )
+
+            # Log when the HTTP library auto-followed a redirect chain before
+            # delivering this response (history is populated by aiohttp).
+            if raw_ret.history:
+                for hist_resp in raw_ret.history:
+                    if hist_resp.status in (TEMPORARY_REDIRECT, PERMANENT_REDIRECT):
+                        logger.debug(
+                            "Request was redirected: HTTP %d to %s",
+                            hist_resp.status,
+                            hist_resp.headers.get("Location", "unknown"),
+                        )
+
             try:
                 if raw_ret.status == OK:
                     logger.debug("SUCCESS")
@@ -837,6 +858,23 @@ class SnowflakeRestful(SnowflakeRestfulSync):
             else:
                 logger.debug(
                     "Hit retryable client error. Retrying... Ignore the following "
+                    f"error stack: {err}",
+                    exc_info=True,
+                )
+                raise RetryRequest(err)
+        except aiohttp.TooManyRedirects as err:
+            # aiohttp raises TooManyRedirects when max_redirects is exceeded.
+            # Unlike .NET's HttpClient (which returns the last 307/308 response),
+            # aiohttp throws here — so is_retryable_http_code(307/308) never fires.
+            # Catch explicitly and apply the same retry/login logic.
+            if is_login_request(full_url):
+                raise OperationalError(
+                    msg="Login request is retryable. Will be handled by authenticator",
+                    errno=ER_RETRYABLE_CODE,
+                )
+            else:
+                logger.debug(
+                    "Too many redirects. Retrying... Ignore the following "
                     f"error stack: {err}",
                     exc_info=True,
                 )
