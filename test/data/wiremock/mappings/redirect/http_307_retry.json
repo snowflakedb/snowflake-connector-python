@@ -1,0 +1,169 @@
+{
+  "mappings": [
+    {
+      "scenarioName": "HTTP 307 redirect retry",
+      "requiredScenarioState": "Started",
+      "newScenarioState": "Logged In",
+      "request": {
+        "urlPathPattern": "/session/v1/login-request.*",
+        "method": "POST"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "data": {
+            "masterToken": "master-token",
+            "token": "session-token",
+            "validityInSeconds": 3600,
+            "masterValidityInSeconds": 14400,
+            "displayUserName": "TEST_USER",
+            "serverVersion": "8.48.0",
+            "firstLogin": false,
+            "healthCheckInterval": 45,
+            "sessionId": 12345,
+            "parameters": [],
+            "sessionInfo": {
+              "databaseName": "TEST_DB",
+              "schemaName": "PUBLIC",
+              "warehouseName": "TEST_WH",
+              "roleName": "PUBLIC"
+            }
+          },
+          "code": null,
+          "message": null,
+          "success": true
+        }
+      }
+    },
+    {
+      "scenarioName": "HTTP 307 redirect retry",
+      "requiredScenarioState": "Logged In",
+      "newScenarioState": "Redirected",
+      "request": {
+        "urlPathPattern": "/queries/v1/query-request.*",
+        "method": "POST"
+      },
+      "response": {
+        "status": 307,
+        "headers": {
+          "Location": "/temp-redirect-target",
+          "Content-Type": "application/json"
+        }
+      }
+    },
+    {
+      "scenarioName": "HTTP 307 redirect retry",
+      "requiredScenarioState": "Redirected",
+      "request": {
+        "urlPathPattern": "/temp-redirect-target",
+        "method": "POST"
+      },
+      "response": {
+        "status": 200,
+        "fixedDelayMilliseconds": 30000,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "data": {},
+          "code": null,
+          "message": null,
+          "success": true
+        }
+      }
+    },
+    {
+      "scenarioName": "HTTP 307 redirect retry",
+      "requiredScenarioState": "Redirected",
+      "newScenarioState": "Done",
+      "request": {
+        "urlPathPattern": "/queries/v1/query-request.*",
+        "method": "POST"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "jsonBody": {
+          "data": {
+            "parameters": [],
+            "rowtype": [
+              {
+                "name": "1",
+                "database": "",
+                "schema": "",
+                "table": "",
+                "nullable": false,
+                "length": null,
+                "type": "fixed",
+                "scale": 0,
+                "precision": 1,
+                "byteLength": null,
+                "collation": null
+              }
+            ],
+            "rowset": [["1"]],
+            "total": 1,
+            "returned": 1,
+            "queryId": "redirect-test-query-id-307",
+            "databaseProvider": null,
+            "finalDatabaseName": null,
+            "finalSchemaName": null,
+            "finalWarehouseName": "TEST_WH",
+            "numberOfBinds": 0,
+            "arrayBindSupported": false,
+            "statementTypeId": 4096,
+            "version": 1,
+            "sendResultTime": 1738317395581,
+            "queryResultFormat": "json"
+          },
+          "code": null,
+          "message": null,
+          "success": true
+        }
+      }
+    },
+    {
+      "scenarioName": "HTTP 307 redirect retry",
+      "request": {
+        "urlPathPattern": "/session",
+        "method": "POST",
+        "queryParameters": {
+          "delete": {
+            "matches": "true"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "jsonBody": {
+          "code": 200,
+          "message": "done",
+          "success": true
+        }
+      }
+    },
+    {
+      "scenarioName": "HTTP 307 redirect retry",
+      "request": {
+        "urlPathPattern": "/telemetry/send",
+        "method": "POST"
+      },
+      "response": {
+        "status": 200,
+        "jsonBody": {
+          "data": {
+            "code": null,
+            "data": "Log Received",
+            "message": null
+          },
+          "success": true
+        }
+      }
+    }
+  ]
+}

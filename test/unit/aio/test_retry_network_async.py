@@ -29,7 +29,9 @@ from snowflake.connector.compat import (
     GATEWAY_TIMEOUT,
     INTERNAL_SERVER_ERROR,
     OK,
+    PERMANENT_REDIRECT,
     SERVICE_UNAVAILABLE,
+    TEMPORARY_REDIRECT,
     UNAUTHORIZED,
 )
 from snowflake.connector.errors import (
@@ -99,7 +101,17 @@ async def test_retry_reason(mockRequestExec):
             },
         }
         cnt.c += 1
-        if "retry" in sql:
+        if "redirect 307" in sql:
+            # error = HTTP 307 redirect
+            if cnt.c == 1:
+                raise RetryRequest(OtherHTTPRetryableError(errno=307))
+            return success_result
+        elif "redirect 308" in sql:
+            # error = HTTP 308 redirect
+            if cnt.c == 1:
+                raise RetryRequest(OtherHTTPRetryableError(errno=308))
+            return success_result
+        elif "retry" in sql:
             # error = HTTP Error 429
             if cnt.c < 3:  # retry twice for 429 error
                 raise RetryRequest(OtherHTTPRetryableError(errno=429))
@@ -136,6 +148,17 @@ async def test_retry_reason(mockRequestExec):
     cnt.reset()
     await conn.cmd_query("unknown error", 0, uuid4())
     assert "retryReason=100" in url
+    assert "retryCount=1" in url
+
+    # ensure 307/308 redirect retryReason is propagated correctly
+    cnt.reset()
+    await conn.cmd_query("redirect 307", 0, uuid4())
+    assert "retryReason=307" in url
+    assert "retryCount=1" in url
+
+    cnt.reset()
+    await conn.cmd_query("redirect 308", 0, uuid4())
+    assert "retryReason=308" in url
     assert "retryCount=1" in url
 
     # ensure query requests have retryReason reset to 0 when no reason is given
@@ -513,3 +536,214 @@ async def test_sslerror_without_econnreset_does_not_retry():
     # This should raise OperationalError, not RetryRequest
     with pytest.raises(OperationalError):
         await rest._request_exec(session=session, **default_parameters)
+
+
+@pytest.mark.parametrize("status_code", [TEMPORARY_REDIRECT, PERMANENT_REDIRECT])
+async def test_redirect_status_raises_retry_request(status_code):
+    """Test that 307/308 responses raise RetryRequest for non-login URLs."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    request_mock = AsyncMock()
+    type(request_mock).status = PropertyMock(return_value=status_code)
+    request_mock.history = ()
+
+    session = AsyncMock()
+    session.request.return_value = request_mock
+
+    with pytest.raises(RetryRequest):
+        await rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+
+@pytest.mark.parametrize("status_code", [TEMPORARY_REDIRECT, PERMANENT_REDIRECT])
+async def test_redirect_login_raises_operational_error(status_code):
+    """Test that 307/308 on login URLs raises OperationalError (not RetryRequest)."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    request_mock = AsyncMock()
+    type(request_mock).status = PropertyMock(return_value=status_code)
+    request_mock.history = ()
+
+    session = AsyncMock()
+    session.request.return_value = request_mock
+
+    with pytest.raises(OperationalError):
+        await rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/session/v1/login-request?request_id=abc",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+
+@pytest.mark.parametrize("status_code", [TEMPORARY_REDIRECT, PERMANENT_REDIRECT])
+@patch("aiohttp.ClientSession.request")
+async def test_redirect_retry_through_real_request_exec(
+    mockSessionRequest, status_code
+):
+    """Test the full retry path: _request_exec sees 307/308, raises RetryRequest,
+    fetch() retries, second _request_exec call returns 200.
+
+    This patches aiohttp.ClientSession.request at the library level (like
+    test_login_request_timeout) so the real fetch() → _request_exec_wrapper()
+    → _request_exec() path is exercised.
+    """
+    output_data = {"success": True, "code": 12345}
+
+    # First call: return redirect status (simulates redirect not auto-followed)
+    redirect_response = MagicMock(status=status_code, history=(), close=lambda: None)
+
+    # Second call: return 200 success
+    success_response = MagicMock(status=OK, history=(), close=lambda: None)
+    success_response.json = AsyncMock(return_value=output_data)
+
+    # aiohttp.ClientSession.request is async, so side_effect must return coroutines
+    async def mock_request_calls(*args, **kwargs):
+        mock_request_calls.call_count += 1
+        if mock_request_calls.call_count == 1:
+            return redirect_response
+        return success_response
+
+    mock_request_calls.call_count = 0
+    mockSessionRequest.side_effect = mock_request_calls
+
+    connection = mock_connection(backoff_policy=zero_backoff)
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    ret = await rest.fetch(
+        method="POST",
+        full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+        headers={},
+        data='{"code": 12345}',
+        timeout=10,
+    )
+    assert ret == output_data
+    assert mock_request_calls.call_count == 2
+
+
+async def test_redirect_history_logged(caplog):
+    """Test that redirect history is logged at debug level."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    # Create a mock redirect history entry (aiohttp uses .status, not .status_code)
+    hist_response = MagicMock()
+    hist_response.status = 307
+    hist_response.headers = {"Location": "/internal-redirect-target"}
+
+    # Create the final 200 response with history
+    output_data = {"success": True, "code": 12345}
+    request_mock = AsyncMock()
+    type(request_mock).status = PropertyMock(return_value=OK)
+    request_mock.json.return_value = output_data
+    request_mock.history = (hist_response,)  # aiohttp uses tuple
+
+    session = AsyncMock()
+    session.request.return_value = request_mock
+
+    with caplog.at_level(logging.DEBUG):
+        ret = await rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+    assert ret == output_data
+    assert (
+        "Request was redirected: HTTP 307 to /internal-redirect-target" in caplog.text
+    )
+
+
+async def test_too_many_redirects_raises_retry_request():
+    """TooManyRedirects from session.request() must raise RetryRequest for query URLs.
+
+    aiohttp raises TooManyRedirects (not returns a 307) when the redirect chain
+    exceeds max_redirects. This is the Python equivalent of .NET's HttpClient
+    returning a 307/308 response at the redirect limit — both should be retried.
+    """
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    # aiohttp.TooManyRedirects requires a RequestInfo-like object as first arg
+    request_info = MagicMock()
+    request_info.real_url = (
+        "https://testaccount.snowflakecomputing.com/queries/v1/query-request"
+    )
+    session = AsyncMock()
+    session.request.side_effect = aiohttp.TooManyRedirects(request_info, history=())
+
+    with pytest.raises(RetryRequest):
+        await rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/queries/v1/query-request",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
+
+
+async def test_too_many_redirects_on_login_raises_operational_error():
+    """TooManyRedirects on login URL must raise OperationalError, not RetryRequest."""
+    connection = mock_connection()
+    connection.errorhandler = Error.default_errorhandler
+    rest = SnowflakeRestful(
+        host="testaccount.snowflakecomputing.com",
+        port=443,
+        connection=connection,
+    )
+
+    request_info = MagicMock()
+    request_info.real_url = (
+        "https://testaccount.snowflakecomputing.com/session/v1/login-request"
+    )
+    session = AsyncMock()
+    session.request.side_effect = aiohttp.TooManyRedirects(request_info, history=())
+
+    with pytest.raises(OperationalError):
+        await rest._request_exec(
+            session=session,
+            method="POST",
+            full_url="https://testaccount.snowflakecomputing.com/session/v1/login-request?request_id=abc",
+            headers={},
+            data='{"code": 12345}',
+            token=None,
+        )
