@@ -114,7 +114,7 @@ from .errorcode import (
     ER_NO_USER,
     ER_NOT_IMPLICITY_SNOWFLAKE_DATATYPE,
 )
-from .errors import DatabaseError, Error, OperationalError, ProgrammingError
+from .errors import DatabaseError, Error, StructuredErrorHandler, OperationalError, ProgrammingError
 from .log_configuration import EasyLoggingConfigPython
 from .network import (
     DEFAULT_AUTHENTICATOR,
@@ -609,7 +609,7 @@ class SnowflakeConnection:
         easy_logging.create_log()
         self._lock_sequence_counter = Lock()
         self.sequence_counter = 0
-        self._errorhandler = Error.default_errorhandler
+        self._errorhandler: StructuredErrorHandler = Error.default_errorhandler
         self._lock_converter = Lock()
         self.messages = []
         self._async_sfqids: dict[str, None] = {}
@@ -959,12 +959,11 @@ class SnowflakeConnection:
         return self._application
 
     @property
-    def errorhandler(self) -> Callable:  # TODO: callable args
+    def errorhandler(self) -> StructuredErrorHandler:
         return self._errorhandler
 
     @errorhandler.setter
-    # Note: Callable doesn't implement operator|
-    def errorhandler(self, value: Callable | None) -> None:
+    def errorhandler(self, value: StructuredErrorHandler | None) -> None:
         if value is None:
             raise ProgrammingError("None errorhandler is specified")
         self._errorhandler = value
