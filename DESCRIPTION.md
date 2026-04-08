@@ -12,7 +12,7 @@ Source code is also available at: https://github.com/snowflakedb/snowflake-conne
   - Consolidated keyring token cache to use a single service name with hashed account keys, reducing macOS Keychain password prompts. Legacy entries are auto-migrated on first read.
   - Added support for AWS outbound JWT token attestation for Workload Identity Federation (WIF). This can be enabled by setting the `SNOWFLAKE_ENABLE_AWS_WIF_OUTBOUND_TOKEN` environment variable to `true`. Note: This environment variable will be removed in a future release.
 
-- v4.4.0(March 24,2026)
+- v4.4.0(March 25,2026)
   - Bump the lower boundary of cryptography to 46.0.5 due to CVE-2026-26007.
   - Added support for Python 3.14.
   - Removed pyOpenSSL upper bound dependency constraint to allow installation of pyOpenSSL 26.0.0+, which includes a fix for GHSA-vp96-hxj8-p424.
