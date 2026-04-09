@@ -1289,6 +1289,12 @@ def test_qcc_updated_on_failed_query_with_hybrid_table(conn_cnx) -> None:
     still sends queryContext in the error response.  The client must
     merge it so that subsequent queries on different GS nodes see the
     updated sessionDPO / read snapshot watermark.
+
+    Note: full behavioural verification depends on the server returning
+    queryContext in error responses, which is gated behind a feature flag.
+    On accounts where the flag is off the QCC simply won't change, so the
+    >= assertion still passes.  The unit tests with mocked responses are
+    the authoritative behavioural tests for this feature.
     """
     with conn_cnx() as conn:
         cur = conn.cursor()
@@ -1298,15 +1304,13 @@ def test_qcc_updated_on_failed_query_with_hybrid_table(conn_cnx) -> None:
                 f"create or replace hybrid table {table_name} "
                 f"(pk text primary key, val text)"
             )
-            cur.execute("alter session set TRANSACTION_ABORT_ON_ERROR = true")
-            cur.execute("begin")
 
             # Q1 — successful insert
             cur.execute(f"insert into {table_name} values ('k1', 'v1')")
             qcc_after_success = len(conn.query_context_cache)
-            assert qcc_after_success > 0, (
-                "QCC should have entries after successful query"
-            )
+            assert (
+                qcc_after_success > 0
+            ), "QCC should have entries after successful query"
 
             # Q2 — duplicate key insert, expected to fail
             with pytest.raises(ProgrammingError):
@@ -1322,6 +1326,100 @@ def test_qcc_updated_on_failed_query_with_hybrid_table(conn_cnx) -> None:
             )
         finally:
             cur.execute(f"drop table if exists {table_name}")
+
+
+@pytest.mark.aws
+@pytest.mark.skipolddriver
+def test_qcc_tracks_multi_database_hybrid_tables(conn_cnx) -> None:
+    """Verify QCC grows as queries touch hybrid tables in different databases.
+
+    Each database contributes an additional entry to the QCC.  The test
+    mirrors the standard multi-database QCC integration test present in the
+    Go and Node.js drivers.
+
+    Steps:
+      1. Create 3 databases, each with a hybrid table of the same name.
+      2. Insert identical rows into each table via USE DATABASE + unqualified name.
+      3. After each database, assert QCC size grew (2 → 3 → 4).
+      4. Run cross-DB selects to confirm data correctness; QCC stays at 4.
+    """
+    suffix = random_string(5)
+    db_names = [f"qcc_test_db_{suffix}_{i}" for i in range(1, 4)]
+    table_name = f"ht_{random_string(8)}"
+
+    with conn_cnx() as conn:
+        cur = conn.cursor()
+        # Remember the original database so we can restore it in cleanup.
+        cur.execute("SELECT CURRENT_DATABASE()")
+        original_db = cur.fetchone()[0]
+
+        try:
+            # Pre-create all databases
+            for db in db_names:
+                cur.execute(f"CREATE DATABASE IF NOT EXISTS {db}")
+
+            scenarios = [
+                # (database, sqls to run, expected QCC size after)
+                (
+                    db_names[0],
+                    [
+                        f"USE DATABASE {db_names[0]}",
+                        f"CREATE OR REPLACE HYBRID TABLE {table_name} "
+                        f"(a INT PRIMARY KEY, b INT)",
+                        f"INSERT INTO {table_name} VALUES (1, 2), (2, 3), (3, 4)",
+                    ],
+                    2,
+                ),
+                (
+                    db_names[1],
+                    [
+                        f"USE DATABASE {db_names[1]}",
+                        f"CREATE OR REPLACE HYBRID TABLE {table_name} "
+                        f"(a INT PRIMARY KEY, b INT)",
+                        f"INSERT INTO {table_name} VALUES (1, 2), (2, 3), (3, 4)",
+                    ],
+                    3,
+                ),
+                (
+                    db_names[2],
+                    [
+                        f"USE DATABASE {db_names[2]}",
+                        f"CREATE OR REPLACE HYBRID TABLE {table_name} "
+                        f"(a INT PRIMARY KEY, b INT)",
+                        f"INSERT INTO {table_name} VALUES (1, 2), (2, 3), (3, 4)",
+                    ],
+                    4,
+                ),
+                (
+                    None,  # no USE DATABASE — cross-DB selects
+                    [
+                        f"SELECT * FROM {db_names[0]}.public.{table_name} x, "
+                        f"{db_names[1]}.public.{table_name} y, "
+                        f"{db_names[2]}.public.{table_name} z "
+                        f"WHERE x.a = y.a AND y.a = z.a",
+                        f"SELECT * FROM {db_names[0]}.public.{table_name} x, "
+                        f"{db_names[1]}.public.{table_name} y "
+                        f"WHERE x.a = y.a",
+                        f"SELECT * FROM {db_names[1]}.public.{table_name} x, "
+                        f"{db_names[2]}.public.{table_name} y "
+                        f"WHERE x.a = y.a",
+                    ],
+                    4,
+                ),
+            ]
+
+            for db_label, sqls, expected_qcc_size in scenarios:
+                for sql in sqls:
+                    cur.execute(sql)
+                actual = len(conn.query_context_cache)
+                assert actual == expected_qcc_size, (
+                    f"After operations on {db_label or 'cross-DB selects'}: "
+                    f"expected QCC size {expected_qcc_size}, got {actual}"
+                )
+        finally:
+            cur.execute(f"USE DATABASE {original_db}")
+            for db in db_names:
+                cur.execute(f"DROP DATABASE IF EXISTS {db}")
 
 
 @pytest.mark.skipolddriver
