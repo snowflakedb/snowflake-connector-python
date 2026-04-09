@@ -1359,64 +1359,52 @@ def test_qcc_tracks_multi_database_hybrid_tables(conn_cnx) -> None:
             for db in db_names:
                 cur.execute(f"CREATE DATABASE IF NOT EXISTS {db}")
 
-            scenarios = [
-                # (database, sqls to run, expected QCC size after)
-                (
-                    db_names[0],
-                    [
-                        f"USE DATABASE {db_names[0]}",
-                        f"CREATE OR REPLACE HYBRID TABLE {table_name} "
-                        f"(a INT PRIMARY KEY, b INT)",
-                        f"INSERT INTO {table_name} VALUES (1, 2), (2, 3), (3, 4)",
-                    ],
-                    2,
-                ),
-                (
-                    db_names[1],
-                    [
-                        f"USE DATABASE {db_names[1]}",
-                        f"CREATE OR REPLACE HYBRID TABLE {table_name} "
-                        f"(a INT PRIMARY KEY, b INT)",
-                        f"INSERT INTO {table_name} VALUES (1, 2), (2, 3), (3, 4)",
-                    ],
-                    3,
-                ),
-                (
-                    db_names[2],
-                    [
-                        f"USE DATABASE {db_names[2]}",
-                        f"CREATE OR REPLACE HYBRID TABLE {table_name} "
-                        f"(a INT PRIMARY KEY, b INT)",
-                        f"INSERT INTO {table_name} VALUES (1, 2), (2, 3), (3, 4)",
-                    ],
-                    4,
-                ),
-                (
-                    None,  # no USE DATABASE — cross-DB selects
-                    [
-                        f"SELECT * FROM {db_names[0]}.public.{table_name} x, "
-                        f"{db_names[1]}.public.{table_name} y, "
-                        f"{db_names[2]}.public.{table_name} z "
-                        f"WHERE x.a = y.a AND y.a = z.a",
-                        f"SELECT * FROM {db_names[0]}.public.{table_name} x, "
-                        f"{db_names[1]}.public.{table_name} y "
-                        f"WHERE x.a = y.a",
-                        f"SELECT * FROM {db_names[1]}.public.{table_name} x, "
-                        f"{db_names[2]}.public.{table_name} y "
-                        f"WHERE x.a = y.a",
-                    ],
-                    4,
-                ),
-            ]
+            # Phase 1: create tables and insert data, verify QCC growth
+            for db, expected_qcc_size in zip(db_names, [2, 3, 4]):
+                cur.execute(f"USE DATABASE {db}")
+                cur.execute(
+                    f"CREATE OR REPLACE HYBRID TABLE {table_name} "
+                    f"(a INT PRIMARY KEY, b INT)"
+                )
+                cur.execute(f"INSERT INTO {table_name} VALUES (1, 2), (2, 3), (3, 4)")
 
-            for db_label, sqls, expected_qcc_size in scenarios:
-                for sql in sqls:
-                    cur.execute(sql)
+                # Verify data was inserted into the correct database
+                cur.execute(f"SELECT * FROM {table_name} ORDER BY a")
+                rows = cur.fetchall()
+                assert rows == [
+                    (1, 2),
+                    (2, 3),
+                    (3, 4),
+                ], f"Data mismatch in {db}: {rows}"
+
                 actual = len(conn.query_context_cache)
                 assert actual == expected_qcc_size, (
-                    f"After operations on {db_label or 'cross-DB selects'}: "
+                    f"After operations on {db}: "
                     f"expected QCC size {expected_qcc_size}, got {actual}"
                 )
+
+            # Phase 2: cross-DB selects — verify data correctness and
+            # QCC stays at 4
+            cur.execute(
+                f"SELECT * FROM {db_names[0]}.public.{table_name} x, "
+                f"{db_names[1]}.public.{table_name} y, "
+                f"{db_names[2]}.public.{table_name} z "
+                f"WHERE x.a = y.a AND y.a = z.a"
+            )
+            rows = cur.fetchall()
+            assert len(rows) == 3, f"Expected 3 rows from 3-way join, got {len(rows)}"
+
+            cur.execute(
+                f"SELECT * FROM {db_names[0]}.public.{table_name} x, "
+                f"{db_names[1]}.public.{table_name} y "
+                f"WHERE x.a = y.a"
+            )
+            rows = cur.fetchall()
+            assert len(rows) == 3, f"Expected 3 rows from 2-way join, got {len(rows)}"
+
+            assert (
+                len(conn.query_context_cache) == 4
+            ), "QCC should remain at 4 after cross-DB selects"
         finally:
             cur.execute(f"USE DATABASE {original_db}")
             for db in db_names:
