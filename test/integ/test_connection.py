@@ -1280,6 +1280,7 @@ def test_disable_query_context_cache(conn_cnx) -> None:
         assert conn.query_context_cache is None
 
 
+@pytest.mark.aws
 @pytest.mark.skipolddriver
 def test_qcc_updated_on_failed_query_with_hybrid_table(conn_cnx) -> None:
     """SNOW-3010877: QCC must be merged even when a query fails.
