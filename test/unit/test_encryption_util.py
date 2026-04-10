@@ -46,7 +46,7 @@ def test_encrypt_decrypt_file(tmp_path):
         )
 
         contents = ""
-        with codecs.open(decrypted_file, "r", encoding=UTF8) as fd:
+        with open(decrypted_file, "r", encoding=UTF8) as fd:
             for line in fd:
                 contents += line
         assert data == contents, "encrypted and decrypted contents"

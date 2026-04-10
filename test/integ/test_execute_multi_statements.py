@@ -209,7 +209,7 @@ SELECT bafa;
 def test_execute_stream(conn_cnx):
     # file stream
     expected_results = [1, 2, 3]
-    with codecs.open(
+    with open(
         os.path.join(THIS_DIR, "../data", "multiple_statements.sql"), encoding="utf-8"
     ) as f:
         with conn_cnx() as cnx:
@@ -234,7 +234,7 @@ def test_execute_stream_with_error(conn_cnx):
                 assert rec.fetchall()[0][0] == expected_results[idx]
 
     # read a file including syntax error in the middle
-    with codecs.open(
+    with open(
         os.path.join(THIS_DIR, "../data", "multiple_statements_negative.sql"),
         encoding="utf-8",
     ) as f:
